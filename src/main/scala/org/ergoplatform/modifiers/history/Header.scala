@@ -22,6 +22,8 @@ import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
 import scala.concurrent.duration.FiniteDuration
 import scorex.util.Extensions._
 
+import scala.annotation.tailrec
+
 case class Header(version: Version,
                   override val parentId: ModifierId,
                   ADProofsRoot: Digest32,
@@ -131,7 +133,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     serializeSolution(h, w)
   }
 
-  def serializeWithoutInterlinksAndPow(h: Header, w: Writer): Unit = {
+  def serializeWithoutPow(h: Header, w: Writer): Unit = {
     w.put(h.version)
     w.putBytes(idToBytes(h.parentId))
     w.putBytes(h.ADProofsRoot)
@@ -144,44 +146,12 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     w.putBytes(h.votes)
   }
 
-  def serializeWithoutInterlinks(h: Header, w: Writer): Unit = {
-    serializeWithoutInterlinksAndPow(h, w)
-    w.putULong(0)
-    serializeSolution(h, w)
-  }
-
-  def serializeWithoutPow(h: Header, w: Writer): Unit = {
-
-    @tailrec
-    @SuppressWarnings(Array("TraversableHead"))
-    def serializeInterlink(links: Seq[ModifierId]): Unit= {
-      if (links.nonEmpty) {
-        val headLink = links.head
-        val repeating = links.count(_ == headLink)
-        w.putUByte(repeating)
-        w.putBytes(idToBytes(headLink))
-        serializeInterlink(links.drop(repeating))
-      }
-    }
-
-    serializeWithoutInterlinksAndPow(h, w)
-
-    w.putULong(h.interlinks.size)
-    serializeInterlink(h.interlinks)
-  }
-
   def bytesWithoutPow(header: Header): Array[Byte] = {
     val w = new VLQByteBufferWriter(new ByteArrayBuilder())
     serializeWithoutPow(header, w)
     w.result().toBytes
   }
 
-
-  def bytesWithoutInterlinks(header: Header): Array[Byte] = {
-    val w = new VLQByteBufferWriter(new ByteArrayBuilder())
-    serializeWithoutInterlinks(header, w)
-    w.result().toBytes
-  }
 
   def serializeSolution(h: Header, w: Writer): Unit = {
     AutolykosSolutionSerializer.serialize(h.powSolution, w)
@@ -199,26 +169,9 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     val height = r.getUInt().toIntExact
     val votes = r.getBytes(3)
 
-    val interlinksSize = r.getULong()
-
-    @tailrec
-    def parseInterlinks(acc: Seq[ModifierId]): Seq[ModifierId] = {
-      if (acc.length < interlinksSize) {
-        val repeatN = r.getUByte()
-        require(repeatN > 0)
-        val link: ModifierId = bytesToId(r.getBytes(Constants.ModifierIdSize))
-        val links: Seq[ModifierId] = Array.fill(repeatN)(link)
-        parseInterlinks(acc ++ links)
-      } else {
-        acc
-      }
-    }
-
-    val interlinks = parseInterlinks(Seq.empty)
-
     val powSolution = AutolykosSolutionSerializer.parse(r)
 
-    Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
+    Header(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
         nBits, height, extensionHash, powSolution, votes, Some(r.consumed))
   }
 }

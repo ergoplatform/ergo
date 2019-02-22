@@ -29,7 +29,7 @@ case class PoPoWProof(m: Byte,
 
   override type M = PoPoWProof
 
-  override lazy val serializer: ScorexSerializer[PoPoWProof] = new PoPoWProofSerializer(powScheme)
+  override lazy val serializer: ScorexSerializer[PoPoWProof] = throw new Error("PoPow proofs serialization not supported")
 
   override def compare(that: PoPoWProof): Int = ???
 

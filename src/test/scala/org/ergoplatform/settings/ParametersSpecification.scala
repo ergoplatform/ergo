@@ -162,45 +162,66 @@ class ParametersSpecification extends ErgoPropertyTest {
     val esc14b = esc13.process(h14b, expectedParameters14e).get
   }
 
+  /**
+    * A vote for a soft-fork which is not gathering enough votes to be activated.
+    * The voting settings are :
+    *   - epoch length is about 2 blocks
+    *   - 2 epochs to vote
+    *   - 3 epochs to activate the fork
+    *
+    */
   property("soft fork - unsuccessful voting") {
     val p: Parameters = Parameters(1, Map(BlockVersion -> 0))
     val vr: VotingData = VotingData.empty
     val esc1 = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
     val forkVote = Array(SoftFork, NoParameter, NoParameter)
     val emptyVotes = Array(NoParameter, NoParameter, NoParameter)
-    val h2 = defaultHeaderGen.sample.get.copy(votes = forkVote, version = 0: Byte, height = 2)
 
+    // Soft-fork vote is proposed @ height == 2
+    val h2 = defaultHeaderGen.sample.get.copy(votes = forkVote, version = 0: Byte, height = 2)
     val expectedParameters2 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 0, BlockVersion -> 0))
     val esc2 = esc1.process(h2, expectedParameters2).get
     esc2.currentParameters.softForkStartingHeight.get shouldBe 2
+
+    // voting for the fork @ height == 3
     val h3 = h2.copy(height = 3)
     val esc3 = esc2.process(h3, expectedParameters2).get
     esc3.currentParameters.softForkStartingHeight.get shouldBe 2
+
+    // voting for the fork @ height == 4
     val h4 = h3.copy(height = 4)
     val expectedParameters4 = Parameters(4, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 2, BlockVersion -> 0))
     val esc4 = esc3.process(h4, expectedParameters4).get
     esc4.currentParameters.softForkStartingHeight.get shouldBe 2
     esc4.currentParameters.softForkVotesCollected.get shouldBe 2
+
+    // no vote for the fork @ height == 5, so only soft-fork proposal has gathered 75% only
     val h5 = h4.copy(height = 5, votes = emptyVotes)
     val esc5 = esc4.process(h5, expectedParameters4).get
 
+    // first epoch after the voting done, data should still be in the block
     val h6 = h5.copy(height = 6)
     val expectedParameters6 = Parameters(6, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 3, BlockVersion -> 0))
     val esc6 = esc5.process(h6, expectedParameters6).get
 
+    // in the first epoch after the voting done, it is prohibited to propose a new voting for a fork
     val h6w = h5.copy(height = 6, votes = forkVote)
     esc5.process(h6w, expectedParameters6).isFailure shouldBe true
 
     val h7 = h6.copy(height = 7)
     val esc7 = esc6.process(h7, expectedParameters6).get
 
+    //... also prohibited to vote for a fork during the first epoch after the voting done
     val h7w = h6.copy(height = 7, votes = forkVote)
     esc6.process(h7w, expectedParameters6).isFailure shouldBe true
 
+    // a new fork voting is proposed on the first block of the second epoch after voting (which has not gathered enough)
     val h8 = h7.copy(height = 8, votes = forkVote)
     val expectedParameters8 = Parameters(8, Map(SoftForkStartingHeight -> 8, SoftForkVotesCollected -> 0, BlockVersion -> 0))
     val esc8 = esc7.process(h8, expectedParameters8).get
 
+    // on the second epoch after voting (not fathered enough) parameters are to be cleared,
+    // and block version to be the same
     val h8e = h7.copy(height = 8, votes = emptyVotes)
     val expectedParameters8e = Parameters(8, Map(BlockVersion -> 0))
     val esc8e = esc7.process(h8e, expectedParameters8e).get

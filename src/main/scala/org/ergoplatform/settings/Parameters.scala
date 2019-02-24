@@ -34,7 +34,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   lazy val maxBlockSize: Int = parametersTable(MaxBlockSizeIncrease)
 
   /**
-    * Cost of accessing 1 token, in nanoErgs.
+    * Cost of accessing token, in nanoErgs.
     */
   lazy val tokenAccessCost: Int = parametersTable(TokenAccessCostIncrease)
 

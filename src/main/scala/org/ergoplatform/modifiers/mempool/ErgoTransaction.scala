@@ -43,8 +43,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   override lazy val id: ModifierId = bytesToId(serializedId)
 
   /**
-    * Assembles a map with (assets -> total amount) data, based on boxes passed as
-    * a parameter. That is, the method is checking amounts of assets in the boxes(i.e. that a box contains non-negative
+    * Extracts a mapping (assets -> total amount) from a set of boxes passed as a parameter.
+    * That is, the method is checking amounts of assets in the boxes(i.e. that a box contains non-negative
     * amount for an asset) and then summarize and group their corresponding amounts.
     *
     * @param boxes - boxes to

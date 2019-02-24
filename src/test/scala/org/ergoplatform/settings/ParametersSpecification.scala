@@ -225,7 +225,7 @@ class ParametersSpecification extends ErgoPropertyTest {
     val esc14b = esc13.process(h14b, expectedParameters14a).get
 
     //wrong parameters: no vote for the fork, but parameters are there
-    val wrongParameters14 = Parameters(14, Map(SoftForkStartingHeight -> 14, SoftForkVotesCollected -> 0, BlockVersion -> 1))
+    val wrongParameters14 = Parameters(14, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 4, BlockVersion -> 1))
     esc13.process(h14b, wrongParameters14).isFailure shouldBe true
   }
 
@@ -292,6 +292,10 @@ class ParametersSpecification extends ErgoPropertyTest {
     val h8e = h7.copy(height = 8, votes = emptyVotes)
     val expectedParameters8e = Parameters(8, Map(BlockVersion -> 0))
     val esc8e = esc7.process(h8e, expectedParameters8e).get
+
+    // parameters are not cleared
+    val wrongParameters8 = Parameters(8, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 3, BlockVersion -> 0))
+    esc7.process(h8e, wrongParameters8).isFailure shouldBe true
   }
 
 }

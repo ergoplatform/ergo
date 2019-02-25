@@ -20,7 +20,7 @@ class KnownNodesSpec extends FreeSpec with IntegrationSuite {
       peers.map(_.name) should contain("node01")
     }
 
-    Await.result(result, 1.minute)
+    Await.result(result, 5.minute)
   }
 
 }

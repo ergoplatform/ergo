@@ -139,7 +139,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     w.putBytes(h.ADProofsRoot)
     w.putBytes(h.transactionsRoot)
     w.putBytes(h.stateRoot)
-    w.putLong(h.timestamp)
+    w.putULong(h.timestamp)
     w.putBytes(h.extensionRoot)
     RequiredDifficulty.serialize(h.nBits, w)
     w.putUInt(h.height)
@@ -163,7 +163,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     val ADProofsRoot = Digest32 @@ r.getBytes(32)
     val transactionsRoot = Digest32 @@ r.getBytes(32)
     val stateRoot = ADDigest @@ r.getBytes(33)
-    val timestamp = r.getLong()
+    val timestamp = r.getULong()
     val extensionHash = Digest32 @@ r.getBytes(32)
     val nBits = RequiredDifficulty.parse(r)
     val height = r.getUInt().toIntExact

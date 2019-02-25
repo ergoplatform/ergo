@@ -219,7 +219,7 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Sc
 
   override def serialize(obj: ErgoStateContext, w: Writer): Unit = {
     w.putBytes(obj.genesisStateDigest)
-    w.putUInt(obj.lastHeaders.size)
+    w.putUByte(obj.lastHeaders.size)
     obj.lastHeaders.foreach(h => HeaderSerializer.serialize(h, w))
     VotingDataSerializer.serialize(obj.votingData, w)
     ParametersSerializer.serialize(obj.currentParameters, w)
@@ -227,7 +227,7 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Sc
 
   override def parse(r: Reader): ErgoStateContext = {
     val genesisDigest = ADDigest @@ r.getBytes(33)
-    val length = r.getUInt().toIntExact
+    val length = r.getUByte()
     val lastHeaders = (1 to length).map(_ => HeaderSerializer.parse(r))
     val votingData = VotingDataSerializer.parse(r)
     val params = ParametersSerializer.parse(r)

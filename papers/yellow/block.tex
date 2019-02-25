@@ -31,7 +31,7 @@ Ergo block consists of 4 parts:
     \hline
     timestamp &  8 &  block timestamp(in milliseconds since beginning of Unix Epoch)  \\
     \hline
-    nBits &  8 & current difficulty in a compressed view  \\
+    nBits &  8 & current difficulty in a compressed form  \\
     \hline
     height &  4 & block height  \\
     \hline
@@ -39,7 +39,7 @@ Ergo block consists of 4 parts:
     \hline
     powSolution & 75-107 (depends on d) & solution of Autolykos PoW puzzle  \\
     \hline
-    votes & 3 & current miner votes \\
+    votes & 3 & votes for changes in system parameteres, one byte per vote  \\
     \hline
 \end{tabular}
 

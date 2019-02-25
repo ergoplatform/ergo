@@ -44,10 +44,7 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
           }
         }
       }
-    } match {
-      case Success(value) => value
-      case Failure(exception) => throw exception
-    }
+    }.fold(e => throw e, v => v)
   }
 
   protected def headerBits(trackedBox: TrackedBox): Array[Boolean] = {

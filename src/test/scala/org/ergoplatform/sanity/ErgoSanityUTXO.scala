@@ -3,7 +3,7 @@ package org.ergoplatform.sanity
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{BlockTransactions, Header, HeaderSerializer}
+import org.ergoplatform.modifiers.history.{BlockTransactions, HeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
@@ -13,7 +13,7 @@ import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
 import scorex.core.app.Version
 import scorex.core.network.peer.PeerInfo
-import scorex.core.network.{ConnectedPeer, Outgoing, PeerSpec}
+import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
 
@@ -77,9 +77,11 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
 
     val peerInfo = PeerInfo(
-      PeerSpec("", Version(0, 0, 0), "", None, Nil),
       0L,
-      Some(Outgoing)
+      None,
+      Some(""),
+      Some(Outgoing),
+      Seq.empty
     )
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(

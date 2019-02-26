@@ -273,10 +273,6 @@ components:
       - difficulty
       - parentId
       - votes
-      - size
-      - extensionId
-      - transactionsId
-      - adProofsId
       properties:
         id:
           $ref: '#/components/schemas/ModifierId'

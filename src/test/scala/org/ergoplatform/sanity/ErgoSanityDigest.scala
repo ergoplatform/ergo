@@ -16,7 +16,7 @@ import org.scalacheck.Gen
 import scorex.core.app.Version
 import scorex.core.idToBytes
 import scorex.core.network.peer.PeerInfo
-import scorex.core.network.{ConnectedPeer, Outgoing, PeerSpec}
+import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
 
@@ -83,9 +83,11 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
 
     val peerInfo = PeerInfo(
-      PeerSpec("", Version(0, 0, 0), "", None, Nil),
-      0L,
-      Some(Outgoing)
+        0L,
+        None,
+        Some(""),
+        Some(Outgoing),
+        Seq.empty
     )
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(

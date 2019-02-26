@@ -4,7 +4,10 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
+import scorex.core.validation.ModifierValidator
+import scorex.core.utils.ScorexEncoding
+import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId}
 
 case class PoPoWProof(m: Byte,
@@ -26,7 +29,7 @@ case class PoPoWProof(m: Byte,
 
   override type M = PoPoWProof
 
-  override def serializer: Serializer[PoPoWProof] = throw new Error("PoPow proofs serialization not supported")
+  override lazy val serializer: ScorexSerializer[PoPoWProof] = throw new Error("PoPow proofs serialization not supported")
 
   override def compare(that: PoPoWProof): Int = ???
 

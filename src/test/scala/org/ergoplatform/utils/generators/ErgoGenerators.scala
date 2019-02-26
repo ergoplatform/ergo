@@ -6,7 +6,6 @@ import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header, PoPowAlgos}
-import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants
@@ -59,13 +58,6 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
   } yield ErgoSyncInfo(ids)
-
-  lazy val transactionIdsForHeaderGen: Gen[TransactionIdsForHeader] = for {
-    idGenerator <- genBytes(32)
-    maxLength = 100
-    toTake <- Gen.chooseNum(1, 100)
-    ids <- Gen.listOfN(maxLength, idGenerator).map(_.take(toTake))
-  } yield TransactionIdsForHeader(ids)
 
   lazy val digest32Gen: Gen[Digest32] = {
     val x = Digest32 @@ genBytes(32)

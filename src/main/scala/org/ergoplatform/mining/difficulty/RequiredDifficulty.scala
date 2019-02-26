@@ -3,16 +3,18 @@ package org.ergoplatform.mining.difficulty
 import java.math.BigInteger
 
 import org.ergoplatform.nodeView.history.ErgoHistory._
-import scorex.core.block.Block._
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
+import scorex.util.serialization.{Reader, Writer}
 
-import scala.util.Try
+object RequiredDifficulty extends ScorexSerializer[NBits] {
 
-object RequiredDifficulty extends Serializer[NBits] {
+  override def serialize(obj: NBits, w: Writer): Unit = {
+    w.putBytes(uint32ToByteArrayBE(obj))
+  }
 
-  override def toBytes(obj: NBits): Array[Version] = uint32ToByteArrayBE(obj)
-
-  override def parseBytes(bytes: Array[Version]): Try[NBits] = Try(readUint32BE(bytes))
+  override def parse(r: Reader): NBits = {
+    readUint32BE(r.getBytes(4))
+  }
 
   /**
     * <p>The "compact" format is a representation of a whole number N using an unsigned 32 bit number similar to a

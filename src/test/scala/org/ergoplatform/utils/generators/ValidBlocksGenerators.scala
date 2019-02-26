@@ -54,7 +54,7 @@ trait ValidBlocksGenerators
              acc: Seq[ErgoTransaction],
              rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
 
-      val currentSize = acc.map(_.bytes.length).sum
+      val currentSize = acc.map(_.size).sum
       val averageSize = if (currentSize > 0) currentSize / acc.length else 1000
       val customTokens = (stateBoxes ++ selfBoxes).flatMap(_.additionalTokens)
       val customTokensNum = customTokens.map(ct => ByteArrayWrapper(ct._1)).toSet.size

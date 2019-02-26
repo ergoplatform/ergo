@@ -27,7 +27,7 @@ object FeeSimulator extends App {
 
   val simpleTx = ErgoTransaction(IndexedSeq(input, input), IndexedSeq(box1, box2), None)
   val stdSize = simpleTx.outputs.map(_.bytes.length).sum / simpleTx.outputs.length
-  val simpleTxSize = simpleTx.bytes.length
+  val simpleTxSize = simpleTx.size
   val outputsSize = simpleTx.outputs.map(_.bytes.length).sum
   lazy val perOutputFee = stdSize * storageFeeFactor / CoinsInOneErgo.toDouble
   val minStdDust = minValuePerByte * stdSize

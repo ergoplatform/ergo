@@ -9,7 +9,7 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHeader}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
@@ -20,15 +20,6 @@ import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.{SBoolean, SType}
 
 class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with ApiCodecs {
-
-  property("TransactionIdsForHeader should be converted into json correctly") {
-    val modifierId = genBytes(Constants.ModifierIdSize).sample.get
-    val stringId = Algos.encode(modifierId)
-    val Right(_) = parse(s"""{ "ids" : ["$stringId"]}""")
-    val data = TransactionIdsForHeader(Seq(modifierId))
-    val c = data.asJson.hcursor
-    c.downField("ids").downArray.as[String] shouldBe Right(stringId)
-  }
 
   property("ErgoFullBlock should be encoded into JSON and decoded back correctly") {
 

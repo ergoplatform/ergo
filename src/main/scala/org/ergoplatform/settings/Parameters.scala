@@ -6,7 +6,9 @@ import io.circe.syntax._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
+import scorex.util.serialization.{Reader, Writer}
+import scorex.util.Extensions._
 
 import scala.util.Try
 import Extension.SystemParametersPrefix
@@ -274,19 +276,25 @@ object Parameters {
 
 }
 
-object ParametersSerializer extends Serializer[Parameters] with ApiCodecs {
+object ParametersSerializer extends ScorexSerializer[Parameters] with ApiCodecs {
 
-  override def toBytes(params: Parameters): Array[Byte] = {
+  override def serialize(params: Parameters, w: Writer): Unit = {
     require(params.parametersTable.nonEmpty, s"$params is empty")
-    Ints.toByteArray(params.height) ++
-      params.parametersTable.map { case (k, v) => k +: Ints.toByteArray(v) }.reduce(_ ++ _)
+    w.putUInt(params.height)
+    w.putUInt(params.parametersTable.size)
+    params.parametersTable.foreach { case (k, v) =>
+      w.put(k)
+      w.putInt(v)
+    }
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[Parameters] = Try {
-    assert(bytes.length % 5 == 4)
-    val height = Ints.fromByteArray(bytes.take(4))
-    val table = bytes.drop(4).grouped(5).map { bs => bs.head -> Ints.fromByteArray(bs.tail) }.toMap
-    Parameters(height, table)
+  override def parse(r: Reader): Parameters = {
+    val height = r.getUInt().toIntExact
+    val tableLength = r.getUInt().toIntExact
+    val table = (0 until tableLength).map {_ =>
+      r.getByte() -> r.getInt()
+    }
+    Parameters(height, table.toMap)
   }
 
   implicit val jsonEncoder: Encoder[Parameters] = { p: Parameters =>

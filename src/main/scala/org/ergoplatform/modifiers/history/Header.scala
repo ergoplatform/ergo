@@ -1,6 +1,5 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.api.ApiCodecs
@@ -12,15 +11,16 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
 import scorex.core.block.Block._
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
 import sigmastate.interpreter.CryptoConstants.EcPointType
+import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
 
 import scala.concurrent.duration.FiniteDuration
-import scala.util.Try
+import scorex.util.Extensions._
 
 case class Header(version: Version,
                   override val parentId: ModifierId,
@@ -56,7 +56,7 @@ case class Header(version: Version,
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
-  override lazy val serializer: Serializer[Header] = HeaderSerializer
+  override lazy val serializer: ScorexSerializer[Header] = HeaderSerializer
 
   lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
 
@@ -124,43 +124,47 @@ object Header extends ApiCodecs {
   }
 }
 
-object HeaderSerializer extends Serializer[Header] {
+object HeaderSerializer extends ScorexSerializer[Header] {
 
-  def bytesWithoutPow(h: Header): Array[Byte] = {
-    Bytes.concat(
-      Array(h.version),
-      idToBytes(h.parentId),
-      h.ADProofsRoot,
-      h.transactionsRoot,
-      h.stateRoot,
-      Longs.toByteArray(h.timestamp),
-      h.extensionRoot,
-      RequiredDifficulty.toBytes(h.nBits),
-      Ints.toByteArray(h.height),
-      h.votes)
+  override def serialize(h: Header, w: Writer): Unit = {
+    serializeWithoutPow(h, w)
+    AutolykosSolutionSerializer.serialize(h.powSolution, w)
   }
 
-  override def toBytes(h: Header): Array[Version] =
-    Bytes.concat(bytesWithoutPow(h), h.powSolution.bytes)
+  def serializeWithoutPow(h: Header, w: Writer): Unit = {
+    w.put(h.version)
+    w.putBytes(idToBytes(h.parentId))
+    w.putBytes(h.ADProofsRoot)
+    w.putBytes(h.transactionsRoot)
+    w.putBytes(h.stateRoot)
+    w.putULong(h.timestamp)
+    w.putBytes(h.extensionRoot)
+    RequiredDifficulty.serialize(h.nBits, w)
+    w.putUInt(h.height)
+    w.putBytes(h.votes)
+  }
 
-  @SuppressWarnings(Array("TryGet"))
-  override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
-    val version = bytes.head
-    val parentId = bytesToId(bytes.slice(1, 33))
-    val ADProofsRoot = Digest32 @@ bytes.slice(33, 65)
-    val transactionsRoot = Digest32 @@ bytes.slice(65, 97)
-    val stateRoot = ADDigest @@ bytes.slice(97, 130)
-    val timestamp = Longs.fromByteArray(bytes.slice(130, 138))
-    val extensionHash = Digest32 @@ bytes.slice(138, 170)
-    val nBits = RequiredDifficulty.parseBytes(bytes.slice(170, 174)).get
-    val height = Ints.fromByteArray(bytes.slice(174, 178))
-    val votes = bytes.slice(178, 181)
-    val powSolutionsBytes = bytes.slice(181, bytes.length)
+  def bytesWithoutPow(header: Header): Array[Byte] = {
+    val w = new VLQByteBufferWriter(new ByteArrayBuilder())
+    serializeWithoutPow(header, w)
+    w.result().toBytes
+  }
 
-    AutolykosSolutionSerializer.parseBytes(powSolutionsBytes) map { powSolution =>
-      Header(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-        nBits, height, extensionHash, powSolution, votes, Some(bytes.length))
-    }
-  }.flatten
-  
+  override def parse(r: Reader): Header = {
+    val version = r.getByte()
+    val parentId = bytesToId(r.getBytes(32))
+    val ADProofsRoot = Digest32 @@ r.getBytes(32)
+    val transactionsRoot = Digest32 @@ r.getBytes(32)
+    val stateRoot = ADDigest @@ r.getBytes(33)
+    val timestamp = r.getULong()
+    val extensionHash = Digest32 @@ r.getBytes(32)
+    val nBits = RequiredDifficulty.parse(r)
+    val height = r.getUInt().toIntExact
+    val votes = r.getBytes(3)
+
+    val powSolution = AutolykosSolutionSerializer.parse(r)
+
+    Header(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
+        nBits, height, extensionHash, powSolution, votes, Some(r.consumed))
+  }
 }

@@ -163,25 +163,19 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   }
 
   property("assets usage correctly affects transaction total cost") {
-    val txGen = for {
-      inputsCount <- Gen.choose(1, 100)
-      tokensCount <- Gen.choose(
-        10,
-        Math.max(100, inputsCount))
-      tokensDistribution <- disperseTokens(inputsCount, tokensCount.toByte)
-      from <- Gen.sequence(tokensDistribution.map(tokens => ergoBoxGenForTokens(tokens, trueLeafGen)))
-      from0 = from.asScala.toIndexedSeq
-      from1 = from0.map { bx =>
-        ErgoBox(bx.value, bx.proposition, bx.creationHeight, Seq(), bx.additionalRegisters, bx.transactionId, bx.index)
-      }
-      prop <- trueLeafGen
-      tx0 = validTransactionFromBoxes(from0, outputsProposition = prop)
-      tx1 = validTransactionFromBoxes(from1, outputsProposition = prop)
-    } yield (from0 -> tx0, from1 -> tx1)
-    forAll(txGen) { case ((from0, tx), (from1, txWithoutAssets)) =>
-      val txCost = tx.statefulValidity(from0, emptyStateContext).get
-      val txWithoutAssetsCost = txWithoutAssets.statefulValidity(from1, emptyStateContext).get
-      txWithoutAssetsCost should be < txCost
+    val txGen = validErgoTransactionGenTemplate(10, 100)
+    forAll(txGen) { case (from, tx) =>
+      val initTxCost = tx.statefulValidity(from, emptyStateContext).get
+      val additionalToken = (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextInt(100000000).toLong)
+      val in0 = from.head
+      val modifiedIn0 = ErgoBox(in0.value, in0.proposition, in0.creationHeight,
+        in0.additionalTokens :+ additionalToken, in0.additionalRegisters, in0.transactionId, in0.index)
+      val txInMod0 = tx.inputs.head.copy(boxId = modifiedIn0.id)
+      val out0 = tx.outputs.head
+      val modifiedOut0 = ErgoBox(out0.value, out0.proposition, out0.creationHeight,
+        out0.additionalTokens :+ additionalToken, out0.additionalRegisters, out0.transactionId, out0.index)
+      val txMod0 = tx.copy(inputs = txInMod0 +: tx.inputs.tail, outputCandidates = modifiedOut0 +: tx.outputCandidates.tail)
+      val inputIncTxCost = txMod0.statefulValidity(modifiedIn0 +: from.tail, emptyStateContext).get
     }
   }
 

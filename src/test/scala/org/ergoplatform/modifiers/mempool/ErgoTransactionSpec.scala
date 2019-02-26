@@ -12,6 +12,7 @@ import sigmastate._
 import sigmastate.Values.GroupElementConstant
 import sigmastate.basics.ProveDHTuple
 import sigmastate.interpreter.CryptoConstants
+import scala.collection.JavaConverters._
 
 import scala.util.Random
 
@@ -158,6 +159,29 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val e = validity.failed.get
       log.info(s"Validation message: ${e.getMessage}", e)
       e.getMessage should startWith("Input script verification failed for input #0")
+    }
+  }
+
+  property("assets usage correctly affects transaction total cost") {
+    val txGen = for {
+      inputsCount <- Gen.choose(1, 100)
+      tokensCount <- Gen.choose(
+        10,
+        Math.max(100, inputsCount))
+      tokensDistribution <- disperseTokens(inputsCount, tokensCount.toByte)
+      from <- Gen.sequence(tokensDistribution.map(tokens => ergoBoxGenForTokens(tokens, trueLeafGen)))
+      from0 = from.asScala.toIndexedSeq
+      from1 = from0.map { bx =>
+        ErgoBox(bx.value, bx.proposition, bx.creationHeight, Seq(), bx.additionalRegisters, bx.transactionId, bx.index)
+      }
+      prop <- trueLeafGen
+      tx0 = validTransactionFromBoxes(from0, outputsProposition = prop)
+      tx1 = validTransactionFromBoxes(from1, outputsProposition = prop)
+    } yield (from0 -> tx0, from1 -> tx1)
+    forAll(txGen) { case ((from0, tx), (from1, txWithoutAssets)) =>
+      val txCost = tx.statefulValidity(from0, emptyStateContext).get
+      val txWithoutAssetsCost = txWithoutAssets.statefulValidity(from1, emptyStateContext).get
+      txWithoutAssetsCost should be < txCost
     }
   }
 

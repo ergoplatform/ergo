@@ -11,10 +11,10 @@ import org.ergoplatform.settings.Parameters
 import org.ergoplatform.{ErgoBox, Input}
 import scorex.crypto.hash.Blake2b256
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.eval.{RuntimeIRContext, IRContext}
+import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 
 /**

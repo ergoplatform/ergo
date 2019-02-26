@@ -1,17 +1,15 @@
 package org.ergoplatform.nodeView.state
 
-import com.google.common.primitives.{Bytes, Ints}
-import org.ergoplatform.settings._
-import org.ergoplatform.mining.{AutolykosPowScheme, groupElemToBytes}
-import org.ergoplatform.modifiers.history.PreHeader
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.mining.{AutolykosPowScheme, groupElemToBytes}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer}
+import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer, PreHeader}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import scorex.core.serialization.{BytesSerializable, Serializer}
+import org.ergoplatform.settings.{Constants, _}
+import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
+import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.util.{Failure, Success, Try}
@@ -70,7 +68,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
-  override def serializer: Serializer[M] = ErgoStateContextSerializer(votingSettings)
+  override def serializer: ScorexSerializer[M] = ErgoStateContextSerializer(votingSettings)
 
   def upcoming(minerPk: EcPointType,
                timestamp: Long,
@@ -214,47 +212,23 @@ object ErgoStateContext {
 
 }
 
-case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Serializer[ErgoStateContext] {
+case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends ScorexSerializer[ErgoStateContext] {
 
-  override def toBytes(ctx: ErgoStateContext): Array[Byte] = {
-    val lastHeaderBytes = scorex.core.utils.concatBytes(ctx.lastHeaders.map(_.bytes))
-
-    val votingDataBytes = VotingDataSerializer.toBytes(ctx.votingData)
-    val votingDataSize = Ints.toByteArray(votingDataBytes.length)
-
-    Bytes.concat(
-      ctx.genesisStateDigest,
-      Ints.toByteArray(lastHeaderBytes.length),
-      lastHeaderBytes,
-      votingDataSize,
-      votingDataBytes,
-      ParametersSerializer.toBytes(ctx.currentParameters))
+  override def serialize(obj: ErgoStateContext, w: Writer): Unit = {
+    w.putBytes(obj.genesisStateDigest)
+    w.putUByte(obj.lastHeaders.size)
+    obj.lastHeaders.foreach(h => HeaderSerializer.serialize(h, w))
+    VotingDataSerializer.serialize(obj.votingData, w)
+    ParametersSerializer.serialize(obj.currentParameters, w)
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[ErgoStateContext] = Try {
-    val genesisDigest = ADDigest @@ bytes.take(33)
-    val lastHeaderBytesLength = Ints.fromByteArray(bytes.slice(33, 37))
-
-    def loop(bytes: Array[Byte], offset: Int, acc: Seq[Header]): Seq[Header] =
-      if (offset < lastHeaderBytesLength) {
-        val header = HeaderSerializer.parseBytes(bytes.slice(offset, bytes.length)).get
-        loop(bytes, offset + header.bytes.length, header +: acc)
-      } else {
-        acc.reverse
-      }
-
-    val afterHeaders = 37 + lastHeaderBytesLength
-    val lastHeaderBytes = bytes.slice(37, afterHeaders)
-    val lastHeaders = loop(lastHeaderBytes, 0, Seq.empty)
-
-    val votingDataSize = Ints.fromByteArray(bytes.slice(afterHeaders, afterHeaders + 4))
-
-    val afterVoting = afterHeaders + 4 + votingDataSize
-    VotingDataSerializer.parseBytes(bytes.slice(afterHeaders + 4, afterVoting)).flatMap { votingData =>
-      ParametersSerializer.parseBytes(bytes.slice(afterVoting, bytes.length)).map { params =>
-        new ErgoStateContext(lastHeaders, genesisDigest, params, votingData)(votingSettings)
-      }
-    }
-  }.flatten
+  override def parse(r: Reader): ErgoStateContext = {
+    val genesisDigest = ADDigest @@ r.getBytes(33)
+    val length = r.getUByte()
+    val lastHeaders = (1 to length).map(_ => HeaderSerializer.parse(r))
+    val votingData = VotingDataSerializer.parse(r)
+    val params = ParametersSerializer.parse(r)
+    new ErgoStateContext(lastHeaders, genesisDigest, params, votingData)(votingSettings)
+  }
 
 }

@@ -55,7 +55,7 @@ class DigestState protected(override val version: VersionTag,
             val declaredHash = fb.header.stateRoot
             // Check modifications, returning sequence of old values
             val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, declaredHash)
-              .get.map(v => ErgoBoxSerializer.parseBytes(v).get)
+              .get.map(v => ErgoBoxSerializer.parseBytes(v))
             val knownBoxes = (txs.flatMap(_.outputs) ++ oldValues).map(o => (ByteArrayWrapper(o.id), o)).toMap
             val totalCost = txs.map { tx =>
               tx.statelessValidity.get

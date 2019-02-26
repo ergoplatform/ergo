@@ -22,8 +22,6 @@ import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
 import scala.concurrent.duration.FiniteDuration
 import scorex.util.Extensions._
 
-import scala.annotation.tailrec
-
 case class Header(version: Version,
                   override val parentId: ModifierId,
                   ADProofsRoot: Digest32,
@@ -130,7 +128,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
 
   override def serialize(h: Header, w: Writer): Unit = {
     serializeWithoutPow(h, w)
-    serializeSolution(h, w)
+    AutolykosSolutionSerializer.serialize(h.powSolution, w)
   }
 
   def serializeWithoutPow(h: Header, w: Writer): Unit = {
@@ -150,11 +148,6 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     val w = new VLQByteBufferWriter(new ByteArrayBuilder())
     serializeWithoutPow(header, w)
     w.result().toBytes
-  }
-
-
-  def serializeSolution(h: Header, w: Writer): Unit = {
-    AutolykosSolutionSerializer.serialize(h.powSolution, w)
   }
 
   override def parse(r: Reader): Header = {

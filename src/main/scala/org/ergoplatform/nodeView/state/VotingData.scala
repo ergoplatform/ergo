@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
+import scorex.util.Extensions._
 
 case class VotingData(epochVotes: Array[(Byte, Int)]) {
 
@@ -30,14 +31,14 @@ object VotingDataSerializer extends ScorexSerializer[VotingData] {
     w.putUShort(obj.epochVotes.length)
     obj.epochVotes.foreach { case (id, cnt) =>
       w.put(id)
-      w.putInt(cnt)
+      w.putUInt(cnt)
     }
   }
 
   override def parse(r: Reader): VotingData = {
     val votesCount = r.getUShort()
     val epochVotes = (0 until votesCount).map {_ =>
-      r.getByte() -> r.getInt()
+      r.getByte() -> r.getUInt().toIntExact
     }
     VotingData(epochVotes.toArray)
   }

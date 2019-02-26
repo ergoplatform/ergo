@@ -1,18 +1,15 @@
 package org.ergoplatform.nodeView.state
 
-import org.ergoplatform.settings._
-import org.ergoplatform.mining.{AutolykosPowScheme, groupElemToBytes}
-import org.ergoplatform.modifiers.history.PreHeader
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.mining.{AutolykosPowScheme, groupElemToBytes}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer}
+import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer, PreHeader}
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.{Constants, _}
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.Extensions._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.util.{Failure, Success, Try}

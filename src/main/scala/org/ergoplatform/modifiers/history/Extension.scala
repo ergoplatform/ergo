@@ -13,9 +13,6 @@ import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
-import scala.annotation.tailrec
-import scala.util.Try
-
 /**
   * Extension section of Ergo block. Contains key-value storage
   * represented as Seq[(Array[Byte], Array[Byte])] with mandatory and optional fields.
@@ -109,7 +106,7 @@ object ExtensionSerializer extends ScorexSerializer[Extension] {
       val value = r.getBytes(length)
       (key, value)
     }
-    val fields = fieldsView.takeWhile(_ => r.position - startPosition < Constants.ExtensionMaxSize).toSeq
+    val fields = fieldsView.takeWhile(_ => r.position - startPosition < Constants.ExtensionMaxSize)
     require(r.position - startPosition < Constants.ExtensionMaxSize)
     Extension(headerId, fields, Some(r.position - startPosition))
   }

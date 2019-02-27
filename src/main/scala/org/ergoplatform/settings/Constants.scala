@@ -7,6 +7,8 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
+import sigmastate.Values
+import sigmastate.Values.ErgoTree
 
 object Constants {
   val HashLength: Int = 32
@@ -49,4 +51,7 @@ object Constants {
   val SoftForkEpochs = 32 //about 45.5 days
 
   val ExtensionMaxSize: Int = 16 * 1024 //16 kb
+
+  val TrueLeaf: ErgoTree = Values.TrueLeaf.toSigmaProp
+  val FalseLeaf: ErgoTree = Values.FalseLeaf.toSigmaProp
 }

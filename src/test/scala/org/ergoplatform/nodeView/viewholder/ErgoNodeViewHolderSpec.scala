@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestConfig, NodeViewTestOps, TestCase}
 import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
@@ -97,7 +97,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
       val genesis = validFullBlock(parentOpt = None, us, bh)
       applyBlock(genesis) shouldBe 'success
 
-      val boxes = ErgoState.boxChanges(genesis.transactions)._2.find(_.proposition == Values.TrueLeaf)
+      val boxes = ErgoState.boxChanges(genesis.transactions)._2.find(_.proposition == Constants.TrueLeaf)
       boxes.nonEmpty shouldBe true
 
       val tx = validTransactionFromBoxes(boxes.toIndexedSeq)
@@ -278,7 +278,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
       val txs = block.blockTransactions.transactions
       val tx = txs.head
       val wrongOutputs = tx.outputCandidates.map(o =>
-        new ErgoBoxCandidate(o.value + 10L, o.proposition, currentHeight, o.additionalTokens, o.additionalRegisters)
+        new ErgoBoxCandidate(o.value + 10L, o.ergoTree, currentHeight, o.additionalTokens, o.additionalRegisters)
       )
       val wrongTxs = tx.copy(outputCandidates = wrongOutputs) +: txs.tail
       block.blockTransactions.copy(txs = wrongTxs)

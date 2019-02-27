@@ -4,18 +4,20 @@ import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.state.{UtxoState, ErgoState}
+import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform._
 import org.ergoplatform.local.ErgoMiner
+import org.ergoplatform.settings.Constants
 import scorex.crypto.hash.Digest32
-import scorex.util.{bytesToId, ModifierId}
-import sigmastate.Values.{TrueLeaf, Value}
+import scorex.util.{ModifierId, bytesToId}
+import sigmastate.Values.{ErgoTree, TrueLeaf, Value}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.interpreter.ProverResult
 import sigmastate.serialization.ValueSerializer
 import sigmastate.SBoolean
+
 import scala.concurrent.blocking
 
 
@@ -127,12 +129,12 @@ trait WalletTestOps extends NodeViewBaseOps {
   def makeTx(boxesToSpend: Seq[ErgoBox],
              proofToSpend: ProverResult,
              balanceToReturn: Long,
-             scriptToReturn: Value[SBoolean.type],
+             scriptToReturn: ErgoTree,
              assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
     val inputs = boxesToSpend.map(box => Input(box.id, proofToSpend))
     val balanceToSpend = boxesToSpend.map(_.value).sum - balanceToReturn
     def creatingCandidate = new ErgoBoxCandidate(balanceToReturn, scriptToReturn, startHeight, replaceNewAssetStub(assets, inputs))
-    val spendingOutput = if (balanceToSpend > 0) Some(new ErgoBoxCandidate(balanceToSpend, TrueLeaf, creationHeight = startHeight)) else None
+    val spendingOutput = if (balanceToSpend > 0) Some(new ErgoBoxCandidate(balanceToSpend, Constants.TrueLeaf, creationHeight = startHeight)) else None
     val creatingOutput = if (balanceToReturn > 0) Some(creatingCandidate) else None
     ErgoTransaction(inputs.toIndexedSeq, spendingOutput.toIndexedSeq ++ creatingOutput.toIndexedSeq)
   }

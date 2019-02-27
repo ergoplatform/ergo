@@ -17,7 +17,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ScorexLogging, idToBytes}
 import sigmastate.SBoolean
-import sigmastate.Values.Value
+import sigmastate.Values.{ErgoTree, Value}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -36,7 +36,7 @@ import scala.util.{Failure, Random, Success, Try}
 class TransactionGenerator(viewHolder: ActorRef,
                            settings: ErgoSettings) extends Actor with ScorexLogging {
 
-  private val feeProp: Value[SBoolean.type] = settings.chainSettings.monetary.feeProposition
+  private val feeProp: ErgoTree = settings.chainSettings.monetary.feeProposition
 
   private var transactionsPerBlock: Int = 0
   private var currentFullHeight: Int = 0

@@ -10,7 +10,7 @@ import org.ergoplatform.api.WalletApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
 import org.scalatest.{FlatSpec, Matchers}
@@ -35,8 +35,8 @@ class WalletApiRouteSpec extends FlatSpec
   implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
   implicit val addressJsonDecoder: Decoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).decoder
 
-  val paymentRequest = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None)
-  val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), 100L, "TEST", "Test", 8)
+  val paymentRequest = PaymentRequest(Pay2SAddress(Constants.FalseLeaf), 100L, None, None)
+  val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), 100L, "TEST", "Test", 8)
   val requestsHolder = RequestsHolder((0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)), 10000L)
   val scriptSource: String =
     """

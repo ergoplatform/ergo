@@ -3,10 +3,9 @@ package org.ergoplatform.utils.generators
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.{BoxCertainty, TrackedBox}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
 import org.scalacheck.Gen
-import sigmastate.Values
 
 trait WalletGenerators extends ErgoTransactionGenerators {
 
@@ -80,7 +79,7 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       value <- Gen.choose(1L, 100000L)
       assets <- Gen.option(additionalTokensGen)
       registers <- Gen.option(additionalRegistersGen)
-    } yield PaymentRequest(Pay2SAddress(Values.FalseLeaf), value, assets, registers)
+    } yield PaymentRequest(Pay2SAddress(Constants.FalseLeaf), value, assets, registers)
   }
 
   def assetIssueRequestGen: Gen[AssetIssueRequest] = {
@@ -89,7 +88,7 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       name <- Gen.alphaUpperStr
       description <- Gen.alphaLowerStr
       decimals <- Gen.choose(4, 16)
-    } yield AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), amount, name, description, decimals)
+    } yield AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), amount, name, description, decimals)
   }
 
   private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)

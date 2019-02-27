@@ -25,13 +25,13 @@ trait ErgoTestHelpers
   def await[A](f: Future[A]): A = Await.result[A](f, defaultAwaitDuration)
 
   def updateHeight(box: ErgoBoxCandidate, creationHeight: Int): ErgoBoxCandidate =
-    new ErgoBoxCandidate(box.value, box.proposition, creationHeight, box.additionalTokens, box.additionalRegisters)
+    new ErgoBoxCandidate(box.value, box.ergoTree, creationHeight, box.additionalTokens, box.additionalRegisters)
 
   def changeValue(box: ErgoBoxCandidate, delta: Long): Option[ErgoBoxCandidate] = {
     if (-delta >= box.value) {
       None
     } else {
-      Some(new ErgoBoxCandidate(Math.addExact(box.value, delta), box.proposition, box.creationHeight,
+      Some(new ErgoBoxCandidate(Math.addExact(box.value, delta), box.ergoTree, box.creationHeight,
         box.additionalTokens, box.additionalRegisters))
     }
   }

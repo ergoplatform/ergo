@@ -10,16 +10,16 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings}
+import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings}
 import scorex.core.transaction.state.MinimalState
 import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import sigmastate.AtLeast
 import sigmastate.Values.{ByteArrayConstant, IntConstant, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.serialization.ValueSerializer
-import sigmastate.{AtLeast, Values}
 
 import scala.collection.mutable
 import scala.util.Try
@@ -103,7 +103,7 @@ object ErgoState extends ScorexLogging {
     val pks = settings.foundersPubkeys
       .map(str => groupElemFromBytes(Base16.decode(str).get))
       .map(pk => SigmaPropConstant(ProveDlog(pk)))
-    val protection = AtLeast(IntConstant(2), pks).isProven
+    val protection = AtLeast(IntConstant(2), pks)
     val protectionBytes = ValueSerializer.serialize(protection)
     val value = emission.foundersCoinsTotal - EmissionRules.CoinsInOneErgo
     val prop = ErgoScriptPredef.foundationScript(settings.monetary)
@@ -127,7 +127,7 @@ object ErgoState extends ScorexLogging {
   private def noPremineBox(chainSettings: ChainSettings): ErgoBox = {
     val proofsBytes = chainSettings.noPremineProof.map(b => ByteArrayConstant(b.getBytes("UTF-8")))
     val proofs = ErgoBox.nonMandatoryRegisters.zip(proofsBytes).toMap
-    ErgoBox(EmissionRules.CoinsInOneErgo, Values.FalseLeaf, ErgoHistory.EmptyHistoryHeight, Seq(), proofs)
+    ErgoBox(EmissionRules.CoinsInOneErgo, Constants.FalseLeaf, ErgoHistory.EmptyHistoryHeight, Seq(), proofs)
   }
 
   /**

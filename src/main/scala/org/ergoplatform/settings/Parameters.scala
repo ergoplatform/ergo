@@ -220,9 +220,6 @@ object Parameters {
   val MinValueMax = 10000 //0.00001 Erg
 
   val TokenAccessCostDefault = 100
-  val TokenAccessCostMax = 10000 //0.00001 Erg
-  val TokenAccessCostMin = 0
-  val TokenAccessCostStep = 10
 
   val parametersDescs: Map[Byte, String] = Map(
     StorageFeeFactorIncrease -> "Storage fee factor (per byte per storage period)",
@@ -235,22 +232,19 @@ object Parameters {
 
   val stepsTable: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorStep,
-    MinValuePerByteIncrease -> MinValueStep,
-    TokenAccessCostIncrease -> TokenAccessCostStep
+    MinValuePerByteIncrease -> MinValueStep
   )
 
   val minValues: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorMin,
     MinValuePerByteIncrease -> MinValueMin,
-    TokenAccessCostIncrease -> TokenAccessCostMin,
     MaxBlockSizeIncrease -> 16 * 1024,
     MaxBlockCostIncrease -> 16 * 1024
   )
 
   val maxValues: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorMax,
-    MinValuePerByteIncrease -> MinValueMax,
-    TokenAccessCostIncrease -> TokenAccessCostMax
+    MinValuePerByteIncrease -> MinValueMax
   )
 
   val ParamVotesCount = 2

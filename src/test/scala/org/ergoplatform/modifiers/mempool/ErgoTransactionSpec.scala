@@ -4,7 +4,7 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
-import org.ergoplatform.settings.LaunchParameters
+import org.ergoplatform.settings.{Algos, LaunchParameters, Parameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import scorex.crypto.hash.Digest32
@@ -12,8 +12,8 @@ import sigmastate._
 import sigmastate.Values.GroupElementConstant
 import sigmastate.basics.ProveDHTuple
 import sigmastate.interpreter.CryptoConstants
-import scala.collection.JavaConverters._
 
+import scala.collection.JavaConverters._
 import scala.util.Random
 
 class ErgoTransactionSpec extends ErgoPropertyTest {
@@ -163,19 +163,36 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   }
 
   property("assets usage correctly affects transaction total cost") {
-    val txGen = validErgoTransactionGenTemplate(10, 100)
+    val txGen = validErgoTransactionGenTemplate(1, 1, 8, 16)
     forAll(txGen) { case (from, tx) =>
       val initTxCost = tx.statefulValidity(from, emptyStateContext).get
+      val existingToken = from.flatMap(_.additionalTokens).toSet.head
       val additionalToken = (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextInt(100000000).toLong)
-      val in0 = from.head
+      val in0 = from.last
       val modifiedIn0 = ErgoBox(in0.value, in0.proposition, in0.creationHeight,
         in0.additionalTokens :+ additionalToken, in0.additionalRegisters, in0.transactionId, in0.index)
-      val txInMod0 = tx.inputs.head.copy(boxId = modifiedIn0.id)
-      val out0 = tx.outputs.head
+      val in1 = from.last
+      val modifiedIn1 = ErgoBox(in1.value, in1.proposition, in1.creationHeight,
+        in1.additionalTokens :+ existingToken, in1.additionalRegisters, in1.transactionId, in1.index)
+      val txInMod0 = tx.inputs.last.copy(boxId = modifiedIn0.id)
+      val txInMod1 = tx.inputs.last.copy(boxId = modifiedIn1.id)
+      val out0 = tx.outputs.last
       val modifiedOut0 = ErgoBox(out0.value, out0.proposition, out0.creationHeight,
         out0.additionalTokens :+ additionalToken, out0.additionalRegisters, out0.transactionId, out0.index)
-      val txMod0 = tx.copy(inputs = txInMod0 +: tx.inputs.tail, outputCandidates = modifiedOut0 +: tx.outputCandidates.tail)
-      val inputIncTxCost = txMod0.statefulValidity(modifiedIn0 +: from.tail, emptyStateContext).get
+      val modifiedOut1 = ErgoBox(out0.value, out0.proposition, out0.creationHeight,
+        out0.additionalTokens :+ existingToken, out0.additionalRegisters, out0.transactionId, out0.index)
+      val txMod0 = tx.copy(inputs = tx.inputs.init :+ txInMod0)
+      val txMod1 = tx.copy(inputs = tx.inputs.init :+ txInMod1)
+      val txMod2 = tx.copy(inputs = tx.inputs.init :+ txInMod0, outputCandidates = tx.outputCandidates.init :+ modifiedOut0)
+      val txMod3 = tx.copy(inputs = tx.inputs.init :+ txInMod1, outputCandidates = tx.outputCandidates.init :+ modifiedOut1)
+      val inputIncTxCost0 = txMod0.statefulValidity(from.init :+ modifiedIn0, emptyStateContext).get
+      val inputIncTxCost1 = txMod1.statefulValidity(from.init :+ modifiedIn1, emptyStateContext).get
+      val outputIncTxCost0 = txMod2.statefulValidity(from.init :+ modifiedIn0, emptyStateContext).get
+      val outputIncTxCost1 = txMod3.statefulValidity(from.init :+ modifiedIn1, emptyStateContext).get
+      (inputIncTxCost0 - initTxCost) shouldEqual Parameters.TokenAccessCostDefault * 2 // one more group + one more token in total
+      (inputIncTxCost1 - initTxCost) shouldEqual Parameters.TokenAccessCostDefault // one more token in total
+      (outputIncTxCost0 - inputIncTxCost0) shouldEqual Parameters.TokenAccessCostDefault * 2
+      (outputIncTxCost1 - inputIncTxCost1) shouldEqual Parameters.TokenAccessCostDefault
     }
   }
 

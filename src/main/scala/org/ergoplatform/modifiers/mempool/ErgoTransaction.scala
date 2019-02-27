@@ -125,18 +125,19 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         extractAssets(boxesToSpend) match {
           case Success((inAssets, inAssetsNum)) =>
             lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
-            validation.validateSeq(outAssets) {
-              case (validation, (outAssetId, outAmount)) =>
-                val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
-                val assetsCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
-                  (inAssets.size + outAssets.size) * tokenAccessCost
-                val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
-                validation.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
-                  fatal(s"Assets preservation rule is broken in $this. " +
-                    s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
-                }
-                .map(_ + assetsCost)
-            }
+            val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
+            val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
+              (inAssets.size + outAssets.size) * tokenAccessCost
+            validation
+              .validateSeq(outAssets) {
+                case (validation, (outAssetId, outAmount)) =>
+                  val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
+                  validation.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
+                    fatal(s"Assets preservation rule is broken in $this. " +
+                      s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
+                  }
+              }
+              .map(_ + totalAssetsAccessCost)
           case Failure(e) => fatal(e.getMessage)
         }
       }.toTry

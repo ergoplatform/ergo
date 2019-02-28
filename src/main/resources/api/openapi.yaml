@@ -615,7 +615,7 @@ components:
             tokenAccessCost:
               type: integer
               format: int32
-              description: Token access cost (in NanoErgs)
+              description: Computational cost of accessing a single token
               minimum: 0
               example: 100
               nullable: false

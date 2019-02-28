@@ -1,15 +1,17 @@
 package org.ergoplatform.tools
 
 import java.io.File
+import java.nio.file.{Files, Paths, StandardOpenOption}
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
+import com.google.common.primitives.Ints
 import org.ergoplatform._
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -52,7 +54,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val boxSelector: BoxSelector = DefaultBoxSelector
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
-  val dir = if (args.length < 2) new File("/tmp/ergo/data") else new File(args(1))
+  val dir = if (args.length < 2) new File("/tmp/ergo4/data") else new File(args(1))
   val txsSize: Int = if (args.length < 3) 100 * 1024 else args(2).toInt
 
   val miningDelay = 1.second
@@ -80,16 +82,48 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   log.info(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
   val chain = loop(state, None, None, Seq())
+
+  val headers = chain.map(_.header)
+  val payloads = chain.map(_.blockTransactions)
+  val extensions = chain.map(_.extension)
+
+  Seq((headers, "headers.dat"), (payloads, "payloads.dat"), (extensions, "extensions.dat"))
+    .foreach { case (mods, name) =>
+      val file = Paths.get(s"/benchmarks/src/test/resources/$name")
+      file.toFile.createNewFile()
+      val modsBytes = mods.foldLeft(Array[Byte]()) { case (acc, mod) =>
+        val modB = HistoryModifierSerializer.toBytes(mod)
+        acc ++ (Ints.toByteArray(modB.length) ++ modB)
+      }
+      Files.write(file, modsBytes, StandardOpenOption.WRITE)
+    }
+
   log.info(s"Chain of length ${chain.length} generated")
   history.bestHeaderOpt shouldBe history.bestFullBlockOpt.map(_.header)
-  history.bestFullBlockOpt.get.id shouldBe chain.last
+  history.bestFullBlockOpt.get.id shouldBe chain.last.id
   log.info("History was generated successfully")
   System.exit(0)
+
+  /**
+    * Use reflection to set `minimalFullBlockHeightVar` to 0 to change regular synchronization rule, that we
+    * first apply headers chain, and apply full blocks only after that
+    */
+  def allowToApplyOldBlocks(history: ErgoHistory): Unit = {
+    import scala.reflect.runtime.{universe => ru}
+    val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
+    val procInstance = runtimeMirror.reflect(history.asInstanceOf[ToDownloadProcessor])
+    val ppM = ru.typeOf[ToDownloadProcessor].member(ru.TermName("pruningProcessor")).asMethod
+    val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
+    val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
+    runtimeMirror.reflect(pp).reflectField(f).set(ErgoHistory.GenesisHeight)
+    val f2 = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
+    runtimeMirror.reflect(pp).reflectField(f2).set(true)
+  }
 
   private def loop(state: UtxoState,
                    initBox: Option[ErgoBox],
                    last: Option[Header],
-                   acc: Seq[ModifierId]): Seq[ModifierId] = {
+                   acc: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = {
     val time: Long = last.map(_.timestamp + blockInterval.toMillis).getOrElse(startTime)
     if (time < timeProvider.time) {
       val (txs, lastOut) = genTransactions(last.map(_.height).getOrElse(ErgoHistory.GenesisHeight),
@@ -112,7 +146,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       log.info(
         s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
 
-      loop(state.applyModifier(block).get, outToPassNext, Some(block.header), acc :+ block.id)
+      loop(state.applyModifier(block).get, outToPassNext, Some(block.header), acc :+ block)
     } else {
       acc
     }
@@ -199,22 +233,6 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
         val minerTag = scorex.utils.Random.randomBytes(Extension.FieldKeySize)
         proveCandidate(candidate.copy(extension = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> minerTag))))
     }
-  }
-
-  /**
-    * Use reflection to set `minimalFullBlockHeightVar` to 0 to change regular synchronization rule, that we
-    * first apply headers chain, and apply full blocks only after that
-    */
-  private def allowToApplyOldBlocks(history: ErgoHistory): Unit = {
-    import scala.reflect.runtime.{universe => ru}
-    val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
-    val procInstance = runtimeMirror.reflect(history.asInstanceOf[ToDownloadProcessor])
-    val ppM = ru.typeOf[ToDownloadProcessor].member(ru.TermName("pruningProcessor")).asMethod
-    val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
-    val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
-    runtimeMirror.reflect(pp).reflectField(f).set(ErgoHistory.GenesisHeight)
-    val f2 = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
-    runtimeMirror.reflect(pp).reflectField(f2).set(true)
   }
 
 }

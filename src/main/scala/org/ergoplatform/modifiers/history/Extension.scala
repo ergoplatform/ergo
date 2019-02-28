@@ -82,7 +82,6 @@ object Extension extends ApiCodecs {
 }
 
 object ExtensionSerializer extends Serializer[Extension] {
-  val Delimiter: Array[Byte] = Array(0: Byte, Byte.MinValue)
 
   override def toBytes(obj: Extension): Array[Byte] = {
     val mandBytes = scorex.core.utils.concatBytes(obj.fields.map(f =>

@@ -41,7 +41,7 @@ class WalletApiRouteSpec extends FlatSpec
   val scriptSource: String =
     """
       |{
-      |    val myPk = PK("tJPvPKbKm9hcWFMGdmAjhdpKAL6umzFswYMBNh2TKkrxRZZH3VTrhP")
+      |    val myPk = PK("3WwUerNahQR1YXyq8AKi5UkKsYeJ99zxrqNqt3BCG4xSGeTERHiQ")
       |    HEIGHT < 9197 && myPk.isProven
       |}
       |""".stripMargin
@@ -49,7 +49,7 @@ class WalletApiRouteSpec extends FlatSpec
   val scriptSourceSigProp: String =
     """
       |{
-      |    PK("tJPvPKbKm9hcWFMGdmAjhdpKAL6umzFswYMBNh2TKkrxRZZH3VTrhP")
+      |    PK("3WwUerNahQR1YXyq8AKi5UkKsYeJ99zxrqNqt3BCG4xSGeTERHiQ")
       |}
       |""".stripMargin
 

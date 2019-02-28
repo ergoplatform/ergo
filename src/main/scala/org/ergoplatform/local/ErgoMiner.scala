@@ -52,7 +52,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
   // cost of a transaction collecting emission box
-  private val EmissionTxCost: Long = 20000
+  // TODO calculate current value every time? Current value is 41010 but it may change with miner votes
+  private val EmissionTxCost: Long = 50000
 
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
 

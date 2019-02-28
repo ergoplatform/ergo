@@ -572,6 +572,7 @@ components:
           - minValuePerByte
           - maxBlockSize
           - maxBlockCost
+          - tokenAccessCost
           properties:
             height:
               type: integer
@@ -610,6 +611,13 @@ components:
               nullable: false
             blockVersion:
               $ref: '#/components/schemas/Version'
+              nullable: false
+            tokenAccessCost:
+              type: integer
+              format: int32
+              description: Token access cost (in NanoErgs)
+              minimum: 0
+              example: 100
               nullable: false
 
     Version:

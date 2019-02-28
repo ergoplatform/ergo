@@ -73,7 +73,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
   }
 
   property("should only collect valid transactions") {
-    def checkCollectTxs(maxCost: Long, maxSize: Int): Unit = {
+    def checkCollectTxs(maxCost: Long, maxSize: Int, withTokens: Boolean = false): Unit = {
 
       val bh = boxesHolderGen.sample.get
       val rnd: Random = new Random
@@ -81,7 +81,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       val usClone = createUtxoState(bh)
       val feeProposition = ErgoScriptPredef.feeProposition(delta)
       val inputs = bh.boxes.values.toIndexedSeq.takeRight(100)
-      val txsWithFees = inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = false, feeProposition))
+      val txsWithFees = inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = withTokens, feeProposition))
       val head = txsWithFees.head
 
       usClone.applyModifier(validFullBlock(None, us, bh, rnd)).get
@@ -105,7 +105,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       fromBigMempool.length should be > 1
       fromBigMempool.map(_.size).sum should be < maxSize
       costs.sum should be < maxCost
-      fromBigMempool.size should be < txsWithFees.size
+      if (!withTokens) fromBigMempool.size should be < txsWithFees.size
     }
 
     // transactions reach computation cost block limit
@@ -113,6 +113,9 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
 
     // transactions reach block size limit
     checkCollectTxs(Long.MaxValue, 4096)
+
+    // miner collects correct transactions from mempool even if they have tokens
+    checkCollectTxs(Int.MaxValue, Int.MaxValue, withTokens = true)
 
   }
 

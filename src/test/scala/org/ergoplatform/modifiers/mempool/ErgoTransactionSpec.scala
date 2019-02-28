@@ -166,29 +166,45 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     val txGen = validErgoTransactionGenTemplate(1, 1, 8, 16)
     forAll(txGen) { case (from, tx) =>
       val initTxCost = tx.statefulValidity(from, emptyStateContext).get
+
+      // already existing token from one of the inputs
       val existingToken = from.flatMap(_.additionalTokens).toSet.head
+      // completely new token
       val additionalToken = (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextInt(100000000).toLong)
+
       val in0 = from.last
+      // new token added to the last input
       val modifiedIn0 = ErgoBox(in0.value, in0.proposition, in0.creationHeight,
         in0.additionalTokens :+ additionalToken, in0.additionalRegisters, in0.transactionId, in0.index)
+      val txInMod0 = tx.inputs.last.copy(boxId = modifiedIn0.id)
+
       val in1 = from.last
+      // existing token added to the last input
       val modifiedIn1 = ErgoBox(in1.value, in1.proposition, in1.creationHeight,
         in1.additionalTokens :+ existingToken, in1.additionalRegisters, in1.transactionId, in1.index)
-      val txInMod0 = tx.inputs.last.copy(boxId = modifiedIn0.id)
       val txInMod1 = tx.inputs.last.copy(boxId = modifiedIn1.id)
+
       val out0 = tx.outputs.last
+      // new token added to the last output
       val modifiedOut0 = ErgoBox(out0.value, out0.proposition, out0.creationHeight,
         out0.additionalTokens :+ additionalToken, out0.additionalRegisters, out0.transactionId, out0.index)
+      // existing token added to the last output
       val modifiedOut1 = ErgoBox(out0.value, out0.proposition, out0.creationHeight,
         out0.additionalTokens :+ existingToken, out0.additionalRegisters, out0.transactionId, out0.index)
-      val txMod0 = tx.copy(inputs = tx.inputs.init :+ txInMod0)
-      val txMod1 = tx.copy(inputs = tx.inputs.init :+ txInMod1)
-      val txMod2 = tx.copy(inputs = tx.inputs.init :+ txInMod0, outputCandidates = tx.outputCandidates.init :+ modifiedOut0)
-      val txMod3 = tx.copy(inputs = tx.inputs.init :+ txInMod1, outputCandidates = tx.outputCandidates.init :+ modifiedOut1)
+
+      // update transaction inputs and outputs accordingly
+      val txMod0 = tx.copy(inputs = tx.inputs.init :+ txInMod0) // new token group added to one input
+    val txMod1 = tx.copy(inputs = tx.inputs.init :+ txInMod1) // existing token added to one input
+    val txMod2 = tx.copy(inputs = tx.inputs.init :+ txInMod0, // new token group added to one input and one output
+      outputCandidates = tx.outputCandidates.init :+ modifiedOut0)
+      val txMod3 = tx.copy(inputs = tx.inputs.init :+ txInMod1, // existing token added to one input and one output
+        outputCandidates = tx.outputCandidates.init :+ modifiedOut1)
+
       val inputIncTxCost0 = txMod0.statefulValidity(from.init :+ modifiedIn0, emptyStateContext).get
       val inputIncTxCost1 = txMod1.statefulValidity(from.init :+ modifiedIn1, emptyStateContext).get
       val outputIncTxCost0 = txMod2.statefulValidity(from.init :+ modifiedIn0, emptyStateContext).get
       val outputIncTxCost1 = txMod3.statefulValidity(from.init :+ modifiedIn1, emptyStateContext).get
+
       (inputIncTxCost0 - initTxCost) shouldEqual Parameters.TokenAccessCostDefault * 2 // one more group + one more token in total
       (inputIncTxCost1 - initTxCost) shouldEqual Parameters.TokenAccessCostDefault // one more token in total
       (outputIncTxCost0 - inputIncTxCost0) shouldEqual Parameters.TokenAccessCostDefault * 2

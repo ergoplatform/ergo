@@ -315,7 +315,8 @@ object ParametersSerializer extends ScorexSerializer[Parameters] with ApiCodecs 
       "storageFeeFactor" -> p.storageFeeFactor.asJson,
       "minValuePerByte" -> p.minValuePerByte.asJson,
       "maxBlockSize" -> p.maxBlockSize.asJson,
-      "maxBlockCost" -> p.maxBlockCost.asJson
+      "maxBlockCost" -> p.maxBlockCost.asJson,
+      "tokenAccessCost" -> p.tokenAccessCost.asJson
     ).asJson
   }
 

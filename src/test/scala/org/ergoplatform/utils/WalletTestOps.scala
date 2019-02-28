@@ -53,7 +53,7 @@ trait WalletTestOps extends NodeViewBaseOps {
   }
 
   def scanTime(boxCount: Int, tokenCount: Int)(implicit ctx: Ctx): Long = {
-    boxCount * scanningInterval + tokenCount * scanningInterval * 2 + 1000
+    boxCount * scanningInterval + tokenCount * scanningInterval * 2 + 2500
   }
 
   def waitForOffchainScanning(tx: ErgoTransaction): Unit = {

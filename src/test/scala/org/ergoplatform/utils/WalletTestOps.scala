@@ -77,7 +77,7 @@ trait WalletTestOps extends NodeViewBaseOps {
   }
 
   def boxesAvailable(tx: ErgoTransaction, pk: ProveDlog): Seq[ErgoBox] = {
-    tx.outputs.filter(_.propositionBytes.containsSlice(ValueSerializer.serialize(pk.value)))
+    tx.outputs.filter(_.propositionBytes.containsSlice(org.ergoplatform.mining.groupElemToBytes(pk.value)))
   }
 
   def assetAmount(boxes: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = {

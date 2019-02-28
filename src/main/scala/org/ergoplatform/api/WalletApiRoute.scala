@@ -14,10 +14,9 @@ import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
-import sigmastate.Values.{ErgoTree, Value}
+import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.lang.SigmaCompiler
-import sigmastate.utxo.SigmaPropIsProven
 import sigmastate.{SBoolean, SSigmaProp}
 
 import scala.concurrent.Future

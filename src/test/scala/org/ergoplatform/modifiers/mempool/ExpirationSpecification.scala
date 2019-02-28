@@ -5,7 +5,6 @@ import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion
-import sigmastate.Values
 import sigmastate.Values.ShortConstant
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 

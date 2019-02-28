@@ -17,7 +17,6 @@ import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.testkit.utils.NoShrink
 import scorex.util.ModifierId
-import sigmastate.Values
 
 class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with NoShrink {
 
@@ -97,7 +96,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
       val genesis = validFullBlock(parentOpt = None, us, bh)
       applyBlock(genesis) shouldBe 'success
 
-      val boxes = ErgoState.boxChanges(genesis.transactions)._2.find(_.proposition == Constants.TrueLeaf)
+      val boxes = ErgoState.boxChanges(genesis.transactions)._2.find(_.ergoTree == Constants.TrueLeaf)
       boxes.nonEmpty shouldBe true
 
       val tx = validTransactionFromBoxes(boxes.toIndexedSeq)

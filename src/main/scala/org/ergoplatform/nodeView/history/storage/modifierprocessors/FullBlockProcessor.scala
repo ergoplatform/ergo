@@ -8,6 +8,7 @@ import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
 import scorex.util.{ModifierId, bytesToId}
 
+import scala.annotation.tailrec
 import scala.util.Try
 
 /**
@@ -26,7 +27,26 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   protected def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
 
-  protected[history] def continuationHeaderChains(header: Header, withFilter: Header => Boolean): Seq[Seq[Header]]
+  protected def continuationChains(block: ErgoFullBlock): Seq[Seq[ErgoFullBlock]] = {
+    @tailrec
+    def loop(currentHeight: Option[Int], acc: Seq[Seq[ErgoFullBlock]]): Seq[Seq[ErgoFullBlock]] = {
+      val nextLevelBlocks = currentHeight.toList
+        .flatMap(h => headerIdsAtHeight(h + 1))
+        .flatMap(id => typedModifierById[Header](id))
+        .flatMap(getFullBlock)
+      if (nextLevelBlocks.isEmpty) {
+        acc.map(chain => chain.reverse)
+      } else {
+        val updatedChains = nextLevelBlocks.flatMap { block =>
+          acc.find(chain => chain.nonEmpty && (block.parentId == chain.head.id)).map(c => block +: c)
+        }
+        val nonUpdatedChains = acc.filter(chain => !nextLevelBlocks.exists(_.parentId == chain.head.id))
+        loop(currentHeight.map(_ + 1), updatedChains ++ nonUpdatedChains)
+      }
+    }
+
+    loop(heightOf(block.id), Seq(Seq(block)))
+  }
 
   /** Process full block when we have one.
     *
@@ -114,9 +134,10 @@ trait FullBlockProcessor extends HeadersProcessor {
   }
 
   private def calculateBestFullChain(fb: ErgoFullBlock): Seq[ErgoFullBlock] = {
-    val continuations = continuationHeaderChains(fb.header, h => getFullBlock(h).nonEmpty).map(_.tail)
-    val chains = continuations.map(hc => hc.map(getFullBlock).takeWhile(_.isDefined).flatten)
-    chains.map(c => fb +: c).maxBy(c => scoreOf(c.last.id))
+    continuationChains(fb)
+      .map(_.tail)
+      .map(c => fb +: c)
+      .maxBy(c => scoreOf(c.last.id))
   }
 
   private def logStatus(toRemove: Seq[ErgoFullBlock],

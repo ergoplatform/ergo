@@ -31,9 +31,9 @@ object ModifiersApplicationBench extends HistoryTestHelpers with App {
       s"Performance of `$benchCase`: $et ms"
     }
 
-    val modifiersDirectOrd = payloads.zip(extensions).flatMap(x => Seq(x._1, x._2)).take(400)
+    val modifiersDirectOrd = payloads.zip(extensions).flatMap(x => Seq(x._1, x._2)).take(300)
     val report0 = bench("Modifiers application in direct order")(applyModifiers, modifiersDirectOrd)
-    val modifiersReversedOrd = payloads.zip(extensions).flatMap(x => Seq(x._1, x._2)).take(400).reverse
+    val modifiersReversedOrd = payloads.zip(extensions).flatMap(x => Seq(x._1, x._2)).take(300).reverse
     val report1 = bench("Modifiers application in reversed order")(applyModifiers, modifiersReversedOrd)
 
     println(report0)
@@ -54,8 +54,8 @@ object ModifiersApplicationBench extends HistoryTestHelpers with App {
       }
     }
 
-    val a = applyLoop(Seq()).size
-    his -> a
+    val appliedModsQty = applyLoop(Seq()).size
+    his -> appliedModsQty
   }
 
   def applyModifiers(mods: Seq[ErgoPersistentModifier], his: ErgoHistory): (ErgoHistory, Int) = {
@@ -71,8 +71,8 @@ object ModifiersApplicationBench extends HistoryTestHelpers with App {
       }
     }
 
-    val a = applyLoop(mods, Seq()).size
-    his -> a
+    val appliedModsQty = applyLoop(mods, Seq()).size
+    his -> appliedModsQty
   }
 
   def history(): ErgoHistory = generateHistory(

@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.util.concurrent.Executors
 
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.{R4, TokenId}
+import org.ergoplatform.ErgoBox.{BoxId, R4, TokenId}
 import org.ergoplatform._
 import org.ergoplatform.mining._
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -15,6 +15,7 @@ import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.core._
+import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import sigmastate.Values.ByteArrayConstant
@@ -223,6 +224,34 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     }
   }
 
+  property("applyTransactions() - simple case for transaction with dataInputs") {
+    forAll(boxesHolderGen) { bh =>
+      val txsIn = validTransactionsFromBoxHolder(bh)._1
+      val headTx = txsIn.head
+      val us = createUtxoState(bh)
+      val stateContext = us.stateContext
+      val existingBoxes: IndexedSeq[BoxId] = bh.boxes.takeRight(3).map(_._2.id).toIndexedSeq
+
+      // trying to apply transactions with missing data inputs
+      val missedId: BoxId = ADKey @@ scorex.util.Random.randomBytes()
+      us.boxById(missedId) shouldBe None
+      val missingDataInputs = (missedId +: existingBoxes).map(DataInput).toIndexedSeq
+      val txWithMissedDataInputs = ErgoTransaction(headTx.inputs, missingDataInputs, headTx.outputCandidates)
+      val incorrectTransactions = IndexedSeq(txWithMissedDataInputs)
+      // proof fro transaction works correctly, providing proof-of-non-existence for missed input
+      val digest2 = us.proofsForTransactions(incorrectTransactions).get._2
+      us.applyTransactions(incorrectTransactions, digest2, stateContext) shouldBe 'failure
+
+      // trying to apply transactions with correct data inputs
+      val existingDataInputs = existingBoxes.map(DataInput).toIndexedSeq
+      existingDataInputs.foreach(b => us.boxById(b.boxId) should not be None)
+      val txWithDataInputs = ErgoTransaction(headTx.inputs, existingDataInputs, headTx.outputCandidates)
+      val correctTransactions = IndexedSeq(txWithDataInputs)
+      val digest = us.proofsForTransactions(correctTransactions).get._2
+      us.applyTransactions(correctTransactions, digest, stateContext).get
+    }
+  }
+
   property("applyTransactions() - simple case") {
     forAll(boxesHolderGen) { bh =>
       val txs = validTransactionsFromBoxHolder(bh)._1
@@ -244,7 +273,6 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
   }
 
   property("applyTransactions() - a transaction is spending an output created by a previous transaction") {
-    val header = defaultHeaderGen.sample.get
     forAll(boxesHolderGen) { bh =>
       val txsFromHolder = validTransactionsFromBoxHolder(bh)._1
 

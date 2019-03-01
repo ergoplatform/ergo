@@ -42,5 +42,12 @@ case class Insertion(box: ErgoBox) extends StateChangeOperation {
 }
 
 case class StateChanges(toRemove: Seq[Removal], toAppend: Seq[Insertion], toLookup: Seq[Lookup]) {
-  val operations: Seq[StateChangeOperation] =  toLookup ++ toRemove ++ toAppend
+
+  /**
+    * First lookup for all leafs required by data inputs (never fails, but may return proof-of-non-existence),
+    * then remove all leafs that should be removed,
+    * then add new leafs
+    */
+  val operations: Seq[StateChangeOperation] = toRemove ++ toLookup ++ toAppend
+
 }

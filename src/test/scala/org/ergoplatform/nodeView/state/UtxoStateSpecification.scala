@@ -252,6 +252,46 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     }
   }
 
+  property("applyTransactions() - dataInputs intersect with inputs") {
+    forAll(boxesHolderGen) { bh =>
+      val us = createUtxoState(bh)
+
+      // generate 2 independent transactions, that only spend state boxes
+      val headTx = validTransactionsFromBoxes(1, bh.boxes.take(10).values.toSeq, new Random())._1.head
+      val nextTx = validTransactionsFromBoxes(1, bh.boxes.takeRight(10).values.toSeq, new Random())._1.head
+      headTx.inputs.intersect(nextTx.inputs) shouldBe empty
+      us.proofsForTransactions(IndexedSeq(headTx, nextTx)) shouldBe 'success
+
+      // trying to apply transactions with data inputs same as inputs of the next tx
+      val dataInputs = nextTx.inputs.filter(i => us.boxById(i.boxId).isDefined).map(i => DataInput(i.boxId))
+      val txWithDataInputs = ErgoTransaction(headTx.inputs, dataInputs, headTx.outputCandidates)
+
+      val txs1 = IndexedSeq(headTx, nextTx)
+      val txs2 = IndexedSeq(txWithDataInputs, nextTx)
+      val sc1 = ErgoState.stateChanges(txs1)
+      val sc2 = ErgoState.stateChanges(IndexedSeq(txWithDataInputs, nextTx))
+      // check that the only difference between txs1 and txs2 are dataInputs and Lookup tree operations
+      txs1.flatMap(_.inputs) shouldBe txs2.flatMap(_.inputs)
+      txs1.flatMap(_.outputCandidates) shouldBe txs2.flatMap(_.outputCandidates)
+      sc1.toAppend.size shouldBe sc2.toAppend.size
+      sc1.toRemove shouldBe sc2.toRemove
+      sc1.toLookup shouldBe empty
+      sc2.toLookup should not be empty
+
+      us.proofsForTransactions(txs1) shouldBe 'success
+      us.proofsForTransactions(txs2) shouldBe 'success
+
+      // trying to apply transactions with data inputs same as outputs of the previous tx
+      val dataInputsNext = headTx.outputs.take(1).map(i => DataInput(i.id))
+      dataInputsNext should not be empty
+      val nextTxWithDataInputs = ErgoTransaction(nextTx.inputs, dataInputsNext, nextTx.outputCandidates)
+      val txsNext = IndexedSeq(headTx, nextTxWithDataInputs)
+      // proof of non-existence
+      val d2 = us.proofsForTransactions(txsNext).get._2
+      us.applyTransactions(txsNext, d2, us.stateContext) shouldBe 'success
+    }
+  }
+
   property("applyTransactions() - simple case") {
     forAll(boxesHolderGen) { bh =>
       val txs = validTransactionsFromBoxHolder(bh)._1

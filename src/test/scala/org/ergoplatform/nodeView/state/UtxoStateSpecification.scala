@@ -49,7 +49,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         ErgoBox(foundersBox.value - remaining - minAmount, defaultProver.secrets.last.publicImage, height, Seq((tokenId, 49L)))
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
-      defaultProver.sign(unsignedTx, emptyDataBoxes, IndexedSeq(foundersBox), us.stateContext).get
+      defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get
     }
     val block1 = validFullBlock(Some(genesis), us, Seq(tx))
     us = us.applyModifier(block1).get

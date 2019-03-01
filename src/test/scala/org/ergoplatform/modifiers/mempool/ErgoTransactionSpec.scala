@@ -194,9 +194,9 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
       // update transaction inputs and outputs accordingly
       val txMod0 = tx.copy(inputs = tx.inputs.init :+ txInMod0) // new token group added to one input
-    val txMod1 = tx.copy(inputs = tx.inputs.init :+ txInMod1) // existing token added to one input
-    val txMod2 = tx.copy(inputs = tx.inputs.init :+ txInMod0, // new token group added to one input and one output
-      outputCandidates = tx.outputCandidates.init :+ modifiedOut0)
+      val txMod1 = tx.copy(inputs = tx.inputs.init :+ txInMod1) // existing token added to one input
+      val txMod2 = tx.copy(inputs = tx.inputs.init :+ txInMod0, // new token group added to one input and one output
+        outputCandidates = tx.outputCandidates.init :+ modifiedOut0)
       val txMod3 = tx.copy(inputs = tx.inputs.init :+ txInMod1, // existing token added to one input and one output
         outputCandidates = tx.outputCandidates.init :+ modifiedOut1)
 

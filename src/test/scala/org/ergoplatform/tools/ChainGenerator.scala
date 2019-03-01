@@ -134,7 +134,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
         val x = outs
           .foldLeft(Seq.empty[ErgoTransaction], input) { case ((acc, in), out) =>
             val inputs = IndexedSeq(in)
-            val unsignedTx = new UnsignedErgoTransaction(
+            val unsignedTx = UnsignedErgoTransaction(
               inputs.map(_.id).map(id => new UnsignedInput(id)),
               IndexedSeq(out)
             )

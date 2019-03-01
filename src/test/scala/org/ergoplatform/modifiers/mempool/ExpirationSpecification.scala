@@ -32,10 +32,10 @@ class ExpirationSpecification extends ErgoPropertyTest {
     val in = Input(from.id,
       ProverResult(Array.emptyByteArray, ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(0)))))
 
-    val h: Int = (from.creationHeight + Constants.StoragePeriod + heightDelta).toInt
+    val h: Int = from.creationHeight + Constants.StoragePeriod + heightDelta
 
     val oc = outsConstructor(h).map(c => updateHeight(c, h))
-    val tx = ErgoTransaction(inputs = IndexedSeq(in), outputCandidates = oc)
+    val tx = ErgoTransaction(inputs = IndexedSeq(in), dataInputs = IndexedSeq(), outputCandidates = oc)
 
     val fb0 = invalidErgoFullBlockGen.sample.get
     val fb = fb0.copy(fb0.header.copy(height = h))

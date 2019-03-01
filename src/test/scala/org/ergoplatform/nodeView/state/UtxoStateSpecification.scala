@@ -47,7 +47,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         ErgoBox(minAmount, defaultProver.secrets.head.publicImage, height, Seq((tokenId, 49L))),
         ErgoBox(foundersBox.value - remaining - minAmount, defaultProver.secrets.last.publicImage, height, Seq((tokenId, 49L)))
       )
-      val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
+      val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), us.stateContext).get
     }
     val block1 = validFullBlock(Some(genesis), us, Seq(tx))
@@ -64,7 +64,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         ErgoBox(remaining, foundersBox.ergoTree, height, Seq(), foundersBox.additionalRegisters),
         ErgoBox(inputValue - remaining, defaultProver.secrets.last.publicImage, height, Seq((tokenId, 98L)))
       )
-      val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
+      val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       defaultProver.sign(unsignedTx, tx.outputs, us.stateContext).get
     }
     val block2 = validFullBlock(Some(block1), us, Seq(tx2))
@@ -100,7 +100,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         ErgoBox(remaining, foundersBox.ergoTree, height, Seq(), foundersBox.additionalRegisters),
         ErgoBox(foundersBox.value - remaining, rewardPk, height, Seq())
       )
-      val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
+      val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx = defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), us.stateContext).get
       us.validate(tx) shouldBe 'success
       height = height + 1
@@ -253,7 +253,9 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val spendingTxInput = Input(boxToSpend.id, emptyProverResult)
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight)))
+        IndexedSeq(),
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight))
+      )
 
       val txs = txsFromHolder :+ spendingTx
 
@@ -276,6 +278,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val spendingTxInput = Input(boxToSpend.id, emptyProverResult)
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
+        IndexedSeq(),
         IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight)))
 
       val txs = spendingTx +: txsFromHolder

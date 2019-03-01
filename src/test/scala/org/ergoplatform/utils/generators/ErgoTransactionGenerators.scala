@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotCh
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
 import org.ergoplatform.settings.{Constants, LaunchParameters}
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
@@ -104,10 +104,15 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     spendingProof <- noProofGen
   } yield Input(boxId, spendingProof)
 
+  lazy val dataInputGen: Gen[DataInput] = for {
+    boxId <- boxIdGen
+  } yield DataInput(boxId)
+
   lazy val invalidErgoTransactionGen: Gen[ErgoTransaction] = for {
     from: IndexedSeq[Input] <- smallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
+    dataInputs: IndexedSeq[DataInput] <- smallInt.flatMap(i => Gen.listOfN(i + 1, dataInputGen).map(_.toIndexedSeq))
     to: IndexedSeq[ErgoBoxCandidate] <- smallInt.flatMap(i => Gen.listOfN(i + 1, ergoBoxCandidateGen).map(_.toIndexedSeq))
-  } yield ErgoTransaction(from, to)
+  } yield ErgoTransaction(from, dataInputs, to)
 
   /**
     * Generates a transaction that is valid if correct boxes were provided.
@@ -198,10 +203,10 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       ErgoBox(amt, outputsProposition, 0, normalizedTokens)
     }
     val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
-    val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
+    val unsignedTx = UnsignedErgoTransaction(inputs, newBoxes)
     defaultProver.sign(unsignedTx, boxesToSpend, stateCtxOpt.getOrElse(emptyStateContext)).getOrElse {
       log.debug(s"Going to generate a transaction with incorrect spending proofs: $unsignedTx")
-      new ErgoTransaction(inputs, newBoxes)
+      ErgoTransaction(inputs, newBoxes)
     }
   }
 

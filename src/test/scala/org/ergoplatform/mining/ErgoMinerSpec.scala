@@ -91,7 +91,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
         val outputs = (1 until desiredSize).map { _ =>
           new ErgoBoxCandidate(boxToSend.value / desiredSize, defaultMinerPk, r.s.stateContext.currentHeight)
         }
-        val unsignedTx = new UnsignedErgoTransaction(inputs, feeBox +: outputs)
+        val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), feeBox +: outputs)
         defaultProver.sign(
           unsignedTx,
           IndexedSeq(boxToSend),
@@ -160,10 +160,10 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val input = Input(boxToDoubleSpend.id, emptyProverResult)
 
     val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1, r.s.stateContext.currentHeight))
-    val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input), outputs1)
+    val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input),  IndexedSeq(), outputs1)
     val tx1 = defaultProver.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), r.s.stateContext).get
     val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2, r.s.stateContext.currentHeight))
-    val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input), outputs2)
+    val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input),  IndexedSeq(), outputs2)
     val tx2 = defaultProver.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), r.s.stateContext).get
 
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx1)

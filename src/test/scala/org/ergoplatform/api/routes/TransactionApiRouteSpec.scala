@@ -35,7 +35,8 @@ class TransactionApiRouteSpec extends FlatSpec
   val boxValue: Long = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, parameters)
   val output: ErgoBoxCandidate = new ErgoBoxCandidate(boxValue, Constants.TrueLeaf,
     creationHeight = creationHeightGen.sample.get)
-  val tx: ErgoTransaction = ErgoTransaction(IndexedSeq(input), IndexedSeq(output))
+  // todo fill dataInputs
+  val tx: ErgoTransaction = ErgoTransaction(IndexedSeq(input), IndexedSeq(), IndexedSeq(output))
 
   it should "post transaction" in {
     Post(prefix, tx.asJson) ~> route ~> check {

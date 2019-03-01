@@ -224,6 +224,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
         val unsignedTx = new UnsignedErgoTransaction(
           inputs.map(_.id).map(id => new UnsignedInput(id)),
+          IndexedSeq(),
           (payTo ++ changeBoxCandidates).toIndexedSeq
         )
 

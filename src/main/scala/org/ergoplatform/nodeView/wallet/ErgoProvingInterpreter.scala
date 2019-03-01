@@ -84,7 +84,7 @@ class ErgoProvingInterpreter(seed: String,
           }
         }
     }.map { case (inputs, _) =>
-      ErgoTransaction(inputs.reverse, unsignedTx.outputCandidates)
+      ErgoTransaction(inputs.reverse, unsignedTx.dataInputs, unsignedTx.outputCandidates)
     }
   }.flatten
 }

@@ -204,7 +204,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     }
     val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
     val unsignedTx = UnsignedErgoTransaction(inputs, newBoxes)
-    defaultProver.sign(unsignedTx, boxesToSpend, stateCtxOpt.getOrElse(emptyStateContext)).getOrElse {
+    defaultProver.sign(unsignedTx, boxesToSpend, emptyDataBoxes, stateCtxOpt.getOrElse(emptyStateContext)).getOrElse {
       log.debug(s"Going to generate a transaction with incorrect spending proofs: $unsignedTx")
       ErgoTransaction(inputs, newBoxes)
     }
@@ -243,9 +243,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, ergoBoxGenForTokens(Seq(), trueLeafGen))
     .map(l => BoxHolder(l))
-
-  lazy val stateChangesGen: Gen[StateChanges] = ergoBoxGenNoProp
-    .map(b => StateChanges(Seq(), Seq(Insertion(b))))
 
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
     headerId <- modifierIdGen

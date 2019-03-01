@@ -330,7 +330,7 @@ object ErgoMiner extends ScorexLogging {
               ErgoMiner.collectFees(us.stateContext.currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
                 case Some(feeTx) =>
                   val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
-                  feeTx.statefulValidity(boxesToSpend, upcomingContext) match {
+                  feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext) match {
                     case Success(cost) =>
                       val blockTxs: Seq[(ErgoTransaction, Long)] = (feeTx -> cost) +: newTxs
                       if (correctLimits(blockTxs)) loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost)) else current

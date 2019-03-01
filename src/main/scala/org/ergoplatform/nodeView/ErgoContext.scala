@@ -8,11 +8,13 @@ import sigmastate.AvlTreeData
 import sigmastate.interpreter.ContextExtension
 
 case class TransactionContext(boxesToSpend: IndexedSeq[ErgoBox],
+                              dataBoxes: IndexedSeq[ErgoBox],
                               spendingTransaction: ErgoLikeTransactionTemplate[_ <: UnsignedInput],
                               selfIndex: Short) {
   lazy val self = boxesToSpend(selfIndex)
 }
 
+// todo send dataBoxes to ErgoLikeContext when it will be ready
 class ErgoContext(val stateContext: ErgoStateContext,
                   transactionContext: TransactionContext,
                   override val extension: ContextExtension = ContextExtension(Map()))

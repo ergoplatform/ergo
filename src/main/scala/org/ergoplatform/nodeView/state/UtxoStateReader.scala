@@ -36,7 +36,10 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   def validateWithCost(tx: ErgoTransaction): Try[Long] = {
     tx.statelessValidity.flatMap { _ =>
       implicit val verifier = ErgoInterpreter(stateContext.currentParameters)
-      tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext)
+      tx.statefulValidity(
+        tx.inputs.flatMap(i => boxById(i.boxId)),
+        tx.dataInputs.flatMap(i => boxById(i.boxId)),
+        stateContext)
     }
   }
 

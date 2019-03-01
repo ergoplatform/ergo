@@ -8,7 +8,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
+import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings}
 import scorex.core.transaction.state.MinimalState
@@ -67,7 +67,8 @@ object ErgoState extends ScorexLogging {
     val (toRemove, toInsert) = boxChanges(txs)
     val toRemoveChanges = toRemove.map(id => Removal(id))
     val toInsertChanges = toInsert.map(b => Insertion(b))
-    StateChanges(toRemoveChanges, toInsertChanges)
+    val toLookup = txs.flatMap(_.dataInputs).map(b => Lookup(b.boxId))
+    StateChanges(toRemoveChanges, toInsertChanges, toLookup)
   }
 
   /**

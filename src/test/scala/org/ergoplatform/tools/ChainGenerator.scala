@@ -139,7 +139,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
               IndexedSeq(out)
             )
 
-            prover.sign(unsignedTx, inputs, ctx)
+            prover.sign(unsignedTx, inputs, emptyDataBoxes, ctx)
               .fold(_ => acc -> in, tx => (acc :+ tx) -> unsignedTx.outputs.head)
           }
           ._1

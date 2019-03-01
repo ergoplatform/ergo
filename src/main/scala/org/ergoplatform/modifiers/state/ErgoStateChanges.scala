@@ -8,6 +8,17 @@ import scorex.crypto.authds.ADKey
 
 abstract class StateChangeOperation
 
+case class Lookup(boxId: ADKey) extends StateChangeOperation {
+  override def equals(that: Any): Boolean = that match {
+    case that: Removal => java.util.Arrays.equals(boxId, that.boxId)
+    case _ => false
+  }
+
+  override def hashCode(): Int = Ints.fromByteArray(boxId)
+
+  override def toString: String = s"Lookup(id: ${Algos.encode(boxId)})"
+}
+
 case class Removal(boxId: ADKey) extends StateChangeOperation {
   override def equals(that: Any): Boolean = that match {
     case that: Removal => java.util.Arrays.equals(boxId, that.boxId)
@@ -30,6 +41,6 @@ case class Insertion(box: ErgoBox) extends StateChangeOperation {
   override def toString: String = s"Insertion(id: ${Algos.encode(box.id)})"
 }
 
-case class StateChanges(toRemove: Seq[Removal], toAppend: Seq[Insertion]) {
-  val operations: Seq[StateChangeOperation] = toRemove ++ toAppend
+case class StateChanges(toRemove: Seq[Removal], toAppend: Seq[Insertion], toLookup: Seq[Lookup]) {
+  val operations: Seq[StateChangeOperation] =  toLookup ++ toRemove ++ toAppend
 }

@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConsta
 import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters, VotingSettings}
-import org.ergoplatform.{ErgoBox, ErgoScriptPredef}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoScriptPredef}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -54,6 +54,8 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)
   val defaultExtension: ExtensionCandidate = ExtensionCandidate(Seq(Array(0: Byte, 8: Byte) -> EmptyDigest32))
   val emptyExtension: ExtensionCandidate = ExtensionCandidate(Seq())
+  val emptyDataInputs: IndexedSeq[DataInput] = IndexedSeq()
+  val emptyDataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()
 
   val defaultTimeout: Timeout = Timeout(14.seconds)
   val defaultAwaitDuration: FiniteDuration = defaultTimeout.duration + 1.second

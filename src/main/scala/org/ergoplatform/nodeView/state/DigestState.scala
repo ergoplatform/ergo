@@ -54,9 +54,9 @@ class DigestState protected(override val version: VersionTag,
 
             val declaredHash = fb.header.stateRoot
             // Check modifications, returning sequence of old values
-            val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, declaredHash)
+            val boxesFromProofs: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, declaredHash)
               .get.map(v => ErgoBoxSerializer.parseBytes(v))
-            val knownBoxes = (txs.flatMap(_.outputs) ++ oldValues).map(o => (ByteArrayWrapper(o.id), o)).toMap
+            val knownBoxes = (txs.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
             val totalCost = txs.map { tx =>
               tx.statelessValidity.get
               val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
@@ -65,7 +65,13 @@ class DigestState protected(override val version: VersionTag,
                   case None => throw new Exception(s"Box with id ${Algos.encode(id)} not found")
                 }
               }
-              tx.statefulValidity(boxesToSpend, currentStateContext)(verifier).get
+              val dataBoxes = tx.dataInputs.map(_.boxId).map { id =>
+                knownBoxes.get(ByteArrayWrapper(id)) match {
+                  case Some(box) => box
+                  case None => throw new Exception(s"Box with id ${Algos.encode(id)} not found")
+                }
+              }
+              tx.statefulValidity(boxesToSpend, dataBoxes, currentStateContext)(verifier).get
             }.sum
             if (totalCost > currentStateContext.currentParameters.maxBlockCost) {
               throw new Exception(s"Transaction cost $totalCost exceeds limit")

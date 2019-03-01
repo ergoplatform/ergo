@@ -105,6 +105,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   /** Return total computation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
+                       dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext)(implicit verifier: ErgoInterpreter): Try[Long] = {
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
@@ -115,11 +116,12 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demand(outputs.forall(o => o.value >= BoxUtils.minimalErgoAmount(o, stateContext.currentParameters)), s"Transaction is trying to create dust: $this")
       .demand(outputCandidates.forall(_.creationHeight <= stateContext.currentHeight), s"Box created in future:  ${outputCandidates.map(_.creationHeight)} vs ${stateContext.currentHeight}")
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
+      .demand(dataBoxes.size == dataInputs.size, s"dataBoxes.size ${dataBoxes.size} != dataInputs.size ${dataInputs.size}")
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val input = inputs(idx)
         val proof = input.spendingProof
         val proverExtension = proof.extension
-        val transactionContext = TransactionContext(boxesToSpend, this, idx.toShort)
+        val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
         val ctx = new ErgoContext(stateContext, transactionContext, proverExtension)
 
         val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)

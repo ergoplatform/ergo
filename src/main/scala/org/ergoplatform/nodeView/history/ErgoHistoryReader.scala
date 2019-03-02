@@ -134,7 +134,7 @@ trait ErgoHistoryReader
     if (isEmpty) {
       info.startingPoints
     } else if (info.lastHeaderIds.isEmpty) {
-      val heightFrom = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
+      val heightFrom = Math.min(bestHeaderHeight, size + ErgoHistory.EmptyHistoryHeight)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
       val headers = headerChainBack(size, startHeader, _ => false)
@@ -144,7 +144,7 @@ trait ErgoHistoryReader
       val ids = info.lastHeaderIds
       val lastHeaderInOurBestChain: ModifierId = ids.view.reverse.find(m => isInBestChain(m)).get
       val theirHeight = heightOf(lastHeaderInOurBestChain).get
-      val heightFrom = Math.min(headersHeight, theirHeight + size)
+      val heightFrom = Math.min(bestHeaderHeight, theirHeight + size)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
       val headerIds = headerChainBack(size, startHeader, h => h.parentId == lastHeaderInOurBestChain)

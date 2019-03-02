@@ -113,7 +113,7 @@ trait ErgoHistory
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
-            val newBestHeader = loopHeightDown(headersHeight, id => !invalidatedIds.contains(id))
+            val newBestHeader = loopHeightDown(bestHeaderHeight, id => !invalidatedIds.contains(id))
               .ensuring(_.isDefined, "Where unable to find new best header, can't invalidate genesis block")
               .get
 
@@ -125,7 +125,7 @@ trait ErgoHistory
               this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
             } else {
               val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
-                .flatMap(f => headerChainBack(fullBlockHeight + 1, f.header, h => !invalidatedIds.contains(h.id)).headers)
+                .flatMap(f => headerChainBack(bestFullBlockHeight + 1, f.header, h => !invalidatedIds.contains(h.id)).headers)
                 .flatMap(h => getFullBlock(h))
                 .ensuring(_.lengthCompare(1) > 0, "invalidatedChain should contain at least bestFullBlock and parent")
 

@@ -29,7 +29,7 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
     * @return
     */
   def constructPoPoWProof(m: Int, k: Int): Try[PoPoWProof] = Try {
-    val currentHeight = headersHeight
+    val currentHeight = bestHeaderHeight
     require(m > 0 && m < currentHeight, s"$m > 0 && $m < $currentHeight")
     require(k > 0 && k < currentHeight, s"$k > 0 && $k < $currentHeight")
 

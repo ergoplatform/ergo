@@ -65,12 +65,12 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   /**
     * @return height of best header
     */
-  def headersHeight: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
+  def bestHeaderHeight: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   /**
     * @return height of best header with all block sections
     */
-  def fullBlockHeight: Int = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
+  def bestFullBlockHeight: Int = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   /**
     * @param id - id of ErgoPersistentModifier
@@ -170,7 +170,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * header ids at this height
     */
   private def bestBlockHeaderIdsRow(h: Header, score: Difficulty) = {
-    val prevHeight = headersHeight
+    val prevHeight = bestHeaderHeight
     log.info(s"New best header ${h.encodedId} with score $score. New height ${h.height}, old height $prevHeight")
     val self: (ByteArrayWrapper, ByteArrayWrapper) =
       heightIdsKey(h.height) -> ByteArrayWrapper((Seq(h.id) ++ headerIdsAtHeight(h.height)).flatMap(idToBytes).toArray)
@@ -370,7 +370,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateEquals(header.requiredDifficulty)(requiredDifficultyAfter(parent)) { detail =>
           fatal(s"Incorrect required difficulty. $detail")
         }
-        .validate(heightOf(header.parentId).exists(h => fullBlockHeight - h < config.keepVersions)) {
+        .validate(heightOf(header.parentId).exists(h => bestFullBlockHeight - h < config.keepVersions)) {
           fatal(s"Trying to apply too old header at height ${heightOf(header.parentId)}")
         }
         .validate(powScheme.validate(header).isSuccess) {

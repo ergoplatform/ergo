@@ -17,7 +17,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
   val BlocksToKeep: Int = BlocksInChain + 1
 
   def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
-    val historyHeight = history.headersHeight
+    val historyHeight = history.bestHeaderHeight
     if (historyHeight < height) {
       history match {
         case _: EmptyBlockSectionProcessor =>
@@ -36,7 +36,8 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
                       PoPoWBootstrap: Boolean,
                       blocksToKeep: Int,
                       epochLength: Int = 100000000,
-                      useLastEpochs: Int = 10): ErgoHistory = {
+                      useLastEpochs: Int = 10,
+                      cacheSettings: CacheSettings = CacheSettings.default): ErgoHistory = {
 
     val protocolVersion = 1: Byte
     val networkPrefix = 0: Byte
@@ -53,7 +54,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
-      nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
+      nodeSettings, scorexSettings, walletSettings, cacheSettings)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }

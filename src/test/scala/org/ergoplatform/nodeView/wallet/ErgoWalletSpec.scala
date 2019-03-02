@@ -396,7 +396,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val block = makeNextBlock(getUtxoState, Seq(creationTx))
       wallet.scanPersistent(block)
       waitForScanning(block)
-      val historyHeight = getHistory.headersHeight
+      val historyHeight = getHistory.bestHeaderHeight
 
       val confirmedBeforeRollback: BalancesSnapshot = getConfirmedBalances
       val totalBeforeRollback = getBalancesWithUnconfirmed
@@ -442,7 +442,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val block = makeNextBlock(getUtxoState, Seq(spendingTx))
       wallet.scanPersistent(block)
       waitForScanning(block)
-      val historyHeight = getHistory.headersHeight
+      val historyHeight = getHistory.bestHeaderHeight
 
       val confirmedBeforeRollback = getConfirmedBalances
       val totalBeforeRollback = getBalancesWithUnconfirmed
@@ -496,7 +496,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val block = makeNextBlock(getUtxoState, Seq(spendingTx))
       wallet.scanPersistent(block)
       waitForScanning(block)
-      val historyHeight = getHistory.headersHeight
+      val historyHeight = getHistory.bestHeaderHeight
 
       val confirmedBeforeRollback = getConfirmedBalances
       val totalBeforeRollback = getBalancesWithUnconfirmed
@@ -554,7 +554,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val block = makeNextBlock(getUtxoState, Seq(creationTx, spendingTx))
       wallet.scanPersistent(block)
       waitForScanning(block)
-      val historyHeight = getHistory.headersHeight
+      val historyHeight = getHistory.bestHeaderHeight
 
       val confirmedBeforeRollback = getConfirmedBalances
       val totalBeforeRollback = getBalancesWithUnconfirmed

@@ -131,7 +131,7 @@ trait FullBlockProcessor extends HeadersProcessor {
         .flatMap { h =>
           headerIdsAtHeight(h + 1)
             .flatMap { id =>
-              fullChainMonitor.getParentId(id, h + 1)
+              fullChainMonitor.get(id, h + 1)
                 .map(parentId => id -> parentId)
                 .orElse {
                   typedModifierById[Header](id).flatMap(getFullBlock).map(b => b.id -> b.parentId)
@@ -193,7 +193,7 @@ trait FullBlockProcessor extends HeadersProcessor {
 
 }
 
-object FullBlockProcessor {
+private object FullBlockProcessor {
 
   type BlockProcessing = PartialFunction[ToProcess, ProgressInfo[ErgoPersistentModifier]]
 
@@ -205,13 +205,20 @@ object FullBlockProcessor {
 
   case class MonitorBlock(id: ModifierId, height: Int)
 
+  /**
+    * Stores links mapping ((id, height) -> parentId) of blocks that could possibly be applied.
+    */
   case class IncompleteFullChainMonitor(monitor: TreeMap[MonitorBlock, ModifierId]) {
-    def getParentId(id: ModifierId, height: Int): Option[ModifierId] = monitor.get(MonitorBlock(id, height))
+
+    val nonEmpty: Boolean = monitor.nonEmpty
+
+    def get(id: ModifierId, height: Int): Option[ModifierId] = monitor.get(MonitorBlock(id, height))
+
     def add(id: ModifierId, parentId: ModifierId, height: Int): IncompleteFullChainMonitor =
       IncompleteFullChainMonitor(monitor.insert(MonitorBlock(id, height), parentId))
+
     def dropUntil(height: Int): IncompleteFullChainMonitor =
       IncompleteFullChainMonitor(monitor.dropWhile(_._1.height < height))
-    val nonEmpty: Boolean = monitor.nonEmpty
   }
 
   private implicit val ord: Ordering[MonitorBlock] = Ordering[(Int, ModifierId)].on(x => (x.height, x.id))

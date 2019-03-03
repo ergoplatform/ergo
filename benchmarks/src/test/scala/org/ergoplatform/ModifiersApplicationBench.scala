@@ -1,10 +1,7 @@
 package org.ergoplatform
 
-import java.nio.file.{Files, Paths}
-
-import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{BlockTransactions, Extension, Header, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.history.{BlockTransactions, Extension, Header}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType
@@ -20,9 +17,9 @@ object ModifiersApplicationBench extends HistoryTestHelpers with App {
 
     val cache = new ErgoModifiersCache(maxSize = 1024)
 
-    val headers: Seq[Header] = readModifiers[Header]("benchmarks/src/test/resources/headers.dat")
-    val payloads: Seq[BlockTransactions] = readModifiers[BlockTransactions]("benchmarks/src/test/resources/payloads.dat")
-    val extensions: Seq[Extension] = readModifiers[Extension]("benchmarks/src/test/resources/extensions.dat")
+    val headers: Seq[Header] = readModifiers[Header]("https://github.com/ergoplatform/static-data/raw/master/headers.dat")
+    val payloads: Seq[BlockTransactions] = readModifiers[BlockTransactions]("https://github.com/ergoplatform/static-data/raw/master/payloads.dat")
+    val extensions: Seq[Extension] = readModifiers[Extension]("https://github.com/ergoplatform/static-data/raw/master/extensions.dat")
 
     def bench(benchCase: String)
              (applicator: (Seq[ErgoPersistentModifier], ErgoHistory) => Any,
@@ -69,13 +66,13 @@ object ModifiersApplicationBench extends HistoryTestHelpers with App {
     val modifiersReversedOrd = modifiersDirectOrd.reverse
     val report0 = bench("Modifiers application in direct order")(applyModifiers, modifiersDirectOrd)
     val report1 = bench("Modifiers application in reversed order")(applyModifiers, modifiersReversedOrd)
-//    val report2 = bench("Modifiers application in direct order (cache)")(applyModifiersWithCache, modifiersDirectOrd)
-//    val report3 = bench("Modifiers application in reversed order (cache)")(applyModifiersWithCache, modifiersReversedOrd)
+    val report2 = bench("Modifiers application in direct order (cache)")(applyModifiersWithCache, modifiersDirectOrd)
+    val report3 = bench("Modifiers application in reversed order (cache)")(applyModifiersWithCache, modifiersReversedOrd)
 
     println(report0)
     println(report1)
-//    println(report2)
-//    println(report3)
+    println(report2)
+    println(report3)
 
     System.exit(0)
   }
@@ -90,16 +87,14 @@ object ModifiersApplicationBench extends HistoryTestHelpers with App {
   }
 
   def readModifiers[M <: ErgoPersistentModifier](path: String): Seq[M] = {
-    def readMods(rem: Array[Byte], acc: Seq[M] = Seq.empty): Seq[M] = {
-      if (rem.nonEmpty) {
-        val len = Ints.fromByteArray(rem.take(4))
-        val mod = HistoryModifierSerializer.parseBytes(rem.slice(4, 4 + len)).get.asInstanceOf[M]
-        readMods(rem.drop(4 + len), acc :+ mod)
-      } else {
-        acc
+    val is = Utils.getUrlInputStream(path)
+    Stream
+      .continually {
+        Utils.readModifier[M](is)
       }
-    }
-    readMods(Files.readAllBytes(Paths.get(path)))
+      .takeWhile(_.isDefined)
+      .flatten
+      .toList
   }
 
   private def time[R](block: => R): Double = {

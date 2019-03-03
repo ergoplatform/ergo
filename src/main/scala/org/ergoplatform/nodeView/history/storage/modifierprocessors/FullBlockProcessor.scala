@@ -87,7 +87,7 @@ trait FullBlockProcessor extends HeadersProcessor {
         val branchPoint = toRemove.headOption.map(_ => prevChain.head.id)
 
         val minForkRootHeight = newBestBlockHeader.height - config.blocksToKeep
-        // remove outdated blocks
+        // remove block ids that have no chance to be applied
         if (nonBestChainsMonitor.nonEmpty) nonBestChainsMonitor = nonBestChainsMonitor.dropUntil(minForkRootHeight)
 
         updateStorage(newModRow, newBestBlockHeader.id)

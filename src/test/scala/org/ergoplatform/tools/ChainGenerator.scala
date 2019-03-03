@@ -205,7 +205,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
     * Use reflection to set `minimalFullBlockHeightVar` to 0 to change regular synchronization rule, that we
     * first apply headers chain, and apply full blocks only after that
     */
-  private def allowToApplyOldBlocks(history: ErgoHistory): Unit = {
+  def allowToApplyOldBlocks(history: ErgoHistory): Unit = {
     import scala.reflect.runtime.{universe => ru}
     val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
     val procInstance = runtimeMirror.reflect(history.asInstanceOf[ToDownloadProcessor])

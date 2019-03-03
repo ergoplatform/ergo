@@ -131,9 +131,10 @@ trait FullBlockProcessor extends HeadersProcessor {
     def loop(currentHeight: Option[Int], acc: Seq[Seq[(ModifierId, ModifierId)]]): Seq[Seq[ModifierId]] = {
       val nextLevelBlocks = currentHeight.toList
         .flatMap { h =>
-          headerIdsAtHeight(h + 1)
+          val nextHeight = h + 1
+          headerIdsAtHeight(nextHeight)
             .flatMap { id =>
-              nonBestChainsMonitor.get(id, h + 1)
+              nonBestChainsMonitor.get(id, nextHeight)
                 .map(parentId => id -> parentId)
                 .orElse {
                   typedModifierById[Header](id)

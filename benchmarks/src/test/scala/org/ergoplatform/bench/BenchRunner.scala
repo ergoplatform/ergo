@@ -1,10 +1,9 @@
 package org.ergoplatform.bench
 
 import java.io.File
-import java.net.URL
 
 import akka.actor.{ActorRef, ActorSystem}
-import javax.net.ssl.HttpsURLConnection
+import org.ergoplatform.Utils
 import org.ergoplatform.bench.misc.ModifierWriter
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
@@ -89,7 +88,7 @@ object BenchRunner extends ScorexLogging {
     var counter = 0
     var headersQty = 0
     log.info("Start reading modifiers from data file.")
-    val is = getUrlInputStream(fileName)
+    val is = Utils.getUrlInputStream(fileName)
     val result = Stream
       .continually {
         counter += 1
@@ -110,19 +109,6 @@ object BenchRunner extends ScorexLogging {
   private def runBench(benchRef: ActorRef, nodeRef: ActorRef, modifiers: Vector[ErgoPersistentModifier]): Unit = {
     benchRef ! BenchActor.Start
     modifiers.foreach { m => nodeRef ! LocallyGeneratedModifier(m) }
-  }
-
-  private def getUrlInputStream(url: String,
-                                connectTimeout: Int = 5000,
-                                readTimeout: Int = 5000,
-                                requestMethod: String = "GET") = {
-    val u = new URL(url)
-    val conn = u.openConnection.asInstanceOf[HttpsURLConnection]
-    conn.setConnectTimeout(connectTimeout)
-    conn.setReadTimeout(readTimeout)
-    conn.setRequestMethod(requestMethod)
-    conn.connect()
-    conn.getInputStream
   }
 
 }

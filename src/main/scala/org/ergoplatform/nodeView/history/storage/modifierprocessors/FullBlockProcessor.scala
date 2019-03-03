@@ -18,7 +18,7 @@ import scala.util.Try
   */
 trait FullBlockProcessor extends HeadersProcessor {
 
-  private var fullChainMonitor = FullBlockProcessor.emptyMonitor
+  private var nonBestChainsMonitor = FullBlockProcessor.emptyMonitor
 
   /**
     * Id of header that contains transactions and proofs
@@ -48,7 +48,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       processBetterChain orElse
       nonBestBlock
 
-  protected def isValidFirstFullBlock(header: Header): Boolean = {
+  private def isValidFirstFullBlock(header: Header): Boolean = {
     pruningProcessor.isHeadersChainSynced &&
       header.height == pruningProcessor.minimalFullBlockHeight &&
       bestFullBlockIdOpt.isEmpty
@@ -88,7 +88,7 @@ trait FullBlockProcessor extends HeadersProcessor {
 
         val minForkRootHeight = newBestBlockHeader.height - config.blocksToKeep
         // remove outdated blocks
-        if (fullChainMonitor.nonEmpty) fullChainMonitor = fullChainMonitor.dropUntil(minForkRootHeight)
+        if (nonBestChainsMonitor.nonEmpty) nonBestChainsMonitor = nonBestChainsMonitor.dropUntil(minForkRootHeight)
 
         updateStorage(newModRow, newBestBlockHeader.id)
 
@@ -118,7 +118,7 @@ trait FullBlockProcessor extends HeadersProcessor {
     case params =>
       val block = params.fullBlock
       if (block.header.height > fullBlockHeight - config.keepVersions) {
-        fullChainMonitor = fullChainMonitor.add(block.id, block.parentId, block.header.height)
+        nonBestChainsMonitor = nonBestChainsMonitor.add(block.id, block.parentId, block.header.height)
       }
       //Orphaned block or full chain is not initialized yet
       logStatus(Seq(), Seq(), params.fullBlock, None)
@@ -133,7 +133,7 @@ trait FullBlockProcessor extends HeadersProcessor {
         .flatMap { h =>
           headerIdsAtHeight(h + 1)
             .flatMap { id =>
-              fullChainMonitor.get(id, h + 1)
+              nonBestChainsMonitor.get(id, h + 1)
                 .map(parentId => id -> parentId)
                 .orElse {
                   typedModifierById[Header](id)

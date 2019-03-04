@@ -38,9 +38,9 @@ trait FullBlockProcessor extends HeadersProcessor {
     */
   protected def processFullBlock(fullBlock: ErgoFullBlock,
                                  newMod: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
-    val bestFullChain = calculateBestChain(fullBlock.header)
-    val newBestBlockHeader = typedModifierById[Header](bestFullChain.last).ensuring(_.isDefined)
-    processing(ToProcess(fullBlock, newMod, newBestBlockHeader, config.blocksToKeep, bestFullChain))
+    val bestFullChainAfter = calculateBestChain(fullBlock.header)
+    val newBestBlockHeader = typedModifierById[Header](bestFullChainAfter.last).ensuring(_.isDefined)
+    processing(ToProcess(fullBlock, newMod, newBestBlockHeader, config.blocksToKeep, bestFullChainAfter))
   }
 
   private def processing: BlockProcessing =
@@ -69,8 +69,8 @@ trait FullBlockProcessor extends HeadersProcessor {
   }
 
   private def processBetterChain: BlockProcessing = {
-    case toProcess@ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), blocksToKeep, _)
-      if bestFullBlockOpt.nonEmpty && isBetterChain(newBestBlockHeader.id) =>
+    case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), blocksToKeep, _)
+      if bestFullBlockOpt.nonEmpty && isBetterChain(newBestBlockHeader.id) && isLinkable(fullBlock.header) =>
 
       val prevBest = bestFullBlockOpt.get
       val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, newBestBlockHeader)
@@ -78,28 +78,25 @@ trait FullBlockProcessor extends HeadersProcessor {
       val toApply: Seq[ErgoFullBlock] = newChain.tail.headers
         .flatMap(h => if (h == fullBlock.header) Some(fullBlock) else getFullBlock(h))
 
-      if (toApply.lengthCompare(newChain.length - 1) != 0) {
-        //block have higher score but is not linkable to full chain
-        nonBestBlock(toProcess)
-      } else {
-        //application of this block leads to full chain with higher score
-        logStatus(toRemove, toApply, fullBlock, Some(prevBest))
-        val branchPoint = toRemove.headOption.map(_ => prevChain.head.id)
+      require(toApply.lengthCompare(newChain.length - 1) == 0)
 
-        val minForkRootHeight = newBestBlockHeader.height - config.blocksToKeep
-        // remove block ids that have no chance to be applied
-        if (nonBestChainsMonitor.nonEmpty) nonBestChainsMonitor = nonBestChainsMonitor.dropUntil(minForkRootHeight)
+      //application of this block leads to full chain with higher score
+      logStatus(toRemove, toApply, fullBlock, Some(prevBest))
+      val branchPoint = toRemove.headOption.map(_ => prevChain.head.id)
 
-        updateStorage(newModRow, newBestBlockHeader.id)
+      val minForkRootHeight = newBestBlockHeader.height - config.blocksToKeep
+      // remove block ids that have no chance to be applied
+      if (nonBestChainsMonitor.nonEmpty) nonBestChainsMonitor = nonBestChainsMonitor.dropUntil(minForkRootHeight)
 
-        if (blocksToKeep >= 0) {
-          val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
-          val bestHeight: Int = newBestBlockHeader.height
-          val diff = bestHeight - prevBest.header.height
-          pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
-        }
-        ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
+      updateStorage(newModRow, newBestBlockHeader.id)
+
+      if (blocksToKeep >= 0) {
+        val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
+        val bestHeight: Int = newBestBlockHeader.height
+        val diff = bestHeight - prevBest.header.height
+        pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
       }
+      ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
   }
 
   /**
@@ -124,6 +121,34 @@ trait FullBlockProcessor extends HeadersProcessor {
       logStatus(Seq(), Seq(), params.fullBlock, None)
       historyStorage.insert(storageVersion(params.newModRow), Seq.empty, Seq(params.newModRow))
       ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+  }
+
+  /**
+    * Tells whether a given `header` is linkable to existing some full chain or not.
+    */
+  private def isLinkable(header: Header): Boolean = {
+    @tailrec
+    def loop(id: ModifierId, height: Int, acc: Seq[ModifierId]): Seq[ModifierId] = {
+      nonBestChainsMonitor.get(id, height).orElse {
+        typedModifierById[Header](id)
+          .flatMap { h =>
+            if (!headerIdsAtHeight(h.height).headOption.exists(_ == h.id)) getFullBlock(h) else None
+          }
+          .map(_.id)
+      } match {
+        case Some(parentId) => loop(parentId, height - 1, parentId +: acc)
+        case None => acc
+      }
+    }
+    if (bestFullBlockIdOpt.exists(_ == header.parentId)) {
+      true
+    } else {
+      loop(header.parentId, header.height, Seq.empty) // follow links back until main chain or absent section is reached
+        .headOption
+        .orElse(Some(header.parentId))
+        .flatMap(id => typedModifierById[Header](id).flatMap(getFullBlock))
+        .isDefined
+    }
   }
 
   private def continuationChains(fromHeader: Header): Seq[Seq[ModifierId]] = {
@@ -218,6 +243,8 @@ object FullBlockProcessor {
     val nonEmpty: Boolean = monitor.nonEmpty
 
     def get(id: ModifierId, height: Int): Option[ModifierId] = monitor.get(MonitorBlock(id, height))
+
+    def exists(id: ModifierId, height: Int): Boolean = get(id, height).isDefined
 
     def add(id: ModifierId, parentId: ModifierId, height: Int): IncompleteFullChainMonitor =
       IncompleteFullChainMonitor(monitor.insert(MonitorBlock(id, height), parentId))

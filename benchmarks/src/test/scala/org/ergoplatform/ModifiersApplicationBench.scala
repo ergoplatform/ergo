@@ -64,7 +64,7 @@ object ModifiersApplicationBench extends HistoryTestHelpers with App {
       his -> appliedModsQty
     }
 
-    val modifiersDirectOrd = payloads.zip(extensions).flatMap(x => Seq(x._1, x._2)).take(800)
+    val modifiersDirectOrd = payloads ++ extensions
     val modifiersReversedOrd = modifiersDirectOrd.reverse
     val report0 = bench("Modifiers application in direct order")(applyModifiers, modifiersDirectOrd)
     val report1 = bench("Modifiers application in reversed order")(applyModifiers, modifiersReversedOrd)

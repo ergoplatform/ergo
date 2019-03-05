@@ -157,8 +157,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   } yield ModeFeature(
     StateType.fromCode(stateTypeCode),
     Random.nextBoolean(),
-    Random.nextBoolean(),
-    popowSuffix,
+    if(Random.nextBoolean()) Some(popowSuffix) else None,
     blocksToKeep)
 
   /** Random long from 1 to maximum - 1

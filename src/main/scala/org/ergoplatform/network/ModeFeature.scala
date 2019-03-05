@@ -10,8 +10,7 @@ import scorex.util.serialization.{Reader, Writer}
 
 case class ModeFeature(stateType: StateType,
                        verifyingTransactions: Boolean,
-                       popowBootstrapping: Boolean,
-                       popowSuffix: Int,
+                       popowSuffix: Option[Int],
                        blocksToKeep: Int) extends PeerFeature {
   override type M = ModeFeature
 
@@ -21,14 +20,16 @@ case class ModeFeature(stateType: StateType,
 }
 
 object ModeFeature {
-  def apply(nodeSettings: NodeConfigurationSettings): ModeFeature =
+  def apply(nodeSettings: NodeConfigurationSettings): ModeFeature = {
+    val popowSuffix = if (nodeSettings.poPoWBootstrap) Some(nodeSettings.minimalSuffix) else None
+
     new ModeFeature(
       nodeSettings.stateType,
       nodeSettings.verifyTransactions,
-      nodeSettings.poPoWBootstrap,
-      nodeSettings.minimalSuffix,
+      popowSuffix,
       nodeSettings.blocksToKeep
     )
+  }
 }
 
 
@@ -36,13 +37,13 @@ object ModeFeatureSerializer extends ScorexSerializer[ModeFeature] {
 
   //we use these methods due to absence of getBoolean in Reader atm of writing the code
   private def booleanToByte(bool: Boolean): Byte = if (bool) 1: Byte else 0: Byte
+
   private def byteToBoolean(byte: Byte): Boolean = if (byte > 0) true else false
-  
+
   override def serialize(mf: ModeFeature, w: Writer): Unit = {
     w.put(mf.stateType.stateTypeCode)
     w.put(booleanToByte(mf.verifyingTransactions))
-    w.put(booleanToByte(mf.popowBootstrapping))
-    w.putInt(mf.popowSuffix)
+    w.putOption(mf.popowSuffix)(_.putInt(_))
     w.putInt(mf.blocksToKeep)
   }
 
@@ -51,14 +52,12 @@ object ModeFeatureSerializer extends ScorexSerializer[ModeFeature] {
 
     val stateType = StateType.fromCode(r.getByte())
     val verifyingTransactions = byteToBoolean(r.getByte())
-    val popowBootstrap = byteToBoolean(r.getByte())
-    val popowSuffix = r.getInt()
+    val popowSuffix = r.getOption(r.getInt())
     val blocksToKeep = r.getInt()
 
     new ModeFeature(
       stateType,
       verifyingTransactions,
-      popowBootstrap,
       popowSuffix,
       blocksToKeep
     )

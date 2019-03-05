@@ -48,6 +48,6 @@ case class StateChanges(toRemove: Seq[Removal], toAppend: Seq[Insertion], toLook
     * then remove all leafs that should be removed,
     * then add new leafs
     */
-  val operations: Seq[StateChangeOperation] = toRemove ++ toLookup ++ toAppend
+  val operations: Seq[StateChangeOperation] = toLookup ++ toRemove ++ toAppend
 
 }

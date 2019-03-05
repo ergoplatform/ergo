@@ -533,19 +533,17 @@ Two infinite loops in different threads with the following functions inside:
 
 \section{Transactions}
 
-
-A transaction is destroying at least one \coin{}~(potentially many {\coin{}}s, up to $2^{15} - 1$ if a block size
-limit allows that), and also creating at least one \coin{}. We use the term "destroying", as everything contained
-in a \coin{} is disappearing from the state during transaction application: monetary value, assets,
-guard script, contents of all the registers, all the bytes and also an identifier of the \coin{}.
+A transaction is a transfer of Erg value and tokens that is broadcast to the network and collected into blocks.
+A transaction references \coin{} from the state and dedicates input Erg and token values to new \coin{}.
+Transactions are not encrypted, so it is possible to browse and view every transaction ever collected into a block.
 
 \subsection{\Coin{} Format}
 \label{box-format}
 
-A \coin{} is made of registers~(and nothing but registers), we allow every \coin{} in the system to have up to 10 registers in the \ecash{} chain,
-and up to 64 registers in the \edata{} chain. We denote the registers as $R_0,R_1,\ldots,R_{63}$.
+A \coin{} is made of registers~(and nothing but registers), we allow every \coin{} in the system to have up to 10 registers.
+We denote the registers as $R_0,R_1,\ldots,R_9$.
 From these registers, four are filled with mandatory values: $R_0$ contains monetary value of a \coin{}, $R_1$ contains
-serialized guard script, $R_2$ contains assets, $R_3$ contains unique identifier of transaction which created the
+serialized guard script, $R_2$ contains tokens, $R_3$ contains declared creation height, unique identifier of transaction which created the
 coin and also an index of the coin in the transaction.
 
 Each register is an expression in \sigm{} language. Thus the registers are typed: every register contains a value of
@@ -559,28 +557,22 @@ from the \coin{} $c$.
 are to be formed as follows:
 
 \begin{itemize}
-    \item{\em monetary value. } We use 64 bits long {\em signed} integer value to store monetary value of the \coin{}
-    (we use the signed integer to make processing easier on platforms with no unsigned integers, such as JVM platform).
-    This value to be represented as register R0 by wrapping it as a constant of integer type.
+    \item{\em monetary value. } We use VLQ-encoded unsigned long value to store monetary value of the \coin{}
     \item{\em bytes of a script. } To see how the script is serialized, see (\knote{link to \sigm language expressions
     serialization}). The script is to be represented as register R1 by wrapping its bytes are constant array of constant
     bytes.
-    \item{\em number of assets } which box is carrying. Represented as a one-byte signed integer.
-    \item{\em assets}. A box can carry multiple assets. A single record in this field is represented as a tuple
-    $asset\_identifier -> amount$, where identifier is of 32 bytes and amount is of 8 bytes. The tuple is serialized as
-    a fixed-sized sequence of bytes.
+    \item{\em creation height } VLQ-encoded unsigned integer value
+    \item{\em number of tokens } which box is carrying. Represented as a one-byte unsigned integer.
+    \item{\em tokens}. A box can carry multiple tokens. A single record in this field is represented as a tuple
+    $token\_identifier -> amount$, where identifier is of 32 bytes and amount is VLQ-encoded integer.
     \item{\em number of additional registers. } Extra registers should come in order (R4, ..., etc), so this number,
-    represented as 1-byte value, defines how much non-empty registers are coming after mandatory ones. If the number is
+    represented as 1-byte unsigned value, defines how much non-empty registers are coming after mandatory ones. If the number is
     zero, next field is missed.
     \item{\em additional registers. } Extra registers are serialized without any delimiters. Each register is
     serialized as a \sigm expression.
-    \item{\em transaction identifier and index of a transaction output. } Identifier of a transaction which created
-    the \coin{}, 32-bytes long, as well as index of the \coin in the transaction outputs, 2-bytes long. These values
-    are to be concatenated into a single array of 34 bytes and wrapped into \sigm language constant stored in the
-    register $R3$.
+    \item{\em transaction identifier. } 32-bytes long identifier of a transaction which created the \coin{}
+    \item{\em index of a transaction output. } VLQ-encoded index of the \coin{} in the transaction outputs.
 \end{itemize}
-
-
 
 \subsection{\Coin{} candidate}
 \label{coin-candidate}
@@ -593,27 +585,45 @@ doing.
 
 To solve the issue we split concepts of a \coin{} and a \coin{} candidate. A \coin{} candidate is defining semantics of
 the corresponding \coin{} i.e. has the same values for all the registers except of the register $R_3$ which is set to
-be $(creation\_height, transaction\_id || output\_index)$ for a box (where $transaction\_id$ is of 32 bytes and
-$output\_index$ is about 2 bytes), and $(creation\_height, 0^{34*8})$~(so instead of real transaction id and output index,
-a zero-bit string of 34 bytes is used).
+be $(creation\_height, transaction\_id || output\_index)$ for a box  and $(creation\_height, 0^{34*8})$~(so instead
+of real transaction id and output index, a zero-bit string of 34 bytes is used).
 
 
 \subsection{Transaction Format}
 \label{tx-format}
 
-A transaction simply refers to a set of \coin{}es, by providing their identifiers and also spending proofs for
-them; the transaction also providing set of new \coin{} candidates. A \coin{} candidate becomes a \coin{} in result of
-transaction processing~(however, once transaction is formed, its identifier is known, and so identifier of the future
-coin is also known before the application).
+Ergo transaction consists of 3 parts:
 
-We now introduce two functions to extract a \coin{} or a \coin{} candidate which a transaction is trying to spend.
- In details, function $in(index)$ returns a \coin{} which transaction is trying to spend, by its index, and $out(index)$
- returns a \coin{} candidate . For example, $in(tx, 0)$ returns the very first \coin{} the transaction $tx$ is trying to spend.
+\begin{itemize}
+    \item{\em inputs} - links to \coin{}s that will be removed from the state during the transaction application.
+    Every inputs consists of \coin{} id, proof for final sigma proposition of this \coin{} protecting script
+    and a context extension to be used during script evaluation.
+    \item{\em data inputs} - links to \coin{}s that won't be removed from the state, but will be available
+    in context of regular inputs scripts.
+    \item{\em outputs} - new \coins{} that will be included into the state during the transaction application.
+\end{itemize}
 
-We require for every transaction $tx$, which is trying to spend $c_i$ {\coin}s and create $c_o$ coins,
-to preserve overall monetary value:
+Transaction bytes are to be formed as follows:
+\begin{itemize}
+    \item{\em inputs number} - VLQ-encoded number of inputs.
+    \item{\em inputs} - every input is represented as 32-byte id of a \coin{} to be spent, VLQ-encoded
+    length of signature, signature itself, VLQ-encoded number of key-value pairs of context extension,
+    and context extension pairs, that are 1-byte key and values serialized as a \sigm expression
+    \item{\em number of data inputs} - VLQ-encoded number of data inputs.
+    \item{\em data inputs} - 32-byte length ids of data boxes
+    \item{\em distinct tokens number} - number of distinct tokens in the transaction, represented as
+    1 byte unsigned integer.
+    \item{\em token ids} - 32-byte length ids of tokens in the transaction
+    \item{\em outputs number} - VLQ-encoded number of transaction outputs
+    \item{\em \coin candidates} - every coin candidates are serialized in the same way, as \coin{} bytes
+    from \ref{box-format} section, but transaction identifier and index of a transaction output are missed,
+    and also tokens are represented as pairs $index -> amount$, where index is 1-byte index of token
+    in token ids section
+\end{itemize}
 
-$ \sum_{i=0}^{c_i - 1}$ \extract{in(tx,i), R_0}$ = \sum_{j=0}^{c_o - 1}$ \extract{out(tx,j), R_0}
+Inputs signatures should sign a $bytesToSign(tx)$ message, that is calculated as transaction bytes,
+as if all it's signatures are empty~(and thus VLQ-encoded length of signature equals to 0).
+Transaction id is calculated as a Blake2b256 hash from messages to sign.
 
 \subsection{Transaction Merkle Tree}
 \label{tx-tree}
@@ -633,47 +643,11 @@ A leaf is $hash(0 || pos || data)$, if the $data$ is not empty
  node is not $null$, $null$ othewise. If root hash is $null$, we are writing all zeros~(of hash function output length)
  instead of it.
 
-
-\subsection{Transaction Identifier and Its Malleability}
-\label{tx-identifier}
-
-A transaction has a unique identifier to be defined deterministically from its contents.
-
-There are different ways to produce semantically the same transaction with different identifiers. We are interesting
-to prevent {\em unauthorized malleability}. We define unauthorized malleability as a way to change transaction
-identifier without re-signing the transaction. One particular way to malleate a transaction is to use signature
-malleability, which is common for most popular digital signature schemes.
-
-To prevent unauthorized transaction malleability, we do not put spending proofs under hash function when we calculate a
-transaction identifier.
-
-In details, we are constructing bytes to get the transaction identifier~(and in the follow-up section, also a signature)
-as follows. We concatenate the following fields:
-
-\begin{itemize}
-    \item{\em number of inputs.} Unsigned 2-bytes integer giving a number of \coin{}s the transaction is spending. Thus
-    the transaction can not spend more than 65536 \coin{}s.
-    \item{\em input identifiers.} Given the number $c_{ins}$ of \coin{}s to spend from the previous field, we form
-    $32 * c_{ins}$ bytes, where $i$-th chunk of 32 bytes represents an identifier of $i$-th \coin{} to spend~(see Section
-    \ref{box-format} for details).
-    \item{\em number of outputs.} Unsigned 2-bytes integer of \coin{}s the transaction is creating~(again, the
-    transaction can not create more than 65,536 \coin{}s).
-    \item{\em transaction outputs.} In this section we store serialized \coin{} candidates, with no delimiters. A \coin{}
-    candidate is serialized as a \coin{}~(see Section~\ref{box-format} for details), but without last field~(transaction
-    identifier and index of the \coin{} in transaction outputs).
-\end{itemize}
-
-Denoting the binary serialization procedure for a transaction $tx$ explained above as $bytes(tx)$, we can derive
-transaction identifier $ident(tx)$ from it as:
-    $$ident(tx) = hash(bytes(tx))$$
-
 \subsection{Signing A Transaction}
 
-To spend a \coin{} a spending transaction $tx$ has as an input, one needs to use $bytes(tx)$~(note that different inputs
+To spend a \coin{} a spending transaction $tx$ has as an input, one needs to use $bytesToSign(tx)$~(note that different inputs
 can be signed in parallel, however, the coins being spent are to be specified before signing), as well as current state
-of the blockchain, or $context$. To avoid any I/O operations, this context is small. In details, it consists of current
-height, last block's state root digest, and the spending transaction along with \coin{}s it spends. The signer also can
-extend the context by putting values there.
+of the blockchain, or $context$. The signer also can extend the context by putting values there.
 
 By having this data, a signer~(or a prover) of an input first reduces the guarding proposition for the input \coin{} by
 evaluating, it using the context. Possible results of the reduction are:
@@ -730,10 +704,20 @@ Proving steps for a tree:
 Now, how to get a flat binary string containing $(e, z)$ pairs~(challenge and prover's response for a leafsub-protocol)
 from the tree:
 
-
-
 \subsection{Transaction Validation Rules}
 \label{tx-validation}
+
+\dnote{describe precisely during https://github.com/ergoplatform/ergo/issues/581}
+
+
+%We now introduce two functions to extract a \coin{} or a \coin{} candidate which a transaction is trying to spend.
+%In details, function $in(index)$ returns a \coin{} which transaction is trying to spend, by its index, and $out(index)$
+%returns a \coin{} candidate . For example, $in(tx, 0)$ returns the very first \coin{} the transaction $tx$ is trying to spend.
+%
+%We require for every transaction $tx$, which is trying to spend $c_i$ {\coin}s and create $c_o$ coins,
+%to preserve overall monetary value:
+%
+%$ \sum_{i=0}^{c_i - 1}$ \extract{in(tx,i), R_0}$ = \sum_{j=0}^{c_o - 1}$ \extract{out(tx,j), R_0}
 
 We split validation of a single transaction into two stages. There are $stateless checks$ which could be done by the
 transaction only being presented. Stateful checks are requiring knowledge of the current state, in the form of the whole
@@ -754,11 +738,13 @@ Stateless checks are:
 
 \knote{Check box and transaction sizes.}
 
+\dnote{describe precisely during https://github.com/ergoplatform/ergo/issues/581}
+
 Stateful checks are:
 
 \begin{itemize}
-    \item{} all the input boxes are members of the UTXO set or UTXO set transformation proof
-     provided by a miner in a dedicated section of a block~(if stateType="digest").
+    \item{} all the input boxes are members of the UTXO set or where created by other transactions of this block.
+    \item{} all the data input boxes are members of the UTXO set or where created by other transactions of this block.
     \item{} total input and output ergo amounts must be the same. Adding up should be done with overflow checks.
     \item{} all the inputs have valid spending proofs. Total cost to verify all the spending proofs should be no more
             than a limit per block~(adjustable via miners voting).

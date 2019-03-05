@@ -260,7 +260,6 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val headTx = validTransactionsFromBoxes(1, bh.boxes.take(10).values.toSeq, new Random())._1.head
       val nextTx = validTransactionsFromBoxes(1, bh.boxes.takeRight(10).values.toSeq, new Random())._1.head
       headTx.inputs.intersect(nextTx.inputs) shouldBe empty
-      us.proofsForTransactions(IndexedSeq(headTx, nextTx)) shouldBe 'success
 
       // trying to apply transactions with data inputs same as inputs of the next tx
       val dataInputs = nextTx.inputs.filter(i => us.boxById(i.boxId).isDefined).map(i => DataInput(i.boxId))

@@ -151,7 +151,7 @@ trait FullBlockProcessor extends HeadersProcessor {
     if (bestFullBlockIdOpt.exists(_ == header.parentId)) {
       true
     } else {
-      loop(header.parentId, header.height, Seq.empty) // follow links back until main chain or absent section is reached
+      loop(header.parentId, header.height - 1, Seq.empty) // follow links back until main chain or absent section is reached
         .headOption
         .orElse(Some(header.parentId))
         .flatMap(id => typedModifierById[Header](id).flatMap(getFullBlock))

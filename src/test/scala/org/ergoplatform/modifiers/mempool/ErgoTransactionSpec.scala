@@ -4,7 +4,7 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
-import org.ergoplatform.settings.{Algos, LaunchParameters, Parameters}
+import org.ergoplatform.settings.{LaunchParameters, Parameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import scorex.crypto.hash.Digest32
@@ -12,8 +12,6 @@ import sigmastate._
 import sigmastate.Values.GroupElementConstant
 import sigmastate.basics.ProveDHTuple
 import sigmastate.interpreter.CryptoConstants
-
-import scala.collection.JavaConverters._
 import scala.util.Random
 
 class ErgoTransactionSpec extends ErgoPropertyTest {
@@ -170,12 +168,12 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       // already existing token from one of the inputs
       val existingToken = from.flatMap(_.additionalTokens).toSet.head
       // completely new token
-      val additionalToken = (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextInt(100000000).toLong)
+      val randomToken = (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextInt(100000000).toLong)
 
       val in0 = from.last
       // new token added to the last input
       val modifiedIn0 = ErgoBox(in0.value, in0.proposition, in0.creationHeight,
-        in0.additionalTokens :+ additionalToken, in0.additionalRegisters, in0.transactionId, in0.index)
+        in0.additionalTokens :+ randomToken, in0.additionalRegisters, in0.transactionId, in0.index)
       val txInMod0 = tx.inputs.last.copy(boxId = modifiedIn0.id)
 
       val in1 = from.last
@@ -187,7 +185,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val out0 = tx.outputs.last
       // new token added to the last output
       val modifiedOut0 = ErgoBox(out0.value, out0.proposition, out0.creationHeight,
-        out0.additionalTokens :+ additionalToken, out0.additionalRegisters, out0.transactionId, out0.index)
+        out0.additionalTokens :+ randomToken, out0.additionalRegisters, out0.transactionId, out0.index)
       // existing token added to the last output
       val modifiedOut1 = ErgoBox(out0.value, out0.proposition, out0.creationHeight,
         out0.additionalTokens :+ existingToken, out0.additionalRegisters, out0.transactionId, out0.index)

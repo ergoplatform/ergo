@@ -1,6 +1,7 @@
 package org.ergoplatform.api.routes
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.testkit.TestDuration
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
@@ -18,13 +19,14 @@ class EmissionApiRouteSpec extends FlatSpec
   with ScalatestRouteTest
   with FailFastCirceSupport {
 
-  implicit val timeout = RouteTestTimeout(15.seconds.dilated)
-
-  val ergoSettings = ErgoSettings.read(None)
-  val coinEmission = new EmissionRules(ergoSettings.chainSettings.monetary)
-
   val prefix = "/emission/at"
-  val route = EmissionApiRoute(coinEmission, ergoSettings).route
+
+  implicit val timeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
+
+  val ergoSettings: ErgoSettings = ErgoSettings.read(None)
+  val coinEmission: EmissionRules = new EmissionRules(ergoSettings.chainSettings.monetary)
+
+  val route: Route = EmissionApiRoute(ergoSettings).route
 
   it should "get correct emission values" in {
     Get(prefix + "/1") ~> route ~> check {
@@ -42,4 +44,5 @@ class EmissionApiRouteSpec extends FlatSpec
       EmissionApiRoute.emissionInfoAtHeight(1000000L, coinEmission).asJson shouldEqual responseAs[Json]
     }
   }
+
 }

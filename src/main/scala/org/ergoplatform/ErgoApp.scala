@@ -5,7 +5,6 @@ import org.ergoplatform.api._
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local._
-import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
@@ -34,23 +33,21 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override protected lazy val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
 
-  lazy val emission = new EmissionRules(ergoSettings.chainSettings.monetary)
-
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
-  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider, emission)
+  override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
   val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-  val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider, emission)
+  val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 
-  val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(readersHolderRef, peerManagerRef, ergoSettings, timeProvider)
+  val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
-    EmissionApiRoute(emission, ergoSettings),
+    EmissionApiRoute(ergoSettings),
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
     InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
-    BlocksApiRoute(readersHolderRef, minerRef, ergoSettings),
+    BlocksApiRoute(nodeViewHolderRef, readersHolderRef, minerRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings)
   )

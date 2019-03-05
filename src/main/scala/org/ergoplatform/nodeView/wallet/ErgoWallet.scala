@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import akka.actor.{ActorRef, ActorSystem, Props}
+import org.ergoplatform.ErgoAddress
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
@@ -13,7 +14,8 @@ import scorex.util.ScorexLogging
 import scala.util.{Failure, Success, Try}
 
 
-class ErgoWallet(historyReader: ErgoHistoryReader,
+class ErgoWallet(
+                 historyReader: ErgoHistoryReader,
                  settings: ErgoSettings)(implicit val actorSystem: ActorSystem)
   extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet] with ErgoWalletReader with ScorexLogging {
 
@@ -39,7 +41,8 @@ class ErgoWallet(historyReader: ErgoHistoryReader,
       case fb: ErgoFullBlock =>
         actor ! ScanOnchain(fb)
       case _ =>
-        log.warn("Only a full block is expected in ErgoWallet.scanPersistent")
+        log.debug("Not full block in ErgoWallet.scanPersistent, which could be the case only if " +
+          "state = digest when bootstrapping")
     }
     this
   }

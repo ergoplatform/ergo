@@ -3,24 +3,26 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import org.ergoplatform.ErgoBox.R4
+import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChanges}
-import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoBox, Height, Outputs, Self}
+import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings}
 import scorex.core.transaction.state.MinimalState
-import scorex.util.ScorexLogging
-import scorex.core.{ModifierId, VersionTag, bytesToId, bytesToVersion}
+import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
-import sigmastate.Values.{IntConstant, LongConstant}
-import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractRegisterAs, ExtractScriptBytes}
-import sigmastate.{SLong, _}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import sigmastate.Values.{ByteArrayConstant, IntConstant, SigmaPropConstant}
+import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.serialization.ValueSerializer
+import sigmastate.{AtLeast, Values}
 
 import scala.collection.mutable
 import scala.util.Try
-
 
 /**
   * Implementation of minimal state concept in Scorex. Minimal state (or just state from now) is some data structure
@@ -35,7 +37,7 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
   self: IState =>
 
-  def closeStorage: Unit = {
+  def closeStorage(): Unit = {
     log.warn("Closing state's store.")
     store.close()
   }
@@ -50,6 +52,8 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 }
 
 object ErgoState extends ScorexLogging {
+
+  type ModifierProcessing[T <: ErgoState[T]] = PartialFunction[ErgoPersistentModifier, Try[T]]
 
   def stateDir(settings: ErgoSettings): File = new File(s"${settings.directory}/state")
 
@@ -90,46 +94,66 @@ object ErgoState extends ScorexLogging {
   }
 
   /**
-    * @param emission - emission curve
-    * @return Genesis box that contains all the coins in the system, protected by the script,
-    *         that allows to take part of them every block.
+    * Genesis box that contains all coins to be collected by Ergo foundation.
+    * Box is protected by the script that allows to take part of them every block
+    * and proposition from R4
     */
-  def genesisEmissionBox(emission: EmissionRules): ErgoBox = {
-    val s = emission.settings
+  private def genesisFoundersBox(settings: ChainSettings): ErgoBox = {
+    val emission = settings.emissionRules
+    val pks = settings.foundersPubkeys
+      .map(str => groupElemFromBytes(Base16.decode(str).get))
+      .map(pk => SigmaPropConstant(ProveDlog(pk)))
+    val protection = AtLeast(IntConstant(2), pks).isProven
+    val protectionBytes = ValueSerializer.serialize(protection)
+    val value = emission.foundersCoinsTotal - EmissionRules.CoinsInOneErgo
+    val prop = ErgoScriptPredef.foundationScript(settings.monetary)
+    ErgoBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map(R4 -> ByteArrayConstant(protectionBytes)))
+  }
 
-    val register = R4
-    val out = ByIndex(Outputs, IntConstant(0))
-    val epoch = Plus(LongConstant(1), Divide(Minus(Height, LongConstant(s.fixedRatePeriod)), LongConstant(s.epochLength)))
-    val coinsToIssue = If(LT(Height, LongConstant(s.fixedRatePeriod)),
-      s.fixedRate,
-      Minus(s.fixedRate, Multiply(s.oneEpochReduction, epoch))
-    )
-    val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(out))
-    val heightCorrect = EQ(ExtractRegisterAs[SLong.type](out, register), Height)
-    val heightIncreased = GT(Height, ExtractRegisterAs[SLong.type](Self, register))
-    val correctCoinsConsumed = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(out)))
-    val lastCoins = LE(ExtractAmount(Self), s.oneEpochReduction)
+  /**
+    * Genesis box that contains coins in the system to be collected by miners.
+    * Box is protected by the script that allows to take part of them every block.
+    */
+  private def genesisEmissionBox(chainSettings: ChainSettings): ErgoBox = {
+    val value = chainSettings.emissionRules.minersCoinsTotal
+    val prop = chainSettings.monetary.emissionBoxProposition
+    ErgoBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map())
+  }
 
-    val prop = AND(heightIncreased, OR(AND(sameScriptRule, correctCoinsConsumed, heightCorrect), lastCoins))
-    ErgoBox(emission.coinsTotal, prop, Seq(), Map(register -> LongConstant(-1)))
+  /**
+    * Genesis box that contains proofs of no premine.
+    * It is a long-living box with special bytes in registers
+    */
+  private def noPremineBox(chainSettings: ChainSettings): ErgoBox = {
+    val proofsBytes = chainSettings.noPremineProof.map(b => ByteArrayConstant(b.getBytes("UTF-8")))
+    val proofs = ErgoBox.nonMandatoryRegisters.zip(proofsBytes).toMap
+    ErgoBox(EmissionRules.CoinsInOneErgo, Values.FalseLeaf, ErgoHistory.EmptyHistoryHeight, Seq(), proofs)
+  }
+
+  /**
+    * All boxes of genesis state.
+    * Emission box is always the first.
+    */
+  def genesisBoxes(chainSettings: ChainSettings): Seq[ErgoBox] = {
+    Seq(genesisEmissionBox(chainSettings), noPremineBox(chainSettings), genesisFoundersBox(chainSettings))
   }
 
   def generateGenesisUtxoState(stateDir: File,
                                constants: StateConstants): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
-    val emissionBox = Some(genesisEmissionBox(constants.emission))
-    val bh = BoxHolder(emissionBox.toSeq)
+    val boxes = genesisBoxes(constants.settings.chainSettings)
+    val bh = BoxHolder(boxes)
 
-    UtxoState.fromBoxHolder(bh, emissionBox, stateDir, constants).ensuring(us => {
+    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, constants).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootHash)}")
-      java.util.Arrays.equals(us.rootHash, constants.emission.settings.afterGenesisStateDigest) && us.version == genesisStateVersion
+      java.util.Arrays.equals(us.rootHash, constants.settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
     }) -> bh
   }
 
   def generateGenesisDigestState(stateDir: File, settings: ErgoSettings): DigestState = {
-    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.monetary.afterGenesisStateDigest),
-      stateDir, settings)
+    DigestState.create(Some(genesisStateVersion), Some(settings.chainSettings.genesisStateDigest),
+      stateDir, StateConstants(None, settings))
   }
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
@@ -142,9 +166,10 @@ object ErgoState extends ScorexLogging {
     dir.mkdirs()
 
     settings.nodeSettings.stateType match {
-      case StateType.Digest => DigestState.create(None, None, dir, settings)
+      case StateType.Digest => DigestState.create(None, None, dir, constants)
       case StateType.Utxo if dir.listFiles().nonEmpty => UtxoState.create(dir, constants)
       case _ => ErgoState.generateGenesisUtxoState(dir, constants)._1
     }
   }
+
 }

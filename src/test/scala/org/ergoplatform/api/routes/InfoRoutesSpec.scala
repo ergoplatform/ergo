@@ -2,6 +2,7 @@ package org.ergoplatform.api.routes
 
 import akka.actor.ActorRef
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.pattern.ask
 import akka.testkit.TestDuration
@@ -15,6 +16,7 @@ import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.local.ErgoStatsCollectorRef
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
+import org.ergoplatform.utils.Stubs
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedHistory
 import scorex.core.utils.TimeProvider.Time
@@ -33,12 +35,11 @@ class InfoRoutesSpec extends FlatSpec
     override def time(): Time = 123
   }
 
-  implicit val actorTimeout = Timeout(15.seconds.dilated)
-  implicit val routeTimeout = RouteTestTimeout(15.seconds.dilated)
+  implicit val actorTimeout: Timeout = Timeout(15.seconds.dilated)
+  implicit val routeTimeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
   val statsCollector: ActorRef = ErgoStatsCollectorRef(nodeViewRef, peerManagerRef, settings, fakeTimeProvider)
-  val route = InfoRoute(statsCollector, settings.scorexSettings.restApi, fakeTimeProvider).route
+  val route: Route = InfoRoute(statsCollector, settings.scorexSettings.restApi, fakeTimeProvider).route
   val requiredDifficulty = BigInt(320000000)
-
 
   override def beforeAll: Unit = {
     Await.ready(initDifficulty(requiredDifficulty), actorTimeout.duration)
@@ -87,11 +88,12 @@ class InfoRoutesSpec extends FlatSpec
       .map(difficultyEncoder.apply)
     log.info(s"Generated difficulty: $generatedDifficulty")
     statsCollector ! ChangedHistory(history)
-    (statsCollector ? GetNodeInfo).mapTo[NodeInfo] map { nodeInfo =>
+    (statsCollector ? GetNodeInfo).mapTo[NodeInfo].map { nodeInfo =>
       val difficulty = nodeInfo.bestFullBlockOpt.map(_.header.requiredDifficulty)
       log.info(s"Set difficulty to: $difficulty")
       difficulty
     }
   }
+
 }
 

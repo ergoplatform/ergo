@@ -9,11 +9,13 @@ import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.core.utils.NetworkTimeProvider
 
+
 case class InfoRoute(statsCollector: ActorRef,
                      settings: RESTApiSettings,
                      timeProvider: NetworkTimeProvider)
                     (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
-  override val route = withCors {
+
+  override val route: Route = withCors {
     info
   }
 
@@ -21,4 +23,5 @@ case class InfoRoute(statsCollector: ActorRef,
     val timeJson = Map("currentTime" -> timeProvider.time().asJson).asJson
     ApiResponse((statsCollector ? GetNodeInfo).mapTo[NodeInfo].map(_.asJson.deepMerge(timeJson)))
   }
+
 }

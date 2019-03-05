@@ -1,13 +1,12 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history.Header
+import scorex.core.{ModifierTypeId, NodeViewModifier}
 import scorex.core.consensus.SyncInfo
 import scorex.core.network.message.SyncInfoMessageSpec
-import scorex.core.serialization.Serializer
-import scorex.core._
-
-import scala.util.Try
-
+import scorex.core.serialization.ScorexSerializer
+import scorex.util.serialization.{Reader, Writer}
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 case class ErgoSyncInfo(lastHeaderIds: Seq[ModifierId]) extends SyncInfo {
 
@@ -17,7 +16,7 @@ case class ErgoSyncInfo(lastHeaderIds: Seq[ModifierId]) extends SyncInfo {
 
   override type M = ErgoSyncInfo
 
-  override lazy val serializer: Serializer[ErgoSyncInfo] = ErgoSyncInfoSerializer
+  override lazy val serializer: ScorexSerializer[ErgoSyncInfo] = ErgoSyncInfoSerializer
 }
 
 object ErgoSyncInfo {
@@ -25,19 +24,18 @@ object ErgoSyncInfo {
   val MaxBlockIds = 1000
 }
 
-object ErgoSyncInfoSerializer extends Serializer[ErgoSyncInfo] {
+object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] {
 
-  override def toBytes(obj: ErgoSyncInfo): Array[Byte] = {
-    scorex.core.utils.concatFixLengthBytes(obj.lastHeaderIds.map(idToBytes))
+  override def serialize(obj: ErgoSyncInfo, w: Writer): Unit = {
+    w.putUShort(obj.lastHeaderIds.size)
+    obj.lastHeaderIds.foreach( id => w.putBytes(idToBytes(id)))
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[ErgoSyncInfo] = Try {
-    require(bytes.length <= ErgoSyncInfo.MaxBlockIds * NodeViewModifier.ModifierIdSize + 1)
-
-    val ids = bytes.grouped(NodeViewModifier.ModifierIdSize).toSeq.map(bytesToId)
-
+  override def parse(r: Reader): ErgoSyncInfo = {
+    val length = r.getUShort()
+    val ids = (1 to length).map(_ => bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize)))
     ErgoSyncInfo(ids)
   }
 }
 
-object ErgoSyncInfoMessageSpec extends SyncInfoMessageSpec[ErgoSyncInfo](ErgoSyncInfoSerializer.parseBytes)
+object ErgoSyncInfoMessageSpec extends SyncInfoMessageSpec[ErgoSyncInfo](ErgoSyncInfoSerializer)

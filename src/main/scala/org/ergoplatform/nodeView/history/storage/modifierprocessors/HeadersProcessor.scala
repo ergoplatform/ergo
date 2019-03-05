@@ -3,22 +3,23 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.mining.PowScheme
+import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.settings.Constants.hashLength
-import org.ergoplatform.settings.{Algos, NodeConfigurationSettings}
-import scorex.util._
+import org.ergoplatform.settings.Constants.HashLength
+import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, Parameters}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
-import scorex.util.ScorexLogging
 import scorex.core.validation.{ModifierValidator, ValidationResult}
+import scorex.util._
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.Try
 
 /**
@@ -32,14 +33,13 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   protected val config: NodeConfigurationSettings
 
-  val powScheme: PowScheme
+  val powScheme: AutolykosPowScheme
 
   //Maximum time in future block header may contain
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
   lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
     chainSettings.useLastEpochs, chainSettings.epochLength)
-
 
   def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
 
@@ -65,12 +65,12 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   /**
     * @return height of best header
     */
-  def headersHeight: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)
+  def headersHeight: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   /**
-    * @return height of best header with transacions and proofs
+    * @return height of best header with all block sections
     */
-  def fullBlockHeight: Int = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(-1)
+  def fullBlockHeight: Int = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   /**
     * @param id - id of ErgoPersistentModifier
@@ -132,7 +132,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     } else {
       orphanedBlockHeaderIdsRow(h, score)
     }
-    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, modifiersToInsert(h))
+    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, Seq(h))
   }
 
   /**
@@ -145,16 +145,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       heightIdsKey(GenesisHeight) -> Algos.idToBAW(h.id),
       headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
       headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
-      modifiersToInsert(h))
-  }
-
-  private def modifiersToInsert(header: Header): Seq[ErgoPersistentModifier] = {
-    if (java.util.Arrays.equals(header.extensionRoot, Algos.emptyMerkleTreeRoot)) {
-      // extension is empty, generate it and insert to history
-      Seq(header, Extension(header.id, Seq(), Seq()))
-    } else {
-      Seq(header)
-    }
+      Seq(h))
   }
 
   /**
@@ -165,14 +156,13 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     Seq(heightIdsKey(h.height) -> ByteArrayWrapper((headerIdsAtHeight(h.height) :+ h.id).flatMap(idToBytes).toArray))
   }
 
-
   /**
     * Update header ids to ensure, that this block id and ids of all parent blocks are in the first position of
     * header ids at this height
     */
   private def bestBlockHeaderIdsRow(h: Header, score: Difficulty) = {
     val prevHeight = headersHeight
-    log.info(s"New best header ${h.encodedId} with score $score. Hew height ${h.height}, old height $prevHeight")
+    log.info(s"New best header ${h.encodedId} with score $score. New height ${h.height}, old height $prevHeight")
     val self: (ByteArrayWrapper, ByteArrayWrapper) =
       heightIdsKey(h.height) -> ByteArrayWrapper((Seq(h.id) ++ headerIdsAtHeight(h.height)).flatMap(idToBytes).toArray)
     val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)
@@ -216,9 +206,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     */
   protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header).toTry
 
-  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(Header.modifierTypeId))
+  protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
 
-  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(hashLength)(-1))
+  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
 
   /**
     * @param id - header id
@@ -246,7 +236,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @return at most limit header back in history starting from startHeader and when condition until is not satisfied
     *         Note now it includes one header satisfying until condition!
     */
-  protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
+  def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
     @tailrec
     def loop(header: Header, acc: Seq[Header]): Seq[Header] = {
       if (acc.lengthCompare(limit) == 0 || until(header)) {
@@ -271,7 +261,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   }
 
   /**
-    * Find first header with the best height <= $height which id satisfies condition $p
+    * Find first header with the best height <= `height` which id satisfies condition `p`
     *
     * @param height - start height
     * @param p      - condition to satisfy
@@ -318,12 +308,32 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       }
     }
 
+    /**
+      * Check that non-zero votes extracted from block header are correct
+      */
+    private def checkVotes(header: Header): Unit = {
+      val votes: Array[Byte] = header.votes.filter(_ != Parameters.NoParameter)
+      val epochStarts = header.votingStarts(chainSettings.voting.votingLength)
+      val votesCount = votes.count(_ != Parameters.SoftFork)
+      if (votesCount > Parameters.ParamVotesCount) throw new Error(s"Too many votes $votesCount")
+
+      val prevVotes = mutable.Buffer[Byte]()
+      votes.foreach { v =>
+        if (prevVotes.contains(v)) throw new Error(s"Double vote in ${votes.mkString}")
+        if (prevVotes.contains((-v).toByte)) throw new Error(s"Contradictory votes in ${votes.mkString}")
+        if (epochStarts && !Parameters.parametersDescs.contains(v)) throw new Error("Incorrect vote proposed")
+        prevVotes += v
+      }
+    }
+
     private def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
       accumulateErrors
         .validateEqualIds(header.parentId, Header.GenesisParentId) { detail =>
           fatal(s"Genesis block should have genesis parent id. $detail")
         }
-        .validate(chainSettings.genesisId.forall { _ == Algos.encode(header.id) }) {
+        .validate(chainSettings.genesisId.forall {
+          _ == Algos.encode(header.id)
+        }) {
           fatal(s"Expected genesis block id is ${chainSettings.genesisId.getOrElse("")}," +
             s" got genesis block with id ${Algos.encode(header.id)}")
         }
@@ -333,6 +343,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(header.height == GenesisHeight) {
           fatal(s"Height of genesis block $header is incorrect")
         }
+        .demandNoThrow(checkVotes(header), "Incorrect votes")
         .result
     }
 
@@ -353,7 +364,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(heightOf(header.parentId).exists(h => fullBlockHeight - h < config.keepVersions)) {
           fatal(s"Trying to apply too old header at height ${heightOf(header.parentId)}")
         }
-        .validate(powScheme.verify(header)) {
+        .validate(powScheme.validate(header).isSuccess) {
           fatal(s"Wrong proof-of-work solution for $header")
         }
         .validateSemantics(isSemanticallyValid(header.parentId)) {
@@ -363,8 +374,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
           error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
         }
         .validateNot(historyStorage.contains(header.id)) {
-          error("Header is already in history")
+          error(s"Header ${header.id} is already in history")
         }
+        .demandNoThrow(checkVotes(header), "Incorrect votes")
         .result
     }
 

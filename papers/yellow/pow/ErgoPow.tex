@@ -1,0 +1,224 @@
+\documentclass[]{article}
+\RequirePackage{amsmath}
+
+\usepackage{graphicx}
+%\graphicspath{{./figures/}}
+\usepackage{amssymb}
+\usepackage{color}
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\bibliographystyle{IEEEtran}
+
+\newcommand{\knote}[1]{\textcolor{green}{A: {#1}}}
+\newcommand{\dnote}[1]{\textcolor{red}{D: {#1}}}
+\newcommand{\vk}[1]{\textcolor{blue}{V: {#1}}}
+\newcommand{\lnote}[1]{\textcolor{cyan}{L: {#1}}}
+\newcommand{\Name}{$Autolykos$}
+\def\Let#1#2{\State #1 $:=$ #2}
+\def\LetRnd#1#2{\State #1 $\gets$ #2}
+
+\newcommand{\pk}{\mathsf{pk}}
+\newcommand{\sk}{\mathsf{sk}}
+
+\begin{document}
+    \title{\Name: The Ergo Platform PoW Puzzle}
+
+    \author{Alexander Chepurnoy, Vasily Kharin, Dmitry Meshkov}
+
+    \date{\today}
+    \maketitle
+
+    %    \begin{abstract}
+    %        This document contains the full description of \Name~-- the PoW protocol that is going to be used in Ergo platform.
+    %    \end{abstract}
+
+
+    \section{Introduction}
+
+    Security of Proof-of-Work blockchains relies 
+    on multiple miners trying to produce new blocks by
+    participating in PoW puzzle lottery, and the network is secure if the
+    majority of them are honest. However, the reality becomes much more complicated
+    than the original one-CPU-one-vote idea from the Bitcoin whitepaper\cite{nakamoto2008bitcoin}.
+
+    The first threat to decentralization came from mining pools -- miners tend
+    to unite in mining pools.
+    Regardless of the PoW algorithm number of pools controlling more then 50\% of
+    computational power is usually quite small: 4 pools in Bitcoin, 2 in Ethereum, 3 in ZCash, etc.
+    This problem led to the notion of non-outsourceable puzzles~\cite{miller2015nonoutsourceable,daian2017piecework}.
+    These are the puzzles constructed in such a way that if a mining pool outsources the puzzle
+    to a miner, miner can recover pool's private key and steal the reward with a non-negligible probability.
+    However the existing solutions either have too large solution size (kilobyte is already
+    on the edge of acceptability for distributed ledgers) or very specific and
+    can not be modified or extended in any way without breaking non-outsourceability.
+
+    The second threat to cryptocurrencies decentralization is that ASIC-equipped miners are
+    able to find PoW solutions orders of magnitude faster and more efficiently
+    than miners equipped with the commodity hardware. In order to reduce the
+    disparity between the ASICs and regular hardware, memory-bound computations
+    where proposed in~\cite{dwork2003memory}. The most interesting practical
+    examples are two
+    asymmetric memory-hard PoW schemes which require significantly less memory
+    to verify a solution than to find it~\cite{biryukov2017equihash,ethHash}.
+    Despite the fact that ASICs already exist for both of them~\cite{ETHAsics,EquihashAsics},
+    they remain the only asymmetric memory-hard PoW algorithms in use.
+
+    In this paper we propose \Name{} --- new asymmetric memory-hard non-outsourceable PoW puzzle.
+    In Section~\ref{puzzle} we provide a full
+    specification of \Name, while in Section~\ref{discussion} we discuss its
+    properties. Few auxiliary algorithms are placed in~\nameref{appendix}.
+
+    \section{Ergo PoW puzzle}
+    \label{puzzle}
+
+    The proposed scheme requires following components:
+    \begin{enumerate}
+        \item Cyclic group $\mathbb{G}$ of prime order~$q$ with fixed generator~$g$
+        and identity element~$e$.
+        Secp256k1 elliptic curve is used for this purposes.
+        \item Number of elements $k$ required in the solution. Value $k=32$ is used in
+            implementation.
+        \item Number $N$ of elements in the list
+            $R\subset\mathbb{Z}/q\mathbb{Z}$ to be stored in miner's memory.
+            Value $N=2^{26}$ is used in implementation.
+        \item Hash function $H$ which returns the values in $\mathbb{Z}/q\mathbb{Z}$.
+        Particular implementation is based on Blake2b256 and is described in Alg.\ref{alg:H}.
+        \item Hash function $genIndexes$ which returns a list of numbers from
+            $0\dots(N-1)$ of size $k$.
+        It is based on Blake2b256 and is described in Alg.\ref{alg:genIndexes}.
+        \item Target interval parameter $b$, that is recalculated via difficulty adjustment rules.
+        \item Constant message $M=[0,\dots,1023].flatMap(i => Longs.toByteArray(i))$ that is used to enlarge message size and increase elements calculation time.
+    \end{enumerate}
+
+    \Name{} is based on one list $k$-sum problem: miner should find
+    $k$ elements from the pre-defined list $R$ of size $N$, such that
+    $\sum_{j \in J} r_{j} - sk = d$ is in the interval $\{-b,\dots,0,\dots,b\mod q\}$.
+    In addition, we require set of element indexes $J$ to be obtained
+    by one-way pseudo-random function $genIndexes$. This prevents optimizations as
+    soon as it is hard to find such a seed,
+    that $genIndexes(seed)$ returns the desired indexes.
+
+    Thus we assume that the only option for miner is to use the simple brute-force algorithm~\ref{alg:prove} to
+    create a valid block.
+
+    \begin{algorithm}[H]
+        \caption{Block mining}
+        \label{alg:prove}
+        \begin{algorithmic}[1]
+            \State \textbf{Input}: latest block header $hdr$, key pair $pk=g^{sk}$
+            \State Generate randomly a new key pair $w=g^x$
+            \Let{$m$}{$Blake2b256(hdr.bytesWithoutPow)$}
+            \While{$true$}
+            \LetRnd{$nonce$}{$\mathsf{rand}$}
+            \Let{$J$}{$genIndexes(m||nonce)$}
+            \Let{$d$}{$\sum_{j \in J}{H(j||M||pk||m||w)} \cdot x - sk \mod q$}
+            \If{$d \le b$}
+            \State \Return $(m,pk,w,nonce,d)$
+            \EndIf
+            \EndWhile
+        \end{algorithmic}
+    \end{algorithm}
+
+    Note that although the mining process utilizes private keys, solution itself
+    only contains public keys. Solution verification can be performed by Alg.~\ref{alg:verify}.
+
+    \begin{algorithm}[H]
+        \caption{Solution verification}
+        \label{alg:verify}
+        \begin{algorithmic}[1]
+            \State \textbf{Input}: $m,pk,w,nonce,d$
+            \State require $d\in\{-b,\dots,0,\dots, b\mod q\}$
+            \State require $pk,w\in \mathbb{G}$ and $pk,w \ne e$
+            \Let{$J$}{$genIndexes(m||nonce)$}
+            \Let{$f$}{$\sum_{j \in J} H(j||M||pk||m||w)$}
+            \State require $w^f = g^dpk$
+        \end{algorithmic}
+    \end{algorithm}
+
+    \section{Security and Non-Outsourceability}
+    First, notice that in Algorithm~\ref{alg:prove} we refer to construction
+    $f(m,nonce,w,pk)=\sum_{j\in genIndexes(m||nonce)} H(j||M||pk||w)$ as a hash
+    function. Public key plays a role of commitment. Therefore, the pair
+    $(pk,d)$ is a Schnorr signature with a public key $w$ over the message
+    $(m,nonce)$ with a hash function $f$. If one denotes $e$ the corresponding
+    value of $f$, and pass to more common notations:
+    $e=f(m,nonce,w,w^eg^{-d})$. The puzzle consists in trying
+    different nonces and keys in order for signature to satisfy
+    $d\in\{-b,\dots,0,\dots,b\}$. Security follows from the security of Schnor
+    signatures, and outsourcing the puzzle is equivalent to outsourcing the
+    signature (or parts of signature creation routine). The only difference from
+    conventional setup is the design of function $f$. It must be constructed in such
+    a way that efficient massive evaluations with different nonces require
+    allocating large amount of memory (benefitting from data reuse), whereas
+    single evaluation on verifier's side can be done ``on fly''.
+
+%    \vk{I would exchange $pk$ and $w$, s.t. $pk$ is exactly public key and $w$ is commitment}
+
+    \section{Discussion}
+    \label{discussion}
+
+    \Name{} mining~\ref{alg:prove} and verification~\ref{alg:verify} algorithms
+    are similar to Schnorr signature algorithm. Therefore, efficient solving
+    requires access to private key $sk$. This fact implies that in order to get
+    complete solution work outsourcer needs to pass the secret key to the miner,
+    putting itself at risk of loosing block rewards.
+    This fact discourages formation of centralized pools and centralization of the network in the hands of pool operators.
+
+    Mining algorithm~\ref{alg:prove} can be optimized, if miner pre-calculates
+    hashes\newline $\{H(j||M||pk||m||w)|i \in [0,N)\}$ and stores them in the memory.
+    Every pre-calculated hash occupies 32 bytes, so the whole list of $N$ elements
+    occupies $N \cdot 32 = 2 Gb$, making this optimization memory-hard.
+    However, the miner profit will also be significant: assuming GPU hashrate
+    $G = 2^{30} H/s$~\cite{gpuHashrate} and block interval $t=120~s$, every element
+    will be used $(G / N) \cdot k \cdot t = 3 \cdot 10^4$ times on average.
+    Thus, if a miner tries to 
+    recalculate hashes ``on the fly'' instead of storing them, the number of
+    calls of $H$ grows $10^4$ times, which is rather significant value.
+
+    Protocol is quite efficient in terms of size: in addition to payload, block header should
+    contain as few as 2 public keys of size 32 bytes, number $d$ that is at most 32 bytes
+    (but contains a lot of leading zeros in case of small target $b$) and an
+    8-bytes long nonce. Header verification requires verifier to calculate 1 $genIndexes$
+    hash, $k$ hashes $H$ and perform two exponentiations in the group. Reference
+    Scala implementation~\cite{ergoGit} allows to verify block header in 2
+    milliseconds on Intel Core i5-7200U, 2.5GHz.
+
+    \bibliography{references}
+
+    \section*{Appendix}
+    \label{appendix}
+
+    Implementation of hash function $H$ which returns the values in $\mathbb{Z}/q\mathbb{Z}$:
+
+    \begin{algorithm}[H]
+        \caption{Numeric hash}
+        \label{alg:H}
+        \begin{algorithmic}[1]
+            \Function{H}{$input$}
+            \Let{$validRange$}{$(2^{256} / q) \cdot q$}
+            \Let{$hashed$}{$Blake2b256(input)$}
+            \If{$hashed < validRange$}
+            \State \Return $hashed.mod(q)$
+            \Else
+            \State \Return $H(hashed)$
+            \EndIf
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+
+    Implementation of hash function $genIndexes$ which returns a list of size $k$ with numbers in $0\dots (N-1)$:
+
+    \begin{algorithm}[H]
+        \caption{Index generator}
+        \label{alg:genIndexes}
+        \begin{algorithmic}[1]
+            \Function{genIndexes}{$seed$}
+            \Let{$hash$}{$Blake2b256(seed)$}
+            \Let{$extendedHash$}{$hash||hash$}
+            \State \Return $(0\dots{k-1}).map(i => extendedHash.slice(i,i+4).mod(N))$
+            \EndFunction
+        \end{algorithmic}
+    \end{algorithm}
+
+\end{document}

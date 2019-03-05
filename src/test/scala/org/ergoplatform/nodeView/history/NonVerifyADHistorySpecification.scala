@@ -1,14 +1,14 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.history.{Header, HeaderChain}
+import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain, PoPowAlgos}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, Constants}
-import org.ergoplatform.utils.HistorySpecification
+import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.History._
 import scorex.crypto.hash.Digest32
 
-class NonVerifyADHistorySpecification extends HistorySpecification {
+class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
   private def genHistory() =
     generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
@@ -23,6 +23,33 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
       processInfo.toApply shouldEqual Some(snapshot)
       popowHistory.applicable(snapshot) shouldBe false
     }
+  }
+
+  property("Header votes") {
+    import org.ergoplatform.settings.Parameters._
+
+    val history = genHistory()
+
+    //double vote
+    val wrongVotes1 = Array(StorageFeeFactorIncrease, StorageFeeFactorIncrease, NoParameter)
+    val hw1 = genHeaderChain(1, history).head.copy(votes = wrongVotes1, version = 0: Byte)
+    history.applicableTry(hw1).isSuccess shouldBe false
+
+
+    //contradictory votes
+    val wrongVotes2 = Array(StorageFeeFactorIncrease, StorageFeeFactorDecrease, NoParameter)
+    val hw2 = genHeaderChain(1, history).head.copy(votes = wrongVotes2, version = 0: Byte)
+    history.applicableTry(hw2).isSuccess shouldBe false
+
+    //too many votes - only two ordinary changes allowed per epoch
+    val wrongVotes3 = Array(StorageFeeFactorIncrease, MaxBlockCostIncrease, MaxBlockSizeDecrease)
+    val hw3 = genHeaderChain(1, history).head.copy(votes = wrongVotes3, version = 0: Byte)
+    history.applicableTry(hw3).isSuccess shouldBe false
+
+    //a vote proposed on non-existing parameter
+    val wrongVotes4 = Array((-50).toByte, NoParameter, MaxBlockSizeDecrease)
+    val hw4 = genHeaderChain(1, history).head.copy(votes = wrongVotes4, version = 0: Byte, height = 2)
+    history.applicableTry(hw4).isSuccess shouldBe false
   }
 
   property("Should calculate difficulty correctly") {
@@ -69,7 +96,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
   property("Compare headers chain") {
     var history = genHistory()
 
-    def getInfo(c: HeaderChain) = ErgoSyncInfo(c.headers.map(_.id))
+    def getInfo(c: HeaderChain): ErgoSyncInfo = ErgoSyncInfo(c.headers.map(_.id))
 
     val common = genHeaderChain(BlocksInChain, history)
     history = applyHeaderChain(history, common)
@@ -120,6 +147,8 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
     val smallerLimit = 2
     val ci0 = history.continuationIds(ErgoSyncInfo(Seq()), smallerLimit).get
+    ci0.length shouldBe smallerLimit
+
     chain.headers.take(smallerLimit).map(_.encodedId) shouldEqual ci0.map(c => Algos.encode(c._2))
 
     val biggerLimit = BlocksInChain + 2
@@ -198,7 +227,10 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
 
         val fork1 = genHeaderChain(forkLength, history).tail
         val common = fork1.headers(forkDepth)
-        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common),
+        val commonInterlinks = history.typedModifierById[Extension](common.extensionId)
+          .map(ext => PoPowAlgos.unpackInterlinks(ext.fields).get)
+          .getOrElse(Seq.empty)
+        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common), commonInterlinks,
           defaultDifficultyControl, extensionHash)
         val fork1SuffixIds = fork1.headers.drop(forkDepth + 1).map(_.encodedId)
         val fork2SuffixIds = fork2.headers.drop(forkDepth + 1).map(_.encodedId)
@@ -222,7 +254,7 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
     val chain = genHeaderChain(BlocksInChain, history)
 
     chain.headers.foreach { header =>
-      val inHeight = history.heightOf(header.parentId).getOrElse(-1)
+      val inHeight = history.heightOf(header.parentId).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
       history.contains(header) shouldBe false
       history.applicable(header) shouldBe true
@@ -236,4 +268,5 @@ class NonVerifyADHistorySpecification extends HistorySpecification {
       history.heightOf(header.id).get shouldBe (inHeight + 1)
     }
   }
+
 }

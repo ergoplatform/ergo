@@ -1,14 +1,12 @@
 package org.ergoplatform.network
 
-import com.google.common.primitives.Ints
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.NodeConfigurationSettings
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
-import scorex.core.serialization.Serializer
-import scorex.core.utils
+import scorex.core.serialization.ScorexSerializer
+import scorex.util.serialization.{Reader, Writer}
 
-import scala.util.Try
 
 case class ModeFeature(stateType: StateType,
                        verifyingTransactions: Boolean,
@@ -23,39 +21,30 @@ case class ModeFeature(stateType: StateType,
 
   def byteToBoolean(byte: Byte): Boolean = if (byte > 0) true else false
 
-  override def serializer: Serializer[ModeFeature] = new Serializer[ModeFeature] {
-    override def toBytes(mf: ModeFeature): Array[Id] = {
-
-      val stateTypeByte = mf.stateType.stateTypeCode
-      val verifyingTransactionsByte = booleanToByte(mf.verifyingTransactions)
-
-      val popowBootstrap = booleanToByte(mf.popowBootstrapping)
-
-      utils.concatBytes(Seq(
-        Array(stateTypeByte, verifyingTransactionsByte, popowBootstrap),
-        Ints.toByteArray(mf.popowSuffix),
-        Ints.toByteArray(mf.blocksToKeep)
-      ))
+  override def serializer: ScorexSerializer[ModeFeature] = new ScorexSerializer[ModeFeature] {
+    override def serialize(mf: ModeFeature, w: Writer): Unit = {
+      w.put(mf.stateType.stateTypeCode)
+      w.put(booleanToByte(mf.verifyingTransactions))
+      w.put(booleanToByte(mf.popowBootstrapping))
+      w.putInt(mf.popowSuffix)
+      w.putInt(mf.blocksToKeep)
     }
 
-    override def parseBytes(bytes: Array[Id]): Try[ModeFeature] = Try {
-      require(bytes.length < 512)
+    override def parse(r: Reader): ModeFeature = {
+      require(r.remaining < 512)
 
-      val stateTypeByte = bytes(0)
-      val verifyingTransactions = bytes(1)
-      val popowBootstrap = bytes(2)
-
-      val popowSuffixBytes = bytes.slice(3, 7)
-      val blocksToKeepBytes = bytes.slice(7, 11)
-
-      val stateType = StateType.fromCode(stateTypeByte)
+      val stateType = StateType.fromCode(r.getByte())
+      val verifyingTransactions = byteToBoolean(r.getByte())
+      val popowBootstrap = byteToBoolean(r.getByte())
+      val popowSuffix = r.getInt()
+      val blocksToKeep = r.getInt()
 
       new ModeFeature(
         stateType,
-        byteToBoolean(verifyingTransactions),
-        byteToBoolean(popowBootstrap),
-        Ints.fromByteArray(popowSuffixBytes),
-        Ints.fromByteArray(blocksToKeepBytes)
+        verifyingTransactions,
+        popowBootstrap,
+        popowSuffix,
+        blocksToKeep
       )
     }
   }

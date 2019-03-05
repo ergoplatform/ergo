@@ -1,36 +1,149 @@
 package org.ergoplatform.utils
 
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoAddress, ErgoWallet, P2PKAddress}
+import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.state.{UtxoState, ErgoState}
+import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
+import org.ergoplatform.utils.fixtures.WalletFixture
+import org.ergoplatform._
+import org.ergoplatform.local.ErgoMiner
+import scorex.crypto.hash.Digest32
+import scorex.util.{bytesToId, ModifierId}
+import sigmastate.Values.{TrueLeaf, Value}
+import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.interpreter.ProverResult
+import sigmastate.serialization.ValueSerializer
 import sigmastate.SBoolean
-import sigmastate.Values.Value
+import scala.concurrent.blocking
 
-import scala.concurrent.Await
 
 trait WalletTestOps extends NodeViewBaseOps {
 
-  def wallet(implicit ctx: Ctx): ErgoWallet = getCurrentView.vault
-  def defaultAddress(implicit ctx: Ctx): P2PKAddress = addresses.head.asInstanceOf[P2PKAddress]
-  def defaultPubKey(implicit ctx: Ctx): Value[SBoolean.type] = defaultAddress.pubkey
-  def defaultProofBytes(implicit ctx: Ctx): Array[Byte] = defaultAddress.contentBytes
+  def newAssetIdStub: TokenId = Digest32 @@ Array.emptyByteArray
 
-  def addresses(implicit ctx: Ctx): Seq[ErgoAddress] =
-    Await.result(wallet.trackedAddresses(), awaitDuration)
+  def withFixture[T](test: WalletFixture => T): T = {
+    new WalletFixture(settings, getCurrentView(_).vault).apply(test)
+  }
 
-  def getConfirmedBalances(implicit ctx: Ctx): BalancesSnapshot =
-    Await.result(wallet.confirmedBalances(), awaitDuration)
+  def wallet(implicit w: WalletFixture): ErgoWallet = w.wallet
 
-  def getUnconfirmedBalances(implicit ctx: Ctx): BalancesSnapshot =
-    Await.result(wallet.unconfirmedBalances(), awaitDuration)
+  def getPublicKeys(implicit w: WalletFixture): Seq[P2PKAddress] =
+    await(w.wallet.publicKeys(0, Int.MaxValue))
+
+  def getConfirmedBalances(implicit w: WalletFixture): BalancesSnapshot =
+    await(w.wallet.confirmedBalances())
+
+  def getBalancesWithUnconfirmed(implicit w: WalletFixture): BalancesSnapshot =
+    await(w.wallet.balancesWithUnconfirmed())
 
   def scanningInterval(implicit ctx: Ctx): Long = ctx.settings.walletSettings.scanningInterval.toMillis
-  def sumOutputs(block: ErgoFullBlock): Long = sum(outputs(block))
-  def sum(boxes: Seq[ErgoBox]): Long = boxes.map(_.value).sum
-  def outputs(block: ErgoFullBlock): Seq[ErgoBox] = block.transactions.flatMap(_.outputs)
 
-  def scanTime(block: ErgoFullBlock)(implicit ctx: Ctx): Long = scanTime(outputs(block).size)
-  def scanTime(boxCount: Int)(implicit ctx: Ctx): Long = boxCount * scanningInterval + 1000
-  def offlineScanTime(tx: ErgoTransaction): Long = tx.outputs.size * 100 + 300
+  def waitForScanning(block: ErgoFullBlock)(implicit ctx: Ctx): Unit = {
+    blocking(Thread.sleep(scanTime(block)))
+  }
+
+  def scanTime(block: ErgoFullBlock)(implicit ctx: Ctx): Long = {
+    val boxes = block.transactions.flatMap(_.outputs)
+    val tokens = boxes.flatMap(_.additionalTokens)
+    scanTime(boxes.size, tokens.size)
+  }
+
+  def scanTime(boxCount: Int, tokenCount: Int)(implicit ctx: Ctx): Long = {
+    boxCount * scanningInterval + tokenCount * scanningInterval * 2 + 1000
+  }
+
+  def waitForOffchainScanning(tx: ErgoTransaction): Unit = {
+    blocking(Thread.sleep(offchainScanTime(tx)))
+  }
+
+  def offchainScanTime(tx: ErgoTransaction): Long = tx.outputs.size * 100 + 300
+
+  def balanceAmount(boxes: Seq[ErgoBox]): Long = boxes.map(_.value).sum
+
+  def boxesAvailable(block: ErgoFullBlock, bytes: Array[Byte]): Seq[ErgoBox] = {
+    block.transactions.flatMap(boxesAvailable(_, bytes))
+  }
+
+  def boxesAvailable(tx: ErgoTransaction, bytes: Array[Byte]): Seq[ErgoBox] = {
+    tx.outputs.filter(_.propositionBytes.containsSlice(bytes))
+  }
+
+  def boxesAvailable(block: ErgoFullBlock, pk: ProveDlog): Seq[ErgoBox] = {
+    block.transactions.flatMap(boxesAvailable(_, pk))
+  }
+
+  def boxesAvailable(tx: ErgoTransaction, pk: ProveDlog): Seq[ErgoBox] = {
+    tx.outputs.filter(_.propositionBytes.containsSlice(ValueSerializer.serialize(pk.value)))
+  }
+
+  def assetAmount(boxes: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = {
+    assetsByTokenId(boxes).map { case (tokenId, sum) => (bytesToId(tokenId), sum) }
+  }
+
+  def toAssetMap(assetSeq: Seq[(TokenId, Long)]): Map[ModifierId, Long] = {
+    assetSeq
+      .map { case (tokenId, sum) => (bytesToId(tokenId), sum) }
+      .toMap
+  }
+
+  def assetsByTokenId(boxes: Seq[ErgoBoxCandidate]): Map[TokenId, Long] = {
+    boxes
+      .flatMap { _.additionalTokens }
+      .groupBy { case (tokenId, _) => tokenId }
+      .map { case (id, pairs) => id -> pairs.map(_._2).sum }
+  }
+
+  def getUtxoState(implicit ctx: Ctx): UtxoState = getCurrentState.asInstanceOf[UtxoState]
+
+  def getHeightOf(state: ErgoState[_])(implicit ctx: Ctx): Option[Int] = {
+    getHistory.heightOf(scorex.core.versionToId(state.version))
+  }
+
+  def makeGenesisBlock(script: ProveDlog, assets: Seq[(TokenId, Long)] = Seq.empty)
+                      (implicit ctx: Ctx): ErgoFullBlock = {
+    makeNextBlock(getUtxoState, Seq(makeGenesisTx(script, assets)))
+  }
+
+  def makeGenesisTx(publicKey: ProveDlog, assetsIn: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
+    val inputs = IndexedSeq(new Input(genesisEmissionBox.id, emptyProverResult))
+    val assets: Seq[(TokenId, Long)] = replaceNewAssetStub(assetsIn, inputs)
+    ErgoMiner.collectRewards(Some(genesisEmissionBox),
+      ErgoHistory.EmptyHistoryHeight,
+      Seq.empty,
+      publicKey,
+      emission,
+      assets).head
+  }
+
+  def makeSpendingTx(boxesToSpend: Seq[ErgoBox],
+                     addressToSpend: ErgoAddress,
+                     balanceToReturn: Long = 0,
+                     assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
+    makeTx(boxesToSpend, emptyProverResult, balanceToReturn, addressToSpend.script, assets)
+  }
+
+  def makeTx(boxesToSpend: Seq[ErgoBox],
+             proofToSpend: ProverResult,
+             balanceToReturn: Long,
+             scriptToReturn: Value[SBoolean.type],
+             assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
+    val inputs = boxesToSpend.map(box => Input(box.id, proofToSpend))
+    val balanceToSpend = boxesToSpend.map(_.value).sum - balanceToReturn
+    def creatingCandidate = new ErgoBoxCandidate(balanceToReturn, scriptToReturn, startHeight, replaceNewAssetStub(assets, inputs))
+    val spendingOutput = if (balanceToSpend > 0) Some(new ErgoBoxCandidate(balanceToSpend, TrueLeaf, creationHeight = startHeight)) else None
+    val creatingOutput = if (balanceToReturn > 0) Some(creatingCandidate) else None
+    ErgoTransaction(inputs.toIndexedSeq, spendingOutput.toIndexedSeq ++ creatingOutput.toIndexedSeq)
+  }
+
+  private def replaceNewAssetStub(assets: Seq[(TokenId, Long)], inputs: Seq[Input]): Seq[(TokenId, Long)] = {
+    def isNewAsset(tokenId: TokenId, value: Long): Boolean =  java.util.Arrays.equals(tokenId, newAssetIdStub)
+    val (newAsset, spentAssets) = assets.partition((isNewAsset _).tupled)
+    newAsset.map(Digest32 @@ inputs.head.boxId -> _._2) ++ spentAssets
+  }
+
+  def randomNewAsset: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> randomLong())
+  def assetsWithRandom(boxes: Seq[ErgoBox]): Seq[(TokenId, Long)] = randomNewAsset ++ assetsByTokenId(boxes)
+  def badAssets: Seq[(TokenId, Long)] = additionalTokensGen.sample.value
 }

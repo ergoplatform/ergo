@@ -1,29 +1,21 @@
 package org.ergoplatform.modifiers.mempool
 
 import org.ergoplatform.ErgoBox
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
+import scorex.util.serialization.{Reader, Writer}
 import sigmastate.SBox
-import sigmastate.serialization.DataSerializer
-import sigmastate.utils.{ByteReader, ByteWriter}
+import sigmastate.serialization.{ConstantStore, DataSerializer}
+import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 
-import scala.util.Try
+object ErgoBoxSerializer extends ScorexSerializer[ErgoBox] {
 
-object ErgoBoxSerializer extends Serializer[ErgoBox] {
-  override def toBytes(box: ErgoBox): Array[Byte] = {
-    val w = sigmastate.serialization.Serializer.startWriter()
-    write(box, w)
-    w.toBytes
-  }
-
-  def write(box: ErgoBox, writer: ByteWriter): Unit = {
+  override def serialize(box: ErgoBox, w: Writer): Unit = {
+    val writer = new SigmaByteWriter(w, None)
     DataSerializer.serialize[SBox.type](box, SBox, writer)
   }
 
-  override def parseBytes(bytes: Array[Byte]): Try[ErgoBox] = {
-    read(sigmastate.serialization.Serializer.startReader(bytes, 0))
-  }
-
-  def read(reader: ByteReader): Try[ErgoBox] = Try {
+  override def parse(r: Reader): ErgoBox = {
+    val reader = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
     DataSerializer.deserialize(SBox, reader)
   }
 }

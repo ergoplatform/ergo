@@ -8,7 +8,8 @@ Ergo block consists of 4 parts:
     \item{\em ADProofs } - proofs for transactions included into the corresponding BlockTransactions section of a block.
     Allows light clients to verify all the transactions and calculate new root hash.
     \item{\em Extension } - additional data, that does not correspond to previous sections.
-          May contain interlinks, current miner votes and (sometimes) current parameters of the chain.
+    Contains interlinks and current parameters of the chain (when an extension belongs to a block at the end of the
+    voting epoch).
 \end{itemize}
 
 \subsection{Header}
@@ -30,13 +31,15 @@ Ergo block consists of 4 parts:
     \hline
     timestamp &  8 &  block timestamp(in milliseconds since beginning of Unix Epoch)  \\
     \hline
-    nBits &  8 & current difficulty in a compressed view  \\
+    nBits &  8 & current difficulty in a compressed form  \\
     \hline
     height &  4 & block height  \\
     \hline
     extensionRoot & 32 & root hash of extension section  \\
     \hline
-    equihashSolution & 128 & solution of equihash PoW puzzle  \\
+    powSolution & 75-107 (depends on d) & solution of Autolykos PoW puzzle  \\
+    \hline
+    votes & 3 & votes for changes in system parameteres, one byte per vote  \\
     \hline
 \end{tabular}
 
@@ -45,23 +48,21 @@ Some of these fields may be calculated by node by itself if it is in a certain m
 
 \begin{itemize}
     \item parentId: if(status==bootstrap AND PoPoWBootstrap == false).
-    \item interlinksRoot: if(PoPoWBootstrap == false).
     \item ADProofsRoot: if(status==regular AND ADState==false AND BlocksToKeep>0).
     \item stateRoot: if(status==regular AND ADState==false AND BlocksToKeep>0).
 \end{itemize}
 
 \subsection{Extension}
+\label{sec:extension}
 
 Extension is a key-value storage for a variety of data.
-It contains 2 parts:
-\begin{itemize}
-    \item{\em Mandatory fields } - fields which keys are set via consensus rules and may be changed
-    via soft/hard forks only. These fields have 4 bytes key and at most 64 bytes value.
-    Value length is known for all peers and this limit only important due to soft forks -
-    it is allowed to add at most 1 new key to this section per epoch (256 blocks between
-    difficulty recalculation), if key is not known to a peer it assumes that soft fork that
-    added this key was performed.
-    \item{\em Optional fields } - random data miner may add to a block. This section contains at most 2
-    elements with 32 byte key size and at most 64 byte value size.
-\end{itemize}
+
+A key is always 2-bytes long, maximum size of a value is 64 bytes. Extension could be no more than of $16,384$ bytes.
+Some keys have predefined semantics. In particular, if the first byte of a key equals to $0x00$, then the second byte
+defines parameter identifier, and the value defines value of the parameter. See Section~\ref{sec:params-table}
+for details. Another predefined key is used for storing interlinks vector - the first byte of the key is $0x01$,
+the second one corresponds to index of the link in the vector and the value contains actual link (32 bytes) prefixed
+with the number of times it appears in the vector (1 byte). Other prefixes may be used freely.
+
+
 

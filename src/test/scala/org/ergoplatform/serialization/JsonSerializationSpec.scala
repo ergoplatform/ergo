@@ -2,29 +2,34 @@ package org.ergoplatform.serialization
 
 import io.circe.parser.parse
 import io.circe.syntax._
-import io.circe.{ACursor, Decoder, Encoder}
+import io.circe.{ACursor, Decoder, Encoder, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.api.ApiEncoderOption.{Detalization, ShowDetails}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, TransactionIdsForHeader}
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform.utils.{ErgoPropertyTest, WalletGenerators}
+import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalatest.Inspectors
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.{SBoolean, SType}
 
 class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with ApiCodecs {
 
-  property("TransactionIdsForHeader should be converted into json correctly") {
-    val modifierId = genBytes(Constants.ModifierIdSize).sample.get
-    val stringId = Algos.encode(modifierId)
-    val Right(_) = parse(s"""{ "ids" : ["$stringId"]}""")
-    val data = TransactionIdsForHeader(Seq(modifierId))
-    val c = data.asJson.hcursor
-    c.downField("ids").downArray.as[String] shouldBe Right(stringId)
+  property("ErgoFullBlock should be encoded into JSON and decoded back correctly") {
+
+    val (st, bh) = createUtxoState()
+    val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
+
+    val blockJson: Json = block.asJson
+    val blockDecoded: ErgoFullBlock = blockJson.as[ErgoFullBlock].toTry.get
+
+    blockDecoded shouldEqual block
   }
 
   property("ErgoBox should be converted into json correctly") {
@@ -41,7 +46,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
-  property("Payment Request should be serialized to json") {
+  property("PaymentRequest should be serialized to json") {
     val ergoSettings = ErgoSettings.read(None)
     implicit val requestEncoder: Encoder[PaymentRequest] = new PaymentRequestEncoder(ergoSettings)
     implicit val requestDecoder: Decoder[PaymentRequest] = new PaymentRequestDecoder(ergoSettings)
@@ -61,12 +66,29 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
+  property("AssetIssueRequest should be serialized to json") {
+    val ergoSettings = ErgoSettings.read(None)
+    implicit val requestEncoder: Encoder[AssetIssueRequest] = new AssetIssueRequestEncoder(ergoSettings)
+    implicit val requestDecoder: Decoder[AssetIssueRequest] = new AssetIssueRequestDecoder(ergoSettings)
+    forAll(assetIssueRequestGen) { request =>
+      val json = request.asJson
+      val parsingResult = json.as[AssetIssueRequest]
+      parsingResult.isRight shouldBe true
+      val restored = parsingResult.right.value
+      restored.addressOpt shouldEqual request.addressOpt
+      restored.amount shouldEqual request.amount
+      restored.name shouldEqual request.name
+      restored.description shouldEqual request.description
+      restored.decimals shouldEqual request.decimals
+    }
+  }
+
   private def checkTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {
     c.downField("spent").as[Boolean] shouldBe Right(b.spendingStatus.spent)
     c.downField("onchain").as[Boolean] shouldBe Right(b.chainStatus.onchain)
     c.downField("certain").as[Boolean] shouldBe Right(b.certainty.certain)
     c.downField("creationOutIndex").as[Short] shouldBe Right(b.creationOutIndex)
-    c.downField("creationHeight").as[Option[Int]] shouldBe Right(b.creationHeight)
+    c.downField("inclusionHeight").as[Option[Int]] shouldBe Right(b.inclusionHeight)
     c.downField("spendingHeight").as[Option[Int]] shouldBe Right(b.spendingHeight)
     checkErgoBox(c.downField("box"), b.box)
     if (!opts.showDetails) {
@@ -84,6 +106,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     c.downField("proposition").as[Value[SBoolean.type]] shouldBe Right(b.proposition)
     checkAssets(c.downField("assets"), b.additionalTokens)
     checkRegisters(c.downField("additionalRegisters"), b.additionalRegisters)
+    c.downField("creationHeight").as[Int] shouldBe Right(b.creationHeight)
   }
 
   private def checkAssets(c: ACursor, assets: Seq[(ErgoBox.TokenId, Long)]) = {

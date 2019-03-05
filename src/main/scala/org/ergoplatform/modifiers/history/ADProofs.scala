@@ -1,17 +1,21 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.Bytes
-import io.circe.Encoder
+import io.circe.{Decoder, Encoder, HCursor}
 import io.circe.syntax._
+import io.circe.{Decoder, Encoder, HCursor}
+import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.state.{Insertion, Removal, StateChangeOperation, StateChanges}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core._
-import scorex.core.serialization.Serializer
+import scorex.core.ModifierTypeId
+import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.avltree.batch.{BatchAVLVerifier, Insert, Modification, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 import scorex.crypto.hash.Digest32
+import scorex.util.serialization.{Reader, Writer}
+import scorex.util.{ModifierId, bytesToId, idToBytes}
+import scorex.util.Extensions._
 
 import scala.util.{Failure, Success, Try}
 
@@ -25,19 +29,9 @@ case class ADProofs(headerId: ModifierId,
 
   override type M = ADProofs
 
-  override lazy val serializer: Serializer[ADProofs] = ADProofSerializer
+  override lazy val serializer: ScorexSerializer[ADProofs] = ADProofSerializer
 
-  override def toString: String = {
-    val sId = Algos.encode(id)
-    val sHeaderId = Algos.encode(headerId)
-
-    /**
-      * Sometimes proofBytes could have length about 350 000 elements, it's useless to convert them into string.
-      * So decisin here is to not render them in toString method.
-      */
-    //val sProofBytes = Algos.encode(proofBytes)
-    s"ADProofs(Id:$sId,HeaderId:$sHeaderId)"
-  }
+  override def toString: String = s"ADProofs(Id:$id,HeaderId:$headerId)"
 
   /**
     * Verify a set of box(outputs) operations on authenticated UTXO set by using the proof (this class wraps).
@@ -65,7 +59,8 @@ case class ADProofs(headerId: ModifierId,
           if (java.util.Arrays.equals(digest, expectedHash)) {
             Success(oldValues)
           } else {
-            Failure(new IllegalArgumentException(s"Unexpected result digest: ${Algos.encode(digest)} != ${Algos.encode(expectedHash)}"))
+            val msg = s"Unexpected result digest: ${Algos.encode(digest)} != ${Algos.encode(expectedHash)}"
+            Failure(new IllegalArgumentException(msg))
           }
         case None =>
           Failure(new IllegalStateException("Digest is undefined"))
@@ -74,7 +69,7 @@ case class ADProofs(headerId: ModifierId,
   }
 }
 
-object ADProofs {
+object ADProofs extends ApiCodecs {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (104: Byte)
 
   val KL = 32
@@ -95,23 +90,36 @@ object ADProofs {
         Remove(r.boxId)
     }
 
-  implicit val jsonEncoder: Encoder[ADProofs] = (proof: ADProofs) =>
+  implicit val jsonEncoder: Encoder[ADProofs] = { proof: ADProofs =>
     Map(
       "headerId" -> Algos.encode(proof.headerId).asJson,
       "proofBytes" -> Algos.encode(proof.proofBytes).asJson,
       "digest" -> Algos.encode(proof.digest).asJson,
       "size" -> proof.size.asJson
     ).asJson
+  }
+
+  implicit val jsonDecoder: Decoder[ADProofs] = { c: HCursor =>
+    for {
+      headerId <- c.downField("headerId").as[ModifierId]
+      proofBytes <- c.downField("proofBytes").as[Array[Byte]]
+      size <- c.downField("size").as[Option[Int]]
+    } yield ADProofs(headerId, SerializedAdProof @@ proofBytes, size)
+  }
 }
 
-object ADProofSerializer extends Serializer[ADProofs] {
-  override def toBytes(obj: ADProofs): Array[Byte] = Bytes.concat(idToBytes(obj.headerId), obj.proofBytes)
+object ADProofSerializer extends ScorexSerializer[ADProofs] {
 
-  override def parseBytes(bytes: Array[Byte]): Try[ADProofs] = Try {
-    ADProofs(
-      bytesToId(bytes.take(Constants.ModifierIdSize)),
-      SerializedAdProof @@ bytes.slice(Constants.ModifierIdSize, bytes.length),
-      Some(bytes.length)
-    )
+  override def serialize(obj: ADProofs, w: Writer): Unit = {
+    w.putBytes(idToBytes(obj.headerId))
+    w.putUInt(obj.proofBytes.size)
+    w.putBytes(obj.proofBytes)
+  }
+
+  override def parse(r: Reader): ADProofs = {
+    val headerId = bytesToId(r.getBytes(Constants.ModifierIdSize))
+    val size = r.getUInt().toIntExact
+    val proofBytes = SerializedAdProof @@ r.getBytes(size)
+    ADProofs(headerId, proofBytes, Some(size + Constants.ModifierIdSize))
   }
 }

@@ -1,0 +1,185 @@
+paths:
+
+  /blocks:
+    post:
+      - |
+        {
+          "header": {
+            "votes": "000000",
+            "difficulty": "291",
+            "timestamp": 1538572701768,
+            "size": 607,
+            "stateRoot": "c2d3cfb7482c9edc4b1214b830032b93556af6a4a9224c7154cbf185bc00c15316",
+            "height": 32693,
+            "nBits": 33628928,
+            "version": 1,
+            "id": "00d2a8d21113598ea924329f9520905693e914bac6235255b74fd3b8016171aa",
+            "adProofsRoot": "a84f62a669fb3684308ea609af6cd831b939b70210307e143a05321ce8efeda2",
+            "transactionsRoot": "cc32add0ada11b6a81f07b61a6c606b2277af9999b453538d32b3c409630bce1",
+            "extensionHash": "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
+            "powSolutions" : {
+                "pk" : "0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5",
+                "w" : "032e3f5edb88f3cc7384bfedc892fc8dcb10d7a3bf3741d08a62cc701848d0932c",
+                "n" : "0000000000000000",
+                "d" : 603083798111021851164432213586916186738093029948325633833495911523787854249
+            },
+            "parentId": "002390f165396f855f53b928e469ba89a2107784479423a2db66b3acccef78e9"
+          },
+          "blockTransactions": {
+            "headerId": "00d2a8d21113598ea924329f9520905693e914bac6235255b74fd3b8016171aa",
+            "transactions": [
+              {
+                "id": "20687df938ee4b3c50b7e145f84bb881f9518465c0877bf77a681241fe1a60e6",
+                "inputs": [
+                  {
+                    "boxId": "0ab3aa13f4a82cfb4e8031a08f0ebdf2e969350deb897a171ec888bb8a6cc2a0",
+                    "spendingProof": {
+                      "proofBytes": "e8f50a65ee577e55b6ef100bfe97597e717b6792c94c749407d37547a31a9bba133be88e0a634bb479d3caffe9567059816cb8780a3bb373",
+                      "extension": {}
+                    }
+                  },
+                  {
+                    "boxId": "2a14b5969a287413918e9af76f939b47c6395ae84c65fa040f11e769e754c474",
+                    "spendingProof": {
+                      "proofBytes": "4b40eb0ca07bff34b4c07cc8c6a3eabc4f7634641e3941670734f59d68a2a946cf1e2a222f08a642c6b5228d331d9ab3120f10d1958a5659",
+                      "extension": {}
+                    }
+                  }
+                ],
+                "outputs": [
+                  {
+                    "boxId": "08667225fa6beb560627ba02b5389929db756add5b65bda8aea7920088b2cc8c",
+                    "value": 100000,
+                    "proposition": "100101017300",
+                    "assets": [],
+                    "additionalRegisters": {},
+                    "creationHeight": 1149
+                  },
+                  {
+                    "boxId": "a27ff81f905bfec9e4a551d95322a0c53259e44cd263cf72fa7d1eabc715fefe",
+                    "value": 900000000,
+                    "proposition": "1001070361a3df05f414e9b01394487c4cc9838857575408677ddc166047a52f93e4ed26cd7300",
+                    "assets": [],
+                    "additionalRegisters": {},
+                    "creationHeight": 1149
+                  }
+                ],
+                "size": 363
+              },
+              {
+                "id": "e0b057427cbe654bc872631e06bb0d96f91eb5a9779f4b4b1503c377582ca636",
+                "inputs": [
+                  {
+                    "boxId": "aaacb6f598587059b770289abcbae0bc3dd949f527052f2ff82230f8411e67b1",
+                    "spendingProof": {
+                      "proofBytes": "28a6e09627092c63151fc10025abe30f368153e4255f26b90768bf60023d321ebde22692f2b412a7e964030333f615dc783b001bcb4865f7",
+                      "extension": {}
+                    }
+                  }
+                ],
+                "outputs": [
+                  {
+                    "boxId": "74c503605218f6e382710bc0cb6716a63e887a2a10252cdbb4662d49d660069c",
+                    "value": 100000,
+                    "proposition": "100101017300",
+                    "assets": [],
+                    "additionalRegisters": {},
+                    "creationHeight": 1149
+                  },
+                  {
+                    "boxId": "cf5a2dbc79d3152305804e7109743d2ed538a5ee73e7fe7f366213c4d028f683",
+                    "value": 500000000,
+                    "proposition": "1001070361a3df05f414e9b01394487c4cc9838857575408677ddc166047a52f93e4ed26cd7300",
+                    "assets": [],
+                    "additionalRegisters": {},
+                    "creationHeight": 1149
+                  }
+                ],
+                "size": 184
+              }
+            ],
+            "size": 4054
+          },
+          "extension": {
+            "headerId": "00d2a8d21113598ea924329f9520905693e914bac6235255b74fd3b8016171aa",
+            "digest": "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
+            "fields": []
+          },
+          "adProofs": {
+            "headerId": "00d2a8d21113598ea924329f9520905693e914bac6235255b74fd3b8016171aa",
+            "proofBytes": "f7ab7f72f0bd0a761308dc0ebe5d9011745fd2aea137918208987aae87a9169cc5f7ff488e5333b6c535d2ce0a03cfbb8265d95a93323323",
+            "digest": "a84f62a669fb3684308ea609af6cd831b939b70210307e143a05321ce8efeda2",
+            "size": 28540
+          },
+          "size": 33201
+        }
+
+  /blocks/lastHeaders/{count}:
+    path_parameters:
+      - count: @lastHeadersCount
+
+  /blocks/at/{blockHeight}:
+    path_parameters:
+      - blockHeight: @blockHeight
+
+  /blocks/{headerId}:
+    path_parameters:
+      - headerId: @headerId
+
+  /blocks/{headerId}/header:
+    path_parameters:
+      - headerId: @headerId
+
+  /blocks/{headerId}/transactions:
+    path_parameters:
+      - headerId: @headerId
+
+  /peers/connect:
+    post:
+      - '"127.0.0.1:5673"'
+
+  /transactions:
+    post:
+      - |
+        {
+          "id": "2ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+          "inputs": [
+            {
+              "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+              "spendingProof": {
+                "proofBytes": "46dc83d572290479218cfe2a8cb9a0d979de4a61da6a96260a53479683f55a2b561ba4ec1faea4a0d4d19efc960a188ebe3fb8fb83e39d3b",
+                "extension": {
+                  "1": "0101"
+                }
+              }
+            }
+          ],
+          "outputs": [
+            {
+              "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+              "value": 147,
+              "proposition": "1001070361a3df05f414e9b01394487c4cc9838857575408677ddc166047a52f93e4ed26cd7300",
+              "assets": [
+                {
+                  "tokenId": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+                  "amount": 1000
+                }
+              ],
+              "additionalRegisters": {
+                "R4": "0101"
+              },
+              "creationHeight": 1149
+            }
+          ],
+          "size": 0
+        }
+
+  /utils/hash/blake2b:
+    post:
+      - '"123qwe"'
+      - '""'
+      - '"aaaaaaaaaa"'
+
+  /utils/seed/{length}:
+    path_parameters:
+      - length: 123

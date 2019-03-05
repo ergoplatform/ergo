@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.state
 
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core._
 import scorex.crypto.authds.ADDigest
@@ -19,11 +19,11 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
       val fb = validFullBlock(parentOpt = None, us, bh)
       val dir2 = createTempDir
-      val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, ErgoSettings.read(None))
+      val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, stateConstants)
       ds.applyModifier(fb).isSuccess shouldBe true
       ds.close()
 
-      val state = DigestState.create(None, None, dir2, ErgoSettings.read(None))
+      val state = DigestState.create(None, None, dir2, stateConstants)
       state.version shouldEqual fb.header.id
       state.rootHash shouldEqual fb.header.stateRoot
     }
@@ -32,12 +32,15 @@ class DigestStateSpecification extends ErgoPropertyTest {
   property("validate() - valid block") {
     var (us, bh) = createUtxoState()
     var ds = createDigestState(us.version, us.rootHash)
+    var parentOpt: Option[ErgoFullBlock] = None
+
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBlockHolder(None, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new Random(seed))
       val block = blBh._1
       bh = blBh._2
       ds = ds.applyModifier(block).get
       us = us.applyModifier(block).get
+      parentOpt = Some(block)
     }
   }
 
@@ -82,12 +85,17 @@ class DigestStateSpecification extends ErgoPropertyTest {
 
       ds2.rollbackVersions.size shouldEqual 2
 
+      ds2.stateContext.lastHeaders.size shouldEqual 1
+
       java.util.Arrays.equals(ds2.rootHash, ds.rootHash) shouldBe false
 
       val ds3 = ds2.rollbackTo(ds.version).get
       ds3.rootHash shouldBe ds.rootHash
 
+      ds3.stateContext.lastHeaders.size shouldEqual 0
+
       ds3.applyModifier(block).get.rootHash shouldBe ds2.rootHash
     }
   }
+
 }

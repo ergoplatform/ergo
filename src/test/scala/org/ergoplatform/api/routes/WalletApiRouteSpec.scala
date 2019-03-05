@@ -1,15 +1,22 @@
 package org.ergoplatform.api.routes
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
+import io.circe.{Decoder, Json}
 import org.ergoplatform.api.WalletApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.Stubs
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
 import org.scalatest.{FlatSpec, Matchers}
 import sigmastate.Values
+
+import scala.util.Try
 
 class WalletApiRouteSpec extends FlatSpec
   with Matchers
@@ -19,27 +26,117 @@ class WalletApiRouteSpec extends FlatSpec
 
   val prefix = "/wallet"
 
-  val ergoSettings = ErgoSettings.read(None)
-  implicit val requestEncoder = new PaymentRequestEncoder(ergoSettings)
-  val route = WalletApiRoute(readersRef, nodeViewRef, settings).route
+  val ergoSettings: ErgoSettings = ErgoSettings.read(Some("src/test/resources/application.conf"))
+  val route: Route = WalletApiRoute(readersRef, nodeViewRef, settings).route
 
-  private implicit val ergoAddressEncoder = new ErgoAddressEncoder(ergoSettings)
+  implicit val paymentRequestEncoder: PaymentRequestEncoder = new PaymentRequestEncoder(ergoSettings)
+  implicit val assetIssueRequestEncoder: AssetIssueRequestEncoder = new AssetIssueRequestEncoder(ergoSettings)
+  implicit val requestsHolderEncoder: RequestsHolderEncoder = new RequestsHolderEncoder(ergoSettings)
+  implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
+  implicit val addressJsonDecoder: Decoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).decoder
 
-  it should "generate transaction" in {
-    val amount = 100L
-    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), amount, None, None)
-    Post(prefix + "/transaction/generate", Seq(request).asJson) ~> route ~> check {
+  val paymentRequest = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None)
+  val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Values.FalseLeaf), 100L, "TEST", "Test", 8)
+  val requestsHolder = RequestsHolder((0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)), 10000L)
+  val scriptSource: String =
+    """
+      |{
+      |    val myPk = PK("tJPvPKbKm9hcWFMGdmAjhdpKAL6umzFswYMBNh2TKkrxRZZH3VTrhP")
+      |    HEIGHT < 9197 && myPk.isProven
+      |}
+      |""".stripMargin
+
+  val scriptSourceSigProp: String =
+    """
+      |{
+      |    PK("tJPvPKbKm9hcWFMGdmAjhdpKAL6umzFswYMBNh2TKkrxRZZH3VTrhP")
+      |}
+      |""".stripMargin
+
+  it should "generate arbitrary transaction" in {
+    Post(prefix + "/transaction/generate", requestsHolder.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
-      responseAs[ErgoTransaction].outputs.head.value shouldEqual amount
+      Try(responseAs[ErgoTransaction]) shouldBe 'success
     }
   }
 
-  it should "generate & send transaction" in {
-    val request = PaymentRequest(Pay2SAddress(Values.FalseLeaf), 100L, None, None)
-    Post(prefix + "/transaction/payment", Seq(request).asJson) ~> route ~> check {
+  it should "get balances" in {
+    Get(prefix + "/balances") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val json = responseAs[Json]
+      log.info(s"Received balances: $json")
+      val c = json.hcursor
+      c.downField("balance").as[Long] shouldEqual Right(WalletActorStub.confirmedBalance)
+    }
+  }
+
+  it should "get unconfirmed balances" in {
+    Get(prefix + "/balances/with_unconfirmed") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val json = responseAs[Json]
+      log.info(s"Received total confirmed with unconfirmed balances: $json")
+      val c = json.hcursor
+      c.downField("balance").as[Long] shouldEqual Right(WalletActorStub.unconfirmedBalance)
+    }
+  }
+
+  it should "generate payment transaction" in {
+    Post(prefix + "/payment/generate", Seq(paymentRequest).asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      Try(responseAs[ErgoTransaction]) shouldBe 'success
+    }
+  }
+
+  it should "generate asset issue transaction" in {
+    Post(prefix + "/assets/generate", Seq(assetIssueRequest).asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      Try(responseAs[ErgoTransaction]) shouldBe 'success
+    }
+  }
+
+  it should "generate & send arbitrary transaction" in {
+    Post(prefix + "/transaction/send", requestsHolder.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
     }
+  }
+
+  it should "generate & send payment transaction" in {
+    Post(prefix + "/payment/send", Seq(paymentRequest).asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[String] should not be empty
+    }
+  }
+
+  it should "generate & send asset issue transaction" in {
+    Post(prefix + "/assets/issue", Seq(assetIssueRequest).asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[String] should not be empty
+    }
+  }
+
+  it should "generate valid P2SAddress form source" in {
+    val suffix = "/p2s_address"
+    val assertion = (json: Json) => {
+      status shouldBe StatusCodes.OK
+      val addressStr = json.hcursor.downField("address").as[String].right.get
+      ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
+    }
+    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
+    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
+      check(assertion(responseAs[Json]))
+  }
+
+  it should "generate valid P2SHAddress form source" in {
+    val suffix = "/p2sh_address"
+    val assertion = (json: Json) => {
+      status shouldBe StatusCodes.OK
+      val addressStr = json.hcursor.downField("address").as[String].right.get
+      ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SHAddress.addressTypePrefix
+    }
+    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
+    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
+      check(assertion(responseAs[Json]))
   }
 
   it should "return addresses" in {

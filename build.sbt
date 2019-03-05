@@ -4,8 +4,8 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "1.6.0-SNAPSHOT",
-  scalaVersion := "2.12.6",
+  version := "1.9.1",
+  scalaVersion := "2.12.8",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
     "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
@@ -14,31 +14,36 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "f510ab33-SNAPSHOT"
+val scorexVersion = "a538c0a7-SNAPSHOT"
+val sigmaStateVersion = "v2.0-1c81f6a2-SNAPSHOT"
+// for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
+val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
 
 libraryDependencies ++= Seq(
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "com.google.guava" % "guava" % "21.0",
-  ("org.scorexfoundation" %% "sigma-state" % "0.10.0")
+  ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   ("org.scorexfoundation" %% "avl-iodb" % "0.2.15").exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "iodb" % "0.3.2",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
+
   "javax.xml.bind" % "jaxb-api" % "2.+",
   "com.iheart" %% "ficus" % "1.4.+",
+  "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "com.google.guava" % "guava" % "21.0",
+  "com.typesafe.akka" %% "akka-actor" % "2.5.+",
 
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
-  "org.scalatest" %% "scalatest" % "3.0.+" % "test,it",
-  "org.scalacheck" %% "scalacheck" % "1.13.+" % "test",
+  "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
+  "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
-  "com.typesafe.akka" %% "akka-testkit" % "2.4.+" % "test",
-  "com.typesafe.akka" %% "akka-http-testkit" % "10.+" % "test",
-  "org.asynchttpclient" % "async-http-client" % "2.1.0-alpha22" % "test",
-  "com.spotify" % "docker-client" % "8.11.0" % "test" classifier "shaded",
-  "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test"
+  "com.typesafe.akka" %% "akka-testkit" % "2.5.+" % "test",
+  "com.typesafe.akka" %% "akka-http-testkit" % "10.1.+" % "test",
+  "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
+  "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test",
+  "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded"
 )
 
 coverageExcludedPackages := ".*ErgoApp.*;.*routes.*;.*ErgoPersistentModifier"
@@ -99,7 +104,7 @@ assemblyMergeStrategy in assembly := {
 enablePlugins(sbtdocker.DockerPlugin)
 
 Defaults.itSettings
-configs(IntegrationTest extend (Test))
+configs(IntegrationTest extend Test)
 inConfig(IntegrationTest)(Seq(
   parallelExecution := false,
   test := (test dependsOn docker).value,
@@ -134,16 +139,6 @@ findbugsExcludeFilters := Some(scala.xml.XML.loadFile(baseDirectory.value / "fin
 scapegoatVersion in ThisBuild := "1.3.3"
 
 scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
-
-val Bench = config("bench") extend Test
-
-inConfig(Bench)(Defaults.testSettings ++ Seq(
-  fork in run := true,
-  classDirectory := (classDirectory in Compile).value,
-  dependencyClasspath := (dependencyClasspath in Compile).value
-))
-
-compile in Bench := (compile in Bench).dependsOn(compile in Test).value
 
 Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 

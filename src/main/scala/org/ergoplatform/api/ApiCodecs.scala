@@ -4,17 +4,19 @@ import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.api.ApiEncoderOption.Detalization
+import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.Algos
-import scorex.core._
 import scorex.core.validation.ValidationResult
-import scorex.crypto.authds.ADKey
+import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
+import scorex.util.ModifierId
 import sigmastate.Values.{EvaluatedValue, Value}
-import sigmastate.serialization.ValueSerializer
+import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.serialization.ErgoTreeSerializer
 import sigmastate.{SBoolean, SType}
 
 import scala.util.Try
@@ -48,21 +50,34 @@ trait ApiCodecs {
 
   implicit val bytesDecoder: Decoder[Array[Byte]] = bytesDecoder(x => x)
 
+  implicit val ecPointDecoder: Decoder[EcPointType] = { implicit cursor =>
+    for {
+      str <- cursor.as[String]
+      bytes <- fromTry(Algos.decode(str))
+    } yield groupElemFromBytes(bytes)
+  }
+
+  implicit val ecPointEncoder: Encoder[EcPointType] = { point:EcPointType =>
+      groupElemToBytes(point).asJson
+  }
+
   implicit val byteSeqEncoder: Encoder[IndexedSeq[Byte]] = { in =>
     Algos.encode(in.toArray).asJson
   }
 
-  implicit val modifierIdEncoder: Encoder[ModifierId] = _.toString.asJson
+  implicit val modifierIdEncoder: Encoder[ModifierId] = Algos.encode(_).asJson
 
-  implicit val modifierIdDecoder: Decoder[ModifierId] = ModifierId @@ _.as[String]
+  implicit val modifierIdDecoder: Decoder[ModifierId] = _.as[String].map(ModifierId @@ _)
 
-  implicit val tokenIdEncoder: Encoder[TokenId] = _.array.asJson
+  implicit val digest32Encoder: Encoder[Digest32] = _.array.asJson
 
-  implicit val tokenIdDecoder: Decoder[TokenId] = bytesDecoder(Digest32 @@ _)
+  implicit val digest32Decoder: Decoder[Digest32] = bytesDecoder(Digest32 @@ _)
 
   implicit val adKeyEncoder: Encoder[ADKey] = _.array.asJson
 
   implicit val adKeyDecoder: Decoder[ADKey] = bytesDecoder(ADKey @@ _)
+
+  implicit val adDigestDecoder: Decoder[ADDigest] = bytesDecoder(ADDigest @@ _)
 
   def bytesDecoder[T](transform: Array[Byte] => T): Decoder[T] = { implicit cursor =>
     for {
@@ -72,7 +87,7 @@ trait ApiCodecs {
   }
 
   implicit val valueEncoder: Encoder[Value[SType]] = { value =>
-    ValueSerializer.serialize(value).asJson
+    ErgoTreeSerializer.DefaultSerializer.serializeWithSegregation(value).asJson
   }
 
   implicit val booleanValueEncoder: Encoder[Value[SBoolean.type]] = { value =>
@@ -89,7 +104,7 @@ trait ApiCodecs {
 
   def valueDecoder[T](transform: Value[SType] => T): Decoder[T] = { implicit cursor: ACursor =>
     cursor.as[Array[Byte]] flatMap { bytes =>
-      fromThrows(transform(ValueSerializer.deserialize(bytes)))
+      fromThrows(transform(ErgoTreeSerializer.DefaultSerializer.deserialize(bytes)))
     }
   }
 
@@ -128,6 +143,7 @@ trait ApiCodecs {
       "value" -> box.value.asJson,
       "proposition" -> valueEncoder(box.proposition),
       "assets" -> box.additionalTokens.asJson,
+      "creationHeight" -> box.creationHeight.asJson,
       "additionalRegisters" -> registersEncoder(box.additionalRegisters)
     )
   }
@@ -147,7 +163,7 @@ trait ApiCodecs {
       "onchain" -> b.chainStatus.onchain.asJson,
       "certain" -> b.certainty.certain.asJson,
       "creationOutIndex" -> b.creationOutIndex.asJson,
-      "creationHeight" -> b.creationHeight.asJson,
+      "inclusionHeight" -> b.inclusionHeight.asJson,
       "spendingHeight" -> b.spendingHeight.asJson,
       "box" -> b.box.asJson
     )

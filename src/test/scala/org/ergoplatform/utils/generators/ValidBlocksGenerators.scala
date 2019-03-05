@@ -127,7 +127,7 @@ trait ValidBlocksGenerators
     val num = 1 + rnd.nextInt(10)
 
     val allBoxes = wus.takeBoxes(num + rnd.nextInt(100))
-    val anyoneCanSpendBoxes = allBoxes.filter(_.proposition == Values.TrueLeaf)
+    val anyoneCanSpendBoxes = allBoxes.filter(_.ergoTree == Constants.TrueLeaf)
     val boxes = if (anyoneCanSpendBoxes.nonEmpty) anyoneCanSpendBoxes else allBoxes
 
     validTransactionsFromBoxes(num, boxes, rnd)._1

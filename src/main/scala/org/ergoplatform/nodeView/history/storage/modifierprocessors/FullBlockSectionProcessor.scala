@@ -1,12 +1,12 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
-import scorex.core.{ModifierId, bytesToId}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, RecoverableModifierError, ValidationResult, ValidationState}
+import scorex.util.{ModifierId, bytesToId}
 
 import scala.reflect.ClassTag
 import scala.util.{Failure, Try}
@@ -40,14 +40,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
 
   override protected def validate(m: BlockSection): Try[Unit] = {
     typedModifierById[Header](m.headerId).map { header =>
-      val minimalHeight = m match {
-        case proofs: ADProofs if contains(header.transactionsId) =>
-          // ADProofs for block transactions that are already in history. Do not validate whether ADProofs are too old
-          -1
-        case _ => pruningProcessor.minimalFullBlockHeight
-      }
-
-      PayloadValidator.validate(m, header, minimalHeight).toTry
+      PayloadValidator.validate(m, header).toTry
     }.getOrElse(Failure(new RecoverableModifierError(s"Header for modifier $m is not defined")))
   }
 
@@ -78,7 +71,6 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     }
   }
 
-
   private def justPutToHistory(m: BlockSection): ProgressInfo[ErgoPersistentModifier] = {
     historyStorage.insert(Algos.idToBAW(m.id), Seq.empty, Seq(m))
     ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
@@ -89,7 +81,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     */
   object PayloadValidator extends ModifierValidator with ScorexEncoding {
 
-    def validate(m: BlockSection, header: Header, minimalHeight: Int): ValidationResult[Unit] = {
+    def validate(m: BlockSection, header: Header): ValidationResult[Unit] = {
       modifierSpecificValidation(m, header)
         .validate(header.isCorrespondingModifier(m)) {
           fatal(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}")
@@ -100,8 +92,9 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         .validate(isHeadersChainSynced) {
           error("Headers chain is not synced yet")
         }
-        .validate(header.height >= minimalHeight) {
-          fatal(s"Too old modifier ${m.encodedId}: ${header.height} < $minimalHeight")
+        .validate(isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
+          fatal(s"Too old modifier ${m.encodedId}: " +
+            s"${header.height} < ${pruningProcessor.minimalFullBlockHeight}")
         }
         .validate(!historyStorage.contains(m.id)) {
           error(s"Modifier ${m.encodedId} is already in history")
@@ -109,41 +102,64 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         .result
     }
 
+    private def isHistoryADProof(m: BlockSection, header: Header): Boolean = m match {
+      // ADProofs for block transactions that are already in history. Do not validate whether ADProofs are too old
+      case _: ADProofs if contains(header.transactionsId) => true
+      case _ => false
+    }
+
+    private def validateExtension(extension: Extension, header: Header): ValidationState[Unit] = {
+      validateInterlinks(extension, header) {
+        failFast
+          .validate(extension.fields.forall(_._1.lengthCompare(Extension.FieldKeySize) == 0)) {
+            fatal(s"Extension ${extension.encodedId} field key length is not ${Extension.FieldKeySize}")
+          }
+          .validate(extension.fields.forall(_._2.lengthCompare(Extension.FieldValueMaxSize) <= 0)) {
+            fatal(s"Extension ${extension.encodedId} field value length > ${Extension.FieldValueMaxSize}")
+          }
+          .validate(extension.fields.map(kv => bytesToId(kv._1)).distinct.length == extension.fields.length) {
+            fatal(s"Extension ${extension.encodedId} contains duplicate keys")
+          }
+          .validate(header.isGenesis || extension.fields.nonEmpty) {
+            fatal("Empty fields in non-genesis block")
+          }
+      }
+    }
+
+    private def validateInterlinks(extension: Extension, header: Header)
+                                  (vs: ValidationState[Unit]): ValidationState[Unit] = {
+      import PoPowAlgos._
+      val prevHeaderOpt = typedModifierById[Header](header.parentId)
+      val prevExtensionOpt = prevHeaderOpt.flatMap(parent => typedModifierById[Extension](parent.extensionId))
+      (prevHeaderOpt, prevExtensionOpt) match {
+        case (Some(parent), Some(parentExt)) =>
+          val parentLinksTry = unpackInterlinks(parentExt.fields)
+          val currentLinksTry = unpackInterlinks(extension.fields)
+          vs
+            .validate(currentLinksTry.isSuccess)(fatal("Interlinks improperly packed"))
+            .validate(parentLinksTry.flatMap(parLinks => currentLinksTry.map(parLinks -> _))
+              .toOption.exists { case (prev, cur) => updateInterlinks(parent, prev) == cur }) {
+              fatal("Invalid interlinks")
+            }
+        case _ =>
+          vs.validate(header.isGenesis || header.height == pruningProcessor.minimalFullBlockHeight) {
+            error("Unable to validate interlinks")
+          }
+      }
+    }
+
     /**
       * Validation specific to concrete type of block payload
       */
     private def modifierSpecificValidation(m: BlockSection, header: Header): ValidationState[Unit] = {
       m match {
-        case e: Extension =>
-          // todo checks that all required mandatory fields are set and non additional mandatory fields
-          failFast
-            .validate(e.optionalFields.lengthCompare(Extension.MaxOptionalFields) <= 0) {
-              fatal(s"Extension ${m.encodedId} have too many optional fields")
-            }
-            .validate(e.mandatoryFields.forall(_._1.lengthCompare(Extension.MandatoryFieldKeySize) == 0)) {
-              fatal(s"Extension ${m.encodedId} mandatory field key length is not ${Extension.MandatoryFieldKeySize}")
-            }
-            .validate(e.optionalFields.forall(_._1.lengthCompare(Extension.OptionalFieldKeySize) == 0)) {
-              fatal(s"Extension ${m.encodedId} optional field key length is not ${Extension.OptionalFieldKeySize}")
-            }
-            .validate(e.mandatoryFields.forall(_._2.lengthCompare(Extension.MaxMandatoryFieldValueSize) <= 0)) {
-              fatal(s"Extension ${m.encodedId} mandatory field value length > ${Extension.MaxMandatoryFieldValueSize}")
-            }
-            .validate(e.optionalFields.forall(_._2.lengthCompare(Extension.MaxOptionalFieldValueSize) <= 0)) {
-              fatal(s"Extension ${m.encodedId} optional field value length > ${Extension.MaxOptionalFieldValueSize}")
-            }
-            .validate(e.mandatoryFields.map(kv => bytesToId(kv._1)).distinct.length == e.mandatoryFields.length) {
-              //todo this check may be done in general mandatory fields check
-              fatal(s"Extension ${m.encodedId} contains duplicate mandatory keys")
-            }
-            .validate(e.optionalFields.map(kv => bytesToId(kv._1)).distinct.length == e.optionalFields.length) {
-              fatal(s"Extension ${m.encodedId} contains duplicate optionalFields keys")
-            }
+        case extension: Extension =>
+          validateExtension(extension, header)
         case _ =>
-          // todo some validations of block transactions, including size limit, should go there.
           failFast
       }
     }
+
   }
 
 }

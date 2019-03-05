@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Algos
-import scorex.core.{ModifierId, bytesToId}
+import scorex.util.{ModifierId, bytesToId}
 
 /**
   * A box tracked by a wallet that contains Ergo box itself as well as
@@ -16,7 +16,7 @@ import scorex.core.{ModifierId, bytesToId}
   *
   * @param creationTx       Transaction created the box
   * @param creationOutIndex Output index in the creation transaction
-  * @param creationHeight   Height of the creation transaction block in blockchain if known
+  * @param inclusionHeight  Height the transaction was included into blockchain
   * @param spendingTx       Transaction which spends the box if exists and known
   * @param spendingHeight   Height of the spending transaction block in blockchain if known
   * @param box              Underlying Ergo box
@@ -24,13 +24,13 @@ import scorex.core.{ModifierId, bytesToId}
   */
 case class TrackedBox(creationTx: ErgoTransaction,
                       creationOutIndex: Short,
-                      creationHeight: Option[Height],
+                      inclusionHeight: Option[Height],
                       spendingTx: Option[ErgoTransaction],
                       spendingHeight: Option[Height],
                       box: ErgoBox,
                       certainty: BoxCertainty) {
 
-  require(spendingHeight.isEmpty || creationHeight.nonEmpty,
+  require(spendingHeight.isEmpty || inclusionHeight.nonEmpty,
     s"Onchain transaction $encodedSpendingTxId at height $spendingHeight " +
       s"is spending offchain box $encodedBoxId from transaction $encodedCreationTxId")
 
@@ -40,10 +40,29 @@ case class TrackedBox(creationTx: ErgoTransaction,
     if (spendingTx.isEmpty) Unspent else Spent
   }
 
-  /** Whether the box is confirmed or not
+  /** Whether box creation is confirmed or not.
+    * Can be derived from `spendingStatus` and `chainStatus` combination
+    */
+  def creationChainStatus: ChainStatus = {
+    if (inclusionHeight.isEmpty) Offchain else Onchain
+  }
+
+  /** Whether box spending is confirmed or not, `Offchain` for unspent boxes.
+    * Can be derived from `spendingStatus` and `chainStatus` combination
+    */
+  def spendingChainStatus: ChainStatus = {
+    if (spendingStatus == Unspent || spendingHeight.isEmpty) Offchain else Onchain
+  }
+
+  /** Same as `creationChainStatus` for unspent boxes,
+    * same as `spendingChainStatus` for spent boxes
     */
   def chainStatus: ChainStatus = {
-    if (creationHeight.isEmpty || spendingTx.nonEmpty && spendingHeight.isEmpty) Offchain else Onchain
+    if (creationChainStatus == Offchain || spendingStatus == Spent && spendingChainStatus == Offchain) {
+      Offchain
+    } else {
+      Onchain
+    }
   }
 
   lazy val boxId: ModifierId = bytesToId(box.id)

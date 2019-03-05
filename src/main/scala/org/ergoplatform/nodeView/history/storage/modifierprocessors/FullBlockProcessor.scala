@@ -2,10 +2,11 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor.{BlockProcessing, ToProcess}
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.{ModifierId, bytesToId}
+import scorex.util.{ModifierId, bytesToId}
 
 import scala.util.Try
 
@@ -47,16 +48,19 @@ trait FullBlockProcessor extends HeadersProcessor {
       nonBestBlock
 
   protected def isValidFirstFullBlock(header: Header): Boolean = {
-    header.height == pruningProcessor.minimalFullBlockHeight && bestFullBlockIdOpt.isEmpty
+    pruningProcessor.isHeadersChainSynced &&
+      header.height == pruningProcessor.minimalFullBlockHeight &&
+      bestFullBlockIdOpt.isEmpty
   }
 
   private def processValidFirstBlock: BlockProcessing = {
     case ToProcess(fullBlock, newModRow, newBestAfterThis, _, toApply)
       if isValidFirstFullBlock(fullBlock.header) =>
 
+      val headers = headerChainBack(10, fullBlock.header, h => h.height == 1)
       logStatus(Seq(), toApply, fullBlock, None)
       updateStorage(newModRow, newBestAfterThis.id)
-      ProgressInfo(None, Seq.empty, toApply, Seq.empty)
+      ProgressInfo(None, Seq.empty, headers.headers.dropRight(1) ++ toApply, Seq.empty)
   }
 
   private def processBetterChain: BlockProcessing = {
@@ -124,13 +128,13 @@ trait FullBlockProcessor extends HeadersProcessor {
       s" New best block is ${toApply.last.header.encodedId} " +
         s"with height ${toApply.last.header.height} " +
         s"updates block ${prevBest.map(_.encodedId).getOrElse("None")} " +
-        s"with height ${prevBest.map(_.header.height).getOrElse(-1)}"
+        s"with height ${ErgoHistory.heightOf(prevBest.map(_.header))}"
     }
     log.info(s"Full block ${appliedBlock.encodedId} appended, " +
       s"going to apply ${toApply.length}$toRemoveStr modifiers.$newStatusStr")
   }
 
-  //Not used so far
+  //todo: not used so far
   private def pruneOnNewBestBlock(header: Header, blocksToKeep: Int): Unit = {
     heightOf(header.id).filter(h => h > blocksToKeep)
       .foreach(h => pruneBlockDataAt(Seq(h - blocksToKeep)))
@@ -166,5 +170,4 @@ object FullBlockProcessor {
                         blocksToKeep: Int,
                         bestFullChain: Seq[ErgoFullBlock]
                       )
-
 }

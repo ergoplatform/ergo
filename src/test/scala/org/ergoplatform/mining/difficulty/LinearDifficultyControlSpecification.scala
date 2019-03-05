@@ -14,7 +14,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
   val Epoch = 123
 
   val UseLastEpochs = 4
-  val DesiredInterval = 1.minute
+  val DesiredInterval: FiniteDuration = 1.minute
   val control = new LinearDifficultyControl(DesiredInterval, UseLastEpochs, Epoch)
 
   property("previousHeadersRequiredForRecalculation() should return correct heights required for recalculation") {
@@ -24,7 +24,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
   }
 
   property("previousHeadersRequiredForRecalculation() with Epoch = 1") {
-    forAll(Gen.choose(2, 1000)) { useLastEpochs1 =>
+    forAll(Gen.choose(2, 1000)) { _ =>
       val useLastEpochs = 3
       val control = new LinearDifficultyControl(1.minute, useLastEpochs, 1)
       val height = useLastEpochs + 1
@@ -47,7 +47,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
   }
 
   property("previousHeadersRequiredForRecalculation() should generate valid heights for calculate()") {
-    forAll(Gen.choose(1, Int.MaxValue), invalidHeaderGen) { (height: Int, header: Header) =>
+    forAll(Gen.choose(1, Int.MaxValue), defaultHeaderGen) { (height: Int, header: Header) =>
       val previousHeaders = control.previousHeadersRequiredForRecalculation(height)
         .map(i => header.copy(timestamp = header.timestamp + i, height = i))
 
@@ -57,7 +57,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
 
 
   property("calculate() should require correct heights") {
-    forAll(Gen.choose(UseLastEpochs, 10 * UseLastEpochs), invalidHeaderGen) { (i: Int, header: Header) =>
+    forAll(Gen.choose(UseLastEpochs, 10 * UseLastEpochs), defaultHeaderGen) { (i: Int, header: Header) =>
       val previousHeaders = control.previousHeadersRequiredForRecalculation(i * Epoch + 1)
         .map(i => header.copy(timestamp = header.timestamp + i, height = i))
       previousHeaders.length shouldBe UseLastEpochs + 1
@@ -68,7 +68,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
   }
 
   property("calculate() should decrease difficulty if block time interval is higher than expected") {
-    forAll(Gen.choose(UseLastEpochs, 10 * UseLastEpochs), invalidHeaderGen) { (startEpoch: Int, header: Header) =>
+    forAll(Gen.choose(UseLastEpochs, 10 * UseLastEpochs), defaultHeaderGen) { (startEpoch: Int, header: Header) =>
       whenever(header.requiredDifficulty > 10) {
         val previousHeaders = control.previousHeadersRequiredForRecalculation(startEpoch * Epoch + 1)
           .map(i => header.copy(timestamp = header.timestamp + DesiredInterval.toMillis * 2 * i, height = i))
@@ -114,7 +114,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
   }
 
   property("calculate() for different epoch lengths and constant hashrate") {
-    forAll(invalidHeaderGen, smallPositiveInt, smallPositiveInt, Gen.choose(1, 60 * 60 * 1000)) { (header: Header, epoch, useLastEpochs, interval) =>
+    forAll(defaultHeaderGen, smallPositiveInt, smallPositiveInt, Gen.choose(1, 60 * 60 * 1000)) { (header: Header, epoch, useLastEpochs, interval) =>
       whenever(useLastEpochs > 1 && header.requiredDifficulty >= 1) {
         val control = new LinearDifficultyControl(interval.millis, useLastEpochs, epoch)
         val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1)
@@ -127,7 +127,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
 
   property("calculate() for different epoch lengths and linear hashrate") {
     val step = 1000
-    forAll(invalidHeaderGen, smallPositiveInt, smallPositiveInt, Gen.choose(1, 60 * 60 * 1000)) { (header: Header, epoch, useLastEpochs, interval) =>
+    forAll(defaultHeaderGen, smallPositiveInt, smallPositiveInt, Gen.choose(1, 60 * 60 * 1000)) { (header: Header, epoch, useLastEpochs, interval) =>
       whenever(useLastEpochs > 1) {
         val control = new LinearDifficultyControl(interval.millis, useLastEpochs, epoch)
         val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1).map { i =>

@@ -7,11 +7,10 @@ import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
 import org.ergoplatform.settings.{Algos, ChainSettings, NodeConfigurationSettings}
-import scorex.core._
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.ScorexEncoding
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
 import scala.reflect.ClassTag
@@ -135,11 +134,11 @@ trait ErgoHistoryReader
     if (isEmpty) {
       info.startingPoints
     } else if (info.lastHeaderIds.isEmpty) {
-      val heightFrom = Math.min(headersHeight, size - 1)
+      val heightFrom = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
       val startId = headerIdsAtHeight(heightFrom).head
       val startHeader = typedModifierById[Header](startId).get
       val headers = headerChainBack(size, startHeader, _ => false)
-        .ensuring(_.headers.exists(_.height == 0), "Should always contain genesis header")
+        .ensuring(_.headers.exists(_.isGenesis), "Should always contain genesis header")
       headers.headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
     } else {
       val ids = info.lastHeaderIds
@@ -201,7 +200,7 @@ trait ErgoHistoryReader
   /**
     * @return ids of count headers starting from offset
     */
-  def headerIdsAt(count: Int, offset: Int = 0): Seq[ModifierId] = (offset until (count + offset))
+  def headerIdsAt(offset: Int = 0, limit: Int): Seq[ModifierId] = (offset until (limit + offset))
     .flatMap(h => headerIdsAtHeight(h).headOption)
 
   override def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
@@ -286,7 +285,6 @@ trait ErgoHistoryReader
     (ourChain, commonBlockThenSuffixes)
   }
 
-
   override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
     historyStorage.getIndex(validityKey(modifierId)) match {
       case Some(b) if b.data.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
@@ -298,4 +296,5 @@ trait ErgoHistoryReader
         ModifierSemanticValidity.Absent
     }
   }
+
 }

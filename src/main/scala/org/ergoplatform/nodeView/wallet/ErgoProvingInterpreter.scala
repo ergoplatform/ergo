@@ -6,13 +6,13 @@ import java.util
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.Constants
-import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeInterpreter, Input}
-import scapi.sigma.DLogProtocol.{DLogProverInput, ProveDlog}
-import scapi.sigma.SigmaProtocolPrivateInput
+import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
+import org.ergoplatform.settings.Parameters
+import org.ergoplatform.{ErgoBox, Input}
 import scorex.crypto.hash.Blake2b256
-import sigmastate.AvlTreeData
-import sigmastate.interpreter.{ContextExtension, CostedProverResult, ProverInterpreter}
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.eval.{IRContext, RuntimeIRContext}
+import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
 import scala.util.{Failure, Success, Try}
 
@@ -35,12 +35,12 @@ import scala.util.{Failure, Success, Try}
 
 class ErgoProvingInterpreter(seed: String,
                              numOfSecrets: Int,
-                             override val maxCost: Long = Constants.MaxBlockCost)
-  extends ErgoLikeInterpreter(maxCost) with ProverInterpreter {
+                             params: Parameters)(implicit IR: IRContext)
+  extends ErgoInterpreter(params) with ProverInterpreter {
 
   require(numOfSecrets > 0, "non-positive number of secrets to generate")
 
-  override lazy val secrets: IndexedSeq[SigmaProtocolPrivateInput[_, _]] = dlogSecrets
+  override lazy val secrets: IndexedSeq[DLogProverInput] = dlogSecrets
 
   def secretsFromSeed(seedStr: String): IndexedSeq[BigInteger] = {
     (1 to numOfSecrets).map { i =>
@@ -53,37 +53,45 @@ class ErgoProvingInterpreter(seed: String,
 
   lazy val dlogPubkeys: IndexedSeq[ProveDlog] = dlogSecrets.map(_.publicImage)
 
+  /** Require `unsignedTx` and `boxesToSpend` have the same boxIds in the same order */
   def sign(unsignedTx: UnsignedErgoTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],
            stateContext: ErgoStateContext): Try[ErgoTransaction] = Try {
 
     require(unsignedTx.inputs.length == boxesToSpend.length)
 
-    unsignedTx.inputs.zip(boxesToSpend).foldLeft(Try(IndexedSeq[Input]() -> 0L)) {
-      case (inputsCostTry, (unsignedInput, inputBox)) =>
+    boxesToSpend.zipWithIndex.foldLeft(Try(IndexedSeq[Input]() -> 0L)) {
+      case (inputsCostTry, (inputBox, boxIdx)) =>
+        val unsignedInput = unsignedTx.inputs(boxIdx)
         require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
+
+        val transactionContext = TransactionContext(boxesToSpend, unsignedTx, boxIdx.toShort)
 
         inputsCostTry.flatMap { case (ins, totalCost) =>
           val context =
-            ErgoLikeContext(
-              stateContext.height + 1,
-              AvlTreeData(stateContext.digest, 32),
-              boxesToSpend,
-              unsignedTx,
-              inputBox,
+            new ErgoContext(
+              stateContext,
+              transactionContext,
               ContextExtension.empty)
 
           prove(inputBox.proposition, context, unsignedTx.messageToSign).flatMap { proverResult =>
-            val newTC = totalCost + proverResult.asInstanceOf[CostedProverResult].cost
+            val newTC = totalCost + proverResult.cost
             if (newTC > maxCost) {
               Failure(new Exception(s"Computational cost of transaction $unsignedTx exceeds limit $maxCost"))
             } else {
-              Success((Input(unsignedInput.boxId, proverResult) +: ins) -> 0L)
+              Success((Input(unsignedInput.boxId, proverResult) +: ins) -> newTC)
             }
           }
         }
     }.map { case (inputs, _) =>
-      ErgoTransaction(inputs, unsignedTx.outputCandidates)
+      ErgoTransaction(inputs.reverse, unsignedTx.outputCandidates)
     }
   }.flatten
+}
+
+
+object ErgoProvingInterpreter {
+
+  def apply(seed: String, numOfSecrets: Int, params: Parameters): ErgoProvingInterpreter =
+    new ErgoProvingInterpreter(seed, numOfSecrets, params)(new RuntimeIRContext)
 }

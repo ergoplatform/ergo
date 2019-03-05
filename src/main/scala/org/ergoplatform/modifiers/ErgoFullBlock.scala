@@ -1,12 +1,13 @@
 package org.ergoplatform.modifiers
 
 import io.circe.syntax._
-import io.circe.{Encoder, Json}
+import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import scorex.core.serialization.Serializer
-import scorex.core.{ModifierId, ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
+import scorex.core.serialization.ScorexSerializer
+import scorex.core.{ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
+import scorex.util.ModifierId
 
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,
@@ -35,21 +36,17 @@ case class ErgoFullBlock(header: Header,
 
   override val sizeOpt: Option[Int] = None
 
-  override lazy val size: Int = {
-    val hSize = header.size
-    val btSize = blockTransactions.size
-    val adSize = adProofs.map(_.size).getOrElse(0)
-    hSize + btSize + adSize
-  }
+  override lazy val size: Int = header.size + blockTransactions.size + adProofs.map(_.size).getOrElse(0)
 
-  override lazy val serializer: Serializer[ErgoFullBlock] = throw new Error("Never try to serialize ErgoFullBlock")
-
+  override lazy val serializer: ScorexSerializer[ErgoFullBlock] =
+    throw new Error("Serialization for ErgoFullBlock is not (and will be not) implemented")
 }
 
 object ErgoFullBlock extends ApiCodecs {
+
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (-127: Byte)
 
-  implicit val jsonEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>
+  implicit val jsonEncoder: Encoder[ErgoFullBlock] = { b: ErgoFullBlock =>
     Json.obj(
       "header" -> b.header.asJson,
       "blockTransactions" -> b.blockTransactions.asJson,
@@ -57,11 +54,21 @@ object ErgoFullBlock extends ApiCodecs {
       "adProofs" -> b.adProofs.asJson,
       "size" -> b.size.asJson
     )
+  }
 
-  val blockSizeEncoder: Encoder[ErgoFullBlock] = (b: ErgoFullBlock) =>
+  implicit val jsonDecoder: Decoder[ErgoFullBlock] = { c: HCursor =>
+    for {
+      header <- c.downField("header").as[Header]
+      transactions <- c.downField("blockTransactions").as[BlockTransactions]
+      extension <- c.downField("extension").as[Extension]
+      adProofs <- c.downField("adProofs").as[Option[ADProofs]]
+    } yield ErgoFullBlock(header, transactions, extension, adProofs)
+  }
+
+  val blockSizeEncoder: Encoder[ErgoFullBlock] = { b: ErgoFullBlock =>
     Json.obj(
       "id" -> b.header.id.asJson,
       "size" -> b.size.asJson
     )
-
+  }
 }

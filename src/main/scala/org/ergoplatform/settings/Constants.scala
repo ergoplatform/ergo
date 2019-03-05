@@ -4,24 +4,49 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
 
-
 object Constants {
-  val hashLength: Int = 32
-  val MaxTarget: BigInt = BigInt(1, Array.fill(hashLength)((-1).toByte))
+  val HashLength: Int = 32
+
+  val CoinsInOneErgo: Long = 1000000000
+
+  val MaxTarget: BigInt = BigInt(1, Array.fill(HashLength)((-1).toByte))
   val InitialDifficulty: Difficulty = BigInt(1)
   val InitialNBits: Long = RequiredDifficulty.encodeCompactBits(InitialDifficulty)
-  val ModifierIdSize: Int = hashLength
-  val MaxBlockCost: Long = 1000000    //todo: move to config
+  val ModifierIdSize: Int = HashLength
 
-  val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
+  val BlocksPerHour = 30
+
+  val BlocksPerDay = BlocksPerHour * 24
+
+  val BlocksPerWeek = BlocksPerDay * 7
+
+  val BlocksPerMonth = BlocksPerDay * 30
+
+  val BlocksPerYear = BlocksPerDay * 365
+
+  //For how many blocks a box could be put into the state with no paying.
+  //4 years
+  val StoragePeriod: Int = 4 * BlocksPerYear
+
+  val StorageContractCost: Long = 50
+
+  val StorageIndexVarId: Byte = Byte.MaxValue
+
+  // Number of last block headers available is scripts from ErgoStateContext
+  val LastHeadersInContext = 10
+
+  val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       Extension.modifierTypeId -> ExtensionSerializer,
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
       ADProofs.modifierTypeId -> ADProofSerializer,
       Transaction.ModifierTypeId -> ErgoTransactionSerializer)
 
+  val SoftForkEpochs = 32 //about 45.5 days
+
+  val ExtensionMaxSize: Int = 16 * 1024 //16 kb
 }

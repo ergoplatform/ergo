@@ -2,24 +2,23 @@ package org.ergoplatform.serialization
 
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransactionSerializer, TransactionIdsForHeaderSerializer}
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
-import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
+import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import org.scalatest.Assertion
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
 
 class SerializationTests extends ErgoPropertyTest with scorex.testkit.SerializationTests {
 
   def checkSerializationRoundtripAndSize[A <: ErgoNodeViewModifier](generator: Gen[A],
-                                                                    serializer: Serializer[A]): Assertion = {
+                                                                    serializer: ScorexSerializer[A]): Assertion = {
     forAll(generator) { b: A =>
-      val recovered = serializer.parseBytes(serializer.toBytes(b)).get
+      val recovered = serializer.parseBytes(serializer.toBytes(b))
       val bytes = serializer.toBytes(b)
       bytes shouldEqual serializer.toBytes(recovered)
-      bytes.length shouldEqual recovered.size
     }
   }
 
@@ -30,28 +29,23 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
     }
   }
 
-  property("HeaderWithoutInterlinks serialization") {
-    val serializer = HeaderSerializer
-    forAll(invalidHeaderGen) { b: Header =>
-      val recovered = serializer.parseBytes(serializer.bytesWithoutInterlinks(b)).get.copy(interlinks = b.interlinks)
-      recovered shouldBe b
-
-      val size = serializer.bytesWithoutInterlinks(b).length
-      recovered.size shouldBe size
-    }
-  }
-
   property("Header serialization") {
     val serializer = HeaderSerializer
     forAll(invalidHeaderGen) { b: Header =>
-      val recovered = serializer.parseBytes(b.bytes)
-      recovered.get shouldBe b
-      recovered.get.size shouldBe b.bytes.length
+      val recovered = serializer.parseBytes(serializer.toBytes(b))
+      recovered shouldBe b
+      recovered.size shouldBe serializer.toBytes(b).size
     }
   }
 
   property("ErgoStateContext serialization") {
-    checkSerializationRoundtrip(ergoStateContextGen, ErgoStateContextSerializer)
+    val serializer = ErgoStateContextSerializer(votingSettings)
+    forAll(ergoStateContextGen) { b: ErgoStateContext =>
+      val recovered = serializer.parseBytes(serializer.toBytes(b))
+      serializer.toBytes(b) shouldEqual serializer.toBytes(recovered)
+      b.lastHeaders.length shouldBe recovered.lastHeaders.length
+      b.lastHeaders shouldBe recovered.lastHeaders
+    }
   }
 
   property("Extension serialization") {
@@ -71,7 +65,7 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
   }
 
   property("ErgoHeader serialization") {
-    checkSerializationRoundtripAndSize(invalidHeaderGen, HeaderSerializer)
+    checkSerializationRoundtripAndSize(defaultHeaderGen, HeaderSerializer)
   }
 
   property("BlockTransactions serialization") {
@@ -80,10 +74,6 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
 
   property("ADProofs serialization") {
     checkSerializationRoundtripAndSize(randomADProofsGen, ADProofSerializer)
-  }
-
-  property("TransactionIdsForHeader serialization") {
-    checkSerializationRoundtrip(transactionIdsForHeaderGen, TransactionIdsForHeaderSerializer)
   }
 
 }

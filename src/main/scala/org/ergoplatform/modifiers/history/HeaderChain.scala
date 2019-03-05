@@ -34,11 +34,12 @@ case class HeaderChain(headers: IndexedSeq[Header]) {
   lazy val length: Int = headers.size
 
   def ++(c: HeaderChain): HeaderChain = HeaderChain(headers ++ c.headers)
+
 }
 
 object HeaderChain {
   lazy val empty = HeaderChain(IndexedSeq.empty[Header])
 
   def apply(seq: Seq[Header]): HeaderChain = HeaderChain(seq.toIndexedSeq)
-}
 
+}

@@ -1,23 +1,22 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
+import org.ergoplatform._
 import org.ergoplatform.local.TransactionGenerator.{Attempt, StartGeneration}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
+import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
-import org.ergoplatform._
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ScorexLogging, idToBytes}
-import sigmastate.SBoolean
-import sigmastate.Values.Value
+import sigmastate.Values.ErgoTree
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -36,7 +35,7 @@ import scala.util.{Failure, Random, Success, Try}
 class TransactionGenerator(viewHolder: ActorRef,
                            settings: ErgoSettings) extends Actor with ScorexLogging {
 
-  private val feeProp: Value[SBoolean.type] = settings.chainSettings.monetary.feeProposition
+  private val feeProp: ErgoTree = settings.chainSettings.monetary.feeProposition
 
   private var transactionsPerBlock: Int = 0
   private var currentFullHeight: Int = 0

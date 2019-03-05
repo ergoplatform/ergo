@@ -3,7 +3,8 @@ package org.ergoplatform.modifiers.mempool
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.nodeView.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
+import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, settings}
 import org.ergoplatform.settings.{Algos, LaunchParameters, Parameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
@@ -210,6 +211,32 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       (outputIncTxCost0 - inputIncTxCost0) shouldEqual Parameters.TokenAccessCostDefault * 2
       (outputIncTxCost1 - inputIncTxCost1) shouldEqual Parameters.TokenAccessCostDefault
     }
+  }
+
+  property("spam simulation (transaction validation cost with too many tokens exceeds block limit)") {
+    val bxsQty = 400
+    val (inputs, tx) = validErgoTransactionGenTemplate(1, 1, 8, 16).sample.get // it takes too long to test with `forAll`
+    val tokens = (0 until 255).map(_ => (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextInt(100000000).toLong))
+    val (in, out) = {
+      val in0 = inputs.head
+      val out0 = tx.outputs.head
+      val inputsMod = (0 until bxsQty).map { i =>
+        ErgoBox(10000000000L, in0.proposition, in0.creationHeight,
+          tokens, in0.additionalRegisters, in0.transactionId, i.toShort)
+      }
+      val outputsMod = (0 until bxsQty).map { i =>
+        ErgoBox(10000000000L, out0.proposition, out0.creationHeight,
+          tokens, out0.additionalRegisters, out0.transactionId, i.toShort)
+      }
+      inputsMod -> outputsMod
+    }
+    val inputsPointers = {
+      val inSample = tx.inputs.head
+      (0 until bxsQty).map(i => inSample.copy(boxId = in(i).id))
+    }
+    val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
+    val cost = txMod.statefulValidity(in, emptyStateContext).get
+    cost shouldBe > (LaunchParameters.maxBlockCost)
   }
 
   private def groupElemGen =

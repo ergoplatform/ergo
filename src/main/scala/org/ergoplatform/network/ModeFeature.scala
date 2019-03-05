@@ -17,37 +17,7 @@ case class ModeFeature(stateType: StateType,
 
   override val featureId: Id = 16: Byte
 
-  def booleanToByte(bool: Boolean): Byte = if (bool) 1: Byte else 0: Byte
-
-  def byteToBoolean(byte: Byte): Boolean = if (byte > 0) true else false
-
-  override def serializer: ScorexSerializer[ModeFeature] = new ScorexSerializer[ModeFeature] {
-    override def serialize(mf: ModeFeature, w: Writer): Unit = {
-      w.put(mf.stateType.stateTypeCode)
-      w.put(booleanToByte(mf.verifyingTransactions))
-      w.put(booleanToByte(mf.popowBootstrapping))
-      w.putInt(mf.popowSuffix)
-      w.putInt(mf.blocksToKeep)
-    }
-
-    override def parse(r: Reader): ModeFeature = {
-      require(r.remaining < 512)
-
-      val stateType = StateType.fromCode(r.getByte())
-      val verifyingTransactions = byteToBoolean(r.getByte())
-      val popowBootstrap = byteToBoolean(r.getByte())
-      val popowSuffix = r.getInt()
-      val blocksToKeep = r.getInt()
-
-      new ModeFeature(
-        stateType,
-        verifyingTransactions,
-        popowBootstrap,
-        popowSuffix,
-        blocksToKeep
-      )
-    }
-  }
+  override def serializer: ScorexSerializer[ModeFeature] = ModeFeatureSerializer
 }
 
 object ModeFeature {
@@ -59,4 +29,38 @@ object ModeFeature {
       nodeSettings.minimalSuffix,
       nodeSettings.blocksToKeep
     )
+}
+
+
+object ModeFeatureSerializer extends ScorexSerializer[ModeFeature] {
+
+  //we use these methods due to absence of getBoolean in Reader atm of writing the code
+  private def booleanToByte(bool: Boolean): Byte = if (bool) 1: Byte else 0: Byte
+  private def byteToBoolean(byte: Byte): Boolean = if (byte > 0) true else false
+  
+  override def serialize(mf: ModeFeature, w: Writer): Unit = {
+    w.put(mf.stateType.stateTypeCode)
+    w.put(booleanToByte(mf.verifyingTransactions))
+    w.put(booleanToByte(mf.popowBootstrapping))
+    w.putInt(mf.popowSuffix)
+    w.putInt(mf.blocksToKeep)
+  }
+
+  override def parse(r: Reader): ModeFeature = {
+    require(r.remaining < 512)
+
+    val stateType = StateType.fromCode(r.getByte())
+    val verifyingTransactions = byteToBoolean(r.getByte())
+    val popowBootstrap = byteToBoolean(r.getByte())
+    val popowSuffix = r.getInt()
+    val blocksToKeep = r.getInt()
+
+    new ModeFeature(
+      stateType,
+      verifyingTransactions,
+      popowBootstrap,
+      popowSuffix,
+      blocksToKeep
+    )
+  }
 }

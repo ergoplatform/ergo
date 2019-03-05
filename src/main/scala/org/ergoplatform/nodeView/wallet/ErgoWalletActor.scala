@@ -56,9 +56,9 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
   private val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer
 
-  private def extractTrackedBytes(addr: ErgoAddress): Option[Array[Byte]] = Some(addr.contentBytes)
+  private def extractTrackedBytes(addr: ErgoAddress): Array[Byte] = addr.contentBytes
 
-  private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.flatMap(extractTrackedBytes(_).toSeq)
+  private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(extractTrackedBytes)
 
   //we currently do not use off-chain boxes to create a transaction
   private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onchain
@@ -278,7 +278,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   override def receive: Receive = onStateChanged orElse scanLogic orElse readers orElse {
     case WatchFor(address) =>
       trackedAddresses.append(address)
-      extractTrackedBytes(address).foreach(trackedBytes.append(_))
+      trackedBytes.append(extractTrackedBytes(address))
 
     //generate a transaction paying to a sequence of boxes payTo
     case GenerateTransaction(requests) =>

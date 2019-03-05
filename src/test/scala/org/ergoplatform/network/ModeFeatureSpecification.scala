@@ -6,11 +6,7 @@ import scala.util.Try
 
 class ModeFeatureSpecification extends ErgoPropertyTest {
 
-  property("serialization roundtrip") {
-    forAll(modeFeatureGen) {mf =>
-      mf.serializer.parseBytes(mf.serializer.toBytes(mf)) shouldEqual mf
-    }
-  }
+  //roundtrip test is provided in SerializationTests
 
   property("additional bytes can be added") {
     forAll(modeFeatureGen) { mf =>

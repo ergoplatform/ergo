@@ -1,12 +1,13 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor.{BlockProcessing, ToProcess}
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeMap
@@ -19,6 +20,12 @@ import scala.util.Try
 trait FullBlockProcessor extends HeadersProcessor {
 
   private var nonBestChainsMonitor = FullBlockProcessor.emptyMonitor
+
+  def isInBestFullChain(id: ModifierId): Boolean = historyStorage.getIndex(chainStatusKey(id))
+    .contains(FullBlockProcessor.BestChainMarker)
+
+  private def chainStatusKey(id: ModifierId): ByteArrayWrapper =
+    ByteArrayWrapper(Algos.hash("main_chain".getBytes(charsetName) ++ idToBytes(id)))
 
   /**
     * Id of header that contains transactions and proofs
@@ -64,7 +71,8 @@ trait FullBlockProcessor extends HeadersProcessor {
         .takeWhile(_.isDefined)
         .flatten
       logStatus(Seq(), toApply, fullBlock, None)
-      updateStorage(newModRow, newBestBlockHeader.id)
+      val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker)
+      updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes)
       ProgressInfo(None, Seq.empty, headers.headers.dropRight(1) ++ toApply, Seq.empty)
   }
 
@@ -88,7 +96,9 @@ trait FullBlockProcessor extends HeadersProcessor {
       // remove block ids that have no chance to be applied
       if (nonBestChainsMonitor.nonEmpty) nonBestChainsMonitor = nonBestChainsMonitor.dropUntil(minForkRootHeight)
 
-      updateStorage(newModRow, newBestBlockHeader.id)
+      val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
+        toRemove.map(b => chainStatusKey(b.id) -> FullBlockProcessor.NonBestChainMarker)
+      updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes)
 
       if (blocksToKeep >= 0) {
         val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
@@ -131,9 +141,7 @@ trait FullBlockProcessor extends HeadersProcessor {
     def loop(id: ModifierId, height: Int, acc: Seq[ModifierId]): Seq[ModifierId] = {
       nonBestChainsMonitor.get(id, height).orElse {
         typedModifierById[Header](id)
-          .flatMap { h =>
-            if (!headerIdsAtHeight(h.height).headOption.exists(_ == h.id)) getFullBlock(h) else None
-          }
+          .flatMap(h => if (!isInBestFullChain(id)) getFullBlock(h) else None)
           .map(_.id)
       } match {
         case Some(parentId) => loop(parentId, height - 1, parentId +: acc)
@@ -212,8 +220,9 @@ trait FullBlockProcessor extends HeadersProcessor {
   }
 
   private def updateStorage(newModRow: ErgoPersistentModifier,
-                            bestFullHeaderId: ModifierId): Unit = {
-    val indicesToInsert = Seq(BestFullBlockKey -> Algos.idToBAW(bestFullHeaderId))
+                            bestFullHeaderId: ModifierId,
+                            additionalIndexes: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = Seq.empty): Unit = {
+    val indicesToInsert = Seq(BestFullBlockKey -> Algos.idToBAW(bestFullHeaderId)) ++ additionalIndexes
     historyStorage.insert(storageVersion(newModRow), indicesToInsert, Seq(newModRow))
       .ensuring(headersHeight >= fullBlockHeight, s"Headers height $headersHeight should be >= " +
         s"full height $fullBlockHeight")
@@ -252,6 +261,9 @@ object FullBlockProcessor {
     def dropUntil(height: Int): IncompleteFullChainMonitor =
       IncompleteFullChainMonitor(monitor.dropWhile(_._1.height < height))
   }
+
+  val BestChainMarker: ByteArrayWrapper = ByteArrayWrapper(Array(1: Byte))
+  val NonBestChainMarker: ByteArrayWrapper = ByteArrayWrapper(Array(0: Byte))
 
   private implicit val ord: Ordering[MonitorBlock] = Ordering[(Int, ModifierId)].on(x => (x.height, x.id))
 

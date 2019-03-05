@@ -1,7 +1,7 @@
 package org.ergoplatform.network
 
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.NodeConfigurationSettings
+import org.ergoplatform.settings.{NodeConfigurationSettings, PeerFeatureIds}
 import scorex.core.network.PeerFeature
 import scorex.core.network.PeerFeature.Id
 import scorex.core.serialization.ScorexSerializer
@@ -14,7 +14,7 @@ case class ModeFeature(stateType: StateType,
                        blocksToKeep: Int) extends PeerFeature {
   override type M = ModeFeature
 
-  override val featureId: Id = 16: Byte
+  override val featureId: Id = PeerFeatureIds.ModeFeatureId
 
   override def serializer: ScorexSerializer[ModeFeature] = ModeFeatureSerializer
 }

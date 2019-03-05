@@ -27,7 +27,7 @@ import scala.util.Try
   */
 trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with ScorexEncoding {
 
-  private val charsetName = "UTF-8"
+  protected val charsetName = "UTF-8"
 
   protected val historyStorage: HistoryStorage
 

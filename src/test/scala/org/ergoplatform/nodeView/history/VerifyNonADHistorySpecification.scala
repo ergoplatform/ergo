@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
@@ -20,17 +21,20 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
     chain.foreach(fb => history.append(fb.extension).get)
 
-    history = history.append(chain.tail.head.blockTransactions).get._1
+    history = history.append(chain(1).blockTransactions).get._1
     history.bestFullBlockOpt shouldBe None
-    val pi1 = history.append(chain.head.blockTransactions).get._2
-    history.bestFullBlockOpt.value shouldBe chain.tail.head
+    val pi1 = history.append(chain(0).blockTransactions).get._2
+    history.bestFullBlockOpt.value shouldBe chain(1)
     pi1.toApply.length shouldBe 2
 
-    chain.tail.tail.tail.foreach(c => history.append(c.blockTransactions))
-    history.bestFullBlockOpt.value.header.height shouldBe chain.tail.head.header.height
+    chain.drop(3).foreach(c => history.append(c.blockTransactions))
+    history.bestFullBlockOpt.value.header.height shouldBe chain(1).header.height
 
-    val pi = history.append(chain.tail.tail.head.blockTransactions).get._2
-    val expected = chain.tail.tail
+    val (hi, pi) = history.append(chain(2).blockTransactions).get
+    val expected = chain.drop(2)
+
+    expected.forall(b => hi.asInstanceOf[FullBlockProcessor].isInBestFullChain(b.id)) shouldBe true
+
     pi.toApply.map(_.asInstanceOf[ErgoFullBlock]) shouldBe expected
   }
 

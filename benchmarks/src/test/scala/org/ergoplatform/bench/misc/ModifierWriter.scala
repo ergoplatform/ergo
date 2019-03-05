@@ -5,6 +5,7 @@ import java.io.{InputStream, OutputStream}
 import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.Utils._
 import scorex.core.serialization.Serializer
 import scorex.core.{ModifierTypeId, NodeViewModifier}
 
@@ -36,11 +37,5 @@ object ModifierWriter {
     val int = fis.read()
     if (int == -1) { None } else { Some(ModifierTypeId @@ int.toByte) }
   }
-
-  private def readLength(implicit fis: InputStream): Option[Int] =
-    Some(Stream.continually(fis.read().toByte).take(4).toArray).map(Ints.fromByteArray)
-
-  private def readBytes(length: Int)(implicit fis: InputStream): Option[Array[Byte]] =
-    Some(Stream.continually(fis.read().toByte).take(length).toArray)
 
 }

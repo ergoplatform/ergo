@@ -139,10 +139,10 @@ trait FullBlockProcessor extends HeadersProcessor {
   private def isLinkable(header: Header): Boolean = {
     @tailrec
     def loop(id: ModifierId, height: Int, acc: Seq[ModifierId]): Seq[ModifierId] = {
-      nonBestChainsMonitor.get(id, height).orElse {
+      nonBestChainsMonitor.getParentId(id, height).orElse {
         typedModifierById[Header](id)
           .flatMap(h => if (!isInBestFullChain(id)) getFullBlock(h) else None)
-          .map(_.id)
+          .map(_.parentId)
       } match {
         case Some(parentId) => loop(parentId, height - 1, parentId +: acc)
         case None => acc
@@ -167,7 +167,7 @@ trait FullBlockProcessor extends HeadersProcessor {
           val nextHeight = h + 1
           headerIdsAtHeight(nextHeight)
             .flatMap { id =>
-              nonBestChainsMonitor.get(id, nextHeight)
+              nonBestChainsMonitor.getParentId(id, nextHeight)
                 .map(parentId => id -> parentId)
                 .orElse {
                   typedModifierById[Header](id)
@@ -251,9 +251,9 @@ object FullBlockProcessor {
 
     val nonEmpty: Boolean = monitor.nonEmpty
 
-    def get(id: ModifierId, height: Int): Option[ModifierId] = monitor.get(MonitorBlock(id, height))
+    def getParentId(id: ModifierId, height: Int): Option[ModifierId] = monitor.get(MonitorBlock(id, height))
 
-    def exists(id: ModifierId, height: Int): Boolean = get(id, height).isDefined
+    def exists(id: ModifierId, height: Int): Boolean = getParentId(id, height).isDefined
 
     def add(id: ModifierId, parentId: ModifierId, height: Int): IncompleteFullChainMonitor =
       IncompleteFullChainMonitor(monitor.insert(MonitorBlock(id, height), parentId))

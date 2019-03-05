@@ -23,10 +23,10 @@ object Utils {
     conn.getInputStream
   }
 
-  private def readLength(implicit fis: InputStream): Option[Int] =
+  def readLength(implicit fis: InputStream): Option[Int] =
     Some(Stream.continually(fis.read().toByte).take(4).toArray).map(Ints.fromByteArray)
 
-  private def readBytes(length: Int)(implicit fis: InputStream): Option[Array[Byte]] =
+  def readBytes(length: Int)(implicit fis: InputStream): Option[Array[Byte]] =
     Some(Stream.continually(fis.read().toByte).take(length).toArray)
 
   def readModifier[M <: ErgoPersistentModifier](implicit fis: InputStream): Option[M] = {

@@ -746,9 +746,14 @@ Stateful checks are:
     \item{} all the input boxes are members of the UTXO set or where created by other transactions of this block.
     \item{} all the data input boxes are members of the UTXO set or where created by other transactions of this block.
     \item{} total input and output ergo amounts must be the same. Adding up should be done with overflow checks.
-    \item{} all the inputs have valid spending proofs. Total cost to verify all the spending proofs should be no more
-            than a limit per block~(adjustable via miners voting).
-    \item{} inputs should have no more than 16 assets collectively. An input can not contain more than 4 assets.
+    \item{} all the inputs have valid spending proofs.
+    \item{} total transaction cost which consists of cost of all spending proofs verification
+            plus the cost of all tokens containing in transaction inputs and outputs
+            validation (calculated as $(\sum_{i=1}^{n_{in}} m_{i} + m_{tx} + \sum_{i=1}^{n_{out}} k_{i} + k_{tx}) * e$,
+            where $n_{in}$ - number of inputs, $m_{i}$ - number of tokens in $i$'th input, $m_{tx}$ - number of tokens
+            in all inputs in total, $n_{out}$ - number of outputs, $k_{i}$ - number of tokens in $i$'th output, $k_{tx}$
+            - number of tokens in all outputs in total, $e$ - cost of accessing a single token~(adjustable via miners voting))
+            should not be greater than a limit per block~(which is adjustable via miners voting as well).
     \item{} for each kind of asset in the outputs, total output amount for the asset should be no more than the total
             input amount, if the asset identifier is not equals to identifier of the first input; otherwise, the total
             output amount must be positive. The latter case corresponds to issuance of a new asset, while the former

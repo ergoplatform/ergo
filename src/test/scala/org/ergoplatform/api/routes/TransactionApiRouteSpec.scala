@@ -15,7 +15,6 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.authds.ADKey
-import sigmastate.Values
 
 import scala.concurrent.duration._
 

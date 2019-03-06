@@ -3,15 +3,11 @@ package org.ergoplatform.modifiers.mempool
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.nodeView.ErgoInterpreter
-import org.ergoplatform.settings.{LaunchParameters, Parameters}
+import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.scalacheck.Gen
 import scorex.crypto.hash.Digest32
-import sigmastate.Values.GroupElementConstant
-import sigmastate._
-import sigmastate.basics.ProveDHTuple
-import sigmastate.interpreter.CryptoConstants
 
 import scala.util.Random
 
@@ -20,7 +16,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Long): ErgoBoxCandidate = {
     new ErgoBoxCandidate(
       boxCandidate.value + delta,
-      boxCandidate.proposition,
+      boxCandidate.ergoTree,
       boxCandidate.creationHeight,
       boxCandidate.additionalTokens,
       boxCandidate.additionalRegisters)
@@ -37,7 +33,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
     new ErgoBoxCandidate(
       boxCandidate.value,
-      boxCandidate.proposition,
+      boxCandidate.ergoTree,
       boxCandidate.creationHeight,
       tokens,
       boxCandidate.additionalRegisters)
@@ -138,7 +134,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
               id -> amount
             }
           }
-          new ErgoBoxCandidate(c.value, c.proposition, startHeight, updTokens, c.additionalRegisters)
+          new ErgoBoxCandidate(c.value, c.ergoTree, startHeight, updTokens, c.additionalRegisters)
         }
 
         val wrongTx = tx.copy(outputCandidates = updCandidates)
@@ -149,7 +145,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   }
 
   property("stateful validation should catch false proposition") {
-    val propositionGen = Gen.const(Values.FalseLeaf)
+    val propositionGen = Gen.const(Constants.FalseLeaf)
     val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
     forAll(gen) { case (from, tx) =>
       tx.statelessValidity.isSuccess shouldBe true
@@ -237,20 +233,22 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     cost shouldBe > (LaunchParameters.maxBlockCost)
   }
 
-  private def groupElemGen =
-    Gen.const(GroupElementConstant(CryptoConstants.dlogGroup.createRandomGenerator()))
-
-  private def proveDiffieHellmanTupleGen = for {
-    gv <- groupElemGen
-    hv <- groupElemGen
-    uv <- groupElemGen
-    vv <- groupElemGen
-  } yield ProveDHTuple(gv, hv, uv, vv)
-
   ignore("too costly transaction should be rejected") {
+/*
+    todo fix or remove
+    val groupElemGen: Gen[EcPointType] = Gen.const(CryptoConstants.dlogGroup.createRandomGenerator())
+
+    val proveDiffieHellmanTupleGen = for {
+      gv <- groupElemGen
+      hv <- groupElemGen
+      uv <- groupElemGen
+      vv <- groupElemGen
+    } yield ProveDHTuple(gv, hv, uv, vv)
+
+
     val propositionGen = for {
       proveList <- Gen.listOfN(50, proveDiffieHellmanTupleGen)
-    } yield OR(proveList)
+    } yield OR(proveList.map(_.toSigmaProp))
 
     val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
 
@@ -262,6 +260,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       Option(cause) shouldBe defined
       cause.getMessage should startWith("Estimated expression complexity")
     }
+*/
   }
 
 }

@@ -4,7 +4,6 @@ import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
-import org.ergoplatform.ErgoLikeTransaction.FlattenedTransaction
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
@@ -22,6 +21,8 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.Values.{EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.serialization.ConstantStore
+import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.{SBoolean, SType}
 
 import scala.collection.mutable
@@ -109,7 +110,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val transactionContext = TransactionContext(boxesToSpend, this, idx.toShort)
         val ctx = new ErgoContext(stateContext, transactionContext, proverExtension)
 
-        val costTry = verifier.verify(box.proposition, ctx, proof, messageToSign)
+        val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
         costTry.recover { case t => t.printStackTrace() }
 
         lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
@@ -215,7 +216,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
       proposition <- cursor.downField("proposition").as[Value[SBoolean.type]]
       assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]
       registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
-    } yield (new ErgoBoxCandidate(value, proposition, creationHeight, assets, registers), maybeId)
+    } yield (new ErgoBoxCandidate(value, proposition.toSigmaProp, creationHeight, assets, registers), maybeId)
   }
 
   implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>
@@ -252,8 +253,8 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
                      (implicit cursor: ACursor): Decoder.Result[IndexedSeq[ErgoBoxCandidate]] = {
     accumulateErrors.validateOrSkip(maybeTxId) { (validation, txId) =>
       validation.validateSeq(outputs.zipWithIndex) {
-        case (validation, ((candidate, maybeId), index)) =>
-          validation.validateOrSkip(maybeId) { (validation, boxId) =>
+        case (validationState, ((candidate, maybeId), index)) =>
+          validationState.validateOrSkip(maybeId) { (validation, boxId) =>
             // todo move ErgoBoxCandidate from sigmastate to Ergo and use ModifierId as a type of txId
             val box = candidate.toBox(txId, index.toShort)
             validation.demandEqualArrays(boxId, box.id, s"Bad identifier for Ergo box. It could also be skipped")
@@ -265,11 +266,14 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
 
 object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
 
-  override def serialize(tx: ErgoTransaction, w: Writer): Unit =
-    FlattenedTransaction.sigmaSerializer.serializeWithGenericWriter(FlattenedTransaction(tx.inputs.toArray, tx.outputCandidates.toArray), w)
+  override def serialize(tx: ErgoTransaction, w: Writer): Unit = {
+    val elt = new ErgoLikeTransaction(tx.inputs, tx.outputCandidates)
+    ErgoLikeTransactionSerializer.serialize(elt, new SigmaByteWriter(w, None))
+  }
 
   override def parse(r: Reader): ErgoTransaction = {
-    val ftx = FlattenedTransaction.sigmaSerializer.parseWithGenericReader(r)
-    ErgoTransaction(ftx.inputs, ftx.outputCandidates)
+    val reader = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
+    val elt = ErgoLikeTransactionSerializer.parse(reader)
+    ErgoTransaction(elt.inputs, elt.outputCandidates)
   }
 }

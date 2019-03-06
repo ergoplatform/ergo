@@ -3,16 +3,11 @@ package org.ergoplatform.modifiers.mempool
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.nodeView.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
-import org.ergoplatform.settings.{Constants, LaunchParameters}
+import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.scalacheck.Gen
 import scorex.crypto.hash.Digest32
-import sigmastate._
-import sigmastate.Values.GroupElementConstant
-import sigmastate.basics.ProveDHTuple
-import sigmastate.interpreter.CryptoConstants
-import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.util.Random
 
@@ -162,6 +157,82 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
   }
 
+  property("assets usage correctly affects transaction total cost") {
+    val txGen = validErgoTransactionGenTemplate(1, 1, 8, 16)
+    forAll(txGen) { case (from, tx) =>
+      val initTxCost = tx.statefulValidity(from, emptyStateContext).get
+
+      // already existing token from one of the inputs
+      val existingToken = from.flatMap(_.additionalTokens).toSet.head
+      // completely new token
+      val randomToken = (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextInt(100000000).toLong)
+
+      val in0 = from.last
+      // new token added to the last input
+      val modifiedIn0 = ErgoBox(in0.value, in0.ergoTree, in0.creationHeight,
+        in0.additionalTokens :+ randomToken, in0.additionalRegisters, in0.transactionId, in0.index)
+      val txInMod0 = tx.inputs.last.copy(boxId = modifiedIn0.id)
+
+      val in1 = from.last
+      // existing token added to the last input
+      val modifiedIn1 = ErgoBox(in1.value, in1.ergoTree, in1.creationHeight,
+        in1.additionalTokens :+ existingToken, in1.additionalRegisters, in1.transactionId, in1.index)
+      val txInMod1 = tx.inputs.last.copy(boxId = modifiedIn1.id)
+
+      val out0 = tx.outputs.last
+      // new token added to the last output
+      val modifiedOut0 = ErgoBox(out0.value, out0.ergoTree, out0.creationHeight,
+        out0.additionalTokens :+ randomToken, out0.additionalRegisters, out0.transactionId, out0.index)
+      // existing token added to the last output
+      val modifiedOut1 = ErgoBox(out0.value, out0.ergoTree, out0.creationHeight,
+        out0.additionalTokens :+ existingToken, out0.additionalRegisters, out0.transactionId, out0.index)
+
+      // update transaction inputs and outputs accordingly
+      val txMod0 = tx.copy(inputs = tx.inputs.init :+ txInMod0) // new token group added to one input
+      val txMod1 = tx.copy(inputs = tx.inputs.init :+ txInMod1) // existing token added to one input
+      val txMod2 = tx.copy(inputs = tx.inputs.init :+ txInMod0, // new token group added to one input and one output
+        outputCandidates = tx.outputCandidates.init :+ modifiedOut0)
+      val txMod3 = tx.copy(inputs = tx.inputs.init :+ txInMod1, // existing token added to one input and one output
+        outputCandidates = tx.outputCandidates.init :+ modifiedOut1)
+
+      val inputIncTxCost0 = txMod0.statefulValidity(from.init :+ modifiedIn0, emptyStateContext).get
+      val inputIncTxCost1 = txMod1.statefulValidity(from.init :+ modifiedIn1, emptyStateContext).get
+      val outputIncTxCost0 = txMod2.statefulValidity(from.init :+ modifiedIn0, emptyStateContext).get
+      val outputIncTxCost1 = txMod3.statefulValidity(from.init :+ modifiedIn1, emptyStateContext).get
+
+      (inputIncTxCost0 - initTxCost) shouldEqual Parameters.TokenAccessCostDefault * 2 // one more group + one more token in total
+      (inputIncTxCost1 - initTxCost) shouldEqual Parameters.TokenAccessCostDefault // one more token in total
+      (outputIncTxCost0 - inputIncTxCost0) shouldEqual Parameters.TokenAccessCostDefault * 2
+      (outputIncTxCost1 - inputIncTxCost1) shouldEqual Parameters.TokenAccessCostDefault
+    }
+  }
+
+  property("spam simulation (transaction validation cost with too many tokens exceeds block limit)") {
+    val bxsQty = 400
+    val (inputs, tx) = validErgoTransactionGenTemplate(1, 1, 8, 16).sample.get // it takes too long to test with `forAll`
+    val tokens = (0 until 255).map(_ => (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextInt(100000000).toLong))
+    val (in, out) = {
+      val in0 = inputs.head
+      val out0 = tx.outputs.head
+      val inputsMod = (0 until bxsQty).map { i =>
+        ErgoBox(10000000000L, in0.ergoTree, in0.creationHeight,
+          tokens, in0.additionalRegisters, in0.transactionId, i.toShort)
+      }
+      val outputsMod = (0 until bxsQty).map { i =>
+        ErgoBox(10000000000L, out0.ergoTree, out0.creationHeight,
+          tokens, out0.additionalRegisters, out0.transactionId, i.toShort)
+      }
+      inputsMod -> outputsMod
+    }
+    val inputsPointers = {
+      val inSample = tx.inputs.head
+      (0 until bxsQty).map(i => inSample.copy(boxId = in(i).id))
+    }
+    val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
+    val cost = txMod.statefulValidity(in, emptyStateContext).get
+    cost shouldBe > (LaunchParameters.maxBlockCost)
+  }
+
   ignore("too costly transaction should be rejected") {
 /*
     todo fix or remove
@@ -190,43 +261,6 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       cause.getMessage should startWith("Estimated expression complexity")
     }
 */
-  }
-
-  property("output contains too many assets") {
-    val gen = validErgoTransactionGenTemplate(1, 2, 1, 2)
-    forAll(gen) { case (from, tx) =>
-      var modified = false
-      val updCandidates = tx.outputCandidates.map { c =>
-        if (!modified) {
-          c.additionalTokens.find(_._2 > ErgoBox.MaxTokens + 1 - c.additionalTokens.size) match {
-            case Some((assetId, amount)) =>
-              val updAmount = amount - (ErgoBox.MaxTokens + 1)
-              val updTokens = Seq(assetId -> amount) ++ (1 to (amount - updAmount).toInt).map(_ => assetId -> 1L) ++
-                c.additionalTokens.filterNot(t => java.util.Arrays.equals(t._1, assetId))
-              modified = true
-              new ErgoBoxCandidate(c.value, c.ergoTree, startHeight, updTokens, c.additionalRegisters)
-            case None => c
-          }
-        } else {
-          c
-        }
-      }
-      val wrongTx = tx.copy(outputCandidates = updCandidates)
-      wrongTx.statelessValidity.isSuccess shouldBe false
-      wrongTx.statefulValidity(from, emptyStateContext).isSuccess shouldBe false
-    }
-  }
-
-  property("tx outputs contain too many assets in total") {
-    val gen = validErgoTransactionGenTemplate(
-      ErgoTransaction.MaxTokens + 1,
-      ErgoTransaction.MaxTokens + 4,
-      ErgoTransaction.MaxTokens + 4,
-      ErgoTransaction.MaxTokens + 8)
-    forAll(gen) { case (from, wrongTx) =>
-      wrongTx.statelessValidity.isSuccess shouldBe false
-      wrongTx.statefulValidity(from, emptyStateContext).isSuccess shouldBe false
-    }
   }
 
 }

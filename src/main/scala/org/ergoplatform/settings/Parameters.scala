@@ -36,9 +36,14 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
   lazy val maxBlockSize: Int = parametersTable(MaxBlockSizeIncrease)
 
   /**
-    * Computational cost of accessing a single token.
+    * Validation cost of accessing a single token.
     */
   lazy val tokenAccessCost: Int = parametersTable(TokenAccessCostIncrease)
+
+  /**
+    * Validation cost per one transaction input.
+    */
+  lazy val inputCost: Int = parametersTable(InputCostIncrease)
 
   /**
     * Max total computation cost of a block.
@@ -209,6 +214,9 @@ object Parameters {
   val TokenAccessCostIncrease: Byte = 5
   val TokenAccessCostDecrease: Byte = (-TokenAccessCostIncrease).toByte
 
+  val InputCostIncrease: Byte = 6
+  val InputCostDecrease: Byte = (-InputCostIncrease).toByte
+
   val StorageFeeFactorDefault = 1250000
   val StorageFeeFactorMax = 2500000
   val StorageFeeFactorMin = 0
@@ -221,13 +229,16 @@ object Parameters {
 
   val TokenAccessCostDefault = 100
 
+  val InputCostDefault = 1000
+
   val parametersDescs: Map[Byte, String] = Map(
     StorageFeeFactorIncrease -> "Storage fee factor (per byte per storage period)",
     MinValuePerByteIncrease -> "Minimum monetary value of a box",
     MaxBlockSizeIncrease -> "Maximum block size",
     MaxBlockCostIncrease -> "Maximum cumulative computational cost of a block",
     SoftFork -> "Soft-fork (increasing version of a block)",
-    TokenAccessCostIncrease -> "Token access cost"
+    TokenAccessCostIncrease -> "Token access cost",
+    InputCostIncrease -> "Cost per one transaction input"
   )
 
   val stepsTable: Map[Byte, Int] = Map(
@@ -316,7 +327,8 @@ object ParametersSerializer extends ScorexSerializer[Parameters] with ApiCodecs 
       "minValuePerByte" -> p.minValuePerByte.asJson,
       "maxBlockSize" -> p.maxBlockSize.asJson,
       "maxBlockCost" -> p.maxBlockCost.asJson,
-      "tokenAccessCost" -> p.tokenAccessCost.asJson
+      "tokenAccessCost" -> p.tokenAccessCost.asJson,
+      "inputCost" -> p.inputCost.asJson
     ).asJson
   }
 

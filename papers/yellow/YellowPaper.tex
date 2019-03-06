@@ -544,7 +544,7 @@ A \coin{} is made of registers~(and nothing but registers), we allow every \coin
 We denote the registers as $R_0,R_1,\ldots,R_9$.
 From these registers, four are filled with mandatory values: $R_0$ contains monetary value of a \coin{}, $R_1$ contains
 serialized guard script, $R_2$ contains tokens, $R_3$ contains declared creation height, unique identifier of transaction which created the
-coin and also an index of the coin in the transaction.
+coin and also an index of the \coin{} in the transaction.
 
 Each register is an expression in \sigm{} language. Thus the registers are typed: every register contains a value of
 some type. Types are defined in \knote{ref}. The value should be evaluated~(i.e. it should be a concrete constant value,
@@ -585,8 +585,8 @@ doing.
 
 To solve the issue we split concepts of a \coin{} and a \coin{} candidate. A \coin{} candidate is defining semantics of
 the corresponding \coin{} i.e. has the same values for all the registers except of the register $R_3$ which is set to
-be $(creation\_height, transaction\_id || output\_index)$ for a box  and $(creation\_height, 0^{34*8})$~(so instead
-of real transaction id and output index, a zero-bit string of 34 bytes is used).
+be $(creation\_height, transaction\_id || output\_index)$ for a \coin{} and $(creation\_height, 0^{34*8})$~(so instead
+of real transaction id and output index, a zero-bit string of 34 bytes is used) for a \coin{} candidate.
 
 
 \subsection{Transaction Format}
@@ -600,10 +600,11 @@ Ergo transaction consists of 3 parts:
     and a context extension to be used during script evaluation.
     \item{\em data inputs} - links to \coin{}s that won't be removed from the state, but will be available
     in context of regular inputs scripts.
-    \item{\em outputs} - new \coins{} that will be included into the state during the transaction application.
+    \item{\em outputs} - new \coin{}s that will be included into the state during the transaction application.
 \end{itemize}
 
 Transaction bytes are to be formed as follows:
+
 \begin{itemize}
     \item{\em inputs number} - VLQ-encoded number of inputs.
     \item{\em inputs} - every input is represented as 32-byte id of a \coin{} to be spent, VLQ-encoded
@@ -623,7 +624,7 @@ Transaction bytes are to be formed as follows:
 
 Inputs signatures should sign a $bytesToSign(tx)$ message, that is calculated as transaction bytes,
 as if all it's signatures are empty~(and thus VLQ-encoded length of signature equals to 0).
-Transaction id is calculated as a Blake2b256 hash from messages to sign.
+Transaction id is calculated as a Blake2b256 hash from message to sign.
 
 \subsection{Transaction Merkle Tree}
 \label{tx-tree}

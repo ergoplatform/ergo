@@ -124,7 +124,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
                                 rnd: Random = new Random,
                                 issueNew: Boolean = true,
                                 outputsProposition: ErgoTree = Constants.TrueLeaf,
-                                stateCtxOpt: Option[ErgoStateContext] = None): ErgoTransaction = {
+                                stateCtxOpt: Option[ErgoStateContext] = None,
+                                dataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()): ErgoTransaction = {
     require(boxesToSpend.nonEmpty, "At least one box is needed to generate a transaction")
 
     val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
@@ -200,10 +201,13 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       ErgoBox(amt, outputsProposition, 0, normalizedTokens)
     }
     val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
-    val unsignedTx = UnsignedErgoTransaction(inputs, newBoxes)
-    defaultProver.sign(unsignedTx, boxesToSpend, emptyDataBoxes, stateCtxOpt.getOrElse(emptyStateContext)).getOrElse {
+    val dataInputs = dataBoxes.map(b => DataInput(b.id))
+    val unsignedTx = UnsignedErgoTransaction(inputs, dataInputs, newBoxes)
+    require(unsignedTx.dataInputs.length == dataBoxes.length, s"${unsignedTx.dataInputs.length} == ${dataBoxes.length}")
+
+    defaultProver.sign(unsignedTx, boxesToSpend, dataBoxes, stateCtxOpt.getOrElse(emptyStateContext)).getOrElse {
       log.debug(s"Going to generate a transaction with incorrect spending proofs: $unsignedTx")
-      ErgoTransaction(inputs, newBoxes)
+      ErgoTransaction(inputs, dataInputs, newBoxes)
     }
   }
 

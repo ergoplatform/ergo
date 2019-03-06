@@ -169,22 +169,22 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
       val in0 = from.last
       // new token added to the last input
-      val modifiedIn0 = ErgoBox(in0.value, in0.proposition, in0.creationHeight,
+      val modifiedIn0 = ErgoBox(in0.value, in0.ergoTree, in0.creationHeight,
         in0.additionalTokens :+ randomToken, in0.additionalRegisters, in0.transactionId, in0.index)
       val txInMod0 = tx.inputs.last.copy(boxId = modifiedIn0.id)
 
       val in1 = from.last
       // existing token added to the last input
-      val modifiedIn1 = ErgoBox(in1.value, in1.proposition, in1.creationHeight,
+      val modifiedIn1 = ErgoBox(in1.value, in1.ergoTree, in1.creationHeight,
         in1.additionalTokens :+ existingToken, in1.additionalRegisters, in1.transactionId, in1.index)
       val txInMod1 = tx.inputs.last.copy(boxId = modifiedIn1.id)
 
       val out0 = tx.outputs.last
       // new token added to the last output
-      val modifiedOut0 = ErgoBox(out0.value, out0.proposition, out0.creationHeight,
+      val modifiedOut0 = ErgoBox(out0.value, out0.ergoTree, out0.creationHeight,
         out0.additionalTokens :+ randomToken, out0.additionalRegisters, out0.transactionId, out0.index)
       // existing token added to the last output
-      val modifiedOut1 = ErgoBox(out0.value, out0.proposition, out0.creationHeight,
+      val modifiedOut1 = ErgoBox(out0.value, out0.ergoTree, out0.creationHeight,
         out0.additionalTokens :+ existingToken, out0.additionalRegisters, out0.transactionId, out0.index)
 
       // update transaction inputs and outputs accordingly
@@ -215,11 +215,11 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val in0 = inputs.head
       val out0 = tx.outputs.head
       val inputsMod = (0 until bxsQty).map { i =>
-        ErgoBox(10000000000L, in0.proposition, in0.creationHeight,
+        ErgoBox(10000000000L, in0.ergoTree, in0.creationHeight,
           tokens, in0.additionalRegisters, in0.transactionId, i.toShort)
       }
       val outputsMod = (0 until bxsQty).map { i =>
-        ErgoBox(10000000000L, out0.proposition, out0.creationHeight,
+        ErgoBox(10000000000L, out0.ergoTree, out0.creationHeight,
           tokens, out0.additionalRegisters, out0.transactionId, i.toShort)
       }
       inputsMod -> outputsMod

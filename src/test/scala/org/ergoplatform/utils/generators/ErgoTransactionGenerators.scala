@@ -127,9 +127,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       mutable.Map(boxesToSpend.flatMap(_.additionalTokens).map { case (bs, amt) =>
         ByteArrayWrapper(bs) -> amt
       }: _*)
-    if (assetsMap.size > ErgoTransaction.MaxTokens) {
-      log.warn("Going to generate a transaction with too much tokens")
-    }
 
     //randomly creating a new asset
     if (rnd.nextBoolean() && issueNew) {
@@ -225,7 +222,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     inputsCount <- Gen.choose(minInputs, maxInputs)
     tokensCount <- Gen.choose(
       minAssets,
-      Math.max(maxAssets, Math.min(inputsCount * ErgoBox.MaxTokens, ErgoTransaction.MaxTokens - 1)))
+      Math.max(maxAssets, inputsCount))
     tokensDistribution <- disperseTokens(inputsCount, tokensCount.toByte)
     from <- Gen.sequence(tokensDistribution.map(tokens => ergoBoxGenForTokens(tokens, propositionGen)))
     prop <- propositionGen

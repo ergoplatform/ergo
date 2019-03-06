@@ -7,17 +7,16 @@ import org.ergoplatform.ErgoBox.{R4, TokenId}
 import org.ergoplatform._
 import org.ergoplatform.mining._
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.LaunchParameters
+import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.core._
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import sigmastate.Values
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.eval.CompiletimeIRContext
@@ -44,7 +43,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val remaining = emission.remainingFoundationRewardAtHeight(genesis.header.height)
       val minAmount = LaunchParameters.minValuePerByte * 1000
       val newBoxes = IndexedSeq(
-        ErgoBox(remaining, foundersBox.proposition, height, Seq(), Map(R4 -> ByteArrayConstant(ValueSerializer.serialize(newProp)))),
+        ErgoBox(remaining, foundersBox.ergoTree, height, Seq(), Map(R4 -> ByteArrayConstant(ValueSerializer.serialize(newProp)))),
         ErgoBox(minAmount, defaultProver.secrets.head.publicImage, height, Seq((tokenId, 49L))),
         ErgoBox(foundersBox.value - remaining - minAmount, defaultProver.secrets.last.publicImage, height, Seq((tokenId, 49L)))
       )
@@ -62,7 +61,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val remaining = emission.remainingFoundationRewardAtHeight(block1.header.height)
       val inputValue = tx.outputs.map(_.value).sum
       val newBoxes = IndexedSeq(
-        ErgoBox(remaining, foundersBox.proposition, height, Seq(), foundersBox.additionalRegisters),
+        ErgoBox(remaining, foundersBox.ergoTree, height, Seq(), foundersBox.additionalRegisters),
         ErgoBox(inputValue - remaining, defaultProver.secrets.last.publicImage, height, Seq((tokenId, 98L)))
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
@@ -98,7 +97,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       // check validity of transaction, spending founders box
       val inputs = IndexedSeq(Input(foundersBox.id, emptyProverResult))
       val newBoxes = IndexedSeq(
-        ErgoBox(remaining, foundersBox.proposition, height, Seq(), foundersBox.additionalRegisters),
+        ErgoBox(remaining, foundersBox.ergoTree, height, Seq(), foundersBox.additionalRegisters),
         ErgoBox(foundersBox.value - remaining, rewardPk, height, Seq())
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
@@ -254,7 +253,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val spendingTxInput = Input(boxToSpend.id, emptyProverResult)
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Values.TrueLeaf, creationHeight = startHeight)))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight)))
 
       val txs = txsFromHolder :+ spendingTx
 
@@ -277,7 +276,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val spendingTxInput = Input(boxToSpend.id, emptyProverResult)
       val spendingTx = ErgoTransaction(
         IndexedSeq(spendingTxInput),
-        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Values.TrueLeaf, creationHeight = startHeight)))
+        IndexedSeq(new ErgoBoxCandidate(boxToSpend.value, Constants.TrueLeaf, creationHeight = startHeight)))
 
       val txs = spendingTx +: txsFromHolder
 

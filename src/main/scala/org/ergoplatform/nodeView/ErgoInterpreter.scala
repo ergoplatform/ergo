@@ -2,11 +2,10 @@ package org.ergoplatform.nodeView
 
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform._
-import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
-import sigmastate.SBoolean
-import sigmastate.Values.Value
+import org.ergoplatform.settings.{Constants, Parameters}
+import sigmastate.Values.ErgoTree
 import sigmastate.eval.{IRContext, RuntimeIRContext}
-import sigmastate.interpreter.Interpreter.{ReductionResult, ScriptEnv, VerificationResult}
+import sigmastate.interpreter.Interpreter.{ScriptEnv, VerificationResult}
 
 import scala.util.Try
 
@@ -41,7 +40,7 @@ class ErgoInterpreter(params: Parameters)(implicit IR: IRContext)
   }
 
   override def verify(env: ScriptEnv,
-                      exp: Value[SBoolean.type],
+                      exp: ErgoTree,
                       context: CTX,
                       proof: Array[Byte],
                       message: Array[Byte]): Try[VerificationResult] = {

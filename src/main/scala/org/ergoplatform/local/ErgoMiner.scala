@@ -52,7 +52,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
   // cost of a transaction collecting emission box
-  private val EmissionTxCost: Long = 20000
+  // TODO calculate current value every time? Current value is 41010 but it may change with miner votes
+  private val EmissionTxCost: Long = 50000
 
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
 
@@ -265,7 +266,7 @@ object ErgoMiner extends ScorexLogging {
     val minerProp = ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
 
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
-      val prop = emissionBox.proposition
+      val prop = emissionBox.ergoTree
       val emissionAmount = emission.minersRewardAtHeight(nextHeight)
       val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop,
         nextHeight, Seq(), Map())

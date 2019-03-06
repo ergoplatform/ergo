@@ -14,8 +14,7 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
-import sigmastate.SBoolean
-import sigmastate.Values.Value
+import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.interpreter.{ContextExtension, ProverResult}
@@ -34,7 +33,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val coinsTotal: Long = emission.coinsTotal
   val stateConstants: StateConstants = StateConstants(None, settings)
   val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
-  val feeProp: Value[SBoolean.type] = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
+  val feeProp: ErgoTree = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
 
   val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(genesisStateDigest, votingSettings)
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)

@@ -33,6 +33,8 @@ trait FullBlockProcessor extends HeadersProcessor {
   override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.getIndex(BestFullBlockKey)
     .map(w => bytesToId(w.data))
 
+  // todo: `getFullBlock` is frequently used to define whether some`header` have enough
+  // todo: related sections - it would be far more efficient to keep such information in the indexes.
   protected def getFullBlock(h: Header): Option[ErgoFullBlock]
 
   protected def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
@@ -93,7 +95,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       val branchPoint = toRemove.headOption.map(_ => prevChain.head.id)
 
       val minForkRootHeight = newBestBlockHeader.height - config.blocksToKeep
-      // remove block ids that have no chance to be applied
+      // remove block ids which have no chance to be applied
       if (nonBestChainsMonitor.nonEmpty) nonBestChainsMonitor = nonBestChainsMonitor.dropUntil(minForkRootHeight)
 
       val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
@@ -134,7 +136,7 @@ trait FullBlockProcessor extends HeadersProcessor {
   }
 
   /**
-    * Tells whether a given `header` is linkable to existing some full chain or not.
+    * Tells whether a given `header` is linkable to some existing full chain or not.
     */
   private def isLinkable(header: Header): Boolean = {
     @tailrec

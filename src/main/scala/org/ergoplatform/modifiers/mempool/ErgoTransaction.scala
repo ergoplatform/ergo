@@ -111,7 +111,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
-    val initialCost: Long = boxesToSpend.size * stateContext.currentParameters.inputCost
+    val initialCost: Long =
+      boxesToSpend.size * stateContext.currentParameters.inputCost +
+      dataBoxes.size * stateContext.currentParameters.dataInputCost +
+      outputCandidates.size * stateContext.currentParameters.outputCost
 
     failFast
       .payload(initialCost)

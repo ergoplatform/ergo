@@ -11,6 +11,7 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
+import special.collection.{Coll, CollOverArray}
 
 import scala.util.{Failure, Success, Try}
 
@@ -19,7 +20,7 @@ import scala.util.{Failure, Success, Try}
   * The predicted header only contains fields that can be predicted.
   */
 class UpcomingStateContext(lastHeaders: Seq[Header],
-                           predictedHeader: PreHeader,
+                           val predictedHeader: PreHeader,
                            genesisStateDigest: ADDigest,
                            currentParameters: Parameters,
                            votingData: VotingData)(implicit votingSettings: VotingSettings)
@@ -32,6 +33,7 @@ class UpcomingStateContext(lastHeaders: Seq[Header],
   override val currentHeight: Int = predictedHeader.height
 
   override def toString: String = s"UpcomingStateContext($predictedHeader, $lastHeaders)"
+
 }
 
 /**
@@ -49,10 +51,17 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                       (implicit val votingSettings: VotingSettings)
   extends BytesSerializable with ScorexEncoding {
 
+
+  def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(lastHeaders.last)
+
+  def sigmaLastHeaders: Coll[special.sigma.Header] = new CollOverArray(lastHeaders.map(h => Header.toSigma(h)).toArray)
+
+  // todo remove from ErgoLikeContext and from ErgoStateContext
   val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption
     .map(_.powSolution.encodedPk)
     .getOrElse(Array.fill(32)(0: Byte))
 
+  // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block
   val previousStateDigest: ADDigest = if (lastHeaders.length >= 2) {
     lastHeaders(1).stateRoot
@@ -60,11 +69,12 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     genesisStateDigest
   }
 
+  // todo remove from ErgoLikeContext and from ErgoStateContext
   val currentHeight: Int = ErgoHistory.heightOf(lastHeaderOpt)
 
   override type M = ErgoStateContext
 
-  def votingEpochLength: Int = votingSettings.votingLength
+  private def votingEpochLength: Int = votingSettings.votingLength
 
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 

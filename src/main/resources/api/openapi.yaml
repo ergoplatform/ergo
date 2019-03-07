@@ -32,6 +32,14 @@ components:
         spendingProof:
           $ref: '#/components/schemas/SpendingProof'
 
+    ErgoTransactionDataInput:
+      type: object
+      required:
+        - boxId
+      properties:
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
+
     SpendingProof:
       description: Spending proof for transaction input
       type: object
@@ -85,6 +93,7 @@ components:
       description: Transaction without any lockers and unlockers
       required:
       - inputs
+      - dataInputs
       - outputs
       properties:
         id:
@@ -94,6 +103,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ErgoTransactionInput'
+        dataInputs:
+          description: Many transaction data inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
         outputs:
           description: Many transaction outputs
           type: array

@@ -13,9 +13,9 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
   import DefaultBoxSelector.select
 
   private val noFilter: TrackedBox => Boolean = _ => true
+  val parentTx = ErgoTransaction(IndexedSeq(), IndexedSeq(), IndexedSeq())
 
   property("returns None when it is impossible to select coins") {
-    val parentTx = ErgoTransaction(IndexedSeq(), IndexedSeq())
     val box = ErgoBox(1, Constants.TrueLeaf, creationHeight = startHeight)
     val uBox = TrackedBox(parentTx, 0, None, box, BoxCertainty.Certain)
 
@@ -33,7 +33,6 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
   }
 
   property("properly selects coins - simple case with no assets") {
-    val parentTx = ErgoTransaction(IndexedSeq(), IndexedSeq())
     val box1 = ErgoBox(1, Constants.TrueLeaf, creationHeight = startHeight)
     val box2 = ErgoBox(10, Constants.TrueLeaf, creationHeight = startHeight)
     val box3 = ErgoBox(100, Constants.TrueLeaf, creationHeight = startHeight)
@@ -127,7 +126,6 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     val assetId7 = bytesToId(Blake2b256("7"))
     val assetId8 = bytesToId(Blake2b256("8"))
 
-    val parentTx = ErgoTransaction(IndexedSeq(), IndexedSeq())
     val box1 = ErgoBox(1, Constants.TrueLeaf, startHeight,
       Seq(Digest32 @@ idToBytes(assetId1) -> 1, Digest32 @@ idToBytes(assetId2) -> 1,
         Digest32 @@ idToBytes(assetId3) -> 1, Digest32 @@ idToBytes(assetId4) -> 1))

@@ -73,7 +73,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
         IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
       )
 
-      val transactionContext = TransactionContext(IndexedSeq(box), testingTx, selfIndex = 0)
+      val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx, selfIndex = 0)
 
       val context =
         new ErgoContext(stateContext, transactionContext, ContextExtension.empty)
@@ -224,10 +224,11 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
         val unsignedTx = new UnsignedErgoTransaction(
           inputs.map(_.id).map(id => new UnsignedInput(id)),
+          IndexedSeq(),
           (payTo ++ changeBoxCandidates).toIndexedSeq
         )
 
-        prover.sign(unsignedTx, inputs, stateContext)
+        prover.sign(unsignedTx, inputs, IndexedSeq(), stateContext)
           .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
       } match {
         case Some(txTry) => txTry

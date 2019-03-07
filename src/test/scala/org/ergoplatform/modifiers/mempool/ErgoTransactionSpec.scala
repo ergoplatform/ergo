@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.mempool
 
+import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.nodeView.ErgoInterpreter
@@ -8,6 +9,7 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.scalacheck.Gen
 import scorex.crypto.hash.Digest32
+import scorex.util.encode.Base16
 
 import scala.util.Random
 
@@ -41,10 +43,19 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
+  property("serialization vector") {
+    // test vector, that specifies transaction json and bytes representation.
+    // ensures that bytes transaction representation was not changed
+    val bytes = Base16.decode("02e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c6400002e9798d7eb0cd867f6dc29872f80de64c04cef10a99a58d007ef7855f0acbdb9000001f97d1dc4626de22db836270fe1aa004b99970791e4557de8f486f6d433b81195026df03fffc9042bf0edb0d0d36d7a675239b83a9080d39716b9aa0a64cccb9963e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c6403da92a8b8e3ad770008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176000200daa4eb6b01aec8d1ff0100da92a8b8e3ad770008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176000200daa4eb6b01aec8d1ff0100fa979af8988ce7010008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176000000").get
+    val tx = ErgoTransactionSerializer.parseBytes(bytes)
+    val str = "{\"id\":\"663ae91ab7145a4f42b5509e1a2fb0469b7cb46ea87fdfd90e0b4c8ef29c2493\",\"inputs\":[{\"boxId\":\"e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c64\",\"spendingProof\":{\"proofBytes\":\"\",\"extension\":{}}},{\"boxId\":\"2e9798d7eb0cd867f6dc29872f80de64c04cef10a99a58d007ef7855f0acbdb9\",\"spendingProof\":{\"proofBytes\":\"\",\"extension\":{}}}],\"dataInputs\":[{\"boxId\":\"f97d1dc4626de22db836270fe1aa004b99970791e4557de8f486f6d433b81195\"}],\"outputs\":[{\"boxId\":\"69e05b68715caaa4ca58ba59a8c8c7e031d42ad890b05f87021a28617c1e70d5\",\"value\":524940416256346,\"proposition\":\"100108cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a21767300\",\"assets\":[{\"tokenId\":\"6df03fffc9042bf0edb0d0d36d7a675239b83a9080d39716b9aa0a64cccb9963\",\"amount\":226153050},{\"tokenId\":\"e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c64\",\"amount\":536110126}],\"creationHeight\":0,\"additionalRegisters\":{}},{\"boxId\":\"556a9a3ec7880d468e56d44e75898cf8a32f6a07344895fa6b5cf34edf101a59\",\"value\":524940416256346,\"proposition\":\"100108cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a21767300\",\"assets\":[{\"tokenId\":\"6df03fffc9042bf0edb0d0d36d7a675239b83a9080d39716b9aa0a64cccb9963\",\"amount\":226153050},{\"tokenId\":\"e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c64\",\"amount\":536110126}],\"creationHeight\":0,\"additionalRegisters\":{}},{\"boxId\":\"16385b5b83992629909c7e004ed0421229ed3587162ce6f29b2df129472e3909\",\"value\":1016367755463674,\"proposition\":\"100108cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a21767300\",\"assets\":[],\"creationHeight\":0,\"additionalRegisters\":{}}],\"size\":329}"
+    tx.asJson.noSpaces shouldBe str
+  }
+
   property("a valid transaction is valid") {
     forAll(validErgoTransactionGen) { case (from, tx) =>
       tx.statelessValidity.isSuccess shouldBe true
-      tx.statefulValidity(from, emptyStateContext).isSuccess shouldBe true
+      tx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe true
     }
   }
 
@@ -56,7 +67,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
         modifyValue(tx.outputCandidates.head, delta) +: tx.outputCandidates.tail)
 
       wrongTx.statelessValidity.isSuccess &&
-        wrongTx.statefulValidity(from, emptyStateContext).isSuccess shouldBe false
+        wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
     }
   }
 
@@ -67,7 +78,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
         modifyValue(tx.outputCandidates.head, -(tx.outputCandidates.head.value + negValue)) +: tx.outputCandidates.tail)
 
       wrongTx.statelessValidity.isSuccess shouldBe false
-      wrongTx.statefulValidity(from, emptyStateContext).isSuccess shouldBe false
+      wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
     }
   }
 
@@ -79,7 +90,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
         modifyValue(tx.outputCandidates.head, overflowSurplus) +: tx.outputCandidates.tail)
 
       wrongTx.statelessValidity.isSuccess shouldBe false
-      wrongTx.statefulValidity(from, emptyStateContext).isSuccess shouldBe false
+      wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
     }
   }
 
@@ -102,7 +113,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
       val wrongTx = updateAnAsset(tx, from, _ + 1)
       wrongTx.statelessValidity.isSuccess shouldBe true
-      wrongTx.statefulValidity(from, emptyStateContext).isSuccess shouldBe false
+      wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
     }
   }
 
@@ -110,7 +121,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
       val wrongTx = updateAnAsset(tx, from, _ => -1)
       wrongTx.statelessValidity.isSuccess shouldBe false
-      wrongTx.statefulValidity(from, emptyStateContext).isSuccess shouldBe false
+      wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
     }
   }
 
@@ -139,7 +150,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
         val wrongTx = tx.copy(outputCandidates = updCandidates)
         wrongTx.statelessValidity.isSuccess shouldBe false
-        wrongTx.statefulValidity(from, emptyStateContext).isSuccess shouldBe false
+        wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
       }
     }
   }
@@ -149,7 +160,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
     forAll(gen) { case (from, tx) =>
       tx.statelessValidity.isSuccess shouldBe true
-      val validity = tx.statefulValidity(from, emptyStateContext)
+      val validity = tx.statefulValidity(from, emptyDataBoxes, emptyStateContext)
       validity.isSuccess shouldBe false
       val e = validity.failed.get
       log.info(s"Validation message: ${e.getMessage}", e)
@@ -160,7 +171,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   property("assets usage correctly affects transaction total cost") {
     val txGen = validErgoTransactionGenTemplate(1, 1, 8, 16)
     forAll(txGen) { case (from, tx) =>
-      val initTxCost = tx.statefulValidity(from, emptyStateContext).get
+      val initTxCost = tx.statefulValidity(from, emptyDataBoxes, emptyStateContext).get
 
       // already existing token from one of the inputs
       val existingToken = from.flatMap(_.additionalTokens).toSet.head
@@ -195,10 +206,10 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val txMod3 = tx.copy(inputs = tx.inputs.init :+ txInMod1, // existing token added to one input and one output
         outputCandidates = tx.outputCandidates.init :+ modifiedOut1)
 
-      val inputIncTxCost0 = txMod0.statefulValidity(from.init :+ modifiedIn0, emptyStateContext).get
-      val inputIncTxCost1 = txMod1.statefulValidity(from.init :+ modifiedIn1, emptyStateContext).get
-      val outputIncTxCost0 = txMod2.statefulValidity(from.init :+ modifiedIn0, emptyStateContext).get
-      val outputIncTxCost1 = txMod3.statefulValidity(from.init :+ modifiedIn1, emptyStateContext).get
+      val inputIncTxCost0 = txMod0.statefulValidity(from.init :+ modifiedIn0, emptyDataBoxes, emptyStateContext).get
+      val inputIncTxCost1 = txMod1.statefulValidity(from.init :+ modifiedIn1, emptyDataBoxes, emptyStateContext).get
+      val outputIncTxCost0 = txMod2.statefulValidity(from.init :+ modifiedIn0, emptyDataBoxes, emptyStateContext).get
+      val outputIncTxCost1 = txMod3.statefulValidity(from.init :+ modifiedIn1, emptyDataBoxes, emptyStateContext).get
 
       (inputIncTxCost0 - initTxCost) shouldEqual Parameters.TokenAccessCostDefault * 2 // one more group + one more token in total
       (inputIncTxCost1 - initTxCost) shouldEqual Parameters.TokenAccessCostDefault // one more token in total
@@ -229,38 +240,38 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       (0 until bxsQty).map(i => inSample.copy(boxId = in(i).id))
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
-    val cost = txMod.statefulValidity(in, emptyStateContext).get
+    val cost = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext).get
     cost shouldBe > (LaunchParameters.maxBlockCost)
   }
 
   ignore("too costly transaction should be rejected") {
-/*
-    todo fix or remove
-    val groupElemGen: Gen[EcPointType] = Gen.const(CryptoConstants.dlogGroup.createRandomGenerator())
+    /*
+        todo fix or remove
+        val groupElemGen: Gen[EcPointType] = Gen.const(CryptoConstants.dlogGroup.createRandomGenerator())
 
-    val proveDiffieHellmanTupleGen = for {
-      gv <- groupElemGen
-      hv <- groupElemGen
-      uv <- groupElemGen
-      vv <- groupElemGen
-    } yield ProveDHTuple(gv, hv, uv, vv)
+        val proveDiffieHellmanTupleGen = for {
+          gv <- groupElemGen
+          hv <- groupElemGen
+          uv <- groupElemGen
+          vv <- groupElemGen
+        } yield ProveDHTuple(gv, hv, uv, vv)
 
 
-    val propositionGen = for {
-      proveList <- Gen.listOfN(50, proveDiffieHellmanTupleGen)
-    } yield OR(proveList.map(_.toSigmaProp))
+        val propositionGen = for {
+          proveList <- Gen.listOfN(50, proveDiffieHellmanTupleGen)
+        } yield OR(proveList.map(_.toSigmaProp))
 
-    val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
+        val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
 
-    forAll(gen) { case (from, tx) =>
-      tx.statelessValidity.isSuccess shouldBe true
-      val validity = tx.statefulValidity(from, emptyStateContext)
-      validity.isSuccess shouldBe false
-      val cause = validity.failed.get.getCause
-      Option(cause) shouldBe defined
-      cause.getMessage should startWith("Estimated expression complexity")
-    }
-*/
+        forAll(gen) { case (from, tx) =>
+          tx.statelessValidity.isSuccess shouldBe true
+          val validity = tx.statefulValidity(from, emptyStateContext)
+          validity.isSuccess shouldBe false
+          val cause = validity.failed.get.getCause
+          Option(cause) shouldBe defined
+          cause.getMessage should startWith("Estimated expression complexity")
+        }
+    */
   }
 
 }

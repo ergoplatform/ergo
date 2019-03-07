@@ -276,6 +276,7 @@ object ErgoMiner extends ScorexLogging {
 
       ErgoTransaction(
         inputs,
+        IndexedSeq(),
         IndexedSeq(newEmissionBox, minerBox)
       )
     }
@@ -284,7 +285,7 @@ object ErgoMiner extends ScorexLogging {
       val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
       val minerBox = new ErgoBoxCandidate(feeAmount, minerProp, nextHeight, feeAssets, Map())
-      Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(minerBox)))
+      Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(), IndexedSeq(minerBox)))
     } else {
       None
     }
@@ -329,7 +330,7 @@ object ErgoMiner extends ScorexLogging {
               ErgoMiner.collectFees(us.stateContext.currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
                 case Some(feeTx) =>
                   val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
-                  feeTx.statefulValidity(boxesToSpend, upcomingContext) match {
+                  feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext) match {
                     case Success(cost) =>
                       val blockTxs: Seq[(ErgoTransaction, Long)] = (feeTx -> cost) +: newTxs
                       if (correctLimits(blockTxs)) loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost)) else current

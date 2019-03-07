@@ -15,7 +15,6 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.authds.ADKey
-import sigmastate.Values
 
 import scala.concurrent.duration._
 
@@ -35,7 +34,8 @@ class TransactionApiRouteSpec extends FlatSpec
   val boxValue: Long = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, parameters)
   val output: ErgoBoxCandidate = new ErgoBoxCandidate(boxValue, Constants.TrueLeaf,
     creationHeight = creationHeightGen.sample.get)
-  val tx: ErgoTransaction = ErgoTransaction(IndexedSeq(input), IndexedSeq(output))
+  // todo fill dataInputs
+  val tx: ErgoTransaction = ErgoTransaction(IndexedSeq(input), IndexedSeq(), IndexedSeq(output))
 
   it should "post transaction" in {
     Post(prefix, tx.asJson) ~> route ~> check {

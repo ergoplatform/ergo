@@ -19,7 +19,7 @@ import scala.util.Try
   */
 trait FullBlockProcessor extends HeadersProcessor {
 
-  private var nonBestChainsMonitor = FullBlockProcessor.emptyMonitor
+  private var nonBestChainsCache = FullBlockProcessor.emptyCache
 
   def isInBestFullChain(id: ModifierId): Boolean = historyStorage.getIndex(chainStatusKey(id))
     .contains(FullBlockProcessor.BestChainMarker)
@@ -90,14 +90,15 @@ trait FullBlockProcessor extends HeadersProcessor {
 
       require(toApply.lengthCompare(newChain.length - 1) == 0)
 
-      //application of this block leads to full chain with higher score
+      // application of this block leads to full chain with higher score
       logStatus(toRemove, toApply, fullBlock, Some(prevBest))
       val branchPoint = toRemove.headOption.map(_ => prevChain.head.id)
 
       val minForkRootHeight = newBestBlockHeader.height - config.blocksToKeep
       // remove block ids which have no chance to be applied
-      if (nonBestChainsMonitor.nonEmpty) nonBestChainsMonitor = nonBestChainsMonitor.dropUntil(minForkRootHeight)
+      if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
 
+      // insert updated chains statuses
       val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
         toRemove.map(b => chainStatusKey(b.id) -> FullBlockProcessor.NonBestChainMarker)
       updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes)
@@ -127,7 +128,7 @@ trait FullBlockProcessor extends HeadersProcessor {
     case params =>
       val block = params.fullBlock
       if (block.header.height > fullBlockHeight - config.keepVersions) {
-        nonBestChainsMonitor = nonBestChainsMonitor.add(block.id, block.parentId, block.header.height)
+        nonBestChainsCache = nonBestChainsCache.add(block.id, block.parentId, block.header.height)
       }
       //Orphaned block or full chain is not initialized yet
       logStatus(Seq(), Seq(), params.fullBlock, None)
@@ -141,8 +142,8 @@ trait FullBlockProcessor extends HeadersProcessor {
   private def isLinkable(header: Header): Boolean = {
     @tailrec
     def loop(id: ModifierId, height: Int, acc: Seq[ModifierId]): Seq[ModifierId] = {
-      nonBestChainsMonitor.getParentId(id, height).orElse {
-        typedModifierById[Header](id)
+      nonBestChainsCache.getParentId(id, height).orElse { // lookup block in the cache
+        typedModifierById[Header](id) // lookup block in storage in case its not presented in the cache.
           .flatMap(h => if (!isInBestFullChain(id)) getFullBlock(h) else None)
           .map(_.parentId)
       } match {
@@ -156,11 +157,14 @@ trait FullBlockProcessor extends HeadersProcessor {
       loop(header.parentId, header.height - 1, Seq.empty) // follow links back until main chain or absent section is reached
         .headOption
         .orElse(Some(header.parentId))
-        .flatMap(id => typedModifierById[Header](id).flatMap(getFullBlock))
+        .flatMap(id => typedModifierById[Header](id).flatMap(getFullBlock)) // check whether first block actually exists
         .isDefined
     }
   }
 
+  /**
+    * Finds all possible chains following a given `header`.
+    */
   private def continuationChains(fromHeader: Header): Seq[Seq[ModifierId]] = {
     @tailrec
     def loop(currentHeight: Option[Int], acc: Seq[Seq[(ModifierId, ModifierId)]]): Seq[Seq[ModifierId]] = {
@@ -169,10 +173,10 @@ trait FullBlockProcessor extends HeadersProcessor {
           val nextHeight = h + 1
           headerIdsAtHeight(nextHeight)
             .flatMap { id =>
-              nonBestChainsMonitor.getParentId(id, nextHeight)
+              nonBestChainsCache.getParentId(id, nextHeight) // lookup block in the cache
                 .map(parentId => id -> parentId)
                 .orElse {
-                  typedModifierById[Header](id)
+                  typedModifierById[Header](id) // lookup block in storage in case its not presented in the cache.
                     .flatMap(getFullBlock)
                     .map(b => b.id -> b.parentId)
                 }
@@ -192,6 +196,9 @@ trait FullBlockProcessor extends HeadersProcessor {
     loop(heightOf(fromHeader.id), Seq(Seq(fromHeader.id -> fromHeader.parentId)))
   }
 
+  /**
+    * Finds best chain following a given `header`.
+    */
   private def calculateBestChain(header: Header): Seq[ModifierId] = {
     continuationChains(header)
       .map(_.tail)
@@ -244,31 +251,29 @@ object FullBlockProcessor {
                        blocksToKeep: Int,
                        newBestChain: Seq[ModifierId])
 
-  case class MonitorBlock(id: ModifierId, height: Int)
+  case class CacheBlock(id: ModifierId, height: Int)
 
   /**
     * Stores links mapping ((id, height) -> parentId) of blocks that could possibly be applied.
     */
-  case class IncompleteFullChainMonitor(monitor: TreeMap[MonitorBlock, ModifierId]) {
+  case class IncompleteFullChainCache(cache: TreeMap[CacheBlock, ModifierId]) {
 
-    val nonEmpty: Boolean = monitor.nonEmpty
+    val nonEmpty: Boolean = cache.nonEmpty
 
-    def getParentId(id: ModifierId, height: Int): Option[ModifierId] = monitor.get(MonitorBlock(id, height))
+    def getParentId(id: ModifierId, height: Int): Option[ModifierId] = cache.get(CacheBlock(id, height))
 
-    def exists(id: ModifierId, height: Int): Boolean = getParentId(id, height).isDefined
+    def add(id: ModifierId, parentId: ModifierId, height: Int): IncompleteFullChainCache =
+      IncompleteFullChainCache(cache.insert(CacheBlock(id, height), parentId))
 
-    def add(id: ModifierId, parentId: ModifierId, height: Int): IncompleteFullChainMonitor =
-      IncompleteFullChainMonitor(monitor.insert(MonitorBlock(id, height), parentId))
-
-    def dropUntil(height: Int): IncompleteFullChainMonitor =
-      IncompleteFullChainMonitor(monitor.dropWhile(_._1.height < height))
+    def dropUntil(height: Int): IncompleteFullChainCache =
+      IncompleteFullChainCache(cache.dropWhile(_._1.height < height))
   }
 
   val BestChainMarker: ByteArrayWrapper = ByteArrayWrapper(Array(1: Byte))
   val NonBestChainMarker: ByteArrayWrapper = ByteArrayWrapper(Array(0: Byte))
 
-  private implicit val ord: Ordering[MonitorBlock] = Ordering[(Int, ModifierId)].on(x => (x.height, x.id))
+  private implicit val ord: Ordering[CacheBlock] = Ordering[(Int, ModifierId)].on(x => (x.height, x.id))
 
-  def emptyMonitor: IncompleteFullChainMonitor = IncompleteFullChainMonitor(TreeMap.empty)
+  def emptyCache: IncompleteFullChainCache = IncompleteFullChainCache(TreeMap.empty)
 
 }

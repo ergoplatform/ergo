@@ -118,8 +118,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     failFast
       .payload(initialCost)
-      .demand(outputs.forall(o => o.value >= BoxUtils.minimalErgoAmount(o, stateContext.currentParameters)), s"Transaction is trying to create dust: $this")
-      .demand(outputCandidates.forall(_.creationHeight <= stateContext.currentHeight), s"Box created in future:  ${outputCandidates.map(_.creationHeight)} vs ${stateContext.currentHeight}")
+      .validateSeq(outputs) { case (validationState, out) =>
+        validationState
+          .demand(out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"Transaction is trying to create dust: $this")
+          .demand(out.creationHeight <= stateContext.currentHeight, s"Box created in future:  ${outputCandidates.map(_.creationHeight)} validationState ${stateContext.currentHeight}")
+      }
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       .demand(dataBoxes.size == dataInputs.size, s"dataBoxes.size ${dataBoxes.size} != dataInputs.size ${dataInputs.size}")
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
@@ -151,9 +154,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
               (inAssets.size + outAssets.size) * tokenAccessCost
             validation
               .validateSeq(outAssets) {
-                case (validation, (outAssetId, outAmount)) =>
+                case (validationState, (outAssetId, outAmount)) =>
                   val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
-                  validation.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
+                  validationState.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
                     fatal(s"Assets preservation rule is broken in $this. " +
                       s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
                   }

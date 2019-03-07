@@ -241,7 +241,7 @@ object Parameters {
       require(k.length == 2, s"Wrong key during parameters parsing in extension: $extension")
       if (k.head == 0) {
         require(v.length == 4, s"Wrong value during parameters parsing in extension: $extension")
-        Some(k.head -> Ints.fromByteArray(v))
+        Some(k.last -> Ints.fromByteArray(v))
       } else {
         None
       }
@@ -250,8 +250,13 @@ object Parameters {
     Parameters(h, paramsTable)
   }
 
-  //Check that calculated parameters are matching ones written in the extension section of the block
-  def matchParameters(p1: Parameters, p2: Parameters): Try[Unit] = Try {
+  /**
+    * Check that two set of parameters are the same (contain the same records).
+    * @param p1 - parameters set
+    * @param p2 - parameters set
+    * @return Success(p1), if parameters match, Failure(_) otherwise
+    */
+  def matchParameters(p1: Parameters, p2: Parameters): Try[Parameters] = Try {
     if (p1.height != p2.height) {
       throw new Exception(s"Different height in parameters, p1 = $p1, p2 = $p2")
     }
@@ -262,7 +267,7 @@ object Parameters {
       val v2 = p2.parametersTable(k)
       if (v2 != v) throw new Exception(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
     }
-  }
+  }.map(_ => p1)
 
 }
 

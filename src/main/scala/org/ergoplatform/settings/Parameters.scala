@@ -245,7 +245,7 @@ object Parameters {
 
   val TokenAccessCostDefault = 100
 
-  val InputCostDefault = 10000
+  val InputCostDefault = 2000
 
   val DataInputCostDefault = 100
 

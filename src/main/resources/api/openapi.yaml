@@ -273,7 +273,6 @@ components:
       - difficulty
       - parentId
       - votes
-      - size
       properties:
         id:
           $ref: '#/components/schemas/ModifierId'
@@ -319,6 +318,12 @@ components:
           description: Size in bytes
           type: integer
           format: int32
+        extensionId:
+          $ref: '#/components/schemas/ModifierId'
+        transactionsId:
+          $ref: '#/components/schemas/ModifierId'
+        adProofsId:
+          $ref: '#/components/schemas/ModifierId'
 
     BlockTransactions:
       type: object

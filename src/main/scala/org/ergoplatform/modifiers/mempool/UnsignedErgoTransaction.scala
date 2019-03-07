@@ -1,14 +1,15 @@
 package org.ergoplatform.modifiers.mempool
 
-import org.ergoplatform.settings.Algos
-import org.ergoplatform.{ErgoBoxCandidate, ErgoLikeTransactionTemplate, UnsignedInput}
-import scorex.util.{ModifierId, bytesToId}
+import org.ergoplatform._
 
-class UnsignedErgoTransaction(override val inputs: IndexedSeq[UnsignedInput],
-                              override val outputCandidates: IndexedSeq[ErgoBoxCandidate])
-  extends ErgoLikeTransactionTemplate[UnsignedInput] {
 
-  lazy val serializedId: Array[Byte] = Algos.hash(messageToSign)
+case class UnsignedErgoTransaction(override val inputs: IndexedSeq[UnsignedInput],
+                                   override val dataInputs: IndexedSeq[DataInput],
+                                   override val outputCandidates: IndexedSeq[ErgoBoxCandidate])
+  extends UnsignedErgoLikeTransaction(inputs, dataInputs, outputCandidates)
 
-  override lazy val id: ModifierId = bytesToId(serializedId)
+object UnsignedErgoTransaction {
+  def apply(inputs: IndexedSeq[UnsignedInput], outputCandidates: IndexedSeq[ErgoBoxCandidate]): UnsignedErgoTransaction = {
+    UnsignedErgoTransaction(inputs, IndexedSeq(), outputCandidates)
+  }
 }

@@ -95,10 +95,10 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       val fromBigMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, us, upcomingContext, txsWithFees, Seq())
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
-      val costs = fromBigMempool.map { tx =>
+      val costs: Seq[Long] = fromBigMempool.map { tx =>
         us.validateWithCost(tx).getOrElse {
           val boxesToSpend = tx.inputs.map(i => newBoxes.find(b => b.id sameElements i.boxId).get)
-          tx.statefulValidity(boxesToSpend, upcomingContext).get
+          tx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext).get
         }
       }
 

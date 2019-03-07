@@ -79,7 +79,13 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
           case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
         }
       }
-      tx.statefulValidity(boxesToSpend, currentStateContext)(verifier).get
+      val dataBoxes = tx.dataInputs.map(_.boxId).map { id =>
+        createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
+          case Some(box) => box
+          case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+        }
+      }
+      tx.statefulValidity(boxesToSpend, dataBoxes, currentStateContext)(verifier).get
     }.sum
 
     if (totalCost > currentStateContext.currentParameters.maxBlockCost) {

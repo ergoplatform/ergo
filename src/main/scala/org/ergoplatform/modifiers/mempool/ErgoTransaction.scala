@@ -28,7 +28,19 @@ import sigmastate.{SBoolean, SType}
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
+/**
+  *
+  *
+  * @param inputs           - inputs, that will be spent by this transaction.
+  * @param dataInputs       - inputs, that are not going to be spent by transaction, but will be
+  *                         reachable from inputs scripts. `dataInputs` scripts will not be executed,
+  *                         thus their scripts costs are not included in transaction cost and
+  *                         they do not contain spending proofs.
+  * @param outputCandidates - box candidates to be created by this transaction.
+  *                         Differ from ordinary ones in that they do not include transaction id and index
+  */
 case class ErgoTransaction(override val inputs: IndexedSeq[Input],
+                           override val dataInputs: IndexedSeq[DataInput],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate],
                            override val sizeOpt: Option[Int] = None)
   extends Transaction
@@ -93,6 +105,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   /** Return total computation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
+                       dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext)(implicit verifier: ErgoInterpreter): Try[Long] = {
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
@@ -105,11 +118,12 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demand(outputs.forall(o => o.value >= BoxUtils.minimalErgoAmount(o, stateContext.currentParameters)), s"Transaction is trying to create dust: $this")
       .demand(outputCandidates.forall(_.creationHeight <= stateContext.currentHeight), s"Box created in future:  ${outputCandidates.map(_.creationHeight)} vs ${stateContext.currentHeight}")
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
+      .demand(dataBoxes.size == dataInputs.size, s"dataBoxes.size ${dataBoxes.size} != dataInputs.size ${dataInputs.size}")
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val input = inputs(idx)
         val proof = input.spendingProof
         val proverExtension = proof.extension
-        val transactionContext = TransactionContext(boxesToSpend, this, idx.toShort)
+        val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
         val ctx = new ErgoContext(stateContext, transactionContext, proverExtension)
 
         val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
@@ -171,6 +185,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
 object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLogging with ScorexEncoding {
 
+  def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction = {
+    ErgoTransaction(inputs, IndexedSeq(), outputCandidates, None)
+  }
+
   val MaxAssetsPerBox = 255
 
   implicit private val extensionEncoder: Encoder[ContextExtension] = { extension =>
@@ -189,6 +207,12 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     )
   }
 
+  implicit private val dataInputEncoder: Encoder[DataInput] = { input =>
+    Json.obj(
+      "boxId" -> input.boxId.asJson,
+    )
+  }
+
   implicit val proofDecoder: Decoder[ProverResult] = { cursor =>
     for {
       proofBytes <- cursor.downField("proofBytes").as[Array[Byte]]
@@ -201,6 +225,12 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
       boxId <- cursor.downField("boxId").as[ADKey]
       proof <- cursor.downField("spendingProof").as[ProverResult]
     } yield Input(boxId, proof)
+  }
+
+  implicit private val dataInputDecoder: Decoder[DataInput] = { cursor =>
+    for {
+      boxId <- cursor.downField("boxId").as[ADKey]
+    } yield DataInput(boxId)
   }
 
   implicit val assetDecoder: Decoder[(ErgoBox.TokenId, Long)] = { cursor =>
@@ -225,6 +255,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     Json.obj(
       "id" -> tx.id.asJson,
       "inputs" -> tx.inputs.asJson,
+      "dataInputs" -> tx.dataInputs.asJson,
       "outputs" -> tx.outputs.asJson,
       "size" -> tx.size.asJson
     )
@@ -234,9 +265,10 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
     for {
       maybeId <- cursor.downField("id").as[Option[ModifierId]]
       inputs <- cursor.downField("inputs").as[IndexedSeq[Input]]
+      dataInputs <- cursor.downField("dataInputs").as[IndexedSeq[DataInput]]
       outputsWithIndex <- cursor.downField("outputs").as[IndexedSeq[(ErgoBoxCandidate, Option[BoxId])]]
       outputs <- validateOutputs(outputsWithIndex, maybeId)
-      result <- validateTransaction(ErgoTransaction(inputs, outputs), maybeId)
+      result <- validateTransaction(ErgoTransaction(inputs, dataInputs, outputs), maybeId)
     } yield result
   }
 
@@ -257,7 +289,6 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
       validation.validateSeq(outputs.zipWithIndex) {
         case (validationState, ((candidate, maybeId), index)) =>
           validationState.validateOrSkip(maybeId) { (validation, boxId) =>
-            // todo move ErgoBoxCandidate from sigmastate to Ergo and use ModifierId as a type of txId
             val box = candidate.toBox(txId, index.toShort)
             validation.demandEqualArrays(boxId, box.id, s"Bad identifier for Ergo box. It could also be skipped")
           }
@@ -269,13 +300,13 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
 object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
 
   override def serialize(tx: ErgoTransaction, w: Writer): Unit = {
-    val elt = new ErgoLikeTransaction(tx.inputs, tx.outputCandidates)
+    val elt = new ErgoLikeTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)
     ErgoLikeTransactionSerializer.serialize(elt, new SigmaByteWriter(w, None))
   }
 
   override def parse(r: Reader): ErgoTransaction = {
     val reader = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
     val elt = ErgoLikeTransactionSerializer.parse(reader)
-    ErgoTransaction(elt.inputs, elt.outputCandidates)
+    ErgoTransaction(elt.inputs, elt.dataInputs, elt.outputCandidates)
   }
 }

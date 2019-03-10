@@ -185,30 +185,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     forkIds :+ self
   }
 
-  /**
-    *
-    * @param header - header we're going to remove from history
-    * @return ids to remove, new data to apply
-    */
-  protected def reportInvalid(header: Header): (Seq[ByteArrayWrapper], Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = {
-    val modifierId = header.id
-    val payloadModifiers = Seq(header.transactionsId, header.ADProofsId).filter(id => historyStorage.contains(id))
-      .map(id => Algos.idToBAW(id))
-
-    val toRemove = Seq(headerScoreKey(modifierId), Algos.idToBAW(modifierId)) ++ payloadModifiers
-    val bestHeaderKeyUpdate = if (bestHeaderIdOpt.contains(modifierId)) {
-      Seq(BestHeaderKey -> Algos.idToBAW(header.parentId))
-    } else {
-      Seq.empty
-    }
-    val bestFullBlockKeyUpdate = if (bestFullBlockIdOpt.contains(modifierId)) {
-      Seq(BestFullBlockKey -> Algos.idToBAW(header.parentId))
-    } else {
-      Seq.empty
-    }
-    (toRemove, bestFullBlockKeyUpdate ++ bestHeaderKeyUpdate)
-  }
-
   /** Validates given header
     *
     * @return Success() if header is valid, Failure(error) otherwise

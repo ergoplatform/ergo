@@ -75,7 +75,7 @@ trait ValidBlocksGenerators
           if (currentSize < sizeLimit - 2 * averageSize) {
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size) + 1).getOrElse(0))
             val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size) + 1).getOrElse(0))
-            val dataBoxes = stateBoxes.take(rnd.nextInt(10)).toIndexedSeq
+            val dataBoxes = (selfBoxes ++ stateBoxes).take(rnd.nextInt(10)).toIndexedSeq
             // disable tokens generation to avoid situation with too many tokens
             val boxesToSpend = (consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq
             val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = dataBoxes)
@@ -89,7 +89,9 @@ trait ValidBlocksGenerators
           } else {
             // take all remaining boxes from state and return transactions set
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
-            val tx = validTransactionFromBoxes((consumedSelfBoxes ++ stateBoxes).toIndexedSeq, rnd, issueNew)
+            val dataBoxes = (selfBoxes ++ stateBoxes).take(rnd.nextInt(10)).toIndexedSeq
+
+            val tx = validTransactionFromBoxes((consumedSelfBoxes ++ stateBoxes).toIndexedSeq, rnd, issueNew, dataBoxes = dataBoxes)
             tx.statelessValidity match {
               case Failure(e) =>
                 log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")

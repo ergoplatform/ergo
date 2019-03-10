@@ -59,8 +59,8 @@ class ErgoProvingInterpreter(seed: String,
            dataBoxes: IndexedSeq[ErgoBox],
            stateContext: ErgoStateContext): Try[ErgoTransaction] = Try {
 
-    require(unsignedTx.inputs.length == boxesToSpend.length)
-    require(unsignedTx.dataInputs.length == dataBoxes.length)
+    require(unsignedTx.inputs.length == boxesToSpend.length, "Not enough boxes to spend")
+    require(unsignedTx.dataInputs.length == dataBoxes.length, "Not enough data boxes")
 
     boxesToSpend.zipWithIndex.foldLeft(Try(IndexedSeq[Input]() -> 0L)) {
       case (inputsCostTry, (inputBox, boxIdx)) =>

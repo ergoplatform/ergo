@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants}
 import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters, VotingSettings}
+import org.ergoplatform.settings._
 import org.ergoplatform.{DataInput, ErgoBox, ErgoScriptPredef}
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
@@ -36,10 +36,8 @@ trait ErgoTestConstants extends ScorexLogging {
   val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
   val feeProp: ErgoTree = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
 
-  val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(genesisStateDigest, votingSettings)
+
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
-  val startHeight: Int = emptyStateContext.currentHeight
-  val startDigest: ADDigest = emptyStateContext.genesisStateDigest
   val genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(settings.chainSettings)
   val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(settings.chainSettings).head
   val defaultSeed: String = ErgoSettings.read(None).walletSettings.seed
@@ -48,6 +46,17 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
   val defaultMinerPkPoint: EcPointType = defaultMinerPk.h
+
+  val defaultTimestamp: Long = 1552217190000L
+  val defaultnBits: Long = Constants.InitialNBits
+  val defaultVotes: Array[Byte] = Array.fill(3)(0.toByte)
+  val defaultVersion: Byte = 0
+  // state context with upcoming block from default miner
+  val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(genesisStateDigest, votingSettings)
+    .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultnBits, defaultVotes, defaultVersion, powScheme)
+
+  val startHeight: Int = emptyStateContext.currentHeight
+  val startDigest: ADDigest = emptyStateContext.genesisStateDigest
 
   lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
   val EmptyStateRoot: ADDigest = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)

@@ -4,7 +4,6 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor.{BlockProcessing, ToProcess}
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
 import scorex.util.{ModifierId, bytesToId, idToBytes}
@@ -19,13 +18,12 @@ import scala.util.Try
   */
 trait FullBlockProcessor extends HeadersProcessor {
 
+  import FullBlockProcessor._
+
   private var nonBestChainsCache = FullBlockProcessor.emptyCache
 
   def isInBestFullChain(id: ModifierId): Boolean = historyStorage.getIndex(chainStatusKey(id))
     .contains(FullBlockProcessor.BestChainMarker)
-
-  private def chainStatusKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("main_chain".getBytes(charsetName) ++ idToBytes(id)))
 
   /**
     * Id of header that contains transactions and proofs
@@ -87,8 +85,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
       val toApply: Seq[ErgoFullBlock] = newChain.tail.headers
         .flatMap(h => if (h == fullBlock.header) Some(fullBlock) else getFullBlock(h))
-
-      require(toApply.lengthCompare(newChain.length - 1) == 0)
+        .ensuring(toApply.lengthCompare(newChain.length - 1) == 0)
 
       // application of this block leads to full chain with higher score
       logStatus(toRemove, toApply, fullBlock, Some(prevBest))
@@ -275,5 +272,8 @@ object FullBlockProcessor {
   private implicit val ord: Ordering[CacheBlock] = Ordering[(Int, ModifierId)].on(x => (x.height, x.id))
 
   def emptyCache: IncompleteFullChainCache = IncompleteFullChainCache(TreeMap.empty)
+
+  def chainStatusKey(id: ModifierId): ByteArrayWrapper =
+    ByteArrayWrapper(Algos.hash("main_chain".getBytes("UTF-8") ++ idToBytes(id)))
 
 }

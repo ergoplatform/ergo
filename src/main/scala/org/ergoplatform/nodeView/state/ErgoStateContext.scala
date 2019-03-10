@@ -11,6 +11,7 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.serialization.GroupElementSerializer
 import special.collection.{Coll, CollOverArray}
 
 import scala.util.{Failure, Success, Try}
@@ -26,11 +27,9 @@ class UpcomingStateContext(lastHeaders: Seq[Header],
                            votingData: VotingData)(implicit votingSettings: VotingSettings)
   extends ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, votingData)(votingSettings) {
 
-  override val lastBlockMinerPk: Array[Byte] = groupElemToBytes(predictedHeader.minerPk)
+  override def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(predictedHeader)
 
-  override val previousStateDigest: ADDigest = lastHeaders.lastOption.map(_.stateRoot).getOrElse(genesisStateDigest)
-
-  override val currentHeight: Int = predictedHeader.height
+  override def sigmaLastHeaders: Coll[special.sigma.Header] = new CollOverArray(lastHeaders.map(h => Header.toSigma(h)).toArray)
 
   override def toString: String = s"UpcomingStateContext($predictedHeader, $lastHeaders)"
 
@@ -51,26 +50,23 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                       (implicit val votingSettings: VotingSettings)
   extends BytesSerializable with ScorexEncoding {
 
-
   def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(lastHeaders.last)
 
-  def sigmaLastHeaders: Coll[special.sigma.Header] = new CollOverArray(lastHeaders.map(h => Header.toSigma(h)).toArray)
+  def sigmaLastHeaders: Coll[special.sigma.Header] = new CollOverArray(lastHeaders.tail.map(h => Header.toSigma(h)).toArray)
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
-  val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption
-    .map(_.powSolution.encodedPk)
-    .getOrElse(Array.fill(32)(0: Byte))
+  def lastBlockMinerPk: Array[Byte] = sigmaPreHeader.minerPk.getEncoded(true).toArray
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block
-  val previousStateDigest: ADDigest = if (lastHeaders.length >= 2) {
-    lastHeaders(1).stateRoot
+  def previousStateDigest: ADDigest = if (sigmaLastHeaders.toArray.nonEmpty) {
+    ADDigest @@ sigmaLastHeaders.toArray.head.ADProofsRoot.toArray
   } else {
     genesisStateDigest
   }
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
-  val currentHeight: Int = ErgoHistory.heightOf(lastHeaderOpt)
+  def currentHeight: Int = sigmaPreHeader.height
 
   override type M = ErgoStateContext
 

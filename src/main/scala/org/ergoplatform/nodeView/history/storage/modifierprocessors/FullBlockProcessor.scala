@@ -85,7 +85,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
       val toApply: Seq[ErgoFullBlock] = newChain.tail.headers
         .flatMap(h => if (h == fullBlock.header) Some(fullBlock) else getFullBlock(h))
-        .ensuring(toApply.lengthCompare(newChain.length - 1) == 0)
+        .ensuring(_.lengthCompare(newChain.length - 1) == 0)
 
       // application of this block leads to full chain with higher score
       logStatus(toRemove, toApply, fullBlock, Some(prevBest))

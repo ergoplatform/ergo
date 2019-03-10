@@ -229,7 +229,6 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val txsIn = validTransactionsFromBoxHolder(bh)._1
       val headTx = txsIn.head
       val us = createUtxoState(bh)
-      val stateContext = us.stateContext
       val existingBoxes: IndexedSeq[BoxId] = bh.boxes.takeRight(3).map(_._2.id).toIndexedSeq
 
       // trying to apply transactions with missing data inputs
@@ -240,7 +239,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val incorrectTransactions = IndexedSeq(txWithMissedDataInputs)
       // proof fro transaction works correctly, providing proof-of-non-existence for missed input
       val digest2 = us.proofsForTransactions(incorrectTransactions).get._2
-      us.applyTransactions(incorrectTransactions, digest2, stateContext) shouldBe 'failure
+      us.applyTransactions(incorrectTransactions, digest2, emptyStateContext) shouldBe 'failure
 
       // trying to apply transactions with correct data inputs
       val existingDataInputs = existingBoxes.map(DataInput).toIndexedSeq
@@ -248,7 +247,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val txWithDataInputs = ErgoTransaction(headTx.inputs, existingDataInputs, headTx.outputCandidates)
       val correctTransactions = IndexedSeq(txWithDataInputs)
       val digest = us.proofsForTransactions(correctTransactions).get._2
-      us.applyTransactions(correctTransactions, digest, stateContext).get
+      us.applyTransactions(correctTransactions, digest, emptyStateContext).get
     }
   }
 
@@ -274,8 +273,6 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       txs1.flatMap(_.outputCandidates) shouldBe txs2.flatMap(_.outputCandidates)
       sc1.toAppend.size shouldBe sc2.toAppend.size
       sc1.toRemove shouldBe sc2.toRemove
-      sc1.toLookup shouldBe empty
-      sc2.toLookup should not be empty
 
       us.proofsForTransactions(txs1) shouldBe 'success
       us.proofsForTransactions(txs2) shouldBe 'success
@@ -287,7 +284,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val txsNext = IndexedSeq(headTx, nextTxWithDataInputs)
       // proof of non-existence
       val d2 = us.proofsForTransactions(txsNext).get._2
-      us.applyTransactions(txsNext, d2, us.stateContext) shouldBe 'success
+      us.applyTransactions(txsNext, d2, emptyStateContext) shouldBe 'success
     }
   }
 

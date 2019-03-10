@@ -204,8 +204,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       }
     }.getOrElse((ExtensionCandidate(packInterlinks(interlinks)), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
-    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, version,
-      ergoSettings.chainSettings.powScheme)
+    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, version)
     //only transactions valid from against the current utxo state we take from the mem pool
     val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules).map(_ -> EmissionTxCost)
 
@@ -321,7 +320,7 @@ object ErgoMiner extends ScorexLogging {
         case Some(tx) =>
           implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)
           // check validity and calculate transaction cost
-          us.validateWithCost(tx) match {
+          us.validateWithCost(tx, Some(upcomingContext)) match {
             case Success(costConsumed) =>
               val newTxs = fixTxsConflicts((tx, costConsumed) +: acc)
               val newBoxes = newTxs.flatMap(_._1.outputs)
@@ -334,7 +333,8 @@ object ErgoMiner extends ScorexLogging {
                     case Success(cost) =>
                       val blockTxs: Seq[(ErgoTransaction, Long)] = (feeTx -> cost) +: newTxs
                       if (correctLimits(blockTxs)) loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost)) else current
-                    case _ => // fee collecting tx is invalid, return current
+                    case Failure(e) =>
+                      log.debug(s"Fee collecting tx is invalid, return current: ${e.getMessage} from ${us.stateContext}")
                       current
                   }
                 case None =>

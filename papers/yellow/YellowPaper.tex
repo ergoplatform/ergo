@@ -533,8 +533,12 @@ Two infinite loops in different threads with the following functions inside:
 
 \section{Transactions}
 
-A transaction is a transfer of Erg value and tokens that is broadcast to the network and collected into blocks.
-A transaction references \coin{} from the state and dedicates input Erg and token values to new \coin{}.
+ErgoTransaction is an atomic state transition operation. It destroys \coin{} from the state
+and creates new ones. If transaction is spending boxes protected by some non-trivial scripts,
+its inputs should also contain proof of spending correctness - context extension (user-defined
+key-value map) and data inputs (links to existing boxes in the state) that may be used during
+script reduction to crypto, signatures that satisfies the remaining cryptographic protection
+of the script.
 Transactions are not encrypted, so it is possible to browse and view every transaction ever collected into a block.
 
 \subsection{\Coin{} Format}

@@ -57,7 +57,7 @@ class ScriptsSpec extends ErgoPropertyTest {
   }
 
   private def applyBlockSpendingScript(script: ErgoTree): Try[UtxoState] = {
-    val box = ergoBoxGen(script).sample.get
+    val box = ergoBoxGen(script, heightGen = 0).sample.get
     val bh = BoxHolder(Seq(box))
     val us = UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants)
     val tx = validTransactionsFromBoxHolder(bh, new Random(1), 101)._1

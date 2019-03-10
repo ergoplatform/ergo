@@ -51,14 +51,13 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultnBits: Long = Constants.InitialNBits
   val defaultVotes: Array[Byte] = Array.fill(3)(0.toByte)
   val defaultVersion: Byte = 0
-  // state context with upcoming block from default miner
+  lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
   val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(genesisStateDigest, votingSettings)
-    .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultnBits, defaultVotes, defaultVersion, powScheme)
+    .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultnBits, defaultVotes, defaultVersion)
 
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest
 
-  lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
   val EmptyStateRoot: ADDigest = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
   val EmptyDigest32: Digest32 = Digest32 @@ Array.fill(HashLength)(0.toByte)
   val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)
@@ -66,7 +65,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val emptyExtension: ExtensionCandidate = ExtensionCandidate(Seq())
   val emptyDataInputs: IndexedSeq[DataInput] = IndexedSeq()
   val emptyDataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()
-  val emptyVerifier: ErgoInterpreter = ErgoInterpreter(emptyStateContext.currentParameters)
+  lazy val emptyVerifier: ErgoInterpreter = ErgoInterpreter(emptyStateContext.currentParameters)
 
   val defaultTimeout: Timeout = Timeout(14.seconds)
   val defaultAwaitDuration: FiniteDuration = defaultTimeout.duration + 1.second

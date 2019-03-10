@@ -6,6 +6,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockPro
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
+import scorex.core.consensus.History.ProgressInfo
 
 class VerifyNonADHistorySpecification extends HistoryTestHelpers {
 
@@ -36,6 +37,53 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     expected.forall(b => hi.asInstanceOf[FullBlockProcessor].isInBestFullChain(b.id)) shouldBe true
 
     pi.toApply.map(_.asInstanceOf[ErgoFullBlock]) shouldBe expected
+  }
+
+  property("full chain status updating") {
+
+    def isInBestChain(b: ErgoFullBlock, h: ErgoHistory): Boolean = {
+      h.asInstanceOf[FullBlockProcessor].isInBestFullChain(b.id)
+    }
+
+    var history = genHistory()
+    val initChain = genChain(6, history)
+
+    val stableChain = initChain.take(3)
+    val altChain = genChain(8, stableChain.last).tail
+
+    // apply initial initChain (1 to 6)
+    history = applyHeaderChain(history, HeaderChain(initChain.map(_.header)))
+    initChain.foreach(fb => history.append(fb.extension).get)
+    initChain.foreach(fb => history.append(fb.blockTransactions).get)
+
+    history.bestFullBlockIdOpt.get shouldEqual initChain.last.id
+    initChain.forall(b => isInBestChain(b, history)) shouldBe true
+
+    // apply better initChain forking initial one (1 to 3 (init initChain), 3 to 11 (new initChain))
+    history = applyHeaderChain(history, HeaderChain(altChain.map(_.header)))
+    altChain.foreach(fb => history.append(fb.extension).get)
+    altChain.foreach(fb => history.append(fb.blockTransactions).get)
+
+    history.bestFullBlockIdOpt.get shouldEqual altChain.last.id
+    // first blocks from init chain are still marked as best chain
+    stableChain.forall(b => isInBestChain(b, history)) shouldBe true
+    // other blocks from init chain are no more in best chain
+    initChain.drop(3).forall(b => !isInBestChain(b, history)) shouldBe true
+    // all blocks from fork are marked as best chain
+    altChain.forall(b => isInBestChain(b, history)) shouldBe true
+
+    val invalidChainHead = altChain.head
+
+    // invalidate modifier from fork
+    history.reportModifierIsInvalid(invalidChainHead.blockTransactions,
+      ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty))
+
+    history.bestFullBlockIdOpt.get shouldEqual initChain.last.id
+
+    // all blocks from init chain are marked as best chain again
+    initChain.forall(b => isInBestChain(b, history)) shouldBe true
+    // blocks from fork no longer marked as best chain
+    altChain.forall(b => !isInBestChain(b, history)) shouldBe true
   }
 
   property("bootstrap from headers and last full blocks") {

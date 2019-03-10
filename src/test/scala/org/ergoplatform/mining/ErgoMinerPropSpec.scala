@@ -9,6 +9,7 @@ import org.ergoplatform.settings.{LaunchParameters, MonetarySettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.util.Random
 
@@ -78,14 +79,13 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       val bh = boxesHolderGen.sample.get
       val rnd: Random = new Random
       val us = createUtxoState(bh)
-      val usClone = createUtxoState(bh)
       val feeProposition = ErgoScriptPredef.feeProposition(delta)
       val inputs = bh.boxes.values.toIndexedSeq.takeRight(100)
       val txsWithFees = inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = withTokens, feeProposition))
       val head = txsWithFees.head
 
-      usClone.applyModifier(validFullBlock(None, us, bh, rnd)).get
-      val upcomingContext = usClone.stateContext
+      val h = validFullBlock(None, us, bh, rnd).header
+      val upcomingContext = us.stateContext.upcoming(h.minerPk, h.timestamp, h.nBits, h.votes, h.version)
       upcomingContext.currentHeight shouldBe (us.stateContext.currentHeight + 1)
 
       val fromSmallMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, us, upcomingContext, Seq(head), Seq())
@@ -96,7 +96,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
       val costs: Seq[Long] = fromBigMempool.map { tx =>
-        us.validateWithCost(tx).getOrElse {
+        us.validateWithCost(tx, Some(upcomingContext)).getOrElse {
           val boxesToSpend = tx.inputs.map(i => newBoxes.find(b => b.id sameElements i.boxId).get)
           tx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext).get
         }

@@ -29,7 +29,14 @@ import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
-  *
+  * ErgoTransaction is an atomic state transition operation. It destroys Boxes from the state
+  * and creates new ones. If transaction is spending boxes protected by some non-trivial scripts,
+  * its inputs should also contain proof of spending correctness - context extension (user-defined
+  * key-value map) and data inputs (links to existing boxes in the state) that may be used during
+  * script reduction to crypto, signatures that satisfies the remaining cryptographic protection
+  * of the script.
+  * Transactions are not encrypted, so it is possible to browse and view every transaction ever
+  * collected into a block.
   *
   * @param inputs           - inputs, that will be spent by this transaction.
   * @param dataInputs       - inputs, that are not going to be spent by transaction, but will be

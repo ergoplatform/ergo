@@ -132,7 +132,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
               throw new Error("Calculated stateRoot is not equal to the declared one")
             }
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
-              s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(inRoot)}")
+              s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
             new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
           stateTry.recoverWith[UtxoState] { case e =>

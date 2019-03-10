@@ -5,40 +5,46 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.settings.Algos
 import scorex.crypto.authds.ADKey
 
+/**
+  * Operations that can be performed over state boxes.
+  */
+sealed trait StateChangeOperation {
+  val boxId: ADKey
 
-abstract class StateChangeOperation
+  override def hashCode(): Int = Ints.fromByteArray(boxId)
 
-case class Lookup(boxId: ADKey) extends StateChangeOperation {
+  protected def sameType(that: StateChangeOperation): Boolean
+
   override def equals(that: Any): Boolean = that match {
-    case that: Removal => java.util.Arrays.equals(boxId, that.boxId)
+    case that: StateChangeOperation if sameType(that) => java.util.Arrays.equals(boxId, that.boxId)
     case _ => false
   }
 
-  override def hashCode(): Int = Ints.fromByteArray(boxId)
+}
+
+case class Lookup(boxId: ADKey) extends StateChangeOperation {
+
+  override protected def sameType(that: StateChangeOperation): Boolean = that.isInstanceOf[Lookup]
 
   override def toString: String = s"Lookup(id: ${Algos.encode(boxId)})"
 }
 
 case class Removal(boxId: ADKey) extends StateChangeOperation {
-  override def equals(that: Any): Boolean = that match {
-    case that: Removal => java.util.Arrays.equals(boxId, that.boxId)
-    case _ => false
-  }
 
-  override def hashCode(): Int = Ints.fromByteArray(boxId)
+  override protected def sameType(that: StateChangeOperation): Boolean = that.isInstanceOf[Removal]
 
   override def toString: String = s"Removal(id: ${Algos.encode(boxId)})"
+
 }
 
 case class Insertion(box: ErgoBox) extends StateChangeOperation {
-  override def equals(that: Any): Boolean = that match {
-    case that: Insertion => box == that.box
-    case _ => false
-  }
 
-  override def hashCode(): Int = Ints.fromByteArray(box.id)
+  override protected def sameType(that: StateChangeOperation): Boolean = that.isInstanceOf[Insertion]
+
+  override val boxId: ADKey = box.id
 
   override def toString: String = s"Insertion(id: ${Algos.encode(box.id)})"
+
 }
 
 case class StateChanges(toRemove: Seq[Removal], toAppend: Seq[Insertion], toLookup: Seq[Lookup]) {

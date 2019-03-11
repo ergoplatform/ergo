@@ -137,9 +137,14 @@ trait ErgoHistory
                   .flatMap(h => getFullBlock(h))
               }
 
+              val chainStatusRow = validChain.tail.map(b =>
+                FullBlockProcessor.chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
+                invalidatedHeaders.map(h =>
+                  FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
+
               val changedLinks = Seq(BestFullBlockKey -> Algos.idToBAW(validChain.last.id),
                 BestHeaderKey -> Algos.idToBAW(newBestHeader.id))
-              val toInsert = validityRow ++ changedLinks
+              val toInsert = validityRow ++ changedLinks ++ chainStatusRow
               historyStorage.insert(validityKey(modifier.id), toInsert, Seq.empty)
               this -> ProgressInfo[ErgoPersistentModifier](Some(branchPoint.id), invalidatedChain.tail,
                 validChain.tail, Seq.empty)
@@ -173,6 +178,8 @@ object ErgoHistory extends ScorexLogging {
   type Score = BigInt
   type Difficulty = BigInt
   type NBits = Long
+
+  val CharsetName = "UTF-8"
 
   val EmptyHistoryHeight: Int = 0
   val GenesisHeight: Int = EmptyHistoryHeight + 1

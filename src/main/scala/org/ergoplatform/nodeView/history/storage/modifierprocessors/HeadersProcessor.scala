@@ -27,8 +27,6 @@ import scala.util.Try
   */
 trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with ScorexEncoding {
 
-  private val charsetName = "UTF-8"
-
   protected val historyStorage: HistoryStorage
 
   protected val config: NodeConfigurationSettings
@@ -47,13 +45,13 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   // todo for performance reasons we may just use key like s"score$id" but this will require to redownload blockchain
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("score".getBytes(charsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash("score".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
   protected def headerHeightKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("height".getBytes(charsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash("height".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
   protected[history] def validityKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("validity".getBytes(charsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
   protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(w => bytesToId(w.data))
 
@@ -174,30 +172,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       heightIdsKey(header.height) -> ByteArrayWrapper((Seq(header.id) ++ otherIds).flatMap(idToBytes).toArray)
     }
     forkIds :+ self
-  }
-
-  /**
-    *
-    * @param header - header we're going to remove from history
-    * @return ids to remove, new data to apply
-    */
-  protected def reportInvalid(header: Header): (Seq[ByteArrayWrapper], Seq[(ByteArrayWrapper, ByteArrayWrapper)]) = {
-    val modifierId = header.id
-    val payloadModifiers = Seq(header.transactionsId, header.ADProofsId).filter(id => historyStorage.contains(id))
-      .map(id => Algos.idToBAW(id))
-
-    val toRemove = Seq(headerScoreKey(modifierId), Algos.idToBAW(modifierId)) ++ payloadModifiers
-    val bestHeaderKeyUpdate = if (bestHeaderIdOpt.contains(modifierId)) {
-      Seq(BestHeaderKey -> Algos.idToBAW(header.parentId))
-    } else {
-      Seq.empty
-    }
-    val bestFullBlockKeyUpdate = if (bestFullBlockIdOpt.contains(modifierId)) {
-      Seq(BestFullBlockKey -> Algos.idToBAW(header.parentId))
-    } else {
-      Seq.empty
-    }
-    (toRemove, bestFullBlockKeyUpdate ++ bestHeaderKeyUpdate)
   }
 
   /** Validates given header

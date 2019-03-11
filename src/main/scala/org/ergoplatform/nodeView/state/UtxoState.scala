@@ -73,13 +73,15 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
     val totalCost = transactions.map { tx =>
       tx.statelessValidity.get
-      val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
+      val boxesToSpend = tx.inputs.map { i =>
+        val id = i.boxId
         createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
           case Some(box) => box
           case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
         }
       }
-      val dataBoxes = tx.dataInputs.map(_.boxId).map { id =>
+      val dataBoxes = tx.dataInputs.map { i =>
+        val id = i.boxId
         createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
           case Some(box) => box
           case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")

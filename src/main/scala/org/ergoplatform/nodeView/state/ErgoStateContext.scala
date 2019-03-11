@@ -85,7 +85,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                version: Byte): ErgoStateContext = {
     val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
     val forkVote = votes.contains(Parameters.SoftFork)
-    val calculatedParams = currentParameters.update(lastHeaders.headOption.map(_.height).getOrElse(0), forkVote, votingData.epochVotes, votingSettings)
+    val height = ErgoHistory.heightOf(lastHeaderOpt)
+    val calculatedParams = currentParameters.update(height, forkVote, votingData.epochVotes, votingSettings)
     new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest, calculatedParams, votingData)
   }
 

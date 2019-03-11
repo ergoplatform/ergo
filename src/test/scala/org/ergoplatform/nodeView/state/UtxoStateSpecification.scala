@@ -237,7 +237,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val missingDataInputs = (missedId +: existingBoxes).map(DataInput).toIndexedSeq
       val txWithMissedDataInputs = ErgoTransaction(headTx.inputs, missingDataInputs, headTx.outputCandidates)
       val incorrectTransactions = IndexedSeq(txWithMissedDataInputs)
-      // proof fro transaction works correctly, providing proof-of-non-existence for missed input
+      // proof for transaction works correctly, providing proof-of-non-existence for missed input
       val digest2 = us.proofsForTransactions(incorrectTransactions).get._2
       us.applyTransactions(incorrectTransactions, digest2, emptyStateContext) shouldBe 'failure
 

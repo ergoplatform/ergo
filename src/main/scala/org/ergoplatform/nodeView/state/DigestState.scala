@@ -59,16 +59,16 @@ class DigestState protected(override val version: VersionTag,
             val knownBoxes = (txs.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
             val totalCost = txs.map { tx =>
               tx.statelessValidity.get
-              val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
-                knownBoxes.get(ByteArrayWrapper(id)) match {
+              val boxesToSpend = tx.inputs.map { i =>
+                knownBoxes.get(ByteArrayWrapper(i.boxId)) match {
                   case Some(box) => box
-                  case None => throw new Exception(s"Box with id ${Algos.encode(id)} not found")
+                  case None => throw new Exception(s"Box with id ${Algos.encode(i.boxId)} not found")
                 }
               }
-              val dataBoxes = tx.dataInputs.map(_.boxId).map { id =>
-                knownBoxes.get(ByteArrayWrapper(id)) match {
+              val dataBoxes = tx.dataInputs.map { i =>
+                knownBoxes.get(ByteArrayWrapper(i.boxId)) match {
                   case Some(box) => box
-                  case None => throw new Exception(s"Box with id ${Algos.encode(id)} not found")
+                  case None => throw new Exception(s"Box with id ${Algos.encode(i.boxId)} not found")
                 }
               }
               tx.statefulValidity(boxesToSpend, dataBoxes, currentStateContext)(verifier).get
@@ -86,7 +86,7 @@ class DigestState protected(override val version: VersionTag,
   }
 
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] =
-    (processFullBlock orElse processHeader orElse processOther)(mod)
+    (processFullBlock orElse processHeader orElse processOther) (mod)
 
   @SuppressWarnings(Array("OptionGet"))
   override def rollbackTo(version: VersionTag): Try[DigestState] = {

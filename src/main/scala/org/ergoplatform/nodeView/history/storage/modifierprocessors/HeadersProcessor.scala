@@ -27,8 +27,6 @@ import scala.util.Try
   */
 trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with ScorexEncoding {
 
-  protected val charsetName = "UTF-8"
-
   protected val historyStorage: HistoryStorage
 
   protected val config: NodeConfigurationSettings
@@ -47,13 +45,13 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   // todo for performance reasons we may just use key like s"score$id" but this will require to redownload blockchain
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("score".getBytes(charsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash("score".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
   protected def headerHeightKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("height".getBytes(charsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash("height".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
   protected[history] def validityKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("validity".getBytes(charsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
   protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(w => bytesToId(w.data))
 

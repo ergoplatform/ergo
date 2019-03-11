@@ -96,7 +96,6 @@ trait ErgoHistory
   override def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
                                        progressInfo: ProgressInfo[ErgoPersistentModifier]
                                       ): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = {
-    import FullBlockProcessor._
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {
       case Some(invalidatedHeader) =>
@@ -138,8 +137,10 @@ trait ErgoHistory
                   .flatMap(h => getFullBlock(h))
               }
 
-              val chainStatusRow = validChain.tail.map(b => chainStatusKey(b.id) -> BestChainMarker) ++
-                invalidatedHeaders.map(h => chainStatusKey(h.id) -> NonBestChainMarker)
+              val chainStatusRow = validChain.tail.map(b =>
+                FullBlockProcessor.chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
+                invalidatedHeaders.map(h =>
+                  FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
 
               val changedLinks = Seq(BestFullBlockKey -> Algos.idToBAW(validChain.last.id),
                 BestHeaderKey -> Algos.idToBAW(newBestHeader.id))
@@ -177,6 +178,8 @@ object ErgoHistory extends ScorexLogging {
   type Score = BigInt
   type Difficulty = BigInt
   type NBits = Long
+
+  val CharsetName = "UTF-8"
 
   val EmptyHistoryHeight: Int = 0
   val GenesisHeight: Int = EmptyHistoryHeight + 1

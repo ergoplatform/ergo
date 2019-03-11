@@ -13,10 +13,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
 import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Parameters}
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
-import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Algos, ErgoSettings}
-import scorex.core.network.Handshake
-import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network.peer.PeerInfo
 import scorex.core.utils.NetworkTimeProvider

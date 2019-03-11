@@ -52,17 +52,13 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     val altChain = genChain(8, stableChain.last).tail
 
     // apply initial initChain (1 to 6)
-    history = applyHeaderChain(history, HeaderChain(initChain.map(_.header)))
-    initChain.foreach(fb => history.append(fb.extension).get)
-    initChain.foreach(fb => history.append(fb.blockTransactions).get)
+    history = applyChain(history, initChain)
 
     history.bestFullBlockIdOpt.get shouldEqual initChain.last.id
     initChain.forall(b => isInBestChain(b, history)) shouldBe true
 
     // apply better initChain forking initial one (1 to 3 (init initChain), 3 to 11 (new initChain))
-    history = applyHeaderChain(history, HeaderChain(altChain.map(_.header)))
-    altChain.foreach(fb => history.append(fb.extension).get)
-    altChain.foreach(fb => history.append(fb.blockTransactions).get)
+    history = applyChain(history, altChain)
 
     history.bestFullBlockIdOpt.get shouldEqual altChain.last.id
     // first blocks from init chain are still marked as best chain

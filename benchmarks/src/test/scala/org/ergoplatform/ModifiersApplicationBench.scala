@@ -5,7 +5,6 @@ import org.ergoplatform.modifiers.history.{BlockTransactions, Extension, Header}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.tools.ChainGenerator
 import org.ergoplatform.utils.HistoryTestHelpers
 
 import scala.annotation.tailrec
@@ -84,7 +83,7 @@ object ModifiersApplicationBench extends HistoryTestHelpers with App {
 
   def unlockedHistory(): ErgoHistory = {
     val h = history()
-    ChainGenerator.allowToApplyOldBlocks(h)
+    HistoryTestHelpers.allowToApplyOldBlocks(h)
     h
   }
 

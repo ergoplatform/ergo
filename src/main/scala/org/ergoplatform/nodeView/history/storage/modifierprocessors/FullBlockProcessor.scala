@@ -274,6 +274,6 @@ object FullBlockProcessor {
   def emptyCache: IncompleteFullChainCache = IncompleteFullChainCache(TreeMap.empty)
 
   def chainStatusKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("main_chain".getBytes("UTF-8") ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash("main_chain".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
 }

@@ -59,7 +59,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   def sigmaLastHeaders: Coll[special.sigma.Header] = new CollOverArray(lastHeaders.tail.map(h => Header.toSigma(h)).toArray)
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
-  def lastBlockMinerPk: Array[Byte] = sigmaPreHeader.minerPk.getEncoded(true).toArray
+  def lastBlockMinerPk: Array[Byte] = sigmaPreHeader.minerPk.getEncoded.toArray
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block

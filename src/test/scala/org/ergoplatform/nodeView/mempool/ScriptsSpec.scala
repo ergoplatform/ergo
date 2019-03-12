@@ -2,12 +2,13 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoAddressEncoder.TestnetNetworkPrefix
 import org.ergoplatform.ErgoScriptPredef.boxCreationHeight
-import org.ergoplatform.{ErgoScriptPredef, Height, Self}
+import org.ergoplatform.{ErgoBox, ErgoScriptPredef, Height, Self}
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.utils.ErgoPropertyTest
 import sigmastate._
 import sigmastate.Values.{ErgoTree, IntConstant, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.CryptoConstants.dlogGroup
 import sigmastate.lang.{SigmaCompiler, TransformingSigmaBuilder}
 import sigmastate.lang.Terms._
@@ -18,7 +19,8 @@ class ScriptsSpec extends ErgoPropertyTest {
 
   val compiler = SigmaCompiler(TestnetNetworkPrefix, TransformingSigmaBuilder)
   val delta = emission.settings.minerRewardDelay
-  val fixedBox = ergoBoxGen(fromString("1 == 1"), heightGen = 0, valueGenOpt = Some(5L)).sample.get
+  val fixedBox: ErgoBox = ergoBoxGen(fromString("1 == 1"), heightGen = 0).sample.get
+  implicit lazy val context: IRContext = new RuntimeIRContext
 
 
   property("simple operations without cryptography") {
@@ -35,7 +37,7 @@ class ScriptsSpec extends ErgoPropertyTest {
     applyBlockSpendingScript(EQ(IntConstant(1), Height).toSigmaProp) shouldBe 'success
     applyBlockSpendingScript(fromString("CONTEXT.preHeader.height == 1")) shouldBe 'success
     applyBlockSpendingScript(fromString("CONTEXT.headers.size == 0")) shouldBe 'success
-    //    applyBlockSpendingScript(fromString(s"CONTEXT.dataInputs.exists{ (box: Box) => box.value == 5}")) shouldBe 'success
+    applyBlockSpendingScript(fromString(s"CONTEXT.dataInputs.exists{ (box: Box) => box.value == ${fixedBox.value}L}")) shouldBe 'success
     // todo other common operations: tokens, data from registers, context extension, etc.
   }
 

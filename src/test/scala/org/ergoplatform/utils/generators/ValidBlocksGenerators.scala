@@ -42,9 +42,16 @@ trait ValidBlocksGenerators
   def validTransactionsFromBoxHolder(boxHolder: BoxHolder): (Seq[ErgoTransaction], BoxHolder) =
     validTransactionsFromBoxHolder(boxHolder, new Random)
 
-  /** @param sizeLimit maximum transactions size in bytes */
   protected def validTransactionsFromBoxes(sizeLimit: Int,
                                            stateBoxesIn: Seq[ErgoBox],
+                                           rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+    validTransactionsFromBoxes(sizeLimit, stateBoxesIn, Seq(), rnd)
+  }
+
+    /** @param sizeLimit maximum transactions size in bytes */
+  protected def validTransactionsFromBoxes(sizeLimit: Int,
+                                           stateBoxesIn: Seq[ErgoBox],
+                                           dataBoxesIn: Seq[ErgoBox],
                                            rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
     var createdEmissionBox: Seq[ErgoBox] = Seq()
 
@@ -53,6 +60,10 @@ trait ValidBlocksGenerators
              selfBoxes: Seq[ErgoBox],
              acc: Seq[ErgoTransaction],
              rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+
+      def getDataBoxes(): IndexedSeq[ErgoBox] = {
+        rnd.shuffle(dataBoxesIn ++ stateBoxesIn ++ selfBoxes).take(rnd.nextInt(10)).toIndexedSeq
+      }
 
       val currentSize = acc.map(_.size).sum
       val averageSize = if (currentSize > 0) currentSize / acc.length else 1000
@@ -75,10 +86,9 @@ trait ValidBlocksGenerators
           if (currentSize < sizeLimit - 2 * averageSize) {
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size) + 1).getOrElse(0))
             val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size) + 1).getOrElse(0))
-            val dataBoxes = (selfBoxes ++ stateBoxes).take(rnd.nextInt(10)).toIndexedSeq
             // disable tokens generation to avoid situation with too many tokens
             val boxesToSpend = (consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq
-            val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = dataBoxes)
+            val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = getDataBoxes)
             tx.statelessValidity match {
               case Failure(e) =>
                 log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
@@ -89,9 +99,8 @@ trait ValidBlocksGenerators
           } else {
             // take all remaining boxes from state and return transactions set
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
-            val dataBoxes = (selfBoxes ++ stateBoxes).take(rnd.nextInt(10)).toIndexedSeq
 
-            val tx = validTransactionFromBoxes((consumedSelfBoxes ++ stateBoxes).toIndexedSeq, rnd, issueNew, dataBoxes = dataBoxes)
+            val tx = validTransactionFromBoxes((consumedSelfBoxes ++ stateBoxes).toIndexedSeq, rnd, issueNew, dataBoxes = getDataBoxes)
             tx.statelessValidity match {
               case Failure(e) =>
                 log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
@@ -119,9 +128,10 @@ trait ValidBlocksGenerators
     val (_, bhWithoutGenesis) = boxHolderWithoutEmission.take(b => genesisBoxes.contains(b))
     val (regularBoxes, drainedBh) = bhWithoutGenesis.take(rnd.nextInt(txSizeLimit / 100) + 1)
     val boxes = emissionBox ++ regularBoxes
+    val dataBoxes: Seq[ErgoBox] = Random.shuffle(boxHolder.boxes).take(rnd.nextInt(txSizeLimit / 100)).map(_._2).toSeq
 
     assert(boxes.nonEmpty, s"Was unable to take at least 1 box from box holder $boxHolder")
-    val (txs, createdBoxes) = validTransactionsFromBoxes(txSizeLimit, boxes, rnd)
+    val (txs, createdBoxes) = validTransactionsFromBoxes(txSizeLimit, boxes, dataBoxes, rnd)
     txs.foreach(_.statelessValidity.get)
     val bs = new BoxHolder(drainedBh.boxes ++ createdBoxes.map(b => ByteArrayWrapper(b.id) -> b))
     txs -> bs

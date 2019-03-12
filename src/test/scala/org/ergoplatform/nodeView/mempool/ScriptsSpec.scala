@@ -35,7 +35,7 @@ class ScriptsSpec extends ErgoPropertyTest {
     applyBlockSpendingScript(EQ(IntConstant(1), Height).toSigmaProp) shouldBe 'success
     applyBlockSpendingScript(fromString("CONTEXT.preHeader.height == 1")) shouldBe 'success
     applyBlockSpendingScript(fromString("CONTEXT.headers.size == 0")) shouldBe 'success
-    // todo uncomment and fix    applyBlockSpendingScript(fromString(s"CONTEXT.dataInputs.exists{ (box: Box) => box.value == 5}")) shouldBe 'success
+    //    applyBlockSpendingScript(fromString(s"CONTEXT.dataInputs.exists{ (box: Box) => box.value == 5}")) shouldBe 'success
     // todo other common operations: tokens, data from registers, context extension, etc.
   }
 

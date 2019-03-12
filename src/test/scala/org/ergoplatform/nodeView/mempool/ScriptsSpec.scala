@@ -18,8 +18,12 @@ class ScriptsSpec extends ErgoPropertyTest {
 
   val compiler = SigmaCompiler(TestnetNetworkPrefix, TransformingSigmaBuilder)
   val delta = emission.settings.minerRewardDelay
+  val fixedBox = ergoBoxGen(fromString("1 == 1"), heightGen = 0, valueGenOpt = Some(5L)).sample.get
+
 
   property("simple operations without cryptography") {
+
+
     // true/false
     applyBlockSpendingScript(Values.TrueLeaf.toSigmaProp) shouldBe 'success
     applyBlockSpendingScript(Values.FalseLeaf.toSigmaProp) shouldBe 'failure
@@ -33,7 +37,7 @@ class ScriptsSpec extends ErgoPropertyTest {
     applyBlockSpendingScript(EQ(IntConstant(1), Height).toSigmaProp) shouldBe 'success
     applyBlockSpendingScript(fromString("CONTEXT.preHeader.height == 1")) shouldBe 'success
     applyBlockSpendingScript(fromString("CONTEXT.headers.size == 0")) shouldBe 'success
-    applyBlockSpendingScript(fromString("CONTEXT.dataInputs.size == 1")) shouldBe 'success
+    applyBlockSpendingScript(fromString(s"CONTEXT.dataInputs.exists{ (box: Box) => box.value == ${fixedBox.value}}")) shouldBe 'success
     // todo other common operations: tokens, data from registers, context extension, etc.
   }
 
@@ -49,6 +53,7 @@ class ScriptsSpec extends ErgoPropertyTest {
 
     applyBlockSpendingScript(GE(Height, Plus(boxCreationHeight(Self), IntConstant(delta))).toSigmaProp) shouldBe 'success
     applyBlockSpendingScript(ErgoScriptPredef.rewardOutputScript(delta, defaultMinerPk)) shouldBe 'success
+//    applyBlockSpendingScript(ErgoScriptPredef.feeProposition(delta)) shouldBe 'success
   }
 
 
@@ -57,11 +62,12 @@ class ScriptsSpec extends ErgoPropertyTest {
   }
 
   private def applyBlockSpendingScript(script: ErgoTree): Try[UtxoState] = {
-    val box = ergoBoxGen(script, heightGen = 0).sample.get
-    val bh = BoxHolder(Seq(box))
+    val scriptBox = ergoBoxGen(script, heightGen = 0).sample.get
+    val bh = BoxHolder(Seq(fixedBox, scriptBox))
     val us = UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants)
-    val tx = validTransactionsFromBoxHolder(bh, new Random(1), 101)._1
+    val tx = validTransactionsFromBoxHolder(bh, new Random(1), 201)._1
     tx.size shouldBe 1
+    tx.head.inputs.size shouldBe 2
     val block = validFullBlock(None, us, tx, Some(1234L))
     us.applyModifier(block)
   }

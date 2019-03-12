@@ -119,6 +119,7 @@ trait ValidBlocksGenerators
     val (_, bhWithoutGenesis) = boxHolderWithoutEmission.take(b => genesisBoxes.contains(b))
     val (regularBoxes, drainedBh) = bhWithoutGenesis.take(rnd.nextInt(txSizeLimit / 100) + 1)
     val boxes = emissionBox ++ regularBoxes
+
     assert(boxes.nonEmpty, s"Was unable to take at least 1 box from box holder $boxHolder")
     val (txs, createdBoxes) = validTransactionsFromBoxes(txSizeLimit, boxes, rnd)
     txs.foreach(_.statelessValidity.get)

@@ -9,7 +9,7 @@ import scorex.util.serialization.{Reader, Writer}
 
 case class ModeFeature(stateType: StateType,
                        verifyingTransactions: Boolean,
-                       poPowSuffix: Option[Int],
+                       popowSuffix: Option[Int],
                        blocksToKeep: Int) extends PeerFeature {
   override type M = ModeFeature
 
@@ -21,12 +21,12 @@ case class ModeFeature(stateType: StateType,
 object ModeFeature {
 
   def apply(nodeSettings: NodeConfigurationSettings): ModeFeature = {
-    val poPowSuffix = if (nodeSettings.poPoWBootstrap) Some(nodeSettings.minimalSuffix) else None
+    val popowSuffix = if (nodeSettings.poPoWBootstrap) Some(nodeSettings.minimalSuffix) else None
 
     new ModeFeature(
       nodeSettings.stateType,
       nodeSettings.verifyTransactions,
-      poPowSuffix,
+      popowSuffix,
       nodeSettings.blocksToKeep
     )
   }
@@ -43,7 +43,7 @@ object ModeFeatureSerializer extends ScorexSerializer[ModeFeature] {
   override def serialize(mf: ModeFeature, w: Writer): Unit = {
     w.put(mf.stateType.stateTypeCode)
     w.put(booleanToByte(mf.verifyingTransactions))
-    w.putOption(mf.poPowSuffix)(_.putInt(_))
+    w.putOption(mf.popowSuffix)(_.putInt(_))
     w.putInt(mf.blocksToKeep)
   }
 
@@ -52,13 +52,13 @@ object ModeFeatureSerializer extends ScorexSerializer[ModeFeature] {
 
     val stateType = StateType.fromCode(r.getByte())
     val verifyingTransactions = byteToBoolean(r.getByte())
-    val poPowSuffix = r.getOption(r.getInt())
+    val popowSuffix = r.getOption(r.getInt())
     val blocksToKeep = r.getInt()
 
     new ModeFeature(
       stateType,
       verifyingTransactions,
-      poPowSuffix,
+      popowSuffix,
       blocksToKeep
     )
   }

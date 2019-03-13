@@ -17,7 +17,7 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
-import sigmastate.Values.{IntConstant, StringConstant}
+import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.interpreter.ContextExtension
 
 import scala.collection.{immutable, mutable}
@@ -175,8 +175,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
         ).headOption.getOrElse(throw new Exception("Can't issue asset with no inputs"))
         val assetId = Digest32 !@@ firstInput.id
         val nonMandatoryRegisters = scala.Predef.Map(
-          R4 -> StringConstant(name),
-          R5 -> StringConstant(description),
+          R4 -> ByteArrayConstant(name.getBytes("UTF-8")),
+          R5 -> ByteArrayConstant(description.getBytes("UTF-8")),
           R6 -> IntConstant(decimals)
         )
         val lockWithAddress = (addressOpt orElse publicKeys.headOption)

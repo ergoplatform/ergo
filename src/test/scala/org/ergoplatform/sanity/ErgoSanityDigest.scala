@@ -11,12 +11,12 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.LaunchParameters
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, LaunchParameters}
 import org.scalacheck.Gen
+import scorex.core.app.Version
 import scorex.core.idToBytes
 import scorex.core.network.peer.PeerInfo
-import scorex.core.network.{ConnectedPeer, Outgoing}
+import scorex.core.network.{ConnectedPeer, PeerSpec}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
 
@@ -82,13 +82,15 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
 
-    val peerInfo = PeerInfo(
-        0L,
-        None,
-        Some(""),
-        Some(Outgoing),
-        Seq.empty
+    val peerSpec = PeerSpec(
+      settings.scorexSettings.network.agentName,
+      Version(settings.scorexSettings.network.appVersion),
+      settings.scorexSettings.network.nodeName,
+      None,
+      Seq.empty
     )
+
+    val peerInfo = PeerInfo(peerSpec, Long.MaxValue)
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(
       inetSocketAddressGen.sample.get,

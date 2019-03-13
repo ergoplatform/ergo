@@ -587,6 +587,9 @@ components:
           - maxBlockSize
           - maxBlockCost
           - tokenAccessCost
+          - inputCost
+          - dataInputCost
+          - outputCost
           properties:
             height:
               type: integer
@@ -629,7 +632,28 @@ components:
             tokenAccessCost:
               type: integer
               format: int32
-              description: Computational cost of accessing a single token
+              description: Validation cost of a single token
+              minimum: 0
+              example: 100
+              nullable: false
+            inputCost:
+              type: integer
+              format: int32
+              description: Validation cost per one transaction input
+              minimum: 0
+              example: 100
+              nullable: false
+            dataInputCost:
+              type: integer
+              format: int32
+              description: Validation cost per one data input
+              minimum: 0
+              example: 100
+              nullable: false
+            outputCost:
+              type: integer
+              format: int32
+              description: Validation cost per one transaction output
               minimum: 0
               example: 100
               nullable: false

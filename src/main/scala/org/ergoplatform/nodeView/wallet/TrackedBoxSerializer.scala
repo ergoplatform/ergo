@@ -12,9 +12,7 @@ import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
-import scorex.util.Extensions._
-
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 class TrackedBoxSerializer(txLookup: TransactionLookup)
   extends ScorexSerializer[TrackedBox]

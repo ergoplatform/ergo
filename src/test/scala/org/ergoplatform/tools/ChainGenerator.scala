@@ -58,7 +58,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val miningDelay = 1.second
   val minimalSuffix = 2
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
-    -1, PoPoWBootstrap = false, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200, 100000, 100000)
+    -1, poPoWBootstrap = false, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200, 100000, 100000)
   val ms = settings.chainSettings.monetary.copy(
     minerRewardDelay = RewardDelay
   )

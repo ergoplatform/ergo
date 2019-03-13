@@ -7,7 +7,7 @@ import org.ergoplatform.ErgoBox.{BoxId, R4, TokenId}
 import org.ergoplatform._
 import org.ergoplatform.mining._
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -90,7 +90,10 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val txs = t._1
       bh = t._2
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
-      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
+      val realHeader = header.copy(stateRoot = adDigest,
+        ADProofsRoot = ADProofs.proofDigest(adProofBytes),
+        height = height,
+        parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId))
       val adProofs = ADProofs(realHeader.id, adProofBytes)
       val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader), Some(adProofs))
       us = us.applyModifier(fb).get
@@ -164,7 +167,10 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val txs = t._1
       bh = t._2
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
-      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
+      val realHeader = header.copy(stateRoot = adDigest,
+        ADProofsRoot = ADProofs.proofDigest(adProofBytes),
+        height = height,
+        parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId))
       val adProofs = ADProofs(realHeader.id, adProofBytes)
       val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader), Some(adProofs))
       us = us.applyModifier(fb).get
@@ -186,7 +192,10 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val txs = t._1
       bh = t._2
       val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
-      val realHeader = header.copy(stateRoot = adDigest, ADProofsRoot = ADProofs.proofDigest(adProofBytes), height = height)
+      val realHeader = header.copy(stateRoot = adDigest,
+        ADProofsRoot = ADProofs.proofDigest(adProofBytes),
+        height = height,
+        parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId))
       val adProofs = ADProofs(realHeader.id, adProofBytes)
       height = height + 1
       val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader), Some(adProofs))

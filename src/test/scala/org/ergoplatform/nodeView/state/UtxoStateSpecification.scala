@@ -21,6 +21,7 @@ import scorex.util.encode.Base16
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.eval.CompiletimeIRContext
+import sigmastate.interpreter.ProverResult
 import sigmastate.serialization.ValueSerializer
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -276,6 +277,21 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
       us.proofsForTransactions(txs1) shouldBe 'success
       us.proofsForTransactions(txs2) shouldBe 'success
+
+      val inputs = headTx.outputs.map(b =>  Input(b.id, ProverResult.empty))
+      val txWithDataInputs2 = ErgoTransaction(inputs, dataInputs, headTx.outputCandidates)
+
+      val version = us.version
+
+      val txs3 = IndexedSeq(headTx, nextTx, txWithDataInputs2)
+      val (_, digest3) =  us.proofsForTransactions(txs3).get
+      us.applyTransactions(txs3, digest3, emptyStateContext) shouldBe 'success
+      us.rollbackTo(version)
+
+      val txs4 = IndexedSeq(headTx, txWithDataInputs2, nextTx)
+      val (_, digest4) =  us.proofsForTransactions(txs3).get
+      us.applyTransactions(txs4, digest4, emptyStateContext) shouldBe 'success
+      us.rollbackTo(version)
 
       // trying to apply transactions with data inputs same as outputs of the previous tx
       val dataInputsNext = headTx.outputs.take(1).map(i => DataInput(i.id))

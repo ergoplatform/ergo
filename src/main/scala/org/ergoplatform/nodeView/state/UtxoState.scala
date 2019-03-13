@@ -115,6 +115,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       val height = fb.header.height
 
       log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
+
       stateContext.appendFullBlock(fb, votingSettings).flatMap { newStateContext =>
         persistentProver.synchronized {
           val inRoot = rootHash

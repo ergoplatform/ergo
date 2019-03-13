@@ -36,9 +36,11 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   implicit val ergoAddressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
+  val realNetworkSetting = ErgoSettings.read(Some("src/main/resources/application.conf"))
+
   val EmissionTxCost: Long = 20000
   val MinTxAmount: Long = 2000000
-  val RewardDelay: Int = 720
+  val RewardDelay: Int = realNetworkSetting.chainSettings.monetary.minerRewardDelay
   val MaxTxsPerBlock: Int = 10
 
   val prover = defaultProver
@@ -62,10 +64,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val ms = settings.chainSettings.monetary.copy(
     minerRewardDelay = RewardDelay
   )
-  val cs = settings.chainSettings.copy(
-    monetary = ms,
-    genesisStateDigestHex = "b2dd428ad9a48f39cde752a372c3cc9ca013ce3cab6880df47198b670f570e6d02"
-  )
+  val cs = realNetworkSetting.chainSettings
 
   val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, cs, settings.testingSettings,
     nodeSettings, settings.scorexSettings, settings.walletSettings, CacheSettings.default)
@@ -134,12 +133,12 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
         val x = outs
           .foldLeft(Seq.empty[ErgoTransaction], input) { case ((acc, in), out) =>
             val inputs = IndexedSeq(in)
-            val unsignedTx = new UnsignedErgoTransaction(
+            val unsignedTx = UnsignedErgoTransaction(
               inputs.map(_.id).map(id => new UnsignedInput(id)),
               IndexedSeq(out)
             )
 
-            prover.sign(unsignedTx, inputs, ctx)
+            prover.sign(unsignedTx, inputs, emptyDataBoxes, ctx)
               .fold(_ => acc -> in, tx => (acc :+ tx) -> unsignedTx.outputs.head)
           }
           ._1

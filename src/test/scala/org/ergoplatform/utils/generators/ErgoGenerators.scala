@@ -5,9 +5,11 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header, PoPowAlgos}
+import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
+import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoTestConstants
 import org.scalacheck.Arbitrary.arbByte
@@ -88,7 +90,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   def extensionKvGen(keySize: Int, valuesSize: Int): Gen[(Array[Byte], Array[Byte])] = for {
     key <- genSecureBoundedBytes(keySize, keySize)
-    value <- if(key.head == 0) genSecureBoundedBytes(4, 4) else genSecureBoundedBytes(valuesSize, valuesSize)
+    value <- if (key.head == 0) genSecureBoundedBytes(4, 4) else genSecureBoundedBytes(valuesSize, valuesSize)
   } yield (key, value)
 
   lazy val extensionGen: Gen[Extension] = for {
@@ -113,7 +115,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   /**
     * Header generator with default miner pk in pow solution
     */
-  lazy val defaultHeaderGen: Gen[Header] = invalidHeaderGen.map{ h =>
+  lazy val defaultHeaderGen: Gen[Header] = invalidHeaderGen.map { h =>
     h.copy(powSolution = h.powSolution.copy(pk = defaultMinerPkPoint))
   }
 
@@ -149,6 +151,16 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val emptyMemPoolGen: Gen[ErgoMemPool] =
     Gen.resultOf({ _: Unit => ErgoMemPool.empty(settings) })(Arbitrary(Gen.const(())))
+
+  lazy val modeFeatureGen: Gen[ModeFeature] = for {
+    stateTypeCode <- Gen.choose(StateType.Utxo.stateTypeCode, StateType.Utxo.stateTypeCode)
+    popowSuffix <- Gen.choose(1, 10)
+    blocksToKeep <- Gen.choose(1, 100000)
+  } yield ModeFeature(
+    StateType.fromCode(stateTypeCode),
+    Random.nextBoolean(),
+    if(Random.nextBoolean()) Some(popowSuffix) else None,
+    blocksToKeep)
 
   /** Random long from 1 to maximum - 1
     *

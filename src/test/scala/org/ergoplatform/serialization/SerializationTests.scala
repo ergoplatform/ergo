@@ -76,4 +76,9 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
     checkSerializationRoundtripAndSize(randomADProofsGen, ADProofSerializer)
   }
 
+  property("ModeFeature serialization") {
+    forAll(modeFeatureGen) {mf =>
+      mf.serializer.parseBytes(mf.serializer.toBytes(mf)) shouldEqual mf
+    }
+  }
 }

@@ -1,7 +1,5 @@
 package org.ergoplatform.utils
 
-import java.net.InetSocketAddress
-
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -22,7 +20,6 @@ import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.core.app.Version
 import scorex.core.network.Handshake
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
-import scorex.core.network.peer.PeerInfo
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
 import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
@@ -52,17 +49,6 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   lazy val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs).get
   lazy val readers = Readers(history, state, memPool, wallet)
-
-  val inetAddr1 = new InetSocketAddress("92.92.92.92", 27017)
-  val inetAddr2 = new InetSocketAddress("93.93.93.93", 27017)
-
-  val ts1: Long = System.currentTimeMillis() - 100
-  val ts2: Long = System.currentTimeMillis() + 100
-
-  val peers = Map(
-    inetAddr1 -> PeerInfo(ts1, Some(inetAddr1), Some("first"), None, Seq.empty),
-    inetAddr2 -> PeerInfo(ts2, Some(inetAddr2), Some("second"), None, Seq.empty)
-  )
 
   val protocolVersion = Version("1.1.1")
 

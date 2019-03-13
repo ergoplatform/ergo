@@ -10,6 +10,7 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalacheck.Gen
 import scorex.core.app.Version
 import scorex.core.network.peer.PeerInfo
@@ -19,7 +20,7 @@ import scorex.core.utils.NetworkTimeProvider
 
 import scala.concurrent.ExecutionContextExecutor
 
-class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] {
+class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
 
   override val historyGen: Gen[HT] =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, -1)

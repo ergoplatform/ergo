@@ -39,7 +39,7 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
 
   def containsAssetIssuingBox(tx: ErgoTransaction): Boolean = {
     val firstInputId = tx.inputs.head.boxId
-    val assetIds = tx.outAssetsTry.get.map(_._1.data).toSeq
+    val assetIds = tx.outAssetsTry.get._1.map(_._1.data).toSeq
     assetIds.exists(x => java.util.Arrays.equals(x, firstInputId))
   }
 
@@ -65,8 +65,8 @@ class TransactionGeneratorSpec extends FlatSpec with ErgoTestHelpers with Wallet
     val txGenRef = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
     txGenRef ! StartGeneration
 
-    private def etxPredicate(tx: ErgoTransaction) = tx.outAssetsTry.get.isEmpty && !containsAssetIssuingBox(tx)
-    private def ttxPredicate(tx: ErgoTransaction) = tx.outAssetsTry.get.nonEmpty && !containsAssetIssuingBox(tx)
+    private def etxPredicate(tx: ErgoTransaction) = tx.outAssetsTry.get._1.isEmpty && !containsAssetIssuingBox(tx)
+    private def ttxPredicate(tx: ErgoTransaction) = tx.outAssetsTry.get._1.nonEmpty && !containsAssetIssuingBox(tx)
     private def tiPredicate(tx: ErgoTransaction) = containsAssetIssuingBox(tx)
 
     val ergoTransferringTx: ErgoTransaction = fishForMessage(transactionAwaitDuration) {

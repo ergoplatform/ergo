@@ -73,7 +73,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
   }
 
   property("should only collect valid transactions") {
-    def checkCollectTxs(maxCost: Long, maxSize: Int, withTokens: Boolean): Unit = {
+    def checkCollectTxs(maxCost: Long, maxSize: Int, withTokens: Boolean = false): Unit = {
 
       val bh = boxesHolderGen.sample.get
       val rnd: Random = new Random
@@ -105,20 +105,19 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       fromBigMempool.length should be > 1
       fromBigMempool.map(_.size).sum should be < maxSize
       costs.sum should be < maxCost
-      fromBigMempool.size should be < txsWithFees.size
+      if (!withTokens) fromBigMempool.size should be < txsWithFees.size
     }
 
     // transactions reach computation cost block limit
-    checkCollectTxs(100000L, Int.MaxValue, withTokens = false)
+    checkCollectTxs(100000L, Int.MaxValue)
 
     // transactions reach block size limit
-    checkCollectTxs(Long.MaxValue, 4096, withTokens = false)
+    checkCollectTxs(Long.MaxValue, 4096)
 
-    // too many tokens in fees
-    checkCollectTxs(Long.MaxValue, Int.MaxValue, withTokens = true)
+    // miner collects correct transactions from mempool even if they have tokens
+    checkCollectTxs(Int.MaxValue, Int.MaxValue, withTokens = true)
 
   }
-
 
   property("should not be able to spend recent fee boxes") {
 

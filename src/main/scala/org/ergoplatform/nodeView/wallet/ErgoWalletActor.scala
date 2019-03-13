@@ -10,14 +10,13 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
-import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters}
+import org.ergoplatform.settings.{Constants, ErgoSettings, LaunchParameters, Parameters}
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
-import sigmastate.Values
 import sigmastate.Values.{IntConstant, StringConstant}
 import sigmastate.interpreter.ContextExtension
 
@@ -57,13 +56,9 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
   private val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer
 
-  private def extractTrackedBytes(addr: ErgoAddress): Option[Array[Byte]] = addr match {
-    case p2pk: P2PKAddress => Some(p2pk.script.pkBytes)
-    case p2s: Pay2SAddress => Some(p2s.contentBytes)
-    case p2sh: Pay2SHAddress => Some(p2sh.contentBytes)
-  }
+  private def extractTrackedBytes(addr: ErgoAddress): Array[Byte] = addr.contentBytes
 
-  private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.flatMap(extractTrackedBytes(_).toSeq)
+  private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(extractTrackedBytes)
 
   //we currently do not use off-chain boxes to create a transaction
   private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onchain
@@ -75,7 +70,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
       val testingTx = UnsignedErgoLikeTransaction(
         IndexedSeq(new UnsignedInput(box.id)),
-        IndexedSeq(new ErgoBoxCandidate(1L, Values.TrueLeaf, creationHeight = height))
+        IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
       )
 
       val transactionContext = TransactionContext(IndexedSeq(box), testingTx, selfIndex = 0)
@@ -83,7 +78,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
       val context =
         new ErgoContext(stateContext, transactionContext, ContextExtension.empty)
 
-      prover.prove(box.proposition, context, testingTx.messageToSign) match {
+      prover.prove(box.ergoTree, context, testingTx.messageToSign) match {
         case Success(_) =>
           log.debug(s"Uncertain box is mine! $uncertainBox")
           registry.makeTransition(uncertainBox.boxId, MakeCertain)
@@ -283,7 +278,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   override def receive: Receive = onStateChanged orElse scanLogic orElse readers orElse {
     case WatchFor(address) =>
       trackedAddresses.append(address)
-      extractTrackedBytes(address).foreach(trackedBytes.append(_))
+      trackedBytes.append(extractTrackedBytes(address))
 
     //generate a transaction paying to a sequence of boxes payTo
     case GenerateTransaction(requests) =>

@@ -11,9 +11,9 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.{ErgoSettings, LaunchParameters}
+import org.ergoplatform.settings.LaunchParameters
+import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
-import scorex.core.app.Version
 import scorex.core.idToBytes
 import scorex.core.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, Outgoing}

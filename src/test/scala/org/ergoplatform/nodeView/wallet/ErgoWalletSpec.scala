@@ -1,7 +1,9 @@
 package org.ergoplatform.nodeView.wallet
 
+import java.nio.ByteBuffer
+
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
@@ -11,9 +13,13 @@ import org.ergoplatform.utils._
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.util.encode.Base16
 import scorex.util.idToBytes
+import scorex.util.serialization.VLQByteBufferReader
 import sigmastate.Values.ByteArrayConstant
 import sigmastate._
+import sigmastate.serialization.ConstantStore
+import sigmastate.utils.SigmaByteReader
 
 import scala.concurrent.blocking
 import scala.util.Random
@@ -23,6 +29,26 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
   private implicit val ergoAddressEncoder: ErgoAddressEncoder =
     new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
+
+  property("Tx signing bug") {
+    val stateContext = emptyStateContext
+    val prover = defaultProver
+
+    val iBytes = Vector(Base16.decode("8086c1bafb01100204cf0f08cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942ea02d192a39a8cc7a70173007301010000d8ae69e006eb5bfc45496a5d07789d117a0b6ec02fdc996d554b7dacc31997ef01").get)
+    val txBytes = Base16.decode("01f3f1ff020865ced128e5b61aad2a3afce111cf9a09bf4d6ab49f6839d51bc28e00000001f3f1ff020865ced128e5b61aad2a3afce111cf9a09bf4d6ab49f6839d51bc28e03c0a1d0ee3e10010101d17300010000e897030008cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b94201010080c2d72f036603455247660f455247206465736372697074696f6e0412d8ccedcbbc010008cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942010000").get
+    val parsedInputs: IndexedSeq[ErgoBox] = iBytes.map { b =>
+      val sInReader = new VLQByteBufferReader(ByteBuffer.wrap(b))
+      val reader = new SigmaByteReader(sInReader, new ConstantStore(), resolvePlaceholdersToConstants = false)
+      ErgoBoxSerializer.parse(reader)
+    }
+
+    val txInReader = new VLQByteBufferReader(ByteBuffer.wrap(txBytes))
+    val txReader = new SigmaByteReader(txInReader, new ConstantStore(), resolvePlaceholdersToConstants = false)
+    val txParsed: ErgoLikeTransaction = ErgoLikeTransactionSerializer.parse(txReader)
+    val uIn: IndexedSeq[UnsignedInput] = txParsed.inputs.map(i => new UnsignedInput(i.boxId, i.extension))
+    val unsignedParsed = UnsignedErgoTransaction(uIn, txParsed.dataInputs, txParsed.outputCandidates)
+    prover.sign(unsignedParsed, parsedInputs, IndexedSeq(), stateContext) shouldBe 'success
+  }
 
   property("Generate asset issuing transaction") {
     withFixture { implicit w =>
@@ -77,14 +103,16 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       applyBlock(block) shouldBe 'success    //scan by wallet happens during apply
       waitForScanning(block)
       val newSnap = getConfirmedBalances
-      val newSumToSpend = newSnap.balance / (addresses.length + 1)
+      val newSumToSpend = newSnap.balance / addresses.length
       val req2 = PaymentRequest(addresses.head, newSumToSpend, Some(assetsToSpend), None) +:
         addresses.tail.map(a => PaymentRequest(a, newSumToSpend, None, None))
       log.info(s"New balance $newSnap")
       log.info(s"Payment requests 2 $req2")
       val tx2 = await(wallet.generateTransaction(req2)).get
+      log.info(s"Generated transaction $tx2")
       val context2 = new ErgoStateContext(Seq(block.header), startDigest, parameters, VotingData.empty)
-      val boxesToSpend2 = tx2.inputs.map(i => tx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
+      val knownBoxes = tx.outputs ++ genesisTx.outputs
+      val boxesToSpend2 = tx2.inputs.map(i => knownBoxes.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx2.statefulValidity(boxesToSpend2, emptyDataBoxes, context2) shouldBe 'success
     }
   }

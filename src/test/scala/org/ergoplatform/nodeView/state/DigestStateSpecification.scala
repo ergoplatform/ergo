@@ -61,6 +61,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
       bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
 
       val block = validFullBlock(parentOpt = None, us, bh)
+      block.blockTransactions.transactions.exists(_.dataInputs.nonEmpty) shouldBe true
 
       val ds = createDigestState(us.version, us.rootHash)
       ds.applyModifier(block).isSuccess shouldBe true

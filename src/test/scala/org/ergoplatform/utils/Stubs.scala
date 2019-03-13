@@ -18,7 +18,7 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.core.app.Version
-import scorex.core.network.Handshake
+import scorex.core.network.{Handshake, PeerSpec}
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
 import scorex.core.settings.ScorexSettings
@@ -52,12 +52,20 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   val protocolVersion = Version("1.1.1")
 
-  val connectedPeers = Seq(
-    Handshake("node_pop", protocolVersion, "first", Some(inetAddr1), Seq(), ts1),
-    Handshake("node_pop", protocolVersion, "second", Some(inetAddr2), Seq(), ts2)
+  val peerSpec = PeerSpec(
+    settings.scorexSettings.network.agentName,
+    Version("1.1.1"),
+    settings.scorexSettings.network.nodeName,
+    None,
+    Seq.empty
   )
 
-  val blacklistedPeers = Seq("4.4.4.4:1111", "8.8.8.8:2222")
+  val connectedPeers: Seq[Handshake] = Seq(
+    Handshake(peerSpec.copy(nodeName = "first"), ts1),
+    Handshake(peerSpec.copy(nodeName = "second"), ts2)
+  )
+
+  val blacklistedPeers: Seq[String] = Seq("4.4.4.4:1111", "8.8.8.8:2222")
 
   class PeersManagerStub extends Actor {
     def receive: PartialFunction[Any, Unit] = {

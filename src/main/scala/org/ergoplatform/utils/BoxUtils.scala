@@ -5,13 +5,13 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.ergoplatform.settings.{Algos, Parameters}
 import scorex.util.ModifierId
 import sigmastate.SType
-import sigmastate.Values.{EvaluatedValue, Value}
+import sigmastate.Values.{ErgoTree, EvaluatedValue}
 
 object BoxUtils {
 
   /** Used when complete instance of ErgoBox is unavailable. */
   @inline
-  def minimalErgoAmountSimulated(script: Value[sigmastate.SBoolean.type],
+  def minimalErgoAmountSimulated(script: ErgoTree,
                                  tokens: Seq[(TokenId, Long)] = Seq(),
                                  additionalRegisters: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]] = Map(),
                                  parameters: Parameters): Long = {
@@ -21,13 +21,13 @@ object BoxUtils {
   }
 
   @inline
-  def minimalErgoAmountSimulated(script: Value[sigmastate.SBoolean.type], parameters: Parameters): Long =
+  def minimalErgoAmountSimulated(script: ErgoTree, parameters: Parameters): Long =
     minimalErgoAmountSimulated(script, Seq(), Map(), parameters)
 
   @inline
   def minimalErgoAmountSimulated(candidate: ErgoBoxCandidate, parameters: Parameters): Long =
     minimalErgoAmountSimulated(
-      candidate.proposition,
+      candidate.ergoTree,
       candidate.additionalTokens,
       candidate.additionalRegisters,
       parameters

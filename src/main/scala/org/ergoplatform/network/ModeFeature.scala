@@ -29,6 +29,7 @@ case class ModeFeature(stateType: StateType,
 }
 
 object ModeFeature {
+
   def apply(nodeSettings: NodeConfigurationSettings): ModeFeature = {
     val popowSuffix = if (nodeSettings.poPoWBootstrap) Some(nodeSettings.minimalSuffix) else None
 
@@ -39,8 +40,8 @@ object ModeFeature {
       nodeSettings.blocksToKeep
     )
   }
-}
 
+}
 
 /**
   * When the node is parsing operating mode information from a peer, it allows additional information to be stored there.
@@ -79,4 +80,5 @@ object ModeFeatureSerializer extends ScorexSerializer[ModeFeature] {
       blocksToKeep
     )
   }
+
 }

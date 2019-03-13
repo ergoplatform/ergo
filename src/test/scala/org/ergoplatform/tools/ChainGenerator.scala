@@ -13,11 +13,10 @@ import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.ProveDlog
 
@@ -76,7 +75,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val protocolVersion = fullHistorySettings.chainSettings.protocolVersion
 
   val history = ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
-  allowToApplyOldBlocks(history)
+  HistoryTestHelpers.allowToApplyOldBlocks(history)
   val (state, _) = ErgoState.generateGenesisUtxoState(stateDir, StateConstants(None, fullHistorySettings))
   log.info(s"Going to generate a chain at ${dir.getAbsoluteFile} starting from ${history.bestFullBlockOpt}")
 
@@ -209,22 +208,6 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
           )
         }
     }
-  }
-
-  /**
-    * Use reflection to set `minimalFullBlockHeightVar` to 0 to change regular synchronization rule, that we
-    * first apply headers chain, and apply full blocks only after that
-    */
-  private def allowToApplyOldBlocks(history: ErgoHistory): Unit = {
-    import scala.reflect.runtime.{universe => ru}
-    val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
-    val procInstance = runtimeMirror.reflect(history.asInstanceOf[ToDownloadProcessor])
-    val ppM = ru.typeOf[ToDownloadProcessor].member(ru.TermName("pruningProcessor")).asMethod
-    val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
-    val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
-    runtimeMirror.reflect(pp).reflectField(f).set(ErgoHistory.GenesisHeight)
-    val f2 = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
-    runtimeMirror.reflect(pp).reflectField(f2).set(true)
   }
 
 }

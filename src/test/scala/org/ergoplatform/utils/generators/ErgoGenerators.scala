@@ -19,7 +19,7 @@ import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import scorex.util.{ModifierId, _}
-import sigmastate.Values.{EvaluatedValue, FalseLeaf, TrueLeaf, Value}
+import sigmastate.Values.{ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf, Value}
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.interpreter.ProverResult
@@ -29,8 +29,8 @@ import scala.util.Random
 
 trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants {
 
-  lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
-  lazy val falseLeafGen: Gen[Value[SBoolean.type]] = Gen.const(FalseLeaf)
+  lazy val trueLeafGen: Gen[ErgoTree] = Gen.const(Constants.TrueLeaf)
+  lazy val falseLeafGen: Gen[ErgoTree] = Gen.const(Constants.FalseLeaf)
 
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
 
@@ -41,11 +41,13 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     seed <- genBytes(32)
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
 
-  lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogGen)
+  lazy val proveDlogTreeGen: Gen[ErgoTree] = proveDlogGen.map(_.toSigmaProp)
+
+  lazy val ergoPropositionGen: Gen[ErgoTree] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogTreeGen)
 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
 
-  def validValueGen(proposition: Value[SBoolean.type],
+  def validValueGen(proposition: ErgoTree,
                     additionalTokens: Seq[(TokenId, Long)] = Seq(),
                     additionalRegisters: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]] = Map(),
                     transactionId: ModifierId = Array.fill[Byte](32)(0.toByte).toModifierId,

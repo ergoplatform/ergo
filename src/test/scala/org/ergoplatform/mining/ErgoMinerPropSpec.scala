@@ -44,7 +44,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     val bh = boxesHolderGen.sample.get
     val us = createUtxoState(bh)
     val height = us.stateContext.currentHeight
-    val blockTx = validTransactionFromBoxes(bh.boxes.take(10).values.toIndexedSeq, outputsProposition = feeProp)
+    val blockTx = validTransactionFromBoxes(bh.boxes.take(2).values.toIndexedSeq, outputsProposition = feeProp)
 
     val txs = ErgoMiner.collectFees(height, Seq(blockTx), defaultMinerPk, emission).toSeq
     val incorrect = ErgoMiner.collectFees(height, Seq(blockTx), proveDlogGen.sample.get, emission).toSeq
@@ -79,9 +79,8 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       val bh = boxesHolderGen.sample.get
       val rnd: Random = new Random
       val us = createUtxoState(bh)
-      val feeProposition = ErgoScriptPredef.feeProposition(delta)
       val inputs = bh.boxes.values.toIndexedSeq.takeRight(100)
-      val txsWithFees = inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = withTokens, feeProposition))
+      val txsWithFees = inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = withTokens, feeProp))
       val head = txsWithFees.head
 
       val h = validFullBlock(None, us, bh, rnd).header
@@ -102,14 +101,14 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
         }
       }
 
-      fromBigMempool.length should be > 1
+      fromBigMempool.length should be > 2
       fromBigMempool.map(_.size).sum should be < maxSize
       costs.sum should be < maxCost
       if (!withTokens) fromBigMempool.size should be < txsWithFees.size
     }
 
     // transactions reach computation cost block limit
-    checkCollectTxs(100000L, Int.MaxValue)
+    checkCollectTxs(LaunchParameters.maxBlockCost, Int.MaxValue)
 
     // transactions reach block size limit
     checkCollectTxs(Long.MaxValue, 4096)

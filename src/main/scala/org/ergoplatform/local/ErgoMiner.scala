@@ -52,8 +52,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
   // cost of a transaction collecting emission box
-  // TODO calculate current value every time? Current value is 41010 but it may change with miner votes
-  private val EmissionTxCost: Long = 50000
 
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
 
@@ -206,7 +204,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, version)
     //only transactions valid from against the current utxo state we take from the mem pool
-    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules).map(_ -> EmissionTxCost)
+    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules).map { tx =>
+      implicit val verifier: ErgoInterpreter = ErgoInterpreter(state.stateContext.currentParameters)
+      val cost = state.validateWithCost(tx, Some(upcomingContext)).get
+      tx -> cost
+    }
 
     val txs = ErgoMiner.collectTxs(minerPk,
       state.stateContext.currentParameters.maxBlockCost,

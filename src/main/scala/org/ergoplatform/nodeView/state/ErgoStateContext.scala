@@ -64,7 +64,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block
   def previousStateDigest: ADDigest = if (sigmaLastHeaders.toArray.nonEmpty) {
-    ADDigest @@ sigmaLastHeaders.toArray.head.ADProofsRoot.toArray
+    ADDigest @@ sigmaLastHeaders.toArray.head.stateRoot.digest.toArray
   } else {
     genesisStateDigest
   }

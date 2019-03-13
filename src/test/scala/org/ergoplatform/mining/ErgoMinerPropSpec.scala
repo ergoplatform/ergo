@@ -121,6 +121,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
   property("should not be able to spend recent fee boxes") {
 
     val delta = 1
+    val inputsNum = 2
     val feeProposition = ErgoScriptPredef.feeProposition(delta)
 
     val bh = boxesHolderGen.sample.get
@@ -132,15 +133,15 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
         minerRewardDelay = delta
       )
     )
+    val txBoxes = bh.boxes.grouped(inputsNum).map(_.values.toIndexedSeq).toSeq
 
-    val blockTx = validTransactionFromBoxes(bh.boxes.take(5).values.toIndexedSeq, outputsProposition = feeProposition)
+    val blockTx = validTransactionFromBoxes(txBoxes(0), outputsProposition = feeProposition)
     val txs = ErgoMiner.collectFees(height, Seq(blockTx), defaultMinerPk, emissionRules).toSeq
     val block = validFullBlock(None, us, blockTx +: txs)
 
     us = us.applyModifier(block).get
 
-    val blockTx2 = validTransactionFromBoxes(
-      bh.boxes.slice(10, 20).values.toIndexedSeq, outputsProposition = feeProposition)
+    val blockTx2 = validTransactionFromBoxes(txBoxes(1), outputsProposition = feeProposition)
     val block2 = validFullBlock(Some(block), us, IndexedSeq(blockTx2))
 
     val earlySpendingTx = validTransactionFromBoxes(txs.head.outputs, stateCtxOpt = Some(us.stateContext))
@@ -153,8 +154,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
 
     val earlySpendingTx2 = validTransactionFromBoxes(txs.head.outputs, stateCtxOpt = Some(us.stateContext))
 
-    val blockTx3 = validTransactionFromBoxes(
-      bh.boxes.slice(20, 30).values.toIndexedSeq, outputsProposition = feeProposition)
+    val blockTx3 = validTransactionFromBoxes(txBoxes(2), outputsProposition = feeProposition)
     val block3 = validFullBlock(Some(block2), us, IndexedSeq(earlySpendingTx2, blockTx3))
 
     us.applyModifier(block3) shouldBe 'success

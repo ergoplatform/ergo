@@ -294,8 +294,8 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       us.rollbackTo(version)
 
       val txs5 = IndexedSeq(txWithDataInputs2, headTx, nextTx)
-      val (_, digest5) =  us.proofsForTransactions(txs5).get
-      us.applyTransactions(txs5, digest5, emptyStateContext) shouldBe 'failure
+      us.proofsForTransactions(txs5) shouldBe 'failure
+      us.applyTransactions(txs5, digest4, emptyStateContext) shouldBe 'failure
       us.rollbackTo(version)
 
       // trying to apply transactions with data inputs same as outputs of the previous tx

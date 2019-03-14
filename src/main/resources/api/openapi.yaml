@@ -32,6 +32,14 @@ components:
         spendingProof:
           $ref: '#/components/schemas/SpendingProof'
 
+    ErgoTransactionDataInput:
+      type: object
+      required:
+        - boxId
+      properties:
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
+
     SpendingProof:
       description: Spending proof for transaction input
       type: object
@@ -85,6 +93,7 @@ components:
       description: Transaction without any lockers and unlockers
       required:
       - inputs
+      - dataInputs
       - outputs
       properties:
         id:
@@ -94,6 +103,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ErgoTransactionInput'
+        dataInputs:
+          description: Many transaction data inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
         outputs:
           description: Many transaction outputs
           type: array
@@ -573,6 +587,9 @@ components:
           - maxBlockSize
           - maxBlockCost
           - tokenAccessCost
+          - inputCost
+          - dataInputCost
+          - outputCost
           properties:
             height:
               type: integer
@@ -615,7 +632,28 @@ components:
             tokenAccessCost:
               type: integer
               format: int32
-              description: Computational cost of accessing a single token
+              description: Validation cost of a single token
+              minimum: 0
+              example: 100
+              nullable: false
+            inputCost:
+              type: integer
+              format: int32
+              description: Validation cost per one transaction input
+              minimum: 0
+              example: 100
+              nullable: false
+            dataInputCost:
+              type: integer
+              format: int32
+              description: Validation cost per one data input
+              minimum: 0
+              example: 100
+              nullable: false
+            outputCost:
+              type: integer
+              format: int32
+              description: Validation cost per one transaction output
               minimum: 0
               example: 100
               nullable: false

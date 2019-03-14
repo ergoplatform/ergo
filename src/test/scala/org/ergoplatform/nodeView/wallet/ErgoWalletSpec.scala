@@ -1,7 +1,9 @@
 package org.ergoplatform.nodeView.wallet
 
+import java.nio.ByteBuffer
+
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
@@ -11,9 +13,13 @@ import org.ergoplatform.utils._
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.util.encode.Base16
 import scorex.util.idToBytes
+import scorex.util.serialization.VLQByteBufferReader
 import sigmastate.Values.ByteArrayConstant
 import sigmastate._
+import sigmastate.serialization.ConstantStore
+import sigmastate.utils.SigmaByteReader
 
 import scala.concurrent.blocking
 import scala.util.Random
@@ -43,7 +49,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Generated transaction $tx")
       val context = new ErgoStateContext(Seq(genesisBlock.header), startDigest, parameters, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
-      tx.statefulValidity(boxesToSpend, context) shouldBe 'success
+      tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
     }
   }
 
@@ -71,21 +77,23 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Generated transaction $tx")
       val context = new ErgoStateContext(Seq(genesisBlock.header), startDigest, parameters, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
-      tx.statefulValidity(boxesToSpend, context) shouldBe 'success
+      tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
 
       val block = makeNextBlock(getUtxoState, Seq(tx))
       applyBlock(block) shouldBe 'success    //scan by wallet happens during apply
       waitForScanning(block)
       val newSnap = getConfirmedBalances
-      val newSumToSpend = newSnap.balance / (addresses.length + 1)
+      val newSumToSpend = newSnap.balance / addresses.length
       val req2 = PaymentRequest(addresses.head, newSumToSpend, Some(assetsToSpend), None) +:
         addresses.tail.map(a => PaymentRequest(a, newSumToSpend, None, None))
       log.info(s"New balance $newSnap")
       log.info(s"Payment requests 2 $req2")
       val tx2 = await(wallet.generateTransaction(req2)).get
+      log.info(s"Generated transaction $tx2")
       val context2 = new ErgoStateContext(Seq(block.header), startDigest, parameters, VotingData.empty)
-      val boxesToSpend2 = tx2.inputs.map(i => tx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
-      tx2.statefulValidity(boxesToSpend2, context2) shouldBe 'success
+      val knownBoxes = tx.outputs ++ genesisTx.outputs
+      val boxesToSpend2 = tx2.inputs.map(i => knownBoxes.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
+      tx2.statefulValidity(boxesToSpend2, emptyDataBoxes, context2) shouldBe 'success
     }
   }
 
@@ -110,7 +118,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val balance2 = Random.nextInt(1000) + 1
       val box2 = IndexedSeq(new ErgoBoxCandidate(balance2, pubKey, startHeight, randomNewAsset))
-      wallet.scanOffchain(ErgoTransaction(fakeInput, box2))
+      wallet.scanOffchain(ErgoTransaction(fakeInput, IndexedSeq(), box2))
 
       blocking(Thread.sleep(1000))
 
@@ -121,7 +129,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       wallet.watchFor(Pay2SAddress(Constants.TrueLeaf))
       val balance3 = Random.nextInt(1000) + 1
       val box3 = IndexedSeq(new ErgoBoxCandidate(balance3, Constants.TrueLeaf, startHeight, randomNewAsset))
-      wallet.scanOffchain(ErgoTransaction(fakeInput, box3))
+      wallet.scanOffchain(ErgoTransaction(fakeInput, IndexedSeq(), box3))
 
       blocking(Thread.sleep(1000))
 

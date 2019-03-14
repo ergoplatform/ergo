@@ -32,18 +32,18 @@ class ExpirationSpecification extends ErgoPropertyTest {
     val in = Input(from.id,
       ProverResult(Array.emptyByteArray, ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(0)))))
 
-    val h: Int = (from.creationHeight + Constants.StoragePeriod + heightDelta).toInt
+    val h: Int = from.creationHeight + Constants.StoragePeriod + heightDelta
 
     val oc = outsConstructor(h).map(c => updateHeight(c, h))
-    val tx = ErgoTransaction(inputs = IndexedSeq(in), outputCandidates = oc)
+    val tx = ErgoTransaction(inputs = IndexedSeq(in), dataInputs = IndexedSeq(), outputCandidates = oc)
 
     val fb0 = invalidErgoFullBlockGen.sample.get
-    val fb = fb0.copy(fb0.header.copy(height = h))
-    val fakeHeader = fb.header.copy(height = fb.header.height - 1)
+    val fakeHeader = fb0.header.copy(height = h - 1)
+    val fb = fb0.copy(fb0.header.copy(height = h, parentId = fakeHeader.id))
     val updContext = emptyStateContext.updateHeaders(Seq(fakeHeader)).appendFullBlock(fb, votingSettings).get
 
     tx.statelessValidity.isSuccess shouldBe true
-    tx.statefulValidity(IndexedSeq(from), updContext).isSuccess shouldBe expectedValidity
+    tx.statefulValidity(IndexedSeq(from), emptyDataBoxes, updContext).isSuccess shouldBe expectedValidity
   }
 
   property("successful spending w. same value") {

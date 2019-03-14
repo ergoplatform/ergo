@@ -52,8 +52,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var candidateOpt: Option[CandidateBlock] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
   // cost of a transaction collecting emission box
-  // TODO calculate current value every time? Current value is 41010 but it may change with miner votes
-  private val EmissionTxCost: Long = 50000
 
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
 
@@ -204,10 +202,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       }
     }.getOrElse((ExtensionCandidate(packInterlinks(interlinks)), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
-    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, version,
-      ergoSettings.chainSettings.powScheme)
+    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, version)
     //only transactions valid from against the current utxo state we take from the mem pool
-    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules).map(_ -> EmissionTxCost)
+    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules).map { tx =>
+      implicit val verifier: ErgoInterpreter = ErgoInterpreter(state.stateContext.currentParameters)
+      val cost = state.validateWithCost(tx, Some(upcomingContext)).get
+      tx -> cost
+    }
 
     val txs = ErgoMiner.collectTxs(minerPk,
       state.stateContext.currentParameters.maxBlockCost,
@@ -276,6 +277,7 @@ object ErgoMiner extends ScorexLogging {
 
       ErgoTransaction(
         inputs,
+        IndexedSeq(),
         IndexedSeq(newEmissionBox, minerBox)
       )
     }
@@ -284,7 +286,7 @@ object ErgoMiner extends ScorexLogging {
       val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
       val minerBox = new ErgoBoxCandidate(feeAmount, minerProp, nextHeight, feeAssets, Map())
-      Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(minerBox)))
+      Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(), IndexedSeq(minerBox)))
     } else {
       None
     }
@@ -320,7 +322,7 @@ object ErgoMiner extends ScorexLogging {
         case Some(tx) =>
           implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)
           // check validity and calculate transaction cost
-          us.validateWithCost(tx) match {
+          us.validateWithCost(tx, Some(upcomingContext)) match {
             case Success(costConsumed) =>
               val newTxs = fixTxsConflicts((tx, costConsumed) +: acc)
               val newBoxes = newTxs.flatMap(_._1.outputs)
@@ -329,11 +331,12 @@ object ErgoMiner extends ScorexLogging {
               ErgoMiner.collectFees(us.stateContext.currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
                 case Some(feeTx) =>
                   val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
-                  feeTx.statefulValidity(boxesToSpend, upcomingContext) match {
+                  feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext) match {
                     case Success(cost) =>
                       val blockTxs: Seq[(ErgoTransaction, Long)] = (feeTx -> cost) +: newTxs
                       if (correctLimits(blockTxs)) loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost)) else current
-                    case _ => // fee collecting tx is invalid, return current
+                    case Failure(e) =>
+                      log.debug(s"Fee collecting tx is invalid, return current: ${e.getMessage} from ${us.stateContext}")
                       current
                   }
                 case None =>

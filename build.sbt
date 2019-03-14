@@ -15,7 +15,7 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "a538c0a7-SNAPSHOT"
-val sigmaStateVersion = "new-costing-f706ed29-SNAPSHOT"
+val sigmaStateVersion = "better-costing-196f63b3-SNAPSHOT"
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
 

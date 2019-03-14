@@ -152,7 +152,7 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     history.bestHeaderOpt shouldBe None
     val header = block.header
 
-    HeaderSerializer.parseBytes(HeaderSerializer.toBytes(header)).get shouldBe header
+    HeaderSerializer.parseBytes(HeaderSerializer.toBytes(header)) shouldBe header
 
     val actualHeader = history.append(header).get._1.bestHeaderOpt.value
     actualHeader shouldBe header

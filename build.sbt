@@ -4,7 +4,7 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "1.9.1",
+  version := "2.0.0",
   scalaVersion := "2.12.8",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
@@ -14,8 +14,8 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "53207304-SNAPSHOT"
-val sigmaStateVersion = "master-5f01afb6-SNAPSHOT"
+val scorexVersion = "95009e9d-SNAPSHOT"
+val sigmaStateVersion = "master-2b4b07a1-SNAPSHOT"
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
 
@@ -32,6 +32,7 @@ libraryDependencies ++= Seq(
   "com.iheart" %% "ficus" % "1.4.+",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
+  "com.typesafe.akka" %% "akka-actor" % "2.5.+",
 
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
@@ -39,7 +40,7 @@ libraryDependencies ++= Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.+" % "test",
-  "com.typesafe.akka" %% "akka-http-testkit" % "10.+" % "test",
+  "com.typesafe.akka" %% "akka-http-testkit" % "10.1.+" % "test",
   "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test",
   "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded"

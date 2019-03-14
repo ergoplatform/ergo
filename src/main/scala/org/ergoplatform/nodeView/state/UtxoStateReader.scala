@@ -27,20 +27,27 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
   /**
+    * Validate transaction provided state context if specified
+    * or state context from the previous block if not
+    */
+  def validateWithCost(tx: ErgoTransaction, stateContextOpt: Option[ErgoStateContext]): Try[Long] = {
+    val verifier = ErgoInterpreter(stateContext.currentParameters)
+    val context = stateContextOpt.getOrElse(stateContext)
+    tx.statelessValidity.flatMap { _ =>
+      tx.statefulValidity(
+        tx.inputs.flatMap(i => boxById(i.boxId)),
+        tx.dataInputs.flatMap(i => boxById(i.boxId)),
+        context)(verifier)
+    }
+  }
+
+  /**
     * Validate transaction as if it was included at the end of the last block.
     * This validation does not guarantee that transaction will be valid in future
     * as soon as state (both UTXO set and state context) will change.
     *
-    * @return transaction cost
     */
-  def validateWithCost(tx: ErgoTransaction): Try[Long] = {
-    tx.statelessValidity.flatMap { _ =>
-      implicit val verifier = ErgoInterpreter(stateContext.currentParameters)
-      tx.statefulValidity(tx.inputs.flatMap(i => boxById(i.boxId)), stateContext)
-    }
-  }
-
-  override def validate(tx: ErgoTransaction): Try[Unit] = validateWithCost(tx).map(_ => Unit)
+  override def validate(tx: ErgoTransaction): Try[Unit] = validateWithCost(tx, None).map(_ => Unit)
 
   /**
     *
@@ -50,7 +57,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = emissionBoxIdOpt match {
     case Some(id) =>
       fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
-        case Some(tx) if tx.outputs.head.proposition == constants.genesisEmissionBox.proposition =>
+        case Some(tx) if tx.outputs.head.proposition == constants.settings.chainSettings.monetary.emissionBoxProposition =>
           tx.outputs.headOption
         case Some(_) =>
           log.info(s"Last possible emission box consumed")
@@ -72,7 +79,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   def boxById(id: ADKey): Option[ErgoBox] = persistentProver.synchronized {
     persistentProver
       .unauthenticatedLookup(id)
-      .map(ErgoBoxSerializer.parseBytes)
+      .map(ErgoBoxSerializer.parseBytesTry)
       .flatMap(_.toOption)
   }
 

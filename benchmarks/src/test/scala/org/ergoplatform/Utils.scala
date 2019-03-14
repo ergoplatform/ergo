@@ -33,7 +33,7 @@ object Utils {
     for {
       length <- readLength
       bytes <- readBytes(length)
-      mod <- HistoryModifierSerializer.parseBytes(bytes).toOption.map(_.asInstanceOf[M])
+      mod <- HistoryModifierSerializer.parseBytesTry(bytes).toOption.map(_.asInstanceOf[M])
     } yield mod
   }
 

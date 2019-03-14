@@ -6,9 +6,10 @@ import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
-import org.ergoplatform.modifiers.mempool.TransactionIdsForHeader
+import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoTestConstants
 import org.scalacheck.Arbitrary.arbByte
@@ -18,7 +19,7 @@ import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import scorex.util.{ModifierId, _}
-import sigmastate.Values.{EvaluatedValue, FalseLeaf, TrueLeaf, Value}
+import sigmastate.Values.{ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf, Value}
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.interpreter.ProverResult
@@ -28,8 +29,8 @@ import scala.util.Random
 
 trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants {
 
-  lazy val trueLeafGen: Gen[Value[SBoolean.type]] = Gen.const(TrueLeaf)
-  lazy val falseLeafGen: Gen[Value[SBoolean.type]] = Gen.const(FalseLeaf)
+  lazy val trueLeafGen: Gen[ErgoTree] = Gen.const(Constants.TrueLeaf)
+  lazy val falseLeafGen: Gen[ErgoTree] = Gen.const(Constants.FalseLeaf)
 
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
 
@@ -40,11 +41,13 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     seed <- genBytes(32)
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
 
-  lazy val ergoPropositionGen: Gen[Value[SBoolean.type]] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogGen)
+  lazy val proveDlogTreeGen: Gen[ErgoTree] = proveDlogGen.map(_.toSigmaProp)
+
+  lazy val ergoPropositionGen: Gen[ErgoTree] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogTreeGen)
 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
 
-  def validValueGen(proposition: Value[SBoolean.type],
+  def validValueGen(proposition: ErgoTree,
                     additionalTokens: Seq[(TokenId, Long)] = Seq(),
                     additionalRegisters: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]] = Map(),
                     transactionId: ModifierId = Array.fill[Byte](32)(0.toByte).toModifierId,
@@ -59,13 +62,6 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
   } yield ErgoSyncInfo(ids)
-
-  lazy val transactionIdsForHeaderGen: Gen[TransactionIdsForHeader] = for {
-    idGenerator <- genBytes(32)
-    maxLength = 100
-    toTake <- Gen.chooseNum(1, 100)
-    ids <- Gen.listOfN(maxLength, idGenerator).map(_.take(toTake))
-  } yield TransactionIdsForHeader(ids)
 
   lazy val digest32Gen: Gen[Digest32] = {
     val x = Digest32 @@ genBytes(32)
@@ -94,7 +90,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   def extensionKvGen(keySize: Int, valuesSize: Int): Gen[(Array[Byte], Array[Byte])] = for {
     key <- genSecureBoundedBytes(keySize, keySize)
-    value <- if(key.head == 0) genSecureBoundedBytes(4, 4) else genSecureBoundedBytes(valuesSize, valuesSize)
+    value <- if (key.head == 0) genSecureBoundedBytes(4, 4) else genSecureBoundedBytes(valuesSize, valuesSize)
   } yield (key, value)
 
   lazy val extensionGen: Gen[Extension] = for {
@@ -119,7 +115,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   /**
     * Header generator with default miner pk in pow solution
     */
-  lazy val defaultHeaderGen: Gen[Header] = invalidHeaderGen.map{ h =>
+  lazy val defaultHeaderGen: Gen[Header] = invalidHeaderGen.map { h =>
     h.copy(powSolution = h.powSolution.copy(pk = defaultMinerPkPoint))
   }
 
@@ -132,13 +128,11 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     requiredDifficulty <- Arbitrary.arbitrary[BigInt]
     height <- Gen.choose(1, Int.MaxValue)
     powSolution <- powSolutionGen
-    interlinks <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(128))
     timestamp <- positiveLongGen
     extensionHash <- digest32Gen
   } yield Header(
     version,
     parentId,
-    interlinks,
     adRoot,
     stateRoot,
     transactionsRoot,
@@ -157,6 +151,16 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val emptyMemPoolGen: Gen[ErgoMemPool] =
     Gen.resultOf({ _: Unit => ErgoMemPool.empty(settings) })(Arbitrary(Gen.const(())))
+
+  lazy val modeFeatureGen: Gen[ModeFeature] = for {
+    stateTypeCode <- Gen.choose(StateType.Utxo.stateTypeCode, StateType.Utxo.stateTypeCode)
+    popowSuffix <- Gen.choose(1, 10)
+    blocksToKeep <- Gen.choose(1, 100000)
+  } yield ModeFeature(
+    StateType.fromCode(stateTypeCode),
+    Random.nextBoolean(),
+    if(Random.nextBoolean()) Some(popowSuffix) else None,
+    blocksToKeep)
 
   /** Random long from 1 to maximum - 1
     *

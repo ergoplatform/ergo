@@ -47,16 +47,15 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
     var (us, bh) = createUtxoState()
     var ds = createDigestState(us.version, us.rootHash)
-    var lastHeaders: Seq[Header] = Seq()
-    requireEqualStateContexts(us.stateContext, ds.stateContext, lastHeaders)
+    var lastBlocks: Seq[ErgoFullBlock] = Seq()
     forAll { seed: Int =>
-      val blBh = validFullBlockWithBoxHolder(lastHeaders.headOption, us, bh, new Random(seed))
+      val blBh = validFullBlockWithBoxHolder(lastBlocks.headOption, us, bh, new Random(seed))
       val block = blBh._1
       bh = blBh._2
       ds = ds.applyModifier(block).get
       us = us.applyModifier(block).get
-      lastHeaders = block.header +: lastHeaders
-      requireEqualStateContexts(us.stateContext, ds.stateContext, lastHeaders)
+      lastBlocks = block +: lastBlocks
+      requireEqualStateContexts(us.stateContext, ds.stateContext, lastBlocks.map(_.header))
     }
   }
 
@@ -70,12 +69,12 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
   property("ErgoState.boxChanges() should generate operations in the same order") {
     var (us, bh) = createUtxoState()
-    var parentOpt: Option[Header] = None
+    var parentOpt: Option[ErgoFullBlock] = None
 
     forAll { seed: Int =>
       val blBh = validFullBlockWithBoxHolder(parentOpt, us, bh, new Random(seed))
       val block = blBh._1
-      parentOpt = Some(block.header)
+      parentOpt = Some(block)
       bh = blBh._2
       us = us.applyModifier(block).get
 
@@ -88,15 +87,14 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
   property("ErgoState.boxChanges() double spend attempt") {
     val (_, bh) = createUtxoState()
-    bh.boxes.size shouldBe 1
-    val genesisBox = bh.boxes.head._2
+    val emissionBox = genesisBoxes.head
 
     forAll { seed: Int =>
       val txs = validTransactionsFromBoxHolder(bh, new Random(seed))._1
       whenever(txs.lengthCompare(2) > 0) {
         // valid transaction should spend the only existing genesis box
         ErgoState.boxChanges(txs)._1.length shouldBe 1
-        ErgoState.boxChanges(txs)._1.head shouldBe genesisBox.id
+        ErgoState.boxChanges(txs)._1.head shouldBe emissionBox.id
 
         // second transaction input should be an input created by the first transaction
         val inputToDoubleSpend = txs(1).inputs.head
@@ -114,8 +112,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
   property("ErgoState.stateChanges()") {
     val (us: UtxoState, bh) = createUtxoState()
-    bh.boxes.size shouldBe 1
-    val genesisBox = bh.boxes.head._2
+    val emissionBox = genesisBoxes.head
 
     forAll { seed: Int =>
       val txs = validTransactionsFromBoxHolder(bh, new Random(seed))._1
@@ -124,13 +121,13 @@ class ErgoStateSpecification extends ErgoPropertyTest {
         val removals = changes.toRemove
         // should remove the only genesis box from the state
         removals.length shouldBe 1
-        removals.head.boxId shouldEqual genesisBox.id
+        removals.head.boxId shouldEqual emissionBox.id
         // number of inputs should be more than 1 - we create boxes and spend them in the same block
         txs.flatMap(_.inputs).length should be > 1
 
         val insertions = changes.toAppend
         // sum of coins in outputs should equal to genesis value
-        insertions.map(_.box.value).sum shouldBe genesisBox.value
+        insertions.map(_.box.value).sum shouldBe emissionBox.value
 
         // if output was spend and then created - it is in both toInsert and toRemove
         val changesRev = ErgoState.stateChanges(txs.reverse)

@@ -4,21 +4,21 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
 import io.circe.{Encoder, Json}
+import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
-import sigmastate.basics.DLogProtocol.ProveDlog
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
-import sigmastate.SBoolean
-import sigmastate.Values.Value
-import sigmastate.lang.{SigmaCompiler, TransformingSigmaBuilder}
+import sigmastate.Values.ErgoTree
+import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.eval.RuntimeIRContext
+import sigmastate.lang.SigmaCompiler
+import sigmastate.{SBoolean, SSigmaProp}
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
@@ -68,11 +68,14 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     keys.zipWithIndex.map { case (pk, i) => s"myPubKey_$i" -> pk }.toMap
   }
 
-  private def compileSource(source: String, env: Map[String, Any]): Try[Value[SBoolean.type]] = {
-    val compiler = SigmaCompiler()
-    Try(compiler.compile(env, source, ergoSettings.chainSettings.addressPrefix)).flatMap {
-      case script: Value[SBoolean.type@unchecked] if script.tpe.isInstanceOf[SBoolean.type] =>
+  private def compileSource(source: String, env: Map[String, Any]): Try[ErgoTree] = {
+    import sigmastate.Values._
+    val compiler = SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
+    Try(compiler.compile(env, source)(new RuntimeIRContext)).flatMap {
+      case script: Value[SSigmaProp.type@unchecked] if script.tpe == SSigmaProp =>
         Success(script)
+      case script: Value[SBoolean.type@unchecked] if script.tpe == SBoolean =>
+        Success(script.toSigmaProp)
       case other =>
         Failure(new Exception(s"Source compilation result is of type ${other.tpe}, but `SBoolean` expected"))
     }

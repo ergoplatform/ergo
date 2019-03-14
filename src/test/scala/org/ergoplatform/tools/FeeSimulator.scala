@@ -25,9 +25,9 @@ object FeeSimulator extends App {
   val box1 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k1, creationHeight, Seq((Digest32 @@ Random.randomBytes(32)) -> scala.util.Random.nextLong()))
   val box2 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k2, creationHeight)
 
-  val simpleTx = ErgoTransaction(IndexedSeq(input, input), IndexedSeq(box1, box2), None)
+  val simpleTx = ErgoTransaction(IndexedSeq(input, input), IndexedSeq(box1, box2))
   val stdSize = simpleTx.outputs.map(_.bytes.length).sum / simpleTx.outputs.length
-  val simpleTxSize = simpleTx.bytes.length
+  val simpleTxSize = simpleTx.size
   val outputsSize = simpleTx.outputs.map(_.bytes.length).sum
   lazy val perOutputFee = stdSize * storageFeeFactor / CoinsInOneErgo.toDouble
   val minStdDust = minValuePerByte * stdSize

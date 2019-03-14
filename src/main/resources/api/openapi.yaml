@@ -32,6 +32,14 @@ components:
         spendingProof:
           $ref: '#/components/schemas/SpendingProof'
 
+    ErgoTransactionDataInput:
+      type: object
+      required:
+        - boxId
+      properties:
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
+
     SpendingProof:
       description: Spending proof for transaction input
       type: object
@@ -85,6 +93,7 @@ components:
       description: Transaction without any lockers and unlockers
       required:
       - inputs
+      - dataInputs
       - outputs
       properties:
         id:
@@ -94,6 +103,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ErgoTransactionInput'
+        dataInputs:
+          description: Many transaction data inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
         outputs:
           description: Many transaction outputs
           type: array
@@ -262,7 +276,6 @@ components:
       - id
       - timestamp
       - version
-      - interlinks
       - adProofsRoot
       - stateRoot
       - transactionsRoot
@@ -280,11 +293,6 @@ components:
           $ref: '#/components/schemas/Timestamp'
         version:
           $ref: '#/components/schemas/Version'
-        interlinks:
-          description: A vector containing pointers to previous blocks, including the id of the previous block. See https://pdfs.semanticscholar.org/1969/453d7960eaca8cfbd642877925f5f5028ce5.pdf for more info
-          type: array
-          items:
-            $ref: '#/components/schemas/Digest32'
         adProofsRoot:
           $ref: '#/components/schemas/Digest32'
         stateRoot:
@@ -578,6 +586,10 @@ components:
           - minValuePerByte
           - maxBlockSize
           - maxBlockCost
+          - tokenAccessCost
+          - inputCost
+          - dataInputCost
+          - outputCost
           properties:
             height:
               type: integer
@@ -616,6 +628,34 @@ components:
               nullable: false
             blockVersion:
               $ref: '#/components/schemas/Version'
+              nullable: false
+            tokenAccessCost:
+              type: integer
+              format: int32
+              description: Validation cost of a single token
+              minimum: 0
+              example: 100
+              nullable: false
+            inputCost:
+              type: integer
+              format: int32
+              description: Validation cost per one transaction input
+              minimum: 0
+              example: 100
+              nullable: false
+            dataInputCost:
+              type: integer
+              format: int32
+              description: Validation cost per one data input
+              minimum: 0
+              example: 100
+              nullable: false
+            outputCost:
+              type: integer
+              format: int32
+              description: Validation cost per one transaction output
+              minimum: 0
+              example: 100
               nullable: false
 
     Version:

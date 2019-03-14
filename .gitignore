@@ -16,7 +16,7 @@ target
 
 # local application.conf
 local-application.conf
-*-local.conf
+*-local*.conf
 my*.conf
 
 # logs

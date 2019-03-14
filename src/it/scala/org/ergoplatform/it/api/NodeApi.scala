@@ -1,6 +1,5 @@
 package org.ergoplatform.it.api
 
-
 import java.io.IOException
 import java.util.concurrent.TimeoutException
 

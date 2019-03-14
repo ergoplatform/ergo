@@ -1,31 +1,34 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosSolution, AutolykosSolutionSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.ModifierTypeId
+import scorex.core.{ModifierTypeId, idToBytes}
 import scorex.core.block.Block._
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
 import sigmastate.interpreter.CryptoConstants.EcPointType
+import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
 
-import scala.annotation.tailrec
 import scala.concurrent.duration.FiniteDuration
-import scala.util.Try
+import scorex.util.Extensions._
+import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement}
+import special.collection.{Coll, CollOverArray}
+import special.sigma
+import special.sigma.{AvlTree, GroupElement}
 
 case class Header(version: Version,
                   override val parentId: ModifierId,
-                  interlinks: Seq[ModifierId],
                   ADProofsRoot: Digest32,
                   stateRoot: ADDigest, //33 bytes! extra byte with tree height here!
                   transactionsRoot: Digest32,
@@ -58,7 +61,7 @@ case class Header(version: Version,
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
-  override lazy val serializer: Serializer[Header] = HeaderSerializer
+  override lazy val serializer: ScorexSerializer[Header] = HeaderSerializer
 
   lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
 
@@ -83,6 +86,38 @@ case class Header(version: Version,
 
 object Header extends ApiCodecs {
 
+  def toSigma(header: Header): special.sigma.Header = new special.sigma.Header {
+    override def id: Coll[Byte] = new CollOverArray(idToBytes(header.id))
+
+    override def version: Version = header.version
+
+    override def parentId: Coll[Byte] = new CollOverArray(idToBytes(header.parentId))
+
+    override def ADProofsRoot: Coll[Byte] = new CollOverArray(header.ADProofsRoot)
+
+    override def stateRoot: AvlTree = CAvlTree(ErgoContext.stateTreeFromDigest(header.stateRoot))
+
+    override def transactionsRoot: Coll[Byte] = new CollOverArray(header.transactionsRoot)
+
+    override def timestamp: Timestamp = header.timestamp
+
+    override def nBits: Timestamp = header.nBits
+
+    override def height: Int = header.height
+
+    override def extensionRoot: Coll[Version] = new CollOverArray(header.extensionRoot)
+
+    override def minerPk: GroupElement = CGroupElement(header.powSolution.pk)
+
+    override def powOnetimePk: GroupElement = CGroupElement(header.powSolution.w)
+
+    override def powNonce: Coll[Byte] = new CollOverArray(header.powSolution.n)
+
+    override def powDistance: sigma.BigInt = CBigInt(header.powSolution.d.bigInteger)
+
+    override def votes: Coll[Byte] = new CollOverArray(header.votes)
+  }
+
   val CurrentVersion: Byte = 1
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
@@ -93,7 +128,6 @@ object Header extends ApiCodecs {
     Map(
       "id" -> Algos.encode(h.id).asJson,
       "transactionsRoot" -> Algos.encode(h.transactionsRoot).asJson,
-      "interlinks" -> h.interlinks.map(i => Algos.encode(i).asJson).asJson,
       "adProofsRoot" -> Algos.encode(h.ADProofsRoot).asJson,
       "stateRoot" -> Algos.encode(h.stateRoot).asJson,
       "parentId" -> Algos.encode(h.parentId).asJson,
@@ -115,7 +149,6 @@ object Header extends ApiCodecs {
   implicit val jsonDecoder: Decoder[Header] = { c: HCursor =>
     for {
       transactionsRoot <- c.downField("transactionsRoot").as[Digest32]
-      interlinks <- c.downField("interlinks").as[List[ModifierId]]
       adProofsRoot <- c.downField("adProofsRoot").as[Digest32]
       stateRoot <- c.downField("stateRoot").as[ADDigest]
       parentId <- c.downField("parentId").as[ModifierId]
@@ -126,88 +159,52 @@ object Header extends ApiCodecs {
       version <- c.downField("version").as[Byte]
       votes <- c.downField("votes").as[String]
       solutions <- c.downField("powSolutions").as[AutolykosSolution]
-    } yield Header(version, parentId, interlinks, adProofsRoot, stateRoot,
+    } yield Header(version, parentId, adProofsRoot, stateRoot,
       transactionsRoot, timestamp, nBits, height, extensionHash, solutions, Algos.decode(votes).get)
   }
 }
 
-object HeaderSerializer extends Serializer[Header] {
+object HeaderSerializer extends ScorexSerializer[Header] {
 
-  def bytesWithoutInterlinksAndPow(h: Header): Array[Byte] =
-    Bytes.concat(
-      Array(h.version),
-      idToBytes(h.parentId),
-      h.ADProofsRoot,
-      h.transactionsRoot,
-      h.stateRoot,
-      Longs.toByteArray(h.timestamp),
-      h.extensionRoot,
-      RequiredDifficulty.toBytes(h.nBits),
-      Ints.toByteArray(h.height),
-      h.votes)
-
-  def bytesWithoutPow(h: Header): Array[Byte] = {
-    @SuppressWarnings(Array("TraversableHead"))
-    def buildInterlinkBytes(links: Seq[ModifierId], acc: Array[Byte]): Array[Byte] = {
-      if (links.isEmpty) {
-        acc
-      } else {
-        val headLink: ModifierId = links.head
-        val repeatingInt = links.count(_ == headLink)
-        val repeating: Byte = repeatingInt.toByte
-        buildInterlinkBytes(links.drop(repeatingInt), Bytes.concat(acc, Array(repeating), idToBytes(headLink)))
-      }
-    }
-
-    val interlinkBytes = buildInterlinkBytes(h.interlinks, Array[Byte]())
-    val interlinkBytesSize = Chars.toByteArray(interlinkBytes.length.toChar)
-
-    Bytes.concat(bytesWithoutInterlinksAndPow(h), interlinkBytesSize, interlinkBytes)
+  override def serialize(h: Header, w: Writer): Unit = {
+    serializeWithoutPow(h, w)
+    AutolykosSolutionSerializer.serialize(h.powSolution, w)
   }
 
-  def bytesWithoutInterlinks(h: Header): Array[Byte] =
-    Bytes.concat(
-      bytesWithoutInterlinksAndPow(h),
-      Chars.toByteArray(0),
-      h.powSolution.bytes
-    )
+  def serializeWithoutPow(h: Header, w: Writer): Unit = {
+    w.put(h.version)
+    w.putBytes(idToBytes(h.parentId))
+    w.putBytes(h.ADProofsRoot)
+    w.putBytes(h.transactionsRoot)
+    w.putBytes(h.stateRoot)
+    w.putULong(h.timestamp)
+    w.putBytes(h.extensionRoot)
+    RequiredDifficulty.serialize(h.nBits, w)
+    w.putUInt(h.height)
+    w.putBytes(h.votes)
+  }
 
-  override def toBytes(h: Header): Array[Version] =
-    Bytes.concat(bytesWithoutPow(h), h.powSolution.bytes)
+  def bytesWithoutPow(header: Header): Array[Byte] = {
+    val w = new VLQByteBufferWriter(new ByteArrayBuilder())
+    serializeWithoutPow(header, w)
+    w.result().toBytes
+  }
 
-  @SuppressWarnings(Array("TryGet"))
-  override def parseBytes(bytes: Array[Version]): Try[Header] = Try {
-    val version = bytes.head
-    val parentId = bytesToId(bytes.slice(1, 33))
-    val ADProofsRoot = Digest32 @@ bytes.slice(33, 65)
-    val transactionsRoot = Digest32 @@ bytes.slice(65, 97)
-    val stateRoot = ADDigest @@ bytes.slice(97, 130)
-    val timestamp = Longs.fromByteArray(bytes.slice(130, 138))
-    val extensionHash = Digest32 @@ bytes.slice(138, 170)
-    val nBits = RequiredDifficulty.parseBytes(bytes.slice(170, 174)).get
-    val height = Ints.fromByteArray(bytes.slice(174, 178))
-    val votes = bytes.slice(178, 181)
+  override def parse(r: Reader): Header = {
+    val version = r.getByte()
+    val parentId = bytesToId(r.getBytes(32))
+    val ADProofsRoot = Digest32 @@ r.getBytes(32)
+    val transactionsRoot = Digest32 @@ r.getBytes(32)
+    val stateRoot = ADDigest @@ r.getBytes(33)
+    val timestamp = r.getULong()
+    val extensionHash = Digest32 @@ r.getBytes(32)
+    val nBits = RequiredDifficulty.parse(r)
+    val height = r.getUInt().toIntExact
+    val votes = r.getBytes(3)
 
-    @tailrec
-    def parseInterlinks(index: Int, endIndex: Int, acc: Seq[ModifierId]): Seq[ModifierId] = if (endIndex > index) {
-      val repeatN: Int = 0xff & bytes(index)
-      require(repeatN != 0)
-      val link: ModifierId = bytesToId(bytes.slice(index + 1, index + 33))
-      val links: Seq[ModifierId] = Array.fill(repeatN)(link)
-      parseInterlinks(index + 33, endIndex, acc ++ links)
-    } else {
-      acc
-    }
+    val powSolution = AutolykosSolutionSerializer.parse(r)
 
-    val interlinksSize = Chars.fromByteArray(bytes.slice(181, 183))
-    val interlinks = parseInterlinks(183, 183 + interlinksSize, Seq.empty)
-
-    val powSolutionsBytes = bytes.slice(183 + interlinksSize, bytes.length)
-
-    AutolykosSolutionSerializer.parseBytes(powSolutionsBytes) map { powSolution =>
-      Header(version, parentId, interlinks, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-        nBits, height, extensionHash, powSolution, votes, Some(bytes.length))
-    }
-  }.flatten
-  
+    Header(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
+      nBits, height, extensionHash, powSolution, votes, Some(r.consumed))
+  }
 }

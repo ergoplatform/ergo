@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.{BlockTransactions, HeaderSerializer}
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -13,9 +13,11 @@ import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.{ErgoSettings, LaunchParameters}
 import org.scalacheck.Gen
+import scorex.core.app.Version
 import scorex.core.idToBytes
 import scorex.core.network.peer.PeerInfo
-import scorex.core.network.{ConnectedPeer, Outgoing}
+import scorex.core.network.{ConnectedPeer, PeerSpec}
+import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
 
 import scala.concurrent.ExecutionContextExecutor
@@ -37,21 +39,21 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
   override def semanticallyInvalidModifier(state: DIGEST_ST): PM = invalidErgoFullBlockGen.sample.get
 
   override def totallyValidModifier(history: HT, state: DIGEST_ST): PM = {
-    val parentOpt = history.bestHeaderOpt
+    val parentOpt = history.bestFullBlockOpt
     validFullBlock(parentOpt, state.asInstanceOf[WrappedDigestState].wrappedUtxoState).header
   }
 
   override def totallyValidModifiers(history: HT, state: DIGEST_ST, count: Int): Seq[PM] = {
     require(count >= 1)
-    val headerOpt = history.bestHeaderOpt
-    (0 until count).foldLeft((headerOpt, Seq.empty[PM])) { case (acc, _) =>
-      val pm = validFullBlock(headerOpt, state.asInstanceOf[WrappedDigestState].wrappedUtxoState)
-      (Some(pm.header), acc._2 :+ pm)
+    val blockOpt = history.bestFullBlockOpt
+    (0 until count).foldLeft((blockOpt, Seq.empty[PM])) { case (acc, _) =>
+      val pm = validFullBlock(blockOpt, state.asInstanceOf[WrappedDigestState].wrappedUtxoState)
+      (Some(pm), acc._2 :+ pm)
     }._2.map(_.asInstanceOf[ErgoFullBlock].header)
   }
 
   override def nodeViewSynchronizer(implicit system: ActorSystem):
-  (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe) = {
+  (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM]) = {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
@@ -80,20 +82,17 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
 
-    val peerInfo = PeerInfo(
-      0L,
-      None,
-      Some(""),
-      Some(Outgoing),
-      Seq.empty
-    )
+
+    val peerInfo = PeerInfo(defaultPeerSpec, Long.MaxValue)
+
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(
       inetSocketAddressGen.sample.get,
       pchProbe.ref,
       Some(peerInfo)
     )
-    (ref, h.syncInfo, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener)
+    val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
+    (ref, h.syncInfo, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener, serializer)
   }
 
   override def modifierWithTransactions(memoryPoolOpt: Option[MPool], customTransactionsOpt: Option[Seq[TX]]): CTM = {

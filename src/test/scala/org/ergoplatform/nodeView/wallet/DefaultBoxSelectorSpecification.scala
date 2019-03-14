@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.{bytesToId, idToBytes}
 import scorex.crypto.hash.{Blake2b256, Digest32}
@@ -12,10 +13,10 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
   import DefaultBoxSelector.select
 
   private val noFilter: TrackedBox => Boolean = _ => true
+  val parentTx = ErgoTransaction(IndexedSeq(), IndexedSeq(), IndexedSeq())
 
   property("returns None when it is impossible to select coins") {
-    val parentTx = ErgoTransaction(IndexedSeq(), IndexedSeq())
-    val box = ErgoBox(1, Values.TrueLeaf, creationHeight = startHeight)
+    val box = ErgoBox(1, Constants.TrueLeaf, creationHeight = startHeight)
     val uBox = TrackedBox(parentTx, 0, None, box, BoxCertainty.Certain)
 
     //target amount is too high
@@ -32,10 +33,9 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
   }
 
   property("properly selects coins - simple case with no assets") {
-    val parentTx = ErgoTransaction(IndexedSeq(), IndexedSeq())
-    val box1 = ErgoBox(1, Values.TrueLeaf, creationHeight = startHeight)
-    val box2 = ErgoBox(10, Values.TrueLeaf, creationHeight = startHeight)
-    val box3 = ErgoBox(100, Values.TrueLeaf, creationHeight = startHeight)
+    val box1 = ErgoBox(1, Constants.TrueLeaf, creationHeight = startHeight)
+    val box2 = ErgoBox(10, Constants.TrueLeaf, creationHeight = startHeight)
+    val box3 = ErgoBox(100, Constants.TrueLeaf, creationHeight = startHeight)
 
     val uBox1 = TrackedBox(parentTx, 0, Option(100), box1, BoxCertainty.Certain)
     val uBox2 = TrackedBox(parentTx, 1, None, box2, BoxCertainty.Certain)
@@ -79,9 +79,9 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     val assetId2 = bytesToId(Blake2b256("world"))
 
     val parentTx = ErgoTransaction(IndexedSeq(), IndexedSeq())
-    val box1 = ErgoBox(1, Values.TrueLeaf, startHeight, Seq(Digest32 @@ idToBytes(assetId1) -> 1))
-    val box2 = ErgoBox(10, Values.TrueLeaf, startHeight, Seq(Digest32 @@ idToBytes(assetId2) -> 10))
-    val box3 = ErgoBox(100, Values.TrueLeaf, startHeight, Seq(Digest32 @@ idToBytes(assetId1) -> 100))
+    val box1 = ErgoBox(1, Constants.TrueLeaf, startHeight, Seq(Digest32 @@ idToBytes(assetId1) -> 1))
+    val box2 = ErgoBox(10, Constants.TrueLeaf, startHeight, Seq(Digest32 @@ idToBytes(assetId2) -> 10))
+    val box3 = ErgoBox(100, Constants.TrueLeaf, startHeight, Seq(Digest32 @@ idToBytes(assetId1) -> 100))
 
     val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, BoxCertainty.Certain)
     val uBox2 = TrackedBox(parentTx, 1, None, box2, BoxCertainty.Certain)
@@ -126,16 +126,15 @@ class DefaultBoxSelectorSpecification extends ErgoPropertyTest {
     val assetId7 = bytesToId(Blake2b256("7"))
     val assetId8 = bytesToId(Blake2b256("8"))
 
-    val parentTx = ErgoTransaction(IndexedSeq(), IndexedSeq())
-    val box1 = ErgoBox(1, Values.TrueLeaf, startHeight,
+    val box1 = ErgoBox(1, Constants.TrueLeaf, startHeight,
       Seq(Digest32 @@ idToBytes(assetId1) -> 1, Digest32 @@ idToBytes(assetId2) -> 1,
         Digest32 @@ idToBytes(assetId3) -> 1, Digest32 @@ idToBytes(assetId4) -> 1))
 
-    val box2 = ErgoBox(10, Values.TrueLeaf, startHeight,
+    val box2 = ErgoBox(10, Constants.TrueLeaf, startHeight,
       Seq(Digest32 @@ idToBytes(assetId5) -> 10, Digest32 @@ idToBytes(assetId6) -> 10,
         Digest32 @@ idToBytes(assetId7) -> 10, Digest32 @@ idToBytes(assetId8) -> 10))
 
-    val box3 = ErgoBox(100, Values.TrueLeaf, startHeight,
+    val box3 = ErgoBox(100, Constants.TrueLeaf, startHeight,
       Seq(Digest32 @@ idToBytes(assetId3) -> 100, Digest32 @@ idToBytes(assetId4) -> 100,
         Digest32 @@ idToBytes(assetId5) -> 100, Digest32 @@ idToBytes(assetId6) -> 100))
 

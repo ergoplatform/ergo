@@ -5,7 +5,7 @@ import java.io.File
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
-import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.ErgoState.ModifierProcessing
@@ -41,6 +41,36 @@ class DigestState protected(override val version: VersionTag,
 
   override lazy val maxRollbackDepth: Int = store.rollbackVersions().size
 
+  private[state] def validateTransactions(txs: Seq[ErgoTransaction],
+                                          expectedHash: ADDigest,
+                                          proofs: ADProofs,
+                                          currentStateContext: ErgoStateContext): Unit = {
+    // Check modifications, returning sequence of old values
+    val boxesFromProofs: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, expectedHash)
+      .get.map(v => ErgoBoxSerializer.parseBytes(v))
+    val knownBoxes = (txs.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
+    val totalCost = txs.map { tx =>
+      tx.statelessValidity.get
+      val boxesToSpend = tx.inputs.map { i =>
+        knownBoxes.get(ByteArrayWrapper(i.boxId)) match {
+          case Some(box) => box
+          case None => throw new Exception(s"Box with id ${Algos.encode(i.boxId)} not found")
+        }
+      }
+      val dataBoxes = tx.dataInputs.map { i =>
+        knownBoxes.get(ByteArrayWrapper(i.boxId)) match {
+          case Some(box) => box
+          case None => throw new Exception(s"Box with id ${Algos.encode(i.boxId)} not found")
+        }
+      }
+      tx.statefulValidity(boxesToSpend, dataBoxes, currentStateContext)(verifier).get
+    }.sum
+
+    if (totalCost > currentStateContext.currentParameters.maxBlockCost) {
+      throw new Exception(s"Transaction cost $totalCost exceeds limit")
+    }
+  }
+
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {
     case fb: ErgoFullBlock =>
       fb.adProofs match {
@@ -51,25 +81,8 @@ class DigestState protected(override val version: VersionTag,
         case Some(proofs) =>
           stateContext.appendFullBlock(fb, votingSettings).map { currentStateContext =>
             val txs = fb.blockTransactions.txs
-
             val declaredHash = fb.header.stateRoot
-            // Check modifications, returning sequence of old values
-            val oldValues: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, declaredHash)
-              .get.map(v => ErgoBoxSerializer.parseBytes(v))
-            val knownBoxes = (txs.flatMap(_.outputs) ++ oldValues).map(o => (ByteArrayWrapper(o.id), o)).toMap
-            val totalCost = txs.map { tx =>
-              tx.statelessValidity.get
-              val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
-                knownBoxes.get(ByteArrayWrapper(id)) match {
-                  case Some(box) => box
-                  case None => throw new Exception(s"Box with id ${Algos.encode(id)} not found")
-                }
-              }
-              tx.statefulValidity(boxesToSpend, currentStateContext)(verifier).get
-            }.sum
-            if (totalCost > currentStateContext.currentParameters.maxBlockCost) {
-              throw new Exception(s"Transaction cost $totalCost exceeds limit")
-            }
+            validateTransactions(txs, declaredHash, proofs, currentStateContext)
           }
       }
 
@@ -80,7 +93,7 @@ class DigestState protected(override val version: VersionTag,
   }
 
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] =
-    (processFullBlock orElse processHeader orElse processOther)(mod)
+    (processFullBlock orElse processHeader orElse processOther) (mod)
 
   @SuppressWarnings(Array("OptionGet"))
   override def rollbackTo(version: VersionTag): Try[DigestState] = {

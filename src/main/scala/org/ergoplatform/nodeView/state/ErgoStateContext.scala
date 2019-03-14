@@ -11,6 +11,8 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.serialization.GroupElementSerializer
+import special.collection.{Coll, CollOverArray}
 
 import scala.util.{Failure, Success, Try}
 
@@ -19,23 +21,24 @@ import scala.util.{Failure, Success, Try}
   * The predicted header only contains fields that can be predicted.
   */
 class UpcomingStateContext(lastHeaders: Seq[Header],
-                           predictedHeader: PreHeader,
+                           val predictedHeader: PreHeader,
                            genesisStateDigest: ADDigest,
                            currentParameters: Parameters,
                            votingData: VotingData)(implicit votingSettings: VotingSettings)
   extends ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, votingData)(votingSettings) {
 
-  override val lastBlockMinerPk: Array[Byte] = groupElemToBytes(predictedHeader.minerPk)
+  override def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(predictedHeader)
 
-  override val previousStateDigest: ADDigest = lastHeaders.lastOption.map(_.stateRoot).getOrElse(genesisStateDigest)
-
-  override val currentHeight: Int = predictedHeader.height
+  override def sigmaLastHeaders: Coll[special.sigma.Header] = new CollOverArray(lastHeaders.map(h => Header.toSigma(h)).toArray)
 
   override def toString: String = s"UpcomingStateContext($predictedHeader, $lastHeaders)"
+
 }
 
 /**
-  * Additional data required for transactions validation
+  * Additional data required for transactions validation.
+  * Script validation requires, that it contain at least a preHeader, so it can only be used
+  * for transaction validation if lastHeaders is not empty or in `upcoming` version.
   *
   * @param lastHeaders        - fixed number of last headers
   * @param genesisStateDigest - genesis state digest (before the very first block)
@@ -49,22 +52,27 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                       (implicit val votingSettings: VotingSettings)
   extends BytesSerializable with ScorexEncoding {
 
-  val lastBlockMinerPk: Array[Byte] = lastHeaders.headOption
-    .map(_.powSolution.encodedPk)
-    .getOrElse(Array.fill(32)(0: Byte))
+  override type M = ErgoStateContext
 
+  def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(lastHeaders.head)
+
+  def sigmaLastHeaders: Coll[special.sigma.Header] = new CollOverArray(lastHeaders.tail.map(h => Header.toSigma(h)).toArray)
+
+  // todo remove from ErgoLikeContext and from ErgoStateContext
+  def lastBlockMinerPk: Array[Byte] = sigmaPreHeader.minerPk.getEncoded.toArray
+
+  // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block
-  val previousStateDigest: ADDigest = if (lastHeaders.length >= 2) {
-    lastHeaders(1).stateRoot
+  def previousStateDigest: ADDigest = if (sigmaLastHeaders.toArray.nonEmpty) {
+    ADDigest @@ sigmaLastHeaders.toArray.head.stateRoot.digest.toArray
   } else {
     genesisStateDigest
   }
 
-  val currentHeight: Int = ErgoHistory.heightOf(lastHeaderOpt)
+  // todo remove from ErgoLikeContext and from ErgoStateContext
+  def currentHeight: Int = Try(sigmaPreHeader.height).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
-  override type M = ErgoStateContext
-
-  def votingEpochLength: Int = votingSettings.votingLength
+  private def votingEpochLength: Int = votingSettings.votingLength
 
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption
 
@@ -74,11 +82,11 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                timestamp: Long,
                nBits: Long,
                votes: Array[Byte],
-               version: Byte,
-               powScheme: AutolykosPowScheme): ErgoStateContext = {
-    val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes, powScheme)
+               version: Byte): ErgoStateContext = {
+    val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
     val forkVote = votes.contains(Parameters.SoftFork)
-    val calculatedParams = currentParameters.update(upcomingHeader.height, forkVote, votingData.epochVotes, votingSettings)
+    val height = ErgoHistory.heightOf(lastHeaderOpt)
+    val calculatedParams = currentParameters.update(height, forkVote, votingData.epochVotes, votingSettings)
     new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest, calculatedParams, votingData)
   }
 
@@ -153,8 +161,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     * This function verifies whether a full block is valid against the ErgoStateContext instance, and modifies
     * the latter according to the former.
     *
-    * @param header      - header of a block
-    * @param extensionOpt - extension section of a block (could be missed then only header data being used for update)
+    * @param header         - header of a block
+    * @param extensionOpt   - extension section of a block (could be missed then only header data being used for update)
     * @param votingSettings - chain-wide voting settings
     * @return updated state context or error
     */
@@ -185,12 +193,15 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 object ErgoStateContext {
 
   def empty(constants: StateConstants): ErgoStateContext = {
-    implicit val votingSettings: VotingSettings = constants.votingSettings
-    new ErgoStateContext(Seq.empty, constants.settings.chainSettings.genesisStateDigest, LaunchParameters, VotingData.empty)
+    empty(constants.settings.chainSettings.genesisStateDigest, constants.votingSettings)
   }
 
+  /**
+    * Initialize empty state context with fake PreHeader
+    */
   def empty(genesisStateDigest: ADDigest, votingSettings: VotingSettings): ErgoStateContext = {
     new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingData.empty)(votingSettings)
+      .upcoming(org.ergoplatform.mining.group.generator, 0L, Constants.InitialNBits, Array.fill(3)(0.toByte), 0.toByte)
   }
 
   /**

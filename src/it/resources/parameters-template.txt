@@ -46,6 +46,7 @@ paths:
                     }
                   }
                 ],
+                "dataInputs" : [],
                 "outputs": [
                   {
                     "boxId": "08667225fa6beb560627ba02b5389929db756add5b65bda8aea7920088b2cc8c",
@@ -75,6 +76,17 @@ paths:
                       "proofBytes": "28a6e09627092c63151fc10025abe30f368153e4255f26b90768bf60023d321ebde22692f2b412a7e964030333f615dc783b001bcb4865f7",
                       "extension": {}
                     }
+                  }
+                ],
+                "dataInputs" : [
+                  {
+                    "boxId" : "fec8fa6499dc086098d1589fdeefdd195def862098b84c9a7d85aaab28e92d0e"
+                  },
+                  {
+                    "boxId" : "fecf6c5508e87f7e71170f4fc88053539b7b70831a72b42090d7d480ae69e52f"
+                  },
+                  {
+                    "boxId" : "fee3087d7ecd4fbef2bea80dae2d0ef86e690c26a68084123c9fa1036761e82b"
                   }
                 ],
                 "outputs": [
@@ -152,6 +164,11 @@ paths:
                   "1": "0101"
                 }
               }
+            }
+          ],
+          "dataInputs" : [
+            {
+              "boxId" : "fee3087d7ecd4fbef2bea80dae2d0ef86e690c26a68084123c9fa1036761e82b"
             }
           ],
           "outputs": [

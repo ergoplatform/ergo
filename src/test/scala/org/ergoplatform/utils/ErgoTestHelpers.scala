@@ -59,9 +59,9 @@ trait ErgoTestHelpers
   val ts1 = System.currentTimeMillis() - 100
   val ts2 = System.currentTimeMillis() + 100
 
-  val peers = Map(
-    inetAddr1 -> PeerInfo(ts1, Some(inetAddr1), Some("first"), Some(Outgoing), Seq()),
-    inetAddr2 -> PeerInfo(ts2, None, Some("second"), Some(Incoming), Seq())
+  val peers: Map[InetSocketAddress, PeerInfo] = Map(
+    inetAddr1 -> PeerInfo(defaultPeerSpec.copy(nodeName = "first"), timeProvider.time()),
+    inetAddr2 -> PeerInfo(defaultPeerSpec.copy(nodeName = "second"), timeProvider.time())
   )
 }
 

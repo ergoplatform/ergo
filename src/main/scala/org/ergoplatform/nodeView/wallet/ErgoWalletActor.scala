@@ -17,7 +17,7 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
-import sigmastate.Values.{IntConstant, StringConstant}
+import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.interpreter.ContextExtension
 
 import scala.collection.{immutable, mutable}
@@ -73,7 +73,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
         IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
       )
 
-      val transactionContext = TransactionContext(IndexedSeq(box), testingTx, selfIndex = 0)
+      val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx, selfIndex = 0)
 
       val context =
         new ErgoContext(stateContext, transactionContext, ContextExtension.empty)
@@ -175,8 +175,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
         ).headOption.getOrElse(throw new Exception("Can't issue asset with no inputs"))
         val assetId = Digest32 !@@ firstInput.id
         val nonMandatoryRegisters = scala.Predef.Map(
-          R4 -> StringConstant(name),
-          R5 -> StringConstant(description),
+          R4 -> ByteArrayConstant(name.getBytes("UTF-8")),
+          R5 -> ByteArrayConstant(description.getBytes("UTF-8")),
           R6 -> IntConstant(decimals)
         )
         val lockWithAddress = (addressOpt orElse publicKeys.headOption)
@@ -224,10 +224,11 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
         val unsignedTx = new UnsignedErgoTransaction(
           inputs.map(_.id).map(id => new UnsignedInput(id)),
+          IndexedSeq(),
           (payTo ++ changeBoxCandidates).toIndexedSeq
         )
 
-        prover.sign(unsignedTx, inputs, stateContext)
+        prover.sign(unsignedTx, inputs, IndexedSeq(), stateContext)
           .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
       } match {
         case Some(txTry) => txTry

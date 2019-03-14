@@ -7,6 +7,7 @@ import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.scalacheck.Gen
+import scalan.util.BenchmarkUtil
 import scorex.crypto.hash.Digest32
 import sigmastate.OR
 import sigmastate.Values.ErgoTree
@@ -238,30 +239,24 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     cost shouldBe > (LaunchParameters.maxBlockCost)
   }
 
-  property("too costly transaction should be rejected") {
-    val groupElemGen: Gen[EcPointType] = Gen.const(CryptoConstants.dlogGroup.createRandomGenerator())
-
-    val proveDiffieHellmanTupleGen = for {
-      gv <- groupElemGen
-      hv <- groupElemGen
-      uv <- groupElemGen
-      vv <- groupElemGen
-    } yield ProveDHTuple(gv, hv, uv, vv)
-
-    val propositionGen = for {
-      proveList <- Gen.listOfN(50, proveDiffieHellmanTupleGen)
-    } yield ErgoTree.fromProposition(OR(proveList.map(_.isProven)).toSigmaProp)
-
-    val gen = validErgoTransactionGenTemplate(0, 0, 1, 1, propositionGen, LaunchParameters.minValuePerByte * 15000)
+  property("transaction with too many inputs should be rejected") {
+    val gen = validErgoTransactionGenTemplate(100, 100, 100, 150, trueLeafGen, LaunchParameters.minValuePerByte * 15000)
 
     forAll(gen) { case (from, tx) =>
       tx.statelessValidity.isSuccess shouldBe true
-      val validity = tx.statefulValidity(from, emptyStateContext)
+      val validity = tx.statefulValidity(from, emptyStateContext)(ErgoInterpreter(LaunchParameters))
       validity.isSuccess shouldBe false
+
+      println("validity: " + validity)
 
       val cause = validity.failed.get.getCause
       Option(cause) shouldBe defined
       cause.getMessage should startWith("Estimated expression complexity")
+
+      val verifier = ErgoInterpreter(Parameters(0, LaunchParameters.parametersTable.updated(Parameters.MaxBlockCostIncrease, Int.MaxValue)))
+      val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, emptyStateContext)(verifier))
+
+      println(time)
     }
   }
 }

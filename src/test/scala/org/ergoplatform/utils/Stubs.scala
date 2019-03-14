@@ -52,13 +52,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   val protocolVersion = Version("1.1.1")
 
-  val peerSpec = PeerSpec(
-    settings.scorexSettings.network.agentName,
-    Version("1.1.1"),
-    settings.scorexSettings.network.nodeName,
-    None,
-    Seq.empty
-  )
+  val peerSpec: PeerSpec = defaultPeerSpec.copy(protocolVersion = protocolVersion)
 
   val connectedPeers: Seq[Handshake] = Seq(
     Handshake(peerSpec.copy(nodeName = "first"), ts1),

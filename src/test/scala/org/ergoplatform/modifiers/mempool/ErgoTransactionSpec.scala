@@ -8,6 +8,11 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.scalacheck.Gen
 import scorex.crypto.hash.Digest32
+import sigmastate.OR
+import sigmastate.Values.ErgoTree
+import sigmastate.basics.ProveDHTuple
+import sigmastate.interpreter.CryptoConstants
+import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.util.Random
 
@@ -233,9 +238,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     cost shouldBe > (LaunchParameters.maxBlockCost)
   }
 
-  ignore("too costly transaction should be rejected") {
-/*
-    todo fix or remove
+  property("too costly transaction should be rejected") {
     val groupElemGen: Gen[EcPointType] = Gen.const(CryptoConstants.dlogGroup.createRandomGenerator())
 
     val proveDiffieHellmanTupleGen = for {
@@ -245,22 +248,20 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       vv <- groupElemGen
     } yield ProveDHTuple(gv, hv, uv, vv)
 
-
     val propositionGen = for {
       proveList <- Gen.listOfN(50, proveDiffieHellmanTupleGen)
-    } yield OR(proveList.map(_.toSigmaProp))
+    } yield ErgoTree.fromProposition(OR(proveList.map(_.isProven)).toSigmaProp)
 
-    val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
+    val gen = validErgoTransactionGenTemplate(0, 0, 1, 1, propositionGen, LaunchParameters.minValuePerByte * 15000)
 
     forAll(gen) { case (from, tx) =>
       tx.statelessValidity.isSuccess shouldBe true
       val validity = tx.statefulValidity(from, emptyStateContext)
       validity.isSuccess shouldBe false
+
       val cause = validity.failed.get.getCause
       Option(cause) shouldBe defined
       cause.getMessage should startWith("Estimated expression complexity")
     }
-*/
   }
-
 }

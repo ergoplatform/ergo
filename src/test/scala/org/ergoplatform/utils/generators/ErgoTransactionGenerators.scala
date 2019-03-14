@@ -14,7 +14,7 @@ import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util._
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf, Value}
+import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate._
 import org.ergoplatform.settings.Parameters._
 
@@ -119,7 +119,9 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
                                 rnd: Random = new Random,
                                 issueNew: Boolean = true,
                                 outputsProposition: ErgoTree = Constants.TrueLeaf,
-                                stateCtxOpt: Option[ErgoStateContext] = None): ErgoTransaction = {
+                                stateCtxOpt: Option[ErgoStateContext] = None,
+                                //assuming that output is 200 bytes max
+                                minValue: Int = LaunchParameters.minValuePerByte * 200): ErgoTransaction = {
     require(boxesToSpend.nonEmpty, "At least one box is needed to generate a transaction")
 
     val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
@@ -132,8 +134,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     if (rnd.nextBoolean() && issueNew) {
       assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), rnd.nextInt(Int.MaxValue))
     }
-
-    val minValue = LaunchParameters.minValuePerByte * 200 //assuming that output is 200 bytes max
 
     require(inputSum >= minValue)
     val inputsCount = boxesToSpend.size
@@ -217,7 +217,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
                                       maxAssets: Int = -1,
                                       minInputs: Int = 1,
                                       maxInputs: Int = 100,
-                                      propositionGen: Gen[ErgoTree] = trueLeafGen
+                                      propositionGen: Gen[ErgoTree] = trueLeafGen,
+                                      minValue: Int = LaunchParameters.minValuePerByte * 200
                                      ): Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = for {
     inputsCount <- Gen.choose(minInputs, maxInputs)
     tokensCount <- Gen.choose(
@@ -226,7 +227,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     tokensDistribution <- disperseTokens(inputsCount, tokensCount.toByte)
     from <- Gen.sequence(tokensDistribution.map(tokens => ergoBoxGenForTokens(tokens, propositionGen)))
     prop <- propositionGen
-    tx = validTransactionFromBoxes(from.asScala.toIndexedSeq, outputsProposition = prop)
+    tx = validTransactionFromBoxes(from.asScala.toIndexedSeq, outputsProposition = prop, minValue = minValue)
   } yield from.asScala.toIndexedSeq -> tx
 
   lazy val validErgoTransactionGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = validErgoTransactionGenTemplate(0)

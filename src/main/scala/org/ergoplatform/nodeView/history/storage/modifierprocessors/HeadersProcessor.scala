@@ -130,7 +130,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     } else {
       orphanedBlockHeaderIdsRow(h, score)
     }
-    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, modifiersToInsert(h))
+    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, Seq(h))
   }
 
   /**
@@ -143,16 +143,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       heightIdsKey(GenesisHeight) -> Algos.idToBAW(h.id),
       headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
       headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
-      modifiersToInsert(h))
-  }
-
-  private def modifiersToInsert(header: Header): Seq[ErgoPersistentModifier] = {
-    if (java.util.Arrays.equals(header.extensionRoot, Algos.emptyMerkleTreeRoot)) {
-      // extension is empty, generate it and insert to history
-      Seq(header, Extension(header.id, Seq()))
-    } else {
-      Seq(header)
-    }
+      Seq(h))
   }
 
   /**

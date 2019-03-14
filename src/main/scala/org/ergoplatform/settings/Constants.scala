@@ -4,10 +4,11 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
-
+import sigmastate.Values
+import sigmastate.Values.ErgoTree
 
 object Constants {
   val HashLength: Int = 32
@@ -40,7 +41,7 @@ object Constants {
   // Number of last block headers available is scripts from ErgoStateContext
   val LastHeadersInContext = 10
 
-  val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: NodeViewModifier]] =
+  val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: NodeViewModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       Extension.modifierTypeId -> ExtensionSerializer,
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
@@ -49,5 +50,8 @@ object Constants {
 
   val SoftForkEpochs = 32 //about 45.5 days
 
-  val extensionMaxSize: Int = 10 * 1024 //10 kb
+  val ExtensionMaxSize: Int = 16 * 1024 //16 kb
+
+  val TrueLeaf: ErgoTree = Values.TrueLeaf.toSigmaProp
+  val FalseLeaf: ErgoTree = Values.FalseLeaf.toSigmaProp
 }

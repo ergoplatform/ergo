@@ -14,7 +14,7 @@ class TrackedBoxSerializationSpec extends ErgoPropertyTest with WalletGenerators
       val serializer = new TrackedBoxSerializer(txLookup(box))
       val bytes = serializer.toBytes(box)
       val recovered = serializer.parseBytes(bytes)
-      recovered shouldBe Success(box)
+      recovered shouldBe box
     }
   }
 

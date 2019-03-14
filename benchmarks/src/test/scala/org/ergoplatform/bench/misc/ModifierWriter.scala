@@ -3,15 +3,15 @@ package org.ergoplatform.bench.misc
 import java.io.{InputStream, OutputStream}
 
 import com.google.common.primitives.Ints
+import org.ergoplatform.Utils._
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.Utils._
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
 import scorex.core.{ModifierTypeId, NodeViewModifier}
 
 object ModifierWriter {
 
-  val modifierSerializers: Map[ModifierTypeId, Serializer[_ <: ErgoPersistentModifier]] =
+  val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: ErgoPersistentModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
       BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
       ADProofs.modifierTypeId -> ADProofSerializer)
@@ -30,7 +30,7 @@ object ModifierWriter {
     typeId <- readModId
     length <- readLength
     bytes <- readBytes(length)
-    mod <- modifierSerializers(typeId).parseBytes(bytes).toOption
+    mod <- modifierSerializers(typeId).parseBytesTry(bytes).toOption
   } yield mod
 
   private def readModId(implicit fis: InputStream): Option[ModifierTypeId] = {

@@ -9,12 +9,13 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import org.ergoplatform.api.TransactionsApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{BoxUtils, Stubs}
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.authds.ADKey
-import sigmastate.Values
+
 import scala.concurrent.duration._
 
 class TransactionApiRouteSpec extends FlatSpec
@@ -28,12 +29,13 @@ class TransactionApiRouteSpec extends FlatSpec
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
   val route: Route = TransactionsApiRoute(readersRef, nodeViewRef, restApiSettings).route
 
-  val input = Input(ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte),emptyProverResult)
+  val input = Input(ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte), emptyProverResult)
+  val dataInput = DataInput(input.boxId)
 
-  val boxValue: Long = BoxUtils.minimalErgoAmountSimulated(Values.TrueLeaf, parameters)
-  val output: ErgoBoxCandidate = new ErgoBoxCandidate(boxValue, Values.TrueLeaf,
+  val boxValue: Long = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, parameters)
+  val output: ErgoBoxCandidate = new ErgoBoxCandidate(boxValue, Constants.TrueLeaf,
     creationHeight = creationHeightGen.sample.get)
-  val tx: ErgoTransaction = ErgoTransaction(IndexedSeq(input), IndexedSeq(output))
+  val tx: ErgoTransaction = ErgoTransaction(IndexedSeq(input), IndexedSeq(dataInput), IndexedSeq(output))
 
   it should "post transaction" in {
     Post(prefix, tx.asJson) ~> route ~> check {

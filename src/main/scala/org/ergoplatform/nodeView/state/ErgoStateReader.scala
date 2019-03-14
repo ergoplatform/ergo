@@ -23,7 +23,7 @@ object ErgoStateReader {
 
   def storageStateContext(store: Store, constants: StateConstants): ErgoStateContext = {
     store.get(ByteArrayWrapper(ErgoStateReader.ContextKey))
-      .flatMap(b => ErgoStateContextSerializer(constants.votingSettings).parseBytes(b.data).toOption)
+      .flatMap(b => ErgoStateContextSerializer(constants.votingSettings).parseBytesTry(b.data).toOption)
       .getOrElse(ErgoStateContext.empty(constants))
   }
 

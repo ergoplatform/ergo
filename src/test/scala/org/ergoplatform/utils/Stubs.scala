@@ -1,7 +1,5 @@
 package org.ergoplatform.utils
 
-import java.net.InetSocketAddress
-
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -20,9 +18,8 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.core.app.Version
-import scorex.core.network.Handshake
+import scorex.core.network.{Handshake, PeerSpec}
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
-import scorex.core.network.peer.PeerInfo
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
 import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
@@ -53,25 +50,16 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   lazy val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs).get
   lazy val readers = Readers(history, state, memPool, wallet)
 
-  val inetAddr1 = new InetSocketAddress("92.92.92.92", 27017)
-  val inetAddr2 = new InetSocketAddress("93.93.93.93", 27017)
-
-  val ts1: Long = System.currentTimeMillis() - 100
-  val ts2: Long = System.currentTimeMillis() + 100
-
-  val peers = Map(
-    inetAddr1 -> PeerInfo(ts1, Some(inetAddr1), Some("first"), None, Seq.empty),
-    inetAddr2 -> PeerInfo(ts2, Some(inetAddr2), Some("second"), None, Seq.empty)
-  )
-
   val protocolVersion = Version("1.1.1")
 
-  val connectedPeers = Seq(
-    Handshake("node_pop", protocolVersion, "first", Some(inetAddr1), Seq(), ts1),
-    Handshake("node_pop", protocolVersion, "second", Some(inetAddr2), Seq(), ts2)
+  val peerSpec: PeerSpec = defaultPeerSpec.copy(protocolVersion = protocolVersion)
+
+  val connectedPeers: Seq[Handshake] = Seq(
+    Handshake(peerSpec.copy(nodeName = "first"), ts1),
+    Handshake(peerSpec.copy(nodeName = "second"), ts2)
   )
 
-  val blacklistedPeers = Seq("4.4.4.4:1111", "8.8.8.8:2222")
+  val blacklistedPeers: Seq[String] = Seq("4.4.4.4:1111", "8.8.8.8:2222")
 
   class PeersManagerStub extends Actor {
     def receive: PartialFunction[Any, Unit] = {
@@ -189,9 +177,6 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10): ErgoHistory = {
 
-    val protocolVersion = 0: Byte
-    val networkPrefix = 0: Byte
-    val blockInterval = 1.minute
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
@@ -200,8 +185,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
     val monetarySettings = settings.chainSettings.monetary
-    val chainSettings = ChainSettings(protocolVersion, networkPrefix, blockInterval, epochLength, useLastEpochs,
-                                      votingSettings, powScheme, monetarySettings)
+    val chainSettings = settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,

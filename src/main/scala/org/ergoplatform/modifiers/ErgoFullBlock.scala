@@ -5,7 +5,7 @@ import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import scorex.core.serialization.Serializer
+import scorex.core.serialization.ScorexSerializer
 import scorex.core.{ModifierTypeId, TransactionsCarryingPersistentNodeViewModifier}
 import scorex.util.ModifierId
 
@@ -38,7 +38,7 @@ case class ErgoFullBlock(header: Header,
 
   override lazy val size: Int = header.size + blockTransactions.size + adProofs.map(_.size).getOrElse(0)
 
-  override lazy val serializer: Serializer[ErgoFullBlock] =
+  override lazy val serializer: ScorexSerializer[ErgoFullBlock] =
     throw new Error("Serialization for ErgoFullBlock is not (and will be not) implemented")
 }
 

@@ -10,15 +10,14 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.nodeView.{ErgoContext, TransactionContext}
-import org.ergoplatform.settings.{ErgoSettings, LaunchParameters, Parameters}
+import org.ergoplatform.settings.{Constants, ErgoSettings, LaunchParameters, Parameters}
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
-import sigmastate.Values
-import sigmastate.Values.{IntConstant, StringConstant}
+import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.interpreter.ContextExtension
 
 import scala.collection.{immutable, mutable}
@@ -57,13 +56,9 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
   private val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer
 
-  private def extractTrackedBytes(addr: ErgoAddress): Option[Array[Byte]] = addr match {
-    case p2pk: P2PKAddress => Some(p2pk.script.pkBytes)
-    case p2s: Pay2SAddress => Some(p2s.contentBytes)
-    case p2sh: Pay2SHAddress => Some(p2sh.contentBytes)
-  }
+  private def extractTrackedBytes(addr: ErgoAddress): Array[Byte] = addr.contentBytes
 
-  private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.flatMap(extractTrackedBytes(_).toSeq)
+  private val trackedBytes: mutable.Buffer[Array[Byte]] = trackedAddresses.map(extractTrackedBytes)
 
   //we currently do not use off-chain boxes to create a transaction
   private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onchain
@@ -75,15 +70,15 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
       val testingTx = UnsignedErgoLikeTransaction(
         IndexedSeq(new UnsignedInput(box.id)),
-        IndexedSeq(new ErgoBoxCandidate(1L, Values.TrueLeaf, creationHeight = height))
+        IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
       )
 
-      val transactionContext = TransactionContext(IndexedSeq(box), testingTx, selfIndex = 0)
+      val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx, selfIndex = 0)
 
       val context =
         new ErgoContext(stateContext, transactionContext, ContextExtension.empty)
 
-      prover.prove(box.proposition, context, testingTx.messageToSign) match {
+      prover.prove(box.ergoTree, context, testingTx.messageToSign) match {
         case Success(_) =>
           log.debug(s"Uncertain box is mine! $uncertainBox")
           registry.makeTransition(uncertainBox.boxId, MakeCertain)
@@ -180,8 +175,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
         ).headOption.getOrElse(throw new Exception("Can't issue asset with no inputs"))
         val assetId = Digest32 !@@ firstInput.id
         val nonMandatoryRegisters = scala.Predef.Map(
-          R4 -> StringConstant(name),
-          R5 -> StringConstant(description),
+          R4 -> ByteArrayConstant(name.getBytes("UTF-8")),
+          R5 -> ByteArrayConstant(description.getBytes("UTF-8")),
           R6 -> IntConstant(decimals)
         )
         val lockWithAddress = (addressOpt orElse publicKeys.headOption)
@@ -229,10 +224,11 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
         val unsignedTx = new UnsignedErgoTransaction(
           inputs.map(_.id).map(id => new UnsignedInput(id)),
+          IndexedSeq(),
           (payTo ++ changeBoxCandidates).toIndexedSeq
         )
 
-        prover.sign(unsignedTx, inputs, stateContext)
+        prover.sign(unsignedTx, inputs, IndexedSeq(), stateContext)
           .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
       } match {
         case Some(txTry) => txTry
@@ -283,7 +279,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   override def receive: Receive = onStateChanged orElse scanLogic orElse readers orElse {
     case WatchFor(address) =>
       trackedAddresses.append(address)
-      extractTrackedBytes(address).foreach(trackedBytes.append(_))
+      trackedBytes.append(extractTrackedBytes(address))
 
     //generate a transaction paying to a sequence of boxes payTo
     case GenerateTransaction(requests) =>

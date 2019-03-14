@@ -56,16 +56,18 @@ class ErgoProvingInterpreter(seed: String,
   /** Require `unsignedTx` and `boxesToSpend` have the same boxIds in the same order */
   def sign(unsignedTx: UnsignedErgoTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],
+           dataBoxes: IndexedSeq[ErgoBox],
            stateContext: ErgoStateContext): Try[ErgoTransaction] = Try {
 
-    require(unsignedTx.inputs.length == boxesToSpend.length)
+    require(unsignedTx.inputs.length == boxesToSpend.length, "Not enough boxes to spend")
+    require(unsignedTx.dataInputs.length == dataBoxes.length, "Not enough data boxes")
 
     boxesToSpend.zipWithIndex.foldLeft(Try(IndexedSeq[Input]() -> 0L)) {
       case (inputsCostTry, (inputBox, boxIdx)) =>
         val unsignedInput = unsignedTx.inputs(boxIdx)
         require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
 
-        val transactionContext = TransactionContext(boxesToSpend, unsignedTx, boxIdx.toShort)
+        val transactionContext = TransactionContext(boxesToSpend, dataBoxes, unsignedTx, boxIdx.toShort)
 
         inputsCostTry.flatMap { case (ins, totalCost) =>
           val context =
@@ -84,7 +86,7 @@ class ErgoProvingInterpreter(seed: String,
           }
         }
     }.map { case (inputs, _) =>
-      ErgoTransaction(inputs.reverse, unsignedTx.outputCandidates)
+      ErgoTransaction(inputs.reverse, unsignedTx.dataInputs, unsignedTx.outputCandidates)
     }
   }.flatten
 }

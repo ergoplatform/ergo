@@ -12,7 +12,8 @@ class KnownNodesSpec extends FreeSpec with IntegrationSuite {
   val nodeConfigs: List[Config] = nodeSeedConfigs.take(3).map(nonGeneratingPeerConfig.withFallback)
   val nodes: List[Node] = docker.startNodes(nodeConfigs, sequentialTopologyConfig).get
 
-  s"The third node knows first node" in {
+  // todo: https://github.com/ergoplatform/ergo/issues/653
+  s"The third node knows first node" ignore {
 
     val node03 = nodes.find(_.nodeName == "node03").value
     val targetPeersCount = nodes.length - 1 /* self */

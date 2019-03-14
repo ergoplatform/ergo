@@ -6,10 +6,11 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosSolution, AutolykosSolutionSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
-import scorex.core.ModifierTypeId
+import scorex.core.{ModifierTypeId, idToBytes}
 import scorex.core.block.Block._
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
@@ -21,6 +22,10 @@ import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
 
 import scala.concurrent.duration.FiniteDuration
 import scorex.util.Extensions._
+import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement}
+import special.collection.{Coll, CollOverArray}
+import special.sigma
+import special.sigma.{AvlTree, GroupElement}
 
 case class Header(version: Version,
                   override val parentId: ModifierId,
@@ -80,6 +85,38 @@ case class Header(version: Version,
 }
 
 object Header extends ApiCodecs {
+
+  def toSigma(header: Header): special.sigma.Header = new special.sigma.Header {
+    override def id: Coll[Byte] = new CollOverArray(idToBytes(header.id))
+
+    override def version: Version = header.version
+
+    override def parentId: Coll[Byte] = new CollOverArray(idToBytes(header.parentId))
+
+    override def ADProofsRoot: Coll[Byte] = new CollOverArray(header.ADProofsRoot)
+
+    override def stateRoot: AvlTree = CAvlTree(ErgoContext.stateTreeFromDigest(header.stateRoot))
+
+    override def transactionsRoot: Coll[Byte] = new CollOverArray(header.transactionsRoot)
+
+    override def timestamp: Timestamp = header.timestamp
+
+    override def nBits: Timestamp = header.nBits
+
+    override def height: Int = header.height
+
+    override def extensionRoot: Coll[Version] = new CollOverArray(header.extensionRoot)
+
+    override def minerPk: GroupElement = CGroupElement(header.powSolution.pk)
+
+    override def powOnetimePk: GroupElement = CGroupElement(header.powSolution.w)
+
+    override def powNonce: Coll[Byte] = new CollOverArray(header.powSolution.n)
+
+    override def powDistance: sigma.BigInt = CBigInt(header.powSolution.d.bigInteger)
+
+    override def votes: Coll[Byte] = new CollOverArray(header.votes)
+  }
 
   val CurrentVersion: Byte = 1
 
@@ -168,6 +205,6 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     val powSolution = AutolykosSolutionSerializer.parse(r)
 
     Header(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-        nBits, height, extensionHash, powSolution, votes, Some(r.consumed))
+      nBits, height, extensionHash, powSolution, votes, Some(r.consumed))
   }
 }

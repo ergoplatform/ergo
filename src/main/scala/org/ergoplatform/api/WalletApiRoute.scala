@@ -16,6 +16,7 @@ import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.eval.RuntimeIRContext
 import sigmastate.lang.SigmaCompiler
 import sigmastate.{SBoolean, SSigmaProp}
 
@@ -70,7 +71,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private def compileSource(source: String, env: Map[String, Any]): Try[ErgoTree] = {
     import sigmastate.Values._
     val compiler = SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
-    Try(compiler.compile(env, source)).flatMap {
+    Try(compiler.compile(env, source)(new RuntimeIRContext)).flatMap {
       case script: Value[SSigmaProp.type@unchecked] if script.tpe == SSigmaProp =>
         Success(script)
       case script: Value[SBoolean.type@unchecked] if script.tpe == SBoolean =>

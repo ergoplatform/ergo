@@ -73,13 +73,21 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
     val totalCost = transactions.map { tx =>
       tx.statelessValidity.get
-      val boxesToSpend = tx.inputs.map(_.boxId).map { id =>
+      val boxesToSpend = tx.inputs.map { i =>
+        val id = i.boxId
         createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
           case Some(box) => box
           case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
         }
       }
-      tx.statefulValidity(boxesToSpend, currentStateContext)(verifier).get
+      val dataBoxes = tx.dataInputs.map { i =>
+        val id = i.boxId
+        createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
+          case Some(box) => box
+          case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+        }
+      }
+      tx.statefulValidity(boxesToSpend, dataBoxes, currentStateContext)(verifier).get
     }.sum
 
     if (totalCost > currentStateContext.currentParameters.maxBlockCost) {
@@ -107,6 +115,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       val height = fb.header.height
 
       log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
+
       stateContext.appendFullBlock(fb, votingSettings).flatMap { newStateContext =>
         persistentProver.synchronized {
           val inRoot = rootHash
@@ -126,7 +135,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
               throw new Error("Calculated stateRoot is not equal to the declared one")
             }
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
-              s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState with root hash ${Algos.encode(inRoot)}")
+              s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
             new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
           stateTry.recoverWith[UtxoState] { case e =>

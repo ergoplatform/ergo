@@ -201,9 +201,9 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
       // update transaction inputs and outputs accordingly
       val txMod0 = tx.copy(inputs = tx.inputs.init :+ txInMod0) // new token group added to one input
-      val txMod1 = tx.copy(inputs = tx.inputs.init :+ txInMod1) // existing token added to one input
-      val txMod2 = tx.copy(inputs = tx.inputs.init :+ txInMod0, // new token group added to one input and one output
-        outputCandidates = tx.outputCandidates.init :+ modifiedOut0)
+    val txMod1 = tx.copy(inputs = tx.inputs.init :+ txInMod1) // existing token added to one input
+    val txMod2 = tx.copy(inputs = tx.inputs.init :+ txInMod0, // new token group added to one input and one output
+      outputCandidates = tx.outputCandidates.init :+ modifiedOut0)
       val txMod3 = tx.copy(inputs = tx.inputs.init :+ txInMod1, // existing token added to one input and one output
         outputCandidates = tx.outputCandidates.init :+ modifiedOut1)
 
@@ -242,7 +242,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
     val cost = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext).get
-    cost shouldBe > (LaunchParameters.maxBlockCost)
+    cost shouldBe >(LaunchParameters.maxBlockCost)
   }
 
   property("transaction with too many inputs should be rejected") {
@@ -262,22 +262,23 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       t - t0
     }
 
-    val gen = validErgoTransactionGenTemplate(0, 0, 1500, 2000, trueLeafGen)
+    val gen = validErgoTransactionGenTemplate(0, 0, 2000, 5000, trueLeafGen)
 
-    forAll(gen) { case (from, tx) =>
+    val (from, tx) = gen.sample.get
 
-      tx.statelessValidity.isSuccess shouldBe true
-      val validity = tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(ErgoInterpreter(LaunchParameters))
-      validity.isSuccess shouldBe false
+    tx.statelessValidity.isSuccess shouldBe true
+    val (validity, time0) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(ErgoInterpreter(LaunchParameters)))
+    validity.isSuccess shouldBe false
+    assert(time0 <= Timeout)
 
-      val cause = validity.failed.get.getCause
-      Option(cause) shouldBe defined
-      cause.getMessage should startWith("Estimated expression complexity")
+    val cause = validity.failed.get.getCause
+    Option(cause) shouldBe defined
+    cause.getMessage should startWith("Estimated expression complexity")
 
-      val verifier = ErgoInterpreter(Parameters(0, LaunchParameters.parametersTable.updated(Parameters.MaxBlockCostIncrease, Int.MaxValue)))
-      val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(verifier))
+    val verifier = ErgoInterpreter(Parameters(0, LaunchParameters.parametersTable.updated(Parameters.MaxBlockCostIncrease, Int.MaxValue)))
+    val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(verifier))
 
-      assert(time > Timeout)
-    }
+    assert(time > Timeout)
   }
+
 }

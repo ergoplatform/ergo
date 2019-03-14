@@ -38,8 +38,8 @@ class ExpirationSpecification extends ErgoPropertyTest {
     val tx = ErgoTransaction(inputs = IndexedSeq(in), dataInputs = IndexedSeq(), outputCandidates = oc)
 
     val fb0 = invalidErgoFullBlockGen.sample.get
-    val fb = fb0.copy(fb0.header.copy(height = h))
-    val fakeHeader = fb.header.copy(height = fb.header.height - 1)
+    val fakeHeader = fb0.header.copy(height = h - 1)
+    val fb = fb0.copy(fb0.header.copy(height = h, parentId = fakeHeader.id))
     val updContext = emptyStateContext.updateHeaders(Seq(fakeHeader)).appendFullBlock(fb, votingSettings).get
 
     tx.statelessValidity.isSuccess shouldBe true

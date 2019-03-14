@@ -82,15 +82,9 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
 
-    val peerSpec = PeerSpec(
-      settings.scorexSettings.network.agentName,
-      Version(settings.scorexSettings.network.appVersion),
-      settings.scorexSettings.network.nodeName,
-      None,
-      Seq.empty
-    )
 
-    val peerInfo = PeerInfo(peerSpec, Long.MaxValue)
+    val peerInfo = PeerInfo(defaultPeerSpec, Long.MaxValue)
+
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(
       inetSocketAddressGen.sample.get,

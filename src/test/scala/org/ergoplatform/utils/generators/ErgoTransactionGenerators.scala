@@ -9,14 +9,15 @@ import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotCh
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
 import org.ergoplatform.settings.{Constants, LaunchParameters}
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util._
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant, EvaluatedValue, FalseLeaf, TrueLeaf, Value}
+import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf, Value}
 import sigmastate._
 import org.ergoplatform.settings.Parameters._
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
@@ -38,7 +39,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     value <- validValueGen(prop, tokens, ar)
   } yield new ErgoBoxCandidate(value, prop, h, tokens, ar)
 
-  def ergoBoxGen(propGen: Gen[Value[SBoolean.type]] = ergoPropositionGen,
+  def ergoBoxGen(propGen: Gen[ErgoTree] = ergoPropositionGen,
                  tokensGen: Gen[Seq[(TokenId, Long)]] = additionalTokensGen,
                  valueGenOpt: Option[Gen[Long]] = None,
                  heightGen: Gen[Int] = creationHeightGen): Gen[ErgoBox] = for {
@@ -56,7 +57,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = ergoBoxGen(propGen = trueLeafGen)
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
-                          propositionGen: Gen[Value[SBoolean.type]]): Gen[ErgoBox] = {
+                          propositionGen: Gen[ErgoTree]): Gen[ErgoBox] = {
     ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens), heightGen = ErgoHistory.EmptyHistoryHeight)
   }
 
@@ -103,10 +104,15 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     spendingProof <- noProofGen
   } yield Input(boxId, spendingProof)
 
+  lazy val dataInputGen: Gen[DataInput] = for {
+    boxId <- boxIdGen
+  } yield DataInput(boxId)
+
   lazy val invalidErgoTransactionGen: Gen[ErgoTransaction] = for {
     from: IndexedSeq[Input] <- smallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
+    dataInputs: IndexedSeq[DataInput] <- smallInt.flatMap(i => Gen.listOfN(i + 1, dataInputGen).map(_.toIndexedSeq))
     to: IndexedSeq[ErgoBoxCandidate] <- smallInt.flatMap(i => Gen.listOfN(i + 1, ergoBoxCandidateGen).map(_.toIndexedSeq))
-  } yield ErgoTransaction(from, to)
+  } yield ErgoTransaction(from, dataInputs, to)
 
   /**
     * Generates a transaction that is valid if correct boxes were provided.
@@ -117,8 +123,9 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   def validTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
                                 rnd: Random = new Random,
                                 issueNew: Boolean = true,
-                                outputsProposition: Value[SBoolean.type] = TrueLeaf,
-                                stateCtxOpt: Option[ErgoStateContext] = None): ErgoTransaction = {
+                                outputsProposition: ErgoTree = Constants.TrueLeaf,
+                                stateCtxOpt: Option[ErgoStateContext] = None,
+                                dataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()): ErgoTransaction = {
     require(boxesToSpend.nonEmpty, "At least one box is needed to generate a transaction")
 
     val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
@@ -126,9 +133,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       mutable.Map(boxesToSpend.flatMap(_.additionalTokens).map { case (bs, amt) =>
         ByteArrayWrapper(bs) -> amt
       }: _*)
-    if (assetsMap.size > ErgoTransaction.MaxTokens) {
-      log.warn("Going to generate a transaction with too much tokens")
-    }
 
     //randomly creating a new asset
     if (rnd.nextBoolean() && issueNew) {
@@ -197,10 +201,13 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       ErgoBox(amt, outputsProposition, 0, normalizedTokens)
     }
     val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
-    val unsignedTx = new UnsignedErgoTransaction(inputs, newBoxes)
-    defaultProver.sign(unsignedTx, boxesToSpend, stateCtxOpt.getOrElse(emptyStateContext)).getOrElse {
+    val dataInputs = dataBoxes.map(b => DataInput(b.id))
+    val unsignedTx = UnsignedErgoTransaction(inputs, dataInputs, newBoxes)
+    require(unsignedTx.dataInputs.length == dataBoxes.length, s"${unsignedTx.dataInputs.length} == ${dataBoxes.length}")
+
+    defaultProver.sign(unsignedTx, boxesToSpend, dataBoxes, stateCtxOpt.getOrElse(emptyStateContext)).getOrElse {
       log.debug(s"Going to generate a transaction with incorrect spending proofs: $unsignedTx")
-      new ErgoTransaction(inputs, newBoxes)
+      ErgoTransaction(inputs, dataInputs, newBoxes)
     }
   }
 
@@ -219,12 +226,12 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
                                       maxAssets: Int = -1,
                                       minInputs: Int = 1,
                                       maxInputs: Int = 100,
-                                      propositionGen: Gen[Value[SBoolean.type]] = trueLeafGen
+                                      propositionGen: Gen[ErgoTree] = trueLeafGen
                                      ): Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = for {
     inputsCount <- Gen.choose(minInputs, maxInputs)
     tokensCount <- Gen.choose(
       minAssets,
-      Math.max(maxAssets, Math.min(inputsCount * ErgoBox.MaxTokens, ErgoTransaction.MaxTokens - 1)))
+      Math.max(maxAssets, inputsCount))
     tokensDistribution <- disperseTokens(inputsCount, tokensCount.toByte)
     from <- Gen.sequence(tokensDistribution.map(tokens => ergoBoxGenForTokens(tokens, propositionGen)))
     prop <- propositionGen
@@ -237,9 +244,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   lazy val boxesHolderGen: Gen[BoxHolder] = Gen.listOfN(2000, ergoBoxGenForTokens(Seq(), trueLeafGen))
     .map(l => BoxHolder(l))
-
-  lazy val stateChangesGen: Gen[StateChanges] = ergoBoxGenNoProp
-    .map(b => StateChanges(Seq(), Seq(Insertion(b))))
 
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
     headerId <- modifierIdGen

@@ -7,7 +7,7 @@ import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local._
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer
+import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.ErgoSettings
@@ -27,11 +27,11 @@ class ErgoApp(args: Seq[String]) extends Application {
   override type PMOD = ErgoPersistentModifier
   override type NVHT = ErgoNodeViewHolder[_]
 
-  override protected lazy val features: Seq[PeerFeature] = Seq()
+  override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
   lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
 
-  override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
+  override protected lazy val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
 
   override protected lazy val additionalMessageSpecs: Seq[MessageSpec[_]] = Seq(ErgoSyncInfoMessageSpec)
   override val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)

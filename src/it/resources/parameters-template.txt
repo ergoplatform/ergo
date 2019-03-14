@@ -14,30 +14,6 @@ paths:
             "nBits": 33628928,
             "version": 1,
             "id": "00d2a8d21113598ea924329f9520905693e914bac6235255b74fd3b8016171aa",
-            "interlinks": [
-              "8b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337",
-              "002390f165396f855f53b928e469ba89a2107784479423a2db66b3acccef78e9",
-              "002390f165396f855f53b928e469ba89a2107784479423a2db66b3acccef78e9",
-              "00055133e65dfbc5f035630a6af6fd7e491c6933a5e990da392c87f3c4d22e56",
-              "00055133e65dfbc5f035630a6af6fd7e491c6933a5e990da392c87f3c4d22e56",
-              "00055133e65dfbc5f035630a6af6fd7e491c6933a5e990da392c87f3c4d22e56",
-              "00029d0f700496081fdf22623aadd90d271615ca71a60cee132bdc7f6a5d73b0",
-              "0000a43cdcb0ed04d8f7cf8549a51ce66a7530ab0fc553e4d4e15e7f33f2cbe1",
-              "0000a43cdcb0ed04d8f7cf8549a51ce66a7530ab0fc553e4d4e15e7f33f2cbe1",
-              "00006310e137b5800f0ac2f1752721f24169d2899527a3aea5253c09ce8e0e5a",
-              "000002e3562dd0e043392336010d4661fe08810ecf64b24757dab8d006d8ec38",
-              "000002e3562dd0e043392336010d4661fe08810ecf64b24757dab8d006d8ec38",
-              "000002e3562dd0e043392336010d4661fe08810ecf64b24757dab8d006d8ec38",
-              "000002e3562dd0e043392336010d4661fe08810ecf64b24757dab8d006d8ec38",
-              "000002e3562dd0e043392336010d4661fe08810ecf64b24757dab8d006d8ec38",
-              "000000935916cc930240be33843df5f09c9fb9b781fc80ef4380c38fb97c0257",
-              "000000935916cc930240be33843df5f09c9fb9b781fc80ef4380c38fb97c0257",
-              "00000585cf94a5d4326b875acf0db730379d41f9a5bb5596f37772763e914391",
-              "00000585cf94a5d4326b875acf0db730379d41f9a5bb5596f37772763e914391",
-              "00000585cf94a5d4326b875acf0db730379d41f9a5bb5596f37772763e914391",
-              "00000585cf94a5d4326b875acf0db730379d41f9a5bb5596f37772763e914391",
-              "00000585cf94a5d4326b875acf0db730379d41f9a5bb5596f37772763e914391"
-            ],
             "adProofsRoot": "a84f62a669fb3684308ea609af6cd831b939b70210307e143a05321ce8efeda2",
             "transactionsRoot": "cc32add0ada11b6a81f07b61a6c606b2277af9999b453538d32b3c409630bce1",
             "extensionHash": "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
@@ -70,6 +46,7 @@ paths:
                     }
                   }
                 ],
+                "dataInputs" : [],
                 "outputs": [
                   {
                     "boxId": "08667225fa6beb560627ba02b5389929db756add5b65bda8aea7920088b2cc8c",
@@ -99,6 +76,17 @@ paths:
                       "proofBytes": "28a6e09627092c63151fc10025abe30f368153e4255f26b90768bf60023d321ebde22692f2b412a7e964030333f615dc783b001bcb4865f7",
                       "extension": {}
                     }
+                  }
+                ],
+                "dataInputs" : [
+                  {
+                    "boxId" : "fec8fa6499dc086098d1589fdeefdd195def862098b84c9a7d85aaab28e92d0e"
+                  },
+                  {
+                    "boxId" : "fecf6c5508e87f7e71170f4fc88053539b7b70831a72b42090d7d480ae69e52f"
+                  },
+                  {
+                    "boxId" : "fee3087d7ecd4fbef2bea80dae2d0ef86e690c26a68084123c9fa1036761e82b"
                   }
                 ],
                 "outputs": [
@@ -176,6 +164,11 @@ paths:
                   "1": "0101"
                 }
               }
+            }
+          ],
+          "dataInputs" : [
+            {
+              "boxId" : "fee3087d7ecd4fbef2bea80dae2d0ef86e690c26a68084123c9fa1036761e82b"
             }
           ],
           "outputs": [

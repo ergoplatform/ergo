@@ -137,9 +137,14 @@ trait ErgoHistory
                   .flatMap(h => getFullBlock(h))
               }
 
+              val chainStatusRow = validChain.tail.map(b =>
+                FullBlockProcessor.chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
+                invalidatedHeaders.map(h =>
+                  FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
+
               val changedLinks = Seq(BestFullBlockKey -> Algos.idToBAW(validChain.last.id),
                 BestHeaderKey -> Algos.idToBAW(newBestHeader.id))
-              val toInsert = validityRow ++ changedLinks
+              val toInsert = validityRow ++ changedLinks ++ chainStatusRow
               historyStorage.insert(validityKey(modifier.id), toInsert, Seq.empty)
               this -> ProgressInfo[ErgoPersistentModifier](Some(branchPoint.id), invalidatedChain.tail,
                 validChain.tail, Seq.empty)
@@ -174,6 +179,8 @@ object ErgoHistory extends ScorexLogging {
   type Difficulty = BigInt
   type NBits = Long
 
+  val CharsetName = "UTF-8"
+
   val EmptyHistoryHeight: Int = 0
   val GenesisHeight: Int = EmptyHistoryHeight + 1
   def heightOf(headerOpt: Option[Header]): Int = headerOpt.map(_.height).getOrElse(EmptyHistoryHeight)
@@ -192,7 +199,7 @@ object ErgoHistory extends ScorexLogging {
     val db = new HistoryStorage(indexStore, objectsStore, settings.cacheSettings)
     val nodeSettings = settings.nodeSettings
 
-    val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.PoPoWBootstrap) match {
+    val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.poPoWBootstrap) match {
       case (true, true) =>
         new ErgoHistory with FullBlockSectionProcessor
           with FullPoPoWProofsProcessor {

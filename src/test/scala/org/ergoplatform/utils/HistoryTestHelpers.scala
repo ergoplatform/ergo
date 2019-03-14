@@ -1,7 +1,7 @@
 package org.ergoplatform.utils
 
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.EmptyBlockSectionProcessor
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.{EmptyBlockSectionProcessor, FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
 import org.scalacheck.Gen
@@ -31,6 +31,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     }
   }
 
+  // todo looks like copy-paste from Stubs.generateHistory
   def generateHistory(verifyTransactions: Boolean,
                       stateType: StateType,
                       PoPoWBootstrap: Boolean,
@@ -38,9 +39,6 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10): ErgoHistory = {
 
-    val protocolVersion = 1: Byte
-    val networkPrefix = 0: Byte
-    val blockInterval = 1.minute
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
@@ -48,8 +46,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
-    val chainSettings = ChainSettings(protocolVersion, networkPrefix, blockInterval, epochLength, useLastEpochs,
-      votingSettings, powScheme, settings.chainSettings.monetary)
+    val chainSettings = settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
@@ -57,4 +54,25 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }
+
+}
+
+object HistoryTestHelpers {
+
+  /**
+    * Use reflection to set `minimalFullBlockHeightVar` to 0 to change regular synchronization rule, that we
+    * first apply headers chain, and apply full blocks only after that
+    */
+  def allowToApplyOldBlocks(history: ErgoHistory): Unit = {
+    import scala.reflect.runtime.{universe => ru}
+    val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
+    val procInstance = runtimeMirror.reflect(history.asInstanceOf[ToDownloadProcessor])
+    val ppM = ru.typeOf[ToDownloadProcessor].member(ru.TermName("pruningProcessor")).asMethod
+    val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
+    val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
+    runtimeMirror.reflect(pp).reflectField(f).set(ErgoHistory.GenesisHeight)
+    val f2 = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
+    runtimeMirror.reflect(pp).reflectField(f2).set(true)
+  }
+
 }

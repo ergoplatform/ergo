@@ -20,9 +20,7 @@ case class ErgoSettings(directory: String,
                         scorexSettings: ScorexSettings,
                         walletSettings: WalletSettings,
                         cacheSettings: CacheSettings,
-                        votingTargets: Map[Byte, Int] = Map()) {
-  lazy val emission = new EmissionRules(chainSettings.monetary)
-}
+                        votingTargets: Map[Byte, Int] = Map())
 
 object ErgoSettings extends ScorexLogging
   with PowSchemeReaders

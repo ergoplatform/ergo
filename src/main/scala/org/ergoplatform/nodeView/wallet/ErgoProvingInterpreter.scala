@@ -11,10 +11,10 @@ import org.ergoplatform.settings.Parameters
 import org.ergoplatform.{ErgoBox, Input}
 import scorex.crypto.hash.Blake2b256
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.eval.{RuntimeIRContext, IRContext}
+import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 
 /**
@@ -56,16 +56,18 @@ class ErgoProvingInterpreter(seed: String,
   /** Require `unsignedTx` and `boxesToSpend` have the same boxIds in the same order */
   def sign(unsignedTx: UnsignedErgoTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],
+           dataBoxes: IndexedSeq[ErgoBox],
            stateContext: ErgoStateContext): Try[ErgoTransaction] = Try {
 
-    require(unsignedTx.inputs.length == boxesToSpend.length)
+    require(unsignedTx.inputs.length == boxesToSpend.length, "Not enough boxes to spend")
+    require(unsignedTx.dataInputs.length == dataBoxes.length, "Not enough data boxes")
 
     boxesToSpend.zipWithIndex.foldLeft(Try(IndexedSeq[Input]() -> 0L)) {
       case (inputsCostTry, (inputBox, boxIdx)) =>
         val unsignedInput = unsignedTx.inputs(boxIdx)
         require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
 
-        val transactionContext = TransactionContext(boxesToSpend, unsignedTx, boxIdx.toShort)
+        val transactionContext = TransactionContext(boxesToSpend, dataBoxes, unsignedTx, boxIdx.toShort)
 
         inputsCostTry.flatMap { case (ins, totalCost) =>
           val context =
@@ -74,7 +76,7 @@ class ErgoProvingInterpreter(seed: String,
               transactionContext,
               ContextExtension.empty)
 
-          prove(inputBox.proposition, context, unsignedTx.messageToSign).flatMap { proverResult =>
+          prove(inputBox.ergoTree, context, unsignedTx.messageToSign).flatMap { proverResult =>
             val newTC = totalCost + proverResult.cost
             if (newTC > maxCost) {
               Failure(new Exception(s"Computational cost of transaction $unsignedTx exceeds limit $maxCost"))
@@ -84,7 +86,7 @@ class ErgoProvingInterpreter(seed: String,
           }
         }
     }.map { case (inputs, _) =>
-      ErgoTransaction(inputs.reverse, unsignedTx.outputCandidates)
+      ErgoTransaction(inputs.reverse, unsignedTx.dataInputs, unsignedTx.outputCandidates)
     }
   }.flatten
 }

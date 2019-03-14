@@ -11,6 +11,8 @@ import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.{DataInput, ErgoBox, ErgoScriptPredef}
+import scorex.core.app.Version
+import scorex.core.network.PeerSpec
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -69,5 +71,13 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val defaultTimeout: Timeout = Timeout(14.seconds)
   val defaultAwaitDuration: FiniteDuration = defaultTimeout.duration + 1.second
+
+  val defaultPeerSpec = PeerSpec(
+    settings.scorexSettings.network.agentName,
+    Version(settings.scorexSettings.network.appVersion),
+    settings.scorexSettings.network.nodeName,
+    None,
+    Seq.empty
+  )
 
 }

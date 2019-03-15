@@ -113,7 +113,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
                        dataBoxes: IndexedSeq[ErgoBox],
-                       stateContext: ErgoStateContext)(implicit verifier: ErgoInterpreter): Try[Long] = {
+                       stateContext: ErgoStateContext,
+                       accumulatedCost: Long = 0L)(implicit verifier: ErgoInterpreter): Try[Long] = {
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
@@ -123,9 +124,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       dataBoxes.size * stateContext.currentParameters.dataInputCost +
       outputCandidates.size * stateContext.currentParameters.outputCost
 
+    val maxCost = verifier.maxCost - accumulatedCost
+
     failFast
       .payload(initialCost)
-      .demand(initialCost < verifier.maxCost, s"Spam transaction detected: $this")
+      .demand(initialCost < maxCost, s"Spam transaction detected: $this")
       .validateSeq(outputs) { case (validationState, out) =>
         validationState
           .demand(out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"Transaction is trying to create dust: $this")

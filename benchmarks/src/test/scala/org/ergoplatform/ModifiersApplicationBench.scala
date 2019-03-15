@@ -2,14 +2,14 @@ package org.ergoplatform
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{BlockTransactions, Extension, Header}
-import org.ergoplatform.nodeView.ErgoModifiersCache
+import org.ergoplatform.nodeView.{ErgoModifiersCache, NVBenchmark}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.HistoryTestHelpers
 
 import scala.annotation.tailrec
 
-object ModifiersApplicationBench extends HistoryTestHelpers with App {
+object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark with App {
 
   override def main(args: Array[String]): Unit = {
 
@@ -85,24 +85,6 @@ object ModifiersApplicationBench extends HistoryTestHelpers with App {
     val h = history()
     HistoryTestHelpers.allowToApplyOldBlocks(h)
     h
-  }
-
-  def readModifiers[M <: ErgoPersistentModifier](path: String): Seq[M] = {
-    val is = Utils.getUrlInputStream(path)
-    Stream
-      .continually {
-        Utils.readModifier[M](is)
-      }
-      .takeWhile(_.isDefined)
-      .flatten
-      .toList
-  }
-
-  private def time[R](block: => R): Double = {
-    val t0 = System.nanoTime()
-    block // call-by-name
-    val t1 = System.nanoTime()
-    (t1.toDouble - t0) / 1000000
   }
 
 }

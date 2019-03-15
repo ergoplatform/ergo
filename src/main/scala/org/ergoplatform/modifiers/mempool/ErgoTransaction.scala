@@ -125,6 +125,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     failFast
       .payload(initialCost)
+      .demand(initialCost < verifier.maxCost, s"Spam transaction detected: $this")
       .validateSeq(outputs) { case (validationState, out) =>
         validationState
           .demand(out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"Transaction is trying to create dust: $this")

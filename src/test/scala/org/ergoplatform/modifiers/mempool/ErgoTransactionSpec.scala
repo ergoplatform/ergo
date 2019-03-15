@@ -262,21 +262,23 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       t - t0
     }
 
-    val gen = validErgoTransactionGenTemplate(0, 0, 2000, 5000, trueLeafGen)
-
+    val gen = validErgoTransactionGenTemplate(0, 0, 600, 1000, trueLeafGen)
     val (from, tx) = gen.sample.get
-
     tx.statelessValidity.isSuccess shouldBe true
-    val (validity, time0) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(ErgoInterpreter(LaunchParameters)))
+
+    //check that spam transaction is being rejected quickly
+    implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
+    val (validity, time0) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext))
     validity.isSuccess shouldBe false
     assert(time0 <= Timeout)
 
-    val cause = validity.failed.get.getCause
-    Option(cause) shouldBe defined
-    cause.getMessage should startWith("Estimated expression complexity")
+    val cause = validity.failed.get.getMessage
+    cause should startWith("Spam transaction detected")
 
-    val verifier = ErgoInterpreter(Parameters(0, LaunchParameters.parametersTable.updated(Parameters.MaxBlockCostIncrease, Int.MaxValue)))
-    val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(verifier))
+    //check that spam transaction validation with no cost limit is indeed taking too much time
+    val relaxedParams = LaunchParameters.parametersTable.updated(Parameters.MaxBlockCostIncrease, Int.MaxValue)
+    val relaxedVerifier = ErgoInterpreter(Parameters(0, relaxedParams))
+    val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(relaxedVerifier))
 
     assert(time > Timeout)
   }

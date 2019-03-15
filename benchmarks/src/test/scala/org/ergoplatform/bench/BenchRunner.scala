@@ -25,10 +25,7 @@ object BenchRunner extends ScorexLogging with NVBenchmark {
   implicit val system: ActorSystem = ActorSystem("bench")
   implicit val ec: ExecutionContextExecutor = system.dispatcher
 
-  val targetDirectory = "target/bench"
-
   def main(args: Array[String]): Unit = {
-    new File(targetDirectory).mkdirs()
     val threshold = args.headOption.getOrElse("1000").toInt
     val isUtxo = args.lift(2).isEmpty
     val state = if (isUtxo) StateType.Utxo else StateType.Digest

@@ -1,5 +1,6 @@
 package org.ergoplatform
 
+import org.ergoplatform.Utils.BenchReport
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{BlockTransactions, Extension, Header}
 import org.ergoplatform.nodeView.{ErgoModifiersCache, NVBenchmark}
@@ -13,6 +14,8 @@ object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark wit
 
   override def main(args: Array[String]): Unit = {
 
+    val startTs = System.currentTimeMillis()
+
     val cache = new ErgoModifiersCache(maxSize = 1024)
 
     val headers: Seq[Header] = readHeaders
@@ -21,11 +24,11 @@ object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark wit
 
     def bench(benchCase: String)
              (applicator: (Seq[ErgoPersistentModifier], ErgoHistory) => Any,
-              mods: Seq[ErgoPersistentModifier]): String = {
+              mods: Seq[ErgoPersistentModifier]): (String, Long) = {
       val preparedHistory = applyModifiers(headers.take(mods.size / 2), unlockedHistory())._1
-      val et = time(applicator(mods, preparedHistory))
+      val et = time(applicator(mods, preparedHistory)).toLong
       assert(preparedHistory.fullBlockHeight == mods.size / 2)
-      s"Performance of `$benchCase`: $et ms"
+      s"Performance of `$benchCase`: $et ms" -> et
     }
 
     def applyModifiersWithCache(mods: Seq[ErgoPersistentModifier], his: ErgoHistory): (ErgoHistory, Int) = {
@@ -63,15 +66,20 @@ object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark wit
 
     val modifiersDirectOrd = payloads ++ extensions
     val modifiersReversedOrd = modifiersDirectOrd.reverse
-    val report0 = bench("Modifiers application in direct order")(applyModifiers, modifiersDirectOrd)
-    val report1 = bench("Modifiers application in reversed order")(applyModifiers, modifiersReversedOrd)
-    val report2 = bench("Modifiers application in direct order (cache)")(applyModifiersWithCache, modifiersDirectOrd)
-    val report3 = bench("Modifiers application in reversed order (cache)")(applyModifiersWithCache, modifiersReversedOrd)
 
-    println(report0)
-    println(report1)
-    println(report2)
-    println(report3)
+    val report0 = bench("Modifiers application in direct order")(applyModifiers, modifiersDirectOrd)
+    val report1 = bench("Modifiers application in direct order (cache)")(applyModifiersWithCache, modifiersDirectOrd)
+    val report2 = bench("Modifiers application in reversed order (cache)")(applyModifiersWithCache, modifiersReversedOrd)
+
+    println(report0._1)
+    println(report1._1)
+    println(report2._1)
+
+    val reports = Seq(report0, report1, report2).map { case (repStr, et) =>
+      BenchReport(repStr, et)
+    }
+
+    Utils.dumpToFile("ModifiersApplicationBench", startTs, reports)
 
     System.exit(0)
   }

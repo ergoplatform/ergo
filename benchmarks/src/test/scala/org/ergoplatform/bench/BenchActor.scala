@@ -1,6 +1,8 @@
 package org.ergoplatform.bench
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import org.ergoplatform.Utils
+import org.ergoplatform.Utils.BenchReport
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.StateType
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
@@ -20,8 +22,6 @@ class BenchActor(threshold: Int, state: StateType) extends Actor with ScorexLogg
 
   val timeout: FiniteDuration = 2 hours
 
-  val fileName = s"target/bench/result_${state.stateTypeName}"
-
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
     context.system.scheduler.scheduleOnce(timeout, self, BenchActor.Timeout)
@@ -29,7 +29,7 @@ class BenchActor(threshold: Int, state: StateType) extends Actor with ScorexLogg
 
   override def receive: Receive = {
     case BenchActor.Start =>
-      start = System.currentTimeMillis()
+      start = System.nanoTime()
       log.info(s"Starting bench..")
     case SemanticallySuccessfulModifier(_: ErgoFullBlock) =>
       self ! BenchActor.Inc
@@ -37,12 +37,10 @@ class BenchActor(threshold: Int, state: StateType) extends Actor with ScorexLogg
       counter += 1
       if (counter % 100 == 0 ) log.info(s"counter is $counter")
       if (counter >= threshold) {
-        finish = System.currentTimeMillis()
-        val seconds = (finish - start) / 1000
-        log.info(s"Start timestamp is $start")
-        log.info(s"Finish timestamp is $finish")
-        log.info(s"FINISHED APPLYING $threshold MODIFIERS in $seconds seconds.")
-        ResultWriter.writeToFile(s"$fileName$threshold.csv", Result(finish, seconds))
+        finish = System.nanoTime()
+        val et = (finish - start) / 1000000
+        log.info(s"$threshold modifiers applied, elapsed time: $et ms")
+        Utils.dumpToFile("NodeViewHolder modifiers application", start, Seq(BenchReport(s"$threshold modifiers", et)))
         System.exit(0)
       }
     case BenchActor.Timeout =>

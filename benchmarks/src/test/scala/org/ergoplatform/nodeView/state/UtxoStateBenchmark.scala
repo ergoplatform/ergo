@@ -1,7 +1,8 @@
 package org.ergoplatform.nodeView.state
 
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.modifiers.history.{BlockTransactions, Extension, Header}
+import org.ergoplatform.Utils
+import org.ergoplatform.Utils.BenchReport
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.NVBenchmark
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.HistoryTestHelpers
@@ -12,27 +13,30 @@ object UtxoStateBenchmark extends HistoryTestHelpers with NVBenchmark with App {
 
   override def main(args: Array[String]): Unit = {
 
+    val startTs = System.currentTimeMillis()
+
     val realNetworkSetting = ErgoSettings.read(Some("src/main/resources/application.conf"))
 
     val blocks = readBlocks
 
     val transactionsQty = blocks.flatMap(_.transactions).size
 
-    def bench(benchCase: String)(mods: Seq[ErgoPersistentModifier]): String = {
+    def bench(mods: Seq[ErgoPersistentModifier]): Long = {
       val state = ErgoState.generateGenesisUtxoState(createTempDir, StateConstants(None, realNetworkSetting))._1
-      val et = time {
+      time {
         mods.foldLeft(state) { case (st, mod) =>
           st.applyModifier(mod).get
         }
-      }
-      s"Performance of `$benchCase` ($transactionsQty transaction): $et ms"
+      }.toLong
     }
 
-    (0 to WarmupRuns).foreach(bench("")(blocks))
+    (0 to WarmupRuns).foreach(_ => bench(blocks))
 
-    val fullBlocksApplication = bench("modifiers application")(blocks)
+    val et = bench(blocks)
 
-    println(fullBlocksApplication)
+    println(s"Performance of `$transactionsQty transactions application`: $et ms")
+
+    Utils.dumpToFile("UtxoStateBenchmark", startTs, Seq(BenchReport(s"$transactionsQty transactions application", et)))
 
     System.exit(0)
 

@@ -109,7 +109,20 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .result
   }
 
-  /** Return total computation cost
+  /**
+    * A method which is checking whether transaction is valid against input boxes to spend, and
+    * non-spendable data inputs.
+    *
+    * Note that this method make only checks which are possible when input boxes are available.
+    *
+    * To make full transaction validation, use (tx.statelessValidity && tx.statefulValidity(...))
+    *
+    * @param boxesToSpend
+    * @param dataBoxes
+    * @param stateContext
+    * @param accumulatedCost
+    * @param verifier
+    * @return total computation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
                        dataBoxes: IndexedSeq[ErgoBox],
@@ -136,23 +149,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       .demand(dataBoxes.size == dataInputs.size, s"dataBoxes.size ${dataBoxes.size} != dataInputs.size ${dataInputs.size}")
-      .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
-        val input = inputs(idx)
-        val proof = input.spendingProof
-        val proverExtension = proof.extension
-        val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
-        val ctx = new ErgoContext(stateContext, transactionContext, proverExtension)
-
-        val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
-        costTry.recover { case t => t.printStackTrace() }
-
-        lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
-        validation
-          .demandEqualArrays(box.id, input.boxId, "Box id doesn't match input")
-          .demandSuccess(costTry, s"Invalid transaction $this")
-          .demand(isCostValid, s"Input script verification failed for input #$idx ($box) of tx $this: $costTry")
-          .map(_ + scriptCost)
-      }
       .demandSuccess(inputSum, s"Overflow in inputs in $this")
       .demandSuccess(outputSum, s"Overflow in outputs in $this")
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
@@ -175,6 +171,23 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
               .map(_ + totalAssetsAccessCost)
           case Failure(e) => fatal(e.getMessage)
         }
+      }
+      .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
+        val input = inputs(idx)
+        val proof = input.spendingProof
+        val proverExtension = proof.extension
+        val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
+        val ctx = new ErgoContext(stateContext, transactionContext, proverExtension)
+
+        val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
+        costTry.recover { case t => t.printStackTrace() }
+
+        lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
+        validation
+          .demandEqualArrays(box.id, input.boxId, "Box id doesn't match input")
+          .demandSuccess(costTry, s"Invalid transaction $this")
+          .demand(isCostValid, s"Input script verification failed for input #$idx ($box) of tx $this: $costTry")
+          .map(_ + scriptCost)
       }.toTry
   }
 

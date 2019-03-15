@@ -5,6 +5,8 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 
 trait NVBenchmark {
 
+  val resourceUrlPrefix = "https://github.com/ergoplatform/static-data/raw/master/v2"
+
   def time[R](block: => R): Double = {
     val t0 = System.nanoTime()
     block // call-by-name

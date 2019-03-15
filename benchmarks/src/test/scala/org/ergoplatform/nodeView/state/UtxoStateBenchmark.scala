@@ -14,8 +14,6 @@ object UtxoStateBenchmark extends HistoryTestHelpers with NVBenchmark with App {
 
     val realNetworkSetting = ErgoSettings.read(Some("src/main/resources/application.conf"))
 
-    val resourceUrlPrefix = "https://github.com/ergoplatform/static-data/raw/master/v2"
-
     val headers: Seq[Header] = readModifiers[Header](s"$resourceUrlPrefix/headers.dat")
     val payloads: Seq[BlockTransactions] = readModifiers[BlockTransactions](s"$resourceUrlPrefix/payloads.dat")
     val extensions: Seq[Extension] = readModifiers[Extension](s"$resourceUrlPrefix/extensions.dat")

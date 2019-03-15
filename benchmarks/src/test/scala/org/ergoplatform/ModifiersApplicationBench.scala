@@ -15,9 +15,9 @@ object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark wit
 
     val cache = new ErgoModifiersCache(maxSize = 1024)
 
-    val headers: Seq[Header] = readModifiers[Header](s"$resourceUrlPrefix/headers.dat")
-    val payloads: Seq[BlockTransactions] = readModifiers[BlockTransactions](s"$resourceUrlPrefix/payloads.dat")
-    val extensions: Seq[Extension] = readModifiers[Extension](s"$resourceUrlPrefix/extensions.dat")
+    val headers: Seq[Header] = readHeaders
+    val payloads: Seq[BlockTransactions] = readPayloads
+    val extensions: Seq[Extension] = readExtensions
 
     def bench(benchCase: String)
              (applicator: (Seq[ErgoPersistentModifier], ErgoHistory) => Any,

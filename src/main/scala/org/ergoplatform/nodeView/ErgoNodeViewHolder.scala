@@ -16,8 +16,10 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
 import scorex.core.settings.ScorexSettings
+import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.NetworkTimeProvider
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.util.{Failure, Success, Try}
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
@@ -36,6 +38,15 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   override protected lazy val modifiersCache =
     new ErgoModifiersCache(settings.scorexSettings.network.maxModifiersCacheSize)
+
+  override def preStart(): Unit = {
+    // enable periodic mempool cleanup for non-mining regimes
+    if (!settings.nodeSettings.mining) {
+      implicit val executor: ExecutionContextExecutor = actorSystem.dispatcher
+      val interval = settings.nodeSettings.mempoolCleanupInterval
+      actorSystem.scheduler.schedule(interval, interval)(cleanupMempool())
+    }
+  }
 
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
     super.preRestart(reason, message)
@@ -200,6 +211,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val dir = ErgoState.stateDir(settings)
     dir.mkdirs()
     dir
+  }
+
+  private def cleanupMempool(): Unit = {
+    val cleanedMempool = memoryPool().filter { tx =>
+      minimalState() match {
+        case validator: TransactionValidation[ErgoTransaction@unchecked] =>
+          validator.validate(tx).isSuccess
+        case _ => true
+      }
+    }
+    updateNodeView(updatedMempool = Some(cleanedMempool))
   }
 
   // scalastyle:on

@@ -83,7 +83,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   class MinerStub extends Actor {
     def receive: Receive = {
       case ErgoMiner.PrepareExternalCandidate => sender() ! Future.successful(externalCandidateBlock)
-      case _: ExternalAutolykosSolution => ()
+      case _: ExternalAutolykosSolution => sender() ! Future.successful(())
     }
   }
 

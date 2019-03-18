@@ -26,8 +26,8 @@ case class MiningApiRoute(miner: ActorRef, ergoSettings: ErgoSettings)
   }
 
   def solutionR: Route = (path("solution") & post & entity(as[ExternalAutolykosSolution])) { solution =>
-    miner ! solution
-    ApiResponse.OK
+    val result = (miner ? solution).mapTo[Future[Unit]].flatten
+    ApiResponse(result)
   }
 
 }

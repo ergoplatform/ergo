@@ -185,9 +185,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       }
 
     case solution: ExternalAutolykosSolution =>
-      candidateOpt.foreach { c =>
-        secretKeyOpt.foreach { sk =>
+      sender() ! (candidateOpt.flatMap { c =>
+        secretKeyOpt.map { sk =>
           val newBlock = powScheme.completeExternal(sk.publicImage, c, solution)
+          powScheme.validate(newBlock.header).map(_ => newBlock)
+        }
+      } match {
+        case Some(Success(newBlock)) =>
           log.info(s"New block ${newBlock.id} at nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}")
           viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
           val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
@@ -195,10 +199,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           } else {
             newBlock.mandatoryBlockSections
           }
-
           sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
-        }
-      }
+          Future.successful(())
+        case Some(Failure(exception)) =>
+          Future.failed(exception)
+        case None =>
+          Future.failed(new Exception("Invalid miner state"))
+      })
   }
 
   private def procCandidateBlock(c: CandidateBlock): Unit = {

@@ -134,23 +134,31 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     val initialCost: Long =
       boxesToSpend.size * stateContext.currentParameters.inputCost +
-      dataBoxes.size * stateContext.currentParameters.dataInputCost +
-      outputCandidates.size * stateContext.currentParameters.outputCost
+        dataBoxes.size * stateContext.currentParameters.dataInputCost +
+        outputCandidates.size * stateContext.currentParameters.outputCost
 
     val maxCost = verifier.maxCost - accumulatedCost
 
     failFast
-      .payload(initialCost)
+      // Check that the transaction is not too big
       .demand(initialCost < maxCost, s"Spam transaction detected: $this")
+      // Starting validation
+      .payload(initialCost)
+      // Perform cheap checks first
+      // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) =>
         validationState
           .demand(out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"Transaction is trying to create dust: $this")
           .demand(out.creationHeight <= stateContext.currentHeight, s"Box created in future:  ${outputCandidates.map(_.creationHeight)} validationState ${stateContext.currentHeight}")
       }
+      // Just to be sure, check that all the input boxes to spend (and to read) are presented.
+      // Normally, this check should always pass, so it is not part of the protocol.
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       .demand(dataBoxes.size == dataInputs.size, s"dataBoxes.size ${dataBoxes.size} != dataInputs.size ${dataInputs.size}")
+      // Check that there are no overflow in input and output values
       .demandSuccess(inputSum, s"Overflow in inputs in $this")
       .demandSuccess(outputSum, s"Overflow in outputs in $this")
+      // Check that transaction is not creating money out of thin air.
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
       .demandTry(outAssetsTry, outAssetsTry.toString) { case (validation, (outAssets, outAssetsNum)) =>
         extractAssets(boxesToSpend) match {
@@ -160,6 +168,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
               (inAssets.size + outAssets.size) * tokenAccessCost
             validation
+              .demand(initialCost + totalAssetsAccessCost < maxCost, s"Spam transaction (w. assets) detected: $this")
               .validateSeq(outAssets) {
                 case (validationState, (outAssetId, outAmount)) =>
                   val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
@@ -183,10 +192,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         costTry.recover { case t => t.printStackTrace() }
 
         lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
+
+        val currentTxCost = validation.result.payload.get
+
         validation
           .demandEqualArrays(box.id, input.boxId, "Box id doesn't match input")
           .demandSuccess(costTry, s"Invalid transaction $this")
           .demand(isCostValid, s"Input script verification failed for input #$idx ($box) of tx $this: $costTry")
+          .demand(currentTxCost + scriptCost < maxCost, s"Too costly transaction after input #${idx}: $this")
           .map(_ + scriptCost)
       }.toTry
   }

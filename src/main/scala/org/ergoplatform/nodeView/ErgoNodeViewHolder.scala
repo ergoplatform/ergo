@@ -65,6 +65,16 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
+  override protected def updateMemPool(blocksRemoved: Seq[ErgoPersistentModifier],
+                                       blocksApplied: Seq[ErgoPersistentModifier],
+                                       memPool: MP,
+                                       state: MS): MP = {
+    val rolledBackTxs = blocksRemoved.flatMap(extractTransactions)
+    val appliedTxs = blocksApplied.flatMap(extractTransactions)
+
+    memPool.putWithoutCheck(rolledBackTxs).filter(tx => !appliedTxs.exists(t => t.id == tx.id))
+  }
+
   /**
     * Hard-coded initial view all the honest nodes in a network are making progress from.
     */

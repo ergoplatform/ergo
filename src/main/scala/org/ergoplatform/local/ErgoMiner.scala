@@ -218,7 +218,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       pool.getAllPrioritized,
       emissionTxOpt.toSeq)
 
-    viewHolderRef ! EliminateTransactions(toEliminate) // remove transactions which turned out to be invalid.
+    // remove transactions which turned out to be invalid
+    if (toEliminate.nonEmpty) viewHolderRef ! EliminateTransactions(toEliminate)
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
       CandidateBlock(bestHeaderOpt, version, nBits, adDigest, adProof, txs, timestamp, extensionCandidate, votes)

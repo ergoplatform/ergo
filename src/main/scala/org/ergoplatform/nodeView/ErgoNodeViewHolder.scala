@@ -7,6 +7,7 @@ import org.ergoplatform.ErgoApp
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.CleanupMempool
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
@@ -44,7 +45,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     if (!settings.nodeSettings.mining) {
       implicit val executor: ExecutionContextExecutor = actorSystem.dispatcher
       val interval = settings.nodeSettings.mempoolCleanupInterval
-      actorSystem.scheduler.schedule(interval, interval)(cleanupMempool())
+      actorSystem.scheduler.schedule(interval, interval)(self ! CleanupMempool)
     }
   }
 
@@ -59,6 +60,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     history().closeStorage()
     minimalState().closeStorage()
   }
+
+  override def receive: Receive = localMempoolInterface orElse super.receive
 
   override protected def txModify(tx: ErgoTransaction): Unit = {
     memoryPool().putIfValid(tx, minimalState()) match {
@@ -207,21 +210,22 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
+  private def localMempoolInterface: Receive = {
+    case CleanupMempool =>
+      val cleanedMempool = memoryPool().filter { tx =>
+        minimalState() match {
+          case validator: TransactionValidation[ErgoTransaction@unchecked] =>
+            validator.validate(tx).isSuccess
+          case _ => true
+        }
+      }
+      updateNodeView(updatedMempool = Some(cleanedMempool))
+  }
+
   private def stateDir(settings: ErgoSettings): File = {
     val dir = ErgoState.stateDir(settings)
     dir.mkdirs()
     dir
-  }
-
-  private def cleanupMempool(): Unit = {
-    val cleanedMempool = memoryPool().filter { tx =>
-      minimalState() match {
-        case validator: TransactionValidation[ErgoTransaction@unchecked] =>
-          validator.validate(tx).isSuccess
-        case _ => true
-      }
-    }
-    updateNodeView(updatedMempool = Some(cleanedMempool))
   }
 
   // scalastyle:on
@@ -257,6 +261,10 @@ object UtxoNodeViewProps extends ErgoNodeViewProps[StateType.UtxoType, UtxoState
             timeProvider: NetworkTimeProvider,
             digestType: StateType.UtxoType): Props =
     Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider)
+}
+
+object ErgoNodeViewHolder {
+  case object CleanupMempool
 }
 
 object ErgoNodeViewRef {

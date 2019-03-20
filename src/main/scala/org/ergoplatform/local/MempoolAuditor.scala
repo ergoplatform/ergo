@@ -13,7 +13,7 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
-import scala.util.Success
+import scala.util.{Random, Success}
 
 /**
   * Performs mempool validation in between blocks application.
@@ -44,24 +44,22 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private def validatePool(validator: TransactionValidation[ErgoTransaction],
                            mempool: ErgoMemPoolReader): Seq[ModifierId] = {
     @tailrec
-    def validateHead(txs: List[ErgoTransaction],
-                     invalidated: Seq[ModifierId],
-                     etAcc: Long): Seq[ModifierId] = {
-      txs match {
-        case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos =>
-          val t0 = System.nanoTime()
-          val validationResult = validator.validate(head)
-          val t1 = System.nanoTime()
-          val accumulatedTime = etAcc + (t1 - t0)
-          validationResult match {
-            case Success(_) => validateHead(tail, invalidated, accumulatedTime)
-            case _ => validateHead(tail, invalidated :+ head.id, accumulatedTime)
-          }
-        case _ =>
-          invalidated
-      }
+    def validationLoop(txs: List[ErgoTransaction],
+                       invalidated: Seq[ModifierId],
+                       etAcc: Long): Seq[ModifierId] = txs match {
+      case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos =>
+        val t0 = System.nanoTime()
+        val validationResult = validator.validate(head)
+        val t1 = System.nanoTime()
+        val accumulatedTime = etAcc + (t1 - t0)
+        validationResult match {
+          case Success(_) => validationLoop(tail, invalidated, accumulatedTime)
+          case _ => validationLoop(tail, invalidated :+ head.id, accumulatedTime)
+        }
+      case _ =>
+        invalidated
     }
-    validateHead(mempool.getAll.toList, Seq.empty, 0L)
+    validationLoop(Random.shuffle(mempool.getAll.toList), Seq.empty, 0L)
   }
 
 }

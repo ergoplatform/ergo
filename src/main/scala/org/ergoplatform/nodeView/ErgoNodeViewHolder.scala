@@ -65,6 +65,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
+  /**
+    * Performs mempool update after a block application, transactions
+    * from rolled back block are to be returned to the pool, and transactions
+    * included in applied block are to be removed.
+    */
   override protected def updateMemPool(blocksRemoved: Seq[ErgoPersistentModifier],
                                        blocksApplied: Seq[ErgoPersistentModifier],
                                        memPool: MP,

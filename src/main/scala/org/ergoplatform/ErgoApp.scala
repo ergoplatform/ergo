@@ -38,8 +38,6 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-  val mempoolAuditor: ActorRef = MempoolAuditorRef(nodeViewHolderRef, ergoSettings.nodeSettings)
-
   val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 
   val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider)
@@ -78,6 +76,11 @@ class ErgoApp(args: Seq[String]) extends Application {
     val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
     txGen ! StartGeneration
   }
+
+  if (!ergoSettings.nodeSettings.stateType.requireProofs) {
+    MempoolAuditorRef(nodeViewHolderRef, ergoSettings.nodeSettings)
+  }
+
 }
 
 object ErgoApp extends ScorexLogging {

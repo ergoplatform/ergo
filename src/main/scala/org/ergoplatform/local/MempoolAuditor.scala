@@ -35,6 +35,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
         log.info(s"${toEliminate.size} transactions from mempool were invalidated")
         nodeViewHolderRef ! EliminateTransactions(toEliminate)
       }
+    case _: Readers => // do nothing
   }
 
   /**

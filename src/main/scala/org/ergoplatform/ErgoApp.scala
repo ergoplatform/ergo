@@ -38,7 +38,7 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-  val mempoolAuditor: ActorRef = MempoolAuditorRef(nodeViewHolderRef, readersHolderRef, ergoSettings.nodeSettings)
+  val mempoolAuditor: ActorRef = MempoolAuditorRef(nodeViewHolderRef, ergoSettings.nodeSettings)
 
   val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 

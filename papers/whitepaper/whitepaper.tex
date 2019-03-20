@@ -26,10 +26,8 @@
     %    #######################################################################################
     %    Базовые мысли:
     %
-    %    Продаем децентрализацию для контракционных денег
-    %    Изначальные пользователи - фанаты децентрализации кто уже более-менее в теме, и устали от проблем BTC/ETH (Justin, mx)
-    %
-    %    ТУДУ:
+    %    Основные фичи - децентрализация и контракционные деньги
+    %    Изначальные пользователи - фанаты децентрализации кто уже более-менее в теме, и устали от проблем BTC/ETH (пример - Justin, mx)
     %
     %    #######################################################################################
 
@@ -42,16 +40,31 @@
 
     \section{Social contract}
 
-    %    Decentralization is the main goal
-    %    No hardforks
-    %    Soft-forkability
-    %    Permissionless and open - allow everyone to join the network without any KYC,
-    %    Created for regular people - regular people pirority is the first. Should be able to participate the network from low-end hardware
-    %    Ideas that works right now without possible security problems or decentralization reduction
-    %    Long terms focus (survivability, ...)
-    %    Cover useful practical cases, (Simplicity from ETH)
-    %    Modularity (from ETH)
-    %    Universality (from ETH) платформенность
+    Ergo protocol is very flexible and may be changed in the future by the community.
+    In this section we define the main principles, that should be followed during the Ergo protocol updates.
+    In case of intentional violation of any of these principles, the resulting protocol should not
+    be called Ergo.
+
+    \begin{itemize}
+        \item{\em Decentralization first.} Ergo should be as decentralized as possible.
+        This means that any parties (social leaders, software developers, hardware manufacturers, miners and so on)
+        which absence or malicious behaviour may affect the security of the network should be avoided.
+        \item{\em Created for regular people.} Ergo is the platform for regular people, their interests should
+        not be infringed upon in favor of big players. In particular, that means that they should be able to
+        participate in the protocol by running a full node and mine blocks (with small probability).
+        \item{\em Platform for contractional money.} Ergo is the base layer to applications, that will be
+        build on top of it. It allows to implement any kind of applications, but it's main goal is
+        to provide efficient, secure and easy way to implement financial contracts. \dnote{probably kushti may write this better}
+        \item{\em Long terms focus.} All aspects of Ergo development should be focus on long-term perspective.
+        At any point of time, Ergo should be able to survive for centuries without expected hardforks,
+        software or hardware improvements or some other unpredictable changes. As far as Ergo is oriented
+        to be a platform, applications built on top of Ergo should also be able to survive in a long term.
+        \item{\em Permissionless and open.} Ergo protocol does not restrict or limit any categories of usage.
+        It should allow anyone to join the network and participate the protocol without any preliminary permissions.
+        No bailouts, blacklists or other forms of discrimination should be possible on core level of Ergo protocol.
+        On the other hand application developers are free to implement any logic they want, taking responsibility
+        for the ethics and legality of their application.
+    \end{itemize}
 
 
     \section{Survivability}
@@ -62,9 +75,17 @@
     %   storage rent
     %   light clients (сослаться на раздел ниже)
 
-    \section{Coins emission}
+    \section{Consensus}
 
-    %    подробная информация об эмиссии, скрипту эмиссии, и всему-всему что нужно для фаундейшена
+    %   Почему выбрали PoW
+    %   Известные проблемы PoW
+    %   Детали Автоликуса
+
+    \section{Clients}
+
+    %   Пробелмы пользователей без легких клиентов
+    %   nipopow/flight clients
+    %   Дайджест узлы
 
     \section{Economy}
 
@@ -82,20 +103,12 @@
     %   ? Анонимность и пример контракта миксинга
     %   Примеры 1-2 контракта, который иллюстрируют несколько основных преимуществ эрго
 
-    \section{Consensus}
-
-    %   Почему выбрали PoW
-    %   Известные проблемы PoW
-    %   Детали Автоликуса
-
-    \section{Clients}
-
-    %   Пробелмы пользователей без легких клиентов
-    %   nipopow/flight clients
-    %   Дайджест узлы
-
     \section{Conclusions}
 
     \bibliography{references}
+
+    \section{Appendix A: Coins emission}
+
+    %    подробная информация об эмиссии, скрипту эмиссии, и всему-всему что нужно для фаундейшена
 
 \end{document}

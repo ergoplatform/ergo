@@ -4,10 +4,9 @@ import java.io.File
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.CleanupMempool
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
@@ -17,10 +16,8 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import scorex.core._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
 import scorex.core.settings.ScorexSettings
-import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.NetworkTimeProvider
 
-import scala.concurrent.ExecutionContextExecutor
 import scala.util.{Failure, Success, Try}
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
@@ -40,15 +37,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   override protected lazy val modifiersCache =
     new ErgoModifiersCache(settings.scorexSettings.network.maxModifiersCacheSize)
 
-  override def preStart(): Unit = {
-    // enable periodic mempool cleanup for non-mining regimes
-    if (!settings.nodeSettings.mining) {
-      implicit val executor: ExecutionContextExecutor = actorSystem.dispatcher
-      val interval = settings.nodeSettings.mempoolCleanupInterval
-      actorSystem.scheduler.schedule(interval, interval)(self ! CleanupMempool)
-    }
-  }
-
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
     super.preRestart(reason, message)
     reason.printStackTrace()
@@ -60,8 +48,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     history().closeStorage()
     minimalState().closeStorage()
   }
-
-  override def receive: Receive = localMempoolInterface orElse super.receive
 
   override protected def txModify(tx: ErgoTransaction): Unit = {
     memoryPool().putIfValid(tx, minimalState()) match {
@@ -210,18 +196,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
-  private def localMempoolInterface: Receive = {
-    case CleanupMempool =>
-      val cleanedMempool = memoryPool().filter { tx =>
-        minimalState() match {
-          case validator: TransactionValidation[ErgoTransaction@unchecked] =>
-            validator.validate(tx).isSuccess
-          case _ => true
-        }
-      }
-      updateNodeView(updatedMempool = Some(cleanedMempool))
-  }
-
   private def stateDir(settings: ErgoSettings): File = {
     val dir = ErgoState.stateDir(settings)
     dir.mkdirs()
@@ -261,10 +235,6 @@ object UtxoNodeViewProps extends ErgoNodeViewProps[StateType.UtxoType, UtxoState
             timeProvider: NetworkTimeProvider,
             digestType: StateType.UtxoType): Props =
     Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider)
-}
-
-object ErgoNodeViewHolder {
-  case object CleanupMempool
 }
 
 object ErgoNodeViewRef {

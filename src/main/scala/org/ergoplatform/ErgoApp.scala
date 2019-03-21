@@ -76,6 +76,11 @@ class ErgoApp(args: Seq[String]) extends Application {
     val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
     txGen ! StartGeneration
   }
+
+  if (!ergoSettings.nodeSettings.stateType.requireProofs) {
+    MempoolAuditorRef(nodeViewHolderRef, ergoSettings.nodeSettings)
+  }
+
 }
 
 object ErgoApp extends ScorexLogging {

@@ -63,7 +63,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   /**
     * Extracts a mapping (assets -> total amount) from a set of boxes passed as a parameter.
-    * That is, the method is checking amounts of assets in the boxes(i.e. that a box contains non-negative
+    * That is, the method is checking amounts of assets in the boxes(i.e. that a box contains positive
     * amount for an asset) and then summarize and group their corresponding amounts.
     *
     * @param boxes - boxes to check and extract assets from
@@ -74,7 +74,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val assetsNum = boxes.foldLeft(0) { case (acc, box) =>
       require(box.additionalTokens.lengthCompare(ErgoTransaction.MaxAssetsPerBox) <= 0, "too many assets in one box")
       box.additionalTokens.foreach { case (assetId, amount) =>
-        require(amount >= 0, s"negative asset amount for ${Algos.encode(assetId)}")
+        require(amount > 0, s"non-positive asset amount for ${Algos.encode(assetId)}")
         val aiWrapped = ByteArrayWrapper(assetId)
         val total = map.getOrElse(aiWrapped, 0L)
         map.put(aiWrapped, Math.addExact(total, amount))
@@ -106,7 +106,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demand(inputs.nonEmpty, s"No inputs in transaction $this")
       .demand(inputs.size <= Short.MaxValue, s"Too many inputs in transaction $this")
       .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $this")
-      .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $this")
+      .demand(outputCandidates.forall(_.value > 0), s"Transaction has an output with non-positive amount $this")
       .demandNoThrow(outputCandidates.map(_.value).reduce(Math.addExact(_, _)), s"Overflow in outputs in $this")
       .demandSuccess(outAssetsTry, s"Asset rules violated $outAssetsTry in $this")
       .result
@@ -166,7 +166,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       // Check that transaction is not creating money out of thin air.
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
       // Check that there are no more than 255 assets per box,
-      // and amount for each asset, its amount in a box is non-negative
+      // and amount for each asset, its amount in a box is positive
       .demandTry(outAssetsTry, outAssetsTry.toString) { case (validation, (outAssets, outAssetsNum)) =>
         extractAssets(boxesToSpend) match {
           case Success((inAssets, inAssetsNum)) =>

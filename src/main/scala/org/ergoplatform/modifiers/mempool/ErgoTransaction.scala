@@ -66,7 +66,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * That is, the method is checking amounts of assets in the boxes(i.e. that a box contains non-negative
     * amount for an asset) and then summarize and group their corresponding amounts.
     *
-    * @param boxes - boxes to
+    * @param boxes - boxes to check and extract assets from
     * @return a mapping from asset id to to balance and total assets number
     */
   private def extractAssets(boxes: IndexedSeq[ErgoBoxCandidate]): Try[(Map[ByteArrayWrapper, Long], Int)] = Try {
@@ -94,8 +94,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     */
   def statelessValidity: Try[Unit] = validateStateless.toTry
 
-  /** Stateless transaction validation with result returned as `ValidationResult`
+  /**
+    * Stateless transaction validation with result returned as `ValidationResult`
     * to accumulate further validation results
+    *
+    * @note Consensus-critical!
     */
   def validateStateless: ValidationResult[Unit] = {
     failFast
@@ -110,12 +113,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   }
 
   /**
-    * A method which is checking whether transaction is valid against input boxes to spend, and
+    * Checks whether transaction is valid against input boxes to spend, and
     * non-spendable data inputs.
     *
     * Note that this method make only checks which are possible when input boxes are available.
     *
     * To make full transaction validation, use (tx.statelessValidity && tx.statefulValidity(...))
+    *
+    * @note Consensus-critical!
     *
     * @param boxesToSpend
     * @param dataBoxes
@@ -160,6 +165,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demandSuccess(outputSum, s"Overflow in outputs in $this")
       // Check that transaction is not creating money out of thin air.
       .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
+      // Check that there are no more than 255 assets per box,
+      // and amount for each asset, its amount in a box is non-negative
       .demandTry(outAssetsTry, outAssetsTry.toString) { case (validation, (outAssets, outAssetsNum)) =>
         extractAssets(boxesToSpend) match {
           case Success((inAssets, inAssetsNum)) =>
@@ -167,11 +174,16 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
             val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
               (inAssets.size + outAssets.size) * tokenAccessCost
+
             validation
+              // Check that transaction is not too costly considering all the assets
               .demand(initialCost + totalAssetsAccessCost < maxCost, s"Spam transaction (w. assets) detected: $this")
               .validateSeq(outAssets) {
                 case (validationState, (outAssetId, outAmount)) =>
                   val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
+
+                  // Check that for each asset output amount is no more than input amount,
+                  // with a possible exception for a new asset created by the transaction
                   validationState.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
                     fatal(s"Assets preservation rule is broken in $this. " +
                       s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
@@ -181,6 +193,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           case Failure(e) => fatal(e.getMessage)
         }
       }
+      // Check inputs, the most expensive check usually, so done last.
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val input = inputs(idx)
         val proof = input.spendingProof
@@ -196,10 +209,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val currentTxCost = validation.result.payload.get
 
         validation
+          // Just in case, should always be true if client implementation is correct.
           .demandEqualArrays(box.id, input.boxId, "Box id doesn't match input")
-          .demandSuccess(costTry, s"Invalid transaction $this")
+          // Check whether input box script interpreter raised exception
+          .demandSuccess(costTry, s"Transaction validation failed on input #$idx: $this")
+          // Check that script verification results in "true" value
           .demand(isCostValid, s"Input script verification failed for input #$idx ($box) of tx $this: $costTry")
-          .demand(currentTxCost + scriptCost < maxCost, s"Too costly transaction after input #${idx}: $this")
+          // Check that cost of the transaction after checking the input becomes too big
+          .demand(currentTxCost + scriptCost < maxCost, s"Too costly transaction after input #$idx: $this")
           .map(_ + scriptCost)
       }.toTry
   }

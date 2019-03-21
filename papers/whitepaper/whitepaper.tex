@@ -10,9 +10,12 @@
 
 \newcommand{\knote}[1]{{\textcolor{green}{Alex notes}}{#1}}
 \newcommand{\dnote}[1]{{\textcolor{red}{Dima notes}}{#1}}
+\newcommand{\Ergo}{Ergo}
+\newcommand{\Erg}{\textbf{Erg}}
+\newcommand{\nanoErg}{\textbf{nanoErg}}
 
 \begin{document}
-    \title{Ergo: The Decentralized Platform For Contractional Money}
+    \title{Ergo: The Resilient Platform For Contractual Money}
     %    \author{Dmitry Meshkov}
 
     %    \date{January 25, 2019\\v1.0}
@@ -40,28 +43,28 @@
 
     \section{Social contract}
 
-    Ergo protocol is very flexible and may be changed in the future by the community.
-    In this section we define the main principles, that should be followed during the Ergo protocol updates.
+    \Ergo{} protocol is very flexible and may be changed in the future by the community.
+    In this section we define the main principles, that should be followed during the \Ergo{} protocol updates.
     In case of intentional violation of any of these principles, the resulting protocol should not
-    be called Ergo.
+    be called \Ergo{}.
 
     \begin{itemize}
-        \item{\em Decentralization first.} Ergo should be as decentralized as possible.
+        \item{\em Decentralization first.} \Ergo{} should be as decentralized as possible.
         This means that any parties (social leaders, software developers, hardware manufacturers, miners and so on)
         which absence or malicious behaviour may affect the security of the network should be avoided.
-        \item{\em Created for regular people.} Ergo is the platform for regular people, their interests should
+        \item{\em Created for regular people.} \Ergo{} is the platform for regular people, their interests should
         not be infringed upon in favor of big players. In particular, that means that they should be able to
         participate in the protocol by running a full node and mine blocks (with small probability).
-        \item{\em Platform for contractional money.} Ergo is the base layer to applications, that will be
+        \item{\em Platform for Contractual money.} \Ergo{} is the base layer to applications, that will be
         build on top of it. It allows to implement any kind of applications, but it's main goal is
         to provide efficient, secure and easy way to implement financial contracts. \dnote{probably kushti may write this better}
-        \item{\em Long terms focus.} All aspects of Ergo development should be focus on long-term perspective.
-        At any point of time, Ergo should be able to survive for centuries without expected hardforks,
-        software or hardware improvements or some other unpredictable changes. As far as Ergo is oriented
-        to be a platform, applications built on top of Ergo should also be able to survive in a long term.
-        \item{\em Permissionless and open.} Ergo protocol does not restrict or limit any categories of usage.
+        \item{\em Long terms focus.} All aspects of \Ergo{} development should be focus on long-term perspective.
+        At any point of time, \Ergo{} should be able to survive for centuries without expected hardforks,
+        software or hardware improvements or some other unpredictable changes. As far as \Ergo{} is oriented
+        to be a platform, applications built on top of \Ergo{} should also be able to survive in a long term.
+        \item{\em Permissionless and open.} \Ergo{} protocol does not restrict or limit any categories of usage.
         It should allow anyone to join the network and participate the protocol without any preliminary permissions.
-        No bailouts, blacklists or other forms of discrimination should be possible on core level of Ergo protocol.
+        No bailouts, blacklists or other forms of discrimination should be possible on core level of \Ergo{} protocol.
         On the other hand application developers are free to implement any logic they want, taking responsibility
         for the ethics and legality of their application.
     \end{itemize}
@@ -75,7 +78,8 @@
     %   storage rent
     %   light clients (сослаться на раздел ниже)
 
-    \section{Consensus}
+    \section{Autolykos Consensus Protocol}
+    \label{sec:autolykos}
 
     %   Почему выбрали PoW
     %   Известные проблемы PoW
@@ -87,12 +91,76 @@
     %   nipopow/flight clients
     %   Дайджест узлы
 
+
+    \section{Currency And Emission}
+
+    %    подробная информация об эмиссии, скрипту эмиссии, и всему-всему что нужно для фаундейшена
+
+    The native currency of \Ergo{} platform is \Erg{} token, which unique property is
+    that it is the only currency to pay storage rent in \Ergo{}~(see~\ref{sec:economy} for more details).
+    One \Erg{} token is divisible to up to $10^9$ parts labeled as \nanoErg{}.
+
+    All \Erg{} tokens that will ever be circulate in the system are presented in the
+    initial state and are divided in 3 parts~(boxes):
+
+    \begin{itemize}
+        \item{\em No premine proof.} This box contain exactly one~\Erg{} and is protected by the script,
+        that is preventing it from spending by anyone.
+        Thus, it is a long-living box, that will live in the system until storage-rent component will
+        destroy it.
+        It's main purpose is to prove, that \Ergo{} mining was not started privately by anyone before
+        the declared launch date.
+        To achieve this, additional registers of this box contains news from media (Guardian, Xinhua, Vedomosti)
+        and block ids from already established cryptocurrencies (Bitcoin and Ethereum).
+        Thus, \Ergo{} mining could not be started before certain events in the real world and in
+        cryptocurrency space.
+
+        \item{\em Foundation reward.} This box contain 4330791.5 \Erg{} that will be used to fund \Ergo{}
+        development.
+        It's protecting script is avaliable at~\cite{link to corresponding sigma tree} and consists of two parts.
+
+        First, it requires that spending transaction should be signed by at least 2 of 3 secret keys,
+        that are under control of initial team members. When they spend this box, they are free to
+        change this part of the script as they wish, for example by adding new members to protect foundation
+        funds.
+
+        Second, it ensures, that only predefined portion of the box value was taken.
+        During blocks 1-525599 (2 years) 7.5 \Erg{} will be released every block,
+        during blocks 525600-590399 (3 month) 4.5 \Erg{} will be released every block and finally
+        during blocks 590400-655199 (3 month) 1.5 \Erg{} will be released every block.
+        This rule ensures the presence of funds for \Ergo{} development for at least 2.5 years and
+        prevents an excessive wealth concentration under control of small group of people, as soon
+        as at any point of time it won't exceed 10\% of total number of coins in circulation.
+
+        \item{\em Miners reward.} This box contain 93409132 \Erg{} that will be collected by block miners
+        as a reward of their work.
+        It's protecting script is coded at \cite{link to corresponding sigma tree} and have several conditions.
+
+        First it checks, that block reward is going to the exact miner, that solved the PoW puzzle, and
+        may be spent not earlier than 720 blocks after the current block.
+        This restrictions are done to prevent mining pools formation, see~\ref{sec:autolykos} for more details.
+
+        Second, it ensures, that only predefined portion of the box value was taken.
+        During blocks 1 - 525599 (2 years) miner will be able to collect 67.5 \Erg{} from this box,
+        during blocks 525600 - 590399 (3 month) miner will be able to collect 66 \Erg{} and after
+        that block reward will be reduced for 3 \Erg{} every 64800 blocks (3 months) until it will reach zero
+        at block 2080799, that should happen roughly 8 years after the genesis block.
+
+
+    \end{itemize}
+
+    All these rules results in the following curve of efficient number of coins in circulation with time:
+
+    \dnote{TODO: plot the correct emission curve - number of \Erg{} in circulation vs time. Miners and foundation part, like ZCash https://z.cash/blog/funding/}
+
+
     \section{Economy}
+    \label{sec:economy}
 
     %   пишет Саша
     %   ценность нашего токена, и филосовские размышления о данном типе экономики
 
-    \section{Contractional Money}
+    \section{Contractual Money}
 
     %   пишет Саша
 
@@ -106,9 +174,5 @@
     \section{Conclusions}
 
     \bibliography{references}
-
-    \section{Appendix A: Coins emission}
-
-    %    подробная информация об эмиссии, скрипту эмиссии, и всему-всему что нужно для фаундейшена
 
 \end{document}

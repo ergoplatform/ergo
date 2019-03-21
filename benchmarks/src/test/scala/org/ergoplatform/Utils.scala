@@ -1,6 +1,6 @@
 package org.ergoplatform
 
-import java.io.InputStream
+import java.io.{File, InputStream, PrintWriter}
 import java.net.URL
 
 import com.google.common.primitives.Ints
@@ -9,6 +9,8 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 
 object Utils {
+
+  final case class BenchReport(benchCase: String, et: Long)
 
   def getUrlInputStream(url: String,
                         connectTimeout: Int = 5000,
@@ -35,6 +37,15 @@ object Utils {
       bytes <- readBytes(length)
       mod <- HistoryModifierSerializer.parseBytesTry(bytes).toOption.map(_.asInstanceOf[M])
     } yield mod
+  }
+
+  def dumpToFile(benchName: String, startTs: Long, reports: Seq[BenchReport]): Unit = {
+    val outWriter = new PrintWriter(new File(s"target/bench/bench-report.json"))
+    val reportsStr = reports.map { case BenchReport(benchCase, et) =>
+      s"""{"benchCase":"$benchCase","elapsedTime":$et}"""
+    }.mkString(",")
+    outWriter.write(s"""{"benchName":"$benchName","startTs":$startTs,"reports":[$reportsStr]}""")
+    outWriter.close()
   }
 
 }

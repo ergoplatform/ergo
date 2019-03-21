@@ -4,9 +4,9 @@ import java.io.File
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
@@ -63,6 +63,21 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (_, ProcessingOutcome.Declined) => // do nothing
         log.debug(s"Transaction $tx declined")
     }
+  }
+
+  /**
+    * Performs mempool update after a block application, transactions
+    * from rolled back block are to be returned to the pool, and transactions
+    * included in applied block are to be removed.
+    */
+  override protected def updateMemPool(blocksRemoved: Seq[ErgoPersistentModifier],
+                                       blocksApplied: Seq[ErgoPersistentModifier],
+                                       memPool: MP,
+                                       state: MS): MP = {
+    val rolledBackTxs = blocksRemoved.flatMap(extractTransactions)
+    val appliedTxs = blocksApplied.flatMap(extractTransactions)
+
+    memPool.putWithoutCheck(rolledBackTxs).filter(tx => !appliedTxs.exists(t => t.id == tx.id))
   }
 
   /**

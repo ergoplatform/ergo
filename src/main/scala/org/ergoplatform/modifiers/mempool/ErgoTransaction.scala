@@ -106,7 +106,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .demand(inputs.nonEmpty, s"No inputs in transaction $this")
       .demand(inputs.size <= Short.MaxValue, s"Too many inputs in transaction $this")
       .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $this")
-      .demand(outputCandidates.forall(_.value > 0), s"Transaction has an output with non-positive amount $this")
+      .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $this")
       .demandNoThrow(outputCandidates.map(_.value).reduce(Math.addExact(_, _)), s"Overflow in outputs in $this")
       .demandSuccess(outAssetsTry, s"Asset rules violated $outAssetsTry in $this")
       .result
@@ -142,6 +142,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         dataBoxes.size * stateContext.currentParameters.dataInputCost +
         outputCandidates.size * stateContext.currentParameters.outputCost
 
+    // Maximum transaction cost the validation procedure could tolerate
     val maxCost = verifier.maxCost - accumulatedCost
 
     failFast

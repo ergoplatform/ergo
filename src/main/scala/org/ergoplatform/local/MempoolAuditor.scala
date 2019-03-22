@@ -63,12 +63,16 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   }
 
   private def working: Receive = {
-    case CleanupDone => context become awaiting
+    case CleanupDone =>
+      log.info("Cleanup done. Switching to awaiting mode")
+      context become awaiting
+
     case _ => // ignore other triggers until work is done
   }
 
   private def initiateCleanup(validator: TransactionValidation[ErgoTransaction],
                               mempool: ErgoMemPoolReader): Unit = {
+    log.info("Initiating cleanup. Switching to working mode")
     worker ! RunCleanup(validator, mempool)
     context become working // ignore other triggers until work is done
   }

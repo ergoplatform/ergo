@@ -1,18 +1,23 @@
 \documentclass[]{article}
+\RequirePackage{amsmath}
 
 \usepackage{graphicx}
 \usepackage{amssymb}
 \usepackage{color}
 \usepackage{hyperref}
 \usepackage{float}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 
-\bibliographystyle{abbrv}
+\bibliographystyle{IEEEtran}
 
 \newcommand{\knote}[1]{{\textcolor{green}{Alex notes}}{#1}}
 \newcommand{\dnote}[1]{{\textcolor{red}{DNotes:{#1}}}}
 \newcommand{\Ergo}{Ergo}
 \newcommand{\Erg}{\textbf{Erg}}
 \newcommand{\nanoErg}{\textbf{nanoErg}}
+\def\Let#1#2{\State #1 $:=$ #2}
+\def\LetRnd#1#2{\State #1 $\gets$ #2}
 
 \begin{document}
     \title{Ergo: The Resilient Platform For Contractual Money}
@@ -62,20 +67,20 @@
     this storage requirements are growing fast.
     Thus thousands of computers all over the world utilize various resources
     increasing the cost of single transaction processing,
-    and users pay transaction fees~\cite{A Systematic Approach To Cryptocurrency Fees} to prevent spam attacks and
+    and users pay transaction fees~\cite{chepurnoy2018systematic} to prevent spam attacks and
     to encourage participation in the protocol.
-    These fees may be very high during the high load~\cite{https://arstechnica.com/tech-policy/2017/12/bitcoin-fees-rising-high/},
+    These fees may be very high during the high load~\cite{bitcoinFees},
     and ten years later blockchain technology is still mainly used in a money application, where the advantage of
     high security outweighs the disadvantage of high transaction costs.
 
     Besides of a plain currency usage, most of blockchains are used to build decentralized applications on top of them.
-    Such applications utilize the ability to write smart contracts~\cite{n.sabo}, that implements their logic
+    Such applications utilize the ability to write smart contracts~\cite{szabo1994smart}, that implements their logic
     by means of blockchain-specific programming language.
-    Ways to write smart contracts depends on cryptocurrency transactional model~\cite{https://eprint.iacr.org/2018/262.pdf} ---
+    Ways to write smart contracts depends on cryptocurrency transactional model~\cite{zahnentferner2018chimeric} ---
     in UTXO-based cryptocurrencies like Bitcoin~\cite{nakamoto2008bitcoin} every coin is protected by a used-defined script,
-    while in account-based cryptocurrencies like Ethereum~\cite{ETH whitepaper} transactions call a code from special contract accounts.
+    while in account-based cryptocurrencies like Ethereum~\cite{ethWhitepaper} transactions call a code from special contract accounts.
     While this models are equivalent \dnote{correct word here?}, protecting scripts implementation is not so natural for
-    account model~(e.g. simple multi-signature contract bug led to \$150 million loss in 2017 in Ethereum~\cite{https://www.ccn.com/i-accidentally-killed-it-parity-wallet-bug-locks-150-million-in-ether}),
+    account model~(e.g. simple multi-signature contract bug led to \$150 million loss in 2017 in Ethereum~\cite{parityLock}),
     while arbitrary Turing-complete logic implementation may be tricky in UTXO model~(e.g. check this example of
     simple Turing-complete system implementation in \Ergo{}~\cite{chepurnoy2018self}).
 
@@ -87,7 +92,7 @@
     This problem led to concepts of lightened nodes with minimum storage requirements~\cite{reyzin2017improving},
     storage rent fee component that prevents bloating of full-node requirements~\cite{chepurnoy2018systematic},
     self-amendable protocols that can adopt to changing environment and improve themselves without
-    trusted parties~\cite{tezos}, and more.
+    trusted parties~\cite{goodman2014tezos}, and more.
 
     The main goal of the Ergo platform is to solve these problems by implementing known scientific ideas.
     It may be called a ``blockchain 1.1'' implementation --- a major update to
@@ -127,6 +132,89 @@
     \end{itemize}
 
 
+    \section{Autolykos Consensus Protocol}
+    \label{sec:autolykos}
+
+    %   Почему выбрали PoW
+    %   Известные проблемы PoW
+    %   Детали Автоликуса
+
+    The core component of any blockchain system is it's consensus protocol.
+    Despite of an extensive research of possible alternatives to original the Proof-of-Work (PoW) protocol,
+    it remains in demand due to simplicity, high security guaranties and friendliness to light clients.
+    However, decade of extensive testing revealed several problems of the original one-CPU-one-vote idea.
+
+    First known problem of PoW is that development of a specialized hardware (ASIC) allowed
+    small group of ASIC-equipped miners to solve PoW puzzles orders of magnitude faster and more efficiently
+    than everyone else. This problem can be solved with the help of memory-hard PoW schemes,
+    that reduce the disparity between the ASICs and commodity hardware. Most promising approach here
+    is to use asymmetric memory-hard PoW schemes that require significantly less memory
+    to verify a solution than to find it where proposed~\cite{biryukov2017equihash,ethHash}.
+
+    Second known threat to a PoW network decentralization, is that even big miners trend to unite in
+    mining pools, leading to a situation when just few pool operators (5 in Bitcoin, 2 in Ethereum
+    at the time of writing) controls more then 51\% of computational power.
+    Although the problem has already been discussed in the community, no practical solutions were
+    implementer before \Ergo{}.
+
+
+    Ergo PoW protocol --- Autolykos --- is the first consensus protocol, that is both memory hard
+    and pool resistant~\cite{Ergopow}.
+    Autolykos is based on one list $k$-sum problem: miner should find
+    $k=32$ elements from the pre-defined list $R$ of size $N=2^{26}$~(which have a size of 2 Gb),
+    such that $\sum_{j \in J} r_{j} - sk = d$ is in the interval $\{-b,\dots,0,\dots,b\mod q\}$.
+    Elements of list $R$ are obtained as a result of one-way computation from index $i$,
+    two miner public keys $pk,w$ and hash of block header $m$ as $r_i=H(i||M||pk||m||w)$,
+    where $M$ is a static big message that is used to make hash calculation slower.
+    In addition, we require set of element indexes $J$ to be obtained
+    by one-way pseudo-random function $genIndexes$, that prevents possible solutions
+    search optimizations.
+
+    Thus we assume that the only option for miner is to use the simple brute-force algorithm~\ref{alg:prove} to
+    create a valid block.
+
+    \begin{algorithm}[H]
+        \caption{Block mining}
+        \label{alg:prove}
+        \begin{algorithmic}[1]
+            \State \textbf{Input}: latest block header hahs $m$, key pair $pk=g^{sk}$
+            \State Generate randomly a new key pair $w=g^x$
+            \State Pre-calculate list $R$ where $r_i=H(j||M||pk||m||w)$
+            \While{$true$}
+            \LetRnd{$nonce$}{$\mathsf{rand}$}
+            \Let{$J$}{$genIndexes(m||nonce)$}
+            \Let{$d$}{$\sum_{j \in J}{r_j} \cdot x - sk \mod q$}
+            \If{$d < b || d > (q - b)$}
+            \State \Return $(m,pk,w,nonce,d)$
+            \EndIf
+            \EndWhile
+        \end{algorithmic}
+    \end{algorithm}
+
+    Note that although the mining process utilizes private keys, solution itself
+    only contains public keys. Solution verification can be performed by Alg.~\ref{alg:verify}.
+
+    \begin{algorithm}[H]
+        \caption{Solution verification}
+        \label{alg:verify}
+        \begin{algorithmic}[1]
+            \State \textbf{Input}: $m,pk,w,nonce,d$
+            \State require $d < b || d > (q - b)$
+            \State require $pk,w\in \mathbb{G}$ and $pk,w \ne e$
+            \Let{$J$}{$genIndexes(m||nonce)$}
+            \Let{$f$}{$\sum_{j \in J} H(j||M||pk||m||w)$}
+            \State require $w^f = g^dpk$
+        \end{algorithmic}
+    \end{algorithm}
+
+    Target parameter $b$ is adjusted to the current network hashrate via difficulty adjustment
+    algorithm~\cite{meshkov2017short}, that is trying to predict an upcoming 1024 block length
+    epoch hashrate based  on data from previous 8 epochs.
+    Full technical specification of Autolykos may be found at~\cite{Ergopow}.
+
+
+
+
     \section{Survivability}
     \label{sec:survivability}
 
@@ -136,12 +224,6 @@
     %   storage rent
     %   light clients (сослаться на раздел ниже или изложить полностью)
 
-    \section{Autolykos Consensus Protocol}
-    \label{sec:autolykos}
-
-    %   Почему выбрали PoW
-    %   Известные проблемы PoW
-    %   Детали Автоликуса
 
     \section{Clients}
     \label{sec:clients}
@@ -214,17 +296,12 @@
     \dnote{TODO: plot the correct emission curve - number of \Erg{} in circulation vs time. Miners and foundation part, like ZCash https://z.cash/blog/funding/}
 
 
-    \section{Economy}
-    \label{sec:economy}
-
-    %   пишет Саша
-    %   ценность нашего токена, и филосовские размышления о данном типе экономики
-
     \section{Contractual Money}
     \label{sec:contractual}
 
     %   пишет Саша
 
+    %   ценность нашего токена, и филосовские размышления о данном типе экономики
     %   практические удобные и эффективные контракты для денег
     %   Описать про UTXO модель, почему мы ее выбрали
     %   Скрипт - доступ к стейту, доступ к блокчейну, цепочки (тут можно сослаться на Эфир, ибо там написано что в UTXO это невозможно), сигма протоколы

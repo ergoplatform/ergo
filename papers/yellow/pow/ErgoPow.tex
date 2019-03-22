@@ -109,11 +109,12 @@
             \State \textbf{Input}: latest block header $hdr$, key pair $pk=g^{sk}$
             \State Generate randomly a new key pair $w=g^x$
             \Let{$m$}{$Blake2b256(hdr.bytesWithoutPow)$}
+            \State Pre-calculate list $R$ where $r_i=H(j||M||pk||m||w)$
             \While{$true$}
             \LetRnd{$nonce$}{$\mathsf{rand}$}
             \Let{$J$}{$genIndexes(m||nonce)$}
-            \Let{$d$}{$\sum_{j \in J}{H(j||M||pk||m||w)} \cdot x - sk \mod q$}
-            \If{$d \le b$}
+            \Let{$d$}{$\sum_{j \in J}{r_j} \cdot x - sk \mod q$}
+            \If{$d < b || d > (q - b)$}
             \State \Return $(m,pk,w,nonce,d)$
             \EndIf
             \EndWhile
@@ -128,7 +129,7 @@
         \label{alg:verify}
         \begin{algorithmic}[1]
             \State \textbf{Input}: $m,pk,w,nonce,d$
-            \State require $d\in\{-b,\dots,0,\dots, b\mod q\}$
+            \State require $d < b || d > (q - b)$
             \State require $pk,w\in \mathbb{G}$ and $pk,w \ne e$
             \Let{$J$}{$genIndexes(m||nonce)$}
             \Let{$f$}{$\sum_{j \in J} H(j||M||pk||m||w)$}

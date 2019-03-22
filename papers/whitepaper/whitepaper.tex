@@ -9,7 +9,7 @@
 \bibliographystyle{abbrv}
 
 \newcommand{\knote}[1]{{\textcolor{green}{Alex notes}}{#1}}
-\newcommand{\dnote}[1]{{\textcolor{red}{Dima notes}}{#1}}
+\newcommand{\dnote}[1]{{\textcolor{red}{DNotes:{#1}}}}
 \newcommand{\Ergo}{Ergo}
 \newcommand{\Erg}{\textbf{Erg}}
 \newcommand{\nanoErg}{\textbf{nanoErg}}
@@ -37,11 +37,68 @@
 
     \section{Introduction}
 
-    %    history of Ergo
-    %    problems of BTC/ETH
-    %    Why did we started Ergo
+    %    Блокчейн дает безопасность (resilient), которая следует из децентрализации (на разных уровнях - майнеры, разработчики, легкие клиенты). (Bitcoin and its problems?)
+    %    Безопасность идет высокой ценой (синхронизация и процессинг данных на куче компов), поэтому основное применение - денежное (Money)
+    %    Для активного применения (platform) нужна адаптивность под окружение (голосование, выживаемость и т.д.) и возможности написания финансовых контрактов (Contractual)
+    %    Вот это все в Эрго, лучше чем в Эфириуме и Биткоине.
+
+    Started more ten years ago with the Bitcoin~\cite{nakamoto2008bitcoin}, blockchain technology proved to be a secure way on maintaining
+    a public transaction ledger.
+    Even after achieving a market capitalisation over \$300bn in 2017~\cite{https://cointelegraph.com/news/bitcoins-price-surpasses-18000-level-market-cap-now-higher-than-visas}
+    no serious attacks were performed to the Bitcoin network\dnote{check} despite the high yield of a successful attack.
+    At the same time, centralized services are continuously fails to resist attacks, regardless of a maintaining company size and expertize.
+    \dnote{examples of attacks to crypto exchanges (mt. gox?), big companies (Facebook? Or better some bank), malicious or incompetent behaviour of some human.
+    Discuss a bit more if there are good examples especially of the last point}.
+    This outstanding resilience of cryptocurrencies is achieved by a combination of modern cryptographic algorithms like digital
+    signatures, that are widely adapted outside cryptocurrencies space, and decentralization, that is ensures that only
+    the majority of the network participants can affect its security.
+
+    However, this resilience does not come for free.
+    To use a blockchain without any trust, it's participants should download and process all the transactions in
+    the network, utilizing network resources.
+    Besides network utilization, transaction processing requires to spend some computational resources,
+    especially if transactional language is flexible enough.
+    Finally, blockchains participants should keep quite big amount of data in their local storages and
+    this storage requirements are growing fast.
+    Thus thousands of computers all over the world utilize various resources
+    increasing the cost of single transaction processing,
+    and users pay transaction fees~\cite{A Systematic Approach To Cryptocurrency Fees} to prevent spam attacks and
+    to encourage participation in the protocol.
+    These fees may be very high during the high load~\cite{https://arstechnica.com/tech-policy/2017/12/bitcoin-fees-rising-high/},
+    and ten years later blockchain technology is still mainly used in a money application, where the advantage of
+    high security outweighs the disadvantage of high transaction costs.
+
+    Besides of a plain currency usage, most of blockchains are used to build decentralized applications on top of them.
+    Such applications utilize the ability to write smart contracts~\cite{n.sabo}, that implements their logic
+    by means of blockchain-specific programming language.
+    Ways to write smart contracts depends on cryptocurrency transactional model~\cite{https://eprint.iacr.org/2018/262.pdf} ---
+    in UTXO-based cryptocurrencies like Bitcoin~\cite{nakamoto2008bitcoin} every coin is protected by a used-defined script,
+    while in account-based cryptocurrencies like Ethereum~\cite{ETH whitepaper} transactions call a code from special contract accounts.
+    While this models are equivalent \dnote{correct word here?}, protecting scripts implementation is not so natural for
+    account model~(e.g. simple multi-signature contract bug led to \$150 million loss in 2017 in Ethereum~\cite{https://www.ccn.com/i-accidentally-killed-it-parity-wallet-bug-locks-150-million-in-ether}),
+    while arbitrary Turing-complete logic implementation may be tricky in UTXO model~(e.g. check this example of
+    simple Turing-complete system implementation in \Ergo{}~\cite{chepurnoy2018self}).
+
+    While contractual component is attractive in terms of building decentralized applications,
+    it is also important that the blockchain will survive in a long term.
+    For now the whole area is young and most of application-oriented blockchain platforms exists just for several years,
+    while they already have known problems with performance degradation over time \dnote{links and may be more discussion of known problems}
+    and their long-term survivability is questionable.
+    This problem led to concepts of lightened nodes with minimum storage requirements~\cite{reyzin2017improving},
+    storage rent fee component that prevents bloating of full-node requirements~\cite{chepurnoy2018systematic},
+    self-amendable protocols that can adopt to changing environment and improve themselves without
+    trusted parties~\cite{tezos}, and more.
+
+    The main goal of the Ergo platform is to solve these problems by implementing known scientific ideas.
+    It may be called a ``blockchain 1.1'' implementation --- a major update to
+    blockchain technology instead of revolutionary breaking changes.
+    The objective of Ergo is to be the platform for blockchain-demanding decentralized
+    applications, survivable in the long-term and reliable to external or internal threats.
+    In the following sections we summarize the general design of Ergo, it's technical and economic solutions,
+    as well as provide possible examples of it's use-cases and further development.
 
     \section{Social contract}
+    \label{sec:social}
 
     \Ergo{} protocol is very flexible and may be changed in the future by the community.
     In this section we define the main principles, that should be followed during the \Ergo{} protocol updates.
@@ -71,12 +128,13 @@
 
 
     \section{Survivability}
+    \label{sec:survivability}
 
     %   well-tested solutions
     %   voting
     %   soft-forkability
     %   storage rent
-    %   light clients (сослаться на раздел ниже)
+    %   light clients (сослаться на раздел ниже или изложить полностью)
 
     \section{Autolykos Consensus Protocol}
     \label{sec:autolykos}
@@ -86,6 +144,7 @@
     %   Детали Автоликуса
 
     \section{Clients}
+    \label{sec:clients}
 
     %   Пробелмы пользователей без легких клиентов
     %   nipopow/flight clients
@@ -93,6 +152,7 @@
 
 
     \section{Currency And Emission}
+    \label{sec:currency}
 
     %    подробная информация об эмиссии, скрипту эмиссии, и всему-всему что нужно для фаундейшена
 
@@ -161,6 +221,7 @@
     %   ценность нашего токена, и филосовские размышления о данном типе экономики
 
     \section{Contractual Money}
+    \label{sec:contractual}
 
     %   пишет Саша
 

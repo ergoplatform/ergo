@@ -128,9 +128,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
                                 dataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()): ErgoTransaction = {
     require(boxesToSpend.nonEmpty, "At least one box is needed to generate a transaction")
 
-    //assuming that output is 200 bytes max
-    val minValue: Int = LaunchParameters.minValuePerByte * 200
-
     val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
     val assetsMap: mutable.Map[ByteArrayWrapper, Long] =
       mutable.Map(boxesToSpend.flatMap(_.additionalTokens).map { case (bs, amt) =>
@@ -141,6 +138,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     if (rnd.nextBoolean() && issueNew) {
       assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), rnd.nextInt(Int.MaxValue))
     }
+
+    val minValue = LaunchParameters.minValuePerByte * 200 //assuming that output is 200 bytes max
 
     require(inputSum >= minValue)
     val inputsCount = boxesToSpend.size

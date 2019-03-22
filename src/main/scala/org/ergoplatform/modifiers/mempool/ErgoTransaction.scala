@@ -158,7 +158,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           .demand(out.creationHeight <= stateContext.currentHeight, s"Box created in future:  ${outputCandidates.map(_.creationHeight)} validationState ${stateContext.currentHeight}")
       }
       // Just to be sure, check that all the input boxes to spend (and to read) are presented.
-      // Normally, this check should always pass, so it is not part of the protocol.
+      // Normally, this check should always pass, if the client is implemented properly
+      // so it is not part of the protocol really.
       .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
       .demand(dataBoxes.size == dataInputs.size, s"dataBoxes.size ${dataBoxes.size} != dataInputs.size ${dataInputs.size}")
       // Check that there are no overflow in input and output values

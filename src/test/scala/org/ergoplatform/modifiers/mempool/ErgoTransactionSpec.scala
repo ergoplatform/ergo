@@ -241,8 +241,9 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       (0 until bxsQty).map(i => inSample.copy(boxId = in(i).id))
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
-    val cost = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext).get
-    cost shouldBe >(LaunchParameters.maxBlockCost)
+    val validFailure = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext)
+    validFailure.isFailure shouldBe true
+    validFailure.failed.get.getMessage.startsWith("Spam") shouldBe true
   }
 
   property("transaction with too many inputs should be rejected") {

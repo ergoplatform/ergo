@@ -122,8 +122,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     *
     * @note Consensus-critical!
     *
-    * @param boxesToSpend
-    * @param dataBoxes
+    * @param boxesToSpend - boxes the transaction spends (via inputs)
+    * @param dataBoxes - boxes the transaction only reads (via data inputs)
     * @param stateContext
     * @param accumulatedCost
     * @param verifier

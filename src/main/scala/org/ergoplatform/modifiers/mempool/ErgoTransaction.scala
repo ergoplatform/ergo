@@ -124,9 +124,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     *
     * @param boxesToSpend - boxes the transaction spends (via inputs)
     * @param dataBoxes - boxes the transaction only reads (via data inputs)
-    * @param stateContext
-    * @param accumulatedCost
-    * @param verifier
+    * @param stateContext - blockchain context at the moment of validation
+    * @param accumulatedCost - computational cost before validation, validation starts with this value
+    * @param verifier - interpreter used to check spending correctness for transaction inputs
     * @return total computation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],

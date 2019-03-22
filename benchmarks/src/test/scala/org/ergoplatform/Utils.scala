@@ -5,8 +5,10 @@ import java.net.URL
 
 import com.google.common.primitives.Ints
 import javax.net.ssl.HttpsURLConnection
+import org.asynchttpclient.{AsyncHttpClient, DefaultAsyncHttpClient}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
+import scala.util.Properties
 
 object Utils {
 
@@ -45,6 +47,24 @@ object Utils {
       s"""{"benchCase":"$benchCase","elapsedTime":$et}"""
     }.mkString(",")
     outWriter.write(s"""{"benchName":"$benchName","startTs":$startTs,"reports":[$reportsStr]}""")
+    outWriter.close()
+
+    sendToInfluxDb(benchName, startTs, reports)
+  }
+
+  def sendToInfluxDb(benchName: String, startTs: Long, reports: Seq[BenchReport]): Unit = {
+    val influxdbConnectionString = Properties.envOrElse("INFLUXDB_CONNECTION_STRING", "")
+    val client: AsyncHttpClient = new DefaultAsyncHttpClient
+    val whenResponse = client.prepareGet("http://ergoplatform.com/").execute()
+    // _post(s"$url:$port$path").setHeader("api_key", apiKey)
+
+    val outWriter = new PrintWriter(new File(s"target/bench/bench-report-influxdb.json"))
+
+    val reportsStr = reports.map { case BenchReport(benchCase, et) =>
+      s"""{"benchCase":"$benchCase","elapsedTime":$et}"""
+    }.mkString(",")
+    outWriter.write(s""" $influxdbConnectionString cpu_load_short,host=server01,region=us-west value=0.64 1434055562000000000    {"benchName":"$benchName","startTs":$startTs,"reports":[$reportsStr]}""")
+
     outWriter.close()
   }
 

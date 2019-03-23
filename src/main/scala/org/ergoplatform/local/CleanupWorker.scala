@@ -46,7 +46,8 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     def validationLoop(txs: List[ErgoTransaction],
                        invalidated: Seq[ModifierId],
                        etAcc: Long): Seq[ModifierId] = txs match {
-      case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos && !validatedIndex.contains(head.id) =>
+      case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos
+        && !validatedIndex.contains(head.id) =>
         val t0 = System.nanoTime()
         val validationResult = validator.validate(head)
         val t1 = System.nanoTime()
@@ -56,6 +57,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
           case _ => validationLoop(tail, invalidated :+ head.id, accumulatedTime)
         }
       case _ :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos =>
+        // this transaction was validated earlier, skip it
         validationLoop(tail, invalidated, etAcc)
       case _ =>
         invalidated
@@ -67,7 +69,8 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     val validatedIds = txsToValidate.map(_.id).filterNot(invalidatedIds.contains)
 
     epochNr += 1
-    if (epochNr % CleanupWorker.IndexRevisionInterval == 0) { // drop ids which are no longer presented in pool from index
+    if (epochNr % CleanupWorker.IndexRevisionInterval == 0) {
+      // drop ids which are no longer presented in pool from index
       validatedIndex = validatedIndex.filter(mempoolTxs.map(_.id).contains) ++ validatedIds
     } else {
       validatedIndex ++= validatedIds

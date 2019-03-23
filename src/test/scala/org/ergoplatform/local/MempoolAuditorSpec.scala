@@ -40,7 +40,7 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps {
 
     subscribeEvents(classOf[FailedTransaction[_]])
     Seq(validTx, doubleSpendTx).foreach(tx => nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx))
-    Thread.sleep(500)
+    Thread.sleep(1000)
     expectNoMsg()
     getPoolSize shouldBe 2
 

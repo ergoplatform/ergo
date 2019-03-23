@@ -11,10 +11,14 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
+import scala.collection.immutable.TreeSet
 import scala.util.{Random, Success}
 
 class CleanupWorker(nodeViewHolderRef: ActorRef,
                     nodeSettings: NodeConfigurationSettings) extends Actor with ScorexLogging {
+
+  private var validatedIndex: TreeSet[ModifierId] = TreeSet.empty[ModifierId]
+  private var epochNr: Int = 0
 
   override def receive: Receive = {
     case RunCleanup(validator, mempool) =>
@@ -33,6 +37,8 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
   /**
     * Validates transactions from mempool for some specified amount of time.
+    *
+    * @return - invalidated transaction ids
     */
   private def validatePool(validator: TransactionValidation[ErgoTransaction],
                            mempool: ErgoMemPoolReader): Seq[ModifierId] = {
@@ -40,7 +46,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     def validationLoop(txs: List[ErgoTransaction],
                        invalidated: Seq[ModifierId],
                        etAcc: Long): Seq[ModifierId] = txs match {
-      case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos =>
+      case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos && !validatedIndex.contains(head.id) =>
         val t0 = System.nanoTime()
         val validationResult = validator.validate(head)
         val t1 = System.nanoTime()
@@ -49,10 +55,25 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
           case Success(_) => validationLoop(tail, invalidated, accumulatedTime)
           case _ => validationLoop(tail, invalidated :+ head.id, accumulatedTime)
         }
+      case _ :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos =>
+        validationLoop(tail, invalidated, etAcc)
       case _ =>
         invalidated
     }
-    validationLoop(Random.shuffle(mempool.getAll.toList), Seq.empty, 0L)
+
+    val mempoolTxs = mempool.getAll.toList
+    val txsToValidate = Random.shuffle(mempoolTxs)
+    val invalidatedIds = validationLoop(txsToValidate, Seq.empty, 0L)
+    val validatedIds = txsToValidate.map(_.id).filterNot(invalidatedIds.contains)
+
+    epochNr += 1
+    if (epochNr % CleanupWorker.IndexRevisionInterval == 0) { // drop ids which are no longer presented in pool from index
+      validatedIndex = validatedIndex.filter(mempoolTxs.map(_.id).contains) ++ validatedIds
+    } else {
+      validatedIndex ++= validatedIds
+    }
+
+    invalidatedIds
   }
 
 }
@@ -60,4 +81,6 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 object CleanupWorker {
   case class RunCleanup(validator: TransactionValidation[ErgoTransaction],
                         mempool: ErgoMemPoolReader)
+
+  val IndexRevisionInterval: Int = 512
 }

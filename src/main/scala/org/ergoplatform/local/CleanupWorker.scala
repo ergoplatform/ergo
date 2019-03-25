@@ -14,6 +14,10 @@ import scala.annotation.tailrec
 import scala.collection.immutable.TreeSet
 import scala.util.{Random, Success}
 
+/**
+  * Performs mempool validation task on demand.
+  * Validation result is sent directly to `NodeViewHolder`.
+  */
 class CleanupWorker(nodeViewHolderRef: ActorRef,
                     nodeSettings: NodeConfigurationSettings) extends Actor with ScorexLogging {
 

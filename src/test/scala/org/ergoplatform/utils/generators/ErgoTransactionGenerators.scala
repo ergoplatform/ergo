@@ -14,7 +14,7 @@ import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util._
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf, Value}
+import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate._
 import org.ergoplatform.settings.Parameters._
 

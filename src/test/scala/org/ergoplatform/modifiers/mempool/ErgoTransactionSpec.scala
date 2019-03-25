@@ -8,7 +8,8 @@ import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import org.scalacheck.Gen
-import scorex.crypto.hash.Digest32
+import scalan.util.BenchmarkUtil
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.encode.Base16
 
 import scala.util.Random
@@ -200,9 +201,9 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
       // update transaction inputs and outputs accordingly
       val txMod0 = tx.copy(inputs = tx.inputs.init :+ txInMod0) // new token group added to one input
-      val txMod1 = tx.copy(inputs = tx.inputs.init :+ txInMod1) // existing token added to one input
-      val txMod2 = tx.copy(inputs = tx.inputs.init :+ txInMod0, // new token group added to one input and one output
-        outputCandidates = tx.outputCandidates.init :+ modifiedOut0)
+    val txMod1 = tx.copy(inputs = tx.inputs.init :+ txInMod1) // existing token added to one input
+    val txMod2 = tx.copy(inputs = tx.inputs.init :+ txInMod0, // new token group added to one input and one output
+      outputCandidates = tx.outputCandidates.init :+ modifiedOut0)
       val txMod3 = tx.copy(inputs = tx.inputs.init :+ txInMod1, // existing token added to one input and one output
         outputCandidates = tx.outputCandidates.init :+ modifiedOut1)
 
@@ -240,38 +241,47 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       (0 until bxsQty).map(i => inSample.copy(boxId = in(i).id))
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
-    val cost = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext).get
-    cost shouldBe > (LaunchParameters.maxBlockCost)
+    val validFailure = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext)
+    validFailure.isFailure shouldBe true
+    validFailure.failed.get.getMessage.startsWith("Spam") shouldBe true
   }
 
-  ignore("too costly transaction should be rejected") {
-    /*
-        todo fix or remove
-        val groupElemGen: Gen[EcPointType] = Gen.const(CryptoConstants.dlogGroup.createRandomGenerator())
+  property("transaction with too many inputs should be rejected") {
 
-        val proveDiffieHellmanTupleGen = for {
-          gv <- groupElemGen
-          hv <- groupElemGen
-          uv <- groupElemGen
-          vv <- groupElemGen
-        } yield ProveDHTuple(gv, hv, uv, vv)
+    //we assume that verifier must finish verification of any script in less time than 3M hash calculations
+    // (for the Blake2b256 hash function over a single block input)
+    val Timeout: Long = {
+      val block = Array.fill(16)(0: Byte)
+      val hf = Blake2b256
 
+      //just in case to heat up JVM
+      (1 to 5000000).foreach(_ => hf(block))
 
-        val propositionGen = for {
-          proveList <- Gen.listOfN(50, proveDiffieHellmanTupleGen)
-        } yield OR(proveList.map(_.toSigmaProp))
+      val t0 = System.currentTimeMillis()
+      (1 to 3000000).foreach(_ => hf(block))
+      val t = System.currentTimeMillis()
+      t - t0
+    }
 
-        val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
+    val gen = validErgoTransactionGenTemplate(0, 0, 600, 1000, trueLeafGen)
+    val (from, tx) = gen.sample.get
+    tx.statelessValidity.isSuccess shouldBe true
 
-        forAll(gen) { case (from, tx) =>
-          tx.statelessValidity.isSuccess shouldBe true
-          val validity = tx.statefulValidity(from, emptyStateContext)
-          validity.isSuccess shouldBe false
-          val cause = validity.failed.get.getCause
-          Option(cause) shouldBe defined
-          cause.getMessage should startWith("Estimated expression complexity")
-        }
-    */
+    //check that spam transaction is being rejected quickly
+    implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
+    val (validity, time0) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext))
+    validity.isSuccess shouldBe false
+    assert(time0 <= Timeout)
+
+    val cause = validity.failed.get.getMessage
+    cause should startWith("Spam transaction detected")
+
+    //check that spam transaction validation with no cost limit is indeed taking too much time
+    val relaxedParams = LaunchParameters.parametersTable.updated(Parameters.MaxBlockCostIncrease, Int.MaxValue)
+    val relaxedVerifier = ErgoInterpreter(Parameters(0, relaxedParams))
+    val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(relaxedVerifier))
+
+    assert(time > Timeout)
   }
 
 }

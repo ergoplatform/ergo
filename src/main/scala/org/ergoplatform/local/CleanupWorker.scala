@@ -21,7 +21,10 @@ import scala.util.{Random, Success}
 class CleanupWorker(nodeViewHolderRef: ActorRef,
                     nodeSettings: NodeConfigurationSettings) extends Actor with ScorexLogging {
 
+  // keep some number of recently validated transactions in order
+  // to avoid validating the same transactions too many times.
   private var validatedIndex: TreeSet[ModifierId] = TreeSet.empty[ModifierId]
+  // count validation sessions in order to perform index cleanup.
   private var epochNr: Int = 0
 
   override def receive: Receive = {
@@ -74,8 +77,8 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
     epochNr += 1
     if (epochNr % CleanupWorker.IndexRevisionInterval == 0) {
-      // drop ids which are no longer presented in pool from index
-      validatedIndex = validatedIndex.filter(mempoolTxs.map(_.id).contains) ++ validatedIds
+      // drop old index in order to check potentially outdated transactions again.
+      validatedIndex = TreeSet(validatedIds:_*)
     } else {
       validatedIndex ++= validatedIds
     }
@@ -89,5 +92,5 @@ object CleanupWorker {
   case class RunCleanup(validator: TransactionValidation[ErgoTransaction],
                         mempool: ErgoMemPoolReader)
 
-  val IndexRevisionInterval: Int = 512
+  val IndexRevisionInterval: Int = 16
 }

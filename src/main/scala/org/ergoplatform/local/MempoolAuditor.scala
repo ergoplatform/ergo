@@ -17,7 +17,8 @@ import scorex.util.ScorexLogging
 import scala.concurrent.duration._
 
 /**
-  * Performs mempool validation in between blocks application.
+  * Controls mempool cleanup workflow. Watches NodeView events and delegates
+  * mempool cleanup task to [[CleanupWorker]] when needed.
   */
 class MempoolAuditor(nodeViewHolderRef: ActorRef,
                      nodeSettings: NodeConfigurationSettings) extends Actor with ScorexLogging {

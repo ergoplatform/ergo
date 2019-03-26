@@ -38,7 +38,7 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps {
     val validTx = validTransactionFromBoxes(boxes.toIndexedSeq)
     val doubleSpendTx = validTransactionFromBoxes(boxes.toIndexedSeq)
 
-    subscribeEvents(classOf[FailedTransaction[_]])
+    subscribeEvents(classOf[FailedTransaction])
     Seq(validTx, doubleSpendTx).foreach(tx => nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx))
     Thread.sleep(1000)
     expectNoMsg()

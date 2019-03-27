@@ -147,7 +147,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     startMining orElse
     onReaders orElse
     onUpdateSecret orElse
-    externalMining orElse
+    mining orElse
     unknownMessage
 
   private def onReaders: Receive = {
@@ -160,7 +160,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       }
   }
 
-  private def externalMining: Receive = {
+  private def mining: Receive = {
     case PrepareExternalCandidate if candidateOpt.isDefined =>
       sender() ! candidateOpt
         .flatMap { c =>
@@ -196,20 +196,28 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         }
       } match {
         case Some(Success(newBlock)) =>
-          log.info(s"New block ${newBlock.id} at nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}")
-          viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
-          val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
-            newBlock.blockSections
-          } else {
-            newBlock.mandatoryBlockSections
-          }
-          sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
+          sendToNodeView(newBlock)
           Future.successful(())
         case Some(Failure(exception)) =>
           Future.failed(exception)
         case None =>
           Future.failed(new Exception("Invalid miner state"))
       })
+
+    case solvedBlock: ErgoFullBlock =>
+      sendToNodeView(solvedBlock)
+
+  }
+
+  private def sendToNodeView(newBlock: ErgoFullBlock): Unit = {
+    log.info(s"New block ${newBlock.id} at nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}")
+    viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
+    val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
+      newBlock.blockSections
+    } else {
+      newBlock.mandatoryBlockSections
+    }
+    sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
   }
 
   private def procCandidateBlock(c: CandidateBlock): Unit = {

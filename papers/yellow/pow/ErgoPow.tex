@@ -114,7 +114,7 @@
             \LetRnd{$nonce$}{$\mathsf{rand}$}
             \Let{$J$}{$genIndexes(m||nonce)$}
             \Let{$d$}{$\sum_{j \in J}{r_j} \cdot x - sk \mod q$}
-            \If{$d < b || d > (q - b)$}
+            \If{$d < b$}
             \State \Return $(m,pk,w,nonce,d)$
             \EndIf
             \EndWhile
@@ -129,7 +129,7 @@
         \label{alg:verify}
         \begin{algorithmic}[1]
             \State \textbf{Input}: $m,pk,w,nonce,d$
-            \State require $d < b || d > (q - b)$
+            \State require $d < b$
             \State require $pk,w\in \mathbb{G}$ and $pk,w \ne e$
             \Let{$J$}{$genIndexes(m||nonce)$}
             \Let{$f$}{$\sum_{j \in J} H(j||M||pk||m||w)$}

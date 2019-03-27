@@ -1,0 +1,35 @@
+package org.ergoplatform.nodeView
+
+import org.ergoplatform.Utils
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.history.{BlockTransactions, Extension, Header}
+
+trait NVBenchmark {
+
+  val resourceUrlPrefix = "https://github.com/ergoplatform/static-data/raw/master/v2"
+
+  def readHeaders: Seq[Header] = readModifiers[Header](s"$resourceUrlPrefix/headers.dat")
+  def readPayloads: Seq[BlockTransactions] = readModifiers[BlockTransactions](s"$resourceUrlPrefix/payloads.dat")
+  def readExtensions: Seq[Extension] = readModifiers[Extension](s"$resourceUrlPrefix/extensions.dat")
+  def readBlocks: Seq[ErgoFullBlock] = readHeaders.zip(readPayloads).zip(readExtensions)
+    .map { case ((h, txs), ext) => ErgoFullBlock(h, txs, ext, None) }
+
+  def time[R](block: => R): Double = {
+    val t0 = System.nanoTime()
+    block // call-by-name
+    val t1 = System.nanoTime()
+    (t1.toDouble - t0) / 1000000
+  }
+
+  def readModifiers[M <: ErgoPersistentModifier](path: String): Seq[M] = {
+    val is = Utils.getUrlInputStream(path)
+    Stream
+      .continually {
+        Utils.readModifier[M](is)
+      }
+      .takeWhile(_.isDefined)
+      .flatten
+      .toList
+  }
+
+}

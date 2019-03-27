@@ -31,7 +31,7 @@ class UtxoStateNodesSyncSpec extends FreeSpec with IntegrationSuite {
       val sample = headerIdsAtSameHeight.head
       headerIdsAtSameHeight should contain only sample
     }
-    Await.result(result, 10.minutes)
+    Await.result(result, 15.minutes)
   }
 
 }

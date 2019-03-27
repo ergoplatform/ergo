@@ -71,7 +71,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                                        currentStateContext: ErgoStateContext) = Try {
     implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
-    val totalCost = transactions.map { tx =>
+    val totalCost = transactions.foldLeft(0L) { case (accumulatedCost, tx) =>
       tx.statelessValidity.get
       val boxesToSpend = tx.inputs.map { i =>
         val id = i.boxId
@@ -87,8 +87,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
           case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
         }
       }
-      tx.statefulValidity(boxesToSpend, dataBoxes, currentStateContext)(verifier).get
-    }.sum
+      val txCost = tx.statefulValidity(boxesToSpend, dataBoxes, currentStateContext)(verifier).get
+      accumulatedCost + txCost
+    }
 
     if (totalCost > currentStateContext.currentParameters.maxBlockCost) {
       throw new Error(s"Transaction cost $totalCost exceeds limit")

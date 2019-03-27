@@ -23,10 +23,11 @@ import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
+import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, GetDataFromCurrentView}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 
@@ -276,13 +277,16 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       tx -> cost
     }
 
-    val txs = ErgoMiner.collectTxs(minerPk,
+    val (txs, toEliminate) = ErgoMiner.collectTxs(minerPk,
       state.stateContext.currentParameters.maxBlockCost,
       state.stateContext.currentParameters.maxBlockSize,
       state,
       upcomingContext,
       pool.getAllPrioritized,
       emissionTxOpt.toSeq)
+
+    // remove transactions which turned out to be invalid
+    if (toEliminate.nonEmpty) viewHolderRef ! EliminateTransactions(toEliminate)
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
       CandidateBlock(bestHeaderOpt, version, nBits, adDigest, adProof, txs, timestamp, extensionCandidate, votes)
@@ -366,6 +370,8 @@ object ErgoMiner extends ScorexLogging {
     *
     * Resulting transactions total cost does not exceeds `maxBlockCost`, total size does not exceeds `maxBlockSize`,
     * and the miner's transaction is correct.
+    *
+    * @return - transactions to include to the block, transaction ids turned out to be invalid.
     */
   def collectTxs(minerPk: ProveDlog,
                  maxBlockCost: Long,
@@ -373,7 +379,7 @@ object ErgoMiner extends ScorexLogging {
                  us: UtxoStateReader,
                  upcomingContext: ErgoStateContext,
                  mempoolTxsIn: Iterable[ErgoTransaction],
-                 startTransactions: Seq[(ErgoTransaction, Long)]): Seq[ErgoTransaction] = {
+                 startTransactions: Seq[(ErgoTransaction, Long)]): (Seq[ErgoTransaction], Seq[ModifierId]) = {
     def correctLimits(blockTxs: Seq[(ErgoTransaction, Long)]): Boolean = {
       blockTxs.map(_._2).sum < maxBlockCost && blockTxs.map(_._1.size).sum < maxBlockSize
     }
@@ -381,7 +387,8 @@ object ErgoMiner extends ScorexLogging {
     @tailrec
     def loop(mempoolTxs: Iterable[ErgoTransaction],
              acc: Seq[(ErgoTransaction, Long)],
-             lastFeeTx: Option[(ErgoTransaction, Long)]): Seq[ErgoTransaction] = {
+             lastFeeTx: Option[(ErgoTransaction, Long)],
+             invalidTxs: Seq[ModifierId]): (Seq[ErgoTransaction], Seq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
       def current = (acc ++ lastFeeTx).map(_._1)
       mempoolTxs.headOption match {
@@ -400,25 +407,33 @@ object ErgoMiner extends ScorexLogging {
                   feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext) match {
                     case Success(cost) =>
                       val blockTxs: Seq[(ErgoTransaction, Long)] = (feeTx -> cost) +: newTxs
-                      if (correctLimits(blockTxs)) loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost)) else current
+                      if (correctLimits(blockTxs)) {
+                        loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
+                      } else {
+                        current -> invalidTxs
+                      }
                     case Failure(e) =>
                       log.debug(s"Fee collecting tx is invalid, return current: ${e.getMessage} from ${us.stateContext}")
-                      current
+                      current -> invalidTxs
                   }
                 case None =>
                   log.debug(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
                   val blockTxs: Seq[(ErgoTransaction, Long)] = newTxs ++ lastFeeTx.toSeq
-                  if (correctLimits(blockTxs)) loop(mempoolTxs.tail, blockTxs, lastFeeTx) else current
+                  if (correctLimits(blockTxs)) {
+                    loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs)
+                  } else {
+                    current -> invalidTxs
+                  }
               }
             case _ =>
-              loop(mempoolTxs.tail, acc, lastFeeTx)
+              loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
           }
         case _ => // mempool is empty
-          current
+          current -> invalidTxs
       }
     }
 
-    loop(mempoolTxsIn, startTransactions, None)
+    loop(mempoolTxsIn, startTransactions, None, Seq.empty)
   }
 
   def fixTxsConflicts(txs: Seq[(ErgoTransaction, Long)]): Seq[(ErgoTransaction, Long)] = {

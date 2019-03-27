@@ -14,7 +14,7 @@ import scorex.core.validation.ValidationResult
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
-import sigmastate.Values.{EvaluatedValue, Value}
+import sigmastate.Values.{ErgoTree, EvaluatedValue, Value}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.serialization.ErgoTreeSerializer
@@ -87,6 +87,14 @@ trait ApiCodecs {
     } yield transform(bytes)
   }
 
+  implicit val ergoTreeEncoder: Encoder[ErgoTree] = { value =>
+    ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(value).asJson
+  }
+
+  implicit val ergoTreeDecoder: Decoder[ErgoTree] = {
+    decodeErgoTree(_.asInstanceOf[ErgoTree])
+  }
+
   implicit val valueEncoder: Encoder[Value[SType]] = { value =>
     ErgoTreeSerializer.DefaultSerializer.serializeWithSegregation(value).asJson
   }
@@ -106,6 +114,12 @@ trait ApiCodecs {
   def valueDecoder[T](transform: Value[SType] => T): Decoder[T] = { implicit cursor: ACursor =>
     cursor.as[Array[Byte]] flatMap { bytes =>
       fromThrows(transform(ErgoTreeSerializer.DefaultSerializer.deserialize(bytes)))
+    }
+  }
+
+  def decodeErgoTree[T](transform: ErgoTree => T): Decoder[T] = { implicit cursor: ACursor =>
+    cursor.as[Array[Byte]] flatMap { bytes =>
+      fromThrows(transform(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bytes)))
     }
   }
 
@@ -144,7 +158,7 @@ trait ApiCodecs {
     Json.obj(
       "boxId" -> box.id.asJson,
       "value" -> box.value.asJson,
-      "proposition" -> valueEncoder(box.proposition),
+      "ergoTree" -> ergoTreeEncoder(box.ergoTree),
       "assets" -> box.additionalTokens.asJson,
       "creationHeight" -> box.creationHeight.asJson,
       "additionalRegisters" -> registersEncoder(box.additionalRegisters)

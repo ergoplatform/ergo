@@ -24,7 +24,6 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      mempoolCapacity: Int,
                                      blacklistCapacity: Int)
 
-
 trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
 
   implicit val nodeConfigurationReader: ValueReader[NodeConfigurationSettings] = { (cfg, path) =>

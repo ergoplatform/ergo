@@ -1,20 +1,16 @@
 package org.ergoplatform.local
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
-import com.google.common.primitives.Longs
 import org.ergoplatform.local.ErgoMiningThread.MineBlock
 import org.ergoplatform.mining.{CandidateBlock, PrivateKey}
-import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext
 
-
 class ErgoMiningThread(ergoSettings: ErgoSettings,
-                       viewHolderRef: ActorRef,
+                       minerRef: ActorRef,
                        startCandidate: CandidateBlock,
                        sk: PrivateKey,
                        timeProvider: NetworkTimeProvider) extends Actor with ScorexLogging {
@@ -30,7 +26,6 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
     context.system.scheduler.scheduleOnce(ergoSettings.nodeSettings.miningDelay) {
       self ! MineBlock
     }
-
 
   override def preStart(): Unit = {
     log.debug(s"Starting miner thread: ${self.path.name}")
@@ -48,17 +43,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
       val lastNonceToCheck = nonce + NonceStep
       powScheme.proveCandidate(candidate, sk, nonce, lastNonceToCheck) match {
         case Some(newBlock) =>
-          log.info(s"New block ${newBlock.id} at nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}")
-
-          viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
-          val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
-            newBlock.blockSections
-          } else {
-            newBlock.mandatoryBlockSections
-          }
-
-          sectionsToApply.foreach(s => viewHolderRef ! LocallyGeneratedModifier(s))
-          mineCmd()
+          minerRef ! newBlock
         case _ =>
           nonce = lastNonceToCheck
           self ! MineBlock
@@ -67,6 +52,7 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
 }
 
 object ErgoMiningThread {
+
   def props(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             startCandidate: CandidateBlock,

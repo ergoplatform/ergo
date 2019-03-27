@@ -1,33 +1,34 @@
 package org.ergoplatform
 
+import org.ergoplatform.Utils.BenchReport
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{BlockTransactions, Extension, Header}
-import org.ergoplatform.nodeView.ErgoModifiersCache
+import org.ergoplatform.nodeView.{ErgoModifiersCache, NVBenchmark}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.HistoryTestHelpers
 
 import scala.annotation.tailrec
 
-object ModifiersApplicationBench extends HistoryTestHelpers with App {
+object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark with App {
 
   override def main(args: Array[String]): Unit = {
 
+    val startTs = System.currentTimeMillis()
+
     val cache = new ErgoModifiersCache(maxSize = 1024)
 
-    val resourceUrlPrefix = "https://github.com/ergoplatform/static-data/raw/master"
-
-    val headers: Seq[Header] = readModifiers[Header](s"$resourceUrlPrefix/headers.dat")
-    val payloads: Seq[BlockTransactions] = readModifiers[BlockTransactions](s"$resourceUrlPrefix/payloads.dat")
-    val extensions: Seq[Extension] = readModifiers[Extension](s"$resourceUrlPrefix/extensions.dat")
+    val headers: Seq[Header] = readHeaders
+    val payloads: Seq[BlockTransactions] = readPayloads
+    val extensions: Seq[Extension] = readExtensions
 
     def bench(benchCase: String)
              (applicator: (Seq[ErgoPersistentModifier], ErgoHistory) => Any,
-              mods: Seq[ErgoPersistentModifier]): String = {
+              mods: Seq[ErgoPersistentModifier]): (String, Long) = {
       val preparedHistory = applyModifiers(headers.take(mods.size / 2), unlockedHistory())._1
-      val et = time(applicator(mods, preparedHistory))
+      val et = time(applicator(mods, preparedHistory)).toLong
       assert(preparedHistory.fullBlockHeight == mods.size / 2)
-      s"Performance of `$benchCase`: $et ms"
+      s"Performance of `$benchCase`: $et ms" -> et
     }
 
     def applyModifiersWithCache(mods: Seq[ErgoPersistentModifier], his: ErgoHistory): (ErgoHistory, Int) = {
@@ -65,15 +66,20 @@ object ModifiersApplicationBench extends HistoryTestHelpers with App {
 
     val modifiersDirectOrd = payloads ++ extensions
     val modifiersReversedOrd = modifiersDirectOrd.reverse
-    val report0 = bench("Modifiers application in direct order")(applyModifiers, modifiersDirectOrd)
-    val report1 = bench("Modifiers application in reversed order")(applyModifiers, modifiersReversedOrd)
-    val report2 = bench("Modifiers application in direct order (cache)")(applyModifiersWithCache, modifiersDirectOrd)
-    val report3 = bench("Modifiers application in reversed order (cache)")(applyModifiersWithCache, modifiersReversedOrd)
 
-    println(report0)
-    println(report1)
-    println(report2)
-    println(report3)
+    val report0 = bench("Modifiers application in direct order")(applyModifiers, modifiersDirectOrd)
+    val report1 = bench("Modifiers application in direct order (cache)")(applyModifiersWithCache, modifiersDirectOrd)
+    val report2 = bench("Modifiers application in reversed order (cache)")(applyModifiersWithCache, modifiersReversedOrd)
+
+    println(report0._1)
+    println(report1._1)
+    println(report2._1)
+
+    val reports = Seq(report0, report1, report2).map { case (repStr, et) =>
+      BenchReport(repStr, et)
+    }
+
+    Utils.dumpToFile("ModifiersApplicationBench", startTs, reports)
 
     System.exit(0)
   }
@@ -85,24 +91,6 @@ object ModifiersApplicationBench extends HistoryTestHelpers with App {
     val h = history()
     HistoryTestHelpers.allowToApplyOldBlocks(h)
     h
-  }
-
-  def readModifiers[M <: ErgoPersistentModifier](path: String): Seq[M] = {
-    val is = Utils.getUrlInputStream(path)
-    Stream
-      .continually {
-        Utils.readModifier[M](is)
-      }
-      .takeWhile(_.isDefined)
-      .flatten
-      .toList
-  }
-
-  private def time[R](block: => R): Double = {
-    val t0 = System.nanoTime()
-    block // call-by-name
-    val t1 = System.nanoTime()
-    (t1.toDouble - t0) / 1000000
   }
 
 }

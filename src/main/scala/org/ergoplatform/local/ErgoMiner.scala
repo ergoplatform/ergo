@@ -92,10 +92,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       candidateOpt.foreach { candidate =>
         secretKeyOpt match {
           case Some(sk) =>
-            log.info("Starting Mining")
             isMining = true
-            miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, sk.w, timeProvider)(context)
-            miningThreads.foreach(_ ! candidate)
+            if (!ergoSettings.nodeSettings.useExternalMiner) {
+              log.info("Starting native miner")
+              miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, sk.w, timeProvider)(context)
+              miningThreads.foreach(_ ! candidate)
+            } else {
+              log.info("Ready to serve external miner")
+            }
           case None =>
             log.warn("Got start mining command while secret key is not ready")
         }
@@ -212,7 +216,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     log.debug(s"Got candidate block at height ${ErgoHistory.heightOf(c.parentOpt) + 1}" +
       s" with ${c.transactions.size} transactions")
     candidateOpt = Some(c)
-    miningThreads.foreach(_ ! c)
+    if (!ergoSettings.nodeSettings.useExternalMiner) miningThreads.foreach(_ ! c)
   }
 
   private def createCandidate(minerPk: ProveDlog,

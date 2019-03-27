@@ -51,7 +51,7 @@ paths:
                   {
                     "boxId": "08667225fa6beb560627ba02b5389929db756add5b65bda8aea7920088b2cc8c",
                     "value": 100000,
-                    "proposition": "100101017300",
+                    "ergoTree": "100101017300",
                     "assets": [],
                     "additionalRegisters": {},
                     "creationHeight": 1149
@@ -59,7 +59,7 @@ paths:
                   {
                     "boxId": "a27ff81f905bfec9e4a551d95322a0c53259e44cd263cf72fa7d1eabc715fefe",
                     "value": 900000000,
-                    "proposition": "1001070361a3df05f414e9b01394487c4cc9838857575408677ddc166047a52f93e4ed26cd7300",
+                    "ergoTree": "1001070361a3df05f414e9b01394487c4cc9838857575408677ddc166047a52f93e4ed26cd7300",
                     "assets": [],
                     "additionalRegisters": {},
                     "creationHeight": 1149
@@ -93,7 +93,7 @@ paths:
                   {
                     "boxId": "74c503605218f6e382710bc0cb6716a63e887a2a10252cdbb4662d49d660069c",
                     "value": 100000,
-                    "proposition": "100101017300",
+                    "ergoTree": "100101017300",
                     "assets": [],
                     "additionalRegisters": {},
                     "creationHeight": 1149
@@ -101,7 +101,7 @@ paths:
                   {
                     "boxId": "cf5a2dbc79d3152305804e7109743d2ed538a5ee73e7fe7f366213c4d028f683",
                     "value": 500000000,
-                    "proposition": "1001070361a3df05f414e9b01394487c4cc9838857575408677ddc166047a52f93e4ed26cd7300",
+                    "ergoTree": "1001070361a3df05f414e9b01394487c4cc9838857575408677ddc166047a52f93e4ed26cd7300",
                     "assets": [],
                     "additionalRegisters": {},
                     "creationHeight": 1149
@@ -175,7 +175,7 @@ paths:
             {
               "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
               "value": 147,
-              "proposition": "1001070361a3df05f414e9b01394487c4cc9838857575408677ddc166047a52f93e4ed26cd7300",
+              "ergoTree": "1001070361a3df05f414e9b01394487c4cc9838857575408677ddc166047a52f93e4ed26cd7300",
               "assets": [
                 {
                   "tokenId": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",

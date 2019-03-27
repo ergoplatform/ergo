@@ -1,6 +1,5 @@
 package org.ergoplatform.serialization
 
-import io.circe.parser.parse
 import io.circe.syntax._
 import io.circe.{ACursor, Decoder, Encoder, Json}
 import org.ergoplatform.ErgoBox
@@ -12,12 +11,12 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalatest.Inspectors
-import sigmastate.Values.{EvaluatedValue, Value}
-import sigmastate.{SBoolean, SType}
+import sigmastate.SType
+import sigmastate.Values.{ErgoTree, EvaluatedValue}
 
 class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with ApiCodecs {
 
@@ -103,7 +102,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   private def checkErgoBox(c: ACursor, b: ErgoBox): Unit = {
     c.downField("boxId").as[String] shouldBe Right(Algos.encode(b.id))
     c.downField("value").as[Long] shouldBe Right(b.value)
-    c.downField("proposition").as[Value[SBoolean.type]] shouldBe Right(b.proposition)
+    c.downField("ergoTree").as[ErgoTree] shouldBe Right(b.ergoTree)
     checkAssets(c.downField("assets"), b.additionalTokens)
     checkRegisters(c.downField("additionalRegisters"), b.additionalRegisters)
     c.downField("creationHeight").as[Int] shouldBe Right(b.creationHeight)

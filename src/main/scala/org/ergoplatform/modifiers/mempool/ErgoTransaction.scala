@@ -19,7 +19,7 @@ import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.ADKey
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.Values.{EvaluatedValue, Value}
+import sigmastate.Values.{ErgoTree, EvaluatedValue, Value}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
@@ -307,10 +307,10 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
       maybeId <- cursor.downField("boxId").as[Option[BoxId]]
       value <- cursor.downField("value").as[Long]
       creationHeight <- cursor.downField("creationHeight").as[Int]
-      proposition <- cursor.downField("proposition").as[Value[SBoolean.type]]
+      ergoTree <- cursor.downField("ergoTree").as[ErgoTree]
       assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]
       registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
-    } yield (new ErgoBoxCandidate(value, proposition.toSigmaProp, creationHeight, assets, registers), maybeId)
+    } yield (new ErgoBoxCandidate(value, ergoTree, creationHeight, assets, registers), maybeId)
   }
 
   implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>

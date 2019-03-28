@@ -1,13 +1,13 @@
 package org.ergoplatform.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.pattern.ask
 import akka.http.scaladsl.server.Route
+import akka.pattern.ask
 import org.ergoplatform.local.ErgoMiner
-import org.ergoplatform.mining.external.{ExternalAutolykosSolution, ExternalCandidateBlock}
+import org.ergoplatform.mining.{AutolykosSolution, ExternalCandidateBlock}
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.settings.RESTApiSettings
 import scorex.core.api.http.ApiResponse
+import scorex.core.settings.RESTApiSettings
 
 import scala.concurrent.Future
 
@@ -21,12 +21,16 @@ case class MiningApiRoute(miner: ActorRef, ergoSettings: ErgoSettings)
   }
 
   def candidateR: Route = (path("candidate") & pathEndOrSingleSlash & get) {
-    val result = (miner ? ErgoMiner.PrepareExternalCandidate).mapTo[Future[ExternalCandidateBlock]].flatten
+    val result = (miner ? ErgoMiner.PrepareCandidate).mapTo[Future[ExternalCandidateBlock]].flatten
     ApiResponse(result)
   }
 
-  def solutionR: Route = (path("solution") & post & entity(as[ExternalAutolykosSolution])) { solution =>
-    val result = (miner ? solution).mapTo[Future[Unit]].flatten
+  def solutionR: Route = (path("solution") & post & entity(as[AutolykosSolution])) { solution =>
+    val result = if (ergoSettings.nodeSettings.useExternalMiner) {
+      (miner ? solution).mapTo[Future[Unit]].flatten
+    } else {
+      Future.failed(new Exception("External miner support is inactive"))
+    }
     ApiResponse(result)
   }
 

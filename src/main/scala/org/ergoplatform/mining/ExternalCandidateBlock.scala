@@ -1,4 +1,4 @@
-package org.ergoplatform.mining.external
+package org.ergoplatform.mining
 
 import io.circe.syntax._
 import io.circe.{Encoder, Json}

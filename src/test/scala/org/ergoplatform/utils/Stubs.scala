@@ -3,7 +3,7 @@ package org.ergoplatform.utils
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.local.ErgoMiner
-import org.ergoplatform.mining.external.{ExternalAutolykosSolution, ExternalCandidateBlock}
+import org.ergoplatform.mining.{AutolykosSolution, ExternalCandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -82,8 +82,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class MinerStub extends Actor {
     def receive: Receive = {
-      case ErgoMiner.PrepareExternalCandidate => sender() ! Future.successful(externalCandidateBlock)
-      case _: ExternalAutolykosSolution => sender() ! Future.successful(())
+      case ErgoMiner.PrepareCandidate => sender() ! Future.successful(externalCandidateBlock)
+      case _: AutolykosSolution => sender() ! Future.successful(())
     }
   }
 

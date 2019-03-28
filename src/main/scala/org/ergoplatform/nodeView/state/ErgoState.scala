@@ -9,8 +9,9 @@ import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
+import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ChainSettings, Constants, ErgoSettings}
 import scorex.core.transaction.state.MinimalState
 import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
@@ -22,7 +23,7 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.serialization.ValueSerializer
 
 import scala.collection.mutable
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * Implementation of minimal state concept in Scorex. Minimal state (or just state from now) is some data structure
@@ -36,6 +37,39 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
   extends MinimalState[ErgoPersistentModifier, IState] with ErgoStateReader {
 
   self: IState =>
+
+  /**
+    * Tries to validate and execute transactions.
+    * @return Result of transactions execution with total cost inside
+    */
+  def execTransactionsTry(transactions: Seq[ErgoTransaction],
+                          currentStateContext: ErgoStateContext)
+                         (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): Try[Long] = {
+    import cats.implicits._
+    implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
+    def execTry(txs: List[ErgoTransaction], accCostTry: Try[Long]): Try[Long] = (txs, accCostTry) match {
+      case (tx :: tail, Success(accumulatedCost)) =>
+        val costTry = tx.statelessValidity.flatMap { _ =>
+          val boxesToSpendTry: Try[List[ErgoBox]] = tx.inputs.toList
+            .map(in => checkBoxExistence(in.boxId))
+            .sequence
+          val dataBoxesTry: Try[List[ErgoBox]] = tx.dataInputs.toList
+            .map(in => checkBoxExistence(in.boxId))
+            .sequence
+          boxesToSpendTry.flatMap { boxes =>
+            dataBoxesTry.flatMap { dataBoxes =>
+              tx.statefulValidity(boxes.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, accumulatedCost)
+            }
+          }
+        }
+        execTry(tail, costTry.map(_ + accumulatedCost))
+      case (_, acc: Success[Long]) =>
+        acc
+      case (_, failure: Failure[Long]) =>
+        failure
+    }
+    execTry(transactions.toList, Success(0L))
+  }
 
   def closeStorage(): Unit = {
     log.warn("Closing state's store.")

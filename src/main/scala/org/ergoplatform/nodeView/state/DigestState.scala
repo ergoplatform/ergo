@@ -41,34 +41,20 @@ class DigestState protected(override val version: VersionTag,
 
   override lazy val maxRollbackDepth: Int = store.rollbackVersions().size
 
-  private[state] def validateTransactions(txs: Seq[ErgoTransaction],
+  private[state] def validateTransactions(transactions: Seq[ErgoTransaction],
                                           expectedHash: ADDigest,
                                           proofs: ADProofs,
-                                          currentStateContext: ErgoStateContext): Unit = {
+                                          currentStateContext: ErgoStateContext): Try[Unit] = {
     // Check modifications, returning sequence of old values
-    val boxesFromProofs: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, expectedHash)
+    val boxesFromProofs: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(transactions), rootHash, expectedHash)
       .get.map(v => ErgoBoxSerializer.parseBytes(v))
-    val knownBoxes = (txs.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
-    val totalCost = txs.foldLeft(0L) { case (accumulatedCost, tx) =>
-      tx.statelessValidity.get
-      val boxesToSpend = tx.inputs.map { i =>
-        knownBoxes.get(ByteArrayWrapper(i.boxId)) match {
-          case Some(box) => box
-          case None => throw new Exception(s"Box with id ${Algos.encode(i.boxId)} not found")
-        }
-      }
-      val dataBoxes = tx.dataInputs.map { i =>
-        knownBoxes.get(ByteArrayWrapper(i.boxId)) match {
-          case Some(box) => box
-          case None => throw new Exception(s"Box with id ${Algos.encode(i.boxId)} not found")
-        }
-      }
-      val txCost = tx.statefulValidity(boxesToSpend, dataBoxes, currentStateContext, accumulatedCost)(verifier).get
-      accumulatedCost + txCost
-    }
-
-    if (totalCost > currentStateContext.currentParameters.maxBlockCost) {
-      throw new Exception(s"Transaction cost $totalCost exceeds limit")
+    val knownBoxes = (transactions.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
+    def checkBoxExistence(id: ErgoBox.BoxId) = knownBoxes.get(ByteArrayWrapper(id))
+      .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
+    execTransactionsTry(transactions, currentStateContext)(checkBoxExistence) match {
+      case Success(executionCost) if executionCost <= currentStateContext.currentParameters.maxBlockCost => Success(())
+      case Success(executionCost) => Failure(new Exception(s"Transaction cost $executionCost exceeds limit"))
+      case failure => failure.map(_ => ())
     }
   }
 
@@ -80,7 +66,7 @@ class DigestState protected(override val version: VersionTag,
         case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
           Failure(new Exception("Incorrect proofs digest"))
         case Some(proofs) =>
-          stateContext.appendFullBlock(fb, votingSettings).map { currentStateContext =>
+          stateContext.appendFullBlock(fb, votingSettings).flatMap { currentStateContext =>
             val txs = fb.blockTransactions.txs
             val declaredHash = fb.header.stateRoot
             validateTransactions(txs, declaredHash, proofs, currentStateContext)

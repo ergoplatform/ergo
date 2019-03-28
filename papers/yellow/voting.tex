@@ -90,7 +90,7 @@ The protocol version upgrade is to be done in the following steps:
     \item{} If the soft-fork proposal is being rejected~(so if it gathers no more than $90\%$ of votes during voting period, i.e.
             no more than $\lfloor 32 * 1024 * 90 / 100 \rfloor = 29491$ votes), new voting may be proposed next epoch
             after the voting done.
-    \item{} If the soft-fork proposal is being approved, activation period of 128 epochs is starting. The first block
+    \item{} If the soft-fork proposal is being approved, activation period of 32 epochs is starting. The first block
     after the activation period is called activation height. It is prohibited to vote for a new soft-fork during the
     activation and also on the activation height. Soft-fork data is still to be
     written to corresponding extension sections~(see below) during the activation period, and on activation height.
@@ -128,11 +128,11 @@ Examples:
     \item{} Now assume that the voting for the soft-fork was successful, i.e. more than $29491$ votes for soft-fork
             have been gathered between blocks $\#1024$~(inclusive) and $\#33792$~(exclusive). In this case, activation
             epoch is starting immediately after voting has been done, so on height $33792$. Activation epoch lasts for
-            128 epochs, so the first block after activation period has height of $164864$. Please note that any vote
+            32 epochs, so the first block after activation period has height of $33792$. Please note that any vote
             for a soft-fork during the activation period is prohibited. Also, on a first block of a voting epoch
             soft-fork voting parameters should be written~(height when voting had been started and also number of votes
             collected). On the first block after activation, protocol version written into a block must be increased.
             The first block after activation should carry soft-fork voting parameters. The parameters must be cleared
-            next epoch, so in a block $\#165888$. A new voting may be started in the block $\#165888$, similarly to the
+            next epoch, so in a block $\#33792$. A new voting may be started in the block $\#33792$, similarly to the
             case of non-successful voting.
 \end{itemize}

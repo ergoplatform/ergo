@@ -7,10 +7,9 @@ import com.google.common.primitives.Longs
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
-import org.ergoplatform.mining.CandidateBlock
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.mining.external.{ExternalAutolykosSolution, ExternalCandidateBlock}
+import org.ergoplatform.mining.{AutolykosSolution, CandidateBlock, ExternalCandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
@@ -23,8 +22,7 @@ import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
-import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, GetDataFromCurrentView}
-import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
+import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.{ModifierId, ScorexLogging}
@@ -53,6 +51,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val votingEpochLength = votingSettings.votingLength
   private val protocolVersion = ergoSettings.chainSettings.protocolVersion
   private val powScheme = ergoSettings.chainSettings.powScheme
+  private val externalMinerMode = ergoSettings.nodeSettings.useExternalMiner
 
   // shared mutable state
   private var isMining = false
@@ -94,9 +93,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         secretKeyOpt match {
           case Some(sk) =>
             isMining = true
-            if (!ergoSettings.nodeSettings.useExternalMiner) {
+            if (!externalMinerMode) {
               log.info("Starting native miner")
-              miningThreads += ErgoMiningThread(ergoSettings, viewHolderRef, candidate, sk.w, timeProvider)(context)
+              miningThreads += ErgoMiningThread(ergoSettings, self, candidate, sk.w, timeProvider)(context)
               miningThreads.foreach(_ ! candidate)
             } else {
               log.info("Ready to serve external miner")
@@ -162,7 +161,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   private def mining: Receive = {
-    case PrepareExternalCandidate if candidateOpt.isDefined =>
+    case PrepareCandidate if candidateOpt.isDefined =>
       sender() ! candidateOpt
         .flatMap { c =>
           secretKeyOpt.map(sk => powScheme.deriveExternalCandidate(c, sk.publicImage))
@@ -170,7 +169,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         .fold[Future[ExternalCandidateBlock]](
           Future.failed(new Exception("Failed to create candidate")))(Future.successful)
 
-    case PrepareExternalCandidate =>
+    case PrepareCandidate =>
       val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
       sender() ! readersR.flatMap {
         case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
@@ -189,12 +188,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           Future.failed(new Exception("Invalid readers state"))
       }
 
-    case solution: ExternalAutolykosSolution =>
-      sender() ! (candidateOpt.flatMap { c =>
-        secretKeyOpt.map { sk =>
-          val newBlock = powScheme.completeExternal(sk.publicImage, c, solution)
-          powScheme.validate(newBlock.header).map(_ => newBlock)
-        }
+    case solution: AutolykosSolution =>
+      val result: Future[Unit] = candidateOpt.map { c =>
+        val newBlock = powScheme.completeBlock(c, solution)
+        powScheme.validate(newBlock.header).map(_ => newBlock)
       } match {
         case Some(Success(newBlock)) =>
           sendToNodeView(newBlock)
@@ -203,11 +200,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           Future.failed(exception)
         case None =>
           Future.failed(new Exception("Invalid miner state"))
-      })
-
-    case solvedBlock: ErgoFullBlock =>
-      sendToNodeView(solvedBlock)
-
+      }
+      if (externalMinerMode) sender() ! result
   }
 
   private def sendToNodeView(newBlock: ErgoFullBlock): Unit = {
@@ -225,7 +219,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     log.debug(s"Got candidate block at height ${ErgoHistory.heightOf(c.parentOpt) + 1}" +
       s" with ${c.transactions.size} transactions")
     candidateOpt = Some(c)
-    if (!ergoSettings.nodeSettings.useExternalMiner) miningThreads.foreach(_ ! c)
+    if (!externalMinerMode) miningThreads.foreach(_ ! c)
   }
 
   private def createCandidate(minerPk: ProveDlog,
@@ -449,7 +443,7 @@ object ErgoMiner extends ScorexLogging {
 
   case object StartMining
 
-  case object PrepareExternalCandidate
+  case object PrepareCandidate
 
   case class UpdateSecret(s: DLogProverInput)
 

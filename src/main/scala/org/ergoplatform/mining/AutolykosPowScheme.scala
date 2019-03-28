@@ -2,7 +2,6 @@ package org.ergoplatform.mining
 
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.mining.external.{ExternalAutolykosSolution, ExternalCandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -157,9 +156,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Assembles [[ErgoFullBlock]] using candidate block and external pow solution.
     */
-  def completeExternal(pk: ProveDlog, candidate: CandidateBlock, solution: ExternalAutolykosSolution): ErgoFullBlock = {
-    val fullSolution = AutolykosSolution(pk.h, solution.w, solution.n, solution.d)
-    val header = AutolykosPowScheme.deriveUnprovedHeader(candidate).copy(powSolution = fullSolution)
+  def completeBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
+    val header = AutolykosPowScheme.deriveUnprovedHeader(candidate).copy(powSolution = solution)
     val adProofs = ADProofs(header.id, candidate.adProofBytes)
     val blockTransactions = BlockTransactions(header.id, candidate.transactions)
     val extension = Extension(header.id, candidate.extension.fields)

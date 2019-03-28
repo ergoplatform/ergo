@@ -5,10 +5,9 @@ import akka.pattern.ask
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.local.ErgoMiner.{PrepareExternalCandidate, StartMining}
+import org.ergoplatform.local.ErgoMiner.{PrepareCandidate, StartMining}
 import org.ergoplatform.local.ErgoMinerRef
 import org.ergoplatform.mining.Listener._
-import org.ergoplatform.mining.external.ExternalCandidateBlock
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
@@ -204,7 +203,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     val passiveMiner: ActorRef = minerRef
 
-    await((passiveMiner ? PrepareExternalCandidate).mapTo[Future[ExternalCandidateBlock]].flatten)
+    await((passiveMiner ? PrepareCandidate).mapTo[Future[ExternalCandidateBlock]].flatten)
   }
 
 }

@@ -7,7 +7,7 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.api.MiningApiRoute
-import org.ergoplatform.mining.external.ExternalAutolykosSolution
+import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.utils.generators.ErgoGenerators
@@ -25,10 +25,10 @@ class MiningApiRouteSpec
 
   val prefix = "/mining"
 
-  val ergoSettings: ErgoSettings = ErgoSettings.read(Some("src/test/resources/application.conf"))
-  val route: Route = MiningApiRoute(minerRef, settings).route
+  val localSetting: ErgoSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(useExternalMiner = true))
+  val route: Route = MiningApiRoute(minerRef, localSetting).route
 
-  val externalSolution = ExternalAutolykosSolution(genECPoint.sample.get, Array.fill(32)(9: Byte), BigInt(0))
+  val solution = AutolykosSolution(genECPoint.sample.get, genECPoint.sample.get, Array.fill(32)(9: Byte), BigInt(0))
 
   it should "return requested candidate" in {
     Get(prefix + "/candidate") ~> route ~> check {
@@ -38,7 +38,7 @@ class MiningApiRouteSpec
   }
 
   it should "process external solution" in {
-    Post(prefix + "/solution", externalSolution.asJson) ~> route ~> check {
+    Post(prefix + "/solution", solution.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
     }
   }

@@ -7,7 +7,6 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.ErgoState.ModifierProcessing
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
@@ -26,8 +25,7 @@ import scala.util.{Failure, Success, Try}
 class DigestState protected(override val version: VersionTag,
                             override val rootHash: ADDigest,
                             override val store: Store,
-                            ergoSettings: ErgoSettings,
-                            val verifier: ErgoInterpreter)
+                            ergoSettings: ErgoSettings)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging {
@@ -90,7 +88,7 @@ class DigestState protected(override val version: VersionTag,
       store.clean(nodeSettings.keepVersions)
       val rootHash = ADDigest @@ store.get(wrappedVersion).get.data
       log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
-      new DigestState(version, rootHash, store, ergoSettings, verifier)
+      new DigestState(version, rootHash, store, ergoSettings)
     }
   }
 
@@ -133,7 +131,7 @@ class DigestState protected(override val version: VersionTag,
     val toUpdate = DigestState.metadata(newVersion, newRootHash, newStateContext)
 
     store.update(wrappedVersion, Seq.empty, toUpdate)
-    new DigestState(newVersion, newRootHash, store, ergoSettings, verifier)
+    new DigestState(newVersion, newRootHash, store, ergoSettings)
   }
 
 }
@@ -149,12 +147,11 @@ object DigestState extends ScorexLogging with ScorexEncoding {
               dir: File,
               constants: StateConstants): DigestState = {
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
-    val verifier = ErgoInterpreter(LaunchParameters)
     val wrappedVersion = Algos.versionToBAW(version)
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
     store.update(wrappedVersion, Seq.empty, toUpdate)
-    new DigestState(version, rootHash, store, constants.settings, verifier)
+    new DigestState(version, rootHash, store, constants.settings)
   }
 
   def create(versionOpt: Option[VersionTag],
@@ -163,14 +160,13 @@ object DigestState extends ScorexLogging with ScorexEncoding {
              constants: StateConstants): DigestState = Try {
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
     val context = ErgoStateReader.storageStateContext(store, constants)
-    val verifier = ErgoInterpreter(LaunchParameters)
     (versionOpt, rootHashOpt) match {
       case (Some(version), Some(rootHash)) =>
         val state = if (store.lastVersionID.map(w => bytesToVersion(w.data)).contains(version)) {
-          new DigestState(version, rootHash, store, constants.settings, verifier)
+          new DigestState(version, rootHash, store, constants.settings)
         } else {
           val inVersion = store.lastVersionID.map(w => bytesToVersion(w.data)).getOrElse(version)
-          new DigestState(inVersion, rootHash, store, constants.settings, verifier)
+          new DigestState(inVersion, rootHash, store, constants.settings)
             .update(version, rootHash, context).get //sync store
         }
         state.ensuring(bytesToVersion(store.lastVersionID.get.data) == version)
@@ -179,7 +175,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
       case _ =>
         val version = bytesToVersion(store.lastVersionID.get.data)
         val rootHash = store.get(Algos.versionToBAW(version)).get.data
-        new DigestState(version, ADDigest @@ rootHash, store, constants.settings, verifier)
+        new DigestState(version, ADDigest @@ rootHash, store, constants.settings)
     }
   } match {
     case Success(state) => state

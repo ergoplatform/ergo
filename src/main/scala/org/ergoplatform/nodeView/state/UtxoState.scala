@@ -151,7 +151,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 object UtxoState {
 
   private lazy val bestVersionKey = Algos.hash("best state version")
-  val EmissionBoxIdKey = Algos.hash("emission box id key")
+  val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,

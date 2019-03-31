@@ -4,7 +4,7 @@ import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
+import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.api.ApiEncoderOption.Detalization
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
@@ -18,6 +18,8 @@ import sigmastate.Values.{ErgoTree, EvaluatedValue, Value}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.serialization.ErgoTreeSerializer
 import sigmastate.{SBoolean, SType}
+import special.collection.Coll
+import sigmastate.eval._
 
 import scala.util.Try
 
@@ -94,6 +96,7 @@ trait ApiCodecs {
     decodeErgoTree(_.asInstanceOf[ErgoTree])
   }
 
+  // TODO catena: this should be removed (Value should not be used directly)
   implicit val valueEncoder: Encoder[Value[SType]] = { value =>
     ErgoTreeSerializer.DefaultSerializer.serializeWithSegregation(value).asJson
   }
@@ -151,12 +154,16 @@ trait ApiCodecs {
     )
   }
 
+//  implicit val byteCollEncoder: Encoder[Coll[Byte]] = _.toArray.asJson
+
+//  implicit val byteCollDecoder: Decoder[Coll[Byte]] = bytesDecoder(x => Colls.fromArray(x))
+
   implicit val boxEncoder: Encoder[ErgoBox] = { box =>
     Json.obj(
       "boxId" -> box.id.asJson,
       "value" -> box.value.asJson,
       "ergoTree" -> ergoTreeEncoder(box.ergoTree),
-      "assets" -> box.additionalTokens.asJson,
+      "assets" -> box.additionalTokens.toArray.toSeq.asJson,
       "creationHeight" -> box.creationHeight.asJson,
       "additionalRegisters" -> registersEncoder(box.additionalRegisters)
     )

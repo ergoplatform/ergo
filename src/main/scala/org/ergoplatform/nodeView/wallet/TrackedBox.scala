@@ -71,7 +71,10 @@ case class TrackedBox(creationTx: ErgoTransaction,
 
   def value: Long = box.value
 
-  lazy val assets: Map[ModifierId, Long] = box.additionalTokens.map { case (id, amt) =>
+  // TODO optimize
+  //  1) avoid allocation of tuples during toArray
+  //  2) and then reallocation of tuples in map
+  lazy val assets: Map[ModifierId, Long] = box.additionalTokens.toArray.map { case (id, amt) =>
     bytesToId(id) -> amt
   }.toMap
 

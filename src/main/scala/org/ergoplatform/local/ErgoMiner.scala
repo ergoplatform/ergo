@@ -24,9 +24,13 @@ import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, GetDataFromCurrentView}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
-import scorex.util.{ModifierId, ScorexLogging}
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import scorex.util.{ScorexLogging, ModifierId}
+import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
+import sigmastate.interpreter.{ProverResult, ContextExtension}
+import sigmastate.eval._
+import sigmastate.eval.Extensions._
+import sigmastate.SType.ErgoBoxRType
+import special.collection.Coll
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -238,7 +242,7 @@ object ErgoMiner extends ScorexLogging {
   def collectEmission(state: UtxoStateReader,
                       minerPk: ProveDlog,
                       emission: EmissionRules): Option[ErgoTransaction] = {
-    collectRewards(state.emissionBoxOpt, state.stateContext.currentHeight, Seq.empty, minerPk, emission, Seq.empty)
+    collectRewards(state.emissionBoxOpt, state.stateContext.currentHeight, Seq.empty, minerPk, emission, Colls.emptyColl)
       .headOption
   }
 
@@ -247,7 +251,7 @@ object ErgoMiner extends ScorexLogging {
                   txs: Seq[ErgoTransaction],
                   minerPk: ProveDlog,
                   emission: EmissionRules): Option[ErgoTransaction] = {
-    collectRewards(None, currentHeight, txs, minerPk, emission, Seq.empty).headOption
+    collectRewards(None, currentHeight, txs, minerPk, emission, Colls.emptyColl).headOption
   }
 
   /**
@@ -259,7 +263,7 @@ object ErgoMiner extends ScorexLogging {
                      txs: Seq[ErgoTransaction],
                      minerPk: ProveDlog,
                      emission: EmissionRules,
-                     assets: Seq[(TokenId, Long)] = Seq()): Seq[ErgoTransaction] = {
+                     assets: Coll[(TokenId, Long)] = Colls.emptyColl): Seq[ErgoTransaction] = {
     val propositionBytes = emission.settings.feePropositionBytes
 
     val inputs = txs.flatMap(_.inputs)
@@ -272,11 +276,11 @@ object ErgoMiner extends ScorexLogging {
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
       val prop = emissionBox.ergoTree
       val emissionAmount = emission.minersRewardAtHeight(nextHeight)
-      val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop,
-        nextHeight, Seq(), Map())
+      val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(
+        emissionBox.value - emissionAmount, prop, nextHeight)
       val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
-      val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, nextHeight, assets, Map())
+      val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, nextHeight, assets)
 
       ErgoTransaction(
         inputs,
@@ -286,7 +290,7 @@ object ErgoMiner extends ScorexLogging {
     }
     val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
       val feeAmount = feeBoxes.map(_.value).sum
-      val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
+      val feeAssets = feeBoxes.toColl.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
       val minerBox = new ErgoBoxCandidate(feeAmount, minerProp, nextHeight, feeAssets, Map())
       Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(), IndexedSeq(minerBox)))

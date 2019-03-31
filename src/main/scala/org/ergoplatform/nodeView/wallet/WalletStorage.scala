@@ -8,6 +8,7 @@ import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
 import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.settings.Constants
 import scorex.util._
+import sigmastate.eval.Extensions._
 
 import scala.collection.{immutable, mutable}
 
@@ -130,7 +131,7 @@ class WalletStorage extends ScorexLogging {
   private def increaseBalances(balanceStatus: ChainStatus, box: ErgoBox): Unit = {
     if (balanceStatus == Onchain) _confirmedBalance += box.value else _unconfirmedDelta += box.value
     val balanceMap = if (balanceStatus == Onchain) _confirmedAssetBalances else _unconfirmedAssetDeltas
-    box.additionalTokens foreach { case (tokenId, amount) =>
+    box.additionalTokens.foreach { case (tokenId, amount) =>
       val assetId = bytesToId(tokenId)
       val updBalance = balanceMap.getOrElse(assetId, 0L) + amount
       if (updBalance == 0L) {

@@ -2,12 +2,12 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
+import cats.Traverse
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.{Algos, LaunchParameters, VotingSettings}
 import org.ergoplatform.utils.LoggingUtil
@@ -65,48 +65,31 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  @SuppressWarnings(Array("TryGet"))
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        expectedDigest: ADDigest,
-                                       currentStateContext: ErgoStateContext) = Try {
-    implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
+                                       currentStateContext: ErgoStateContext): Try[Unit] = {
+    import cats.implicits._
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
-    val totalCost = transactions.foldLeft(0L) { case (accumulatedCost, tx) =>
-      tx.statelessValidity.get
-      val boxesToSpend = tx.inputs.map { i =>
-        val id = i.boxId
-        createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
-          case Some(box) => box
-          case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
+
+    def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
+      .get(ByteArrayWrapper(id))
+      .orElse(boxById(id))
+      .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
+
+    execTransactionsTry(transactions, currentStateContext)(checkBoxExistence) match {
+      case Success(executionCost) if executionCost <= currentStateContext.currentParameters.maxBlockCost =>
+        persistentProver.synchronized {
+          val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
+          val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+          if (java.util.Arrays.equals(expectedDigest, persistentProver.digest) || resultTry.isFailure) {
+            resultTry
+          } else {
+            Failure(new Exception(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
+              s"${Algos.encode(persistentProver.digest)} given"))
+          }
         }
-      }
-      val dataBoxes = tx.dataInputs.map { i =>
-        val id = i.boxId
-        createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id)) match {
-          case Some(box) => box
-          case None => throw new Error(s"Box with id ${Algos.encode(id)} not found")
-        }
-      }
-      val txCost = tx.statefulValidity(boxesToSpend, dataBoxes, currentStateContext)(verifier).get
-      accumulatedCost + txCost
-    }
-
-    if (totalCost > currentStateContext.currentParameters.maxBlockCost) {
-      throw new Error(s"Transaction cost $totalCost exceeds limit")
-    }
-
-    persistentProver.synchronized {
-      val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
-      mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
-        t.flatMap(_ => {
-          persistentProver.performOneOperation(m)
-        })
-      }.get
-
-      if (!java.util.Arrays.equals(expectedDigest, persistentProver.digest)) {
-        throw new Error(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
-          s"${Algos.encode(persistentProver.digest)} given")
-      }
+      case Success(executionCost) => Failure(new Exception(s"Transaction cost $executionCost exceeds limit"))
+      case failure => failure.map(_ => ())
     }
   }
 
@@ -172,7 +155,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 object UtxoState {
 
   private lazy val bestVersionKey = Algos.hash("best state version")
-  val EmissionBoxIdKey = Algos.hash("emission box id key")
+  val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,

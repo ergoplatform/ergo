@@ -148,7 +148,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     failFast
       // Check that the transaction is not too big
-      .demand(initialCost < maxCost, s"Spam transaction detected: $this")
+      //.demand(initialCost < maxCost, s"Spam transaction detected: $this")
       // Starting validation
       .payload(initialCost)
       // Perform cheap checks first
@@ -180,7 +180,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
             validation
               // Check that transaction is not too costly considering all the assets
-              .demand(initialCost + totalAssetsAccessCost < maxCost, s"Spam transaction (w. assets) detected: $this")
+              //.demand(initialCost + totalAssetsAccessCost < maxCost, s"Spam transaction (w. assets) detected: $this")
               .validateSeq(outAssets) {
                 case (validationState, (outAssetId, outAmount)) =>
                   val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
@@ -219,7 +219,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           // Check that script verification results in "true" value
           .demand(isCostValid, s"Input script verification failed for input #$idx ($box) of tx $this: $costTry")
           // Check that cost of the transaction after checking the input becomes too big
-          .demand(currentTxCost + scriptCost < maxCost, s"Too costly transaction after input #$idx: $this")
+//          .demand(currentTxCost + scriptCost < maxCost, s"Too costly transaction after input #$idx: $this")
           .map(_ + scriptCost)
       }.toTry
   }

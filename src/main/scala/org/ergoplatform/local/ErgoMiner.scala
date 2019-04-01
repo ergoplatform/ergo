@@ -25,6 +25,7 @@ import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
+import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
@@ -156,7 +157,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         createCandidate(minerProp, h, m, s.asInstanceOf[UtxoStateReader]) match {
           case Success(candidate) =>
             val candidateMsg = powScheme.msgByHeader(AutolykosPowScheme.deriveUnprovedHeader(candidate))
-            log.info(s"New candidate with msg $candidateMsg generated")
+            log.info(s"New candidate with msg ${Base16.encode(candidateMsg)} generated")
             procCandidateBlock(candidate)
           case Failure(e) => log.warn("Failed to produce candidate block.", e)
         }

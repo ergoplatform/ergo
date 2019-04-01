@@ -47,8 +47,11 @@ class DigestState protected(override val version: VersionTag,
     val boxesFromProofs: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(transactions), rootHash, expectedHash)
       .get.map(v => ErgoBoxSerializer.parseBytes(v))
     val knownBoxes = (transactions.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
-    def checkBoxExistence(id: ErgoBox.BoxId) = knownBoxes.get(ByteArrayWrapper(id))
+
+    def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = knownBoxes
+      .get(ByteArrayWrapper(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
+
     execTransactionsTry(transactions, currentStateContext)(checkBoxExistence) match {
       case Success(executionCost) if executionCost <= currentStateContext.currentParameters.maxBlockCost => Success(())
       case Success(executionCost) => Failure(new Exception(s"Transaction cost $executionCost exceeds limit"))

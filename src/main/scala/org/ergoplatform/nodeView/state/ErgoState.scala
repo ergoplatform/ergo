@@ -43,8 +43,8 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
     * @return Result of transactions execution with total cost inside
     */
   protected def execTransactionsTry(transactions: Seq[ErgoTransaction],
-                          currentStateContext: ErgoStateContext)
-                         (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): Try[Long] = {
+                                    currentStateContext: ErgoStateContext)
+                                   (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): Try[Long] = {
     import cats.implicits._
     implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
     def execTry(txs: List[ErgoTransaction], accCostTry: Try[Long]): Try[Long] = (txs, accCostTry) match {

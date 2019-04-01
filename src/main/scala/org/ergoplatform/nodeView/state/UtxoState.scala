@@ -113,12 +113,12 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
-      val height = fb.header.height
+      persistentProver.synchronized {
+        val height = fb.header.height
 
-      log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
+        log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
 
-      stateContext.appendFullBlock(fb, votingSettings).flatMap { newStateContext =>
-        persistentProver.synchronized {
+        stateContext.appendFullBlock(fb, votingSettings).flatMap { newStateContext =>
           val inRoot = rootHash
 
           val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>

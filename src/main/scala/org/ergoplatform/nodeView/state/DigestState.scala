@@ -7,7 +7,6 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.ErgoState.ModifierProcessing
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
@@ -26,8 +25,7 @@ import scala.util.{Failure, Success, Try}
 class DigestState protected(override val version: VersionTag,
                             override val rootHash: ADDigest,
                             override val store: Store,
-                            ergoSettings: ErgoSettings,
-                            val verifier: ErgoInterpreter)
+                            ergoSettings: ErgoSettings)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
     with ScorexLogging {
@@ -41,34 +39,23 @@ class DigestState protected(override val version: VersionTag,
 
   override lazy val maxRollbackDepth: Int = store.rollbackVersions().size
 
-  private[state] def validateTransactions(txs: Seq[ErgoTransaction],
+  private[state] def validateTransactions(transactions: Seq[ErgoTransaction],
                                           expectedHash: ADDigest,
                                           proofs: ADProofs,
-                                          currentStateContext: ErgoStateContext): Unit = {
+                                          currentStateContext: ErgoStateContext): Try[Unit] = {
     // Check modifications, returning sequence of old values
-    val boxesFromProofs: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(txs), rootHash, expectedHash)
+    val boxesFromProofs: Seq[ErgoBox] = proofs.verify(ErgoState.stateChanges(transactions), rootHash, expectedHash)
       .get.map(v => ErgoBoxSerializer.parseBytes(v))
-    val knownBoxes = (txs.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
-    val totalCost = txs.foldLeft(0L) { case (accumulatedCost, tx) =>
-      tx.statelessValidity.get
-      val boxesToSpend = tx.inputs.map { i =>
-        knownBoxes.get(ByteArrayWrapper(i.boxId)) match {
-          case Some(box) => box
-          case None => throw new Exception(s"Box with id ${Algos.encode(i.boxId)} not found")
-        }
-      }
-      val dataBoxes = tx.dataInputs.map { i =>
-        knownBoxes.get(ByteArrayWrapper(i.boxId)) match {
-          case Some(box) => box
-          case None => throw new Exception(s"Box with id ${Algos.encode(i.boxId)} not found")
-        }
-      }
-      val txCost = tx.statefulValidity(boxesToSpend, dataBoxes, currentStateContext, accumulatedCost)(verifier).get
-      accumulatedCost + txCost
-    }
+    val knownBoxes = (transactions.flatMap(_.outputs) ++ boxesFromProofs).map(o => (ByteArrayWrapper(o.id), o)).toMap
 
-    if (totalCost > currentStateContext.currentParameters.maxBlockCost) {
-      throw new Exception(s"Transaction cost $totalCost exceeds limit")
+    def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = knownBoxes
+      .get(ByteArrayWrapper(id))
+      .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
+
+    execTransactionsTry(transactions, currentStateContext)(checkBoxExistence) match {
+      case Success(executionCost) if executionCost <= currentStateContext.currentParameters.maxBlockCost => Success(())
+      case Success(executionCost) => Failure(new Exception(s"Transaction cost $executionCost exceeds limit"))
+      case failure => failure.map(_ => ())
     }
   }
 
@@ -80,7 +67,7 @@ class DigestState protected(override val version: VersionTag,
         case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
           Failure(new Exception("Incorrect proofs digest"))
         case Some(proofs) =>
-          stateContext.appendFullBlock(fb, votingSettings).map { currentStateContext =>
+          stateContext.appendFullBlock(fb, votingSettings).flatMap { currentStateContext =>
             val txs = fb.blockTransactions.txs
             val declaredHash = fb.header.stateRoot
             validateTransactions(txs, declaredHash, proofs, currentStateContext)
@@ -104,7 +91,7 @@ class DigestState protected(override val version: VersionTag,
       store.clean(nodeSettings.keepVersions)
       val rootHash = ADDigest @@ store.get(wrappedVersion).get.data
       log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
-      new DigestState(version, rootHash, store, ergoSettings, verifier)
+      new DigestState(version, rootHash, store, ergoSettings)
     }
   }
 
@@ -147,7 +134,7 @@ class DigestState protected(override val version: VersionTag,
     val toUpdate = DigestState.metadata(newVersion, newRootHash, newStateContext)
 
     store.update(wrappedVersion, Seq.empty, toUpdate)
-    new DigestState(newVersion, newRootHash, store, ergoSettings, verifier)
+    new DigestState(newVersion, newRootHash, store, ergoSettings)
   }
 
 }
@@ -163,12 +150,11 @@ object DigestState extends ScorexLogging with ScorexEncoding {
               dir: File,
               constants: StateConstants): DigestState = {
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
-    val verifier = ErgoInterpreter(LaunchParameters)
     val wrappedVersion = Algos.versionToBAW(version)
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
     store.update(wrappedVersion, Seq.empty, toUpdate)
-    new DigestState(version, rootHash, store, constants.settings, verifier)
+    new DigestState(version, rootHash, store, constants.settings)
   }
 
   def create(versionOpt: Option[VersionTag],
@@ -177,14 +163,13 @@ object DigestState extends ScorexLogging with ScorexEncoding {
              constants: StateConstants): DigestState = Try {
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
     val context = ErgoStateReader.storageStateContext(store, constants)
-    val verifier = ErgoInterpreter(LaunchParameters)
     (versionOpt, rootHashOpt) match {
       case (Some(version), Some(rootHash)) =>
         val state = if (store.lastVersionID.map(w => bytesToVersion(w.data)).contains(version)) {
-          new DigestState(version, rootHash, store, constants.settings, verifier)
+          new DigestState(version, rootHash, store, constants.settings)
         } else {
           val inVersion = store.lastVersionID.map(w => bytesToVersion(w.data)).getOrElse(version)
-          new DigestState(inVersion, rootHash, store, constants.settings, verifier)
+          new DigestState(inVersion, rootHash, store, constants.settings)
             .update(version, rootHash, context).get //sync store
         }
         state.ensuring(bytesToVersion(store.lastVersionID.get.data) == version)
@@ -193,7 +178,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
       case _ =>
         val version = bytesToVersion(store.lastVersionID.get.data)
         val rootHash = store.get(Algos.versionToBAW(version)).get.data
-        new DigestState(version, ADDigest @@ rootHash, store, constants.settings, verifier)
+        new DigestState(version, ADDigest @@ rootHash, store, constants.settings)
     }
   } match {
     case Success(state) => state

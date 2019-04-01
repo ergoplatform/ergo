@@ -16,7 +16,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 import sigmastate.Values.{ErgoTree, EvaluatedValue, Value}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.serialization.ErgoTreeSerializer
+import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
 import sigmastate.{SBoolean, SType}
 import special.collection.Coll
 import sigmastate.eval._
@@ -98,7 +98,7 @@ trait ApiCodecs {
 
   // TODO catena: this should be removed (Value should not be used directly)
   implicit val valueEncoder: Encoder[Value[SType]] = { value =>
-    ErgoTreeSerializer.DefaultSerializer.serializeWithSegregation(value).asJson
+    ValueSerializer.serialize(value).asJson
   }
 
   implicit val booleanValueEncoder: Encoder[Value[SBoolean.type]] = { value =>
@@ -115,7 +115,7 @@ trait ApiCodecs {
 
   def valueDecoder[T](transform: Value[SType] => T): Decoder[T] = { implicit cursor: ACursor =>
     cursor.as[Array[Byte]] flatMap { bytes =>
-      fromThrows(transform(ErgoTreeSerializer.DefaultSerializer.deserialize(bytes)))
+      fromThrows(transform(ValueSerializer.deserialize(bytes)))
     }
   }
 

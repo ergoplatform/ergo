@@ -70,8 +70,12 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                                        currentStateContext: ErgoStateContext): Try[Unit] = {
     import cats.implicits._
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
-    def checkBoxExistence(id: ErgoBox.BoxId) = createdOutputs.get(ByteArrayWrapper(id)).orElse(boxById(id))
+
+    def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
+      .get(ByteArrayWrapper(id))
+      .orElse(boxById(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
+
     execTransactionsTry(transactions, currentStateContext)(checkBoxExistence) match {
       case Success(executionCost) if executionCost <= currentStateContext.currentParameters.maxBlockCost =>
         persistentProver.synchronized {

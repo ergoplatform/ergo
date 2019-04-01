@@ -42,7 +42,7 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
     * Tries to validate and execute transactions.
     * @return Result of transactions execution with total cost inside
     */
-  def execTransactionsTry(transactions: Seq[ErgoTransaction],
+  protected def execTransactionsTry(transactions: Seq[ErgoTransaction],
                           currentStateContext: ErgoStateContext)
                          (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): Try[Long] = {
     import cats.implicits._

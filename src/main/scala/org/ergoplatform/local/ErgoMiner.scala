@@ -9,7 +9,7 @@ import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.mining.{AutolykosSolution, CandidateBlock, ExternalCandidateBlock}
+import org.ergoplatform.mining.{AutolykosPowScheme, AutolykosSolution, CandidateBlock, ExternalCandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
@@ -154,7 +154,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
       secretKeyOpt.map(_.publicImage).foreach { minerProp =>
         createCandidate(minerProp, h, m, s.asInstanceOf[UtxoStateReader]) match {
-          case Success(candidate) => procCandidateBlock(candidate)
+          case Success(candidate) =>
+            val candidateMsg = powScheme.msgByHeader(AutolykosPowScheme.deriveUnprovedHeader(candidate))
+            log.info(s"New candidate with msg $candidateMsg generated")
+            procCandidateBlock(candidate)
           case Failure(e) => log.warn("Failed to produce candidate block.", e)
         }
       }
@@ -287,7 +290,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     }
   }.flatten
 
-  def requestCandidate(): Unit = readersHolderRef ! GetReaders
+  def requestCandidate(): Unit = {
+    log.info("Requesting candidate")
+    readersHolderRef ! GetReaders
+  }
 
 }
 

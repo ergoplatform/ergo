@@ -1,6 +1,7 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.mining.AutolykosPowScheme
+import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import scorex.crypto.authds.ADDigest
 import scorex.util.ModifierId
@@ -25,6 +26,7 @@ case class ChainSettings(protocolVersion: Byte,
                          noPremineProof: Seq[String],
                          foundersPubkeys: Seq[String],
                          genesisStateDigestHex: String,
+                         initialDifficulty: BigInt,
                          genesisId: Option[ModifierId] = None) {
 
   val genesisStateDigest: ADDigest = Base16.decode(genesisStateDigestHex) match {
@@ -33,5 +35,7 @@ case class ChainSettings(protocolVersion: Byte,
   }
 
   val emissionRules: EmissionRules = new EmissionRules(monetary)
+
+  val initialNBits: Long = RequiredDifficulty.encodeCompactBits(initialDifficulty)
 
 }

@@ -2,16 +2,19 @@ package org.ergoplatform.mining.difficulty
 
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, Height}
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.ChainSettings
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration.FiniteDuration
 
-class LinearDifficultyControl(val desiredInterval: FiniteDuration,
-                              val useLastEpochs: Int,
-                              val epochLength: Int) extends ScorexLogging {
+class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLogging {
 
   import LinearDifficultyControl._
+
+  val desiredInterval: FiniteDuration = chainSettings.blockInterval
+  val useLastEpochs: Int = chainSettings.useLastEpochs
+  val epochLength: Int = chainSettings.epochLength
+  val initialDifficulty: BigInt = chainSettings.initialDifficulty
 
   assert(useLastEpochs > 1, "useLastEpochs should always be > 1")
   assert(epochLength > 0, "epochLength should always be > 0")
@@ -44,7 +47,7 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
         (end.height, diff)
       }
       val diff = interpolate(data)
-      if (diff >= 1) diff else Constants.InitialDifficulty
+      if (diff >= 1) diff else initialDifficulty
     }
   }
 

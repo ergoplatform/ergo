@@ -232,7 +232,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val nBits: Long = bestHeaderOpt
       .map(parent => history.requiredDifficultyAfter(parent))
       .map(d => RequiredDifficulty.encodeCompactBits(d))
-      .getOrElse(Constants.InitialNBits)
+      .getOrElse(ergoSettings.chainSettings.initialNBits)
     val interlinks = bestHeaderOpt
       .flatMap { h =>
         history.typedModifierById[Extension](h.extensionId)

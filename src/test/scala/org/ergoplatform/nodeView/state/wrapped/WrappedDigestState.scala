@@ -1,9 +1,8 @@
 package org.ergoplatform.nodeView.state.wrapped
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.DigestState
-import org.ergoplatform.settings.{ErgoSettings, LaunchParameters}
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.VersionTag
 
 import scala.util.Try

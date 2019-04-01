@@ -5,18 +5,16 @@ import akka.testkit.TestProbe
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{BlockTransactions, HeaderSerializer}
-import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.{ErgoSettings, LaunchParameters}
+import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
-import scorex.core.app.Version
 import scorex.core.idToBytes
 import scorex.core.network.peer.PeerInfo
-import scorex.core.network.{ConnectedPeer, PeerSpec}
+import scorex.core.network.ConnectedPeer
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
 

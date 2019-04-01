@@ -29,8 +29,6 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
 
   import ErgoWalletActor._
 
-  private val votingSettings = ergoSettings.chainSettings.voting
-
   private lazy val seed: String = ergoSettings.walletSettings.seed
 
   private val registry = new WalletStorage
@@ -45,7 +43,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings) extends Actor with ScorexLoggi
   // to the wallet (by executing testing transactions against them). The state context is being updating by listening
   // to state updates.
   //todo: initialize it, e.g. by introducing StateInitialized signal in addition to StateChanged
-  private var stateContext: ErgoStateContext = ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte), votingSettings)
+  private var stateContext: ErgoStateContext = ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte), ergoSettings)
 
   // Height of last full block scanned.
   private var height = stateContext.currentHeight

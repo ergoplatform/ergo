@@ -157,7 +157,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
     val nBits: Long = lastHeaderOpt
       .map(parent => history.requiredDifficultyAfter(parent))
       .map(d => RequiredDifficulty.encodeCompactBits(d))
-      .getOrElse(Constants.InitialNBits)
+      .getOrElse(settings.chainSettings.initialNBits)
 
     val interlinks = lastHeaderOpt
       .flatMap { h =>

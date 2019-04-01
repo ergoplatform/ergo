@@ -36,8 +36,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   //Maximum time in future block header may contain
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
-  lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
-    chainSettings.useLastEpochs, chainSettings.epochLength)
+  lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings)
 
   def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
 

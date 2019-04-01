@@ -2,7 +2,10 @@ package org.ergoplatform.settings
 
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ValueReader
+import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.nodeView.state.StateType
+import scorex.util.encode.Base16
+import sigmastate.basics.DLogProtocol.ProveDlog
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -19,11 +22,22 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      mining: Boolean,
                                      miningDelay: FiniteDuration,
                                      useExternalMiner: Boolean,
+                                     miningPubKeyHex: Option[String],
                                      offlineGeneration: Boolean,
                                      keepVersions: Int,
                                      mempoolCapacity: Int,
                                      blacklistCapacity: Int,
-                                     mempoolCleanupDuration: FiniteDuration)
+                                     mempoolCleanupDuration: FiniteDuration) {
+
+  val miningPubKey: Option[ProveDlog] = miningPubKeyHex.map { str =>
+    ProveDlog(
+      groupElemFromBytes(
+        Base16.decode(str).fold(_ => throw new Error(s"Failed to parse miningPubKeyHex = $miningPubKeyHex"), x => x)
+      )
+    )
+  }
+
+}
 
 trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
 
@@ -39,6 +53,7 @@ trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
       cfg.as[Boolean](s"$path.mining"),
       cfg.as[FiniteDuration](s"$path.miningDelay"),
       cfg.as[Boolean](s"$path.useExternalMiner"),
+      cfg.as[Option[String]](s"$path.miningPubKeyHex"),
       cfg.as[Boolean](s"$path.offlineGeneration"),
       cfg.as[Int](s"$path.keepVersions"),
       cfg.as[Int](s"$path.mempoolCapacity"),

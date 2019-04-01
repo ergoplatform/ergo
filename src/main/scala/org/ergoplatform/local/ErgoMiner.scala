@@ -9,7 +9,7 @@ import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.mining.{AutolykosPowScheme, AutolykosSolution, CandidateBlock, ExternalCandidateBlock}
+import org.ergoplatform.mining._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
@@ -21,7 +21,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
+import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
@@ -61,9 +61,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   // cost of a transaction collecting emission box
 
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
+  private var publicKeyOpt: Option[ProveDlog] = ergoSettings.nodeSettings.miningPubKey
+    .orElse(inSecretKeyOpt.map(_.publicImage))
 
   override def preStart(): Unit = {
-    if (secretKeyOpt.isEmpty) {
+    // in external miner mode key from wallet is used if `publicKeyOpt` is not set
+    if ((publicKeyOpt.isEmpty && externalMinerMode) || (secretKeyOpt.isEmpty && !externalMinerMode)) {
+      log.info("Using key from wallet for mining")
       val callback = self
       viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
         v.vault.firstSecret().onComplete(_.foreach(r => callback ! UpdateSecret(r)))
@@ -86,28 +90,38 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def onUpdateSecret: Receive = {
     case UpdateSecret(s) =>
       secretKeyOpt = Some(s)
+      publicKeyOpt = Some(s.publicImage)
   }
 
   private def startMining: Receive = {
     case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
       candidateOpt.foreach { candidate =>
-        secretKeyOpt match {
-          case Some(sk) =>
+        publicKeyOpt match {
+          case Some(_) =>
             isMining = true
             if (!externalMinerMode) {
               log.info("Starting native miner")
-              miningThreads += ErgoMiningThread(ergoSettings, self, candidate, sk.w, timeProvider)(context)
-              miningThreads.foreach(_ ! candidate)
+              runMiningThreads(candidate)
             } else {
               log.info("Ready to serve external miner")
             }
           case None =>
-            log.warn("Got start mining command while secret key is not ready")
+            log.warn("Got start mining command while public key is not ready")
         }
       }
     case StartMining if candidateOpt.isEmpty =>
       requestCandidate()
       context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)
+  }
+
+  private def runMiningThreads(candidateBlock: CandidateBlock): Unit = {
+    secretKeyOpt match {
+      case Some(sk) =>
+        miningThreads += ErgoMiningThread(ergoSettings, self, candidateBlock, sk.w, timeProvider)(context)
+        miningThreads.foreach(_ ! candidateBlock)
+      case None =>
+        log.warn("Trying to start native miner while secret key is not ready")
+    }
   }
 
   private def needNewCandidate(b: ErgoFullBlock): Boolean = {
@@ -153,7 +167,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def onReaders: Receive = {
     case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
-      secretKeyOpt.map(_.publicImage).foreach { minerProp =>
+      publicKeyOpt.foreach { minerProp =>
         createCandidate(minerProp, h, m, s.asInstanceOf[UtxoStateReader]) match {
           case Success(candidate) =>
             val candidateMsg = powScheme.msgByHeader(AutolykosPowScheme.deriveUnprovedHeader(candidate))
@@ -168,7 +182,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case PrepareCandidate if candidateOpt.isDefined =>
       sender() ! candidateOpt
         .flatMap { c =>
-          secretKeyOpt.map(sk => powScheme.deriveExternalCandidate(c, sk.publicImage))
+          publicKeyOpt.map(powScheme.deriveExternalCandidate(c, _))
         }
         .fold[Future[ExternalCandidateBlock]](
           Future.failed(new Exception("Failed to create candidate")))(Future.successful)
@@ -177,12 +191,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
       sender() ! readersR.flatMap {
         case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
-          secretKeyOpt
-            .flatMap { sk =>
-              createCandidate(sk.publicImage, h, m, s.asInstanceOf[UtxoStateReader])
+          publicKeyOpt
+            .flatMap { pk =>
+              createCandidate(pk, h, m, s.asInstanceOf[UtxoStateReader])
                 .map { c =>
                   candidateOpt = Some(c)
-                  powScheme.deriveExternalCandidate(c, sk.publicImage)
+                  powScheme.deriveExternalCandidate(c, pk)
                 }
                 .toOption
             }

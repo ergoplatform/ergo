@@ -17,9 +17,13 @@ CMD ["/usr/bin/java", "-jar", "/ergo.jar"]
 
 FROM openjdk:10-jre-slim
 LABEL maintainer="Andrey Andreev <andyceo@yandex.ru> (@andyceo)"
-COPY --from=builder /ergo.jar /ergo.jar
+RUN adduser --disabled-password --home /var/lib/ergo --uid 9052 --gecos "ErgoPlatform" ergo && \
+    install -m 0755 -o ergo -g ergo -d /var/cache/ergo /var/cache/ergo/data
+COPY --from=builder /ergo.jar /var/lib/ergo/ergo.jar
+USER ergo
 EXPOSE 9007 9052
-WORKDIR /root
-VOLUME ["/root/ergo/data"]
-ENTRYPOINT ["/usr/bin/java", "-jar", "/ergo.jar"]
+WORKDIR /var/cache/ergo
+VOLUME ["/var/cache/ergo/data"]
+ENV DATADIR=/var/cache/ergo/data
+ENTRYPOINT ["/usr/bin/java", "-jar", "/var/lib/ergo/ergo.jar"]
 CMD [""]

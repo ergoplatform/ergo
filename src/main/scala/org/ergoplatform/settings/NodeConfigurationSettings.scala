@@ -2,10 +2,7 @@ package org.ergoplatform.settings
 
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ValueReader
-import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.nodeView.state.StateType
-import scorex.util.encode.Base16
-import sigmastate.basics.DLogProtocol.ProveDlog
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -27,17 +24,7 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      keepVersions: Int,
                                      mempoolCapacity: Int,
                                      blacklistCapacity: Int,
-                                     mempoolCleanupDuration: FiniteDuration) {
-
-  val miningPubKey: Option[ProveDlog] = miningPubKeyHex.map { str =>
-    ProveDlog(
-      groupElemFromBytes(
-        Base16.decode(str).fold(_ => throw new Error(s"Failed to parse miningPubKeyHex = $miningPubKeyHex"), x => x)
-      )
-    )
-  }
-
-}
+                                     mempoolCleanupDuration: FiniteDuration)
 
 trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
 

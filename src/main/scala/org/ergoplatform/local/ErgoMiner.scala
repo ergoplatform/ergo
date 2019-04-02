@@ -61,7 +61,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   // cost of a transaction collecting emission box
 
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
-  private var publicKeyOpt: Option[ProveDlog] = ergoSettings.nodeSettings.miningPubKey
+  private var publicKeyOpt: Option[ProveDlog] = ergoSettings.miningPubKey
     .orElse(inSecretKeyOpt.map(_.publicImage))
 
   override def preStart(): Unit = {

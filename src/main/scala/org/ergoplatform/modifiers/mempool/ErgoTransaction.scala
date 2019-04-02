@@ -218,7 +218,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           // Check that script verification results in "true" value
           .demand(isCostValid, s"Input script verification failed for input #$idx ($box) of tx $this: $costTry")
           // Check that cost of the transaction after checking the input becomes too big
-          .demand(currentTxCost + scriptCost < maxCost, s"Too costly transaction after input #$idx: $this")
+          .demand(currentTxCost + scriptCost <= maxCost, s"Too costly transaction after input #$idx: $this")
           .map(_ + scriptCost)
       }.toTry
   }

@@ -36,19 +36,25 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
   @SuppressWarnings(Array("TraversableHead"))
   def calculate(previousHeaders: Seq[Header]): Difficulty = {
     assert(previousHeaders.nonEmpty, "PreviousHeaders should always contain at least 1 element")
-    if (previousHeaders.lengthCompare(1) == 0 || previousHeaders.head.timestamp >= previousHeaders.last.timestamp) {
-      previousHeaders.head.requiredDifficulty
-    } else {
-      val data: Seq[(Int, Difficulty)] = previousHeaders.sliding(2).toList.map { d =>
-        val start = d.head
-        val end = d.last
-        require(end.height - start.height == epochLength, s"Incorrect heights interval for $d")
-        val diff = end.requiredDifficulty * desiredInterval.toMillis * epochLength / (end.timestamp - start.timestamp)
-        (end.height, diff)
+    val uncompressedDiff = {
+      if (previousHeaders.lengthCompare(1) == 0 || previousHeaders.head.timestamp >= previousHeaders.last.timestamp) {
+        previousHeaders.head.requiredDifficulty
+      } else {
+        val data: Seq[(Int, Difficulty)] = previousHeaders.sliding(2).toList.map { d =>
+          val start = d.head
+          val end = d.last
+          require(end.height - start.height == epochLength, s"Incorrect heights interval for $d")
+          val diff = end.requiredDifficulty * desiredInterval.toMillis * epochLength / (end.timestamp - start.timestamp)
+          (end.height, diff)
+        }
+        val diff = interpolate(data)
+        if (diff >= 1) diff else initialDifficulty
       }
-      val diff = interpolate(data)
-      if (diff >= 1) diff else initialDifficulty
     }
+    // perform serialization cycle in order to normalize resulted difficulty
+    RequiredDifficulty.decodeCompactBits(
+      RequiredDifficulty.encodeCompactBits(uncompressedDiff)
+    )
   }
 
   //y = a + bx

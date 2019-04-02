@@ -15,6 +15,7 @@ import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 import sigmastate.Values.{ErgoTree, EvaluatedValue, Value}
+import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.serialization.ErgoTreeSerializer
 import sigmastate.{SBoolean, SType}
@@ -131,6 +132,8 @@ trait ApiCodecs {
       case nonMandatoryId: NonMandatoryRegisterId => nonMandatoryId
     }
   }
+
+  implicit val proveDlogEncoder: Encoder[ProveDlog] = _.pkBytes.asJson
 
   def decodeRegisterId(key: String)(implicit cursor: ACursor): Decoder.Result[NonMandatoryRegisterId] = {
     registerIdDecoder

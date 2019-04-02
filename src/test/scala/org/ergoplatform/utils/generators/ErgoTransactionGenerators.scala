@@ -283,7 +283,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
           c.appendFullBlock(block, votingSettings).get -> (h + 1)
         }._1
       case _ =>
-        ErgoStateContext.empty(stateRoot, votingSettings)
+        ErgoStateContext.empty(stateRoot, settings)
     }
   }
 }

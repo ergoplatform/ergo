@@ -193,15 +193,15 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 object ErgoStateContext {
 
   def empty(constants: StateConstants): ErgoStateContext = {
-    empty(constants.settings.chainSettings.genesisStateDigest, constants.votingSettings)
+    empty(constants.settings.chainSettings.genesisStateDigest, constants.settings)
   }
 
   /**
     * Initialize empty state context with fake PreHeader
     */
-  def empty(genesisStateDigest: ADDigest, votingSettings: VotingSettings): ErgoStateContext = {
-    new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingData.empty)(votingSettings)
-      .upcoming(org.ergoplatform.mining.group.generator, 0L, Constants.InitialNBits, Array.fill(3)(0.toByte), 0.toByte)
+  def empty(genesisStateDigest: ADDigest, settings: ErgoSettings): ErgoStateContext = {
+    new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingData.empty)(settings.chainSettings.voting)
+      .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), 0.toByte)
   }
 
   /**

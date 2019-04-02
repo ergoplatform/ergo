@@ -1,11 +1,11 @@
 package org.ergoplatform.mining
 
-import akka.actor.{Actor, ActorRef, ActorSystem}
+import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill}
 import akka.pattern.ask
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.local.ErgoMiner.StartMining
+import org.ergoplatform.local.ErgoMiner.{PrepareCandidate, StartMining}
 import org.ergoplatform.local.ErgoMinerRef
 import org.ergoplatform.mining.Listener._
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -29,6 +29,7 @@ import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.utxo.CostTable.Cost
 
 import scala.annotation.tailrec
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -184,6 +185,25 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     //Make sure that only tx got into chain
     txs.filter(tx => tx.id == tx1.id || tx.id == tx2.id) should have length 1
     system.terminate()
+  }
+
+  it should "prepare external candidate" in new TestKit(ActorSystem()) {
+    val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
+
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
+
+    def minerRef: ActorRef = ErgoMinerRef(
+      ergoSettings,
+      nodeViewHolderRef,
+      readersHolderRef,
+      timeProvider,
+      Some(defaultMinerSecret)
+    )
+
+    val passiveMiner: ActorRef = minerRef
+
+    await((passiveMiner ? PrepareCandidate).mapTo[Future[ExternalCandidateBlock]].flatten)
   }
 
 }

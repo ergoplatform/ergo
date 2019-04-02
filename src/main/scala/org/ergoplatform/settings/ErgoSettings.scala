@@ -5,13 +5,16 @@ import java.io.File
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import org.ergoplatform.ErgoApp
-import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, P2PKAddress}
+import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.nodeView.state.StateType.Digest
 import scorex.core.settings.{ScorexSettings, SettingsReaders}
 import scorex.util.ScorexLogging
+import scorex.util.encode.Base16
+import sigmastate.basics.DLogProtocol.ProveDlog
 
 import scala.collection.JavaConverters._
+import scala.util.Try
 
 case class ErgoSettings(directory: String,
                         chainSettings: ChainSettings,
@@ -20,7 +23,20 @@ case class ErgoSettings(directory: String,
                         scorexSettings: ScorexSettings,
                         walletSettings: WalletSettings,
                         cacheSettings: CacheSettings,
-                        votingTargets: Map[Byte, Int] = Map())
+                        votingTargets: Map[Byte, Int] = Map()) {
+
+  val addressEncoder = ErgoAddressEncoder(chainSettings.addressPrefix)
+
+  val miningPubKey: Option[ProveDlog] = nodeSettings.miningPubKeyHex
+    .flatMap { str =>
+      val keyBytes = Base16.decode(str)
+        .fold(_ => throw new Error(s"Failed to parse miningPubKeyHex = $nodeSettings.miningPubKeyHex"), x => x)
+      Try(ProveDlog(groupElemFromBytes(keyBytes)))
+        .orElse(addressEncoder.fromString(str).collect { case p2pk: P2PKAddress => p2pk.pubkey })
+        .toOption
+    }
+
+}
 
 object ErgoSettings extends ScorexLogging
   with PowSchemeReaders

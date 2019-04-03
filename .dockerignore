@@ -12,7 +12,14 @@ docker-compose.yml
 .idea/
 .ensime
 .vscode/
+.ivy2/
+.sbt/
 
 # ergo binary/cache
+/target/
 /ergo.jar
 /ergo/
+/.ergo/
+
+#
+README.md

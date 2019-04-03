@@ -45,6 +45,7 @@ my*.conf
 # db files
 *.data
 ergo/
+.ergo/
 
 # for temporary experiments
 sheet.scala

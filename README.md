@@ -38,7 +38,7 @@ Also, reference with [Node Configuration File](https://github.com/ergoplatform/e
 
 Ergo has officially supported Docker package. To run Ergo as a console application with logs in console:
 
-    sudo docker run --rm -p 9020:9020 -p 9052:9052 -v ergo-testnet:/var/cache/ergo/data ergoplatform/ergo
+    sudo docker run --rm -p 9020:9020 -p 9052:9052 -v ergo-testnet:/home/ergo/.ergo ergoplatform/ergo
 
 This will connect to Ergo testnet with default config and open ports `9020` and `9052` on host system. All data will be stored in your named Docker volume `ergo-testnet`.
 
@@ -47,7 +47,7 @@ To run specific Ergo version as a service with custom config:
     sudo docker run -d \
         -p 9020:9020 \
         -p 9052:9052 \
-        -v ergo:/var/cache/ergo/data \
+        -v ergo:/home/ergo/.ergo \
         -v /path/on/host/system/to/myergo.conf:/etc/myergo.conf \
         ergoplatform/ergo:v2.0.3 /etc/myergo.conf
 

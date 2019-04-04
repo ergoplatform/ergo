@@ -1,0 +1,29 @@
+pipeline {
+    agent { label 'slave' }
+    stages {
+
+        stage('org.ergoplatform.bench.BenchRunner') {
+            steps {
+                sh('sbt "benchmarks/test:runMain org.ergoplatform.bench.BenchRunner"')
+            }
+        }
+
+        stage('org.ergoplatform.nodeView.state.UtxoStateBenchmark') {
+            steps {
+                sh('sbt "benchmarks/test:runMain org.ergoplatform.nodeView.state.UtxoStateBenchmark"')
+            }
+        }
+
+        stage('org.ergoplatform.ModifiersApplicationBench') {
+            steps {
+                sh('sbt "benchmarks/test:runMain org.ergoplatform.ModifiersApplicationBench"')
+            }
+        }
+
+        stage('org.ergoplatform.nodeView.mempool.ErgoMemPoolBenchmark') {
+            steps {
+                sh('##sbt "benchmarks/test:runMain org.ergoplatform.nodeView.mempool.ErgoMemPoolBenchmark"')
+            }
+        }
+    }
+}

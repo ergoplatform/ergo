@@ -1,30 +1,30 @@
 \section{Autolykos Consensus Protocol}
 \label{sec:autolykos}
 
-%   Почему выбрали PoW
-%   Известные проблемы PoW
-%   Детали Автоликуса
+% Почему выбрали PoW
+% Известные проблемы PoW
+% Детали Автоликуса
 
-The core component of any blockchain system is it's consensus protocol.
-Despite of an extensive research of possible alternatives to original the Proof-of-Work (PoW) protocol,
-it remains in demand due to simplicity, high security guaranties and friendliness to light clients.
-However, decade of extensive testing revealed several problems of the original one-CPU-one-vote idea.
+The core component of any blockchain system is its consensus protocol.
+Despite extensive research of possible alternatives to original the Proof-of-Work (PoW) protocol,
+it remains in demand due to simplicity, high security guarantees, and friendliness to light clients.
+However, a decade of extensive testing revealed several problems of the original one-CPU-one-vote idea.
 
-First known problem of PoW is that development of a specialized hardware (ASIC) allowed
-small group of ASIC-equipped miners to solve PoW puzzles orders of magnitude faster and more efficiently
+First known problem of PoW is that development of specialized hardware (ASIC) allowed
+a small group of ASIC-equipped miners to solve PoW puzzles orders of magnitude faster and more efficiently
 than everyone else. This problem can be solved with the help of memory-hard PoW schemes,
-that reduce the disparity between the ASICs and commodity hardware. Most promising approach here
+that reduce the disparity between the ASICs and commodity hardware. The most promising approach here
 is to use asymmetric memory-hard PoW schemes that require significantly less memory
 to verify a solution than to find it where proposed~\cite{biryukov2017equihash,ethHash}.
 
-Second known threat to a PoW network decentralization, is that even big miners trend to unite in
-mining pools, leading to a situation when just few pool operators (5 in Bitcoin, 2 in Ethereum
-at the time of writing) controls more then 51\% of computational power.
+The second known threat to a PoW network decentralization is that even big miners trend to unite in
+mining pools, leading to a situation when just a few pool operators (5 in Bitcoin, 2 in Ethereum
+at the time of writing) controls more than 51\% of computational power.
 Although the problem has already been discussed in the community, no practical solutions were
 implementer before \Ergo{}.
 
 
-Ergo PoW protocol --- Autolykos --- is the first consensus protocol, that is both memory hard
+Ergo PoW protocol --- Autolykos --- is the first consensus protocol, that is both memory-hard
 and pool resistant~\cite{Ergopow}.
 Autolykos is based on one list $k$-sum problem: miner should find
 $k=32$ elements from the pre-defined list $R$ of size $N=2^{26}$~(which have a size of 2 Gb),
@@ -32,11 +32,11 @@ such that $\sum_{j \in J} r_{j} - sk = d$ is in the interval $\{-b,\dots,0,\dots
 Elements of list $R$ are obtained as a result of one-way computation from index $i$,
 two miner public keys $pk,w$ and hash of block header $m$ as $r_i=H(i||M||pk||m||w)$,
 where $M$ is a static big message that is used to make hash calculation slower.
-In addition, we require set of element indexes $J$ to be obtained
+In addition, we require a set of element indexes $J$ to be obtained
 by one-way pseudo-random function $genIndexes$, that prevents possible solutions
 search optimizations.
 
-Thus we assume that the only option for miner is to use the simple brute-force algorithm~\ref{alg:prove} to
+Thus we assume that the only option for a miner is to use the simple brute-force algorithm~\ref{alg:prove} to
 create a valid block.
 
 \begin{algorithm}[H]
@@ -57,7 +57,7 @@ create a valid block.
     \end{algorithmic}
 \end{algorithm}
 
-Note that although the mining process utilizes private keys, solution itself
+Note that although the mining process utilizes private keys, the solution itself
 only contains public keys. Solution verification can be performed by Alg.~\ref{alg:verify}.
 
 \begin{algorithm}[H]
@@ -73,7 +73,7 @@ only contains public keys. Solution verification can be performed by Alg.~\ref{a
     \end{algorithmic}
 \end{algorithm}
 
-Target parameter $b$ is adjusted to the current network hashrate via difficulty adjustment
+Target parameter $b$ is adjusted to the current network hash rate via difficulty adjustment
 algorithm~\cite{meshkov2017short}, that is trying to predict an upcoming 1024 block length
-epoch hashrate based on data from previous 8 epochs.
+epoch hash rate based on data from the previous 8 epochs.
 Full technical specification of Autolykos may be found at~\cite{Ergopow}.

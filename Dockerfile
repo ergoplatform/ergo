@@ -1,4 +1,4 @@
-FROM openjdk:10-jre-slim as builder
+FROM openjdk:11-jre-slim as builder
 ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update && \
     apt-get install -y --no-install-recommends apt-transport-https apt-utils bc dirmngr gnupg && \
@@ -9,17 +9,23 @@ RUN apt-get update && \
     apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y --no-install-recommends sbt
+COPY ["build.sbt", "lock.sbt", "/ergo/"]
+COPY ["project", "/ergo/project"]
+RUN sbt update
 COPY . /ergo
 WORKDIR /ergo
-RUN sbt reload clean assembly
+RUN sbt assembly
 RUN mv `find . -name ergo-assembly*.jar` /ergo.jar
 CMD ["/usr/bin/java", "-jar", "/ergo.jar"]
 
-FROM openjdk:10-jre-slim
+FROM openjdk:11-jre-slim
 LABEL maintainer="Andrey Andreev <andyceo@yandex.ru> (@andyceo)"
-COPY --from=builder /ergo.jar /ergo.jar
-EXPOSE 9007 9052
-WORKDIR /root
-VOLUME ["/root/ergo/data"]
-ENTRYPOINT ["/usr/bin/java", "-jar", "/ergo.jar"]
+RUN adduser --disabled-password --home /home/ergo --uid 9052 --gecos "ErgoPlatform" ergo && \
+    install -m 0750 -o ergo -g ergo -d /home/ergo/.ergo
+COPY --from=builder /ergo.jar /home/ergo/ergo.jar
+USER ergo
+EXPOSE 9020 9052
+WORKDIR /home/ergo
+VOLUME ["/home/ergo/.ergo"]
+ENTRYPOINT ["/usr/bin/java", "-jar", "/home/ergo/ergo.jar"]
 CMD [""]

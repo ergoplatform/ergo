@@ -20,7 +20,8 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 
   val baseHeader = defaultHeaderGen.sample.get
 //  val difficultyControl = new LinearDifficultyControl(1.minute, useLastEpochs = 100, epochLength = 1)
-  val difficultyControl = new LinearDifficultyControl(2.minute, useLastEpochs = 8, epochLength = 256)
+  val chainSettings = settings.chainSettings.copy(blockInterval = 2.minute, useLastEpochs = 8, epochLength = 256)
+  val difficultyControl = new LinearDifficultyControl(chainSettings)
   // Constant rate: Stable simulated average interval = 119713, error  = 0.23916666% | Init simulated average interval = 117794, error  = 1.8383334%
   // Increasing rate: Stable simulated average interval = 119841, error  = 0.1325% | Init simulated average interval = 119077, error  = 0.76916665%
   // Random rate: Stable simulated average interval = 120539, error  = 0.44916666% | Init simulated average interval = 115519, error  = 3.7341666%
@@ -85,8 +86,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
   def printTestnetData(): Unit = {
     val baseHeader = defaultHeaderGen.sample.get
     val chainSettings = ErgoSettings.read(None).chainSettings.copy(epochLength = 1)
-    val difficultyControl = new LinearDifficultyControl(chainSettings.blockInterval,
-      chainSettings.useLastEpochs, chainSettings.epochLength)
+    val difficultyControl = new LinearDifficultyControl(chainSettings)
 
     val headers = Source.fromResource("difficulty.csv").getLines().toSeq.tail.map { line =>
       val l = line.split(",")

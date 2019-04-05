@@ -1,6 +1,7 @@
 package org.ergoplatform.mining.difficulty
 
 import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.settings.ChainSettings
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.{Arbitrary, Gen}
 
@@ -15,7 +16,13 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
 
   val UseLastEpochs = 4
   val DesiredInterval: FiniteDuration = 1.minute
-  val control = new LinearDifficultyControl(DesiredInterval, UseLastEpochs, Epoch)
+
+  def chainSettings(blockInterval: FiniteDuration = DesiredInterval,
+                    useLastEpochs: Int = UseLastEpochs,
+                    epochLength: Int = Epoch): ChainSettings =
+    settings.chainSettings.copy(blockInterval = blockInterval, useLastEpochs = useLastEpochs, epochLength = epochLength)
+
+  val control = new LinearDifficultyControl(chainSettings())
 
   property("previousHeadersRequiredForRecalculation() should return correct heights required for recalculation") {
     val height = Epoch * (UseLastEpochs + 1) + 1
@@ -26,7 +33,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
   property("previousHeadersRequiredForRecalculation() with Epoch = 1") {
     forAll(Gen.choose(2, 1000)) { _ =>
       val useLastEpochs = 3
-      val control = new LinearDifficultyControl(1.minute, useLastEpochs, 1)
+      val control = new LinearDifficultyControl(chainSettings(1.minute, useLastEpochs, 1))
       val height = useLastEpochs + 1
       control.previousHeadersRequiredForRecalculation(height) shouldEqual (0 until height)
     }
@@ -104,7 +111,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
   property("interpolate() for linear hashrate growth") {
     forAll(epochGen, diffGen, smallPositiveInt, smallPositiveInt) { (startEpoch, diff, epoch, useLastEpochs) =>
       whenever(useLastEpochs > 1) {
-        val control = new LinearDifficultyControl(1.minute, useLastEpochs, epoch)
+        val control = new LinearDifficultyControl(chainSettings(1.minute, useLastEpochs, epoch))
         val previousDifficulties = (startEpoch * epoch until (useLastEpochs + startEpoch) * epoch by epoch).map(i => (i, diff * i))
         val newDiff = control.interpolate(previousDifficulties)
         val expected = previousDifficulties.map(_._2).max + diff
@@ -116,7 +123,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
   property("calculate() for different epoch lengths and constant hashrate") {
     forAll(defaultHeaderGen, smallPositiveInt, smallPositiveInt, Gen.choose(1, 60 * 60 * 1000)) { (header: Header, epoch, useLastEpochs, interval) =>
       whenever(useLastEpochs > 1 && header.requiredDifficulty >= 1) {
-        val control = new LinearDifficultyControl(interval.millis, useLastEpochs, epoch)
+        val control = new LinearDifficultyControl(chainSettings(interval.millis, useLastEpochs, epoch))
         val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1)
           .map(i => header.copy(timestamp = header.timestamp + i * interval, height = i))
         previousHeaders.length shouldBe useLastEpochs + 1
@@ -129,7 +136,7 @@ class LinearDifficultyControlSpecification extends ErgoPropertyTest {
     val step = 1000
     forAll(defaultHeaderGen, smallPositiveInt, smallPositiveInt, Gen.choose(1, 60 * 60 * 1000)) { (header: Header, epoch, useLastEpochs, interval) =>
       whenever(useLastEpochs > 1) {
-        val control = new LinearDifficultyControl(interval.millis, useLastEpochs, epoch)
+        val control = new LinearDifficultyControl(chainSettings(interval.millis, useLastEpochs, epoch))
         val previousHeaders = control.previousHeadersRequiredForRecalculation(epoch * useLastEpochs + 1).map { i =>
           header.copy(timestamp = header.timestamp + i * interval,
             height = i,

@@ -2,16 +2,19 @@ package org.ergoplatform.mining.difficulty
 
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, Height}
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.ChainSettings
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration.FiniteDuration
 
-class LinearDifficultyControl(val desiredInterval: FiniteDuration,
-                              val useLastEpochs: Int,
-                              val epochLength: Int) extends ScorexLogging {
+class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLogging {
 
   import LinearDifficultyControl._
+
+  val desiredInterval: FiniteDuration = chainSettings.blockInterval
+  val useLastEpochs: Int = chainSettings.useLastEpochs
+  val epochLength: Int = chainSettings.epochLength
+  val initialDifficulty: BigInt = chainSettings.initialDifficulty
 
   assert(useLastEpochs > 1, "useLastEpochs should always be > 1")
   assert(epochLength > 0, "epochLength should always be > 0")
@@ -33,19 +36,25 @@ class LinearDifficultyControl(val desiredInterval: FiniteDuration,
   @SuppressWarnings(Array("TraversableHead"))
   def calculate(previousHeaders: Seq[Header]): Difficulty = {
     assert(previousHeaders.nonEmpty, "PreviousHeaders should always contain at least 1 element")
-    if (previousHeaders.lengthCompare(1) == 0 || previousHeaders.head.timestamp >= previousHeaders.last.timestamp) {
-      previousHeaders.head.requiredDifficulty
-    } else {
-      val data: Seq[(Int, Difficulty)] = previousHeaders.sliding(2).toList.map { d =>
-        val start = d.head
-        val end = d.last
-        require(end.height - start.height == epochLength, s"Incorrect heights interval for $d")
-        val diff = end.requiredDifficulty * desiredInterval.toMillis * epochLength / (end.timestamp - start.timestamp)
-        (end.height, diff)
+    val uncompressedDiff = {
+      if (previousHeaders.lengthCompare(1) == 0 || previousHeaders.head.timestamp >= previousHeaders.last.timestamp) {
+        previousHeaders.head.requiredDifficulty
+      } else {
+        val data: Seq[(Int, Difficulty)] = previousHeaders.sliding(2).toList.map { d =>
+          val start = d.head
+          val end = d.last
+          require(end.height - start.height == epochLength, s"Incorrect heights interval for $d")
+          val diff = end.requiredDifficulty * desiredInterval.toMillis * epochLength / (end.timestamp - start.timestamp)
+          (end.height, diff)
+        }
+        val diff = interpolate(data)
+        if (diff >= 1) diff else initialDifficulty
       }
-      val diff = interpolate(data)
-      if (diff >= 1) diff else Constants.InitialDifficulty
     }
+    // perform serialization cycle in order to normalize resulted difficulty
+    RequiredDifficulty.decodeCompactBits(
+      RequiredDifficulty.encodeCompactBits(uncompressedDiff)
+    )
   }
 
   //y = a + bx

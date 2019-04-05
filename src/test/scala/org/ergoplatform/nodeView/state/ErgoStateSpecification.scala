@@ -109,7 +109,6 @@ class ErgoStateSpecification extends ErgoPropertyTest {
     }
   }
 
-
   property("ErgoState.stateChanges()") {
     val (us: UtxoState, bh) = createUtxoState()
     val emissionBox = genesisBoxes.head

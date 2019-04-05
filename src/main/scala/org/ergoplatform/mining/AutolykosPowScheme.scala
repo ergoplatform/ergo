@@ -11,6 +11,7 @@ import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
+import sigmastate.basics.DLogProtocol.ProveDlog
 
 import scala.annotation.tailrec
 import scala.math.BigInt
@@ -47,7 +48,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val msg = msgByHeader(header)
     val s = header.powSolution
 
-    require(s.d < b || s.d > (q - b), s"Incorrect d = ${s.d} for b = $b")
+    require(s.d < b, s"Incorrect d = ${s.d} for b = $b")
     require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
     require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
 
@@ -153,6 +154,28 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
+    * Assembles [[ErgoFullBlock]] using candidate block and external pow solution.
+    */
+  def completeBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
+    val header = AutolykosPowScheme.deriveUnprovedHeader(candidate).copy(powSolution = solution)
+    val adProofs = ADProofs(header.id, candidate.adProofBytes)
+    val blockTransactions = BlockTransactions(header.id, candidate.transactions)
+    val extension = Extension(header.id, candidate.extension.fields)
+    new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
+  }
+
+  /**
+    * Assembles candidate block derivative required for external miner.
+    */
+  def deriveExternalCandidate(candidate: CandidateBlock, pk: ProveDlog): ExternalCandidateBlock = {
+    val h = AutolykosPowScheme.deriveUnprovedHeader(candidate)
+    val msg = msgByHeader(h)
+    val b = getB(candidate.nBits)
+
+    ExternalCandidateBlock(msg, b, pk)
+  }
+
+  /**
     * Check nonces from `startNonce` to `endNonce` for message `m`, secrets `sk` and `x`, difficulty `b`.
     * Return AutolykosSolution if there is any valid nonce in this interval.
     */
@@ -182,9 +205,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Get target `b` from encoded difficulty `nBits`
     */
-  private[mining] def getB(nBits: Long): BigInt = {
-    q / RequiredDifficulty.decodeCompactBits(nBits)
-  }
+  private[mining] def getB(nBits: Long): BigInt = q / RequiredDifficulty.decodeCompactBits(nBits)
 
   /**
     * Hash function that takes `m` and `nonceBytes` and returns a list of size `k` with numbers in
@@ -222,6 +243,30 @@ object AutolykosPowScheme {
     val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
 
     (parentId, height)
+  }
+
+  /**
+    * Derives header without pow from [[CandidateBlock]].
+    */
+  def deriveUnprovedHeader(candidate: CandidateBlock): Header = {
+    val (parentId, height) = derivedHeaderFields(candidate.parentOpt)
+    val transactionsRoot = BlockTransactions.transactionsRoot(candidate.transactions)
+    val adProofsRoot = ADProofs.proofDigest(candidate.adProofBytes)
+    val extensionRoot: Digest32 = Extension.rootHash(candidate.extension)
+
+    Header(
+      candidate.version,
+      parentId,
+      adProofsRoot,
+      candidate.stateRoot,
+      transactionsRoot,
+      candidate.timestamp,
+      candidate.nBits,
+      height,
+      extensionRoot,
+      null,
+      candidate.votes
+    )
   }
 
 }

@@ -40,6 +40,7 @@ object Utils {
   }
 
   def dumpToFile(benchName: String, startTs: Long, reports: Seq[BenchReport]): Unit = {
+    new File(s"target/bench/").mkdirs()
     val outWriter = new PrintWriter(new File(s"target/bench/bench-report.json"))
     val reportsStr = reports.map { case BenchReport(benchCase, et) =>
       s"""{"benchCase":"$benchCase","elapsedTime":$et}"""

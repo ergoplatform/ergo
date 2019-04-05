@@ -14,7 +14,7 @@ import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util._
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf, Value}
+import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate._
 import org.ergoplatform.settings.Parameters._
 
@@ -283,7 +283,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
           c.appendFullBlock(block, votingSettings).get -> (h + 1)
         }._1
       case _ =>
-        ErgoStateContext.empty(stateRoot, votingSettings)
+        ErgoStateContext.empty(stateRoot, settings)
     }
   }
 }

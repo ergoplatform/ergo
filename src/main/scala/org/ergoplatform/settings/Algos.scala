@@ -16,8 +16,6 @@ object Algos extends ScorexEncoding {
 
   val hash: HF = Blake2b256
 
-  val initialDifficulty = 1
-
   lazy val emptyMerkleTreeRoot: Digest32 = Algos.hash(LeafData @@ Array[Byte]())
 
   @inline def versionToBAW(id: VersionTag): ByteArrayWrapper = ByteArrayWrapper(versionToBytes(id))

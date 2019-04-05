@@ -19,11 +19,11 @@ import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import scorex.util.{ModifierId, _}
-import sigmastate.Values.{ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf, Value}
+import sigmastate.SType
+import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.interpreter.ProverResult
-import sigmastate.{SBoolean, _}
 
 import scala.util.Random
 
@@ -56,7 +56,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     //there are outputs in tests of 183 bytes, and maybe in some tests at least 2 outputs are required
     //thus we put in an input a monetary value which is at least enough for storing 400 bytes of outputs
     val minValue = parameters.minValuePerByte * 400
-    Gen.choose(minValue, coinsTotal)
+    Gen.choose(minValue, coinsTotal / 1000)
   }
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {

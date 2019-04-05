@@ -50,11 +50,11 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultMinerPkPoint: EcPointType = defaultMinerPk.h
 
   val defaultTimestamp: Long = 1552217190000L
-  val defaultnBits: Long = Constants.InitialNBits
+  val defaultnBits: Long = settings.chainSettings.initialNBits
   val defaultVotes: Array[Byte] = Array.fill(3)(0.toByte)
   val defaultVersion: Byte = 0
   lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
-  val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(genesisStateDigest, votingSettings)
+  val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(genesisStateDigest, settings)
     .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultnBits, defaultVotes, defaultVersion)
 
   val startHeight: Int = emptyStateContext.currentHeight
@@ -62,7 +62,7 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val EmptyStateRoot: ADDigest = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
   val EmptyDigest32: Digest32 = Digest32 @@ Array.fill(HashLength)(0.toByte)
-  val defaultDifficultyControl = new LinearDifficultyControl(1.minute, 8, 256)
+  val defaultDifficultyControl = new LinearDifficultyControl(settings.chainSettings)
   val defaultExtension: ExtensionCandidate = ExtensionCandidate(Seq(Array(0: Byte, 8: Byte) -> EmptyDigest32))
   val emptyExtension: ExtensionCandidate = ExtensionCandidate(Seq())
   val emptyDataInputs: IndexedSeq[DataInput] = IndexedSeq()

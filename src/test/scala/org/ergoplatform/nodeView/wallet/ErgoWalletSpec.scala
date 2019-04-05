@@ -1,11 +1,8 @@
 package org.ergoplatform.nodeView.wallet
 
-import java.nio.ByteBuffer
-
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoInterpreter
-import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, LaunchParameters}
@@ -13,13 +10,9 @@ import org.ergoplatform.utils._
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.util.encode.Base16
 import scorex.util.idToBytes
-import scorex.util.serialization.VLQByteBufferReader
 import sigmastate.Values.ByteArrayConstant
 import sigmastate._
-import sigmastate.serialization.ConstantStore
-import sigmastate.utils.SigmaByteReader
 
 import scala.concurrent.blocking
 import scala.util.Random

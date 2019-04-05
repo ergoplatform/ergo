@@ -43,8 +43,9 @@ object AutolykosSolution extends ApiCodecs {
       w <- c.downField("w").as[EcPointType]
       n <- c.downField("n").as[Array[Byte]]
       d <- c.downField("d").as[BigInt]
-    } yield AutolykosSolution(pk: EcPointType, w: EcPointType, n: Array[Byte], d: BigInt)
+    } yield AutolykosSolution(pk, w, n, d)
   }
+
 }
 
 object AutolykosSolutionSerializer extends ScorexSerializer[AutolykosSolution] {

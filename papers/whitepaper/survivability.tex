@@ -9,33 +9,31 @@
 
 Being a platform for contractual money, Ergo should also support long-term contracts for a
 period of a person's life.
-While even young project are experiencing issues with performance degradation and
-adaptability to external conditions, leading to a situation when a decentralized cryptocurrency
-depends on a small group of developers, that should provide a hard-fork, otherwise the cryptocurrency
-won't survive.
+At the same time existing smart contract platforms are experiencing issues with performance degradation and
+adaptability to external conditions, even just after several years after launch.
+This leads to a situation when a cryptocurrency depends on a small group of developers
+that should provide a fixing hard-fork, otherwise the cryptocurrency won't survive.
 
-The first common issue is that in pursuit of popularity blockchain developers implement ad-hoc
+The first common survivability issue is that in pursuit of popularity blockchain developers implement ad-hoc
 solutions without proper preliminary research and testing.
-Such solutions inevitably lead to bugs, and regardless of whether they were exploited or not
-to bug fixes in a centralized manner, that makes the network even less secure.
+Such solutions inevitably lead to bugs, hasty bug fixes, fixes of bug fixes and so on, making the network even less secure.
 Ergo approach here is to use stable well-tested solutions, even if that leads to slower
 short-term innovation applicability.
 Most of Ergo solutions are formalized in scientific papers, presented at peer-reviewed conferences
 and are widely discussed in the community.
 
-In particular, Ergo avoid solutions that may be useful for now, but will lead to performance degradation
-over time while also preventing some known performance problems of the blockchain technology.
-As far as Ergo is a PoW blockchain, it easily allows extracting a small header from the block content.
+Ergo is trying to fix known problems of the blockchain technology without creating new problems.
+As far as Ergo is a PoW blockchain, it easily allows to extract a small header from the block content.
 Simple header allows to validate the work done, while headers chain is enough to select the best chain
 and synchronize the network.
 Headers chain is much smaller than the full one, however it still growths linearly with time.
-Hopefully, modern researches of light clients~\cite{nipopows, flight clients} provide a way to
-synchronize the network by downloading only a small subset of headers, unlocking the ability to
-use the network without any trust from low-end hardware like smartphones.
+Hopefully, modern research of light clients~\cite{nipopows, flight clients} provide a way to
+synchronize the network by downloading even smaller piece of data, unlocking the ability to
+use the network without any trust from low-end hardware like mobile phones.
 In addition, Ergo uses authenticated state\cite{???} and for any transaction included,
 a client may download a proof of its correctness.
 Thus, regardless of the blockchain size, a regular user with a
-smart-phone can join the network and start using Ergo with the same security
+mobile phone can join the network and start using Ergo with the same security
 guarantees as a full node.
 
 Although support of light clients solves problems of Ergo users, it does not solve problems

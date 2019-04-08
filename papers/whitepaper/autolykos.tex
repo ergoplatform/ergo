@@ -96,7 +96,8 @@ for the new header will only consume few milliseconds~(for about 50 ms on Nvidia
 
 Target parameter $b$ is build-in into puzzle itself, so the correct puzzle solution immediately
 leads to a new block generation. $b$ is adjusted to the current network hash rate via difficulty adjustment
-algorithm~\cite{meshkov2017short}, that is trying to predict an upcoming 1024 block length
-epoch hash rate based on data from the previous 8 epochs.
-This algorithm predicts the network hashrate better than the usual difficulty adjustment algorithm,
-while also makes possible ``coin-hopping'' attacks less profitable.
+algorithm~\cite{meshkov2017short} to keep time interval between block close to 2 minutes.
+This algorithm is trying to predict the hash rate of an upcoming 1024 block length epoch
+based on data from the previous 8 epochs via well-known linear least squares method,
+to predict it better than the usual difficulty adjustment algorithm while also makes possible
+``coin-hopping'' attacks less profitable.

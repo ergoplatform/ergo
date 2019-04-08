@@ -1,21 +1,21 @@
 \section{Currency And Emission}
 \label{sec:currency}
 
-%    подробная информация об эмиссии, скрипту эмиссии, и всему-всему что нужно для фаундейшена
+% подробная информация об эмиссии, скрипту эмиссии, и всему-всему что нужно для фаундейшена
 
 The native currency of \Ergo{} platform is \Erg{} token, which unique property is
 that it is the only currency to pay storage rent in \Ergo{}~(see~\ref{sec:economy} for more details).
 One \Erg{} token is divisible to up to $10^9$ parts labeled as \nanoErg{}.
 
-All \Erg{} tokens that will ever be circulate in the system are presented in the
-initial state and are divided in 3 parts~(boxes):
+All \Erg{} tokens that will ever circulate in the system are presented in the
+initial state and are divided into 3 parts~(boxes):
 
 \begin{itemize}
-    \item{\em No premine proof.} This box contain exactly one~\Erg{} and is protected by the script,
+    \item{\em No premine proof.} This box contains exactly one~\Erg{} and is protected by the script,
     that is preventing it from spending by anyone.
     Thus, it is a long-living box, that will live in the system until storage-rent component will
     destroy it.
-    It's main purpose is to prove, that \Ergo{} mining was not started privately by anyone before
+    Its main purpose is to prove, that \Ergo{} mining was not started privately by anyone before
     the declared launch date.
     To achieve this, additional registers of this box contains news from media (Guardian, Xinhua, Vedomosti)
     and block ids from already established cryptocurrencies (Bitcoin and Ethereum).
@@ -26,33 +26,33 @@ initial state and are divided in 3 parts~(boxes):
     development.
     It's protecting script~\cite{link to corresponding ergo tree} consists of two parts.
 
-    First, it ensures, that only predefined portion of the box value was taken.
+    First, it ensures, that only a predefined portion of the box value was taken.
     During blocks 1-525599 (2 years) 7.5 \Erg{} will be released every block,
     during blocks 525600-590399 (3 month) 4.5 \Erg{} will be released every block and finally
     during blocks 590400-655199 (3 month) 1.5 \Erg{} will be released every block.
     This rule ensures the presence of funds for \Ergo{} development for at least 2.5 years and
-    prevents an excessive wealth concentration under control of small group of people, as soon
-    as at any point of time it won't exceed 10\% of total number of coins in circulation.
+    prevents an excessive wealth concentration under control of a small group of people, as soon
+    as at any point of time, it won't exceed 10\% of the total number of coins in circulation.
 
     Second, it have a custom protection from unexpected spending.
-    Initially it requires that spending transaction should be signed by at least 2 of 3 secret keys,
+    Initially, it requires that spending transaction should be signed by at least 2 of 3 secret keys,
     that are under control of initial team members. When they spend this box, they are free to
     change this part of the script as they wish, for example by adding new members to protect foundation
     funds or switching to threshold by special token ownership~\cite{link to ...}.
 
-    During the first year this funds will be used to cover pre-issued EFYT token~\cite{our website},
-    after that they will be distributed in decentralized manner via community voting.
+    During the first year, this funds will be used to cover pre-issued EFYT token~\cite{our website},
+    after that, they will be distributed in a decentralized manner via community voting.
 
 
     \item{\em Miners reward.} This box contain 93409132 \Erg{} that will be collected by block miners
     as a reward of their work.
     It's protecting script~\cite{link to corresponding ergo tree} have several conditions.
 
-    First it checks, that block reward is going to the exact miner, that solved the PoW puzzle, and
+    First, it checks, that block reward is going to the exact miner, that solved the PoW puzzle, and
     may be spent not earlier than 720 blocks after the current block.
     This restrictions are done to prevent mining pools formation, see~\ref{sec:autolykos} for more details.
 
-    Second, it ensures, that only predefined portion of the box value was taken.
+    Second, it ensures, that only a predefined portion of the box value was taken.
     During blocks 1 - 525599 (2 years) miner will be able to collect 67.5 \Erg{} from this box,
     during blocks 525600 - 590399 (3 month) miner will be able to collect 66 \Erg{} and after
     that block reward will be reduced for 3 \Erg{} every 64800 blocks (3 months) until it will reach zero
@@ -61,6 +61,6 @@ initial state and are divided in 3 parts~(boxes):
 
 \end{itemize}
 
-All these rules results in the following curve of efficient number of coins in circulation with time:
+All these rules results in the following curve of the efficient number of coins in circulation with time:
 
 \dnote{TODO: plot the correct emission curve - number of \Erg{} in circulation vs time. Miners and foundation part, like ZCash https://z.cash/blog/funding/}

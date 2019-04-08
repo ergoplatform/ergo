@@ -18,7 +18,7 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
   val delta: Int = settings.chainSettings.monetary.minerRewardDelay
 
   private def expectedRewardOutputScriptBytes(pk: ProveDlog): Array[Byte] =
-    ErgoScriptPredef.rewardOutputScript(delta, pk).bytes
+    ErgoScriptPredef.rewardOutputScript(delta, pk).treeWithSegregation.bytes
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 

@@ -48,11 +48,11 @@ This leads to serious security issues, as far as when the state does not fit in 
 an adversary may generate transactions which validation become very slow due to required random
 access to miners storage
 leading to DoS attack like an attack to the Ethereum network in 2016~\cite{??}.
-To prevent this Ergo uses economic solution analyzed in~\cite{chepurnoy2018systematic}: if an
+To prevent this Ergo have a storage rent component: if an
 output remains in the state for 4 years without being moved, a miner may charge a small fee for every
 byte kept in the state.
-This idea is similar to regular cloud storage services, however, it is new for
-cryptocurrencies and has several important consequences.
+This idea is similar to regular cloud storage services, however, it was only proposed quite recently for
+cryptocurrencies~\cite{chepurnoy2017space} and has several important consequences.
 First, Ergo mining will always be stable unlike Bitcoin and other PoW currencies
 in which mining may become unstable after the
 initial emission~\cite{carlsten2016instability}.

@@ -51,3 +51,16 @@
  value and protecting script, an Ergo coin contains additinal registers with arbitrary data (of certain types and within
  certain limits), thus we use term {\em box} instead of {\em coin}. Also, like in Ethereum, the ledger snapshot
  representation~(in form of boxes not destroyed by previous transactions) is fixed by the Ergo protocol.
+
+\subsection{The Ergo As The Platform}
+ \label{sec:platform}
+
+ In our opinion, 99\% of public blockchain use-cases are about financial applications, even in the presence of a
+ general-purpose decentralized world computer, such as Ethefeum Classic. For example, even if oracle is writing
+ concrete data into a blockchain (such as temperature), this data is usually to be written to be used in a financial
+ contract. Another trivial observation we have made, is that many applications are using digital tokens with mechanics
+ different from a native token of a blockchain system.
+
+ Thus Ergo offers for an application developer in-built tokens~(with minimal functionality per se, in comparison with
+ Waves or Nxt), and domain-specific language for box guarding condition which is powerful enough to define rich
+ financial applications. 

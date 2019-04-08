@@ -34,3 +34,20 @@
  Ergo is a utility token used to pay for storage rent. This storage rent is making system more stable. Also, Ergo is
  suitable to build monetary systems on top of it with properties different from Ergo native token itself. However,
  participating in such systems would require to use Ergo native token as well in order to pay storage rent.
+
+\subsection{UTXO vs Accounts}
+ \label{sec:utxo}
+
+ To check a new transaction, a cryptocurrency client is not using the ledger (all the transactions happened before the
+ transaction), rather, it is using ledger state snapshot got from the history. In Bitcoin Core reference implementation,
+ this snapshot is about active one-time coins, and a transaction is destroying some coins and also creating new ones.
+ In Ethereum, the snapshot is about long-living accounts, where an account is controlled whether by a human or
+ executable code; a transaction then is modifying monetary balance and internal memory of some accounts. Also, the
+ representation of the snapshot in Ethereum~(unlike Bitcoin) is fixed by the protocol, as authenticating digest of the
+ snapshot is written into a block header (thus, in order to have full security guarantees, a client needs to build
+ the same snapshot as a miner).
+
+ Ergo is representing the snapshot in form on one-time coins, like Bitcoin. The difference is, in addition to monetary
+ value and protecting script, an Ergo coin contains additinal registers with arbitrary data (of certain types and within
+ certain limits), thus we use term {\em box} instead of {\em coin}. Also, like in Ethereum, the ledger snapshot
+ representation~(in form of boxes not destroyed by previous transactions) is fixed by the Ergo protocol.

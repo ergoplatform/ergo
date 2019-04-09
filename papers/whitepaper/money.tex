@@ -69,3 +69,31 @@
  change their contracts from Ergs which are bounded by contracts in the sense that a box with contractual Ergs is
  demanding from a spending transaction to create boxes with some properties. We will refer to the former as to ordinary
  (or cleared) Ergs, and to the latter as to the contractual Ergs. Similarly, we can define contractual tokens.
+
+\subsection{Difference From Bitcoin}
+
+ While in Bitcoin a transaction output~(a digital coin) is protected by a program in stack-based language, in Ergo a
+ box is protected by a
+
+
+\subsection{Data Inputs}
+
+ A box could be not only destroyed by a transaction, but is also could be only read, in the latter case we refer to the
+ box as to {\em data input} of the transaction. Thus a transaction is getting two box sets as its arguments, inputs and
+ data inputs, and produces a box set named {\em outputs}. Data inputs are useful for oracle applications and interacting
+ contracts.
+
+\subsection{Custom tokens}
+
+ A transaction can carry many tokens, if only estimated complexity for processing them is not exceeding a limit. A
+ transaction is also able to issue a token, but only one, and with a unique~(and cryptographically strong against
+ finding a collision) identifier, which is equal to identifier of a first~(spendable) input box of the transaction.
+ The amount of the tokens issued could be any number within the [1, 9223372036854775807] range. For the tokens, the weak
+ preservation rule is defined, which is demanding total amount for a token in transaction outputs should be no more
+ than total amount for the token in transaction inputs~(thus some amount of token could be burnt). In contrast, for Ergs
+ a preservation rule is strong, thus total Ergs amount for inputs should be equal to total Ergs amount for outputs.
+
+
+\subsection{The Local Exchange Trading System}
+ \label{sec:platform}
+

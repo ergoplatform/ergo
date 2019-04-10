@@ -78,6 +78,12 @@
  acyclic graph, which serialized form is written in a box. To destroy a box, a spending transaction needs to provide
  arguments, including zero-knowledge proofs, which are enough to satisfy the formula.
 
+ However, in most cases a developer is unlikely to develop box contracts in terms of graphs. Instead, he would likely
+ using a high-level language, and we provide one called ErgoScript. Writing scripts in this language is easy, for
+ example, for a one-out-of-two signature, protecting script would be ${pk_1 \&\& pk_2}$, which means "prove knowledge of
+ a secret key corresponding to the public key $pk_1$, or knowledge of a secret key corresponding to $pk_2$". We have
+ two separate documents helping to develop contracts with ErgoScript, the "ErgoScript Tutorial"~\cite{} and "Advanced
+ ErgoScript Tutorial"~\cite{}.
 
 
 \subsection{Data Inputs}
@@ -110,6 +116,7 @@
  As digital community could be vulnerable to sybil attacks, thus some mechanism is needed in order to prevent creation
  of sybils creating debts. We consider two solutions, namely, a committee of trusted managers approving new members,
  or security deposits made in Ergs. For simplicity, we consider the approach with the committee here.
+
 
 
 

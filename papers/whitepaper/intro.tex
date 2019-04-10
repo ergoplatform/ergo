@@ -56,9 +56,17 @@ This problem led to concepts of lightened nodes with minimum storage requirement
 storage rent fee component that prevents bloating of full-node requirements~\cite{chepurnoy2018systematic},
 self-amendable protocols that can adapt to the changing environment and improve themselves without
 trusted parties~\cite{goodman2014tezos}, and more.
+Ergo combines various scientific ideas together to fix these problems, while also provide a way for
+further improvements without any breaking changes.
 
-The main goal of the Ergo platform is to solve these problems by implementing known scientific ideas.
-The objective of Ergo is to be the platform for blockchain-demanding decentralized
-applications, survivable in the long-term and reliable to external or internal threats.
-In the following sections, we summarize the general design of Ergo, its technical and economic solutions,
-as well as provide possible examples of its use-cases and further development.
+This paper contains a detailed overview of the Ergo platform for average-technical audience
+and is structured as follows: in Section~\ref{sec:social} we present general ideas of Ergo platform,
+Section~\ref{sec:autolykos} contains description of Ergo consensus protocol,
+in Section~\ref{sec:survivability} we describe main components, that are implemented in Ergo
+to achieve long term survivability, Section~\ref{sec:currency} describes native token
+of Ergo platform and its emission rules while in Section~\ref{sec:contractual} we
+discuss its value and possible use-cases of Ergo contracts.
+Finally, we conclude our work in Section~\ref{sec:conclusions}.
+More information about different Ergo components may be found in separate documents:
+full technical documentation~\cite{yellowpaper}, ErgoScript overview and examples\cite{???,???} and
+Proof-of-Work algorithm specification~\cite{Ergopow}.

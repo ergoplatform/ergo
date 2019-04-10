@@ -6,48 +6,52 @@
 %    Для активного применения (platform) нужна адаптивность под окружение (голосование, выживаемость и т.д.) и возможности написания финансовых контрактов (Contractual)
 %    Вот это все в Эрго, лучше чем в Эфириуме и Биткоине.
 
-Started more ten years ago with the Bitcoin~\cite{nakamoto2008bitcoin}, blockchain technology proved to be a secure way of maintaining
-a public transaction ledger.
+Started more ten years ago with the Bitcoin~\cite{nakamoto2008bitcoin}, blockchain technology proved
+to be a secure way of maintaining a public transaction ledger.
 Even after achieving a market capitalization over \$300bn in 2017~\cite{btcPrice}
-no serious attacks were performed to the Bitcoin network\dnote{check} despite the high potential yield.
-At the same time, centralized services are continuous fails to resist attacks, regardless of maintaining company size and expertize.
-\dnote{examples of attacks to crypto exchanges (mt. gox?), big companies (Facebook? Or better some bank), malicious or incompetent behavior of some human.
-Discuss a bit more if there are good examples especially of the last point}.
-This outstanding resilience of cryptocurrencies is achieved by a combination of modern cryptographic algorithms like digital
-signatures, that are widely adapted outside cryptocurrencies space, and decentralization, that ensures that only
-the majority of the network participants can affect its security.
+no severe attacks were performed to the Bitcoin network despite the high potential yield.
+This outstanding resilience of cryptocurrencies is achieved by a combination of modern cryptographic algorithms
+and decentralized architecture.
+Cryptography itself is widely used outside the cryptocurrencies, however centralized services continuously
+being hacked\cite{sanger2015bank,leskin2018top} due to malicious or incompetent behavior of company employers.
+Decentralized systems are resilient for such kind of attacks by design due to absence of an ``admin'' user
+that is capable to manually change records of the database and steal money or private data.
 
 However, this resilience does not come for free.
-To use a blockchain without any trust, it's participants should download and process all the transactions in
-the network, utilizing network resources.
-Besides network utilization, transaction processing requires to spend some computational resources,
+To use a blockchain without any trust, its participants should check each other by downloading and
+processing all the transactions in the network, utilizing network resources.
+Besides network utilization, transaction processing requires to utilize computational resources,
 especially if the transactional language is flexible enough.
-Finally, blockchains participants should keep quite a big amount of data in their local storages and
+Finally, blockchains participants should keep quite a significant amount of data in their local storages and
 these storage requirements are growing fast.
 Thus thousands of computers all over the world utilize various resources
 increasing the cost of single transaction processing,
-and users pay transaction fees~\cite{chepurnoy2018systematic} to prevent spam attacks and
-to encourage participation in the protocol.
-These fees may be very high~\cite{bitcoinFees},
+so users pay transaction fees~\cite{chepurnoy2018systematic}.
+These fees may be very high~\cite{bitcoinFees}
 and ten years later blockchain technology is still mainly used in a money application, where the advantage of
 high security outweighs the disadvantage of high transaction costs.
 
 Besides of a plain currency usage, most of the blockchains are used to build decentralized applications on top of them.
 Such applications utilize the ability to write smart contracts~\cite{szabo1994smart}, that implements their logic
 by means of blockchain-specific programming language.
-Ways to write smart contracts depends on cryptocurrency transactional model~\cite{zahnentferner2018chimeric} ---
-in UTXO-based cryptocurrencies like Bitcoin~\cite{nakamoto2008bitcoin} every coin is protected by a user-defined script,
-while in account-based cryptocurrencies like Ethereum~\cite{ethWhitepaper} transactions call code from special contract accounts.
-While these models are equal, protecting scripts implementation is not so natural for
-account model~(e.g. simple multi-signature contract bug led to \$150 million loss in 2017 in Ethereum~\cite{parityLock}),
-while arbitrary Turing-complete logic implementation may be tricky in UTXO model~(e.g. check this example of
+For now, there are two main approaches to write smart contracts~\cite{zahnentferner2018chimeric}:
+UTXO-based~(e.g., Bitcoin) and account-based~(e.g., Ethereum).
+Account-based cryptocurrencies like Ethereum introduces special contract accounts with some code associated to it,
+that may be invoked by incoming transactions.
+This approach allows performing arbitrary computations, however, complexity coins spending conditions
+implementation lead to bugs like \$150 million loss in 2017 in Ethereum from simple multi-signature contract~\cite{parityLock}.
+In UTXO-based cryptocurrencies, every coin have a script associated with it, and to spend this coin one should
+satisfy script conditions.
+Implementation of coins protecting conditions is much easier in UTXO model,
+while arbitrary Turing-complete logic become quite complicated~(e.g., check this example of
 simple Turing-complete system implementation in \Ergo{}~\cite{chepurnoy2018self}).
+Ergo is based on UTXO model as far as it is more convenient to implement financial applications, that
+covers the overwhelming majority of public blockchain use-cases.
 
-While the contractual component is attractive in terms of building decentralized applications,
-it is also important that the blockchain will survive in the long term.
-For now, the whole area is young and most of the application-oriented blockchain platforms exist just for several years,
-while they already have known problems with performance degradation over time \dnote{links and may be more discussion of known problems}
-and their long-term survivability is questionable.
+While the contractual component is attractive in for building decentralized applications,
+it is also essential that the blockchain will survive in the long term.
+For now, the whole area is young, and most of the application-oriented blockchain platforms exist just for several years,
+while they already have known problems with performance degradation over time~\cite{???} and their long-term survivability is questionable.
 This problem led to concepts of lightened nodes with minimum storage requirements~\cite{reyzin2017improving},
 storage rent fee component that prevents bloating of full-node requirements~\cite{chepurnoy2018systematic},
 self-amendable protocols that can adapt to the changing environment and improve themselves without
@@ -56,5 +60,5 @@ trusted parties~\cite{goodman2014tezos}, and more.
 The main goal of the Ergo platform is to solve these problems by implementing known scientific ideas.
 The objective of Ergo is to be the platform for blockchain-demanding decentralized
 applications, survivable in the long-term and reliable to external or internal threats.
-In the following sections, we summarize the general design of Ergo, it's technical and economic solutions,
+In the following sections, we summarize the general design of Ergo, its technical and economic solutions,
 as well as provide possible examples of its use-cases and further development.

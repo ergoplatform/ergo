@@ -7,8 +7,8 @@ The native currency of \Ergo{} platform is \Erg{} token, which unique property i
 that it is the only currency to pay storage rent in \Ergo{}~(see~\ref{sec:survivability} for more details).
 One \Erg{} token is divisible to up to $10^9$ parts labeled as \nanoErg{}.
 
-All \Erg{} tokens that will ever circulate in the system are presented in the
-initial state and are divided into 3 parts~(boxes):
+All \Erg{} tokens that will ever circulate in the system are presented in
+the initial state and are divided into 3 parts~(boxes):
 
 \begin{itemize}
     \item{\em No premine proof.} This box contains exactly one~\Erg{} and is protected by the script,
@@ -32,34 +32,34 @@ initial state and are divided into 3 parts~(boxes):
     during blocks 590400-655199 (3 month) 1.5 \Erg{} will be released every block.
     This rule ensures the presence of funds for \Ergo{} development for at least 2.5 years and
     prevents an excessive wealth concentration under control of a small group of people, as soon
-    as at any point of time it won't exceed 10\% of the total number of coins in circulation.
+    as at any point of time, it won't exceed 10\% of the total number of coins in circulation.
 
-    Second, it have a custom protection from unexpected spending.
+    Second, it has custom protection from unexpected spending.
     Initially, it requires that spending transaction should be signed by at least 2 of 3 secret keys,
     that are under control of initial team members. When they spend this box, they are free to
     change this part of the script as they wish, for example by adding new members to protect foundation
     funds or switching to threshold by special token ownership~\cite{link to ...}.
 
-    During the first year, this funds will be used to cover pre-issued EFYT token~\cite{our website},
+    During the first year, these funds are going to be used to cover pre-issued EFYT token~\cite{our website},
     after that, they will be distributed in a decentralized manner via community voting.
 
 
-    \item{\em Miners reward.} This box contain 93409132 \Erg{} that will be collected by block miners
-    as a reward of their work.
+    \item{\em Miners reward.} This box contains 93409132 \Erg{} that will be collected by block miners
+    as a reward for their work.
     Its protecting script~\cite{link to corresponding ergo tree} requires, that spending transaction
     have exactly two outputs with the following properties:
 
 
-    First output should be protected by exactly the same script and number of \Erg{} in it should
-    equal to the remaining miners reward.
+    The first output should be protected by the same script and number of \Erg{} in it should
+    equal to the remaining miners' reward.
     During blocks 1 - 525599 (2 years) miner will be able to collect 67.5 \Erg{} from this box,
     during blocks 525600 - 590399 (3 month) miner will be able to collect 66 \Erg{} and after
     that block reward will be reduced for 3 \Erg{} every 64800 blocks (3 months) until it will reach zero
     at block 2080799.
 
-    Second output should contain remaining coins and should be protected by the following condition:
-    it can be spend by the exact miner, that solved the PoW puzzle not earlier than 720 blocks after the current block.
-    This restrictions are done to prevent mining pools formation, see~\ref{sec:autolykos} for more details.
+    The second output should contain the remaining coins and should be protected by the following condition:
+    it can be spent by the exact miner, that solved the PoW puzzle not earlier than 720 blocks after the current block.
+    These restrictions are done to prevent mining pools formation, see~\ref{sec:autolykos} for more details.
 
 
 

@@ -8,7 +8,7 @@
 The core component of any blockchain system is its consensus protocol.
 Despite extensive research of possible alternatives to the original Proof-of-Work (PoW) protocol
 with the longest chain rule,
-it remains in demand due to simplicity, high security guarantees, and friendliness to light clients.
+it remains in demand due to simplicity, high-security guarantees, and friendliness to light clients.
 However, a decade of extensive testing revealed several problems of the original one-CPU-one-vote idea.
 
 First known problem of PoW is that development of specialized hardware (ASIC) allows
@@ -33,7 +33,7 @@ such that $\sum_{j \in J} r_{j} - sk = d$ is in the interval $\{-b,\dots,0,\dots
 Elements of list $R$ are obtained as a result of one-way computation from index $i$,
 two miner public keys $pk,w$ and hash of block header $m$ as $r_i=H(i||M||pk||m||w)$,
 where $M$ is a static big message that is used to make hash calculation slower.
-In addition, we require a set of element indexes $J$ to be obtained
+Also, we require a set of element indexes $J$ to be obtained
 by one-way pseudo-random function $genIndexes$, that prevents possible solutions
 search optimizations.
 
@@ -74,9 +74,9 @@ only contains public keys. Solution verification can be performed by Alg.~\ref{a
     \end{algorithmic}
 \end{algorithm}
 
-This approach prevents mining pool formation, as soon as a miner that actually found a correct solution
+This approach prevents mining pool formation, as soon as a miner that found a correct solution
 can always try to steal the block reward as far as he knows the secret key $sk$. On the other hand,
-a single solution revealing is secure, as soon as it only operates with public keys and reveal only one
+a single solution revealing is secure, as soon as it only operates with public keys and reveals only one
 linear relation between 2 secrets $sk,w$.
 
 Memory-hardness follows from the fact, that algorithm~\ref{alg:prove} requires to keep
@@ -89,12 +89,11 @@ hash $H$ multiple~(for about $10^4$ for modern GPUs) times, reducing miner's eff
 
 List $R$ is also quite a big computation task: our initial implementation~\cite{ergoMiner}
 consumed ~25 seconds on Nvidia GTX 1070 to fill all $2^{26}$ elements of it.
-This part, however, may be optimized if miner in addition stores a list of unfinalized hashes $u_{i \in [0,N)}=H(i||M||pk$
-in memory, consuming 5 more Gigabytes of it. In such a case this work to calculate unfinalized hashes should
+This part, however, may be optimized if miner also stores a list of unfinalized hashes $u_{i \in [0,N)}=H(i||M||pk$ in memory, consuming 5 more Gigabytes of it. In such a case this work to calculate unfinalized hashes should
 be done only once during mining initialization while finalizing them and filling the list $R$
-for the new header will only consume few milliseconds~(for about 50 ms on Nvidia GTX 1070).
+for the new header only consumes few milliseconds~(for about 50 ms on Nvidia GTX 1070).
 
-Target parameter $b$ is build-in into puzzle itself, so the correct puzzle solution immediately
+Target parameter $b$ is built-in into the puzzle itself, so the correct puzzle solution immediately
 leads to a new block generation. $b$ is adjusted to the current network hash rate via difficulty adjustment
 algorithm~\cite{meshkov2017short} to keep time interval between block close to 2 minutes.
 This algorithm is trying to predict the hash rate of an upcoming 1024 block length epoch

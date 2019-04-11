@@ -124,7 +124,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
     inOpt
       .find { bx =>
         val canUnlock = (bx.creationHeight + RewardDelay <= height) || (bx.proposition.toSigmaProp != minerProp)
-        canUnlock && bx.proposition.toSigmaProp != cs.monetary.emissionBoxProposition && bx.value >= MinTxAmount
+        canUnlock && bx.proposition.toSigmaProp != cs.monetary.emissionBoxProposition.proposition && bx.value >= MinTxAmount
       }
       .map { input =>
         val qty = MaxTxsPerBlock

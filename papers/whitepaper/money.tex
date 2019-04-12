@@ -116,6 +116,19 @@
 \subsection{An Oracle Example}
  \label{sec:platform}
 
+ Equipped with custom tokens and data inputs, we can develop a simple oracle example, also showing on the way some
+ design patterns for Ergo contracts. In the example, Alice and Bob are putting money into a box, which is spendable by
+ Alice if temperature is more than 15 degrees, and is spendable by Bob otherwise. To deliver temperature into the
+ blockchain a trusted oracle is needed.
+
+ In opposite to Ethereum with its long-lived accounts, where trusted oracle identifier is usually known in advance,
+ delivering data with one-time boxes is more tricky. For starters, a box which is protected by an oracle's key could
+ not be trusted, as anyone can create such a box. With custom tokens, however, a solution is pretty simple.
+
+ In the first place, a token identifying the oracle should be issued. In the simplest case, amount for the token could
+ be equal to one. Then the oracle is creating a box which contains the token and also temperature, for example, in the
+ register number four~($R4$). 
+
 
 
 

@@ -15,23 +15,23 @@
 \subsection{Ergo Token Value}
  \label{sec:ergo-value}
 
- In this section we are going to provide some reflections on nature of the native Ergo token. Any currency is about
- three main functions: medium of exchange, unit of account, and store of value.
+ In this section we are going to provide some reflections on nature of the native Ergo token. For starters, we note that
+ any currency is about three main functions: medium of exchange, unit of account, and store of value.
 
  Bitcoin, being historically the first digital scarce asset, is a perfect as store-of-value. It is even better than
  gold under certain assumptions~(such as SHA-256 hash function not being broken, and majority of miners are not willing
  to destroy the Bitcoin), as emission is limited and known in advance. However, being perfect store-of-value also means
  to be not so good as medium-of-exchange. In particular, if one knows that Bitcoin is indeed the best tool to store
- value in the long term, he would use fiat whenever possible in order to collect Bitcoin.
+ value in the long term, he would use fiat whenever possible in order to collect more bitcoins.
 
  On the other hand, Ethereum is not just a currency, but an utility token used to pay for computations over the
  "decentralized world computer" (or "fully replicated programmable calculator"). However, Ethereum is not good as
- store-of-value, as emission in endless, and, historically, can be changed easily by the community core, as well as
+ store-of-value, as emission in endless, and, historically, can be changed easily by the community core along with
  critical system assumptions.
 
  Ergo combines best from these two top blockchains. Emission is predefined and limited, more, it will be finished within
  just 10 years. The system assumptions are set in stone with precisely defined {\em social contract}. \knote{link}. Also,
- Ergo is a utility token used to pay for storage rent. This storage rent is making system more stable. Also, Ergo is
+ Ergo is a utility token used to pay for storage rent. This storage rent is making system more stable. Last, Ergo is
  suitable to build monetary systems on top of it with properties different from Ergo native token itself. However,
  participating in such systems would require to use Ergo native token as well in order to pay storage rent.
 
@@ -47,23 +47,23 @@
  snapshot is written into a block header (thus, in order to have full security guarantees, a client needs to build
  the same snapshot as a miner).
 
- Ergo is representing the snapshot in form on one-time coins, like Bitcoin. The difference is, in addition to monetary
- value and protecting script, an Ergo coin contains additinal registers with arbitrary data (of certain types and within
- certain limits), thus we use term {\em box} instead of {\em coin}. Also, like in Ethereum, the ledger snapshot
- representation~(in form of boxes not destroyed by previous transactions) is fixed by the Ergo protocol.
+ Ergo is representing the snapshot in form of one-time coins, like Bitcoin. The difference is, in addition to monetary
+ value and protecting script, an Ergo coin contains additinal registers with arbitrary data, thus we use term {\em box}
+ instead of {\em coin}. Also, like in Ethereum, the ledger snapshot representation~(in form of boxes not destroyed by
+ previous transactions) is fixed by the Ergo protocol.
 
 \subsection{The Ergo As The Platform}
  \label{sec:platform}
 
  In our opinion, 99\% of public blockchain use-cases are about financial applications, even in the presence of a
- general-purpose decentralized world computer, such as Ethefeum Classic. For example, even if oracle is writing
- concrete data into a blockchain (such as temperature), this data is usually to be written to be used in a financial
+ general-purpose decentralized world computer, such as Ethefeum Classic. For example, even if an oracle is writing
+ non-financial data into a blockchain (such as temperature), this data is usually to be written to be used in a financial
  contract. Another trivial observation we have made, is that many applications are using digital tokens with mechanics
- different from a native token of a blockchain system.
+ different from a native token of a blockchain system~(especially application built on top of Ethereum).
 
  Thus Ergo offers for an application developer in-built tokens~(with minimal functionality per se, in comparison with
  Waves or Nxt), and domain-specific language for box guarding condition which is powerful enough to define rich
- financial applications. As this applications defined in the term of guarding scripts built into boxes also containing
+ financial applications. Thus Ergo applications are defined in terms of guarding scripts built into boxes also containing
  data possibly involved into execution. We coin the term {\em contractual money} for Ergs and secondary tokens which
  usage is bounded by a contract. In narrow sense, we can distinguish Ergs in existence as ones which could easily
  change their contracts from Ergs which are bounded by contracts in the sense that a box with contractual Ergs is
@@ -105,9 +105,11 @@
  than total amount for the token in transaction inputs~(thus some amount of token could be burnt). In contrast, for Ergs
  a preservation rule is strong, thus total Ergs amount for inputs should be equal to total Ergs amount for outputs.
 
-
 \subsection{An Oracle Example}
  \label{sec:platform}
+
+
+
 
 \subsection{A Mixing Example}
  \label{sec:platform}

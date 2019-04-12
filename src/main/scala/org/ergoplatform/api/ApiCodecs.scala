@@ -16,7 +16,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 import sigmastate.Values.{ErgoTree, EvaluatedValue, Value}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.serialization.ErgoTreeSerializer
+import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
 import sigmastate.{SBoolean, SType}
 import special.collection.Coll
 import sigmastate.eval._
@@ -96,26 +96,17 @@ trait ApiCodecs {
     decodeErgoTree(_.asInstanceOf[ErgoTree])
   }
 
-  // TODO catena: this should be removed (Value should not be used directly)
-  implicit val valueEncoder: Encoder[Value[SType]] = { value =>
-    ErgoTreeSerializer.DefaultSerializer.serializeWithSegregation(value).asJson
-  }
-
-  implicit val booleanValueEncoder: Encoder[Value[SBoolean.type]] = { value =>
-    valueEncoder(value)
-  }
-
-  implicit val booleanValueDecoder: Decoder[Value[SBoolean.type]] = {
-    valueDecoder(_.asInstanceOf[Value[SBoolean.type]])
+  implicit val evaluatedValueEncoder: Encoder[EvaluatedValue[SType]] = { value =>
+    ValueSerializer.serialize(value).asJson
   }
 
   implicit val evaluatedValueDecoder: Decoder[EvaluatedValue[SType]] = {
-    valueDecoder(_.asInstanceOf[EvaluatedValue[SType]])
+    decodeEvaluatedValue(_.asInstanceOf[EvaluatedValue[SType]])
   }
 
-  def valueDecoder[T](transform: Value[SType] => T): Decoder[T] = { implicit cursor: ACursor =>
+  def decodeEvaluatedValue[T](transform: EvaluatedValue[SType] => T): Decoder[T] = { implicit cursor: ACursor =>
     cursor.as[Array[Byte]] flatMap { bytes =>
-      fromThrows(transform(ErgoTreeSerializer.DefaultSerializer.deserialize(bytes)))
+      fromThrows(transform(ValueSerializer.deserialize(bytes).asInstanceOf[EvaluatedValue[SType]]))
     }
   }
 
@@ -143,7 +134,7 @@ trait ApiCodecs {
 
   implicit val registersEncoder: Encoder[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = {
     _.map { case (key, value) =>
-      registerIdEncoder(key) -> valueEncoder(value)
+      registerIdEncoder(key) -> evaluatedValueEncoder(value)
     }.asJson
   }
 

@@ -123,14 +123,24 @@
 
  In opposite to Ethereum with its long-lived accounts, where trusted oracle identifier is usually known in advance,
  delivering data with one-time boxes is more tricky. For starters, a box which is protected by an oracle's key could
- not be trusted, as anyone can create such a box. With custom tokens, however, a solution is pretty simple.
+ not be trusted, as anyone can create such a box. It is possible to include a signed data into a box, and check the
+ signature in the contract using the data, we have such an example, but this example is quite involved. With custom
+ tokens, however, a solution is pretty simple.
 
  In the first place, a token identifying the oracle should be issued. In the simplest case, amount for the token could
  be equal to one. Then the oracle is creating a box which contains the token and also temperature, for example, in the
- register number four~($R4$). 
+ register number four~($R4$). In order to update temperature, an oracle is destroying the outpdate box and creating a
+ new one with updated temperature.
 
+ Then, like in Ethereum, Alice and Bob usually know oracle's token identifier in advance. With this knowledge, they
+ can jointly create a box which requires first data input (which is read-only) to contain the oracle's token. The
+ contract is extracting temperature from the data input and decides who is getting the payout. The code is as simple as
 
-
+       val dataInput = CONTEXT.dataInputs(0)
+       val inReg = dataInput.R4[Long].get
+       val inToken = dataInput.tokens(0)._1 == tokenId
+       val okContractLogic = (inReg > 15L && pkA) || (inReg <= 15L && pkB)
+       inToken && okContractLogic
 
 \subsection{A Mixing Example}
  \label{sec:platform}

@@ -256,7 +256,7 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
 
   implicit private val extensionEncoder: Encoder[ContextExtension] = { extension =>
     extension.values.map { case (key, value) =>
-      key -> valueEncoder(value)
+      key -> evaluatedValueEncoder(value)
     }.asJson
   }
 

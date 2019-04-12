@@ -68,7 +68,15 @@
  usage is bounded by a contract. In narrow sense, we can distinguish Ergs in existence as ones which could easily
  change their contracts from Ergs which are bounded by contracts in the sense that a box with contractual Ergs is
  demanding from a spending transaction to create boxes with some properties. We will refer to the former as to ordinary
- (or cleared) Ergs, and to the latter as to the contractual Ergs. Similarly, we can define contractual tokens.
+ (or cleared, or free) Ergs, and to the latter as to the contractual Ergs. Similarly, we can define contractual tokens.
+
+ For example, if a box is protected just by a public key~(so providing a signature against a spending transaction is
+ enough in order to destroy the box), a public key owner may create an arbitrary box replacing the one being protected
+ by the public key, thus the Ergs within the box are free to change the contract. In contrast, imagine a box "B" which
+ is protected by combination of a public key and also condition which demands a spending transaction to create an output
+ box which guarding script hash is equal to "rBMUEMuPQUx3GzgFZSsHmLMBouLabNZ4HcERm4N" (in Base58 encoding), and Ergs
+ value of the output should equal to the value of the original box. In this case box value is bounded by the contract,
+ thus Ergs in the box are contractual Ergs.
 
 \subsection{Difference From Bitcoin}
 

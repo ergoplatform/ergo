@@ -136,11 +136,18 @@
  can jointly create a box which requires first data input (which is read-only) to contain the oracle's token. The
  contract is extracting temperature from the data input and decides who is getting the payout. The code is as simple as
 
-       val dataInput = CONTEXT.dataInputs(0)
-       val inReg = dataInput.R4[Long].get
-       val inToken = dataInput.tokens(0)._1 == tokenId
-       val okContractLogic = (inReg > 15L && pkA) || (inReg <= 15L && pkB)
-       inToken && okContractLogic
+
+ \begin{algorithm}[H]
+    \caption{Oracle Contract Example}
+    \label{alg:oracle}
+    \begin{algorithmic}[1]
+        \State val dataInput = CONTEXT.dataInputs(0)
+        \State val inReg = dataInput.R4[Long].get
+        \State val inToken = dataInput.tokens(0).\_1 == tokenId
+        \State val okContractLogic = (inReg $>$ 15L \&\& pkA) $||$ (inReg $<=$ 15L \&\& pkB)
+        \State inToken \&\& okContractLogic
+    \end{algorithmic}
+ \end{algorithm}
 
 \subsection{A Mixing Example}
  \label{sec:platform}

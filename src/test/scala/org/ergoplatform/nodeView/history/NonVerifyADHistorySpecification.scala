@@ -61,7 +61,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     val blocksBeforeRecalculate = epochLength + 1
 
     history = applyHeaderChain(history, genHeaderChain(blocksBeforeRecalculate, history))
-    history.requiredDifficultyAfter(history.bestHeaderOpt.get) shouldBe Constants.InitialDifficulty
+    history.requiredDifficultyAfter(history.bestHeaderOpt.get) shouldBe settings.chainSettings.initialDifficulty
   }
 
   property("lastHeaders() should return correct number of blocks") {

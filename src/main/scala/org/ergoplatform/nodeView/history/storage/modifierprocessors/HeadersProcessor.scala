@@ -36,8 +36,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   //Maximum time in future block header may contain
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
-  lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings.blockInterval,
-    chainSettings.useLastEpochs, chainSettings.epochLength)
+  lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings)
 
   def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
 
@@ -329,17 +328,14 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(header.height == parent.height + 1) {
           fatal(s"Header height ${header.height} is not greater by 1 than parents ${parent.height}")
         }
-        .validate(realDifficulty(header) >= header.requiredDifficulty) {
-          fatal(s"Block difficulty ${realDifficulty(header)} is less than required ${header.requiredDifficulty}")
+        .validateNoFailure(powScheme.validate(header)) { e =>
+          fatal(s"Wrong proof-of-work solution for $header: ${e.getMessage}")
         }
         .validateEquals(header.requiredDifficulty)(requiredDifficultyAfter(parent)) { detail =>
           fatal(s"Incorrect required difficulty. $detail")
         }
         .validate(heightOf(header.parentId).exists(h => fullBlockHeight - h < config.keepVersions)) {
           fatal(s"Trying to apply too old header at height ${heightOf(header.parentId)}")
-        }
-        .validate(powScheme.validate(header).isSuccess) {
-          fatal(s"Wrong proof-of-work solution for $header")
         }
         .validateSemantics(isSemanticallyValid(header.parentId)) {
           fatal("Parent header is marked as semantically invalid")

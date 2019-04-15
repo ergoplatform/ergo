@@ -163,6 +163,39 @@
      An external observer can coin spent by whom, as output boxes are indistinguishable.
  \end{enumerate}
 
+ For simplicity, we are not considering fees in the example. 
+
+ \begin{algorithm}[H]
+    \caption{Mixing Transaction Output Script}
+    \label{alg:oracle}
+    \begin{algorithmic}[1]
+        \State val c1 = OUTPUTS(0).R4[GroupElement].get
+        \State val c2 = OUTPUTS(0).R5[GroupElement].get
+        \State
+        \State OUTPUTS.size == 2 \&\&
+        \State OUTPUTS(0).value == SELF.value \&\&
+        \State OUTPUTS(1).value == SELF.value \&\&
+        \State blake2b256(OUTPUTS(0).propositionBytes) == fullMixScriptHash \&\&
+        \State blake2b256(OUTPUTS(1).propositionBytes) == fullMixScriptHash \&\&
+        \State OUTPUTS(1).R4[GroupElement].get == c2 \&\&
+        \State OUTPUTS(1).R5[GroupElement].get == c1 \&\& {
+        \State  proveDHTuple(g, gX, c1, c2) $||$
+        \State  proveDHTuple(g, gX, c2, c1)
+        \State }
+    \end{algorithmic}
+ \end{algorithm}
+
+ \begin{algorithm}[H]
+    \caption{Mixing Transaction Output Script}
+    \label{alg:oracle}
+    \begin{algorithmic}[1]
+        \State val c1 = SELF.R4[GroupElement].get
+        \State val c2 = SELF.R5[GroupElement].get
+        \State proveDlog(c2) $||$            // either c2 is $g^y$
+        \State proveDHTuple(g, c1, gX, c2) // or c2 is $u^y = g^{x \cdot y}$
+    \end{algorithmic}
+ \end{algorithm}
+
 
 \subsection{The Local Exchange Trading System}
  \label{sec:platform}

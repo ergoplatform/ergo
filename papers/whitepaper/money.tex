@@ -152,6 +152,18 @@
 \subsection{A Mixing Example}
  \label{sec:platform}
 
+ Privacy is important for a digital currency, but implementing it in a protocol could be costly or require a trusted
+ setup. Thus we are looking for ways to do coin mixing via cheap enough applications. As a first step towards that, we
+ offer an application for non-interactive coin mixing, which is working in the following case:
+ \begin{enumerate}
+    \item{} Alice creates a box which demands any Bob's coin to satisfy certain conditions in order to be mixed with
+    the coin of Alice. After that, Alice only listens to the blockchain, no any interaction with Bob is needed.
+    \item{} Bob is creating a box and then a spending transaction which has boxes of Alice and Bob as inputs,
+     and creates two outputs with the same script, but both Alice and Bob may spend only one box out of the two.
+     An external observer can coin spent by whom, as output boxes are indistinguishable.
+ \end{enumerate}
+
+
 \subsection{The Local Exchange Trading System}
  \label{sec:platform}
 

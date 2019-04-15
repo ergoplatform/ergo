@@ -163,10 +163,12 @@
      An external observer can coin spent by whom, as output boxes are indistinguishable.
  \end{enumerate}
 
- For simplicity, we are not considering fees in the example.
+ For simplicity, we are not considering fees in the example. The idea of mixing is similar to non-interactive
+ Diffie-Hellman key exchange. First, Alice creates a secret value $x$ and publishing a corresponding public value
+ $gX = g^x$. She demands 
 
  \begin{algorithm}[H]
-    \caption{Mixing Transaction Output Script}
+    \caption{Alice's Input Script}
     \label{alg:oracle}
     \begin{algorithmic}[1]
         \State val c1 = OUTPUTS(0).R4[GroupElement].get
@@ -216,4 +218,4 @@
 
 \subsection{More Examples}
 
-
+ We have more examples of Ergo applications.

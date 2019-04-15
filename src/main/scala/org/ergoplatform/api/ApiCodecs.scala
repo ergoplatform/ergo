@@ -148,10 +148,6 @@ trait ApiCodecs {
     )
   }
 
-//  implicit val byteCollEncoder: Encoder[Coll[Byte]] = _.toArray.asJson
-
-//  implicit val byteCollDecoder: Decoder[Coll[Byte]] = bytesDecoder(x => Colls.fromArray(x))
-
   implicit val boxEncoder: Encoder[ErgoBox] = { box =>
     Json.obj(
       "boxId" -> box.id.asJson,

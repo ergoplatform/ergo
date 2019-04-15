@@ -1,0 +1,25 @@
+.git/
+**/.gitignore
+**/.gitkeep
+**/.dockerignore
+
+# build helpers
+Makefile
+Dockerfile
+docker-compose.yml
+
+# other
+.idea/
+.ensime
+.vscode/
+.ivy2/
+.sbt/
+
+# ergo binary/cache
+/target/
+/ergo.jar
+/ergo/
+/.ergo/
+
+#
+README.md

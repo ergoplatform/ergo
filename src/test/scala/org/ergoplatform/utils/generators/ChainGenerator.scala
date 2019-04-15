@@ -63,7 +63,7 @@ trait ChainGenerator extends ErgoTestConstants {
     powScheme.prove(
       prev,
       Header.CurrentVersion,
-      Constants.InitialNBits,
+      settings.chainSettings.initialNBits,
       EmptyStateRoot,
       EmptyDigest32,
       EmptyDigest32,
@@ -81,14 +81,14 @@ trait ChainGenerator extends ErgoTestConstants {
 
   def genChain(height: Int,
                history: ErgoHistory,
-               nBits: Long = Constants.InitialNBits,
+               nBits: Long = settings.chainSettings.initialNBits,
                extension: ExtensionCandidate = defaultExtension): Seq[ErgoFullBlock] = {
     val prefix = history.bestFullBlockOpt
     blockStream(prefix, nBits, extension).take(height + prefix.size)
   }
 
   protected def blockStream(prefix: Option[ErgoFullBlock],
-                            nBits: Long = Constants.InitialNBits,
+                            nBits: Long = settings.chainSettings.initialNBits,
                             extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
@@ -106,7 +106,7 @@ trait ChainGenerator extends ErgoTestConstants {
   def nextBlock(prev: Option[ErgoFullBlock],
                 txs: Seq[ErgoTransaction],
                 extension: ExtensionCandidate,
-                nBits: Long = Constants.InitialNBits): ErgoFullBlock = {
+                nBits: Long = settings.chainSettings.initialNBits): ErgoFullBlock = {
     val interlinks = prev.toSeq.flatMap(x =>
       PoPowAlgos.updateInterlinks(x.header, PoPowAlgos.unpackInterlinks(x.extension.fields).get))
     val validExtension = extension.copy(fields = extension.fields ++ PoPowAlgos.packInterlinks(interlinks))

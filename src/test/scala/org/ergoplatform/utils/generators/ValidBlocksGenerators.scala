@@ -195,7 +195,7 @@ trait ValidBlocksGenerators
     val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(PoPowAlgos.packInterlinks(interlinks))
     val votes = Array.fill(3)(0: Byte)
 
-    powScheme.proveBlock(parentOpt.map(_.header), Header.CurrentVersion, Constants.InitialNBits, updStateDigest, adProofBytes,
+    powScheme.proveBlock(parentOpt.map(_.header), Header.CurrentVersion, settings.chainSettings.initialNBits, updStateDigest, adProofBytes,
       transactions, time, extension, votes, defaultMinerSecretNumber).get
   }
 
@@ -217,7 +217,7 @@ trait ValidBlocksGenerators
     val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(Seq.empty)
     val votes = Array.fill(3)(0: Byte)
 
-    powScheme.proveBlock(parentOpt, Header.CurrentVersion, Constants.InitialNBits, updStateDigest,
+    powScheme.proveBlock(parentOpt, Header.CurrentVersion, settings.chainSettings.initialNBits, updStateDigest,
       adProofBytes, transactions, time, extension, votes, defaultMinerSecretNumber).get
   }
 

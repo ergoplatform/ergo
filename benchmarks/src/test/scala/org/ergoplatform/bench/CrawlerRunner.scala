@@ -60,7 +60,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
     UtilsApiRoute(settings.restApi),
     PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
     InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
-    BlocksApiRoute(nodeViewHolderRef, readersHolderRef, minerRef, ergoSettings),
+    BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")

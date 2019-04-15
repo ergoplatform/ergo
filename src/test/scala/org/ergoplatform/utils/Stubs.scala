@@ -1,7 +1,9 @@
 package org.ergoplatform.utils
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import org.ergoplatform.local.ErgoMiner.{MiningStatusRequest, MiningStatusResponse}
+import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.local.ErgoMiner
+import org.ergoplatform.mining.{AutolykosSolution, ExternalCandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -25,7 +27,10 @@ import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
+import scorex.util.Random
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Success
 
@@ -61,8 +66,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   val blacklistedPeers: Seq[String] = Seq("4.4.4.4:1111", "8.8.8.8:2222")
 
+  val pk: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray(Random.randomBytes(32))).publicImage
+  val externalCandidateBlock = ExternalCandidateBlock(Array.fill(32)(2: Byte), BigInt(9999), pk)
+
   class PeersManagerStub extends Actor {
-    def receive: PartialFunction[Any, Unit] = {
+    def receive: Receive = {
       case GetAllPeers => sender() ! peers
       case GetBlacklistedPeers => sender() ! blacklistedPeers
     }
@@ -72,11 +80,10 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     def props(): Props = Props(new PeersManagerStub)
   }
 
-  val minerInfo = MiningStatusResponse(isMining = false, candidateBlock = None)
-
   class MinerStub extends Actor {
-    def receive: PartialFunction[Any, Unit] = {
-      case MiningStatusRequest => sender() ! minerInfo
+    def receive: Receive = {
+      case ErgoMiner.PrepareCandidate => sender() ! Future.successful(externalCandidateBlock)
+      case _: AutolykosSolution => sender() ! Future.successful(())
     }
   }
 
@@ -85,7 +92,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class NodeViewStub extends Actor {
-    def receive: PartialFunction[Any, Unit] = {
+    def receive:Receive = {
       case _ =>
     }
   }
@@ -95,7 +102,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class NetworkControllerStub extends Actor {
-    def receive: PartialFunction[Any, Unit] = {
+    def receive: Receive = {
       case GetConnectedPeers => sender() ! connectedPeers
       case _ =>
     }
@@ -106,7 +113,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class PeerManagerStub extends Actor {
-    def receive: PartialFunction[Any, Unit] = {
+    def receive: Receive = {
       case _ =>
     }
   }
@@ -180,7 +187,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, offlineGeneration = false, 200, 100000, 100000, 1.minute)
+      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
+      offlineGeneration = false, 200, 100000, 100000, 1.minute)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
@@ -200,7 +208,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     powScheme.prove(
       history.bestHeaderOpt,
       Header.CurrentVersion,
-      Constants.InitialNBits,
+      settings.chainSettings.initialNBits,
       ADDigest @@ Array.fill(HashLength + 1)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),

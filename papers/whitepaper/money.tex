@@ -163,7 +163,7 @@
      An external observer can coin spent by whom, as output boxes are indistinguishable.
  \end{enumerate}
 
- For simplicity, we are not considering fees in the example. 
+ For simplicity, we are not considering fees in the example.
 
  \begin{algorithm}[H]
     \caption{Mixing Transaction Output Script}
@@ -178,10 +178,10 @@
         \State blake2b256(OUTPUTS(0).propositionBytes) == fullMixScriptHash \&\&
         \State blake2b256(OUTPUTS(1).propositionBytes) == fullMixScriptHash \&\&
         \State OUTPUTS(1).R4[GroupElement].get == c2 \&\&
-        \State OUTPUTS(1).R5[GroupElement].get == c1 \&\& {
-        \State  proveDHTuple(g, gX, c1, c2) $||$
-        \State  proveDHTuple(g, gX, c2, c1)
-        \State }
+        \State OUTPUTS(1).R5[GroupElement].get == c1 \&\& \{
+        \State\hspace{\algorithmicindent}  proveDHTuple(g, gX, c1, c2) $||$
+        \State\hspace{\algorithmicindent}  proveDHTuple(g, gX, c2, c1)
+        \State \}
     \end{algorithmic}
  \end{algorithm}
 

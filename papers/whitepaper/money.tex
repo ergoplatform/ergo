@@ -164,12 +164,20 @@
  \end{enumerate}
 
  For simplicity, we are not considering fees in the example. The idea of mixing is similar to non-interactive
- Diffie-Hellman key exchange. First, Alice creates a secret value $x$ and publishing a corresponding public value
- $gX = g^x$. She demands 
+ Diffie-Hellman key exchange. First, Alice creates a secret value $x$~(a huge number) and publishing a corresponding
+ public value $gX = g^x$. She demands from Bob to generate a secret number $y$, and to include into each output two
+ values $c1$, $c2$, where one value is equal to $g^y$ and another is equal to $g^{x \cdot y}$. We assume that a Bob is using
+ a random coin to decide which of $\{c_1, c_2\}$ will a value. With no access to the secret information, an external
+ observer can not guess whether, for example, $c_1$ is about $g^y$ or $g^{x \cdot y}$, with probability above
+ $\frac{1}{2}$ (as a cryptographic primitive we are using has a certain property, namely, the hardness of
+ Diffie-Hellman decisional problem). To destroy an output box, a proof should be given that for $c_2$ whether $y$ is known,
+  such that $c_2 = g^y$, or $c_2 = g^{x \cdot y}$ has the same exponent $x$ against $c1 = g^y$ as $g^x$ against $g$.
+ The contract of the Alice's box is checking that $c1$ and $c2$ are well-formed. The code snippets for the Alice's coin and
+ a mixing transaction output are provided in Algorithm \ref{alg:alice} and Algorithm \ref{alg:mixing-out}, respectively.
 
  \begin{algorithm}[H]
     \caption{Alice's Input Script}
-    \label{alg:oracle}
+    \label{alg:alice}
     \begin{algorithmic}[1]
         \State val c1 = OUTPUTS(0).R4[GroupElement].get
         \State val c2 = OUTPUTS(0).R5[GroupElement].get
@@ -189,7 +197,7 @@
 
  \begin{algorithm}[H]
     \caption{Mixing Transaction Output Script}
-    \label{alg:oracle}
+    \label{alg:mixing-out}
     \begin{algorithmic}[1]
         \State val c1 = SELF.R4[GroupElement].get
         \State val c2 = SELF.R5[GroupElement].get
@@ -210,11 +218,11 @@
 
  As digital community could be vulnerable to sybil attacks, thus some mechanism is needed in order to prevent creation
  of sybils creating debts. We consider two solutions, namely, a committee of trusted managers approving new members of
- the community, or securitуy deposits made in Ergs. For simplicity, we consider the approach with the committee here.
+ the community, or securitу deposits made in Ergs. For simplicity, we consider the approach with the committee here.
 
  This example is about two interacting contracts then. In the first place, a management script is about maintaining a
- community members list, and a new member could be added if management condition (e.g. threshold signature from a
- committee) satisfied. In the second
+ community members list, and a new member could be added if management condition satisfied  (for example, a threshold
+ signature is provided) . In the second
 
 \subsection{More Examples}
 

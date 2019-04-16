@@ -77,12 +77,10 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
 
-
-
     val peerInfo = PeerInfo(defaultPeerSpec, timeProvider.time())
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(
-      inetSocketAddressGen.sample.get,
+      connectionIdGen.sample.get,
       pchProbe.ref,
       Some(peerInfo)
     )

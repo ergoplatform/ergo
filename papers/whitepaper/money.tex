@@ -210,19 +210,22 @@
 \subsection{The Local Exchange Trading System}
  \label{sec:platform}
 
- Here we briefly overview a local exchange trading system implementation. In such system, a member of a community may
- issue community currency via personal debt. For example, if Alice with zero balance is buying something for 5
- community tokens from Bob, which balance is about zero as well, her balance after the trade would be -5 tokens, and
- Bob's balance would be 5 tokens. Then Bob could buy something for 5 tokens, for example, from Carol. Usually, in such
- systems there is a limit for negative balance.
+ Here we briefly overview a local exchange trading system implementation. In such a system, a member of a community may
+ issue community currency via personal debt. For example, if Alice with zero balance is buying something for $5$
+ community tokens from Bob, which balance is about zero as well, her balance after the trade would be $-5$ tokens, and
+ Bob's balance would be $5$ tokens. Then Bob can buy something for his $5$ tokens, for example, from Carol.
+ Usually, in such systems there is a limit for negative balance (to avoid free-riding).
 
- As digital community could be vulnerable to sybil attacks, thus some mechanism is needed in order to prevent creation
- of sybils creating debts. We consider two solutions, namely, a committee of trusted managers approving new members of
- the community, or securitу deposits made in Ergs. For simplicity, we consider the approach with the committee here.
+ As digital community could be vulnerable to sybil attacks~(which allow to do free-riding again), thus some mechanism
+ is needed in order to prevent creation of sybils creating debts. We consider two solutions, namely, a committee of
+ trusted managers approving new members of the community, or securitу deposits made in Ergs. For simplicity, we
+ consider the approach with the committee here.
 
- This example is about two interacting contracts then. In the first place, a management script is about maintaining a
+ This example is about two interacting contracts then. A management contract is about maintaining a
  community members list, and a new member could be added if management condition satisfied  (for example, a threshold
- signature is provided) . In the second
+ signature is provided). A new member is associated with a box which contains a token identifying the member. The user
+ box is protected by a special exchange script which requiring to do a fair exchange only for a spending transaction.
+ We skip the corresponding code but it could be found in a separate article \knote{provide link}
 
 \subsection{More Examples}
 

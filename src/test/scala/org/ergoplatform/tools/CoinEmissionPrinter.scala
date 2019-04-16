@@ -7,7 +7,7 @@ import scala.annotation.tailrec
 
 object CoinEmissionPrinter extends App {
 
-  val emissionCurve = new EmissionRules(MonetarySettings(10080, 2160, 7500000000L, 300000000, 720, 750000000L))
+  val emissionCurve = new EmissionRules(MonetarySettings(525600, 64800, 75000000000L, 3000000000L, 720, 7500000000L))
   val blocksPerHour = 30
 
   //  // Number of coins issued after slow start period
@@ -35,17 +35,25 @@ object CoinEmissionPrinter extends App {
   println(TotalSupply / Constants.CoinsInOneErgo)
 
   println("================")
-  println("age (years), total coins, current rate")
+  println("age (years), foundation coins, coins total")
+  println("0, 0, 0")
 
   @tailrec
-  def loop(height: Int, supply: Long): Unit = if (height < emissionCurve.blocksTotal) {
-    val currentSupply = emissionCurve.emissionAtHeight(height)
-    assert(supply + currentSupply == emissionCurve.issuedCoinsAfterHeight(height),
-      s"$height: $supply == ${emissionCurve.issuedCoinsAfterHeight(height - 1)} => " +
-        s"${supply + currentSupply} == ${emissionCurve.issuedCoinsAfterHeight(height)}")
-    if (height % (blocksPerHour * 60) == 0) println(s"${height.toDouble / blocksPerYear}, ${supply / Constants.CoinsInOneErgo}, ${currentSupply.toDouble / Constants.CoinsInOneErgo}")
-    loop(height + 1, supply + currentSupply)
+  def loop(height: Int, totalMinersReward: Long, totalFoundationReward: Long): Unit = if (height <= emissionCurve.blocksTotal) {
+    val currentMinersReward = emissionCurve.minersRewardAtHeight(height)
+    val currentFoundationReward = emissionCurve.foundationRewardAtHeight(height)
+    val newTotalMinersReward = totalMinersReward + currentMinersReward
+    val newTotalFoundationReward = totalFoundationReward + currentFoundationReward
+
+    if (emissionCurve.foundationRewardAtHeight(height - 1) != currentFoundationReward ||
+      emissionCurve.minersRewardAtHeight(height - 1) != currentMinersReward ||
+      height == emissionCurve.blocksTotal) {
+      // rate changed, print points
+      val supply = newTotalMinersReward + newTotalFoundationReward
+      println(s"${height.toDouble / blocksPerYear}, ${newTotalFoundationReward / Constants.CoinsInOneErgo}, ${supply / Constants.CoinsInOneErgo}")
+    }
+    loop(height + 1, newTotalMinersReward, newTotalFoundationReward)
   }
 
-  loop(0, 0)
+  loop(1, 0, 0)
 }

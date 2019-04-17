@@ -17,7 +17,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.trueaccord.lenses" % "lenses_2.12" % "0.4.12",
   "com.typesafe" % "config" % "1.3.3",
   "com.typesafe" % "ssl-config-core_2.12" % "0.3.6",
-  "com.typesafe.akka" % "akka-actor_2.12" % "2.5.21",
+  "com.typesafe.akka" % "akka-actor_2.12" % "2.5.22",
   "com.typesafe.akka" % "akka-http-core_2.12" % "10.1.6",
   "com.typesafe.akka" % "akka-http_2.12" % "10.1.6",
   "com.typesafe.akka" % "akka-parsing_2.12" % "10.1.6",
@@ -63,7 +63,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scalacheck" % "scalacheck_2.12" % "1.13.5",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.15",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "1594a02c-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "b69e9dba-SNAPSHOT",
   "org.scorexfoundation" % "scorex-util_2.12" % "0.1.3",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.6",
   "org.scorexfoundation" % "sigma-api_2.12" % "master-2b4b07a1-SNAPSHOT",
@@ -83,4 +83,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 32ebddd3cf1247df26d339b64b37b4b3b60d798c
+// LIBRARY_DEPENDENCIES_HASH e965a18e15bbe1ce8dac3521e3d3f141010cbdcc

@@ -8,7 +8,7 @@
 The core component of any blockchain system is its consensus protocol.
 Despite extensive research of possible alternatives to the original Proof-of-Work (PoW) protocol
 with the longest chain rule,
-it remains in demand due to simplicity, high-security guarantees, and friendliness to light clients.
+is still in demand due to simplicity, high-security guarantees, and friendliness to light clients.
 However, a decade of extensive testing revealed several problems of the original one-CPU-one-vote idea.
 
 First known problem of PoW is that development of specialized hardware (ASIC) allows
@@ -20,13 +20,13 @@ to verify a solution than to find it~\cite{biryukov2017equihash,ethHash}.
 
 The second known threat to a PoW network decentralization is that even big miners trend to unite in
 mining pools, leading to a situation when just a few pool operators (5 in Bitcoin, 2 in Ethereum
-at the time of writing) controls more than 51\% of computational power.
+at the time of writing) control more than 51\% of computational power.
 Although the problem has already been discussed in the community, no practical solutions were
 implementer before \Ergo{}.
 
 
-Ergo PoW protocol --- Autolykos~\cite{Ergopow} --- is the first consensus protocol, that is both memory-hard
-and pool resistant.
+Ergo PoW protocol, Autolykos~\cite{Ergopow}, is the first consensus protocol, that is both memory-hard
+and pool-resistant.
 Autolykos is based on one list $k$-sum problem: miner should find
 $k=32$ elements from the pre-defined list $R$ of size $N=2^{26}$~(which have a size of 2 Gb),
 such that $\sum_{j \in J} r_{j} - sk = d$ is in the interval $\{-b,\dots,0,\dots,b\mod q\}$.
@@ -58,6 +58,8 @@ create a valid block.
     \end{algorithmic}
 \end{algorithm}
 
+\knote{no genIndexes details}
+
 Note that although the mining process utilizes private keys, the solution itself
 only contains public keys. Solution verification can be performed by Alg.~\ref{alg:verify}.
 
@@ -70,33 +72,35 @@ only contains public keys. Solution verification can be performed by Alg.~\ref{a
         \State require $pk,w\in \mathbb{G}$ and $pk,w \ne e$
         \Let{$J$}{$genIndexes(m||nonce)$}
         \Let{$f$}{$\sum_{j \in J} H(j||M||pk||m||w)$}
-        \State require $w^f = g^dpk$
+        \State require $w^f = g^d \cdot pk$
     \end{algorithmic}
 \end{algorithm}
 
 This approach prevents mining pool formation, as soon as a miner that found a correct solution
 can always try to steal the block reward as far as he knows the secret key $sk$. On the other hand,
-a single solution revealing is secure, as soon as it only operates with public keys and reveals only one
-linear relation between 2 secrets $sk,w$.
+it is secure to reveal a single solution, as soon as it only operates with public keys and reveals only one
+linear relation between 2 secrets $sk, w$.
 
-Memory-hardness follows from the fact, that algorithm~\ref{alg:prove} requires to keep
-the whole list $R$ during the main loop.
-Every list element occupies 32 bytes, so the whole list of $N$ elements
-occupies $N \cdot 32 = 2 Gb$ of memory.
+Memory-hardness follows from the fact that Algorithm~\ref{alg:prove} requires to keep
+the whole list $R$ during the main loop execution.
+Every list element takes 32 bytes, so the whole list of $N$ elements
+takes $N \cdot 32 = 2 Gb$ of memory.
 Miner can try to reduce memory requirements by calculating these elements ``on fly''
 without keeping them in memory, however, in such a case he'll need to calculate the same
 hash $H$ multiple~(for about $10^4$ for modern GPUs) times, reducing miner's efficiency and profit.
 
-List $R$ is also quite a big computation task: our initial implementation~\cite{ergoMiner}
-consumed ~25 seconds on Nvidia GTX 1070 to fill all $2^{26}$ elements of it.
-This part, however, may be optimized if miner also stores a list of unfinalized hashes $u_{i \in [0,N)}=H(i||M||pk$ in memory, consuming 5 more Gigabytes of it. In such a case this work to calculate unfinalized hashes should
+Calculating the list $R$ is also quite a heavy computational task: our initial implementation~\cite{ergoMiner}
+consumes ~25 seconds on Nvidia GTX 1070 to fill all the $2^{26}$ elements of the list.
+This part, however, may be optimized if a miner also stores a list of unfinalized hashes $u_{i \in [0,N)}=H(i||M||pk$
+in memory, consuming 5 more Gigabytes of it. In such a case, work to calculate unfinalized hashes should
 be done only once during mining initialization while finalizing them and filling the list $R$
-for the new header only consumes few milliseconds~(for about 50 ms on Nvidia GTX 1070).
+for the new header only consumes milliseconds~(about 50 ms on Nvidia GTX 1070).
 
 Target parameter $b$ is built-in into the puzzle itself, so the correct puzzle solution immediately
-leads to a new block generation. $b$ is adjusted to the current network hash rate via difficulty adjustment
+leads to a new block generation. \knote{What does the last sentence mean?}
+$b$ is adjusted to the current network hash rate via difficulty adjustment
 algorithm~\cite{meshkov2017short} to keep time interval between block close to 2 minutes.
 This algorithm is trying to predict the hash rate of an upcoming 1024 block length epoch
 based on data from the previous 8 epochs via well-known linear least squares method,
 to predict it better than the usual difficulty adjustment algorithm while also makes possible
-``coin-hopping'' attacks less profitable.
+``coin-hopping'' attacks less profitable. \knote{provide a link to the difficulty algo paper}

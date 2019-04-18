@@ -10,20 +10,21 @@ import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.utils.BoxUtils
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, ValidationResult}
+import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
 import scorex.crypto.authds.ADKey
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.Values.{ErgoTree, EvaluatedValue, Value}
+import sigmastate.SType
+import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
-import sigmastate.{SBoolean, SType}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
@@ -54,7 +55,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     with ErgoLikeTransactionTemplate[Input]
     with MempoolModifier
     with ErgoNodeViewModifier
-    with ModifierValidator
     with ScorexLogging {
 
   override val serializedId: Array[Byte] = Algos.hash(messageToSign)
@@ -92,7 +92,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * @return Success(Unit) if transaction is valid, Failure(e) if transaction is invalid, with respect to
     *         an error encapsulated in the exception "e".
     */
-  def statelessValidity: Try[Unit] = validateStateless.toTry
+  def statelessValidity()(implicit vs: ValidationSettings): Try[Unit] = validateStateless.toTry
 
   /**
     * Stateless transaction validation with result returned as `ValidationResult`
@@ -100,15 +100,15 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     *
     * @note Consensus-critical!
     */
-  def validateStateless: ValidationResult[Unit] = {
-    failFast
-      .demand(outputCandidates.nonEmpty, s"No outputs in transaction $this")
-      .demand(inputs.nonEmpty, s"No inputs in transaction $this")
-      .demand(inputs.size <= Short.MaxValue, s"Too many inputs in transaction $this")
-      .demand(outputCandidates.size <= Short.MaxValue, s"Too many outputCandidates in transaction $this")
-      .demand(outputCandidates.forall(_.value >= 0), s"Transaction has an output with negative amount $this")
-      .demandNoThrow(outputCandidates.map(_.value).reduce(Math.addExact(_, _)), s"Overflow in outputs in $this")
-      .demandSuccess(outAssetsTry, s"Asset rules violated $outAssetsTry in $this")
+  def validateStateless()(implicit vs: ValidationSettings): ValidationResult[Unit] = {
+    ModifierValidator(vs)
+      .validate(txNoInputs, inputs.nonEmpty, toString)
+      .validate(txNoOutputs, outputCandidates.nonEmpty, toString)
+      .validate(txManyInputs, inputs.size <= Short.MaxValue, toString)
+      .validate(txManyOutputs, outputCandidates.size <= Short.MaxValue, toString)
+      .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), toString)
+      .validate(txOutputsOverflow, Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _))).isSuccess, toString)
+      .validate(txAssetRules, outAssetsTry.isSuccess, s"$outAssetsTry in $this")
       .result
   }
 
@@ -121,18 +121,18 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * To make full transaction validation, use (tx.statelessValidity && tx.statefulValidity(...))
     *
     * @note Consensus-critical!
-    *
-    * @param boxesToSpend - boxes the transaction spends (via inputs)
-    * @param dataBoxes - boxes the transaction only reads (via data inputs)
-    * @param stateContext - blockchain context at the moment of validation
+    * @param boxesToSpend    - boxes the transaction spends (via inputs)
+    * @param dataBoxes       - boxes the transaction only reads (via data inputs)
+    * @param stateContext    - blockchain context at the moment of validation
     * @param accumulatedCost - computational cost before validation, validation starts with this value
-    * @param verifier - interpreter used to check spending correctness for transaction inputs
+    * @param verifier        - interpreter used to check spending correctness for transaction inputs
     * @return total computation cost
     */
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
-                       accumulatedCost: Long = 0L)(implicit verifier: ErgoInterpreter): Try[Long] = {
+                       accumulatedCost: Long = 0L)
+                      (implicit verifier: ErgoInterpreter, vs: ValidationSettings): Try[Long] = {
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
@@ -145,82 +145,80 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     // Maximum transaction cost the validation procedure could tolerate
     val maxCost = verifier.maxCost - accumulatedCost
 
-    failFast
+    ModifierValidator(vs)
       // Check that the transaction is not too big
-      .demand(initialCost < maxCost, s"Spam transaction detected: $this")
+      .validate(txCost, initialCost < maxCost, s"Initial cost of $this")
       // Starting validation
       .payload(initialCost)
       // Perform cheap checks first
       // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) =>
-        validationState
-          .demand(out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"Transaction is trying to create dust: $this")
-          .demand(out.creationHeight <= stateContext.currentHeight, s"Box created in future:  ${outputCandidates.map(_.creationHeight)} validationState ${stateContext.currentHeight}")
-      }
+      validationState
+        .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"output: $out")
+        .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s"output: $out")
+    }
       // Just to be sure, check that all the input boxes to spend (and to read) are presented.
       // Normally, this check should always pass, if the client is implemented properly
       // so it is not part of the protocol really.
-      .demand(boxesToSpend.size == inputs.size, s"boxesToSpend.size ${boxesToSpend.size} != inputs.size ${inputs.size}")
-      .demand(dataBoxes.size == dataInputs.size, s"dataBoxes.size ${dataBoxes.size} != dataInputs.size ${dataInputs.size}")
+      .validate(txBoxesToSpend, boxesToSpend.size == inputs.size, s"${boxesToSpend.size} != ${inputs.size}")
+      .validate(txDataBoxes, dataBoxes.size == dataInputs.size, s"${dataBoxes.size} != ${dataInputs.size}")
       // Check that there are no overflow in input and output values
-      .demandSuccess(inputSum, s"Overflow in inputs in $this")
-      .demandSuccess(outputSum, s"Overflow in outputs in $this")
+      .validate(txInputsSum, inputSum.isSuccess, this.toString)
+      .validate(txOutputSum, outputSum.isSuccess, this.toString)
       // Check that transaction is not creating money out of thin air.
-      .demand(inputSum == outputSum, s"Ergo token preservation is broken in $this")
+      .validate(txErgPreservation, inputSum == outputSum, s"Ergo token preservation is broken in $this")
       // Check that there are no more than 255 assets per box,
       // and amount for each asset, its amount in a box is positive
-      .demandTry(outAssetsTry, outAssetsTry.toString) { case (validation, (outAssets, outAssetsNum)) =>
-        extractAssets(boxesToSpend) match {
-          case Success((inAssets, inAssetsNum)) =>
-            lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
-            val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
-            val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
-              (inAssets.size + outAssets.size) * tokenAccessCost
+      .validateTry(outAssetsTry, e => ModifierValidator.fatal("???", e)) { case (validation, (outAssets, outAssetsNum)) =>
+      extractAssets(boxesToSpend) match {
+        case Success((inAssets, inAssetsNum)) =>
+          lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
+          val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
+          val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
+            (inAssets.size + outAssets.size) * tokenAccessCost
 
-            validation
-              // Check that transaction is not too costly considering all the assets
-              .demand(initialCost + totalAssetsAccessCost < maxCost, s"Spam transaction (w. assets) detected: $this")
-              .validateSeq(outAssets) {
-                case (validationState, (outAssetId, outAmount)) =>
-                  val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
+          validation
+            // Check that transaction is not too costly considering all the assets
+            .validate(txCost, initialCost + totalAssetsAccessCost < maxCost, s"assets cost of $this")
+            .validateSeq(outAssets) {
+              case (validationState, (outAssetId, outAmount)) =>
+                val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
 
-                  // Check that for each asset output amount is no more than input amount,
-                  // with a possible exception for a new asset created by the transaction
-                  validationState.validate(inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0)) {
-                    fatal(s"Assets preservation rule is broken in $this. " +
-                      s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
-                  }
-              }
-              .map(_ + totalAssetsAccessCost)
-          case Failure(e) => fatal(e.getMessage)
-        }
+                // Check that for each asset output amount is no more than input amount,
+                // with a possible exception for a new asset created by the transaction
+                validationState.validate(txAssetsPreservation,
+                  inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0),
+                  s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
+            }
+            .map(_ + totalAssetsAccessCost)
+        case Failure(e) => ModifierValidator.fatal(e.getMessage)
       }
+    }
       // Check inputs, the most expensive check usually, so done last.
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
-        val input = inputs(idx)
-        val proof = input.spendingProof
-        val proverExtension = proof.extension
-        val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
-        val ctx = new ErgoContext(stateContext, transactionContext, proverExtension)
 
-        val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
-        costTry.recover { case t => t.printStackTrace() }
+      val input = inputs(idx)
+      val proof = input.spendingProof
+      val proverExtension = proof.extension
+      val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
+      val ctx = new ErgoContext(stateContext, transactionContext, proverExtension)
 
-        lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
+      val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
+      costTry.recover { case t => t.printStackTrace() }
 
-        val currentTxCost = validation.result.payload.get
+      lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
 
-        validation
-          // Just in case, should always be true if client implementation is correct.
-          .demandEqualArrays(box.id, input.boxId, "Box id doesn't match input")
-          // Check whether input box script interpreter raised exception
-          .demandSuccess(costTry, s"Transaction validation failed on input #$idx: $this")
-          // Check that script verification results in "true" value
-          .demand(isCostValid, s"Input script verification failed for input #$idx ($box) of tx $this: $costTry")
-          // Check that cost of the transaction after checking the input becomes too big
-          .demand(currentTxCost + scriptCost <= maxCost, s"Too costly transaction after input #$idx: $this")
-          .map(_ + scriptCost)
-      }.toTry
+      val currentTxCost = validation.result.payload.get
+
+      validation
+        // Just in case, should always be true if client implementation is correct.
+        .validateEquals(txBoxToSpend, box.id, input.boxId)
+        // Check whether input box script interpreter raised exception
+        .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"#$idx: $costTry")
+        // Check that cost of the transaction after checking the input becomes too big
+        .validate(txCost, currentTxCost + scriptCost <= maxCost, s"cost exceeds limit after input #$idx: $this")
+        .map(_ + scriptCost)
+    }.toTry
   }
 
   override type M = ErgoTransaction
@@ -245,7 +243,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
 }
 
-object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLogging with ScorexEncoding {
+object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding {
 
   def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction = {
     ErgoTransaction(inputs, IndexedSeq(), outputCandidates, None)
@@ -325,38 +323,14 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
 
   implicit val transactionDecoder: Decoder[ErgoTransaction] = { implicit cursor =>
     for {
-      maybeId <- cursor.downField("id").as[Option[ModifierId]]
       inputs <- cursor.downField("inputs").as[IndexedSeq[Input]]
       dataInputs <- cursor.downField("dataInputs").as[IndexedSeq[DataInput]]
       outputsWithIndex <- cursor.downField("outputs").as[IndexedSeq[(ErgoBoxCandidate, Option[BoxId])]]
-      outputs <- validateOutputs(outputsWithIndex, maybeId)
-      result <- validateTransaction(ErgoTransaction(inputs, dataInputs, outputs), maybeId)
+      outputs: IndexedSeq[ErgoBoxCandidate] <- outputsWithIndex.map(_._1)
+      result <- new ErgoTransaction(inputs, dataInputs, outputs)
     } yield result
   }
 
-  def validateTransaction(tx: ErgoTransaction, txId: Option[ModifierId])
-                         (implicit cursor: ACursor): Decoder.Result[ErgoTransaction] = {
-    accumulateErrors
-      .validateOrSkip(txId) { (validation, id) =>
-        validation.demandEqualIds(id, tx.id, "Bad identifier for Ergo transaction. It could also be skipped")
-      }
-      .validate(tx.validateStateless)
-      .result(tx)
-      .toDecoderResult
-  }
-
-  def validateOutputs(outputs: IndexedSeq[(ErgoBoxCandidate, Option[BoxId])], maybeTxId: Option[ModifierId])
-                     (implicit cursor: ACursor): Decoder.Result[IndexedSeq[ErgoBoxCandidate]] = {
-    accumulateErrors.validateOrSkip(maybeTxId) { (validation, txId) =>
-      validation.validateSeq(outputs.zipWithIndex) {
-        case (validationState, ((candidate, maybeId), index)) =>
-          validationState.validateOrSkip(maybeId) { (validation, boxId) =>
-            val box = candidate.toBox(txId, index.toShort)
-            validation.demandEqualArrays(boxId, box.id, s"Bad identifier for Ergo box. It could also be skipped")
-          }
-      }
-    }.result(outputs.map(_._1)).toDecoderResult
-  }
 }
 
 object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {

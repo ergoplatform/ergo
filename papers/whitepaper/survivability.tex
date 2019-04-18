@@ -60,29 +60,29 @@ Third, by collecting storage fees from outdated boxes, miners return coins to ci
 of circulating supply due to lost keys~\cite{wsj2018}.
 All these effects should support Ergo long-term survivability, both technically and economically.
 
-Another vital aspect of survivability is that the environment changes and a network should
-adapt to changing hardware infrastructure, appearing ideas that may improve security or
-scalability, arising use-cases and so on.
+Another vital aspect of survivability is that the environment changes, so the network should
+adapt to ever changing hardware infrastructure, ideas that may improve security or
+scalability emerge over time, use-cases evolution, and so on.
 If all the rules are fixed without any ability to change them in a decentralized manner, even
-simple constant change may lead to huge debates and community split, e.g., discussion of a block
+simple constant change may lead to hot debates and community splits, e.g., discussion of a block
 size limit in Bitcoin led to the network split into several independent coins.
 In contrast, Ergo protocol is self-amendable and is able to adapt to the changing environment.
-In Ergo parameters like block size can be changed on-the-fly via miners voting.
-At the beginning of a 1024 blocks length voting epoch miner is proposing changes~(up to 2 parameters,
+In Ergo, parameters like block size can be changed on-the-fly via miners voting.
+At the beginning of a 1024-blocks voting epoch a miner is proposing changes~(up to 2 parameters,
 e.g., to increase block size and to decrease storage fee factor) and during the rest of the epoch miners
-vote whether to approve these changes or not.
-If the majority of votes within an epoch are supporting some~(or both) of these changes, a new value of
-the parameter should be written into the extension section of the first block of the next epoch and
+vote to whether approve the changes or not.
+If the majority of votes within an epoch are supporting a change, a new value of
+the parameter should be written into the extension section of the first block of the next epoch, and
 the network starts to use this update parameter value during block mining and validation.
 
-To absorb more fundamental changes, Ergo is following the approach of soft-forkability, that
-allows to change protocol significantly but keeping old nodes operating.
+To absorb more fundamental changes, Ergo is following the approach of soft-forkability that
+allows to change protocol significantly with keeping old nodes operating.
 At the beginning of an epoch, a miner can also propose to vote for a fundamental change~(e.g., to add a new instruction to ErgoScript), describing affected validation rules.
-Voting for such breaking changes continues for 32768 blocks and requires at least $90\%$ of
+Voting for such breaking changes continues for 32,768 blocks and requires for at least $90\%$ of
 "Yes" votes to be accepted.
-Once being accepted, 32768 blocks length activation period started to give time to outdated
-nodes to update their software version.
-If a node is still not updated after the activation period, it skips the specified checks,
-however, continues to validate all the known rules.
+Once being accepted, 32,768 blocks long activation period starts to give outdated
+nodes time to update their software version.
+If a node software is still not updated after the activation period, then it skips the specified checks, but continues
+to validate all the known rules.
 List of previous soft-fork changes is recorded into the extension to allow light nodes of
-any software version to join the network and read current validation rules.
+any software version to join the network and catch up current validation rules.

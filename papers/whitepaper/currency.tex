@@ -4,68 +4,68 @@
 % подробная информация об эмиссии, скрипту эмиссии, и всему-всему что нужно для фаундейшена
 
 The native currency of \Ergo{} platform is \Erg{} token, which unique property is
-that it is the only currency to pay storage rent in \Ergo{}~(see~\ref{sec:survivability} for more details).
-One \Erg{} token is divisible to up to $10^9$ parts labeled as \nanoErg{}.
+that it is the only currency to pay for storage rent in \Ergo{}~(see Section~\ref{sec:survivability} for more details).
+One \Erg{} token is divisible to up to $10^9$ smallest units, \nanoErg{}s.
 
 All \Erg{} tokens that will ever circulate in the system are presented in
 the initial state and are divided into 3 parts~(boxes):
 
+\knote{no any notion of a box was introduced before, the introduction is sudden}
+
 \begin{itemize}
-    \item{\em No premine proof.} This box contains exactly one~\Erg{} and is protected by the script,
+    \item{\em No premine proof.} This box contains exactly one~\Erg{} and is protected by the script
     that is preventing it from spending by anyone.
-    Thus, it is a long-living box, that will live in the system until storage-rent component will
-    destroy it.
-    Its main purpose is to prove, that \Ergo{} mining was not started privately by anyone before
+    Thus, it is a long-lived box that will stay in the system until storage-rent component
+    destroys it.
+    Its main purpose is to prove that \Ergo{} mining was not started privately by anyone before
     the declared launch date.
-    To achieve this, additional registers of this box contains news from media (Guardian, Xinhua, Vedomosti)
-    and block ids from already established cryptocurrencies (Bitcoin and Ethereum).
-    Thus, \Ergo{} mining could not be started before certain events in the real world and in
+    To achieve this, additional registers of this box contains latest titles from media (The Guardian, Vedomosti, Xinhua)
+    as well as latest block identifiers from Bitcoin and Ethereum.
+    Thus, \Ergo{} mining could not be started before certain events in the real world and the
     cryptocurrency space.
 
-    \item{\em Treasury.} This box contain 4330791.5 \Erg{} that will be used to fund \Ergo{}
+    \item{\em Treasury.} This box contain 4,330,791.5 \Erg{} that will be used to fund \Ergo{}
     development.
     Its protecting script~\cite{link to corresponding ergo tree} consists of two parts.
 
-    First, it ensures, that only a predefined portion of the box value was unlocked.
-    During blocks 1-525599 (2 years) 7.5 \Erg{} will be released every block,
-    during blocks 525600-590399 (3 month) 4.5 \Erg{} will be released every block and finally
-    during blocks 590400-655199 (3 month) 1.5 \Erg{} will be released every block.
-    This rule ensures the presence of funds for \Ergo{} development for at least 2.5 years and
-    prevents an excessive wealth concentration under control of a small group of people, as soon
-    as at any point of time, it won't exceed 10\% of the total number of coins in circulation.
+    First, it ensures that only a predefined portion of the box value is unlocked.
+    During blocks 1-525,599 (2 years) 7.5 \Erg{} will be released every block,
+    during blocks 525,600-590,399 (3 months) 4.5 \Erg{} will be released every block, and finally,
+    during blocks 590,400-655,199 (3 months) 1.5 \Erg{} will be released every block.
+    This rule ensures the presence of funds for \Ergo{} development for at least 2.5 years and, at any moment of time,
+    rewards do not exceed 10\% of the total number of coins in circulation.
 
     Second, it has custom protection from unexpected spending.
-    Initially, it requires that spending transaction should be signed by at least 2 of 3 secret keys,
-    that are under control of initial team members. When they spend this box, they are free to
+    Initially, it requires that spending transaction should be signed by at least 2 of 3 secret keys
+    that are under control of initial team members. When they spend the box, they are free to
     change this part of the script as they wish, for example by adding new members to protect foundation
-    funds or switching to threshold by special token ownership~\cite{link to ...}.
+    funds, or switching to threshold by special token ownership~\cite{link to ...}.
 
     During the first year, these funds are going to be used to cover pre-issued EFYT token~\cite{our website},
     after that, they will be distributed in a decentralized manner via community voting.
 
 
-    \item{\em Miners reward.} This box contains 93409132 \Erg{} that will be collected by block miners
-    as a reward for their work.
-    Its protecting script~\cite{link to corresponding ergo tree} requires, that spending transaction
-    have exactly two outputs with the following properties:
+    \item{\em Miners reward.} This box contains 93,409,132 \Erg{} that will be collected by block miners
+    as rewards for their work.
+    Its protecting script~\cite{link to corresponding ergo tree} requires that spending transaction
+    should have exactly two outputs with the following properties:
 
-
-    The first output should be protected by the same script and number of \Erg{} in it should
+    \begin{itemize}
+    \item{} the first output should be protected by the same script and number of \Erg{} in it should
     equal to the remaining miners' reward.
-    During blocks 1 - 525599 (2 years) miner will be able to collect 67.5 \Erg{} from this box,
-    during blocks 525600 - 590399 (3 month) miner will be able to collect 66 \Erg{} and after
-    that block reward will be reduced for 3 \Erg{} every 64800 blocks (3 months) until it will reach zero
-    at block 2080799.
+    During blocks 1 - 525,599 (2 years) miner will be able to collect 67.5 \Erg{} from this box,
+    during blocks 525,600 - 590,399 (3 month) miner will be able to collect 66 \Erg{} and after
+    that block reward will be reduced by 3 \Erg{} every 64,800 blocks (3 months) until it reaches zero
+    at block 2,080,799.
 
-    The second output should contain the remaining coins and should be protected by the following condition:
-    it can be spent by the exact miner, that solved the PoW puzzle not earlier than 720 blocks after the current block.
-    These restrictions are done to prevent mining pools formation, see~\ref{sec:autolykos} for more details.
-
-
+    \item{} the second output should contain the remaining coins and should be protected by the following condition:
+    it can be spent by a miner that solved the block's PoW puzzle and not earlier than 720 blocks after the current block.
+    % These restrictions are done to prevent mining pools formation, see~\ref{sec:autolykos} for more details.
+    \end{itemize}
 
 \end{itemize}
 
-All these rules results in the following curve of the efficient number of coins in circulation with time:
+All these rules results in the following curve of the number of coins in circulation with time:
 
 \begin{figure}[H]
     \centering

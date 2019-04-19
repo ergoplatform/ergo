@@ -7,6 +7,8 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.nodeView.ErgoInterpreter
+import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
@@ -15,7 +17,7 @@ import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, Parameters}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, ValidationResult}
+import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
 import scorex.util._
 
 import scala.annotation.tailrec
@@ -266,9 +268,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     }
   }
 
-  class HeaderValidator extends ModifierValidator with ScorexEncoding {
+  class HeaderValidator extends ScorexEncoding {
 
-    def validate(header: Header): ValidationResult[Unit] = {
+    def validate(header: Header)(implicit vs: ValidationSettings): ValidationResult[Unit] = {
       if (header.isGenesis) {
         validateGenesisBlockHeader(header)
       } else {
@@ -276,7 +278,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         parentOpt map { parent =>
           validateChildBlockHeader(header, parent)
         } getOrElse {
-          error(s"Parent header with id ${Algos.encode(header.parentId)} is not defined")
+          ModifierValidator(vs).validate(hdrParent, false, Algos.encode(header.parentId))
         }
       }
     }
@@ -299,54 +301,29 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       }
     }
 
-    private def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
-      accumulateErrors
-        .validateEqualIds(header.parentId, Header.GenesisParentId) { detail =>
-          fatal(s"Genesis block should have genesis parent id. $detail")
-        }
-        .validate(chainSettings.genesisId.forall {
-          _ == Algos.encode(header.id)
-        }) {
-          fatal(s"Expected genesis block id is ${chainSettings.genesisId.getOrElse("")}," +
-            s" got genesis block with id ${Algos.encode(header.id)}")
-        }
-        .validate(bestHeaderIdOpt.isEmpty) {
-          fatal("Trying to append genesis block to non-empty history")
-        }
-        .validate(header.height == GenesisHeight) {
-          fatal(s"Height of genesis block $header is incorrect")
-        }
-        .demandNoThrow(checkVotes(header), "Incorrect votes")
+    private def validateGenesisBlockHeader(header: Header)
+                                          (implicit vs: ValidationSettings): ValidationResult[Unit] = {
+      ModifierValidator(vs)
+        .validateEqualIds(hdrGenesisParent, header.parentId, Header.GenesisParentId)
+        .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, _ == header.id)
+        .validate(hdrGenesisNonEmpty, bestHeaderIdOpt.isEmpty)
+        .validate(hdrGenesisHeight, header.height == GenesisHeight, header.toString)
+        .validateNoThrow(hdrVotes ,checkVotes(header))
         .result
     }
 
-    private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] = {
-      failFast
-        .validate(header.timestamp > parent.timestamp) {
-          fatal(s"Header timestamp ${header.timestamp} is not greater than parents ${parent.timestamp}")
-        }
-        .validate(header.height == parent.height + 1) {
-          fatal(s"Header height ${header.height} is not greater by 1 than parents ${parent.height}")
-        }
-        .validateNoFailure(powScheme.validate(header)) { e =>
-          fatal(s"Wrong proof-of-work solution for $header: ${e.getMessage}")
-        }
-        .validateEquals(header.requiredDifficulty)(requiredDifficultyAfter(parent)) { detail =>
-          fatal(s"Incorrect required difficulty. $detail")
-        }
-        .validate(heightOf(header.parentId).exists(h => fullBlockHeight - h < config.keepVersions)) {
-          fatal(s"Trying to apply too old header at height ${heightOf(header.parentId)}")
-        }
-        .validateSemantics(isSemanticallyValid(header.parentId)) {
-          fatal("Parent header is marked as semantically invalid")
-        }
-        .validate(header.timestamp - timeProvider.time() <= MaxTimeDrift) {
-          error(s"Header timestamp ${header.timestamp} is too far in future from now ${timeProvider.time()}")
-        }
-        .validateNot(historyStorage.contains(header.id)) {
-          error(s"Header ${header.id} is already in history")
-        }
-        .demandNoThrow(checkVotes(header), "Incorrect votes")
+    private def validateChildBlockHeader(header: Header, parent: Header)
+                                        (implicit vs: ValidationSettings): ValidationResult[Unit] = {
+      ModifierValidator(vs)
+        .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, s"${header.timestamp} > ${parent.timestamp}")
+        .validate(hdrHeight, header.height == parent.height + 1, s"${header.height} vs ${parent.height}")
+        .validateNoFailure(hdrPoW, powScheme.validate(header))
+        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent))
+        .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < config.keepVersions), heightOf(header.parentId).toString)
+        .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
+        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
+        .validateNot(hdrAlreadyApplied, historyStorage.contains(header.id), header.id.toString)
+        .validateNoThrow(hdrVotes ,checkVotes(header))
         .result
     }
 

@@ -3,9 +3,10 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.ValidationRules._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, RecoverableModifierError, ValidationResult, ValidationState}
+import scorex.core.validation.{ModifierValidator, _}
 import scorex.util.{ModifierId, bytesToId}
 
 import scala.reflect.ClassTag
@@ -16,6 +17,10 @@ import scala.util.{Failure, Try}
   * downloads and process full blocks.
   */
 trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProcessor {
+
+  protected def vs: ValidationSettings
+
+  private def validationState: ValidationState[Unit] = ModifierValidator(vs)
 
   /**
     * Process block section.
@@ -39,9 +44,11 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
   }
 
   override protected def validate(m: BlockSection): Try[Unit] = {
-    typedModifierById[Header](m.headerId).map { header =>
-      PayloadValidator.validate(m, header).toTry
-    }.getOrElse(Failure(new RecoverableModifierError(s"Header for modifier $m is not defined")))
+    typedModifierById[Header](m.headerId) map { header =>
+      new PayloadValidator(validationState).validate(m, header).toTry
+    } getOrElse {
+      validationState.validate(bsNoHeader, condition = false, Algos.encode(m.id)).result.toTry
+    }
   }
 
   /**
@@ -77,28 +84,17 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
   }
 
   /**
-    * Validator for BlockTransactions and ADProofs
+    * Validator for BlockTransactions, ADProofs and Extension
     */
-  object PayloadValidator extends ModifierValidator with ScorexEncoding {
+  class PayloadValidator(validator: ValidationState[Unit]) extends ScorexEncoding {
 
     def validate(m: BlockSection, header: Header): ValidationResult[Unit] = {
       modifierSpecificValidation(m, header)
-        .validate(header.isCorrespondingModifier(m)) {
-          fatal(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}")
-        }
-        .validateSemantics(isSemanticallyValid(header.id)) {
-          fatal(s"Header ${header.encodedId} for modifier ${m.encodedId} is semantically invalid")
-        }
-        .validate(isHeadersChainSynced) {
-          error("Headers chain is not synced yet")
-        }
-        .validate(isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
-          fatal(s"Too old modifier ${m.encodedId}: " +
-            s"${header.height} < ${pruningProcessor.minimalFullBlockHeight}")
-        }
-        .validate(!historyStorage.contains(m.id)) {
-          error(s"Modifier ${m.encodedId} is already in history")
-        }
+        .validate(alreadyApplied,!historyStorage.contains(m.id), s"${m.encodedId}")
+        .validate(bsCorrespondsToHeader, header.isCorrespondingModifier(m), s"header=${header.encodedId}, id=${m.encodedId}")
+        .validateSemantics(bsHeaderValid, isSemanticallyValid(header.id), s"header=${header.encodedId}, id=${m.encodedId}")
+        .validate(bsHeadersChainSynced, isHeadersChainSynced)
+        .validate(bsTooOld, isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height), s"header=${header.encodedId}, id=${m.encodedId}")
         .result
     }
 
@@ -155,6 +151,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
       m match {
         case extension: Extension =>
           validateExtension(extension, header)
+        case p: ADProofs =>
         case _ =>
           failFast
       }

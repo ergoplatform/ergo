@@ -17,7 +17,7 @@ import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, Parameters}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
+import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings, ValidationState}
 import scorex.util._
 
 import scala.annotation.tailrec
@@ -268,9 +268,11 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     }
   }
 
-  class HeaderValidator extends ScorexEncoding {
+  class HeaderValidator(vs: ValidationSettings) extends ScorexEncoding {
 
-    def validate(header: Header)(implicit vs: ValidationSettings): ValidationResult[Unit] = {
+    private val validationState: ValidationState[Unit] = ModifierValidator(vs)
+
+    def validate(header: Header): ValidationResult[Unit] = {
       if (header.isGenesis) {
         validateGenesisBlockHeader(header)
       } else {
@@ -278,7 +280,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         parentOpt map { parent =>
           validateChildBlockHeader(header, parent)
         } getOrElse {
-          ModifierValidator(vs).validate(hdrParent, false, Algos.encode(header.parentId))
+          validationState.validate(hdrParent, condition = false, Algos.encode(header.parentId))
         }
       }
     }
@@ -301,20 +303,18 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       }
     }
 
-    private def validateGenesisBlockHeader(header: Header)
-                                          (implicit vs: ValidationSettings): ValidationResult[Unit] = {
-      ModifierValidator(vs)
+    private def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
+      validationState
         .validateEqualIds(hdrGenesisParent, header.parentId, Header.GenesisParentId)
         .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, _ == header.id)
         .validate(hdrGenesisNonEmpty, bestHeaderIdOpt.isEmpty)
         .validate(hdrGenesisHeight, header.height == GenesisHeight, header.toString)
-        .validateNoThrow(hdrVotes ,checkVotes(header))
+        .validateNoThrow(hdrVotes, checkVotes(header))
         .result
     }
 
-    private def validateChildBlockHeader(header: Header, parent: Header)
-                                        (implicit vs: ValidationSettings): ValidationResult[Unit] = {
-      ModifierValidator(vs)
+    private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] = {
+      validationState
         .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, s"${header.timestamp} > ${parent.timestamp}")
         .validate(hdrHeight, header.height == parent.height + 1, s"${header.height} vs ${parent.height}")
         .validateNoFailure(hdrPoW, powScheme.validate(header))
@@ -322,8 +322,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < config.keepVersions), heightOf(header.parentId).toString)
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
-        .validateNot(hdrAlreadyApplied, historyStorage.contains(header.id), header.id.toString)
-        .validateNoThrow(hdrVotes ,checkVotes(header))
+        .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
+        .validateNoThrow(hdrVotes, checkVotes(header))
         .result
     }
 

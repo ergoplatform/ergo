@@ -18,6 +18,7 @@ import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.core.app.Version
 import scorex.core.network.{Handshake, PeerSpec}
@@ -126,8 +127,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     def seed: String = "walletstub"
 
     private implicit val addressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
-    private val prover = ErgoProvingInterpreter(seed, 2, parameters)
-    private val trackedAddresses: Seq[P2PKAddress] = prover.dlogPubkeys.map(P2PKAddress.apply)
+    private val prover: ErgoProvingInterpreter = ???
+    private val trackedAddresses: Seq[P2PKAddress] = prover.pubKeys.map(P2PKAddress.apply)
 
     def receive: Receive = {
 

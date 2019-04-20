@@ -10,6 +10,7 @@ import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.{ModifierTypeId, idToBytes}
 import scorex.core.block.Block._
 import scorex.core.serialization.ScorexSerializer
@@ -95,7 +96,7 @@ object Header extends ApiCodecs {
 
     override def ADProofsRoot: Coll[Byte] = new CollOverArray(header.ADProofsRoot)
 
-    override def stateRoot: AvlTree = CAvlTree(ErgoContext.stateTreeFromDigest(header.stateRoot))
+    override def stateRoot: AvlTree = CAvlTree(ErgoInterpreter.stateTreeFromDigest(header.stateRoot))
 
     override def transactionsRoot: Coll[Byte] = new CollOverArray(header.transactionsRoot)
 

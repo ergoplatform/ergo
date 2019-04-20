@@ -1,17 +1,16 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.mining.{AutolykosPowScheme, groupElemToBytes}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer, PreHeader}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{Constants, _}
+import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.serialization.GroupElementSerializer
 import special.collection.{Coll, CollOverArray}
 
 import scala.util.{Failure, Success, Try}
@@ -50,7 +49,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                        val currentParameters: Parameters,
                        val votingData: VotingData)
                       (implicit val votingSettings: VotingSettings)
-  extends BytesSerializable with ScorexEncoding {
+  extends ErgoLikeStateContext
+    with BytesSerializable
+    with ScorexEncoding {
 
   override type M = ErgoStateContext
 

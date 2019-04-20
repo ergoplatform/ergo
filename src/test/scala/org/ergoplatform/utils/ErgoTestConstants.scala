@@ -5,11 +5,10 @@ import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.ExtensionCandidate
-import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants}
-import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
+import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
 import org.ergoplatform.{DataInput, ErgoBox, ErgoScriptPredef}
 import scorex.core.app.Version
 import scorex.core.network.PeerSpec
@@ -38,12 +37,11 @@ trait ErgoTestConstants extends ScorexLogging {
   val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
   val feeProp: ErgoTree = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
 
-
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   val genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(settings.chainSettings)
   val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(settings.chainSettings).head
   val defaultSeed: String = ErgoSettings.read(None).walletSettings.seed
-  val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(defaultSeed, 2, parameters)
+  val defaultProver: ErgoProvingInterpreter = ???
   val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
   val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage

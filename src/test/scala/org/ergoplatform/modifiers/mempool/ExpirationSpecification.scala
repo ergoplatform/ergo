@@ -7,7 +7,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion
 import sigmastate.Values.ShortConstant
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-
+import sigmastate.eval._
 
 class ExpirationSpecification extends ErgoPropertyTest {
 
@@ -19,7 +19,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
     ErgoBox(box.value,
       Constants.FalseLeaf,
       box.creationHeight,
-      box.additionalTokens,
+      box.additionalTokens.toArray.toSeq,
       box.additionalRegisters,
       transactionId = box.transactionId,
       boxIndex = box.index)
@@ -103,7 +103,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
   property("script changed tokens w. same value") {
     forAll(unspendableErgoBoxGen()) { from =>
       whenever(from.additionalTokens.nonEmpty) {
-        val out = new ErgoBoxCandidate(from.value, from.ergoTree, from.creationHeight + 1, Seq())
+        val out = new ErgoBoxCandidate(from.value, from.ergoTree, from.creationHeight + 1, Colls.emptyColl)
         constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = false)
       }
     }

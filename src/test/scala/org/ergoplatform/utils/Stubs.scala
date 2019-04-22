@@ -157,7 +157,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class WalletStub extends ErgoWalletReader {
-    val actor: ActorRef = system.actorOf(WalletActorStub.props())
+    val walletActor: ActorRef = system.actorOf(WalletActorStub.props())
   }
 
 

@@ -18,12 +18,13 @@ import scala.concurrent.Future
 import scala.util.Try
 
 trait ErgoWalletReader extends VaultReader {
-  val actor: ActorRef
+
+  val walletActor: ActorRef
 
   private implicit val timeout: Timeout = Timeout(60, TimeUnit.SECONDS)
 
   def balances(chainStatus: ChainStatus): Future[BalancesSnapshot] = {
-    (actor ? ErgoWalletActor.ReadBalances(chainStatus)).mapTo[BalancesSnapshot]
+    (walletActor ? ErgoWalletActor.ReadBalances(chainStatus)).mapTo[BalancesSnapshot]
   }
 
   def confirmedBalances(): Future[BalancesSnapshot] = balances(MainChain)
@@ -31,27 +32,27 @@ trait ErgoWalletReader extends VaultReader {
   def balancesWithUnconfirmed(): Future[BalancesSnapshot] = balances(Fork)
 
   def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] = {
-    (actor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
+    (walletActor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
   }
 
   def firstSecret(): Future[DLogProverInput] = {
-    (actor ? GetFirstSecret).mapTo[DLogProverInput]
+    (walletActor ? GetFirstSecret).mapTo[DLogProverInput]
   }
 
   def unspendBoxes(): Future[Iterator[ErgoBox]] = {
-    (actor ? GetBoxes).mapTo[Iterator[ErgoBox]]
+    (walletActor ? GetBoxes).mapTo[Iterator[ErgoBox]]
   }
 
   def randomPublicKey(): Future[P2PKAddress] = {
-    (actor ? ReadRandomPublicKey).mapTo[P2PKAddress]
+    (walletActor ? ReadRandomPublicKey).mapTo[P2PKAddress]
   }
 
   def trackedAddresses(): Future[Seq[ErgoAddress]] = {
-    (actor ? ReadTrackedAddresses).mapTo[Seq[ErgoAddress]]
+    (walletActor ? ReadTrackedAddresses).mapTo[Seq[ErgoAddress]]
   }
 
   def generateTransaction(requests: Seq[TransactionRequest]): Future[Try[ErgoTransaction]] = {
-    (actor ? GenerateTransaction(requests)).mapTo[Try[ErgoTransaction]]
+    (walletActor ? GenerateTransaction(requests)).mapTo[Try[ErgoTransaction]]
   }
 
 }

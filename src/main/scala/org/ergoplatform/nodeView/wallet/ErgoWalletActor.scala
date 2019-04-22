@@ -1,5 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
+import java.io.File
+
 import akka.actor.Actor
 import org.ergoplatform.ErgoBox.{R4, R5, R6}
 import org.ergoplatform._
@@ -56,6 +58,17 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
   private val registry = new WalletStorage
 
   private val parameters: Parameters = LaunchParameters
+
+  override def preStart(): Unit = {
+    context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
+    readSecretStorage.foreach(storage => secretStorageOpt = Some(storage))
+  }
+
+  override def receive: Receive =
+    walletCommands orElse
+      onStateChanged orElse
+      scanLogic orElse
+      readers
 
   private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
 
@@ -250,6 +263,18 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
       .flatMap(_.boxes)
   }
 
+  private def readSecretStorage: Try[JsonSecretStorage] = {
+    val dir = new File(ergoSettings.walletSettings.secretStorageSettings.secretDir)
+    dir.listFiles().toList match {
+      case files if files.size > 1 =>
+        Failure(new Exception("Ambiguous secret files"))
+      case headFile :: _ =>
+        Success(new JsonSecretStorage(headFile, ergoSettings.walletSettings.secretStorageSettings.encryption))
+      case Nil =>
+        Failure(new Exception("Secret file not found"))
+    }
+  }
+
   private def readers: Receive = {
     case ReadBalances(chainStatus) =>
       if (chainStatus.mainChain) {
@@ -272,10 +297,6 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
     case ReadTrackedAddresses =>
       sender() ! trackedAddresses.toIndexedSeq
-  }
-
-  override def preStart(): Unit = {
-    context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
   }
 
   private def onStateChanged: Receive = {
@@ -317,12 +338,6 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     case GenerateTransaction(requests) =>
       sender() ! generateTransactionWithOutputs(requests)
   }
-
-  override def receive: Receive =
-    walletCommands orElse
-      onStateChanged orElse
-      scanLogic orElse
-      readers
 
 }
 

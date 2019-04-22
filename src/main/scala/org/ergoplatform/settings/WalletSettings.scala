@@ -4,7 +4,7 @@ import org.ergoplatform.wallet.settings.SecretStorageSettings
 
 import scala.concurrent.duration.FiniteDuration
 
-case class WalletSettings(secretStorageSettings: SecretStorageSettings,
+case class WalletSettings(secretStorage: SecretStorageSettings,
                           seedStrengthBits: Int,
                           mnemonicPhraseLanguage: String,
                           scanningInterval: FiniteDuration,

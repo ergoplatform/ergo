@@ -264,12 +264,12 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   private def readSecretStorage: Try[JsonSecretStorage] = {
-    val dir = new File(ergoSettings.walletSettings.secretStorageSettings.secretDir)
+    val dir = new File(ergoSettings.walletSettings.secretStorage.secretDir)
     dir.listFiles().toList match {
       case files if files.size > 1 =>
         Failure(new Exception("Ambiguous secret files"))
       case headFile :: _ =>
-        Success(new JsonSecretStorage(headFile, ergoSettings.walletSettings.secretStorageSettings.encryption))
+        Success(new JsonSecretStorage(headFile, ergoSettings.walletSettings.secretStorage.encryption))
       case Nil =>
         Failure(new Exception("Secret file not found"))
     }
@@ -309,12 +309,12 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     case InitWallet(pass) =>
       val seed = scorex.utils.Random.randomBytes(ergoSettings.walletSettings.seedStrengthBits / 8)
       val secretStorage = JsonSecretStorage
-        .init(seed, pass)(ergoSettings.walletSettings.secretStorageSettings)
+        .init(seed, pass)(ergoSettings.walletSettings.secretStorage)
       secretStorageOpt = Some(secretStorage)
 
     case RestoreWallet(mnemonic, passOpt, encryptionPass) =>
       val secretStorage = JsonSecretStorage
-        .restore(mnemonic, passOpt, encryptionPass)(ergoSettings.walletSettings.secretStorageSettings)
+        .restore(mnemonic, passOpt, encryptionPass)(ergoSettings.walletSettings.secretStorage)
       secretStorageOpt = Some(secretStorage)
 
     case UnlockWallet(pass) =>

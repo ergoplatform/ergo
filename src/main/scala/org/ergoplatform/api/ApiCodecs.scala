@@ -181,8 +181,8 @@ trait ApiCodecs {
       "onchain" -> b.chainStatus.mainChain.asJson,
       "certain" -> b.certainty.certain.asJson,
       "creationOutIndex" -> b.creationOutIndex.asJson,
-      "inclusionHeight" -> b.inclusionHeight.asJson,
-      "spendingHeight" -> b.spendingHeight.asJson,
+      "inclusionHeight" -> b.inclusionHeightOpt.asJson,
+      "spendingHeight" -> b.spendingHeightOpt.asJson,
       "box" -> b.box.asJson
     )
     val fieldsWithTx = if (opts.showDetails) {

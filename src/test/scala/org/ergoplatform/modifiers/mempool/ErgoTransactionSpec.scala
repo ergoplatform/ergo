@@ -13,7 +13,7 @@ import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.encode.Base16
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-
+import sigmastate.eval._
 import scala.util.Random
 
 class ErgoTransactionSpec extends ErgoPropertyTest {
@@ -59,8 +59,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
         new ProverResult(Base16.decode("5aea4d78a234c35accacdf8996b0af5b51e26fee29ea5c05468f23707d31c0df39400127391cd57a70eb856710db48bb9833606e0bf90340").get, new ContextExtension(Map()))),
     )
     val outputCandidates: IndexedSeq[ErgoBoxCandidate] = IndexedSeq(
-      new ErgoBoxCandidate(1000000000L, defaultMinerPk, height, Seq(), Map()),
-      new ErgoBoxCandidate(1000000L, settings.chainSettings.monetary.feeProposition, height, Seq(), Map())
+      new ErgoBoxCandidate(1000000000L, defaultMinerPk, height, Colls.emptyColl, Map()),
+      new ErgoBoxCandidate(1000000L, settings.chainSettings.monetary.feeProposition, height, Colls.emptyColl, Map())
     )
     val tx = ErgoTransaction(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate])
 
@@ -159,7 +159,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   property("impossible to overflow an asset value") {
     val gen = validErgoTransactionGenTemplate(1, 1, 8, 16)
     forAll(gen) { case (from, tx) =>
-      val tokenOpt = tx.outputCandidates.flatMap(_.additionalTokens).map(t => ByteArrayWrapper.apply(t._1) -> t._2)
+      val tokenOpt = tx.outputCandidates.flatMap(_.additionalTokens.toArray).map(t => ByteArrayWrapper.apply(t._1) -> t._2)
         .groupBy(_._1).find(_._2.size >= 2)
 
       whenever(tokenOpt.nonEmpty) {
@@ -205,29 +205,29 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val initTxCost = tx.statefulValidity(from, emptyDataBoxes, emptyStateContext).get
 
       // already existing token from one of the inputs
-      val existingToken = from.flatMap(_.additionalTokens).toSet.head
+      val existingToken = from.flatMap(_.additionalTokens.toArray).toSet.head
       // completely new token
       val randomToken = (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextInt(100000000).toLong)
 
       val in0 = from.last
       // new token added to the last input
       val modifiedIn0 = ErgoBox(in0.value, in0.ergoTree, in0.creationHeight,
-        in0.additionalTokens :+ randomToken, in0.additionalRegisters, in0.transactionId, in0.index)
+        in0.additionalTokens.toArray.toSeq :+ randomToken, in0.additionalRegisters, in0.transactionId, in0.index)
       val txInMod0 = tx.inputs.last.copy(boxId = modifiedIn0.id)
 
       val in1 = from.last
       // existing token added to the last input
       val modifiedIn1 = ErgoBox(in1.value, in1.ergoTree, in1.creationHeight,
-        in1.additionalTokens :+ existingToken, in1.additionalRegisters, in1.transactionId, in1.index)
+        in1.additionalTokens.toArray.toSeq :+ existingToken, in1.additionalRegisters, in1.transactionId, in1.index)
       val txInMod1 = tx.inputs.last.copy(boxId = modifiedIn1.id)
 
       val out0 = tx.outputs.last
       // new token added to the last output
       val modifiedOut0 = ErgoBox(out0.value, out0.ergoTree, out0.creationHeight,
-        out0.additionalTokens :+ randomToken, out0.additionalRegisters, out0.transactionId, out0.index)
+        out0.additionalTokens.toArray.toSeq :+ randomToken, out0.additionalRegisters, out0.transactionId, out0.index)
       // existing token added to the last output
       val modifiedOut1 = ErgoBox(out0.value, out0.ergoTree, out0.creationHeight,
-        out0.additionalTokens :+ existingToken, out0.additionalRegisters, out0.transactionId, out0.index)
+        out0.additionalTokens.toArray.toSeq :+ existingToken, out0.additionalRegisters, out0.transactionId, out0.index)
 
       // update transaction inputs and outputs accordingly
       val txMod0 = tx.copy(inputs = tx.inputs.init :+ txInMod0) // new token group added to one input

@@ -12,6 +12,7 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
+import sigmastate.lang.Terms._
 
 import scala.util.{Failure, Try}
 
@@ -57,7 +58,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = emissionBoxIdOpt match {
     case Some(id) =>
       fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
-        case Some(tx) if tx.outputs.head.proposition == constants.settings.chainSettings.monetary.emissionBoxProposition =>
+        case Some(tx) if tx.outputs.head.ergoTree == constants.settings.chainSettings.monetary.emissionBoxProposition =>
           tx.outputs.headOption
         case Some(_) =>
           log.info(s"Last possible emission box consumed")

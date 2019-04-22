@@ -59,9 +59,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
 
-  private def trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(extractTrackedBytes)
-
-  private def extractTrackedBytes(address: ErgoAddress): Array[Byte] = address.contentBytes
+  private def trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.contentBytes)
 
   //we currently do not use off-chain boxes to create a transaction
   private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.mainChain
@@ -81,7 +79,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
       proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption) match {
         case Some(_) =>
-          log.debug(s"Uncertain box is mine! $uncertainBox")
+          log.debug(s"Box certainty resolved for $uncertainBox")
           registry.makeTransition(uncertainBox.boxId, MakeCertain)
         case None =>
           log.debug(s"Failed to resolve uncertainty for ${uncertainBox.boxId} created at " +
@@ -303,6 +301,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
         case Some(secretStorage) =>
           sender() ! secretStorage.unlock(pass).fold(e => UnlockFailed(e), _ => UnlockSucceed)
           proverOpt = Some(ErgoProvingInterpreter(secretStorage.secret.map(_.key).toIndexedSeq, parameters))
+          proverOpt.foreach(_.pubKeys.foreach(pk => trackedAddresses.append(P2PKAddress(pk))))
         case None =>
           sender() ! UnlockFailed(new Exception("Wallet not initialized"))
       }

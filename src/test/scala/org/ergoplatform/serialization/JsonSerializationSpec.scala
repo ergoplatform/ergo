@@ -9,11 +9,11 @@ import org.ergoplatform.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
+import org.ergoplatform.wallet.boxes.TrackedBox
 import org.scalatest.Inspectors
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
@@ -84,18 +84,15 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
 
   private def checkTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {
     c.downField("spent").as[Boolean] shouldBe Right(b.spendingStatus.spent)
-    c.downField("onchain").as[Boolean] shouldBe Right(b.chainStatus.onchain)
+    c.downField("onchain").as[Boolean] shouldBe Right(b.chainStatus.mainChain)
     c.downField("certain").as[Boolean] shouldBe Right(b.certainty.certain)
     c.downField("creationOutIndex").as[Short] shouldBe Right(b.creationOutIndex)
     c.downField("inclusionHeight").as[Option[Int]] shouldBe Right(b.inclusionHeight)
     c.downField("spendingHeight").as[Option[Int]] shouldBe Right(b.spendingHeight)
     checkErgoBox(c.downField("box"), b.box)
     if (!opts.showDetails) {
-      c.downField("creationTransactionId").as[String] shouldBe Right(b.encodedCreationTxId)
-      c.downField("spendingTransactionId").as[Option[String]] shouldBe Right(b.encodedSpendingTxId)
-    } else {
-      checkTransaction(c.downField("creationTransaction"), Some(b.creationTx))
-      checkTransaction(c.downField("spendingTransaction"), b.spendingTx)
+      c.downField("creationTransactionId").as[String] shouldBe Right(b.creationTxId)
+      c.downField("spendingTransactionId").as[Option[String]] shouldBe Right(b.spendingTxIdOpt)
     }
   }
 
@@ -130,7 +127,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     } else {
       val decoded = decodedTxOpt.get
       val tx = txOpt.get
-      decoded.id should contain theSameElementsInOrderAs tx.id
+      decoded.id shouldEqual tx.id
       decoded.inputs should contain theSameElementsInOrderAs tx.inputs
       decoded.outputs should contain theSameElementsInOrderAs tx.outputs
     }

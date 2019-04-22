@@ -52,8 +52,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val dataInputs: IndexedSeq[DataInput],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate],
                            override val sizeOpt: Option[Int] = None)
-  extends Transaction
-    with ErgoLikeTransactionTemplate[Input]
+  extends ErgoLikeTransaction(inputs, dataInputs, outputCandidates)
+    with Transaction
     with MempoolModifier
     with ErgoNodeViewModifier
     with ModifierValidator

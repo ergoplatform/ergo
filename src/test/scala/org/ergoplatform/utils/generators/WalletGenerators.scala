@@ -2,8 +2,8 @@ package org.ergoplatform.utils.generators
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
-import org.ergoplatform.nodeView.wallet.{BoxCertainty, TrackedBox}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
 import org.scalacheck.Gen
 
@@ -48,7 +48,7 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       outIndex <- outIndexGen(tx)
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield TrackedBox(tx, outIndex, None, Some(spendingTx), None, ergoBox, certainty)
+    } yield TrackedBox(tx.id, outIndex, None, Some(spendingTx.id), None, ergoBox, certainty)
   }
 
   def spentPartiallyOffchainBoxGen: Gen[TrackedBox] = {
@@ -59,7 +59,7 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       height <- heightGen()
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield TrackedBox(tx, outIndex, Some(height), Some(spendingTx), None, ergoBox, certainty)
+    } yield TrackedBox(tx.id, outIndex, Some(height), Some(spendingTx.id), None, ergoBox, certainty)
   }
 
   def spentOnchainBoxGen: Gen[TrackedBox] = {
@@ -71,7 +71,7 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       spendingHeight <- heightGen(height)
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield TrackedBox(tx, outIndex, Some(height), Some(spendingTx), Some(spendingHeight), ergoBox, certainty)
+    } yield TrackedBox(tx.id, outIndex, Some(height), Some(spendingTx.id), Some(spendingHeight), ergoBox, certainty)
   }
 
   def paymentRequestGen: Gen[PaymentRequest] = {

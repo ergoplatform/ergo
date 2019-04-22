@@ -23,10 +23,8 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.interpreter.ContextExtension
 
-import scala.collection.{immutable, mutable}
+import scala.collection.mutable
 import scala.util.{Failure, Random, Success, Try}
-
-case class BalancesSnapshot(height: Height, balance: Long, assetBalances: immutable.Map[ModifierId, Long])
 
 class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
   extends Actor
@@ -83,7 +81,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
           registry.makeTransition(uncertainBox.boxId, MakeCertain)
         case None =>
           log.debug(s"Failed to resolve uncertainty for ${uncertainBox.boxId} created at " +
-            s"${uncertainBox.inclusionHeight} while current height is ${stateContext.currentHeight}")
+            s"${uncertainBox.inclusionHeightOpt} while current height is ${stateContext.currentHeight}")
           //todo: remove after some time? remove spent after some time?
           false
       }
@@ -117,7 +115,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private def registerBox(trackedBox: TrackedBox): Boolean = {
     if (registry.contains(trackedBox.boxId)) {
-      trackedBox.inclusionHeight match {
+      trackedBox.inclusionHeightOpt match {
         case Some(h) =>
           registry.makeTransition(trackedBox.boxId, CreationConfirmation(h))
         case None =>

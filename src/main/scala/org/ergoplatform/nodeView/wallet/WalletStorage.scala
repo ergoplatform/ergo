@@ -191,8 +191,8 @@ class WalletStorage extends ScorexLogging {
     if (trackedBox.spendingStatus == Unspent) {
       log.debug(s"New ${trackedBox.chainStatus} ${trackedBox.certainty} box arrived: " + trackedBox)
     }
-    trackedBox.inclusionHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))
-    trackedBox.spendingHeight.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))
+    trackedBox.inclusionHeightOpt.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))
+    trackedBox.spendingHeightOpt.foreach(h => putToConfirmedIndex(h, trackedBox.boxId))
     updateBalances(trackedBox)
   }
 
@@ -214,7 +214,7 @@ class WalletStorage extends ScorexLogging {
                              spendingTransaction: ErgoTransaction,
                              spendingHeightOpt: Option[Height]): Option[TrackedBox] = {
     (trackedBox.spendingStatus, trackedBox.chainStatus) match {
-      case _ if spendingHeightOpt.nonEmpty && trackedBox.inclusionHeight.isEmpty =>
+      case _ if spendingHeightOpt.nonEmpty && trackedBox.inclusionHeightOpt.isEmpty =>
         log.error(s"Invalid state transition for ${trackedBox.boxId}: no creation height, but spent on-chain")
         None
       case (Unspent, Fork) if spendingHeightOpt.nonEmpty =>
@@ -227,7 +227,7 @@ class WalletStorage extends ScorexLogging {
       case (Spent, MainChain) =>
         None
       case _ =>
-        Some(trackedBox.copy(spendingTxIdOpt = Some(spendingTransaction.id), spendingHeight = spendingHeightOpt))
+        Some(trackedBox.copy(spendingTxIdOpt = Some(spendingTransaction.id), spendingHeightOpt = spendingHeightOpt))
     }
   }
 
@@ -237,8 +237,8 @@ class WalletStorage extends ScorexLogging {
     * @return Some(trackedBox), if box state has been changed, None otherwise
     */
   private def convertToConfirmed(trackedBox: TrackedBox, creationHeight: Height): Option[TrackedBox] = {
-    if (trackedBox.inclusionHeight.isEmpty) {
-      Some(trackedBox.copy(inclusionHeight = Option(creationHeight)))
+    if (trackedBox.inclusionHeightOpt.isEmpty) {
+      Some(trackedBox.copy(inclusionHeightOpt = Option(creationHeight)))
     } else {
       if (trackedBox.spendingStatus == Unspent || trackedBox.chainStatus == Fork) {
         log.warn(s"Double creation of tracked box for  ${trackedBox.boxId}")
@@ -254,15 +254,15 @@ class WalletStorage extends ScorexLogging {
     * @return Some(trackedBox), if box state has been changed, None otherwise
     */
   private def convertBack(trackedBox: TrackedBox, toHeight: Height): Option[TrackedBox] = {
-    val dropCreation = trackedBox.inclusionHeight.exists(toHeight < _)
-    val dropSpending = trackedBox.spendingHeight.exists(toHeight < _)
+    val dropCreation = trackedBox.inclusionHeightOpt.exists(toHeight < _)
+    val dropSpending = trackedBox.spendingHeightOpt.exists(toHeight < _)
 
     if (dropCreation && dropSpending) {
-      Some(trackedBox.copy(inclusionHeight = None, spendingHeight = None))
+      Some(trackedBox.copy(inclusionHeightOpt = None, spendingHeightOpt = None))
     } else if (dropCreation) {
-      Some(trackedBox.copy(inclusionHeight = None))
+      Some(trackedBox.copy(inclusionHeightOpt = None))
     } else if (dropSpending) {
-      Some(trackedBox.copy(spendingHeight = None))
+      Some(trackedBox.copy(spendingHeightOpt = None))
     } else {
       None
     }

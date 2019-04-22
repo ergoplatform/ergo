@@ -18,6 +18,7 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
+import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector}
 import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.ProveDlog
 

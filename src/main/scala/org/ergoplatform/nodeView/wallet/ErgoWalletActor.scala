@@ -8,10 +8,11 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
-import org.ergoplatform.nodeView.wallet.BoxCertainty.Uncertain
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings.{Constants, ErgoSettings, LaunchParameters, Parameters}
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
+import org.ergoplatform.wallet.boxes.BoxCertainty.Uncertain
+import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
@@ -61,7 +62,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
   private def extractTrackedBytes(addr: ErgoAddress): Array[Byte] = addr.contentBytes
 
   //we currently do not use off-chain boxes to create a transaction
-  private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onchain
+  private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.mainChain
 
   //todo: make resolveUncertainty(boxId, witness)
   private def resolveUncertainty(idOpt: Option[ModifierId]): Boolean = {
@@ -249,7 +250,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private def readers: Receive = {
     case ReadBalances(chainStatus) =>
-      if (chainStatus.onchain) {
+      if (chainStatus.mainChain) {
         sender() ! BalancesSnapshot(lastScannedBlockHeight, registry.confirmedBalance, registry.confirmedAssetBalances)
       } else {
         sender() ! BalancesSnapshot(lastScannedBlockHeight, registry.balancesWithUnconfirmed, registry.assetBalancesWithUnconfirmed)

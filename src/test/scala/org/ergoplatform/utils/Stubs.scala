@@ -18,6 +18,7 @@ import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
+import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.core.app.Version
@@ -150,7 +151,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   object WalletActorStub {
     def props(): Props = Props(new WalletActorStub)
-    def balance(chainStatus: ChainStatus): Long = if (chainStatus.onchain) confirmedBalance else unconfirmedBalance
+    def balance(chainStatus: ChainStatus): Long = if (chainStatus.mainChain) confirmedBalance else unconfirmedBalance
     def confirmedBalance: Long = 1L
     def unconfirmedBalance: Long = 2L
   }

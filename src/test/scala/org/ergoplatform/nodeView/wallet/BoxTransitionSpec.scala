@@ -1,15 +1,16 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.ChainStatus.{Offchain, Onchain}
-import org.ergoplatform.nodeView.wallet.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
+import org.ergoplatform.wallet.boxes.ChainStatus.{Fork, MainChain}
+import org.ergoplatform.wallet.boxes.SpendingStatus.{Spent, Unspent}
 import org.scalacheck.Gen
 
 class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
 
-  implicit override val generatorDrivenConfig = PropertyCheckConfiguration(minSuccessful = 10)
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfiguration(minSuccessful = 10)
 
   def heightGen: Gen[Int] = Gen.choose(0, Integer.MAX_VALUE)
 
@@ -23,7 +24,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Unspent
-      transited.chainStatus shouldBe Onchain
+      transited.chainStatus shouldBe MainChain
       transited.inclusionHeight shouldBe Some(height)
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
@@ -39,7 +40,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
-      transited.chainStatus shouldBe Offchain
+      transited.chainStatus shouldBe Fork
       transited.inclusionHeight shouldBe Some(height)
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
@@ -88,7 +89,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
-      transited.chainStatus shouldBe Offchain
+      transited.chainStatus shouldBe Fork
       transited.inclusionHeight shouldBe None
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
@@ -126,7 +127,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
-      transited.chainStatus shouldBe Offchain
+      transited.chainStatus shouldBe Fork
       transited.inclusionHeight shouldBe box.inclusionHeight
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
@@ -175,7 +176,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
-      transited.chainStatus shouldBe Onchain
+      transited.chainStatus shouldBe MainChain
       transited.inclusionHeight shouldBe box.inclusionHeight
       transited.spendingHeight shouldBe Some(height)
       transited.certainty shouldBe box.certainty
@@ -191,7 +192,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
-      transited.chainStatus shouldBe Onchain
+      transited.chainStatus shouldBe MainChain
       transited.inclusionHeight shouldBe box.inclusionHeight
       transited.spendingHeight shouldBe Some(height)
       transited.certainty shouldBe box.certainty
@@ -241,7 +242,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
-      transited.chainStatus shouldBe Offchain
+      transited.chainStatus shouldBe Fork
       transited.inclusionHeight shouldBe None
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
@@ -281,7 +282,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Unspent
-      transited.chainStatus shouldBe Offchain
+      transited.chainStatus shouldBe Fork
       transited.inclusionHeight shouldBe None
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
@@ -321,7 +322,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
-      transited.chainStatus shouldBe Offchain
+      transited.chainStatus shouldBe Fork
       transited.inclusionHeight shouldBe None
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
@@ -337,7 +338,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
-      transited.chainStatus shouldBe Offchain
+      transited.chainStatus shouldBe Fork
       transited.inclusionHeight shouldBe box.inclusionHeight
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty
@@ -354,7 +355,7 @@ class BoxTransitionSpec extends ErgoPropertyTest with WalletGenerators {
       registry.byId(box.boxId) should not be empty
       val transited = registry.byId(box.boxId).value
       transited.spendingStatus shouldBe Spent
-      transited.chainStatus shouldBe Offchain
+      transited.chainStatus shouldBe Fork
       transited.inclusionHeight shouldBe box.inclusionHeight
       transited.spendingHeight shouldBe None
       transited.certainty shouldBe box.certainty

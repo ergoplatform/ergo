@@ -122,11 +122,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     requestReaders.m.size should be > 10
 
     // wait for mempool to be cleaned
-    while (requestReaders.m.size > 0) {
+    scorex.core.utils.untilTimeout(5.minute, 500.millis) {
       log.debug(s"Wait until transactions in mempool will be included into blocks. Currents size: ${requestReaders.m.size}")
-      // blocks should not be empty
-      r.h.bestFullBlockOpt.get.transactions.nonEmpty shouldBe true
-      Thread.sleep(1000)
+      requestReaders.m.size shouldBe 0
     }
   }
 
@@ -164,10 +162,10 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val input = Input(boxToDoubleSpend.id, emptyProverResult)
 
     val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1, r.s.stateContext.currentHeight))
-    val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input),  IndexedSeq(), outputs1)
+    val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs1)
     val tx1 = defaultProver.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), IndexedSeq(), r.s.stateContext).get
     val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2, r.s.stateContext.currentHeight))
-    val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input),  IndexedSeq(), outputs2)
+    val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs2)
     val tx2 = defaultProver.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), IndexedSeq(), r.s.stateContext).get
 
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx1))

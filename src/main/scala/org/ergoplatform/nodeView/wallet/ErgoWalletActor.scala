@@ -11,11 +11,12 @@ import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
-import org.ergoplatform.settings.{Constants, ErgoSettings, LaunchParameters, Parameters}
+import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import org.ergoplatform.wallet.boxes.BoxCertainty.Uncertain
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
+import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.TransactionContext
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
@@ -54,6 +55,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   // todo: persist?
   private val trackedAddresses: mutable.Buffer[ErgoAddress] = publicKeys.toBuffer
+
+  private val walletSettings: WalletSettings = ergoSettings.walletSettings
 
   private val registry = new WalletStorage
 
@@ -311,6 +314,9 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
       val secretStorage = JsonSecretStorage
         .init(seed, pass)(ergoSettings.walletSettings.secretStorage)
       secretStorageOpt = Some(secretStorage)
+      val mnemonicTry = new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
+        .toMnemonic(seed)
+      sender() ! mnemonicTry
 
     case RestoreWallet(mnemonic, passOpt, encryptionPass) =>
       val secretStorage = JsonSecretStorage
@@ -320,11 +326,11 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     case UnlockWallet(pass) =>
       secretStorageOpt match {
         case Some(secretStorage) =>
-          sender() ! secretStorage.unlock(pass).fold(e => UnlockFailed(e), _ => UnlockSucceed)
+          sender() ! secretStorage.unlock(pass)
           proverOpt = Some(ErgoProvingInterpreter(secretStorage.secret.map(_.key).toIndexedSeq, parameters))
           proverOpt.foreach(_.pubKeys.foreach(pk => trackedAddresses.append(P2PKAddress(pk))))
         case None =>
-          sender() ! UnlockFailed(new Exception("Wallet not initialized"))
+          sender() ! Failure(new Exception("Wallet not initialized"))
       }
 
     case LockWallet =>
@@ -364,10 +370,6 @@ object ErgoWalletActor {
   final case class RestoreWallet(mnemonic: String, passOpt: Option[String], encryptionPass: String)
 
   final case class UnlockWallet(pass: String)
-
-  final case class UnlockFailed(e: Throwable)
-
-  final case object UnlockSucceed
 
   final case object LockWallet
 

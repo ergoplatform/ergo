@@ -163,7 +163,7 @@ the previous sections, we should unify the style in the whole document}
  Diffie-Hellman key exchange. First, Alice creates a secret value $x$~(a huge number) and publishing a corresponding
  public value $gX = g^x$. She demands from Bob to generate a secret number $y$, and to include into each output two
  values $c1$, $c2$, where one value is equal to $g^y$ and another is equal to $g^{x \cdot y}$. We assume that a Bob is using
- a random coin to decide which of $\{c_1, c_2\}$ will a value\dnote{"will a value"?}. With no access to the secret information, an external
+ a random coin to choose meanings for $\{c_1, c_2\}$. With no access to the secret information, an external
  observer can not guess whether, for example, $c_1$ is about $g^y$ or $g^{x \cdot y}$, with probability above
  $\frac{1}{2}$ (as a cryptographic primitive we are using has a certain property, namely, the hardness of
  Diffie-Hellman decisional problem). To destroy an output box, a proof should be given that for $c_2$ whether $y$ is known,

@@ -33,8 +33,8 @@ demands a spending transaction with the box which guarding script hash equal to 
  value of the output should equal to the value of the original box. In this case, box value is bounded by the contract,
  thus Ergs in the box are contractual Ergs.
 
-\dnote{Style where every small piece of information is divided into a subsection is completely different from
-the previous sections, we should unify the style in the whole document}
+%\dnote{Style where every small piece of information is divided into a subsection is completely different from
+%the previous sections, we should unify the style in the whole document}
 
 \subsection{UTXO vs Accounts}
  \label{sec:utxo}
@@ -107,11 +107,8 @@ the previous sections, we should unify the style in the whole document}
 \subsection{An Oracle Example}
  \label{sec:platform}
 
-  \dnote{more generic intro like " Let's assume that Alice and Bob are going to bet for the weather and Alice wins if the temperature is more than
-  15 degrees. "}
-
  Equipped with custom tokens and data inputs, we can develop a simple oracle example, also showing on the way some
- design patterns for Ergo contracts. In the example, Alice and Bob are putting money into a box, which is spendable by
+ design patterns for Ergo contracts. Assume that Alice and Bob are going to bet on weather tomorrow. For that, they are putting money into a box, which is spendable by
  Alice if the temperature is more than 15 degrees, and is spendable by Bob otherwise. To deliver the temperature into the
  blockchain a trusted oracle is needed.
 

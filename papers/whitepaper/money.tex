@@ -152,11 +152,11 @@ the previous sections, we should unify the style in the whole document}
  setup. Thus we are looking for ways to do coin mixing via cheap enough applications. As a first step towards that, we
  offer an application for non-interactive coin mixing, which is working in the following case:
  \begin{enumerate}
-    \item{} Alice creates a box which demands any Bob's coin\dnote{do we use coin term, or box?} to satisfy certain conditions in order to be mixed with
+    \item{} Alice creates a box which demands any Bob's box to satisfy certain conditions in order to be mixed with
     the coin of Alice. After that, Alice only listens to the blockchain, no any interaction with Bob is needed.
     \item{} Bob is creating a box and then a spending transaction which has boxes of Alice and Bob as inputs,
      and creates two outputs with the same script, but both Alice and Bob may spend only one box out of the two.
-     An external observer can coin spent by whom\dnote{what does "can coin spent by whom" mean?}, as output boxes are indistinguishable.
+     An external observer can not decide which output is spent by whom, as output boxes are indistinguishable.
  \end{enumerate}
 
  For simplicity, we are not considering fees in the example. The idea of mixing is similar to non-interactive

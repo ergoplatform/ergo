@@ -50,7 +50,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     withFixture { implicit w =>
       val addresses = getPublicKeys
       val pubkey = addresses.head.pubkey
-      addresses.length should be > 1
+      addresses.length should be > 0
       val genesisBlock = makeGenesisBlock(pubkey, randomNewAsset)
       val genesisTx = genesisBlock.transactions.head
       val initialBoxes = boxesAvailable(genesisTx, pubkey)

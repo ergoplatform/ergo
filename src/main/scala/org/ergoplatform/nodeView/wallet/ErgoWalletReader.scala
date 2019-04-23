@@ -28,8 +28,8 @@ trait ErgoWalletReader extends VaultReader {
   }
 
   def restoreWallet(encryptionPass: String, mnemonic: String,
-                    mnemonicPassOpt: Option[String] = None): Unit = {
-    walletActor ! RestoreWallet(mnemonic, mnemonicPassOpt, encryptionPass)
+                    mnemonicPassOpt: Option[String] = None): Future[Try[Unit]] = {
+    (walletActor ? RestoreWallet(mnemonic, mnemonicPassOpt, encryptionPass)).mapTo[Try[Unit]]
   }
 
   def unlockWallet(pass: String): Future[Try[Unit]] = {
@@ -52,8 +52,8 @@ trait ErgoWalletReader extends VaultReader {
     (walletActor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
   }
 
-  def firstSecret(): Future[DLogProverInput] = {
-    (walletActor ? GetFirstSecret).mapTo[DLogProverInput]
+  def firstSecret(): Future[Try[DLogProverInput]] = {
+    (walletActor ? GetFirstSecret).mapTo[Try[DLogProverInput]]
   }
 
   def unspendBoxes(): Future[Iterator[ErgoBox]] = {

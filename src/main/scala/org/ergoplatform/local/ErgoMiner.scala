@@ -67,10 +67,15 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   override def preStart(): Unit = {
     // in external miner mode key from wallet is used if `publicKeyOpt` is not set
     if ((publicKeyOpt.isEmpty && externalMinerMode) || (secretKeyOpt.isEmpty && !externalMinerMode)) {
-      log.info("Using key from wallet for mining")
+      log.info("Trying to use key from wallet for mining")
       val callback = self
       viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        v.vault.firstSecret().onComplete(_.foreach(r => callback ! UpdateSecret(r)))
+        v.vault.firstSecret().onComplete(_.foreach {
+          _.fold(
+            _ => log.warn("Failed to load key from wallet. Wallet is locked."),
+            r => callback ! UpdateSecret(r)
+          )
+        })
       }
     }
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
@@ -110,7 +115,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         }
       }
     case StartMining if candidateOpt.isEmpty =>
-      requestCandidate()
+      if (secretKeyOpt.isDefined || externalMinerMode) requestCandidate()
       context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)
   }
 

@@ -50,7 +50,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bitbucket.inkytonik.kiama" % "kiama_2.12" % "2.1.0",
   "org.bitlet" % "weupnp" % "0.1.4",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
-  "org.ergoplatform" % "ergo-wallet_2.12" % "0.0.6",
+  "org.ergoplatform" % "ergo-wallet_2.12" % "0.0.9",
   "org.objenesis" % "objenesis" % "2.4",
   "org.ow2.asm" % "asm" % "5.0.4",
   "org.reactivestreams" % "reactive-streams" % "1.0.2",

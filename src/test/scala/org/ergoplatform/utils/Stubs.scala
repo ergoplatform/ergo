@@ -134,7 +134,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case _: InitWallet => sender() ! Success(WalletActorStub.mnemonic)
 
-      case _: RestoreWallet => ()
+      case _: RestoreWallet => sender() ! Success(())
 
       case _: UnlockWallet => sender() ! Success(())
 

@@ -3,6 +3,7 @@ package org.ergoplatform.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
+import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -45,7 +46,11 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       sendPaymentTransactionR ~
       sendAssetIssueTransactionR ~
       p2shAddressR ~
-      p2sAddressR
+      p2sAddressR ~
+      initWalletR ~
+      restoreWalletR ~
+      unlockWalletR ~
+      lockWalletR
   }
 
   private val loadMaxKeys: Int = 100
@@ -59,6 +64,22 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   private val source: Directive1[String] = entity(as[Json]).flatMap { p =>
     p.hcursor.downField("source").as[String]
+      .fold(_ => reject, s => provide(s))
+  }
+
+  private val password: Directive1[String] = entity(as[Json]).flatMap { p =>
+    p.hcursor.downField("pass").as[String]
+      .fold(_ => reject, s => provide(s))
+  }
+
+  private val restoreRequest: Directive1[(String, String, Option[String])] = entity(as[Json]).flatMap { p =>
+    p.hcursor.downField("pass").as[String]
+      .flatMap(pass => p.hcursor.downField("mnemonic").as[String]
+        .flatMap(mnemo => p.hcursor.downField("mnemonicPass").as[Option[String]]
+          .map(mnemoPassOpt => (pass, mnemo, mnemoPassOpt)
+          )
+        )
+      )
       .fold(_ => reject, s => provide(s))
   }
 
@@ -164,6 +185,39 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def addressesR: Route = (path("addresses") & get) {
     withWallet(_.trackedAddresses())
+  }
+
+  def initWalletR: Route = (path("init") & post & password) { pass =>
+    withWalletOp(_.initWallet(pass)) {
+      _.fold(
+        e => BadRequest(e.getMessage),
+        mnemonic => ApiResponse(Json.obj("mnemonic" -> mnemonic.asJson))
+      )
+    }
+  }
+
+  def restoreWalletR: Route = (path("init") & post & restoreRequest) {
+    case (pass, mnemo, mnemoPassOpt) =>
+      withWallet { w =>
+        w.restoreWallet(pass, mnemo, mnemoPassOpt)
+        Future.successful(())
+      }
+  }
+
+  def unlockWalletR: Route = (path("unlock") & post & password) { pass =>
+    withWalletOp(_.unlockWallet(pass)) {
+      _.fold(
+        e => BadRequest(e.getMessage),
+        _ => ApiResponse.toRoute(ApiResponse.OK)
+      )
+    }
+  }
+
+  def lockWalletR: Route = (path("lock") & get) {
+    withWallet { w =>
+      w.lockWallet()
+      Future.successful(())
+    }
   }
 
 }

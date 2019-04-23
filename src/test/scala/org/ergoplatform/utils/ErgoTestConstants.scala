@@ -40,7 +40,6 @@ trait ErgoTestConstants extends ScorexLogging {
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   val genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(settings.chainSettings)
   val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(settings.chainSettings).head
-  val defaultSeed: String = ErgoSettings.read(None).walletSettings.seed
   val defaultProver: ErgoProvingInterpreter = ???
   val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
   val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w

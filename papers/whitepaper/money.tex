@@ -3,15 +3,35 @@
 \section{Contractual Money}
     \label{sec:contractual}
 
-    %   пишет Саша
+\dnote{I don't completely catch your definition of contractual money. I expected that any condition is some contract,
+a simple one~(e.g., anyone can spend these coins at any time), more complicated~($PK_A$ before time T, $PK_B$
+after that) or with complicated spending conditions~(like may only be spend for concrete address).
+For example it's unclear for me, whether a box with proposition "protected by public key OR
+demands a spending transaction with the box which guarding script hash equal to "rB...4N" is contractual or free}
 
-    %   ценность нашего токена, и филосовские размышления о данном типе экономики
-    %   практические удобные и эффективные контракты для денег
-    %   Описать про UTXO модель, почему мы ее выбрали
-    %   Скрипт - доступ к стейту, доступ к блокчейну, цепочки (тут можно сослаться на Эфир, ибо там написано что в UTXO это невозможно), сигма протоколы
-    %   token system - токены на базовом уровне, сильно упрощают протоколы вида "token threshold", позволяют разграничить потоки
-    %   ? Анонимность и пример контракта миксинга
-    %   Примеры 1-2 контракта, который иллюстрируют несколько основных преимуществ эрго
+ In our opinion, the overwhelming majority of public blockchain use-cases are about financial applications,
+ even in platforms that claim to be a general-purpose decentralized world computer.
+ For example, even if an oracle is writing
+ non-financial data into a blockchain (such as temperature), this data is usually to be written to be used in a financial
+ contract. Another trivial observation we have made is that many applications are using digital tokens with mechanics
+ different from a native one.
+
+ Ergo offers for an application developer inbuilt tokens and domain-specific language for box guarding
+ condition to implement flexible and secure financial applications.
+ Thus Ergo applications are defined in terms of guarding scripts built into boxes also containing
+ data possibly involved into execution. We coin the term {\em contractual money} for Ergs and secondary tokens which
+ usage is bounded by a contract. In the narrow sense, we can distinguish Ergs in existence as ones which could easily
+ change their contracts from Ergs which are bounded by contracts in the sense that a box with contractual Ergs is
+ demanding from a spending transaction to create boxes with some properties. We will refer to the former as to ordinary
+ (or cleared, or free) Ergs, and to the latter as to the contractual Ergs. Similarly, we can define contractual tokens.
+
+ For example, if a box is protected just by a public key~(so providing a signature against a spending transaction is
+ enough in order to destroy the box), a public key owner may create an arbitrary box replacing the one being protected
+ by the public key, thus the Ergs within the box are free to change the contract. In contrast, imagine a box "B" which
+ is protected by combination of a public key and also condition which demands a spending transaction to create an output
+ box which guarding script hash is equal to "rBMUEMuPQUx3GzgFZSsHmLMBouLabNZ4HcERm4N" (in Base58 encoding), and Ergs
+ value of the output should equal to the value of the original box. In this case, box value is bounded by the contract,
+ thus Ergs in the box are contractual Ergs.
 
 \dnote{Style where every small piece of information is divided into a subsection is completely different from
 the previous sections, we should unify the style in the whole document}
@@ -46,40 +66,6 @@ the previous sections, we should unify the style in the whole document}
  datasets, so we are using authenticated AVL+ trees as described in~\cite{reyzin2017improving}. We provide access to
  this datastructure via our transaction language as well.
 
-\subsection{The Ergo As The Platform}
- \label{sec:platform}
-
-\dnote{I think this subsection is the nice intro for the whole "Contractual Money" section so propose to put it to the beginning}
-
-\dnote{I don't completely catch your definition of contractual money. I expected that any condition is some contract,
-a simple one~(e.g., anyone can spend these coins at any time), more complicated~($PK_A$ before time T, $PK_B$
-after that) or with complicated spending conditions~(like may only be spend for concrete address).
-For example it's unclear for me, whether a box with proposition "protected by public key OR
-demands a spending transaction with the box which guarding script hash equal to "rB...4N" is contractual or free}
-
- In our opinion, the overwhelming majority of public blockchain use-cases are about financial applications,
- even in platforms that claim to be a general-purpose decentralized world computer.
- For example, even if an oracle is writing
- non-financial data into a blockchain (such as temperature), this data is usually to be written to be used in a financial
- contract. Another trivial observation we have made is that many applications are using digital tokens with mechanics
- different from a native one.
-
- Ergo offers for an application developer inbuilt tokens and domain-specific language for box guarding
- condition to implement flexible and secure financial applications.
- Thus Ergo applications are defined in terms of guarding scripts built into boxes also containing
- data possibly involved into execution. We coin the term {\em contractual money} for Ergs and secondary tokens which
- usage is bounded by a contract. In the narrow sense, we can distinguish Ergs in existence as ones which could easily
- change their contracts from Ergs which are bounded by contracts in the sense that a box with contractual Ergs is
- demanding from a spending transaction to create boxes with some properties. We will refer to the former as to ordinary
- (or cleared, or free) Ergs, and to the latter as to the contractual Ergs. Similarly, we can define contractual tokens.
-
- For example, if a box is protected just by a public key~(so providing a signature against a spending transaction is
- enough in order to destroy the box), a public key owner may create an arbitrary box replacing the one being protected
- by the public key, thus the Ergs within the box are free to change the contract. In contrast, imagine a box "B" which
- is protected by combination of a public key and also condition which demands a spending transaction to create an output
- box which guarding script hash is equal to "rBMUEMuPQUx3GzgFZSsHmLMBouLabNZ4HcERm4N" (in Base58 encoding), and Ergs
- value of the output should equal to the value of the original box. In this case, box value is bounded by the contract,
- thus Ergs in the box are contractual Ergs.
 
 \subsection{Difference From Bitcoin}
 

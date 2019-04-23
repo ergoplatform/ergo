@@ -20,13 +20,11 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.core.app.Version
-import scorex.core.network.{Handshake, PeerSpec}
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
+import scorex.core.network.{Handshake, PeerSpec}
 import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -36,7 +34,7 @@ import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.Success
 
 trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with FileUtils {
 
@@ -129,16 +127,16 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   class WalletActorStub extends Actor {
 
     private implicit val addressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
-    private val prover: ErgoProvingInterpreter = ???
+    private val prover: ErgoProvingInterpreter = defaultProver
     private val trackedAddresses: Seq[P2PKAddress] = prover.pubKeys.map(P2PKAddress.apply)
 
     def receive: Receive = {
 
-      case InitWallet => sender() ! Success(WalletActorStub.mnemonic)
+      case _: InitWallet => sender() ! Success(WalletActorStub.mnemonic)
 
-      case RestoreWallet => ()
+      case _: RestoreWallet => ()
 
-      case UnlockWallet => Success(())
+      case _: UnlockWallet => sender() ! Success(())
 
       case LockWallet => ()
 

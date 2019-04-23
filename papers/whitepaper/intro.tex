@@ -14,7 +14,7 @@ This outstanding resilience of cryptocurrencies is achieved by a combination of 
 and decentralized architecture.
 Cryptography itself is widely used outside the cryptocurrencies, however centralized services continuously
 being hacked\cite{sanger2015bank,leskin2018top} due to malicious or incompetent behavior of company employers.
-\knote{Why you are sure that this is a major problem of centralized services?}
+\knote{Why you are sure that this is a major problem of centralized services?}\dnote{I've provided 2 links, we may provide more if you don't think it is enough}
 Decentralized systems are resilient for such kind of attacks by design due to absence of an ``admin'' user
 that is capable to manually change records of the database and steal money or private data.
 
@@ -25,9 +25,8 @@ Besides network utilization, transaction processing requires to utilize computat
 especially if the transactional language is flexible enough.
 Finally, blockchain participants should keep quite a significant amount of data in their local storages and
 the storage requirements are growing fast.
-Thus thousands of computers all over the world utilize various resources
-increasing the cost of single transaction processing,
-so users pay transaction fees~\cite{chepurnoy2018systematic}. \knote{The sentence sounds pretty weird.}
+Thus transaction processing utilize various resources of thousands of computers all over the world
+and these resources consumption is paid by regular users via transaction fees~\cite{chepurnoy2018systematic}.
 These fees may be very high~\cite{bitcoinFees}
 and ten years later blockchain technology is still mainly used in financial applications, where the advantage of
 high security outweighs the disadvantage of high transaction costs.
@@ -39,15 +38,14 @@ For now, there are two main approaches to write smart contracts~\cite{zahnentfer
 UTXO-based~(e.g., Bitcoin) and account-based~(e.g., Ethereum).
 Account-based cryptocurrencies, such as Ethereum, introduce special contract accounts controlled by code,
 that may be invoked by incoming transactions.
-This approach allows performing arbitrary computations, however, complexity coins spending conditions
-implementation \knote{last five words do not sound together at all} lead to bugs like \$150 million loss in 2017 in
+This approach allows performing arbitrary computations, however, implementation of complex coins spending conditions
+lead to bugs like \$150 million loss in 2017 in
 Ethereum from simple multi-signature contract~\cite{parityLock}.
 In UTXO-based cryptocurrencies, every coin has a script associated with it, and to spend the coin, one should
 satisfy script conditions.
 Implementation of coins protecting conditions is much easier in UTXO model,
-while arbitrary Turing-complete logic become quite complicated~(e.g., check this example of
-simple Turing-complete system implementation in \Ergo{}~\cite{chepurnoy2018self}) \knote{The paper is unlikely showing
-that the UTXO model is not so convenient for Turing-complete computations. The meaning of the sentence is not clear}.
+while arbitrary Turing-complete logic become quite complicated~(e.g., implementation of a trivial Turing-complete
+system become quite complicated~\cite{chepurnoy2018self}).
 Ergo is based on UTXO model as far as it is more convenient to implement financial applications covering the
 overwhelming majority of public blockchain use-cases.
 

@@ -18,7 +18,7 @@ import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.TransactionContext
-import org.ergoplatform.wallet.secrets.JsonSecretStorage
+import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, JsonSecretStorage}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
@@ -64,7 +64,20 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
-    readSecretStorage.foreach(storage => secretStorageOpt = Some(storage))
+    walletSettings.testMnemonic match {
+      case Some(testMnemonic) =>
+        log.info("Initializing wallet in test mode.")
+        val seed = Mnemonic.toSeed(testMnemonic)
+        val sk = ExtendedSecretKey.deriveMasterKey(seed).key
+        proverOpt = Some(ErgoProvingInterpreter(sk, parameters))
+        proverOpt.foreach(_.pubKeys.foreach(pk => trackedAddresses.append(P2PKAddress(pk))))
+      case None =>
+        log.info("Trying to read wallet in secure mode ..")
+        readSecretStorage.fold(
+          e => log.info(s"Failed to read wallet. Manual initialization is required to sign transactions. Cause: $e"),
+          _ => log.info("Wallet loaded successfully")
+        )
+    }
   }
 
   override def receive: Receive =
@@ -268,13 +281,17 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private def readSecretStorage: Try[JsonSecretStorage] = {
     val dir = new File(ergoSettings.walletSettings.secretStorage.secretDir)
-    dir.listFiles().toList match {
-      case files if files.size > 1 =>
-        Failure(new Exception("Ambiguous secret files"))
-      case headFile :: _ =>
-        Success(new JsonSecretStorage(headFile, ergoSettings.walletSettings.secretStorage.encryption))
-      case Nil =>
-        Failure(new Exception("Secret file not found"))
+    if (dir.exists()) {
+      dir.listFiles().toList match {
+        case files if files.size > 1 =>
+          Failure(new Exception("Ambiguous secret files"))
+        case headFile :: _ =>
+          Success(new JsonSecretStorage(headFile, ergoSettings.walletSettings.secretStorage.encryption))
+        case Nil =>
+          Failure(new Exception("Secret file not found"))
+      }
+    } else {
+      Failure(new Exception("Secret dir does not exist"))
     }
   }
 
@@ -290,7 +307,11 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! publicKeys.slice(from, until)
 
     case GetFirstSecret =>
-      proverOpt.foreach(_.secrets.headOption.foreach(s => sender() ! s))
+      if (proverOpt.nonEmpty) {
+        proverOpt.foreach(_.secrets.headOption.foreach(s => sender() ! Success(s)))
+      } else {
+        sender() ! Failure(new Exception("Wallet is locked"))
+      }
 
     case GetBoxes =>
       sender() ! registry.unspentCertainBoxesIterator.map(_.box)
@@ -309,7 +330,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private def walletCommands: Receive = {
 
-    case InitWallet(pass) =>
+    case InitWallet(pass) if secretStorageOpt.isEmpty =>
       val seed = scorex.utils.Random.randomBytes(ergoSettings.walletSettings.seedStrengthBits / 8)
       val secretStorage = JsonSecretStorage
         .init(seed, pass)(ergoSettings.walletSettings.secretStorage)
@@ -318,10 +339,14 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
         .toMnemonic(seed)
       sender() ! mnemonicTry
 
-    case RestoreWallet(mnemonic, passOpt, encryptionPass) =>
+    case RestoreWallet(mnemonic, passOpt, encryptionPass) if secretStorageOpt.isEmpty =>
       val secretStorage = JsonSecretStorage
         .restore(mnemonic, passOpt, encryptionPass)(ergoSettings.walletSettings.secretStorage)
       secretStorageOpt = Some(secretStorage)
+      sender() ! Success(())
+
+    case RestoreWallet | InitWallet(_) =>
+      sender() ! Failure(new Exception("Wallet is already initialized"))
 
     case UnlockWallet(pass) =>
       secretStorageOpt match {

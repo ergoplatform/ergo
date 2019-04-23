@@ -9,6 +9,7 @@ import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConsta
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
+import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.{DataInput, ErgoBox, ErgoScriptPredef}
 import scorex.core.app.Version
@@ -39,7 +40,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val feeProp: ErgoTree = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
 
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
-  val defaultSeed: Digest32 = Blake2b256.hash("seed".getBytes("UTF-8"))
+  val defaultSeed: Array[Byte] = Mnemonic.toSeed(settings.walletSettings.testMnemonic.get)
   val defaultRootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(defaultSeed)
   val genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(settings.chainSettings)
   val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(settings.chainSettings).head

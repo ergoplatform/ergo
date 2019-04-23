@@ -14,6 +14,7 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import scorex.core._
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Digest32
@@ -75,13 +76,15 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
   property("Founders should be able to spend genesis founders box") {
     var (us, bh) = createUtxoState()
-    val foundersBox = genesisBoxes.last
     var height: Int = ErgoHistory.GenesisHeight
 
-    val settingsPks = settings.chainSettings.foundersPubkeys
-      .map(str => groupElemFromBytes(Base16.decode(str).get))
-      .map(pk => ProveDlog(pk))
-    settingsPks.count(p => defaultProver.pubKeys.contains(p)) shouldBe 2
+    val foundersSecrets = IndexedSeq(defaultRootSecret.key, defaultRootSecret.child(1).key)
+    val foundersPks = foundersSecrets.map(_.publicImage)
+    val prover = ErgoProvingInterpreter(foundersSecrets, parameters)
+    foundersPks.count(p => prover.pubKeys.contains(p)) shouldBe 2
+
+    val foundersBox = ErgoState.genesisBoxes(
+      settings.chainSettings.copy(foundersPubkeys = foundersPks.map(x => Base16.encode(x.pkBytes)))).last
 
     forAll(defaultHeaderGen) { header =>
       val rewardPk = new DLogProverInput(BigInt(header.height).bigInteger).publicImage
@@ -106,7 +109,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         ErgoBox(foundersBox.value - remaining, rewardPk, height, Seq())
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
-      val tx = defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get
+      val tx = prover.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get
       us.validate(ErgoTransaction(tx)) shouldBe 'success
       height = height + 1
     }

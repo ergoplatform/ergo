@@ -8,4 +8,5 @@ case class WalletSettings(secretStorage: SecretStorageSettings,
                           seedStrengthBits: Int,
                           mnemonicPhraseLanguage: String,
                           scanningInterval: FiniteDuration,
-                          defaultTransactionFee: Long = 100000L)
+                          defaultTransactionFee: Long = 100000L,
+                          testMnemonic: Option[String] = None)

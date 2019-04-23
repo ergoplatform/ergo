@@ -196,7 +196,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
-  def restoreWalletR: Route = (path("init") & post & restoreRequest) {
+  def restoreWalletR: Route = (path("restore") & post & restoreRequest) {
     case (pass, mnemo, mnemoPassOpt) =>
       withWallet { w =>
         w.restoreWallet(pass, mnemo, mnemoPassOpt)

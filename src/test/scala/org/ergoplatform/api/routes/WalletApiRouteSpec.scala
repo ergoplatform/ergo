@@ -14,7 +14,6 @@ import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
 import org.scalatest.{FlatSpec, Matchers}
-import sigmastate.Values
 
 import scala.util.Try
 
@@ -148,7 +147,7 @@ class WalletApiRouteSpec extends FlatSpec
   it should "initialize wallet" in {
     Post(prefix + "/init", Json.obj("pass" -> "1234".asJson)) ~> route ~> check {
       status shouldBe StatusCodes.OK
-      responseAs[String] shouldEqual WalletActorStub.mnemonic
+      responseAs[Json].hcursor.downField("mnemonic").as[String] shouldEqual Right(WalletActorStub.mnemonic)
     }
   }
 

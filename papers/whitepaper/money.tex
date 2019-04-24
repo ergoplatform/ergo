@@ -196,7 +196,13 @@ found~\cite{ergoTutorial}.
 
 \paragraph{Crowdfunding}
 
- We consider a simplest crowdfunding scenario.
+ We consider a simplest crowdfunding scenario. In the example, a crowdfunding project is considered successful if it
+ can collect unspent outputs with total value not less than a certain amount before
+ a certain height. A project backer creates an output box protected by the following statement: \knote{finish}
+ Then the project can collect biggest outputs with total value not less
+ than the amount with a single transaction~(it is possible to collect up to ~22,000 outputs in Bitcoin, which is
+ enough even for a big crowdfunding campaign). For remaining small outputs over the amount, it is possible to
+ construct follow-up transactions. The code can be found in~\cite{ergoTutorial}.
 
 \paragraph{The Local Exchange Trading System}
 

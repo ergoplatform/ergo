@@ -33,37 +33,6 @@
  value of the output should equal to the value of the original box. In this case, box value is bounded by the contract,
  thus Ergs in the box are bounded Ergs.
 
-\subsection{UTXO vs Accounts}
- \label{sec:utxo}
-
-\dnote{This subsection looks unrelated to other subsections of this section, so I propose to extend it and extract to a separate section}
-
- To check a new transaction, a cryptocurrency client is not using the ledger (all the transactions happened before the
- transaction), rather, it is using ledger state snapshot got from the history. In Bitcoin Core reference implementation,
- this snapshot is about active one-time coins, and a transaction is destroying some coins and also creating new ones.
- In Ethereum, the snapshot is about long-living accounts, where an account is controlled whether by a human or
- executable code; a transaction then is modifying monetary balance and internal memory of some accounts. Also, the
- representation of the snapshot in Ethereum~(unlike Bitcoin) is fixed by the protocol, as authenticating digest of the
- snapshot is written into a block header (thus, in order to have full security guarantees, a client needs to build
- the same snapshot as a miner).
-
- Ergo is representing the snapshot in the form of one-time coins, like Bitcoin. The difference is, in addition to monetary
- value and protecting script, an Ergo coin contains additional registers with arbitrary data, thus we use term {\em box}
- instead of {\em coin}. Using one-time immutable objects is the easiest and safest solution for replay and reordering
- attacks. Also, it it is easier to process transactions in parallel when they are not modifying state of objects they
- are accessing. Also, with one-time coins, it seems it is easier to build fully stateless clients~\cite{chepurnoy2018edrax},
- however, research in this area is still in the initial stage. A major criticism for one-time coins says that this model
- is not suitable for non-trivial applications, but Ergo has overcome such problems, and we have many non-trivial
- prototype applications built on top of the Ergo Platform.
-
- Like in Ethereum, the ledger snapshot representation~(in the form of boxes not destroyed by
- previous transactions) is fixed by the Ergo protocol. In details, a miner should maintain a Merkle-tree like
- authenticated data structure built on top of UTXO set, and include short digest (just 33 bytes) corresponding to UTXO
- set after application of a block into a header of the block. However, static Merkle trees are not suitable for evolving
- datasets, so we are using authenticated AVL+ trees as described in~\cite{reyzin2017improving}. We provide access to
- this datastructure via our transaction language as well.
-
-
 \subsection{Prelimiaries For Ergo Contracts}
 
   While in Bitcoin a transaction output is protected by a program in the stack-based language, in Ergo a

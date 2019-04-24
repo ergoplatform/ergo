@@ -182,11 +182,23 @@
  We refer to the \cite{ergoAdvTutorial} for a proof of outputs indistinguishability and details on why
  Alice and Bob can spend only their respective coins.
 
-\subsubsection{The Local Exchange Trading System}
- \label{sec:platform}
 
-\dnote{Does this section provide any new information? Looks like the same approach as an oracle example ---
-issue a token and link to it with data inputs. We may move this example to "More Examples" and provide a short description there.}
+\subsubsection{More Examples}
+
+ We briefly give a light on few more examples along with links document providing details and code/
+
+\paragraph{Atomic Swap}
+
+Cross-chain atomic swap could be done in the same way as proposed for Bitcoin, see initial protocol for Bitcoin in
+\cite{Nol13}, its Ergo alternative is provided in~\cite{ergoTutorial}. As Ergo has custom tokens,
+atomic exchange on a single block chain (Erg-to-token or token-to-token) is also possible, a solution for that can be
+found~\cite{ergoTutorial}.
+
+\paragraph{Crowdfunding}
+
+ We consider a simplest crowdfunding scenario.
+
+\paragraph{The Local Exchange Trading System}
 
  Here we briefly overview a local exchange trading system implementation. In such a system, a member of a community may
  issue community currency via personal debt. For example, if Alice with zero balance is buying something for $5$
@@ -205,9 +217,10 @@ issue a token and link to it with data inputs. We may move this example to "More
  box is protected by a special exchange script requiring to do a fair exchange only for a spending transaction.
  We skip the corresponding code, but it could be found in a separate article~\cite{icoTutorial}.
 
-\subsubsection{More Examples}
+\paragraph{Initial Coin Offering}
 
-\dnote{I propose to provide a short description for valuable examples here like in  \url{https://github.com/ethereum/wiki/wiki/White-Paper\#further-applications}}
+
+\paragraph{Even More Examples}
 
  We have more examples of Ergo applications, such as crowdfunding, atomic swap, time-controlled emission,
  cold wallet, rock-paper-scissors game, initial coin offering (ICO), and so on. The examples could be

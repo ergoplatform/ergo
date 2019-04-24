@@ -14,7 +14,6 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import scorex.core._
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Digest32

@@ -108,7 +108,8 @@ demands a spending transaction with the box which guarding script hash equal to 
  \label{sec:platform}
 
  Equipped with custom tokens and data inputs, we can develop a simple oracle example, also showing on the way some
- design patterns for Ergo contracts. Assume that Alice and Bob are going to bet on weather tomorrow. For that, they are putting money into a box, which is spendable by
+ design patterns that we have discovered. Assume that Alice and Bob are going to bet on weather tomorrow. For that,
+ they are putting money into a box, which is spendable by
  Alice if the temperature is more than 15 degrees, and is spendable by Bob otherwise. To deliver the temperature into the
  blockchain a trusted oracle is needed.
 
@@ -125,8 +126,8 @@ demands a spending transaction with the box which guarding script hash equal to 
 
  Assume that Alice and Bob know oracle's token identifier in advance. With this knowledge, they
  can jointly create a box which requires first data input (which is read-only) to contain the oracle's token. The
- contract is extracting temperature from the data input and decides who is getting the payout. The code is as simple as
-
+ contract is extracting temperature and time~(in seconds since the beginning of the UNIX epoch)from the data input
+ and decides who is getting the payout. The code is as simple as following:
 
  \begin{algorithm}[H]
     \caption{Oracle Contract Example}
@@ -134,9 +135,10 @@ demands a spending transaction with the box which guarding script hash equal to 
     \begin{algorithmic}[1]
         \State val dataInput = CONTEXT.dataInputs(0)
         \State val inReg = dataInput.R4[Long].get
-        \State val inToken = dataInput.tokens(0).\_1 == tokenId
-        \State val okContractLogic = (inReg $>$ 15L \&\& pkA) $||$ (inReg $<=$ 15L \&\& pkB)
-        \State inToken \&\& okContractLogic
+        \State val inTime = dataInput.R5[Long].get
+        \State val inToken = dataInput.tokens(0)._1 == tokenId
+        \State val okContractLogic = (inTime > 1556089223) && ((inReg > 15L && pkA) || (inReg <= 15L && pkB))
+        \State inToken && okContractLogic
     \end{algorithmic}
  \end{algorithm}
 

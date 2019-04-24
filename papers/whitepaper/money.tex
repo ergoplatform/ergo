@@ -108,7 +108,8 @@
         \State val inReg = dataInput.R4[Long].get
         \State val inTime = dataInput.R5[Long].get
         \State val inToken = dataInput.tokens(0).\_1 == tokenId
-        \State val okContractLogic = (inTime > 1556089223) \&\& ((inReg > 15L \&\& pkA) || (inReg <= 15L \&\& pkB))
+        \State val okContractLogic = (inTime $>$ 1556089223) \&\&
+        \State\hspace{\algorithmicindent}\hspace{\algorithmicindent} ((inReg $>$ 15L \&\& pkA) $||$ (inReg $\le$ 15L \&\& pkB))
         \State inToken \&\& okContractLogic
     \end{algorithmic}
  \end{algorithm}

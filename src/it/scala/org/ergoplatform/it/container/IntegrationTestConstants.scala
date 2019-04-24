@@ -9,7 +9,14 @@ import scala.collection.JavaConverters._
 
 trait IntegrationTestConstants extends ErgoTestConstants {
 
-  val defaultConfigTemplate: Config = ConfigFactory.parseResources("template.conf")
+  val walletAutoInitConfig: Config = ConfigFactory.parseString(
+    s"""
+       |ergo.wallet.testMnemonic = "ozone drill grab fiber curtain grace pudding thank cruise elder eight picnic"
+       |ergo.wallet.testKeysQty = 5
+    """.stripMargin
+  )
+
+  val defaultConfigTemplate: Config = ConfigFactory.parseResources("template.conf").withFallback(walletAutoInitConfig)
   val nodesJointConfig: Config = ConfigFactory.parseResources("nodes.conf").resolve()
   val nodeSeedConfigs: List[Config] = nodesJointConfig.getConfigList("nodes").asScala.toList
 

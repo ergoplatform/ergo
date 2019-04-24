@@ -66,8 +66,6 @@ demands a spending transaction with the box which guarding script hash equal to 
 
 \subsection{Prelimiaries For Ergo Contracts}
 
-%\dnote{Subsection name does not match the content, propose to rename it to "Ergo guardian script" or similar}
-
   While in Bitcoin a transaction output is protected by a program in the stack-based language, in Ergo a
  box is protected by a logic formula which combines predicates over a context and cryptographic statements provable
  via zero-knowledge protocols with AND, OR, and k-out-of-n connectives. The formula is represented as a typed direct
@@ -82,15 +80,14 @@ demands a spending transaction with the box which guarding script hash equal to 
  and "Advanced ErgoScript Tutorial"~\cite{ergoAdvTutorial}. Thus below we are not going to dive into developing contracts with
  ErgoScript, rather, we are going to provide a couple of motivation examples.
 
-
  \begin{itemize}
- \item{Data Inputs: }
+    \item{Data Inputs: }
  a box could be not only destroyed by a transaction, but is also could be only read, in the latter case we refer to the
  box as to {\em data input} of the transaction. Thus a transaction is getting two box sets as its arguments, inputs and
  data inputs, and produces a box set named {\em outputs}. Data inputs are useful for oracle applications and interacting
  contracts.
 
- \item{Custom tokens: }
+    \item{Custom tokens: }
  a transaction can carry many tokens, if only estimated complexity for processing them is not exceeding a limit. A
  transaction is also able to issue a token, but only one, and with a unique~(and cryptographically strong against
  finding a collision) identifier, which is equal to identifier of a first~(spendable) input box of the transaction.

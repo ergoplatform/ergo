@@ -136,9 +136,9 @@ demands a spending transaction with the box which guarding script hash equal to 
         \State val dataInput = CONTEXT.dataInputs(0)
         \State val inReg = dataInput.R4[Long].get
         \State val inTime = dataInput.R5[Long].get
-        \State val inToken = dataInput.tokens(0)._1 == tokenId
-        \State val okContractLogic = (inTime > 1556089223) && ((inReg > 15L && pkA) || (inReg <= 15L && pkB))
-        \State inToken && okContractLogic
+        \State val inToken = dataInput.tokens(0).\_1 == tokenId
+        \State val okContractLogic = (inTime > 1556089223) \&\& ((inReg > 15L \&\& pkA) || (inReg <= 15L \&\& pkB))
+        \State inToken \&\& okContractLogic
     \end{algorithmic}
  \end{algorithm}
 

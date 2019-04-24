@@ -3,27 +3,27 @@
 \section{Contractual Money}
     \label{sec:contractual}
 
-\dnote{I don't completely catch your definition of contractual money. I expected that any condition is some contract,
-a simple one~(e.g., anyone can spend these coins at any time), more complicated~($PK_A$ before time T, $PK_B$
-after that) or with complicated spending conditions~(like may only be spend for concrete address).
-For example it's unclear for me, whether a box with proposition "protected by public key OR
-demands a spending transaction with the box which guarding script hash equal to "rB...4N" is contractual or free}
-
  In our opinion, the overwhelming majority of public blockchain use-cases are about financial applications,
- even in platforms that claim to be a general-purpose decentralized world computer.
- For example, even if an oracle is writing
- non-financial data into a blockchain (such as temperature), this data is usually to be written to be used in a financial
+ even in case of a platform which claims to be a general-purpose decentralized world computer.
+ For example, if an oracle is writing down
+ non-financial data into a blockchain~(such as temperature), this data is usually to be used further in a financial
  contract. Another trivial observation we have made is that many applications are using digital tokens with mechanics
  different from a native one.
 
- Ergo offers for an application developer inbuilt tokens and domain-specific language for box guarding
- condition to implement flexible and secure financial applications.
+ Ergo offers for an application developer custom tokens~(which are first-class citizens) and domain-specific language
+ for box protecting
+ condition in order to implement flexible and secure financial applications.
  Thus Ergo applications are defined in terms of guarding scripts built into boxes also containing
  data possibly involved into execution. We coin the term {\em contractual money} for Ergs and secondary tokens which
- usage is bounded by a contract. In the narrow sense, we can distinguish Ergs in existence as ones which could easily
+ usage is bounded by a contract.
+
+ Any box with its contents~(Ergs, tokens, data) is bounded by a contract.
+ However, we can distinguish Ergs in existence as ones which could easily
  change their contracts from Ergs which are bounded by contracts in the sense that a box with contractual Ergs is
  demanding from a spending transaction to create boxes with some properties. We will refer to the former as to ordinary
- (or cleared, or free) Ergs, and to the latter as to the contractual Ergs. Similarly, we can define contractual tokens.
+ (or cleared, or free) Ergs, and to the latter as to the bounded Ergs. Similarly, we can define bounded tokens. Both
+ free and bounded Ergs are contractual, and in some cases hybrids are possible, for example, for one public key it could
+ be a bounding contract, and for another public key not.
 
  For example, if a box is protected just by a public key~(so providing a signature against a spending transaction is
  enough in order to destroy the box), a public key owner may create an arbitrary box replacing the one being protected
@@ -31,7 +31,7 @@ demands a spending transaction with the box which guarding script hash equal to 
  is protected by combination of a public key and also condition which demands a spending transaction to create an output
  box which guarding script hash is equal to "rBMUEMuPQUx3GzgFZSsHmLMBouLabNZ4HcERm4N" (in Base58 encoding), and Ergs
  value of the output should equal to the value of the original box. In this case, box value is bounded by the contract,
- thus Ergs in the box are contractual Ergs.
+ thus Ergs in the box are bounded Ergs.
 
 \subsection{UTXO vs Accounts}
  \label{sec:utxo}
@@ -78,7 +78,9 @@ demands a spending transaction with the box which guarding script hash equal to 
  a secret key corresponding to the public key $pk_1$ and knowledge of a secret key corresponding to $pk_2$". We have
  two separate documents which are helping to develop contracts with ErgoScript, the "ErgoScript Tutorial"~\cite{ergoTutorial}
  and "Advanced ErgoScript Tutorial"~\cite{ergoAdvTutorial}. Thus below we are not going to dive into developing contracts with
- ErgoScript, rather, we are going to provide a couple of motivation examples.
+ ErgoScript, rather, we are going to provide a couple of motivation examples in following sections.
+
+ More features of Ergo are shaping contracting possibilities:
 
  \begin{itemize}
     \item{Data Inputs: }

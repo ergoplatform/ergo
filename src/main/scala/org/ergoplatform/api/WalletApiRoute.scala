@@ -34,18 +34,20 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  override val route: Route = (pathPrefix("wallet") & withCors & withAuth) {
-    balancesR ~
-      unconfirmedBalanceR ~
-      addressesR ~
-      generateTransactionR ~
-      generatePaymentTransactionR ~
-      generateAssetIssueTransactionR ~
-      sendTransactionR ~
-      sendPaymentTransactionR ~
-      sendAssetIssueTransactionR ~
-      p2shAddressR ~
-      p2sAddressR
+  override val route: Route = (pathPrefix("wallet") & withAuth) {
+    corsHandler {
+      balancesR ~
+        unconfirmedBalanceR ~
+        addressesR ~
+        generateTransactionR ~
+        generatePaymentTransactionR ~
+        generateAssetIssueTransactionR ~
+        sendTransactionR ~
+        sendPaymentTransactionR ~
+        sendAssetIssueTransactionR ~
+        p2shAddressR ~
+        p2sAddressR
+    }
   }
 
   private val loadMaxKeys: Int = 100

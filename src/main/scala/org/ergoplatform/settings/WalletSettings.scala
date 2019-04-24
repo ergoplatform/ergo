@@ -9,4 +9,5 @@ case class WalletSettings(secretStorage: SecretStorageSettings,
                           mnemonicPhraseLanguage: String,
                           scanningInterval: FiniteDuration,
                           defaultTransactionFee: Long = 100000L,
-                          testMnemonic: Option[String] = None)
+                          testMnemonic: Option[String] = None,
+                          testKeysQty: Option[Int] = None)

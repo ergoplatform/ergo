@@ -68,8 +68,9 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
       case Some(testMnemonic) =>
         log.info("Initializing wallet in test mode.")
         val seed = Mnemonic.toSeed(testMnemonic)
-        val sk = ExtendedSecretKey.deriveMasterKey(seed).key
-        proverOpt = Some(ErgoProvingInterpreter(sk, parameters))
+        val rootSk = ExtendedSecretKey.deriveMasterKey(seed)
+        val childSks = walletSettings.testKeysQty.toIndexedSeq.flatMap(x => (0 until x).map(rootSk.child))
+        proverOpt = Some(ErgoProvingInterpreter((rootSk +: childSks).map(_.key), parameters))
         proverOpt.foreach(_.pubKeys.foreach(pk => trackedAddresses.append(P2PKAddress(pk))))
       case None =>
         log.info("Trying to read wallet in secure mode ..")

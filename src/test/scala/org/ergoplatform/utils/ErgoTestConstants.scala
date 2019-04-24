@@ -16,7 +16,7 @@ import scorex.core.app.Version
 import scorex.core.network.PeerSpec
 import scorex.core.utils.NetworkTimeProvider
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
@@ -42,9 +42,13 @@ trait ErgoTestConstants extends ScorexLogging {
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   val defaultSeed: Array[Byte] = Mnemonic.toSeed(settings.walletSettings.testMnemonic.get)
   val defaultRootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(defaultSeed)
+  val defaultChildSecrets: IndexedSeq[ExtendedSecretKey] = settings.walletSettings.testKeysQty
+    .toIndexedSeq
+    .flatMap(x => (0 until x).map(defaultRootSecret.child))
   val genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(settings.chainSettings)
   val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(settings.chainSettings).head
-  val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(IndexedSeq(defaultRootSecret.key), parameters)
+  val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(
+    (defaultRootSecret +: defaultChildSecrets).map(_.key), parameters)
   val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
   val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage

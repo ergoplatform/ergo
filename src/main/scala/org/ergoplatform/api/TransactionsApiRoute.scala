@@ -18,8 +18,10 @@ import scala.concurrent.Future
 case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, settings: RESTApiSettings)
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
-  override val route: Route = (pathPrefix("transactions") & withCors) {
-    getUnconfirmedTransactionsR ~ sendTransactionR
+  override val route: Route = pathPrefix("transactions") {
+    corsHandler {
+      getUnconfirmedTransactionsR ~ sendTransactionR
+    }
   }
 
   private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)

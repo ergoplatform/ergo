@@ -1,24 +1,20 @@
 \section{Introduction}
 \label{sec:intro}
 
-%    Блокчейн дает безопасность (resilient), которая следует из децентрализации (на разных уровнях - майнеры, разработчики, легкие клиенты). (Bitcoin and its problems?)
-%    Безопасность идет высокой ценой (синхронизация и процессинг данных на куче компов), поэтому основное применение - денежное (Money)
-%    Для активного применения (platform) нужна адаптивность под окружение (голосование, выживаемость и т.д.) и возможности написания финансовых контрактов (Contractual)
-%    Вот это все в Эрго, лучше чем в Эфириуме и Биткоине.
+% say the WHY creating Ergo. And also attack the existing financial system a few times.
+% Important the readers know that Ergo really is in the same spirit of Bitcoin in the sense it is open,
+% permissionless and is designed to disintermediate trusted third parties. But then we need to make clear if
+% not too directly that Bitcoin/Ethereum still face a lot of challenges that Ergo is built to address.
 
-Started more ten years ago with the Bitcoin~\cite{nakamoto2008bitcoin}, blockchain technology proved
-to be a secure way of maintaining a public transaction ledger.
+Started more ten years ago with the Bitcoin~\cite{nakamoto2008bitcoin}, blockchain technology has so far proved
+to be a secure way of maintaining a public transaction ledger and disintermediating trusted third parties and
+traditional financial institutions to some degree.
 Even after achieving a market capitalization over \$300bn in 2017~\cite{btcPrice},
 no severe attacks were performed to the Bitcoin network despite the high potential yield.
-This outstanding resilience of cryptocurrencies is achieved by a combination of modern cryptographic algorithms
-and decentralized architecture.
-Cryptography itself is widely used outside the cryptocurrencies, however centralized services continuously
-being hacked\cite{sanger2015bank,leskin2018top} due to malicious or incompetent behavior of company employers.
-\knote{Why you are sure that this is a major problem of centralized services?}\dnote{I've provided 2 links, we may provide more if you don't think it is enough}
-Decentralized systems are resilient for such kind of attacks by design due to absence of an ``admin'' user
-that is capable to manually change records of the database and steal money or private data.
+This resilience of cryptocurrencies and the financial empowerment and self-sovereignty it promises to bring is
+achieved by a combination of modern cryptographic algorithms and decentralized architecture.
 
-However, this resilience does not come for free.
+However, this resilience does not come for free and has not yet been proven by existing systems in the long-term at economy wide-scale.
 To use a blockchain without any trust, its participants should check each other by downloading and
 processing all the transactions in the network, utilizing network resources.
 Besides network utilization, transaction processing requires to utilize computational resources,
@@ -27,7 +23,7 @@ Finally, blockchain participants should keep quite a significant amount of data 
 the storage requirements are growing fast.
 Thus transaction processing utilize various resources of thousands of computers all over the world
 and these resources consumption is paid by regular users via transaction fees~\cite{chepurnoy2018systematic}.
-These fees may be very high~\cite{bitcoinFees}
+Despite the generous block reward subsidy in some existing systems, these fees may be very high~\cite{bitcoinFees}
 and ten years later blockchain technology is still mainly used in financial applications, where the advantage of
 high security outweighs the disadvantage of high transaction costs.
 
@@ -53,21 +49,12 @@ While the contractual component is attractive in for building decentralized appl
 it is also essential that the blockchain will survive in the long term.
 For now, the whole area is young, and most of the application-oriented blockchain platforms exist just for several years,
 while they already have known problems with performance degradation over time~\cite{???} and their long-term survivability is questionable.
+And even older UTXO money-oriented blockchains have not yet been proven fully resilient in the long-run
+under changing conditions as we only have 10-years of blockchain history to this point.
 This problem led to concepts of light nodes with minimum storage requirements~\cite{reyzin2017improving},
 storage rent fee component that prevents bloating of full-node requirements~\cite{chepurnoy2018systematic},
 self-amendable protocols that can adapt to the changing environment and improve themselves without
 trusted parties~\cite{goodman2014tezos}, and more.
-Ergo combines various scientific ideas together to fix these problems, while also provide a way for
-further improvements without any breaking changes.
+What is needed is the combination of various scientific ideas together to fix these problems, while also
+providing a way for further improvements without any breaking changes and this is exactly what Ergo seeks to accomplish.
 
-This paper contains a detailed overview of the Ergo platform %for average-technical audience
-and is structured as follows: in Section~\ref{sec:social} we present general ideas of Ergo platform,
-Section~\ref{sec:autolykos} contains description of Ergo consensus protocol,
-in Section~\ref{sec:survivability} we describe main components, that are implemented in Ergo
-to achieve long term survivability, Section~\ref{sec:currency} describes native token
-of Ergo platform and its emission rules while in Section~\ref{sec:contractual} we
-discuss its value and possible use-cases of Ergo contracts.
-Finally, we conclude our work in Section~\ref{sec:conclusions}.
-More information about different Ergo components may be found in separate documents:
-full technical documentation~\cite{yellowpaper}, ErgoScript overview and examples\cite{???,???} and
-Proof-of-Work algorithm specification~\cite{Ergopow}.

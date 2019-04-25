@@ -35,8 +35,8 @@ object CoinEmissionPrinter extends App {
   println(TotalSupply / Constants.CoinsInOneErgo)
 
   println("================")
-  println("age (years), foundation coins, coins total")
-  println("0, 0, 0")
+  println("age (years), foundation coins, miners coins, coins total")
+  println("0, 0, 0, 0")
 
   @tailrec
   def loop(height: Int, totalMinersReward: Long, totalFoundationReward: Long): Unit = if (height <= emissionCurve.blocksTotal) {
@@ -50,7 +50,11 @@ object CoinEmissionPrinter extends App {
       height == emissionCurve.blocksTotal) {
       // rate changed, print points
       val supply = newTotalMinersReward + newTotalFoundationReward
-      println(s"${height.toDouble / blocksPerYear}, ${newTotalFoundationReward / Constants.CoinsInOneErgo}, ${supply / Constants.CoinsInOneErgo}")
+      println(s"" +
+        s"${height.toDouble / blocksPerYear}," +
+        s" ${newTotalFoundationReward / Constants.CoinsInOneErgo}," +
+        s" ${newTotalMinersReward / Constants.CoinsInOneErgo}," +
+        s" ${supply / Constants.CoinsInOneErgo}")
     }
     loop(height + 1, newTotalMinersReward, newTotalFoundationReward)
   }

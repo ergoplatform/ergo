@@ -1,105 +1,29 @@
+
+
 \section{Contractual Money}
     \label{sec:contractual}
 
-    %   пишет Саша
-
-    %   ценность нашего токена, и филосовские размышления о данном типе экономики
-    %   практические удобные и эффективные контракты для денег
-    %   Описать про UTXO модель, почему мы ее выбрали
-    %   Скрипт - доступ к стейту, доступ к блокчейну, цепочки (тут можно сослаться на Эфир, ибо там написано что в UTXO это невозможно), сигма протоколы
-    %   token system - токены на базовом уровне, сильно упрощают протоколы вида "token threshold", позволяют разграничить потоки
-    %   ? Анонимность и пример контракта миксинга
-    %   Примеры 1-2 контракта, который иллюстрируют несколько основных преимуществ эрго
-
-\dnote{Style where every small piece of information is divided into a subsection is completely different from
-the previous sections, we should unify the style in the whole document}
-
-\subsection{Ergo Token Value}
- \label{sec:ergo-value}
-
- \dnote{I think it might be correct to rename previous section "Currency And Emission"~\ref{sec:currency} to
- "Ergo native token" and include this subsection into it}
-
- \dnote{Bitcoin have utility usage to pay for network resources as well as Ethereum has a utility usage to pay for
- computations~(we've also discussed it in "Systematic approach to cryptocurrency fees" paper). Also Ethereum emission
- rate was only reduced making it better and better as a store of value and is following "set in stone social contract" that
- it will reach zero when it will switch to PoS. Keeping in mind lost coins, Ethereum may be better then Ergo even
- right now, as far as efficient number of coins in circullation may reduce with time unlike Ergo.}
-
- \dnote{Instead of comparision of medium of exchange or store of value properties with BTC/ETH, I propose to
- describe, that Erg is utility token with the different purpose~(pay storage fee) and also have limited
- supply~(that would be natural if we'll move this part into previous section)}
-
-
- In this section, we are going to provide some reflections on the nature of the native Ergo token. For starters, we note that
- any currency is about three main functions: a medium of exchange, a unit of account, and a store of value.
-
- Bitcoin, being historically the first digital scarce asset, is perfect as store-of-value. It is even better than
- gold under certain assumptions~(such as SHA-256 hash function not being broken, and majority of miners are not willing
- to destroy the Bitcoin), as emission is limited and known in advance. However, being perfect store-of-value also means
- to be not so good as medium-of-exchange. In particular, if one knows that Bitcoin is indeed the best tool to store
- value in the long term, he would use fiat whenever possible in order to collect more bitcoins.
-
- On the other hand, Ethereum is not just a currency, but a utility token used to pay for computations over the
- "decentralized world computer" (or "fully replicated programmable calculator"). However, Ethereum is not good as
- store-of-value, as emission in endless, and, historically, can be changed easily by the community core along with
- critical system assumptions.
-
- Ergo combines best from these two top blockchains. Emission is predefined and limited, more, it will be finished within
- just ten years. The system assumptions are set in stone with precisely defined {\em social contract}~\ref{sec:social}. Also,
- Ergo is a utility token used to pay for storage rent. This storage rent is making the system more stable. Last, Ergo is
- suitable to build monetary systems on top of it with properties different from Ergo native token itself. However,
- participating in such systems would require to use Ergo native token as well in order to pay storage rent.
-
-\subsection{UTXO vs Accounts}
- \label{sec:utxo}
-
-\dnote{I think we should add more information our AVL+ tree and it dynamic properties}
-
-\dnote{Also it would be nice to discuss, why did we chose UTXO instead of account~(there are some words about it in intro)}
-
-\dnote{This subsection looks unrelated to other subsections of this section, so I propose to extend it and extract to a separate section}
-
- To check a new transaction, a cryptocurrency client is not using the ledger (all the transactions happened before the
- transaction), rather, it is using ledger state snapshot got from the history. In Bitcoin Core reference implementation,
- this snapshot is about active one-time coins, and a transaction is destroying some coins and also creating new ones.
- In Ethereum, the snapshot is about long-living accounts, where an account is controlled whether by a human or
- executable code; a transaction then is modifying monetary balance and internal memory of some accounts. Also, the
- representation of the snapshot in Ethereum~(unlike Bitcoin) is fixed by the protocol, as authenticating digest of the
- snapshot is written into a block header (thus, in order to have full security guarantees, a client needs to build
- the same snapshot as a miner).
-
- Ergo is representing the snapshot in the form of one-time coins, like Bitcoin. The difference is, in addition to monetary
- value and protecting script, an Ergo coin contains additional registers with arbitrary data, thus we use term {\em box}
- instead of {\em coin}. Also, like in Ethereum, the ledger snapshot representation~(in the form of boxes not destroyed by
- previous transactions) is fixed by the Ergo protocol.
-
-\subsection{The Ergo As The Platform}
- \label{sec:platform}
-
-\dnote{I think this subsection is the nice intro for the whole "Contractual Money" section so propose to put it to the beginning}
-
-\dnote{I don't completely catch your definition of contractual money. I expected that any condition is some contract,
-a simple one~(e.g., anyone can spend these coins at any time), more complicated~($PK_A$ before time T, $PK_B$
-after that) or with complicated spending conditions~(like may only be spend for concrete address).
-For example it's unclear for me, whether a box with proposition "protected by public key OR
-demands a spending transaction with the box which guarding script hash equal to "rB...4N" is contractual or free}
-
- In our opinion, the overwhelming majority of public blockchain use-cases are about financial applications,
- even in platforms that claim to be a general-purpose decentralized world computer.
- For example, even if an oracle is writing
- non-financial data into a blockchain (such as temperature), this data is usually to be written to be used in a financial
+ In our opinion, the overwhelming majority of use-cases for a public blockchain are about financial applications,
+ even in case of a platform which claims to be a general-purpose decentralized world computer.
+ For example, if an oracle is writing down
+ non-financial data into a blockchain~(such as temperature), this data is usually to be used further in a financial
  contract. Another trivial observation we have made is that many applications are using digital tokens with mechanics
  different from a native one.
 
- Ergo offers for an application developer inbuilt tokens and domain-specific language for box guarding
- condition to implement flexible and secure financial applications.
- Thus Ergo applications are defined in terms of guarding scripts built into boxes also containing
+ The Ergo Platform is offering an application developer custom tokens~(which are first-class citizens) and a
+ domain-specific language for box protecting
+ condition in order to implement flexible and secure financial applications.
+ Ergo applications are defined in terms of protecting scripts built into boxes also containing
  data possibly involved into execution. We coin the term {\em contractual money} for Ergs and secondary tokens which
- usage is bounded by a contract. In the narrow sense, we can distinguish Ergs in existence as ones which could easily
+ usage is bounded by a contract, so all the tokens on the platform in existence.
+
+ Any box with its contents~(Ergs, tokens, data) is bounded by a contract.
+ However, we can distinguish Ergs in existence as ones which could easily
  change their contracts from Ergs which are bounded by contracts in the sense that a box with contractual Ergs is
  demanding from a spending transaction to create boxes with some properties. We will refer to the former as to ordinary
- (or cleared, or free) Ergs, and to the latter as to the contractual Ergs. Similarly, we can define contractual tokens.
+ (or cleared, or free) Ergs, and to the latter as to the bounded Ergs. Similarly, we can define bounded tokens. Both
+ free and bounded Ergs are contractual, and in some cases hybrids are possible, for example, for one public key it could
+ be a bounding contract, and for another public key not.
 
  For example, if a box is protected just by a public key~(so providing a signature against a spending transaction is
  enough in order to destroy the box), a public key owner may create an arbitrary box replacing the one being protected
@@ -107,13 +31,12 @@ demands a spending transaction with the box which guarding script hash equal to 
  is protected by combination of a public key and also condition which demands a spending transaction to create an output
  box which guarding script hash is equal to "rBMUEMuPQUx3GzgFZSsHmLMBouLabNZ4HcERm4N" (in Base58 encoding), and Ergs
  value of the output should equal to the value of the original box. In this case, box value is bounded by the contract,
- thus Ergs in the box are contractual Ergs.
+ thus Ergs in the box are bounded Ergs.
 
-\subsection{Difference From Bitcoin}
+\subsection{Prelimiaries For Ergo Contracts}
 
-\dnote{Subsection name does not match the content, propose to rename it to "Ergo guardian script" or similar}
-
- While in Bitcoin a transaction output is protected by a program in the stack-based language, in Ergo a
+  While in Bitcoin a transaction output is protected by a program in a stack-based language named Bitcoin Script,
+  in Ergo a
  box is protected by a logic formula which combines predicates over a context and cryptographic statements provable
  via zero-knowledge protocols with AND, OR, and k-out-of-n connectives. The formula is represented as a typed direct
  acyclic graph, which serialized form is written in a box. To destroy a box, a spending transaction needs to provide
@@ -125,35 +48,40 @@ demands a spending transaction with the box which guarding script hash equal to 
  a secret key corresponding to the public key $pk_1$ and knowledge of a secret key corresponding to $pk_2$". We have
  two separate documents which are helping to develop contracts with ErgoScript, the "ErgoScript Tutorial"~\cite{ergoTutorial}
  and "Advanced ErgoScript Tutorial"~\cite{ergoAdvTutorial}. Thus below we are not going to dive into developing contracts with
- ErgoScript, rather, we are going to provide a couple of motivation examples.
+ ErgoScript, rather, we are going to provide a couple of motivation examples in following sections.
 
-\subsection{Data Inputs}
- \label{sec:data-inputs}
+ More features of Ergo are shaping contracting possibilities:
 
- A box could be not only destroyed by a transaction, but is also could be only read, in the latter case we refer to the
+ \begin{itemize}
+    \item{Data Inputs: }
+ a box could be not only destroyed by a transaction, but is also could be only read, in the latter case we refer to the
  box as to {\em data input} of the transaction. Thus a transaction is getting two box sets as its arguments, inputs and
  data inputs, and produces a box set named {\em outputs}. Data inputs are useful for oracle applications and interacting
  contracts.
 
-\subsection{Custom tokens}
- \label{sec:custom tokens}
-
- A transaction can carry many tokens, if only estimated complexity for processing them is not exceeding a limit. A
+    \item{Custom tokens: }
+ a transaction can carry many tokens, if only estimated complexity for processing them is not exceeding a limit. A
  transaction is also able to issue a token, but only one, and with a unique~(and cryptographically strong against
  finding a collision) identifier, which is equal to identifier of a first~(spendable) input box of the transaction.
  The amount of the tokens issued could be any number within the [1, 9223372036854775807] range. For the tokens, the weak
  preservation rule is defined, which is demanding total amount for a token in transaction outputs should be no more
  than total amount for the token in transaction inputs~(thus some amount of token could be burnt). In contrast, for Ergs
  a preservation rule is strong, thus total Ergs amount for inputs should be equal to total Ergs amount for outputs.
+ \end{itemize}
 
-\subsection{An Oracle Example}
+\subsection{Contract Examples}
+\label{sec:examples}
+
+ In this section we provide some examples which are clearly show superiority of Ergo contracts in comparison with
+ Bitcoin. The examples are including a bet on oracle-provided data, non-interactive mixing, and a complementary currency
+ living on top of the Ergo blockchain.
+
+ \subsubsection{An Oracle Example}
  \label{sec:platform}
 
-  \dnote{more generic intro like " Let's assume that Alice and Bob are going to bet for the weather and Alice wins if the temperature is more than
-  15 degrees. "}
-
  Equipped with custom tokens and data inputs, we can develop a simple oracle example, also showing on the way some
- design patterns for Ergo contracts. In the example, Alice and Bob are putting money into a box, which is spendable by
+ design patterns that we have discovered. Assume that Alice and Bob are going to bet on weather tomorrow. For that,
+ they are putting money into a box, which is spendable by
  Alice if the temperature is more than 15 degrees, and is spendable by Bob otherwise. To deliver the temperature into the
  blockchain a trusted oracle is needed.
 
@@ -164,14 +92,15 @@ demands a spending transaction with the box which guarding script hash equal to 
  tokens, however, a solution is pretty simple.
 
  In the first place, a token identifying the oracle should be issued. In the simplest case, the amount for the token could
- be equal to one. Then the oracle is creating a box which contains the token and also temperature, for example, in the
- register number four~($R4$). In order to update temperature, an oracle is destroying the box and creating a
- new one with updated temperature.
+ be equal to one. We call such a token {\em a singleton token}. Then the oracle is creating a box containing the token
+ and also data, namely, temperature in the register number four~($R4$), and time~(in seconds since the beginning of
+ the UNIX epoch) in the register number five($R5$).
+ In order to update temperature, an oracle is destroying the box and creating a new one with updated temperature.
 
  Assume that Alice and Bob know oracle's token identifier in advance. With this knowledge, they
  can jointly create a box which requires first data input (which is read-only) to contain the oracle's token. The
- contract is extracting temperature from the data input and decides who is getting the payout. The code is as simple as
-
+ contract is extracting temperature and time from the data input
+ and decides who is getting the payout. The code is as simple as following:
 
  \begin{algorithm}[H]
     \caption{Oracle Contract Example}
@@ -179,33 +108,40 @@ demands a spending transaction with the box which guarding script hash equal to 
     \begin{algorithmic}[1]
         \State val dataInput = CONTEXT.dataInputs(0)
         \State val inReg = dataInput.R4[Long].get
+        \State val inTime = dataInput.R5[Long].get
         \State val inToken = dataInput.tokens(0).\_1 == tokenId
-        \State val okContractLogic = (inReg $>$ 15L \&\& pkA) $||$ (inReg $<=$ 15L \&\& pkB)
+        \State val okContractLogic = (inTime $>$ 1556089223) \&\&
+        \State\hspace{\algorithmicindent}\hspace{\algorithmicindent} ((inReg $>$ 15L \&\& pkA) $||$ (inReg $\le$ 15L \&\& pkB))
         \State inToken \&\& okContractLogic
     \end{algorithmic}
  \end{algorithm}
 
- \dnote{some conclusions, that emphasizes ergo contract development pattens}
+ This contract shows how a singleton token could be used for authentification. As a possible alternative, an oracle
+ can put signed time and temperature into a box along with a signature for the data published. However, this requires
+ signature checking in a contract which is using an oracle box, which is more complex and expensive, in comparison with
+ the singleton token approach. Also the contract shows how read-only data inputs could be useful for contracts which do
+ need access to data in some box in the state. Without data inputs, an oracle needs to issue a spendable box for every
+ pair of Alice and Bob. With data inputs support, the oracle is issuing only a single box per arbitrary number of users.
 
-\subsection{A Mixing Example}
+\subsubsection{A Mixing Example}
  \label{sec:platform}
 
  Privacy is important for a digital currency, but implementing it in a protocol could be costly or require a trusted
  setup. Thus we are looking for ways to do coin mixing via cheap enough applications. As a first step towards that, we
  offer an application for non-interactive coin mixing, which is working in the following case:
  \begin{enumerate}
-    \item{} Alice creates a box which demands any Bob's coin\dnote{do we use coin term, or box?} to satisfy certain conditions in order to be mixed with
+    \item{} Alice creates a box which demands any Bob's box to satisfy certain conditions in order to be mixed with
     the coin of Alice. After that, Alice only listens to the blockchain, no any interaction with Bob is needed.
     \item{} Bob is creating a box and then a spending transaction which has boxes of Alice and Bob as inputs,
      and creates two outputs with the same script, but both Alice and Bob may spend only one box out of the two.
-     An external observer can coin spent by whom\dnote{what does "can coin spent by whom" mean?}, as output boxes are indistinguishable.
+     An external observer can not decide which output is spent by whom, as output boxes are indistinguishable.
  \end{enumerate}
 
  For simplicity, we are not considering fees in the example. The idea of mixing is similar to non-interactive
  Diffie-Hellman key exchange. First, Alice creates a secret value $x$~(a huge number) and publishing a corresponding
  public value $gX = g^x$. She demands from Bob to generate a secret number $y$, and to include into each output two
  values $c1$, $c2$, where one value is equal to $g^y$ and another is equal to $g^{x \cdot y}$. We assume that a Bob is using
- a random coin to decide which of $\{c_1, c_2\}$ will a value\dnote{"will a value"?}. With no access to the secret information, an external
+ a random coin to choose meanings for $\{c_1, c_2\}$. With no access to the secret information, an external
  observer can not guess whether, for example, $c_1$ is about $g^y$ or $g^{x \cdot y}$, with probability above
  $\frac{1}{2}$ (as a cryptographic primitive we are using has a certain property, namely, the hardness of
  Diffie-Hellman decisional problem). To destroy an output box, a proof should be given that for $c_2$ whether $y$ is known,
@@ -244,16 +180,37 @@ demands a spending transaction with the box which guarding script hash equal to 
     \end{algorithmic}
  \end{algorithm}
 
-\dnote{provide more discussion, namely why:
-1. External observer can not distinguish output boxes
-2. Alice or Bob can not steal both coins or lock other coin forever
-}
+ We refer to the \cite{ergoAdvTutorial} for a proof of outputs indistinguishability and details on why
+ Alice and Bob can spend only their respective coins.
 
-\subsection{The Local Exchange Trading System}
- \label{sec:platform}
 
-\dnote{Does this section provide any new information? Looks like the same approach as an oracle example ---
-issue a token and link to it with data inputs. We may move this example to "More Examples" and provide a short description there.}
+\subsubsection{More Examples}
+
+ In this section we are briefly shedding a light on few more examples along with links to documents providing
+ details and code.
+
+\paragraph{Atomic Swap}
+
+Cross-chain atomic swap Ergo and another blockchain~(supporting a payment to SHA-256 or Blake2b-256 hash preimage
+and a time-lock) could be done in the same way as proposed for Bitcoin, see initial protocol for Bitcoin in
+\cite{Nol13}, its Ergo alternative is provided in~\cite{ergoTutorial}. As Ergo has custom tokens,
+atomic exchange on a single block chain (Erg-to-token or token-to-token) is also possible, a solution for that can be
+found~\cite{ergoTutorial}.
+
+\paragraph{Crowdfunding}
+
+ We consider a simplest crowdfunding scenario. In the example, a crowdfunding project with a known public key
+ is considered successful if it
+ can collect unspent outputs with total value not less than a certain amount before
+ a certain height. A project backer creates an output box protected by the following statement: the box can be spent
+ if a spending transaction is having its first output box protected by the project's key, and the output should have
+ no less than the target amount.
+ Then the project can collect biggest backer output boxes with total value not less
+ than the amount with a single transaction~(it is possible to collect up to ~22,000 outputs in Bitcoin, which is
+ enough even for a big crowdfunding campaign). For remaining small outputs over the amount, it is possible to
+ construct follow-up transactions. The code can be found in~\cite{ergoTutorial}.
+
+\paragraph{The Local Exchange Trading System}
 
  Here we briefly overview a local exchange trading system implementation. In such a system, a member of a community may
  issue community currency via personal debt. For example, if Alice with zero balance is buying something for $5$
@@ -270,12 +227,13 @@ issue a token and link to it with data inputs. We may move this example to "More
  community members list, and a new member could be added if management condition satisfied  (for example, a threshold
  signature is provided). A new member is associated with a box which contains a token identifying the member. The user
  box is protected by a special exchange script requiring to do a fair exchange only for a spending transaction.
- We skip the corresponding code, but it could be found in a separate article \knote{provide link}
+ We skip the corresponding code, but it could be found in a separate article~\cite{icoTutorial}.
 
-\subsection{More Examples}
+\paragraph{Initial Coin Offering}
 
-\dnote{I propose to provide a short description for valuable examples here like in  \url{https://github.com/ethereum/wiki/wiki/White-Paper\#further-applications}}
+
+\paragraph{Even More Examples}
 
  We have more examples of Ergo applications, such as crowdfunding, atomic swap, time-controlled emission,
- cold wallet, rock-paper-scissors game, and so on. Description of the examples could be found in \cite{ergoTutorial,
- ergoAdvTutorial}.
+ cold wallet, rock-paper-scissors game, initial coin offering (ICO), and so on. The examples could be
+ found in \cite{ergoTutorial, ergoAdvTutorial}.

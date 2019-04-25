@@ -96,7 +96,7 @@ object Header extends ApiCodecs {
 
     override def ADProofsRoot: Coll[Byte] = new CollOverArray(header.ADProofsRoot)
 
-    override def stateRoot: AvlTree = CAvlTree(ErgoInterpreter.stateTreeFromDigest(header.stateRoot))
+    override def stateRoot: AvlTree = CAvlTree(ErgoInterpreter.avlTreeFromDigest(header.stateRoot))
 
     override def transactionsRoot: Coll[Byte] = new CollOverArray(header.transactionsRoot)
 

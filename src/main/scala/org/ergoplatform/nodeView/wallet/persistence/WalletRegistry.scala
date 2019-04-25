@@ -1,3 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-final class WalletRegistry[B <: StorageBackend](storage: B) {}
+/**
+  * Stores version-sensitive indexes (outputs, balances).
+  */
+final class WalletRegistry[B <: TransactionalStorageBackend](storage: B) {}

@@ -239,7 +239,15 @@ found~\cite{ergoTutorial}.
 
 \paragraph{Initial Coin Offering}
 
- An initial coin offering shows very clearly how to develop a multi-stage contract in Ergo.
+ An initial coin offering (ICO) example shows very clearly how to develop a multi-stage contract in Ergo. Like most of
+ ICOs, our example is about three stages. In the first stage the project is raising money in Ergs. In the second stage,
+ the project is issuing a new token, with amount of tokens to be equal to an amount of nanoErgs raised in the stage. In
+ the third stage, investors can withdraw issued tokens.
+
+ Note that the first stage could be about many transactions on
+ the blockchain, as well as the third stage, while for the second stage a single transaction is enough. As in the
+ previous example, an ICO contract box will contain a list of investors, now stored along with investments.
+
 
 \paragraph{Even More Examples}
 

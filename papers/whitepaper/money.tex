@@ -185,21 +185,26 @@
 
 \subsubsection{More Examples}
 
- We briefly give a light on few more examples along with links document providing details and code/
+ In this section we are briefly shedding a light on few more examples along with links to documents providing
+ details and code.
 
 \paragraph{Atomic Swap}
 
-Cross-chain atomic swap could be done in the same way as proposed for Bitcoin, see initial protocol for Bitcoin in
+Cross-chain atomic swap Ergo and another blockchain~(supporting a payment to SHA-256 or Blake2b-256 hash preimage
+and a time-lock) could be done in the same way as proposed for Bitcoin, see initial protocol for Bitcoin in
 \cite{Nol13}, its Ergo alternative is provided in~\cite{ergoTutorial}. As Ergo has custom tokens,
 atomic exchange on a single block chain (Erg-to-token or token-to-token) is also possible, a solution for that can be
 found~\cite{ergoTutorial}.
 
 \paragraph{Crowdfunding}
 
- We consider a simplest crowdfunding scenario. In the example, a crowdfunding project is considered successful if it
+ We consider a simplest crowdfunding scenario. In the example, a crowdfunding project with a known public key
+ is considered successful if it
  can collect unspent outputs with total value not less than a certain amount before
- a certain height. A project backer creates an output box protected by the following statement: \knote{finish}
- Then the project can collect biggest outputs with total value not less
+ a certain height. A project backer creates an output box protected by the following statement: the box can be spent
+ if a spending transaction is having its first output box protected by the project's key, and the output should have
+ no less than the target amount.
+ Then the project can collect biggest backer output boxes with total value not less
  than the amount with a single transaction~(it is possible to collect up to ~22,000 outputs in Bitcoin, which is
  enough even for a big crowdfunding campaign). For remaining small outputs over the amount, it is possible to
  construct follow-up transactions. The code can be found in~\cite{ergoTutorial}.

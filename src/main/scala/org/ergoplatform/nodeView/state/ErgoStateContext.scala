@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.mining.{AutolykosPowScheme, groupElemToBytes}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer, PreHeader}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -11,7 +10,6 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.serialization.GroupElementSerializer
 import special.collection.{Coll, CollOverArray}
 
 import scala.util.{Failure, Success, Try}

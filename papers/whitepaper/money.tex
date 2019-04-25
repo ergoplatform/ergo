@@ -43,19 +43,20 @@
  arguments, including zero-knowledge proofs, which are enough to satisfy the formula.
 
  However, in most cases, a developer is unlikely to develop box contracts in terms of graphs. Instead, he would likely
- using a high-level language, and we provide one called ErgoScript. Writing scripts in this language is easy, for
+ using a high-level language, and we provide one with the reference client called ErgoScript. Writing scripts in this
+ language is easy, for
  example, for a one-out-of-two signature, protecting script would be ${pk_1 \&\& pk_2}$, which means "prove knowledge of
  a secret key corresponding to the public key $pk_1$ and knowledge of a secret key corresponding to $pk_2$". We have
  two separate documents which are helping to develop contracts with ErgoScript, the "ErgoScript Tutorial"~\cite{ergoTutorial}
- and "Advanced ErgoScript Tutorial"~\cite{ergoAdvTutorial}. Thus below we are not going to dive into developing contracts with
- ErgoScript, rather, we are going to provide a couple of motivation examples in following sections.
+ and the "Advanced ErgoScript Tutorial"~\cite{ergoAdvTutorial}. Thus below we are not going to dive into developing contracts with
+ ErgoScript, rather, we are going to provide a couple of motivating examples in the following sections.
 
- More features of Ergo are shaping contracting possibilities:
+ More features of Ergo which are shaping contracting possibilities:
 
  \begin{itemize}
     \item{Data Inputs: }
- a box could be not only destroyed by a transaction, but is also could be only read, in the latter case we refer to the
- box as to {\em data input} of the transaction. Thus a transaction is getting two box sets as its arguments, inputs and
+ a box could be not only destroyed by a transaction, but be read-only, in the latter case we refer to the
+ box as to {\em data input} box of the transaction. Thus a transaction is getting two box sets as its arguments, inputs and
  data inputs, and produces a box set named {\em outputs}. Data inputs are useful for oracle applications and interacting
  contracts.
 
@@ -73,15 +74,15 @@
 \label{sec:examples}
 
  In this section we provide some examples which are clearly show superiority of Ergo contracts in comparison with
- Bitcoin. The examples are including a bet on oracle-provided data, non-interactive mixing, and a complementary currency
- living on top of the Ergo blockchain.
+ Bitcoin. The examples are including a bet on oracle-provided data, non-interactive mixing, atomic swap,
+ complementary currency, and initial coin offering implemented on top of the Ergo blockchain.
 
  \subsubsection{An Oracle Example}
  \label{sec:platform}
 
  Equipped with custom tokens and data inputs, we can develop a simple oracle example, also showing on the way some
- design patterns that we have discovered. Assume that Alice and Bob are going to bet on weather tomorrow. For that,
- they are putting money into a box, which is spendable by
+ design patterns that we have discovered while playing with Ergo contracts. Assume that Alice and Bob are going to bet
+ on weather tomorrow. For that, they are putting money into a box, which is spendable by
  Alice if the temperature is more than 15 degrees, and is spendable by Bob otherwise. To deliver the temperature into the
  blockchain a trusted oracle is needed.
 
@@ -229,11 +230,18 @@ found~\cite{ergoTutorial}.
  box is protected by a special exchange script requiring to do a fair exchange only for a spending transaction.
  We skip the corresponding code, but it could be found in a separate article~\cite{icoTutorial}.
 
+ What this contract shows, in comparison with previous example, is that instead of storing a members list, only a short
+ digest of an authenticated AVL+ tree is to be included into a box. That allows to reduce storage requirements for the
+ state. A transaction which is doing lookup or modification of the member list should provide a proof for AVL+ tree
+ lookup or modification operations. Thus saving space in the state storage leads to bigger transactions, but the latter
+ problem for scalability is easier to solve.
+
+
 \paragraph{Initial Coin Offering}
 
+ An initial coin offering shows very clearly how to develop a multi-stage contract in Ergo.
 
 \paragraph{Even More Examples}
 
- We have more examples of Ergo applications, such as crowdfunding, atomic swap, time-controlled emission,
- cold wallet, rock-paper-scissors game, initial coin offering (ICO), and so on. The examples could be
- found in \cite{ergoTutorial, ergoAdvTutorial}.
+ We have more examples of Ergo applications, such as time-controlled emission, cold wallet, rock-paper-scissors game,
+ and so on. The examples could be found in \cite{ergoTutorial, ergoAdvTutorial}.

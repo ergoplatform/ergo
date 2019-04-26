@@ -66,7 +66,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
     walletSettings.testMnemonic match {
       case Some(testMnemonic) =>
-        log.info("Initializing wallet in test mode.")
+        log.warn("Initializing wallet in test mode. Switch to secure mode for production usage.")
         val seed = Mnemonic.toSeed(testMnemonic)
         val rootSk = ExtendedSecretKey.deriveMasterKey(seed)
         val childSks = walletSettings.testKeysQty.toIndexedSeq.flatMap(x => (0 until x).map(rootSk.child))
@@ -75,7 +75,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
       case None =>
         log.info("Trying to read wallet in secure mode ..")
         readSecretStorage.fold(
-          e => log.info(s"Failed to read wallet. Manual initialization is required to sign transactions. Cause: $e"),
+          e => log.info(
+            s"Failed to read wallet. Manual initialization is required to sign transactions. Cause: ${e.getCause}"),
           _ => log.info("Wallet loaded successfully")
         )
     }

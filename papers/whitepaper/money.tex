@@ -228,7 +228,7 @@ found~\cite{ergoTutorial}.
  community members list, and a new member could be added if management condition satisfied  (for example, a threshold
  signature is provided). A new member is associated with a box which contains a token identifying the member. The user
  box is protected by a special exchange script requiring to do a fair exchange only for a spending transaction.
- We skip the corresponding code, but it could be found in a separate article~\cite{icoTutorial}.
+ We skip the corresponding code, but it could be found in a separate article~\cite{letsTutorial}.
 
  What this contract shows, in comparison with previous example, is that instead of storing a members list, only a short
  digest of an authenticated AVL+ tree is to be included into a box. That allows to reduce storage requirements for the
@@ -246,7 +246,28 @@ found~\cite{ergoTutorial}.
 
  Note that the first stage could be about many transactions on
  the blockchain, as well as the third stage, while for the second stage a single transaction is enough. As in the
- previous example, an ICO contract box will contain a list of investors, now stored along with investments.
+ previous example, an ICO contract box will contain a list of investors, now stored along with investments. Initially,
+ this dictionary containing (investor, balance) pairs is empty, and it is allowed to only append new pairs to the
+ dictionary. During the funding stage, each spending transaction
+ is having the contract box and also investor boxes as inputs. An investor box should contain hash of a spending script
+ for a withdrawal box in a special register. The transaction
+ should have only two outputs, one is re-creating the contract input box with investor hashes and respective input
+ values being added to the dictionary. If a deadline for the funding stage is not met yet, the script of the re-created
+ contract box should be the same (so the funding sctipt). Otherwise, is fundraising deadline is met, then the script of
+ the output box should be of issuance stage script. The second output is for paying a fee to a miner, so should have
+ corresponding script, and its value should be no more than predefined constant.
+
+ Issuance stage script is simple. It is checking that a new token is issued with certain amount, and that the
+ dictionary now is being closed for appending new data, and removals being allowed from now. The script is also checking
+ that the re-created contract box is protected by a withdrawal stage script.
+
+ Withdrawal stage, in opposite to the funding stage, is about few inputs, or even a single one, which is the contract
+ box. A withdrawal transaction re-creates the contract box (in the withdrawal state), and also creates output boxes
+ for investors. An investor's box should be protected by a hash which was provided in the funding stage, and should
+ contain newly issued token according to the dictionary. In the re-created contract output box investors should be
+ removed from the dictionary.
+
+ More details can be found in a dedicated article~\cite{icoTutorial}.
 
 
 \paragraph{Even More Examples}

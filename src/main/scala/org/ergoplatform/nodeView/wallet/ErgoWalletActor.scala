@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import java.io.File
 
 import akka.actor.Actor
+import io.iohk.iodb.LSMStore
 import org.ergoplatform.ErgoBox.{BoxId, R4, R5, R6}
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -10,11 +11,12 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
+import org.ergoplatform.nodeView.wallet.persistence.WalletRegistry
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import org.ergoplatform.wallet.boxes.BoxCertainty.Uncertain
-import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
+import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.TransactionContext
@@ -58,7 +60,13 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private val walletSettings: WalletSettings = ergoSettings.walletSettings
 
-  private val registry = new WalletStorage
+  private val __store = new WalletStorage
+
+  private val registry: WalletRegistry = {
+    val dir = new File(s"${ergoSettings.directory}/wallet/registry")
+    dir.mkdirs()
+    new WalletRegistry(new LSMStore(dir))
+  }
 
   private val parameters: Parameters = LaunchParameters
 
@@ -95,9 +103,30 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
   //we currently do not use off-chain boxes to create a transaction
   private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.mainChain
 
+  private def resolve(box: ErgoBox): Boolean = {
+    val testingTx = UnsignedErgoLikeTransaction(
+      IndexedSeq(new UnsignedInput(box.id)),
+      IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
+    )
+
+    val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx, selfIndex = 0)
+    val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty)
+
+    proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption) match {
+      case Some(_) =>
+        log.debug(s"Box certainty resolved for $box")
+        true
+      case None =>
+        log.debug(s"Failed to resolve uncertainty for ${Algos.encode(box.id)} created at " +
+          s"${box.creationHeight} while current height is ${stateContext.currentHeight}")
+        //todo: remove after some time? remove spent after some time?
+        false
+    }
+  }
+
   //todo: make resolveUncertainty(boxId, witness)
   private def resolveUncertainty(idOpt: Option[ModifierId]): Boolean = {
-    (idOpt.flatMap(id => registry.byId(id)) orElse registry.nextUncertain()).exists { uncertainBox =>
+    (idOpt.flatMap(id => __store.byId(id)) orElse __store.nextUncertain()).exists { uncertainBox =>
       val box = uncertainBox.box
 
       val testingTx = UnsignedErgoLikeTransaction(
@@ -111,7 +140,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
       proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption) match {
         case Some(_) =>
           log.debug(s"Box certainty resolved for $uncertainBox")
-          registry.makeTransition(uncertainBox.boxId, MakeCertain)
+          __store.makeTransition(uncertainBox.boxId, MakeCertain)
         case None =>
           log.debug(s"Failed to resolve uncertainty for ${uncertainBox.boxId} created at " +
             s"${uncertainBox.inclusionHeightOpt} while current height is ${stateContext.currentHeight}")
@@ -138,7 +167,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
   private def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
     tx.inputs.forall { inp =>
       val boxId = bytesToId(inp.boxId)
-      registry.makeTransition(boxId, ProcessSpending(tx, heightOpt))
+      __store.makeTransition(boxId, ProcessSpending(tx, heightOpt))
     }
   }
 
@@ -154,16 +183,16 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   private def registerBox(trackedBox: TrackedBox): Boolean = {
-    if (registry.contains(trackedBox.boxId)) {
+    if (__store.contains(trackedBox.boxId)) {
       trackedBox.inclusionHeightOpt match {
         case Some(h) =>
-          registry.makeTransition(trackedBox.boxId, CreationConfirmation(h))
+          __store.makeTransition(trackedBox.boxId, CreationConfirmation(h))
         case None =>
           log.warn(s"Double registration of the off-chain box: ${trackedBox.boxId}")
           false
       }
     } else {
-      registry.register(trackedBox)
+      __store.register(trackedBox)
       true
     }
   }
@@ -219,7 +248,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
               AssetUtils.mergeAssets(boxTokens, acc)
             }
 
-          boxSelector.select(registry.unspentCertainBoxesIterator, filterFn, targetBalance, targetAssets).map { r =>
+          boxSelector.select(__store.unspentCertainBoxesIterator, filterFn, targetBalance, targetAssets).map { r =>
             val inputs = r.boxes.toIndexedSeq
 
             val changeAddress = prover.pubKeys(Random.nextInt(prover.pubKeys.size))
@@ -249,7 +278,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private def inputsFor(targetAmount: Long,
                         targetAssets: Map[ModifierId, Long] = Map.empty): Seq[ErgoBox] = {
-    boxSelector.select(registry.unspentCertainBoxesIterator, filterFn, targetAmount, targetAssets)
+    boxSelector.select(__store.unspentCertainBoxesIterator, filterFn, targetAmount, targetAssets)
       .toSeq
       .flatMap(_.boxes)
   }
@@ -285,19 +314,28 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     case ScanOnchain(fullBlock) =>
       proverOpt.foreach(_.IR.resetContext())
       height = fullBlock.header.height
-      fullBlock.transactions.flatMap(tx => scan(tx, Some(height))).foreach { tb =>
-        self ! Resolve(Some(tb.boxId))
+      val (outputs, inputs) = fullBlock.transactions
+        .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, BoxId)]) {
+          case ((outAcc, inAcc), tx) =>
+            (outAcc ++ extractOutputs(tx).map(tx.id -> _), inAcc ++ extractInputs(tx).map(tx.id -> _))
+        }
+      val (resolved, unresolved) = outputs
+        .filterNot { case (_, o) => inputs.contains(o.id) }
+        .partition { case (_, o) => resolve(o) }
+      val resolvedTrackedBoxes = resolved.map { case (txId, bx) =>
+        TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Certain)
+      }
+      val unresolvedTrackedBoxes = unresolved.map { case (txId, bx) =>
+        TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
       }
 
-      // Try to resolve all just received boxes plus one more random
-      self ! Resolve(None)
+      registry.putBoxes(resolvedTrackedBoxes ++ unresolvedTrackedBoxes)
 
-    //todo: update utxo root hash
     case Rollback(heightTo) =>
       height.until(heightTo, -1).foreach { h =>
-        val toRemove = registry.confirmedAt(h)
+        val toRemove = __store.confirmedAt(h)
         toRemove.foreach { boxId =>
-          registry.makeTransition(boxId, ProcessRollback(heightTo))
+          __store.makeTransition(boxId, ProcessRollback(heightTo))
         }
       }
       height = heightTo
@@ -306,9 +344,9 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
   private def readers: Receive = {
     case ReadBalances(chainStatus) =>
       if (chainStatus.mainChain) {
-        sender() ! BalancesSnapshot(height, registry.confirmedBalance, registry.confirmedAssetBalances)
+        sender() ! BalancesSnapshot(height, __store.confirmedBalance, __store.confirmedAssetBalances)
       } else {
-        sender() ! BalancesSnapshot(height, registry.balancesWithUnconfirmed, registry.assetBalancesWithUnconfirmed)
+        sender() ! BalancesSnapshot(height, __store.balancesWithUnconfirmed, __store.assetBalancesWithUnconfirmed)
       }
 
     case ReadPublicKeys(from, until) =>
@@ -322,7 +360,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
       }
 
     case GetBoxes =>
-      sender() ! registry.unspentCertainBoxesIterator.map(_.box)
+      sender() ! __store.unspentCertainBoxesIterator.map(_.box)
 
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))

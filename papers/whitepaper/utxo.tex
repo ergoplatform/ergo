@@ -1,11 +1,8 @@
 \section{Ergo state}
 \label{sec:utxo}
 
-\dnote{rewrite and provide detailed description of Ergo Box, AVL+ trees, digest nodes}
-\dnote{it might be useful to add info about block structure~(Header+Block transactions+Extension+ADProofs), transaction structure}
-
-To check a new transaction, a cryptocurrency client is not using the ledger (all the transactions happened before this
-one). Instead, it is using the ledger state snapshot got from history. In Bitcoin Core reference implementation,
+To check a new transaction, a cryptocurrency client is not using the ledger with all the transactions happened before this
+one. Instead, it is using the ledger state snapshot got from history. In Bitcoin Core reference implementation,
 this snapshot is about active one-time coins, and a transaction is destroying some coins and also creating new ones.
 In Ethereum, the snapshot is about long-living accounts, a transaction then is modifying monetary balance and internal memory of some accounts. Also, the
 representation of the snapshot in Ethereum~(unlike Bitcoin) is fixed by the protocol, as authenticating digest of the
@@ -19,16 +16,16 @@ From these registers, four are filled with mandatory values, while the rest can 
 
 \begin{itemize}
     \item{\em $R_0$: monetary value. } Amount of Erg locked in this box.
-    \item{\em $R_1$: guard script. } Serialized script, protecting this box.
+    \item{\em $R_1$: guard script. } Serialized script protecting this box.
     \item{\em $R_2$: tokens. } A box can carry multiple tokens. This register contains an array of
-    $token\_identifier -> amount$ pairs locked in this box.
+    $token\_identifier \rightarrow amount$ pairs locked in this box.
     \item{\em $R_3$: tx info. } Contains declared creation height~(that should not be bigger then height of a block, carrying this transaction),
     unique identifier of transaction which created the box and also an index of the box in the transaction.
     \item{\em $R_4-R_9$: additional data. } Contains arbitrary user-defined data.
 \end{itemize}
 
 
-Using one-time immutable objects is the easiest and safest solution for replay and reordering attacks.
+Using one-time immutable objects is the easiest and safest protection from replay and reordering attacks.
 Also, it is easier to process transactions in parallel when they are not modifying the state of objects they
 are accessing.
 Also, with one-time coins, it seems it is easier to build fully stateless clients~\cite{chepurnoy2018edrax},
@@ -44,14 +41,14 @@ This authenticated data structure is built on top of AVL+ tree~\cite{reyzin2017i
 allows generating proofs of existence and non-existence of particular elements in a tree.
 Thus users maintaining the full tree are capable to generate proofs that their boxes were unspent, while small 33 bytes
 digest allows verifying these proofs.
-Also, it allows to generate proofs of the tree modifications, that is enough to calculate a new tree digest on the verifier side.
-In Ergo miner is enforced to generate proofs for block modifications, and a hash of this proof is included into
+However, unlike regular hash trees, it also allows to generate proofs of the tree modifications, that is enough to calculate a new tree digest on the verifier side.
+In Ergo miners are enforced to generate proofs for block modifications, and a hash of this proof is included into
 a block header as well as the digest of the resulting state.
-So, light nodes that only keeps a small tree digest are able to verify the full block --- that all spent boxes where
+So, light nodes that only keeps a small tree digest are able to verify the full block --- they can check that all spent boxes where
 removed from the state, all created boxes were added to it and no more changes where made.
 
-Our improvements to the design of authenticated dictionaries reduce proof size and speed
-up verification by 1.4-2.5 times, making them better suited for the cryptocurrency application.
+AVL+ trees allows to build efficient authenticated dictionaries that reduce proof size and speed
+up verification by 1.4-2.5 times in comparison with prior solutions, making them better suited for the cryptocurrency application.
 For example, our proofs sizes are for about 3 times smaller, than proofs of Merkle Patricia trie used in Ethereum
 for the same purposes:
 

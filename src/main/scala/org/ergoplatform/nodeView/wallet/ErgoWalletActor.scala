@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import java.io.File
 
 import akka.actor.Actor
-import org.ergoplatform.ErgoBox.{R4, R5, R6}
+import org.ergoplatform.ErgoBox.{BoxId, R4, R5, R6}
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
@@ -120,6 +120,11 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     }
   }
 
+  private def extractOutputs(tx: ErgoTransaction): Seq[ErgoBox] = tx.outputs
+    .filter(bx => trackedBytes.exists(t => bx.propositionBytes.containsSlice(t)))
+
+  private def extractInputs(tx: ErgoTransaction): Seq[BoxId] = tx.inputs.map(_.boxId)
+
   private def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Seq[TrackedBox] = {
     scanInputs(tx, heightOpt)
     tx.outputCandidates
@@ -160,38 +165,6 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
       registry.register(trackedBox)
       true
     }
-  }
-
-  private def scanLogic: Receive = {
-    case ScanOffchain(tx) =>
-      scan(tx, None).foreach { tb =>
-        self ! Resolve(Some(tb.boxId))
-      }
-
-    case Resolve(idOpt: Option[ModifierId]) =>
-      if (resolveUncertainty(idOpt)) {
-        // If the resolving was successful, try to resolve one more random box
-        self ! Resolve(None)
-      }
-
-    case ScanOnchain(fullBlock) =>
-      proverOpt.foreach(_.IR.resetContext())
-      height = fullBlock.header.height
-      fullBlock.transactions.flatMap(tx => scan(tx, Some(height))).foreach { tb =>
-        self ! Resolve(Some(tb.boxId))
-      }
-      // Try to resolve all just received boxes plus one more random
-      self ! Resolve(None)
-
-    //todo: update utxo root hash
-    case Rollback(heightTo) =>
-      height.until(heightTo, -1).foreach { h =>
-        val toRemove = registry.confirmedAt(h)
-        toRemove.foreach { boxId =>
-          registry.makeTransition(boxId, ProcessRollback(heightTo))
-        }
-      }
-      height = heightTo
   }
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
@@ -294,6 +267,39 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     } else {
       Failure(new Exception("Secret dir does not exist"))
     }
+  }
+
+  private def scanLogic: Receive = {
+    case ScanOffchain(tx) =>
+      scan(tx, None).foreach { tb =>
+        self ! Resolve(Some(tb.boxId))
+      }
+
+    case Resolve(idOpt: Option[ModifierId]) =>
+      if (resolveUncertainty(idOpt)) {
+        // If the resolving was successful, try to resolve one more random box
+        self ! Resolve(None)
+      }
+
+    case ScanOnchain(fullBlock) =>
+      proverOpt.foreach(_.IR.resetContext())
+      height = fullBlock.header.height
+      fullBlock.transactions.flatMap(tx => scan(tx, Some(height))).foreach { tb =>
+        self ! Resolve(Some(tb.boxId))
+      }
+
+      // Try to resolve all just received boxes plus one more random
+      self ! Resolve(None)
+
+    //todo: update utxo root hash
+    case Rollback(heightTo) =>
+      height.until(heightTo, -1).foreach { h =>
+        val toRemove = registry.confirmedAt(h)
+        toRemove.foreach { boxId =>
+          registry.makeTransition(boxId, ProcessRollback(heightTo))
+        }
+      }
+      height = heightTo
   }
 
   private def readers: Receive = {

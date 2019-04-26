@@ -1387,6 +1387,131 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/init:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Initialize new wallet with randomly generated seed
+      operationId: walletInit
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pass
+              properties:
+                pass:
+                  type: string
+                  description: Password to encrypt wallet file with
+      responses:
+        '200':
+          description: New wallet with randomly generated seed created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - mnemonic
+                properties:
+                  mnemonic:
+                    type: string
+                    description: Mnemonic seed phrase
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/restore:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Create new wallet from existing mnemonic seed
+      operationId: walletRestore
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pass
+                - mnemonic
+              properties:
+                pass:
+                  type: string
+                  description: Password to encrypt wallet file with
+                mnemonic:
+                  type: string
+                  description: Mnemonic seed
+                mnemonicPass:
+                  type: string
+                  description: Optional pass for mnemonic seed
+      responses:
+        '200':
+          description: Wallet restored successfully
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/unlock:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Unlock wallet
+      operationId: walletUnlock
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pass
+              properties:
+                pass:
+                  type: string
+                  description: Password to decrypt wallet file with
+      responses:
+        '200':
+          description: Wallet unlocked successfully
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/lock:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Lock wallet
+      operationId: walletLock
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Wallet locked successfully
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/balances:
     get:
       security:

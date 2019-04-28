@@ -2,15 +2,15 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.ValidationRules._
+import org.ergoplatform.settings.{Algos, ValidationRules}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, _}
 import scorex.util.{ModifierId, bytesToId}
 
 import scala.reflect.ClassTag
-import scala.util.{Failure, Try}
+import scala.util.Try
 
 /**
   * Trait that implements BlockSectionProcessor interfaces for regimes where the node
@@ -18,9 +18,7 @@ import scala.util.{Failure, Try}
   */
 trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProcessor {
 
-  protected def vs: ValidationSettings
-
-  private def validationState: ValidationState[Unit] = ModifierValidator(vs)
+  private def validationState: ValidationState[Unit] = ModifierValidator(ValidationRules.initialSettings)
 
   /**
     * Process block section.
@@ -90,7 +88,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
 
     def validate(m: BlockSection, header: Header): ValidationResult[Unit] = {
       modifierSpecificValidation(m, header)
-        .validate(alreadyApplied,!historyStorage.contains(m.id), s"${m.encodedId}")
+        .validate(alreadyApplied, !historyStorage.contains(m.id), s"${m.encodedId}")
         .validate(bsCorrespondsToHeader, header.isCorrespondingModifier(m), s"header=${header.encodedId}, id=${m.encodedId}")
         .validateSemantics(bsHeaderValid, isSemanticallyValid(header.id), s"header=${header.encodedId}, id=${m.encodedId}")
         .validate(bsHeadersChainSynced, isHeadersChainSynced)
@@ -105,25 +103,15 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     }
 
     private def validateExtension(extension: Extension, header: Header): ValidationState[Unit] = {
-      validateInterlinks(extension, header) {
-        failFast
-          .validate(extension.fields.forall(_._1.lengthCompare(Extension.FieldKeySize) == 0)) {
-            fatal(s"Extension ${extension.encodedId} field key length is not ${Extension.FieldKeySize}")
-          }
-          .validate(extension.fields.forall(_._2.lengthCompare(Extension.FieldValueMaxSize) <= 0)) {
-            fatal(s"Extension ${extension.encodedId} field value length > ${Extension.FieldValueMaxSize}")
-          }
-          .validate(extension.fields.map(kv => bytesToId(kv._1)).distinct.length == extension.fields.length) {
-            fatal(s"Extension ${extension.encodedId} contains duplicate keys")
-          }
-          .validate(header.isGenesis || extension.fields.nonEmpty) {
-            fatal("Empty fields in non-genesis block")
-          }
-      }
+      validateInterlinks(extension, header)
+        .validate(exKeyLength, extension.fields.forall(_._1.lengthCompare(Extension.FieldKeySize) == 0), extension.encodedId)
+        .validate(exValueLength, extension.fields.forall(_._2.lengthCompare(Extension.FieldValueMaxSize) <= 0), extension.encodedId)
+        .validate(exDuplicateKeys, extension.fields.map(kv => bytesToId(kv._1)).distinct.length == extension.fields.length, extension.encodedId)
+        .validate(exEmpty, header.isGenesis || extension.fields.nonEmpty, extension.encodedId)
     }
 
-    private def validateInterlinks(extension: Extension, header: Header)
-                                  (vs: ValidationState[Unit]): ValidationState[Unit] = {
+
+    private def validateInterlinks(extension: Extension, header: Header): ValidationState[Unit] = {
       import PoPowAlgos._
       val prevHeaderOpt = typedModifierById[Header](header.parentId)
       val prevExtensionOpt = prevHeaderOpt.flatMap(parent => typedModifierById[Extension](parent.extensionId))
@@ -131,16 +119,13 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         case (Some(parent), Some(parentExt)) =>
           val parentLinksTry = unpackInterlinks(parentExt.fields)
           val currentLinksTry = unpackInterlinks(extension.fields)
-          vs
-            .validate(currentLinksTry.isSuccess)(fatal("Interlinks improperly packed"))
-            .validate(parentLinksTry.flatMap(parLinks => currentLinksTry.map(parLinks -> _))
-              .toOption.exists { case (prev, cur) => updateInterlinks(parent, prev) == cur }) {
-              fatal("Invalid interlinks")
-            }
+          validationState
+            .validateNoFailure(exIlEncoding, currentLinksTry)
+            .validate(exIlStructure, parentLinksTry.flatMap(parLinks => currentLinksTry.map(parLinks -> _))
+              .toOption.exists { case (prev, cur) => updateInterlinks(parent, prev) == cur })
         case _ =>
-          vs.validate(header.isGenesis || header.height == pruningProcessor.minimalFullBlockHeight) {
-            error("Unable to validate interlinks")
-          }
+          validationState
+            .validate(exIlUnableToValidate, header.isGenesis || header.height == pruningProcessor.minimalFullBlockHeight)
       }
     }
 
@@ -151,9 +136,8 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
       m match {
         case extension: Extension =>
           validateExtension(extension, header)
-        case p: ADProofs =>
         case _ =>
-          failFast
+          validationState
       }
     }
 

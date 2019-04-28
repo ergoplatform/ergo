@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, Parameters}
+import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, Parameters, ValidationRules}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
@@ -268,9 +268,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     }
   }
 
-  class HeaderValidator(vs: ValidationSettings) extends ScorexEncoding {
+  class HeaderValidator extends ScorexEncoding {
 
-    private val validationState: ValidationState[Unit] = ModifierValidator(vs)
+    private def validationState: ValidationState[Unit] = ModifierValidator(ValidationRules.initialSettings)
 
     def validate(header: Header): ValidationResult[Unit] = {
       if (header.isGenesis) {
@@ -306,7 +306,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     private def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
       validationState
         .validateEqualIds(hdrGenesisParent, header.parentId, Header.GenesisParentId)
-        .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, _ == header.id)
+        .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, (id: ModifierId) => id.equals(header.id))
         .validate(hdrGenesisNonEmpty, bestHeaderIdOpt.isEmpty)
         .validate(hdrGenesisHeight, header.height == GenesisHeight, header.toString)
         .validateNoThrow(hdrVotes, checkVotes(header))

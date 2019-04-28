@@ -11,8 +11,9 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
 import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.{Algos, ChainSettings, Constants, ErgoSettings}
+import org.ergoplatform.settings._
 import scorex.core.transaction.state.MinimalState
+import scorex.core.validation.ValidationSettings
 import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
@@ -47,6 +48,8 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
                                    (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): Try[Long] = {
     import cats.implicits._
     implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
+    implicit val vs: ValidationSettings = ValidationRules.initialSettings
+
     def execTry(txs: List[ErgoTransaction], accCostTry: Try[Long]): Try[Long] = (txs, accCostTry) match {
       case (tx :: tail, Success(accumulatedCost)) =>
         val costTry = tx.statelessValidity.flatMap { _ =>

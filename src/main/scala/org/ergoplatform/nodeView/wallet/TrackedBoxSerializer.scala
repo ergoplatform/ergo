@@ -16,7 +16,6 @@ import scala.util.{Failure, Try}
 
 class TrackedBoxSerializer(txLookup: TransactionLookup)
   extends ScorexSerializer[TrackedBox]
-    with ModifierValidator
     with ScorexEncoding {
 
 
@@ -56,12 +55,10 @@ class TrackedBoxSerializer(txLookup: TransactionLookup)
 
   protected def readHeader(r: Reader)(parser: BoxCertainty => Try[TrackedBox]): Try[TrackedBox] = {
     val (spendingStatus, chainStatus, certainty) = readHeaderBits(r)
-    parser(certainty) flatMap { trackedBox =>
-      accumulateErrors
-        .demand(trackedBox.spendingStatus == spendingStatus, s"$trackedBox corrupted: should be $spendingStatus")
-        .demand(trackedBox.chainStatus == chainStatus, s"$trackedBox corrupted: should be $chainStatus")
-        .result(trackedBox)
-        .toTry
+    parser(certainty) map { trackedBox =>
+      require(trackedBox.spendingStatus == spendingStatus, s"$trackedBox corrupted: should be $spendingStatus")
+      require(trackedBox.chainStatus == chainStatus, s"$trackedBox corrupted: should be $chainStatus")
+      trackedBox
     }
   }
 

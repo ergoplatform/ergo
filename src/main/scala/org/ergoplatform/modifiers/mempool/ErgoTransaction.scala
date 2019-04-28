@@ -9,7 +9,7 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, ValidationRules}
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.utils.BoxUtils
 import scorex.core.serialization.ScorexSerializer
@@ -92,7 +92,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * @return Success(Unit) if transaction is valid, Failure(e) if transaction is invalid, with respect to
     *         an error encapsulated in the exception "e".
     */
-  def statelessValidity()(implicit vs: ValidationSettings): Try[Unit] = validateStateless.toTry
+  def statelessValidity: Try[Unit] = validateStateless.toTry
 
   /**
     * Stateless transaction validation with result returned as `ValidationResult`
@@ -100,8 +100,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     *
     * @note Consensus-critical!
     */
-  def validateStateless()(implicit vs: ValidationSettings): ValidationResult[Unit] = {
-    ModifierValidator(vs)
+  def validateStateless: ValidationResult[Unit] = {
+    ModifierValidator(ValidationRules.initialSettings)
       .validate(txNoInputs, inputs.nonEmpty, toString)
       .validate(txNoOutputs, outputCandidates.nonEmpty, toString)
       .validate(txManyInputs, inputs.size <= Short.MaxValue, toString)
@@ -132,7 +132,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long = 0L)
-                      (implicit verifier: ErgoInterpreter, vs: ValidationSettings): Try[Long] = {
+                      (implicit verifier: ErgoInterpreter): Try[Long] = {
+    val vs: ValidationSettings = ValidationRules.initialSettings
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
     lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
@@ -326,9 +327,7 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
       inputs <- cursor.downField("inputs").as[IndexedSeq[Input]]
       dataInputs <- cursor.downField("dataInputs").as[IndexedSeq[DataInput]]
       outputsWithIndex <- cursor.downField("outputs").as[IndexedSeq[(ErgoBoxCandidate, Option[BoxId])]]
-      outputs: IndexedSeq[ErgoBoxCandidate] <- outputsWithIndex.map(_._1)
-      result <- new ErgoTransaction(inputs, dataInputs, outputs)
-    } yield result
+    } yield new ErgoTransaction(inputs, dataInputs, outputsWithIndex.map(_._1))
   }
 
 }

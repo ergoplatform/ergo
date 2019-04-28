@@ -2,22 +2,27 @@ package org.ergoplatform.settings
 
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import scorex.core.validation.ModifierValidator
+import scorex.core.validation.{MapValidationSettings, ModifierValidator, ValidationSettings}
 import scorex.core.validation.ValidationResult.Invalid
 
 object ValidationRules {
 
+  // TODO update via soft-forks
+  lazy val initialSettings: ValidationSettings = new MapValidationSettings(true, rulesSpec.map(r => r._1 -> (r._2._1, r._2._2)))
+
   /**
-    * TODO check that we really need:
+    * TODO
     *
+    * check that we really need:
     * txBoxToSpend - should always work for correct client implementation
     * hdrGenesisNoneEmpty - should lead to troubles on launch
     * bsTooOld - check
     *
+    * add Parameters.maxBlockSize rule
+    *
     * looks like recoverable errors are implementation-specific
     *
     */
-
   lazy val rulesSpec: Map[Short, (String => Invalid, Boolean, Seq[Class[_]])] = Map(
 
     alreadyApplied -> (s => fatal(s"Modifier $s is already in history"), true, Seq(classOf[Header], classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
@@ -66,6 +71,17 @@ object ValidationRules {
     bsHeaderValid -> (s => fatal(s"Header $s is semantically invalid: "), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
     bsHeadersChainSynced -> (s => recoverable(s"Headers chain is not synchronized yet"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
     bsTooOld -> (s => fatal(s"Too old block section: $s"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
+
+    // extension validation
+    // interlinks validation
+    exIlUnableToValidate -> (s => recoverable(s"Unable to validate interlinks: $s"), true, Seq(classOf[Extension])),
+    exIlEncoding -> (s => fatal(s"Interlinks improperly packed: $s"), true, Seq(classOf[Extension])),
+    exIlStructure -> (s => fatal(s"Interlinks are incorrect: $s"), true, Seq(classOf[Extension])),
+
+    exKeyLength -> (s => fatal(s"Extension $s field key length is not ${Extension.FieldKeySize}"), true, Seq(classOf[Extension])),
+    exValueLength -> (s => fatal(s"Extension $s field value length > ${Extension.FieldValueMaxSize}"), true, Seq(classOf[Extension])),
+    exDuplicateKeys -> (s => fatal(s"Extension $s contains duplicate keys"), true, Seq(classOf[Extension])),
+    exEmpty -> (s => fatal(s"Empty fields in non-genesis block: $s"), true, Seq(classOf[Extension])),
 
 
     Short.MaxValue -> (_ => recoverable("Deactivated check"), false, Seq())
@@ -117,6 +133,16 @@ object ValidationRules {
   val bsHeadersChainSynced: Short = 304
   val bsTooOld: Short = 305
 
+  // extension validation
+  // validate interlinks
+  val exIlUnableToValidate: Short = 310
+  val exIlEncoding: Short = 311
+  val exIlStructure: Short = 312
+  // rest extension validation
+  val exKeyLength: Short = 313
+  val exValueLength: Short = 314
+  val exDuplicateKeys: Short = 315
+  val exEmpty: Short = 316
 
   private def recoverable(errorMessage: String): Invalid = ModifierValidator.error(errorMessage)
 

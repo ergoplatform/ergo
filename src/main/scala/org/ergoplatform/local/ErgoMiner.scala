@@ -21,10 +21,11 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{ErgoSettings, Parameters}
+import org.ergoplatform.settings.{ErgoSettings, Parameters, ValidationRules}
 import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
+import scorex.core.validation.ValidationSettings
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
@@ -395,6 +396,8 @@ object ErgoMiner extends ScorexLogging {
                  upcomingContext: ErgoStateContext,
                  mempoolTxsIn: Iterable[ErgoTransaction],
                  startTransactions: Seq[(ErgoTransaction, Long)]): (Seq[ErgoTransaction], Seq[ModifierId]) = {
+    implicit val vs: ValidationSettings = ValidationRules.initialSettings
+
     def correctLimits(blockTxs: Seq[(ErgoTransaction, Long)]): Boolean = {
       blockTxs.map(_._2).sum < maxBlockCost && blockTxs.map(_._1.size).sum < maxBlockSize
     }

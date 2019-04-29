@@ -101,7 +101,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
   private def trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.contentBytes)
 
   //we currently do not use off-chain boxes to create a transaction
-  private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.mainChain
+  private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onChain
 
   private def resolve(box: ErgoBox): Boolean = {
     val testingTx = UnsignedErgoLikeTransaction(
@@ -343,7 +343,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private def readers: Receive = {
     case ReadBalances(chainStatus) =>
-      if (chainStatus.mainChain) {
+      if (chainStatus.onChain) {
         sender() ! BalancesSnapshot(height, __store.confirmedBalance, __store.confirmedAssetBalances)
       } else {
         sender() ! BalancesSnapshot(height, __store.balancesWithUnconfirmed, __store.assetBalancesWithUnconfirmed)

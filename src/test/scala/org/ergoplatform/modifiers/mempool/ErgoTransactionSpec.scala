@@ -3,16 +3,17 @@ package org.ergoplatform.modifiers.mempool
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
 import scalan.util.BenchmarkUtil
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.encode.Base16
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
 
 import scala.util.Random
 
@@ -52,6 +53,12 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
     // simple transfer transaction with 2 inputs and 2 outputs (first is transfer, second is fee)
     val height = 1000
+    val minerPkHex = "0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942"
+    val minerPk = Base16.decode(minerPkHex).map { point =>
+      ProveDlog(
+        CryptoConstants.dlogGroup.curve.decodePoint(point).asInstanceOf[CryptoConstants.EcPointType]
+      )
+    }.get
     val inputs: IndexedSeq[Input] = IndexedSeq(
       new Input(ADKey @@ Base16.decode("c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742").get,
         new ProverResult(Base16.decode("b4a04b4201da0578be3dac11067b567a73831f35b024a2e623c1f8da230407f63bab62c62ed9b93808b106b5a7e8b1751fa656f4c5de4674").get, new ContextExtension(Map()))),
@@ -59,7 +66,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
         new ProverResult(Base16.decode("5aea4d78a234c35accacdf8996b0af5b51e26fee29ea5c05468f23707d31c0df39400127391cd57a70eb856710db48bb9833606e0bf90340").get, new ContextExtension(Map()))),
     )
     val outputCandidates: IndexedSeq[ErgoBoxCandidate] = IndexedSeq(
-      new ErgoBoxCandidate(1000000000L, defaultMinerPk, height, Seq(), Map()),
+      new ErgoBoxCandidate(1000000000L, minerPk, height, Seq(), Map()),
       new ErgoBoxCandidate(1000000L, settings.chainSettings.monetary.feeProposition, height, Seq(), Map())
     )
     val tx = ErgoTransaction(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate])
@@ -72,7 +79,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     check(bytesStr, bytesToSign, jsonStr)
 
 
-    // tx with 2 inputs, 1 data input, 3 outputs with tokens
+    // tx with 2 inputs, 1 data input, 3 outputs with tokens 0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942
     check("02e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c6400002e9798d7eb0cd867f6dc29872f80de64c04cef10a99a58d007ef7855f0acbdb9000001f97d1dc4626de22db836270fe1aa004b99970791e4557de8f486f6d433b81195026df03fffc9042bf0edb0d0d36d7a675239b83a9080d39716b9aa0a64cccb9963e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c6403da92a8b8e3ad770008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176000200daa4eb6b01aec8d1ff0100da92a8b8e3ad770008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176000200daa4eb6b01aec8d1ff0100fa979af8988ce7010008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176000000",
       "02e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c6400002e9798d7eb0cd867f6dc29872f80de64c04cef10a99a58d007ef7855f0acbdb9000001f97d1dc4626de22db836270fe1aa004b99970791e4557de8f486f6d433b81195026df03fffc9042bf0edb0d0d36d7a675239b83a9080d39716b9aa0a64cccb9963e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c6403da92a8b8e3ad770008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176000200daa4eb6b01aec8d1ff0100da92a8b8e3ad770008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176000200daa4eb6b01aec8d1ff0100fa979af8988ce7010008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176000000",
       "{\"id\":\"663ae91ab7145a4f42b5509e1a2fb0469b7cb46ea87fdfd90e0b4c8ef29c2493\",\"inputs\":[{\"boxId\":\"e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c64\",\"spendingProof\":{\"proofBytes\":\"\",\"extension\":{}}},{\"boxId\":\"2e9798d7eb0cd867f6dc29872f80de64c04cef10a99a58d007ef7855f0acbdb9\",\"spendingProof\":{\"proofBytes\":\"\",\"extension\":{}}}],\"dataInputs\":[{\"boxId\":\"f97d1dc4626de22db836270fe1aa004b99970791e4557de8f486f6d433b81195\"}],\"outputs\":[{\"boxId\":\"69e05b68715caaa4ca58ba59a8c8c7e031d42ad890b05f87021a28617c1e70d5\",\"value\":524940416256346,\"ergoTree\":\"0008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176\",\"assets\":[{\"tokenId\":\"6df03fffc9042bf0edb0d0d36d7a675239b83a9080d39716b9aa0a64cccb9963\",\"amount\":226153050},{\"tokenId\":\"e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c64\",\"amount\":536110126}],\"creationHeight\":0,\"additionalRegisters\":{}},{\"boxId\":\"556a9a3ec7880d468e56d44e75898cf8a32f6a07344895fa6b5cf34edf101a59\",\"value\":524940416256346,\"ergoTree\":\"0008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176\",\"assets\":[{\"tokenId\":\"6df03fffc9042bf0edb0d0d36d7a675239b83a9080d39716b9aa0a64cccb9963\",\"amount\":226153050},{\"tokenId\":\"e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c64\",\"amount\":536110126}],\"creationHeight\":0,\"additionalRegisters\":{}},{\"boxId\":\"16385b5b83992629909c7e004ed0421229ed3587162ce6f29b2df129472e3909\",\"value\":1016367755463674,\"ergoTree\":\"0008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176\",\"assets\":[],\"creationHeight\":0,\"additionalRegisters\":{}}],\"size\":329}")

@@ -7,27 +7,29 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.wallet.boxes.DefaultBoxSelector
 import scorex.core.VersionTag
 import scorex.core.transaction.wallet.Vault
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 
+class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
+                (implicit val actorSystem: ActorSystem)
+  extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
+    with ErgoWalletReader
+    with ScorexLogging {
 
-class ErgoWallet(
-                 historyReader: ErgoHistoryReader,
-                 settings: ErgoSettings)(implicit val actorSystem: ActorSystem)
-  extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet] with ErgoWalletReader with ScorexLogging {
-
-  override lazy val actor: ActorRef = actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings))
+  override val walletActor: ActorRef =
+    actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings, DefaultBoxSelector))
 
   def watchFor(address: ErgoAddress): ErgoWallet = {
-    actor ! WatchFor(address)
+    walletActor ! WatchFor(address)
     this
   }
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
-    actor ! ScanOffchain(tx)
+    walletActor ! ScanOffchain(tx)
     this
   }
 
@@ -39,7 +41,7 @@ class ErgoWallet(
   override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = {
     modifier match {
       case fb: ErgoFullBlock =>
-        actor ! ScanOnchain(fb)
+        walletActor ! ScanOnchain(fb)
       case _ =>
         log.debug("Not full block in ErgoWallet.scanPersistent, which could be the case only if " +
           "state = digest when bootstrapping")
@@ -50,7 +52,7 @@ class ErgoWallet(
   override def rollback(to: VersionTag): Try[ErgoWallet] =
     historyReader.heightOf(scorex.core.versionToId(to)) match {
       case Some(height) =>
-        actor ! Rollback(height)
+        walletActor ! Rollback(height)
         Success(this)
       case None =>
         Failure(new Exception(s"Height of a modifier with id $to not found"))

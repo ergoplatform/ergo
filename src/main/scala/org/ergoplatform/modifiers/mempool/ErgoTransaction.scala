@@ -7,10 +7,12 @@ import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
+import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import org.ergoplatform.wallet.protocol.context.TransactionContext
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
@@ -19,11 +21,11 @@ import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.crypto.authds.ADKey
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.Values.{ErgoTree, EvaluatedValue, Value}
+import sigmastate.SType
+import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
-import sigmastate.{SBoolean, SType}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
@@ -50,8 +52,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val dataInputs: IndexedSeq[DataInput],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate],
                            override val sizeOpt: Option[Int] = None)
-  extends Transaction
-    with ErgoLikeTransactionTemplate[Input]
+  extends ErgoLikeTransaction(inputs, dataInputs, outputCandidates)
+    with Transaction
     with MempoolModifier
     with ErgoNodeViewModifier
     with ModifierValidator
@@ -250,6 +252,9 @@ object ErgoTransaction extends ApiCodecs with ModifierValidator with ScorexLoggi
   def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction = {
     ErgoTransaction(inputs, IndexedSeq(), outputCandidates, None)
   }
+
+  def apply(tx: ErgoLikeTransaction): ErgoTransaction =
+    ErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)
 
   val MaxAssetsPerBox = 255
 

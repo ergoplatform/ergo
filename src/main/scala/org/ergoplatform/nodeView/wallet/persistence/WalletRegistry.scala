@@ -4,23 +4,24 @@ import cats.data.State
 import cats.free.Free
 import cats.free.Free.liftF
 import cats.~>
-import io.iohk.iodb.Store
+import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
+import org.ergoplatform.wallet.settings.Constants
 
 import scala.util.Try
 
 /**
   * Stores version-sensitive indexes (outputs, balances).
   */
-final class WalletRegistry(store: Store) {
+final class WalletRegistry(private[persistence] val store: Store) {
 
   import RegistryOpA._
   import WalletRegistry._
 
-  type RegistryUpdate = (Seq[(Array[Byte], Array[Byte])], Seq[Array[Byte]])
+  type UpdateBatch = (Seq[(Array[Byte], Array[Byte])], Seq[Array[Byte]])
 
-  type RegistryOpState[A] = State[RegistryUpdate, A]
+  type RegistryOpState[A] = State[UpdateBatch, A]
 
   def putBox(box: TrackedBox): RegistryOp[Unit] =
     liftF[RegistryOpA, Unit](PutBox(box))
@@ -65,17 +66,47 @@ final class WalletRegistry(store: Store) {
       .getOrElse(Free.pure(()))
     }
 
-  private val interpreter: RegistryOpA ~> RegistryOpState = new (RegistryOpA ~> RegistryOpState) {
-    override def apply[A](fa: RegistryOpA[A]): RegistryOpState[A] = fa match {
-      case PutBox(box) =>
-        State.modify { case (toInsert, toRemove) =>
-          val boxKey = key(box)
-          val boxBytes = TrackedBoxSerializer.toBytes(box)
-          (toInsert :+ (boxKey, boxBytes), toRemove)
-        }
-      case _ => ???
+  private[persistence] val interpreter: RegistryOpA ~> RegistryOpState =
+    new (RegistryOpA ~> RegistryOpState) {
+      override def apply[A](fa: RegistryOpA[A]): RegistryOpState[A] = fa match {
+        case PutBox(box) =>
+          State.modify { case (toInsert, toRemove) =>
+            val boxBytes = TrackedBoxSerializer.toBytes(box)
+            (toInsert :+ (key(box), boxBytes), toRemove)
+          }
+        case GetBox(id) =>
+          State.inspect { _ =>
+            store.get(ByteArrayWrapper(id))
+              .flatMap(r => TrackedBoxSerializer.parseBytesTry(r.data).toOption)
+              .asInstanceOf[A]
+          }
+        case GetBoxes(ids) =>
+          State.inspect { _ =>
+            ids
+              .map { id => store.get(ByteArrayWrapper(id))
+                .flatMap { x =>
+                  TrackedBoxSerializer.parseBytesTry(x.data).toOption
+                }
+              }
+              .asInstanceOf[A]
+          }
+        case RemoveBox(id) =>
+          State.modify { case (toInsert, toRemove) =>
+            (toInsert, toRemove :+ key(id))
+          }
+        case PutIndex(index) =>
+          State.modify { case (toInsert, toRemove) =>
+            val registryBytes = RegistryIndexSerializer.toBytes(index)
+            (toInsert :+ (RegistryIndexKey, registryBytes), toRemove)
+          }
+        case GetIndex =>
+          State.inspect { _ =>
+            store.get(ByteArrayWrapper(RegistryIndexKey))
+              .flatMap(r => RegistryIndexSerializer.parseBytesTry(r.data).toOption)
+              .asInstanceOf[A]
+          }
+      }
     }
-  }
 
   def rollback(version: String): Try[Unit] = ???
 
@@ -83,6 +114,10 @@ final class WalletRegistry(store: Store) {
 
 object WalletRegistry {
 
-  def key(box: TrackedBox): Array[Byte] = box.box.id
+  val RegistryIndexKey: Array[Byte] = "reg_index".getBytes(Constants.Encoding)
+
+  def key(trackedBox: TrackedBox): Array[Byte] = trackedBox.box.id
+
+  def key(id: BoxId): Array[Byte] = id
 
 }

@@ -413,7 +413,6 @@ object ErgoMiner extends ScorexLogging {
       def current = (acc ++ lastFeeTx).map(_._1)
       mempoolTxs.headOption match {
         case Some(tx) =>
-          tx.bytes
           implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)
           // check validity and calculate transaction cost
           us.validateWithCost(tx, Some(upcomingContext)) match {

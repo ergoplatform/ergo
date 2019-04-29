@@ -178,7 +178,7 @@ trait ApiCodecs {
   implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = { b =>
     val plainFields = Map(
       "spent" -> b.spendingStatus.spent.asJson,
-      "onchain" -> b.chainStatus.mainChain.asJson,
+      "onchain" -> b.chainStatus.onChain.asJson,
       "certain" -> b.certainty.certain.asJson,
       "creationOutIndex" -> b.creationOutIndex.asJson,
       "inclusionHeight" -> b.inclusionHeightOpt.asJson,

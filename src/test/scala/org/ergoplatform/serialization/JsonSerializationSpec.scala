@@ -84,7 +84,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
 
   private def checkTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {
     c.downField("spent").as[Boolean] shouldBe Right(b.spendingStatus.spent)
-    c.downField("onchain").as[Boolean] shouldBe Right(b.chainStatus.mainChain)
+    c.downField("onchain").as[Boolean] shouldBe Right(b.chainStatus.onChain)
     c.downField("certain").as[Boolean] shouldBe Right(b.certainty.certain)
     c.downField("creationOutIndex").as[Short] shouldBe Right(b.creationOutIndex)
     c.downField("inclusionHeight").as[Option[Int]] shouldBe Right(b.inclusionHeightOpt)

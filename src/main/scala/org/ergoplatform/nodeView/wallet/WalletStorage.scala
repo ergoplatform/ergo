@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.wallet.boxes.BoxCertainty.{Certain, Uncertain}
-import org.ergoplatform.wallet.boxes.ChainStatus.{Fork, MainChain}
+import org.ergoplatform.wallet.boxes.ChainStatus.{OnChain, OffChain}
 import org.ergoplatform.wallet.boxes.SpendingStatus.{Spent, Unspent}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import scorex.util._
@@ -113,9 +113,9 @@ class WalletStorage extends ScorexLogging {
         log.debug(s"${if (undo) "Undo" else "Update"} balance with UNSPENT ${trackedBox.chainStatus} " +
                   s"${trackedBox.boxId} $trackedBox balance: $confirmedBalance $confirmedAssetBalances, " +
                   s"total: $balancesWithUnconfirmed $assetBalancesWithUnconfirmed")
-      } else if (trackedBox.creationChainStatus == MainChain && trackedBox.spendingChainStatus == Fork) {
-        increaseBalances(MainChain, trackedBox.box, undo)
-        decreaseBalances(Fork, trackedBox.box, undo)
+      } else if (trackedBox.creationChainStatus == OnChain && trackedBox.spendingChainStatus == OffChain) {
+        increaseBalances(OnChain, trackedBox.box, undo)
+        decreaseBalances(OffChain, trackedBox.box, undo)
         log.debug(s"${if (undo) "Undo" else "Update"} balance with OFF-CHAIN SPENT ${trackedBox.boxId} " +
                   s"balance: $confirmedBalance, total: $balancesWithUnconfirmed")
       } else {
@@ -129,8 +129,8 @@ class WalletStorage extends ScorexLogging {
   }
 
   private def increaseBalances(balanceStatus: ChainStatus, box: ErgoBox): Unit = {
-    if (balanceStatus == MainChain) _confirmedBalance += box.value else _unconfirmedDelta += box.value
-    val balanceMap = if (balanceStatus == MainChain) _confirmedAssetBalances else _unconfirmedAssetDeltas
+    if (balanceStatus == OnChain) _confirmedBalance += box.value else _unconfirmedDelta += box.value
+    val balanceMap = if (balanceStatus == OnChain) _confirmedAssetBalances else _unconfirmedAssetDeltas
     box.additionalTokens foreach { case (tokenId, amount) =>
       val assetId = bytesToId(tokenId)
       val updBalance = balanceMap.getOrElse(assetId, 0L) + amount
@@ -147,8 +147,8 @@ class WalletStorage extends ScorexLogging {
   }
 
   private def decreaseBalances(balanceStatus: ChainStatus, box: ErgoBox): Unit = {
-    if (balanceStatus == MainChain) _confirmedBalance -= box.value else _unconfirmedDelta -= box.value
-    val balanceMap = if (balanceStatus == MainChain) _confirmedAssetBalances else _unconfirmedAssetDeltas
+    if (balanceStatus == OnChain) _confirmedBalance -= box.value else _unconfirmedDelta -= box.value
+    val balanceMap = if (balanceStatus == OnChain) _confirmedAssetBalances else _unconfirmedAssetDeltas
     box.additionalTokens foreach { case (tokenId, amount) =>
       val assetId = bytesToId(tokenId)
       val currentBalance = balanceMap.getOrElse(assetId, 0L)
@@ -217,14 +217,14 @@ class WalletStorage extends ScorexLogging {
       case _ if spendingHeightOpt.nonEmpty && trackedBox.inclusionHeightOpt.isEmpty =>
         log.error(s"Invalid state transition for ${trackedBox.boxId}: no creation height, but spent on-chain")
         None
-      case (Unspent, Fork) if spendingHeightOpt.nonEmpty =>
+      case (Unspent, OffChain) if spendingHeightOpt.nonEmpty =>
         log.warn(s"Onchain transaction ${trackedBox.spendingTxIdOpt} is spending offchain box ${trackedBox.box}")
         None
-      case (Spent, Fork) if spendingHeightOpt.isEmpty =>
+      case (Spent, OffChain) if spendingHeightOpt.isEmpty =>
         log.warn(s"Double spending of an unconfirmed box ${trackedBox.boxId}")
         //todo: handle double-spending strategy for an unconfirmed tx
         None
-      case (Spent, MainChain) =>
+      case (Spent, OnChain) =>
         None
       case _ =>
         Some(trackedBox.copy(spendingTxIdOpt = Some(spendingTransaction.id), spendingHeightOpt = spendingHeightOpt))
@@ -240,7 +240,7 @@ class WalletStorage extends ScorexLogging {
     if (trackedBox.inclusionHeightOpt.isEmpty) {
       Some(trackedBox.copy(inclusionHeightOpt = Option(creationHeight)))
     } else {
-      if (trackedBox.spendingStatus == Unspent || trackedBox.chainStatus == Fork) {
+      if (trackedBox.spendingStatus == Unspent || trackedBox.chainStatus == OffChain) {
         log.warn(s"Double creation of tracked box for  ${trackedBox.boxId}")
       }
       None

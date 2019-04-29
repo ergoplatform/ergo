@@ -6,10 +6,10 @@ import scorex.util.ScorexLogging
 object ValidationRulesPrinter extends App with ScorexLogging {
 
 
-
   val rules = ValidationRules.rulesSpec
 
 
+  println("Transaction validation\n\n")
   println("\\begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{2.5cm}| }")
   println("\\hline\nId & Validation rule & Active & Modifiers \\\\\n\\hline")
   rules.toSeq.sortBy(_._1).foreach { r =>
@@ -18,6 +18,17 @@ object ValidationRulesPrinter extends App with ScorexLogging {
     val activated = r._2._2
     val modifiers = r._2._3.map(_.getSimpleName).mkString(", ")
 
+    if (r._1 == 200) {
+      println("\\end{tabular}")
+      println("\n\nHeader validation\n\n")
+      println("\\begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{2.5cm}| }")
+      println("\\hline\nId & Validation rule & Active & Modifiers \\\\\n\\hline")
+    } else if (r._1 == 300) {
+      println("\\end{tabular}")
+      println("\n\nBlock sections validation\n\n")
+      println("\\begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{2.5cm}| }")
+      println("\\hline\nId & Validation rule & Active & Modifiers \\\\\n\\hline")
+    }
 
     if (r._2._1("").isFatal) {
       // we only mention fatal errors here

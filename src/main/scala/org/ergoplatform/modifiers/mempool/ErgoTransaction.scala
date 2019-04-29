@@ -9,8 +9,8 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
-import org.ergoplatform.settings.{Algos, ValidationRules}
 import org.ergoplatform.settings.ValidationRules._
+import org.ergoplatform.settings.{Algos, ValidationRules}
 import org.ergoplatform.utils.BoxUtils
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
@@ -22,13 +22,11 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
+import sigmastate.eval.Extensions._
+import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
-
-import sigmastate.{SBoolean, SType}
-import sigmastate.eval._
-import sigmastate.eval.Extensions._
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
@@ -90,6 +88,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   lazy val outAssetsTry: Try[(Map[ByteArrayWrapper, Long], Int)] = extractAssets(outputCandidates)
 
+  lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
+
   /**
     * statelessValidity is checking whether aspects of a transaction is valid which do not require the state to check.
     *
@@ -111,7 +111,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txManyInputs, inputs.size <= Short.MaxValue, toString)
       .validate(txManyOutputs, outputCandidates.size <= Short.MaxValue, toString)
       .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), toString)
-      .validate(txOutputsOverflow, Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _))).isSuccess, toString)
+      .validate(txOutputSum, outputsSumTry.isSuccess, toString)
       .validate(txAssetRules, outAssetsTry.isSuccess, s"$outAssetsTry in $this")
       .result
   }
@@ -139,8 +139,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                       (implicit verifier: ErgoInterpreter): Try[Long] = {
     val vs: ValidationSettings = ValidationRules.initialSettings
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
-    lazy val inputSum = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
-    lazy val outputSum = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
+    lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
     val initialCost: Long =
       boxesToSpend.size * stateContext.currentParameters.inputCost +
@@ -168,10 +167,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txBoxesToSpend, boxesToSpend.size == inputs.size, s"${boxesToSpend.size} != ${inputs.size}")
       .validate(txDataBoxes, dataBoxes.size == dataInputs.size, s"${dataBoxes.size} != ${dataInputs.size}")
       // Check that there are no overflow in input and output values
-      .validate(txInputsSum, inputSum.isSuccess, this.toString)
-      .validate(txOutputSum, outputSum.isSuccess, this.toString)
+      .validate(txInputsSum, inputSumTry.isSuccess, this.toString)
       // Check that transaction is not creating money out of thin air.
-      .validate(txErgPreservation, inputSum == outputSum, s"Ergo token preservation is broken in $this")
+      .validate(txErgPreservation, inputSumTry == outputsSumTry, s"Ergo token preservation is broken in $this")
       // Check that there are no more than 255 assets per box,
       // and amount for each asset, its amount in a box is positive
       .validateTry(outAssetsTry, e => ModifierValidator.fatal("???", e)) { case (validation, (outAssets, outAssetsNum)) =>

@@ -92,7 +92,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
   private def trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.contentBytes)
 
   //we currently do not use off-chain boxes to create a transaction
-  private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.mainChain
+  private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onChain
 
   //todo: make resolveUncertainty(boxId, witness)
   private def resolveUncertainty(idOpt: Option[ModifierId]): Boolean = {
@@ -298,7 +298,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private def readers: Receive = {
     case ReadBalances(chainStatus) =>
-      if (chainStatus.mainChain) {
+      if (chainStatus.onChain) {
         sender() ! BalancesSnapshot(height, registry.confirmedBalance, registry.confirmedAssetBalances)
       } else {
         sender() ! BalancesSnapshot(height, registry.balancesWithUnconfirmed, registry.assetBalancesWithUnconfirmed)

@@ -162,7 +162,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val mnemonic: String = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
 
     def props(): Props = Props(new WalletActorStub)
-    def balance(chainStatus: ChainStatus): Long = if (chainStatus.mainChain) confirmedBalance else unconfirmedBalance
+    def balance(chainStatus: ChainStatus): Long = if (chainStatus.onChain) confirmedBalance else unconfirmedBalance
     def confirmedBalance: Long = 1L
     def unconfirmedBalance: Long = 2L
   }

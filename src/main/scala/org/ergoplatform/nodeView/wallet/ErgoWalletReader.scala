@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
 import org.ergoplatform.wallet.boxes.ChainStatus
-import org.ergoplatform.wallet.boxes.ChainStatus.{Fork, MainChain}
+import org.ergoplatform.wallet.boxes.ChainStatus.{OnChain, OffChain}
 import org.ergoplatform.{ErgoAddress, ErgoBox, P2PKAddress}
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import scorex.core.transaction.wallet.VaultReader
@@ -44,9 +44,9 @@ trait ErgoWalletReader extends VaultReader {
     (walletActor ? ReadBalances(chainStatus)).mapTo[BalancesSnapshot]
   }
 
-  def confirmedBalances(): Future[BalancesSnapshot] = balances(MainChain)
+  def confirmedBalances(): Future[BalancesSnapshot] = balances(OnChain)
 
-  def balancesWithUnconfirmed(): Future[BalancesSnapshot] = balances(Fork)
+  def balancesWithUnconfirmed(): Future[BalancesSnapshot] = balances(OffChain)
 
   def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] = {
     (walletActor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]

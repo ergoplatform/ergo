@@ -23,15 +23,17 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  override val route: Route = (pathPrefix("blocks") & withCors) {
-    getBlocksR ~
-      postBlocksR ~
-      getLastHeadersR ~
-      getBlockIdsAtHeightR ~
-      getBlockHeaderByHeaderIdR ~
-      getBlockTransactionsByHeaderIdR ~
-      getFullBlockByHeaderIdR ~
-      getModifierByIdR
+  override val route: Route = pathPrefix("blocks") {
+    corsHandler {
+      getBlocksR ~
+        postBlocksR ~
+        getLastHeadersR ~
+        getBlockIdsAtHeightR ~
+        getBlockHeaderByHeaderIdR ~
+        getBlockTransactionsByHeaderIdR ~
+        getFullBlockByHeaderIdR ~
+        getModifierByIdR
+    }
   }
 
   private def getHistory: Future[ErgoHistoryReader] =

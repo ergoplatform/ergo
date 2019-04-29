@@ -26,6 +26,10 @@ import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 
+import sigmastate.{SBoolean, SType}
+import sigmastate.eval._
+import sigmastate.eval.Extensions._
+
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
@@ -72,7 +76,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   private def extractAssets(boxes: IndexedSeq[ErgoBoxCandidate]): Try[(Map[ByteArrayWrapper, Long], Int)] = Try {
     val map: mutable.Map[ByteArrayWrapper, Long] = mutable.Map[ByteArrayWrapper, Long]()
     val assetsNum = boxes.foldLeft(0) { case (acc, box) =>
-      require(box.additionalTokens.lengthCompare(ErgoTransaction.MaxAssetsPerBox) <= 0, "too many assets in one box")
+      require(box.additionalTokens.length <= ErgoTransaction.MaxAssetsPerBox, "too many assets in one box")
       box.additionalTokens.foreach { case (assetId, amount) =>
         require(amount > 0, s"non-positive asset amount for ${Algos.encode(assetId)}")
         val aiWrapped = ByteArrayWrapper(assetId)
@@ -254,7 +258,7 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
 
   implicit private val extensionEncoder: Encoder[ContextExtension] = { extension =>
     extension.values.map { case (key, value) =>
-      key -> valueEncoder(value)
+      key -> evaluatedValueEncoder(value)
     }.asJson
   }
 
@@ -307,9 +311,9 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
       value <- cursor.downField("value").as[Long]
       creationHeight <- cursor.downField("creationHeight").as[Int]
       ergoTree <- cursor.downField("ergoTree").as[ErgoTree]
-      assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]
+      assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]  // TODO optimize: encode directly into Coll avoiding allocation of Tuple2 for each element
       registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
-    } yield (new ErgoBoxCandidate(value, ergoTree, creationHeight, assets, registers), maybeId)
+    } yield (new ErgoBoxCandidate(value, ergoTree, creationHeight, assets.toColl, registers), maybeId)
   }
 
   implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>

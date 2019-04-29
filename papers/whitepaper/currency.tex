@@ -1,51 +1,41 @@
 \section{Ergo's Native Token}
-
- \dnote{Bitcoin have utility usage to pay for network resources as well as Ethereum has a utility usage to pay for
- computations~(we've also discussed it in "Systematic approach to cryptocurrency fees" paper). Also Ethereum emission
- rate was only reduced making it better and better as a store of value and is following "set in stone social contract" that
- it will reach zero when it will switch to PoS. Keeping in mind lost coins, Ethereum may be better then Ergo even
- right now, as far as efficient number of coins in circullation may reduce with time unlike Ergo.}
-
- \dnote{Instead of comparision of medium of exchange or store of value properties with BTC/ETH, I propose to
- describe, that Erg is utility token with the different purpose~(pay storage fee) and also have limited
- supply~(that would be natural if we'll move this part into previous section)}
-
- \knote{I disagree, but you are free to propose an alternative text. Also, what was discussed in the "Systematic
- approach..." paper that is a fee structure, not usefulness of a token.}
-
- In this section, we are going to provide some reflections on the nature of the native Ergo token. For starters, we note that
- any currency is about three main functions: a medium of exchange, a unit of account, and a store of value.
-
- Bitcoin, being historically the first digital scarce asset, is perfect as store-of-value. It is even better than
- gold under certain assumptions~(such as SHA-256 hash function not being broken, and majority of miners are not willing
- to destroy the Bitcoin), as emission is limited and known in advance. However, being perfect store-of-value also means
- to be not so good as medium-of-exchange. In particular, if one knows that Bitcoin is indeed the best tool to store
- value in the long term, he would use fiat whenever possible in order to collect more bitcoins.
-
- On the other hand, Ethereum is not just a currency, but a utility token used to pay for computations over the
- "decentralized world computer" (or "fully replicated programmable calculator"). However, Ethereum is not good as
- store-of-value, as emission in endless, and, historically, can be changed easily by the community core along with
- critical system assumptions.
-
- Ergo combines best from these two top blockchains. Emission is predefined and limited, more, it will be finished within
- just ten years. The system assumptions are set in stone with precisely defined {\em social contract}~\ref{sec:social}. Also,
- Ergo is a utility token used to pay for storage rent. This storage rent is making the system more stable. Last, Ergo is
- suitable to build monetary systems on top of it with properties different from Ergo native token itself. However,
- participating in such systems would require to use Ergo native token as well in order to pay for storage rent.
-
-
-\subsection{Currency And Emission}
 \label{sec:currency}
 
-The native currency of \Ergo{} platform is \Erg{} token, which unique property is
-that it is the only currency to pay for storage rent in \Ergo{}~(see Section~\ref{sec:survivability} for more details).
-One \Erg{} token is divisible to up to $10^9$ smallest units, \nanoErg{}s.
+As most of the blockchain systems, Ergo platform have its native token which is
+called \Erg{} and is divisible to up to $10^9$ smallest units, \nanoErg{}s.
+\Erg{} provides stability to Ergo platform by several meaningful applications.
 
-All \Erg{} tokens that will ever circulate in the system are presented in
-the initial state and are divided into 3 parts~(boxes):
+During the initial phase of Ergo live, miners will receive the reward in \Erg{}s created
+out of thin air according to a predefined and hard-coded token emission schedule
+~(see~\ref{sec:emission} for more details).
+This coins will incentivize miners to participate in the Ergo network, securing it from hashrate-based attacks
+like the known 51\% attack.
 
-\knote{no any notion of a box was introduced before, the introduction is sudden}
-\dnote{I propose to add section about Ergo state before this one and introduce box notion in it}
+\Erg{} emission will be finished within just eight years, and after that miner will only receive \Erg{} from
+fees.
+Ergo block size and block computation cost are limited, and thus miners are enforced to
+choose only a subset of transactions from mempool during high load.
+Fees will help miners to sort the transactions, preventing spam attacks while allowing
+to include transactions from honest users in blocks.
+
+Besides network and computation resources, transaction utilizes storage by increasing state size.
+In existing cryptocurrencies, an element of the state once created lives possibly forever without
+paying anything for that, leading to continuously increasing state size.
+In contrast, Ergo has a storage rent component, that periodically charges users for every byte
+included in the state.
+This storage rent is making the system more stable by limiting state size, returning lost coins into
+circulation and providing an additional stable and predictable reward to miners.
+
+Thus, being a platform for contractual money, Ergo is suitable to build applications and monetary systems
+on top of it.
+However, participating in such systems would require to use Erg, making the network more stable and secure.
+
+\subsection{Emission}
+\label{sec:emission}
+
+
+All \Erg{} tokens that will ever circulate in the system are presented in the initial state and
+that will consists of 3 boxes:
 
 \begin{itemize}
     \item{\em No premine proof.} This box contains exactly one~\Erg{} and is protected by the script

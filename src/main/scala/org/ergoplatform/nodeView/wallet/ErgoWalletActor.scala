@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
-import org.ergoplatform.nodeView.wallet.persistence.WalletRegistry
+import org.ergoplatform.nodeView.wallet.persistence.RegistryOps._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
@@ -62,10 +62,10 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private val __store = new WalletStorage
 
-  private val registry: WalletRegistry = {
+  private val registry: LSMStore = {
     val dir = new File(s"${ergoSettings.directory}/wallet/registry")
     dir.mkdirs()
-    new WalletRegistry(new LSMStore(dir))
+    new LSMStore(dir)
   }
 
   private val parameters: Parameters = LaunchParameters
@@ -329,7 +329,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
         TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
       }
 
-      registry.putBoxes(resolvedTrackedBoxes ++ unresolvedTrackedBoxes)
+      putBoxes(resolvedTrackedBoxes ++ unresolvedTrackedBoxes).transact(registry, idToBytes(fullBlock.id))
 
     case Rollback(heightTo) =>
       height.until(heightTo, -1).foreach { h =>

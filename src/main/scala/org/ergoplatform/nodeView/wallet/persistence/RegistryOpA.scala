@@ -16,7 +16,9 @@ object RegistryOpA {
 
   final case class GetBoxes(ids: Seq[BoxId]) extends RegistryOpA[Seq[Option[TrackedBox]]]
 
-  final case class RemoveBox(id: BoxId) extends RegistryOpA[Unit]
+  case object GetAllBoxes extends RegistryOpA[Seq[TrackedBox]]
+
+  final case class RemoveBoxes(ids: Seq[BoxId]) extends RegistryOpA[Unit]
 
   final case class PutIndex(index: RegistryIndex) extends RegistryOpA[Unit]
 

@@ -109,9 +109,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txNoInputs, inputs.nonEmpty, toString)
       .validate(txNoOutputs, outputCandidates.nonEmpty, toString)
       .validate(txManyInputs, inputs.size <= Short.MaxValue, toString)
+      .validate(txManyDataInputs, dataInputs.size <= Short.MaxValue, toString)
       .validate(txManyOutputs, outputCandidates.size <= Short.MaxValue, toString)
       .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), toString)
       .validate(txOutputSum, outputsSumTry.isSuccess, toString)
+      .validate(txInputsUnique, inputs.distinct.size == inputs.size, toString)
       .validate(txAssetRules, outAssetsTry.isSuccess, s"$outAssetsTry in $this")
       .result
   }

@@ -20,8 +20,6 @@ object ValidationRules {
     * hdrFutureTimestamp - is it fatal?
     *
     * add Parameters.maxBlockSize rule
-    * check txManyDataInputs like txManyInputs?
-    * check duplicate inputs?
     *
     * split hdrVotes into multiple checks?
     * split hdrPoW into multiple checks?
@@ -39,9 +37,11 @@ object ValidationRules {
     txNoInputs -> (s => fatal(s"Transaction should have at least one input. $s"), true, Seq(classOf[ErgoTransaction])),
     txNoOutputs -> (s => fatal(s"Transaction should have at least one output. $s"), true, Seq(classOf[ErgoTransaction])),
     txManyInputs -> (s => fatal(s"Number of transaction inputs should not exceed ${Short.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
+    txManyDataInputs -> (s => fatal(s"Number of transaction data inputs should not exceed ${Short.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
     txManyOutputs -> (s => fatal(s"Number of transaction outputs should not exceed ${Short.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
     txNegativeOutput -> (s => fatal(s"Amounts of transaction outputs should not be negative. $s"), true, Seq(classOf[ErgoTransaction])),
     txOutputSum -> (s => fatal(s"Sum of transaction outputs should not exceed ${Long.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
+    txInputsUnique -> (s => fatal(s"There should be no duplicate inputs. $s"), true, Seq(classOf[ErgoTransaction])),
     txAssetRules -> (s => fatal(s"Number of assets in a single output should not exceed ${ErgoTransaction.MaxAssetsPerBox}, " +
       s"amount of every individual asset should be positive and sum of assets of one type should " +
       s"not exceed ${Long.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
@@ -97,10 +97,12 @@ object ValidationRules {
   val txNoInputs: Short = 100
   val txNoOutputs: Short = 101
   val txManyInputs: Short = 102
-  val txManyOutputs: Short = 103
-  val txNegativeOutput: Short = 104
-  val txOutputSum: Short = 105
-  val txAssetRules: Short = 106
+  val txManyDataInputs: Short = 103
+  val txManyOutputs: Short = 104
+  val txNegativeOutput: Short = 105
+  val txOutputSum: Short = 106
+  val txAssetRules: Short = 107
+  val txInputsUnique: Short = 108
 
   // stateful transaction validation
   val txCost: Short = 120

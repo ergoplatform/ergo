@@ -32,7 +32,7 @@ object ValidationRules {
     */
   lazy val rulesSpec: Map[Short, (String => Invalid, Boolean, Seq[Class[_]])] = Map(
 
-    alreadyApplied -> (s => fatal(s"Modifier $s is already in history"), true, Seq(classOf[Header], classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
+    alreadyApplied -> (s => fatal(s"Modifier should not be applied yet. $s"), true, Seq(classOf[Header], classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
 
 
     // stateless transaction validation
@@ -42,8 +42,8 @@ object ValidationRules {
     txManyOutputs -> (s => fatal(s"Number of transaction outputs should not exceed ${Short.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
     txNegativeOutput -> (s => fatal(s"Amounts of transaction outputs should not be negative. $s"), true, Seq(classOf[ErgoTransaction])),
     txOutputSum -> (s => fatal(s"Sum of transaction outputs should not exceed ${Long.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
-    txAssetRules -> (s => fatal(s"Number of assets in one box should not exceed ${ErgoTransaction.MaxAssetsPerBox}, " +
-      s"amount of every individual asset should be positive and sum of assets of one type should" +
+    txAssetRules -> (s => fatal(s"Number of assets in a single output should not exceed ${ErgoTransaction.MaxAssetsPerBox}, " +
+      s"amount of every individual asset should be positive and sum of assets of one type should " +
       s"not exceed ${Long.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
 
     // stateful transaction validation
@@ -55,7 +55,7 @@ object ValidationRules {
     txInputsSum -> (s => fatal(s"Sum of transaction inputs should not exceed ${Long.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
     txErgPreservation -> (s => fatal(s"Amount of Erg in inputs should equal to amount of Erg in outputs. $s"), true, Seq(classOf[ErgoTransaction])),
     txAssetsPreservation -> (s => fatal(s"For every token, its amount in inputs should not exceed its amount of Erg in outputs. $s"), true, Seq(classOf[ErgoTransaction])),
-    txBoxToSpend -> (s => recoverable(s"Box id doesn't match input: $s"), true, Seq(classOf[ErgoTransaction])),
+    txBoxToSpend -> (s => recoverable(s"Box id doesn't match input. $s"), true, Seq(classOf[ErgoTransaction])),
     txScriptValidation -> (s => fatal(s"Scripts of all transaction inputs should pass verification. $s"), true, Seq(classOf[ErgoTransaction])),
 
     // header validation
@@ -66,17 +66,17 @@ object ValidationRules {
     hdrParent -> (s => recoverable(s"Parent header with id $s is not defined"), true, Seq(classOf[Header])),
     hdrVotes -> (s => fatal(s"Header should contain 3 votes, with no duplicates and contradictory votes, that should be known by parametersDescs. $s"), true, Seq(classOf[Header])),
     hdrNonIncreasingTimestamp -> (s => fatal(s"Block timestamp should be greater than parents. $s"), true, Seq(classOf[Header])),
-    hdrHeight -> (s => fatal(s"Header height  should be greater by 1 than parents. $s"), true, Seq(classOf[Header])),
-    hdrPoW -> (s => fatal(s"Header should contain correct PoW solution: $s"), true, Seq(classOf[Header])),
-    hdrRequiredDifficulty -> (s => fatal(s"Header should contain correct required difficulty: $s"), true, Seq(classOf[Header])),
+    hdrHeight -> (s => fatal(s"Header height should be greater by 1 than parents. $s"), true, Seq(classOf[Header])),
+    hdrPoW -> (s => fatal(s"Header should contain correct PoW solution. $s"), true, Seq(classOf[Header])),
+    hdrRequiredDifficulty -> (s => fatal(s"Header should contain correct required difficulty. $s"), true, Seq(classOf[Header])),
     hdrTooOld -> (s => fatal(s"Header height should not be older, than current height minus <config.keepVersions>. $s"), true, Seq(classOf[Header])),
-    hdrParentSemantics -> (s => fatal(s"Parent header should not be marked as invalid: $s"), true, Seq(classOf[Header])),
-    hdrFutureTimestamp -> (s => fatal(s"Header timestamp should not be more than 20 minutes in future: $s"), true, Seq(classOf[Header])),
+    hdrParentSemantics -> (s => fatal(s"Parent header should not be marked as invalid. $s"), true, Seq(classOf[Header])),
+    hdrFutureTimestamp -> (s => fatal(s"Header timestamp should not be more than 20 minutes in future. $s"), true, Seq(classOf[Header])),
 
     // block sections validation
     bsNoHeader -> (s => recoverable(s"Header for modifier $s is not defined"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
-    bsCorrespondsToHeader -> (s => fatal(s"Modifier does not corresponds to header: $s"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
-    bsHeaderValid -> (s => fatal(s"Header $s is semantically invalid: "), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
+    bsCorrespondsToHeader -> (s => fatal(s"Block sections should correspond to declared header. $s"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
+    bsHeaderValid -> (s => fatal(s"Header for block section should not be marked as invalid. $s"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
     bsHeadersChainSynced -> (s => recoverable(s"Headers chain is not synchronized yet"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
     bsTooOld -> (s => fatal(s"Too old block section: $s"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
 

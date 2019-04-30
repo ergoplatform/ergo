@@ -1156,7 +1156,7 @@ paths:
 
   /transactions:
     post:
-      summary: Send an anyone can spend transaction
+      summary: Send an Ergo transaction
       operationId: sendTransaction
       tags:
       - transactions
@@ -1208,7 +1208,7 @@ paths:
       - transactions
       responses:
         '200':
-          description: Array with anyone can spend transactions objects
+          description: Array with Ergo transactions
           content:
             application/json:
               schema:

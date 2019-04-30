@@ -12,7 +12,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeSet
-import scala.util.{Random, Success}
+import scala.util.{Failure, Random, Success}
 
 /**
   * Performs mempool validation task on demand.
@@ -61,7 +61,9 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
         val accumulatedTime = etAcc + (t1 - t0)
         validationResult match {
           case Success(_) => validationLoop(tail, invalidated, accumulatedTime)
-          case _ => validationLoop(tail, invalidated :+ head.id, accumulatedTime)
+          case Failure(e) =>
+            log.debug(s"Transaction ${head.id} invalidated: ${e.getMessage}")
+            validationLoop(tail, invalidated :+ head.id, accumulatedTime)
         }
       case _ :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos =>
         // this transaction was validated earlier, skip it

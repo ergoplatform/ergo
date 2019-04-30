@@ -1,5 +1,6 @@
 package org.ergoplatform.settings
 
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -78,7 +79,9 @@ object ValidationRules {
     bsCorrespondsToHeader -> (s => fatal(s"Block sections should correspond to declared header. $s"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
     bsHeaderValid -> (s => fatal(s"Header for block section should not be marked as invalid. $s"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
     bsHeadersChainSynced -> (s => recoverable(s"Headers chain is not synchronized yet"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
-    bsTooOld -> (s => fatal(s"Too old block section: $s"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
+    bsTooOld -> (s => fatal(s"Too old block section. $s"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
+    fbOperationFailed -> (s => fatal(s"Operation applied to AVL+ tree should pass. $s"), true, Seq(classOf[ErgoFullBlock])),
+    fbDigestIncorrect -> (s => fatal(s"Calucated AVL+ digest should be eqaul to the declared one. $s"), true, Seq(classOf[ErgoFullBlock])),
 
     // extension validation
     // interlinks validation
@@ -149,6 +152,11 @@ object ValidationRules {
   val exValueLength: Short = 314
   val exDuplicateKeys: Short = 315
   val exEmpty: Short = 316
+
+  // full block application
+  val fbOperationFailed: Short = 400
+  val fbDigestIncorrect: Short = 401
+
 
   private def recoverable(errorMessage: String): Invalid = ModifierValidator.error(errorMessage)
 

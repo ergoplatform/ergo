@@ -9,11 +9,14 @@ import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{Algos, LaunchParameters, VotingSettings}
+import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed, txCost}
+import org.ergoplatform.settings.{Algos, LaunchParameters, ValidationRules, VotingSettings}
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
 import scorex.core.transaction.state.TransactionValidation
+import scorex.core.utils.ScorexEncoding
+import scorex.core.validation.{ModifierValidator, ValidationState}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
@@ -34,7 +37,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                 override val constants: StateConstants)
   extends ErgoState[UtxoState]
     with TransactionValidation[ErgoTransaction]
-    with UtxoStateReader {
+    with UtxoStateReader
+    with ScorexEncoding {
 
   override def rootHash: ADDigest = persistentProver.synchronized {
     persistentProver.digest
@@ -76,20 +80,19 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       .orElse(boxById(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
 
-    execTransactionsTry(transactions, currentStateContext)(checkBoxExistence) match {
-      case Success(executionCost) if executionCost <= currentStateContext.currentParameters.maxBlockCost =>
-        persistentProver.synchronized {
-          val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
-          val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
-          if (java.util.Arrays.equals(expectedDigest, persistentProver.digest) || resultTry.isFailure) {
-            resultTry
-          } else {
-            Failure(new Exception(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
-              s"${Algos.encode(persistentProver.digest)} given"))
-          }
-        }
-      case Success(executionCost) => Failure(new Exception(s"Transaction cost $executionCost exceeds limit"))
-      case failure => failure.map(_ => ())
+    val txProcessing = execTransactions(transactions, currentStateContext)(checkBoxExistence)
+    if (txProcessing.isValid) {
+      persistentProver.synchronized {
+        val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
+        val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+        ModifierValidator(ValidationRules.initialSettings)
+          .validateNoFailure(fbOperationFailed, resultTry)
+          .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
+          .result
+          .toTry
+      }
+    } else {
+      txProcessing.toTry.map(_ => ())
     }
   }
 

@@ -21,13 +21,17 @@ Every rule is numerated and may be deactivated later via soft forks, while new r
     \hline
     102 & Number of transaction inputs should not exceed 32767. & true & ErgoTransaction \\
     \hline
-    103 & Number of transaction outputs should not exceed 32767. & true & ErgoTransaction \\
+    103 & Number of transaction data inputs should not exceed 32767. & true & ErgoTransaction \\
     \hline
-    104 & Amounts of transaction outputs should not be negative. & true & ErgoTransaction \\
+    104 & Number of transaction outputs should not exceed 32767. & true & ErgoTransaction \\
     \hline
-    105 & Sum of transaction outputs should not exceed 9223372036854775807. & true & ErgoTransaction \\
+    105 & Amounts of transaction outputs should not be negative. & true & ErgoTransaction \\
     \hline
-    106 & Number of assets in one box should not exceed 255, amount of every individual asset should be positive and sum of assets of one type should not exceed 9223372036854775807. & true & ErgoTransaction \\
+    106 & Sum of transaction outputs should not exceed 9223372036854775807. & true & ErgoTransaction \\
+    \hline
+    107 & Number of assets in a single output should not exceed 255, amount of every individual asset should be positive and sum of assets of one type should not exceed 9223372036854775807. & true & ErgoTransaction \\
+    \hline
+    108 & There should be no duplicate inputs. & true & ErgoTransaction \\
     \hline
     120 & Total cost of transaction scripts should not exceed <maxBlockCost>. & true & ErgoTransaction \\
     \hline
@@ -97,7 +101,7 @@ Every rule is numerated and may be deactivated later via soft forks, while new r
     \hline
     303 & Header for block section should not be marked as invalid. & true & ADProofs, Extension, BlockTransactions \\
     \hline
-    305 & Too old block section: & true & ADProofs, Extension, BlockTransactions \\
+    305 & Too old block section. & true & ADProofs, Extension, BlockTransactions \\
     \hline
     311 & Interlinks should be packed properly. & true & Extension \\
     \hline
@@ -110,5 +114,19 @@ Every rule is numerated and may be deactivated later via soft forks, while new r
     315 & Extension should not contain duplicate keys. & true & Extension \\
     \hline
     316 & Extension of non-genesis block should not be empty. & true & Extension \\
+    \hline
+\end{tabular}
+
+
+\textbf{Block application to state validation:}
+
+
+\begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{2.5cm}| }
+    \hline
+    Id & Validation rule & Active & Modifiers \\
+    \hline
+    400 & Operation applied to AVL+ tree should pass. & true & ErgoFullBlock \\
+    \hline
+    401 & Calucated AVL+ digest should be eqaul to the declared one. & true & ErgoFullBlock \\
     \hline
 \end{tabular}

@@ -14,7 +14,6 @@ import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
 import org.scalatest.{FlatSpec, Matchers}
-import sigmastate.Values
 
 import scala.util.Try
 
@@ -141,6 +140,30 @@ class WalletApiRouteSpec extends FlatSpec
 
   it should "return addresses" in {
     Get(prefix + "/addresses") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "initialize wallet" in {
+    Post(prefix + "/init", Json.obj("pass" -> "1234".asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("mnemonic").as[String] shouldEqual Right(WalletActorStub.mnemonic)
+    }
+  }
+
+  it should "restore wallet" in {
+    Post(prefix + "/restore", Json.obj("pass" -> "1234".asJson, "mnemonic" -> WalletActorStub.mnemonic.asJson)) ~>
+      route ~> check(status shouldBe StatusCodes.OK)
+  }
+
+  it should "unlock wallet" in {
+    Post(prefix + "/unlock", Json.obj("pass" -> "1234".asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "lock wallet" in {
+    Get(prefix + "/lock") ~> route ~> check {
       status shouldBe StatusCodes.OK
     }
   }

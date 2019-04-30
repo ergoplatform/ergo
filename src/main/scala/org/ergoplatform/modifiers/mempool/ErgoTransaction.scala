@@ -144,7 +144,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def validateStateful(boxesToSpend: IndexedSeq[ErgoBox],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
-                       accumulatedCost: Long = 0L)
+                       accumulatedCost: Long)
                       (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
     val vs: ValidationSettings = ValidationRules.initialSettings
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
@@ -181,7 +181,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txErgPreservation, inputSumTry == outputsSumTry, s"Ergo token preservation is broken in $this")
       // Check that there are no more than 255 assets per box,
       // and amount for each asset, its amount in a box is positive
-      .validateTry(outAssetsTry, e => ModifierValidator.fatal("???", e)) { case (validation, (outAssets, outAssetsNum)) =>
+      .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", e)) { case (validation, (outAssets, outAssetsNum)) =>
       extractAssets(boxesToSpend) match {
         case Success((inAssets, inAssetsNum)) =>
           lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)

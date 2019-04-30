@@ -1,6 +1,7 @@
 package org.ergoplatform.utils.generators
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
@@ -89,6 +90,15 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       description <- Gen.alphaLowerStr
       decimals <- Gen.choose(4, 16)
     } yield AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), amount, name, description, decimals)
+  }
+
+  def registryIndexGen: Gen[RegistryIndex] = {
+    for {
+      height <- Gen.posNum[Int]
+      amount <- Gen.choose(1L, 100000L)
+      balances <- additionalTokensGen
+      uncertain <- Gen.listOf(boxIdGen)
+    } yield RegistryIndex(height, amount, balances, uncertain)
   }
 
   private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)

@@ -91,13 +91,11 @@ class TransactionGenerator(viewHolder: ActorRef,
         case i if i < 70 =>
           Some(PaymentRequest(randProposition, math.min(randAmount, balances.balance - feeReq.value), None, None))
         case i if i < 95 && balances.assetBalances.nonEmpty =>
-          val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
+          val tokenToSpend = balances.assetBalances(Random.nextInt(balances.assetBalances.size))
           val tokenAmountToSpend = tokenToSpend._2 / 4
           val approximateBoxSize = 200
           val minimalErgoAmount = approximateBoxSize * (parameters.minValuePerByte + Parameters.MinValueStep)
-          Try(idToBytes(tokenToSpend._1)).map { id =>
-            PaymentRequest(randProposition, minimalErgoAmount, Some(Seq(Digest32 @@ id -> tokenAmountToSpend)), None)
-          }.toOption
+          Some(PaymentRequest(randProposition, minimalErgoAmount, Some(Seq(tokenToSpend._1 -> tokenAmountToSpend)), None))
         case _ =>
           val assetInfo = genNewAssetInfo
           Some(AssetIssueRequest(randProposition, assetInfo._1, assetInfo._2, assetInfo._3, assetInfo._4))

@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
+import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils._
@@ -246,7 +247,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val asset2Sum = randomLong()
       val asset1ToReturn = randomLong(asset1Sum)
-      val assets2Seq = Seq(Digest32 @@ idToBytes(asset1Token) -> asset1ToReturn, newAssetIdStub -> asset2Sum)
+      val assets2Seq = Seq(asset1Token -> asset1ToReturn, newAssetIdStub -> asset2Sum)
       val balanceToReturn = 1000 * parameters.minValuePerByte
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assets2Seq)
       val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
@@ -259,7 +260,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"With unconfirmed after spending: $balanceAfterSpending")
       val assets = balanceAfterSpending.assetBalances
       totalAfterSpending.assetBalances shouldBe assets
-      assets(asset1Token) shouldBe asset1ToReturn
+      assets(1) shouldBe asset1ToReturn
       val asset2 = assets.filter(_._1 != asset1Token)
       asset2 should not be empty
       asset2.head._2 shouldBe asset2Sum
@@ -400,7 +401,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       waitForScanning(block)
       val historyHeight = getHistory.headersHeight
 
-      val confirmedBeforeRollback: BalancesSnapshot = getConfirmedBalances
+      val confirmedBeforeRollback: RegistryIndex = getConfirmedBalances
       val totalBeforeRollback = getBalancesWithUnconfirmed
       wallet.rollback(initialState.version)
       blocking(Thread.sleep(100))

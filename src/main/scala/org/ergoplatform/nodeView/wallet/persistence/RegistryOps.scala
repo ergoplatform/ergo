@@ -61,8 +61,11 @@ object RegistryOps {
   def getBoxes(ids: Seq[BoxId]): RegistryOp[Seq[Option[TrackedBox]]] =
     liftF[RegistryOpA, Seq[Option[TrackedBox]]](GetBoxes(ids))
 
-  def removeBox(id: BoxId): RegistryOp[Unit] =
-    liftF[RegistryOpA, Unit](RemoveBox(id))
+  def getAllBoxes: RegistryOp[Seq[TrackedBox]] =
+    liftF[RegistryOpA, Seq[TrackedBox]](GetAllBoxes)
+
+  def removeBoxes(ids: Seq[BoxId]): RegistryOp[Unit] =
+    liftF[RegistryOpA, Unit](RemoveBoxes(ids))
 
   def updateBox(id: BoxId, updateF: TrackedBox => TrackedBox): RegistryOp[Unit] =
     getBox(id).flatMap { _
@@ -114,9 +117,19 @@ object RegistryOps {
               }
               .asInstanceOf[A]
           }
-        case RemoveBox(id) =>
+        case GetAllBoxes =>
+          State.inspect { _ =>
+            store.getAll()
+              .filterNot(_._1 == ByteArrayWrapper(RegistryIndexKey))
+              .flatMap { case (_, boxBytes) =>
+                TrackedBoxSerializer.parseBytesTry(boxBytes.data).toOption
+              }
+              .toSeq
+              .asInstanceOf[A]
+          }
+        case RemoveBoxes(ids) =>
           State.modify { case (toInsert, toRemove) =>
-            (toInsert, toRemove :+ key(id))
+            (toInsert, toRemove ++ ids.map(key))
           }
         case PutIndex(index) =>
           State.modify { case (toInsert, toRemove) =>

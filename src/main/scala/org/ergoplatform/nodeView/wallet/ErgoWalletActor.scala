@@ -10,6 +10,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
+import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOps._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings._
@@ -253,7 +254,19 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
         TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
       }
 
-      putBoxes(resolvedTrackedBoxes ++ unresolvedTrackedBoxes).transact(registry, idToBytes(fullBlock.id))
+      val transaction = for {
+        _ <- putBoxes(resolvedTrackedBoxes ++ unresolvedTrackedBoxes)
+        spentBoxes <- getAllBoxes.map(_.filter(x => inputs.map(_._2).contains(x.box.id)))
+        _ <- updateIndex { case RegistryIndex(_, balance, tokensBalance, uncertainBoxes) =>
+          val spentAmt = spentBoxes.map(_.box.value).sum
+          val receivedAmt = resolvedTrackedBoxes.map(_.box.value).sum
+          // todo: recalculate tokensBalance.
+          RegistryIndex(height, balance - spentAmt + receivedAmt, tokensBalance, uncertainBoxes)
+        }
+        _ <- removeBoxes(spentBoxes.map(_.box.id))
+      } yield ()
+
+      transaction.transact(registry, idToBytes(fullBlock.id))
 
     case Rollback(version: VersionTag) =>
       Try(registry.rollback(ByteArrayWrapper(Base16.decode(version).get))).fold(

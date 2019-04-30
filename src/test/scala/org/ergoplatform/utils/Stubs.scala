@@ -14,6 +14,7 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
@@ -144,7 +145,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         sender() ! trackedAddresses.slice(from, until)
 
       case ReadBalances(chainStatus) =>
-        sender ! BalancesSnapshot(0, WalletActorStub.balance(chainStatus), Map.empty)
+        sender ! RegistryIndex(0, WalletActorStub.balance(chainStatus), Seq.empty, Seq.empty)
 
       case ReadTrackedAddresses =>
         sender ! trackedAddresses

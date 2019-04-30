@@ -4,7 +4,7 @@ import java.io.File
 
 import akka.actor.Actor
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
-import org.ergoplatform.ErgoBox.{BoxId, R4, R5, R6}
+import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
@@ -254,19 +254,29 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
         TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
       }
 
-      val transaction = for {
+      val update = for {
         _ <- putBoxes(resolvedTrackedBoxes ++ unresolvedTrackedBoxes)
         spentBoxes <- getAllBoxes.map(_.filter(x => inputs.map(_._2).contains(x.box.id)))
         _ <- updateIndex { case RegistryIndex(_, balance, tokensBalance, uncertainBoxes) =>
           val spentAmt = spentBoxes.map(_.box.value).sum
+          val spentTokensAmt = spentBoxes
+            .flatMap(_.box.additionalTokens)
+            .foldLeft(Map.empty[ByteArrayWrapper, Long]) { case (acc, (id, amt)) =>
+              acc.updated(ByteArrayWrapper(id), acc.getOrElse(ByteArrayWrapper(id), 0L) + amt)
+            }
+          val tokensBalanceMap = tokensBalance.map(x => ByteArrayWrapper(x._1) -> x._2).toMap
+          val newTokensBalance = spentTokensAmt.foldLeft(Seq.empty[(TokenId, Long)]) {
+            case (acc, (wrappedId, amt)) =>
+              val newAmt = tokensBalanceMap.getOrElse(wrappedId, 0L) - amt
+              acc :+ (Digest32 @@ wrappedId.data -> newAmt)
+          }
           val receivedAmt = resolvedTrackedBoxes.map(_.box.value).sum
-          // todo: recalculate tokensBalance.
-          RegistryIndex(height, balance - spentAmt + receivedAmt, tokensBalance, uncertainBoxes)
+          RegistryIndex(height, balance - spentAmt + receivedAmt, newTokensBalance, uncertainBoxes) // todo: uncertain
         }
         _ <- removeBoxes(spentBoxes.map(_.box.id))
       } yield ()
 
-      transaction.transact(registry, idToBytes(fullBlock.id))
+      update.transact(registry, idToBytes(fullBlock.id))
 
     case Rollback(version: VersionTag) =>
       Try(registry.rollback(ByteArrayWrapper(Base16.decode(version).get))).fold(
@@ -276,9 +286,9 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
   private def readers: Receive = {
     case ReadBalances(chainStatus) =>
       if (chainStatus.onChain) {
-        sender() ! BalancesSnapshot(height, __store.confirmedBalance, __store.confirmedAssetBalances)
+        getIndex.transact(registry).foreach(sender() ! _)
       } else {
-        sender() ! BalancesSnapshot(height, __store.balancesWithUnconfirmed, __store.assetBalancesWithUnconfirmed)
+        ???
       }
 
     case ReadPublicKeys(from, until) =>

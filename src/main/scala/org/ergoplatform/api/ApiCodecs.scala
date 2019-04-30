@@ -10,6 +10,7 @@ import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.wallet.boxes.TrackedBox
 import scorex.core.validation.ValidationResult
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
@@ -177,21 +178,21 @@ trait ApiCodecs {
   implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = { b =>
     val plainFields = Map(
       "spent" -> b.spendingStatus.spent.asJson,
-      "onchain" -> b.chainStatus.onchain.asJson,
+      "onchain" -> b.chainStatus.onChain.asJson,
       "certain" -> b.certainty.certain.asJson,
       "creationOutIndex" -> b.creationOutIndex.asJson,
-      "inclusionHeight" -> b.inclusionHeight.asJson,
-      "spendingHeight" -> b.spendingHeight.asJson,
+      "inclusionHeight" -> b.inclusionHeightOpt.asJson,
+      "spendingHeight" -> b.spendingHeightOpt.asJson,
       "box" -> b.box.asJson
     )
     val fieldsWithTx = if (opts.showDetails) {
       plainFields +
-        ("creationTransaction" -> b.creationTx.asJson) +
-        ("spendingTransaction" -> b.spendingTx.asJson)
+        ("creationTransaction" -> b.creationTxId.asJson) +
+        ("spendingTransaction" -> b.spendingTxIdOpt.asJson)
     } else {
       plainFields +
         ("creationTransactionId" -> b.creationTxId.asJson) +
-        ("spendingTransactionId" -> b.spendingTxId.asJson)
+        ("spendingTransactionId" -> b.spendingTxIdOpt.asJson)
     }
     fieldsWithTx.asJson
   }

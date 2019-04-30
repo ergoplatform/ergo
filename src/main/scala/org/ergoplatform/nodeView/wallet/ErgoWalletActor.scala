@@ -3,28 +3,28 @@ package org.ergoplatform.nodeView.wallet
 import java.io.File
 
 import akka.actor.Actor
-import io.iohk.iodb.LSMStore
+import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.ErgoBox.{BoxId, R4, R5, R6}
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOps._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
-import org.ergoplatform.wallet.boxes.BoxCertainty.Uncertain
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.TransactionContext
 import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, JsonSecretStorage}
+import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
+import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.interpreter.ContextExtension
@@ -124,78 +124,10 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     }
   }
 
-  //todo: make resolveUncertainty(boxId, witness)
-  private def resolveUncertainty(idOpt: Option[ModifierId]): Boolean = {
-    (idOpt.flatMap(id => __store.byId(id)) orElse __store.nextUncertain()).exists { uncertainBox =>
-      val box = uncertainBox.box
-
-      val testingTx = UnsignedErgoLikeTransaction(
-        IndexedSeq(new UnsignedInput(box.id)),
-        IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
-      )
-
-      val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx, selfIndex = 0)
-      val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty)
-
-      proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption) match {
-        case Some(_) =>
-          log.debug(s"Box certainty resolved for $uncertainBox")
-          __store.makeTransition(uncertainBox.boxId, MakeCertain)
-        case None =>
-          log.debug(s"Failed to resolve uncertainty for ${uncertainBox.boxId} created at " +
-            s"${uncertainBox.inclusionHeightOpt} while current height is ${stateContext.currentHeight}")
-          //todo: remove after some time? remove spent after some time?
-          false
-      }
-    }
-  }
-
   private def extractOutputs(tx: ErgoTransaction): Seq[ErgoBox] = tx.outputs
     .filter(bx => trackedBytes.exists(t => bx.propositionBytes.containsSlice(t)))
 
   private def extractInputs(tx: ErgoTransaction): Seq[BoxId] = tx.inputs.map(_.boxId)
-
-  private def scan(tx: ErgoTransaction, heightOpt: Option[Height]): Seq[TrackedBox] = {
-    scanInputs(tx, heightOpt)
-    tx.outputCandidates
-      .zipWithIndex
-      .flatMap { case (outCandidate, outIndex) =>
-        scanOutput(outCandidate, outIndex.toShort, tx, heightOpt)
-      }
-  }
-
-  private def scanInputs(tx: ErgoTransaction, heightOpt: Option[Height]): Boolean = {
-    tx.inputs.forall { inp =>
-      val boxId = bytesToId(inp.boxId)
-      __store.makeTransition(boxId, ProcessSpending(tx, heightOpt))
-    }
-  }
-
-  private def scanOutput(outCandidate: ErgoBoxCandidate, outIndex: Short,
-                         tx: ErgoTransaction, heightOpt: Option[Height]): Option[TrackedBox] = {
-    if (trackedBytes.exists(t => outCandidate.propositionBytes.containsSlice(t))) {
-      val tb = TrackedBox(tx, outIndex, heightOpt, outCandidate.toBox(tx.id, outIndex), Uncertain)
-      registerBox(tb)
-      Some(tb)
-    } else {
-      None
-    }
-  }
-
-  private def registerBox(trackedBox: TrackedBox): Boolean = {
-    if (__store.contains(trackedBox.boxId)) {
-      trackedBox.inclusionHeightOpt match {
-        case Some(h) =>
-          __store.makeTransition(trackedBox.boxId, CreationConfirmation(h))
-        case None =>
-          log.warn(s"Double registration of the off-chain box: ${trackedBox.boxId}")
-          false
-      }
-    } else {
-      __store.register(trackedBox)
-      true
-    }
-  }
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
     requests.map {
@@ -301,15 +233,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private def scanLogic: Receive = {
     case ScanOffchain(tx) =>
-      scan(tx, None).foreach { tb =>
-        self ! Resolve(Some(tb.boxId))
-      }
-
-    case Resolve(idOpt: Option[ModifierId]) =>
-      if (resolveUncertainty(idOpt)) {
-        // If the resolving was successful, try to resolve one more random box
-        self ! Resolve(None)
-      }
+      // scan and put to in-memory storage
 
     case ScanOnchain(fullBlock) =>
       proverOpt.foreach(_.IR.resetContext())
@@ -331,14 +255,9 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
       putBoxes(resolvedTrackedBoxes ++ unresolvedTrackedBoxes).transact(registry, idToBytes(fullBlock.id))
 
-    case Rollback(heightTo) =>
-      height.until(heightTo, -1).foreach { h =>
-        val toRemove = __store.confirmedAt(h)
-        toRemove.foreach { boxId =>
-          __store.makeTransition(boxId, ProcessRollback(heightTo))
-        }
-      }
-      height = heightTo
+    case Rollback(version: VersionTag) =>
+      Try(registry.rollback(ByteArrayWrapper(Base16.decode(version).get))).fold(
+        e => log.error(s"Failed to rollback wallet registry to version $version due to: $e"), _ => ())
   }
 
   private def readers: Receive = {
@@ -420,15 +339,13 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
 object ErgoWalletActor {
 
-  private[ErgoWalletActor] case class Resolve(idOpt: Option[ModifierId])
-
   final case class WatchFor(address: ErgoAddress)
 
   final case class ScanOffchain(tx: ErgoTransaction)
 
   final case class ScanOnchain(block: ErgoFullBlock)
 
-  final case class Rollback(height: Int)
+  final case class Rollback(version: VersionTag)
 
   final case class GenerateTransaction(requests: Seq[TransactionRequest])
 

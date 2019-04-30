@@ -9,6 +9,7 @@ import org.ergoplatform.api.ApiEncoderOption.Detalization
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.boxes.TrackedBox
 import scorex.core.validation.ValidationResult
@@ -166,12 +167,12 @@ trait ApiCodecs {
     )
   }
 
-  implicit val balancesSnapshotEncoder: Encoder[BalancesSnapshot] = { v =>
+  implicit val balancesSnapshotEncoder: Encoder[RegistryIndex] = { v =>
     import v._
     Json.obj(
       "height" -> height.asJson,
       "balance" -> balance.asJson,
-      "assets" -> assetBalances.toSeq.asJson
+      "assets" -> assetBalances.asJson
     )
   }
 

@@ -9,6 +9,7 @@ import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform._
 import org.ergoplatform.local.ErgoMiner
+import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.settings.Constants
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
@@ -34,10 +35,10 @@ trait WalletTestOps extends NodeViewBaseOps {
   def getPublicKeys(implicit w: WalletFixture): Seq[P2PKAddress] =
     await(w.wallet.publicKeys(0, Int.MaxValue))
 
-  def getConfirmedBalances(implicit w: WalletFixture): BalancesSnapshot =
+  def getConfirmedBalances(implicit w: WalletFixture): RegistryIndex =
     await(w.wallet.confirmedBalances())
 
-  def getBalancesWithUnconfirmed(implicit w: WalletFixture): BalancesSnapshot =
+  def getBalancesWithUnconfirmed(implicit w: WalletFixture): RegistryIndex =
     await(w.wallet.balancesWithUnconfirmed())
 
   def scanningInterval(implicit ctx: Ctx): Long = ctx.settings.walletSettings.scanningInterval.toMillis

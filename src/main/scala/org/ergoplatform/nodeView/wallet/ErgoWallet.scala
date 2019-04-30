@@ -12,7 +12,7 @@ import scorex.core.VersionTag
 import scorex.core.transaction.wallet.Vault
 import scorex.util.ScorexLogging
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Try}
 
 class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
                 (implicit val actorSystem: ActorSystem)
@@ -49,18 +49,13 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
     this
   }
 
-  override def rollback(to: VersionTag): Try[ErgoWallet] =
-    historyReader.heightOf(scorex.core.versionToId(to)) match {
-      case Some(height) =>
-        walletActor ! Rollback(height)
-        Success(this)
-      case None =>
-        Failure(new Exception(s"Height of a modifier with id $to not found"))
-    }
+  override def rollback(to: VersionTag): Try[ErgoWallet] = {
+    walletActor ! Rollback(to)
+    Success(this)
+  }
 
   override type NVCT = this.type
 }
-
 
 object ErgoWallet {
   def readOrGenerate(historyReader: ErgoHistoryReader,

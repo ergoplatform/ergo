@@ -80,6 +80,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   private def unknownMessage: Receive = {
+    case _: scala.runtime.BoxedUnit =>
+      // ignore, this message is caused by way of interaction with NVH.
     case m =>
       log.warn(s"Unexpected message $m of class: ${m.getClass}")
   }

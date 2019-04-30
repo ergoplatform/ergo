@@ -16,7 +16,7 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
+import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings, ValidationState}
 import scorex.crypto.authds.ADKey
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -91,12 +91,20 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
   /**
-    * statelessValidity is checking whether aspects of a transaction is valid which do not require the state to check.
-    *
-    * @return Success(Unit) if transaction is valid, Failure(e) if transaction is invalid, with respect to
-    *         an error encapsulated in the exception "e".
-    */
-  def statelessValidity: Try[Unit] = validateStateless.toTry
+    * Same as `validateStateless`, but result is returned as Try[Long]
+    **/
+  def statelessValidity: Try[Unit] = validateStateless.result.toTry
+
+  /**
+    * Same as `validateStateful`, but result is returned as Try[Long]
+    **/
+  def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
+                       dataBoxes: IndexedSeq[ErgoBox],
+                       stateContext: ErgoStateContext,
+                       accumulatedCost: Long = 0L)
+                      (implicit verifier: ErgoInterpreter): Try[Long] = {
+    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry
+  }
 
   /**
     * Stateless transaction validation with result returned as `ValidationResult`
@@ -104,7 +112,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     *
     * @note Consensus-critical!
     */
-  def validateStateless: ValidationResult[Unit] = {
+  def validateStateless: ValidationState[Unit] = {
     ModifierValidator(ValidationRules.initialSettings)
       .validate(txNoInputs, inputs.nonEmpty, toString)
       .validate(txNoOutputs, outputCandidates.nonEmpty, toString)
@@ -115,7 +123,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txOutputSum, outputsSumTry.isSuccess, toString)
       .validate(txInputsUnique, inputs.distinct.size == inputs.size, toString)
       .validate(txAssetRules, outAssetsTry.isSuccess, s"$outAssetsTry in $this")
-      .result
   }
 
   /**
@@ -134,11 +141,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * @param verifier        - interpreter used to check spending correctness for transaction inputs
     * @return total computation cost
     */
-  def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
+  def validateStateful(boxesToSpend: IndexedSeq[ErgoBox],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long = 0L)
-                      (implicit verifier: ErgoInterpreter): Try[Long] = {
+                      (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
     val vs: ValidationSettings = ValidationRules.initialSettings
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
@@ -223,7 +230,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         // Check that cost of the transaction after checking the input becomes too big
         .validate(txCost, currentTxCost + scriptCost <= maxCost, s"cost exceeds limit after input #$idx: $this")
         .map(_ + scriptCost)
-    }.toTry
+    }
   }
 
   override type M = ErgoTransaction
@@ -311,7 +318,7 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
       value <- cursor.downField("value").as[Long]
       creationHeight <- cursor.downField("creationHeight").as[Int]
       ergoTree <- cursor.downField("ergoTree").as[ErgoTree]
-      assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]]  // TODO optimize: encode directly into Coll avoiding allocation of Tuple2 for each element
+      assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]] // TODO optimize: encode directly into Coll avoiding allocation of Tuple2 for each element
       registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
     } yield (new ErgoBoxCandidate(value, ergoTree, creationHeight, assets.toColl, registers), maybeId)
   }

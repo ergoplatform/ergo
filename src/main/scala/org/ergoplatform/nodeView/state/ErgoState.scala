@@ -52,6 +52,9 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
     def execTry(txs: List[ErgoTransaction], accCostTry: Try[Long]): Try[Long] = (txs, accCostTry) match {
       case (tx :: tail, Success(accumulatedCost)) =>
+        tx.validateStateless
+
+
         val costTry = tx.statelessValidity.flatMap { _ =>
           val boxesToSpendTry: Try[List[ErgoBox]] = tx.inputs.toList
             .map(in => checkBoxExistence(in.boxId))

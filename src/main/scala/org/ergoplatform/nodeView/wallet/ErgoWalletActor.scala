@@ -23,6 +23,7 @@ import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
+import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.interpreter.ContextExtension
@@ -334,11 +335,11 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
     case InitWallet(pass) if secretStorageOpt.isEmpty =>
       val seed = scorex.utils.Random.randomBytes(ergoSettings.walletSettings.seedStrengthBits / 8)
+      val mnemonicTry = new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
+        .toMnemonic(seed)
       val secretStorage = JsonSecretStorage
         .init(seed, pass)(ergoSettings.walletSettings.secretStorage)
       secretStorageOpt = Some(secretStorage)
-      val mnemonicTry = new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
-        .toMnemonic(seed)
       sender() ! mnemonicTry
 
     case RestoreWallet(mnemonic, passOpt, encryptionPass) if secretStorageOpt.isEmpty =>

@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import java.io.File
+import java.util
 
 import akka.actor.Actor
 import org.ergoplatform.ErgoBox.{R4, R5, R6}
@@ -333,12 +334,16 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
   private def walletCommands: Receive = {
 
     case InitWallet(pass) if secretStorageOpt.isEmpty =>
-      val seed = scorex.utils.Random.randomBytes(ergoSettings.walletSettings.seedStrengthBits / 8)
-      val secretStorage = JsonSecretStorage
-        .init(seed, pass)(ergoSettings.walletSettings.secretStorage)
-      secretStorageOpt = Some(secretStorage)
+      val entropy = scorex.utils.Random.randomBytes(ergoSettings.walletSettings.seedStrengthBits / 8)
       val mnemonicTry = new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
-        .toMnemonic(seed)
+        .toMnemonic(entropy)
+        .map { mnemonic =>
+          val secretStorage = JsonSecretStorage
+            .init(Mnemonic.toSeed(mnemonic), pass)(ergoSettings.walletSettings.secretStorage)
+          secretStorageOpt = Some(secretStorage)
+          mnemonic
+        }
+      util.Arrays.fill(entropy, 0: Byte)
       sender() ! mnemonicTry
 
     case RestoreWallet(mnemonic, passOpt, encryptionPass) if secretStorageOpt.isEmpty =>

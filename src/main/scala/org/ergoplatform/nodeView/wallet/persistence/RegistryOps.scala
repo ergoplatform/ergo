@@ -88,7 +88,7 @@ object RegistryOps {
     liftF[RegistryOpA, RegistryIndex](GetIndex)
 
   def updateIndex(updateF: RegistryIndex => RegistryIndex): RegistryOp[Unit] =
-    getIndex.map(v => putIndex(updateF(v)))
+    getIndex.flatMap(v => putIndex(updateF(v)))
 
   private def interpreter(store: Store): RegistryOpA ~> RegistryOpState =
     new (RegistryOpA ~> RegistryOpState) {

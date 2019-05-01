@@ -68,15 +68,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     // in external miner mode key from wallet is used if `publicKeyOpt` is not set
     if ((publicKeyOpt.isEmpty && externalMinerMode) || (secretKeyOpt.isEmpty && !externalMinerMode)) {
       log.info("Trying to use key from wallet for mining")
-      val callback = self
-      viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        v.vault.firstSecret().onComplete(_.foreach {
-          _.fold(
-            _ => log.warn("Failed to load key from wallet. Wallet is locked."),
-            r => callback ! UpdateSecret(r)
-          )
-        })
-      }
+      self ! QueryWallet
     }
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
   }
@@ -88,6 +80,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   private def unknownMessage: Receive = {
+    case _: scala.runtime.BoxedUnit =>
+      // ignore, this message is caused by way of interaction with NVH.
     case m =>
       log.warn(s"Unexpected message $m of class: ${m.getClass}")
   }
@@ -96,6 +90,22 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case UpdateSecret(s) =>
       secretKeyOpt = Some(s)
       publicKeyOpt = Some(s.publicImage)
+  }
+
+  private def queryWallet: Receive = {
+    case QueryWallet =>
+      val callback = self
+      viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
+        v.vault.firstSecret().onComplete(_.foreach {
+          _.fold(
+            _ => {
+              log.warn("Failed to load key from wallet. Wallet is locked.")
+              context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet)(context.system.dispatcher)
+            },
+            r => callback ! UpdateSecret(r)
+          )
+        })
+      }
   }
 
   private def startMining: Receive = {
@@ -168,6 +178,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     onReaders orElse
     onUpdateSecret orElse
     mining orElse
+    queryWallet orElse
     unknownMessage
 
   private def onReaders: Receive = {
@@ -468,6 +479,8 @@ object ErgoMiner extends ScorexLogging {
   }
 
   case object StartMining
+
+  case object QueryWallet
 
   case object PrepareCandidate
 

@@ -62,7 +62,6 @@ object ValidationRules {
     // header validation
     hdrGenesisParent -> (s => fatal(s"Genesis header should have genesis parent id. $s"), true, Seq(classOf[Header])),
     hdrGenesisFromConfig -> (s => fatal(s"Genesis header id should equals to to id from the config. $s"), true, Seq(classOf[Header])),
-    hdrGenesisNonEmpty -> (s => fatal(s"Genesis header may be only applied to empty history. $s"), true, Seq(classOf[Header])),
     hdrGenesisHeight -> (s => fatal(s"Genesis height should be ${ErgoHistory.GenesisHeight}. $s"), true, Seq(classOf[Header])),
     hdrParent -> (s => recoverable(s"Parent header with id $s is not defined"), true, Seq(classOf[Header])),
     hdrVotes -> (s => fatal(s"Header should contain 3 votes, with no duplicates and contradictory votes, that should be known by parametersDescs. $s"), true, Seq(classOf[Header])),
@@ -122,7 +121,6 @@ object ValidationRules {
   // header validation
   val hdrGenesisParent: Short = 200
   val hdrGenesisFromConfig: Short = 201
-  val hdrGenesisNonEmpty: Short = 202
   val hdrGenesisHeight: Short = 203
   val hdrVotes: Short = 204
   val hdrParent: Short = 205

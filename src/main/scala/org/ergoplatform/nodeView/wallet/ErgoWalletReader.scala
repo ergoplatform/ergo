@@ -23,8 +23,8 @@ trait ErgoWalletReader extends VaultReader {
 
   private implicit val timeout: Timeout = Timeout(60, TimeUnit.SECONDS)
 
-  def initWallet(pass: String): Future[Try[String]] = {
-    (walletActor ? InitWallet(pass)).mapTo[Try[String]]
+  def initWallet(pass: String, mnemonicPassOpt: Option[String]): Future[Try[String]] = {
+    (walletActor ? InitWallet(pass, mnemonicPassOpt)).mapTo[Try[String]]
   }
 
   def restoreWallet(encryptionPass: String, mnemonic: String,

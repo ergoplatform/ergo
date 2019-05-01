@@ -3,15 +3,14 @@ package org.ergoplatform.nodeView.wallet
 import java.io.File
 
 import akka.actor.Actor
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
+import io.iohk.iodb.LSMStore
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
-import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
-import org.ergoplatform.nodeView.wallet.persistence.RegistryOps._
+import org.ergoplatform.nodeView.wallet.persistence.WalletRegistry
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
@@ -25,7 +24,6 @@ import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
-import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.interpreter.ContextExtension
@@ -61,12 +59,10 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private val walletSettings: WalletSettings = ergoSettings.walletSettings
 
-  private val __store = new WalletStorage
-
-  private val registry: LSMStore = {
+  private val registry: WalletRegistry = {
     val dir = new File(s"${ergoSettings.directory}/wallet/registry")
     dir.mkdirs()
-    new LSMStore(dir)
+    new WalletRegistry(new LSMStore(dir))
   }
 
   private val parameters: Parameters = LaunchParameters
@@ -181,7 +177,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
               AssetUtils.mergeAssets(boxTokens, acc)
             }
 
-          boxSelector.select(__store.unspentCertainBoxesIterator, filterFn, targetBalance, targetAssets).map { r =>
+          boxSelector.select(
+            registry.readCertainBoxes.toIterator, filterFn, targetBalance, targetAssets).map { r =>
             val inputs = r.boxes.toIndexedSeq
 
             val changeAddress = prover.pubKeys(Random.nextInt(prover.pubKeys.size))
@@ -210,11 +207,11 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     }
 
   private def inputsFor(targetAmount: Long,
-                        targetAssets: Map[ModifierId, Long] = Map.empty): Seq[ErgoBox] = {
-    boxSelector.select(__store.unspentCertainBoxesIterator, filterFn, targetAmount, targetAssets)
+                        targetAssets: Map[ModifierId, Long] = Map.empty): Seq[ErgoBox] =
+    boxSelector
+      .select(registry.readCertainBoxes.toIterator, filterFn, targetAmount, targetAssets)
       .toSeq
       .flatMap(_.boxes)
-  }
 
   private def readSecretStorage: Try[JsonSecretStorage] = {
     val dir = new File(ergoSettings.walletSettings.secretStorage.secretDir)
@@ -236,15 +233,16 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     case ScanOffchain(tx) =>
       // scan and put to in-memory storage
 
-    case ScanOnchain(fullBlock) =>
+    case ScanOnchain(block) =>
       proverOpt.foreach(_.IR.resetContext())
-      height = fullBlock.header.height
-      val (outputs, inputs) = fullBlock.transactions
+      height = block.header.height
+      val (outputs, inputs) = block.transactions
         .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, BoxId)]) {
           case ((outAcc, inAcc), tx) =>
             (outAcc ++ extractOutputs(tx).map(tx.id -> _), inAcc ++ extractInputs(tx).map(tx.id -> _))
         }
-      val (resolved, unresolved) = outputs
+      val prevUncertainBoxes = registry.readUncertainBoxes
+      val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
         .filterNot { case (_, o) => inputs.contains(o.id) }
         .partition { case (_, o) => resolve(o) }
       val resolvedTrackedBoxes = resolved.map { case (txId, bx) =>
@@ -254,39 +252,19 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
         TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
       }
 
-      val update = for {
-        _ <- putBoxes(resolvedTrackedBoxes ++ unresolvedTrackedBoxes)
-        spentBoxes <- getAllBoxes.map(_.filter(x => inputs.map(_._2).contains(x.box.id)))
-        _ <- updateIndex { case RegistryIndex(_, balance, tokensBalance, uncertainBoxes) =>
-          val spentAmt = spentBoxes.map(_.box.value).sum
-          val spentTokensAmt = spentBoxes
-            .flatMap(_.box.additionalTokens)
-            .foldLeft(Map.empty[ByteArrayWrapper, Long]) { case (acc, (id, amt)) =>
-              acc.updated(ByteArrayWrapper(id), acc.getOrElse(ByteArrayWrapper(id), 0L) + amt)
-            }
-          val tokensBalanceMap = tokensBalance.map(x => ByteArrayWrapper(x._1) -> x._2).toMap
-          val newTokensBalance = spentTokensAmt.foldLeft(Seq.empty[(TokenId, Long)]) {
-            case (acc, (wrappedId, amt)) =>
-              val newAmt = tokensBalanceMap.getOrElse(wrappedId, 0L) - amt
-              acc :+ (Digest32 @@ wrappedId.data -> newAmt)
-          }
-          val receivedAmt = resolvedTrackedBoxes.map(_.box.value).sum
-          RegistryIndex(height, balance - spentAmt + receivedAmt, newTokensBalance, uncertainBoxes) // todo: uncertain
-        }
-        _ <- removeBoxes(spentBoxes.map(_.box.id))
-      } yield ()
+      registry.updateOnBlock(
+        resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs.map(_._2))(block.id, block.height)
 
-      update.transact(registry, idToBytes(fullBlock.id))
 
     case Rollback(version: VersionTag) =>
-      Try(registry.rollback(ByteArrayWrapper(Base16.decode(version).get))).fold(
+      registry.rollback(version).fold(
         e => log.error(s"Failed to rollback wallet registry to version $version due to: $e"), _ => ())
   }
 
   private def readers: Receive = {
     case ReadBalances(chainStatus) =>
       if (chainStatus.onChain) {
-        getIndex.transact(registry).foreach(sender() ! _)
+        sender() ! registry.readIndex
       } else {
         ???
       }
@@ -302,7 +280,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
       }
 
     case GetBoxes =>
-      sender() ! __store.unspentCertainBoxesIterator.map(_.box)
+      sender() ! registry.readCertainBoxes.map(_.box)
 
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))

@@ -1,26 +1,23 @@
 package org.ergoplatform.utils
 
 import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform._
+import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
-import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
-import org.ergoplatform.utils.fixtures.WalletFixture
-import org.ergoplatform._
-import org.ergoplatform.local.ErgoMiner
+import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.settings.Constants
+import org.ergoplatform.utils.fixtures.WalletFixture
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
-import sigmastate.Values.{ErgoTree, TrueLeaf, Value}
+import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.interpreter.ProverResult
-import sigmastate.serialization.ValueSerializer
-import sigmastate.SBoolean
 
 import scala.concurrent.blocking
-
 
 trait WalletTestOps extends NodeViewBaseOps {
 

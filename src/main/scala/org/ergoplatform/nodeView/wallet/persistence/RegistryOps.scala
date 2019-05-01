@@ -8,7 +8,7 @@ import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA._
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
-import org.ergoplatform.wallet.settings.Constants
+import scorex.crypto.hash.Blake2b256
 
 import scala.language.implicitConversions
 
@@ -145,7 +145,7 @@ object RegistryOps {
       }
     }
 
-  private val RegistryIndexKey: Array[Byte] = "reg_index".getBytes(Constants.Encoding)
+  private val RegistryIndexKey: Array[Byte] = Blake2b256.hash("reg_index")
 
   private def key(trackedBox: TrackedBox): Array[Byte] = trackedBox.box.id
 

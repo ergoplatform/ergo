@@ -1407,6 +1407,9 @@ paths:
                 pass:
                   type: string
                   description: Password to encrypt wallet file with
+                mnemonicPass:
+                  type: string
+                  description: Optional pass to password-protect mnemonic seed
       responses:
         '200':
           description: New wallet with randomly generated seed created successfully
@@ -1453,7 +1456,7 @@ paths:
                   description: Mnemonic seed
                 mnemonicPass:
                   type: string
-                  description: Optional pass for mnemonic seed
+                  description: Optional pass to password-protect mnemonic seed
       responses:
         '200':
           description: Wallet restored successfully

@@ -19,14 +19,14 @@ final class WalletRegistry(store: Store) extends ScorexLogging {
   import RegistryOps._
 
   def readIndex: RegistryIndex =
-    getIndex.transact(store).getOrElse(RegistryIndex.empty)
+    getIndex.transact(store)
 
   def readCertainBoxes: Seq[TrackedBox] = {
     val query = for {
       allBoxes <- getAllBoxes
       index <- getIndex
     } yield {
-      val uncertainIds = index.map(_.uncertainBoxes).getOrElse(Seq.empty)
+      val uncertainIds = index.uncertainBoxes
       allBoxes.filterNot(b => uncertainIds.contains(b.box.id))
     }
     query.transact(store)
@@ -35,7 +35,7 @@ final class WalletRegistry(store: Store) extends ScorexLogging {
   def readUncertainBoxes: Seq[TrackedBox] = {
     val query = for {
       index <- getIndex
-      uncertainBoxes <- getBoxes(index.map(_.uncertainBoxes).getOrElse(Seq.empty))
+      uncertainBoxes <- getBoxes(index.uncertainBoxes)
     } yield uncertainBoxes.flatten
     query.transact(store)
   }

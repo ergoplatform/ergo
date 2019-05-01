@@ -22,6 +22,6 @@ object RegistryOpA {
 
   final case class PutIndex(index: RegistryIndex) extends RegistryOpA[Unit]
 
-  case object GetIndex extends RegistryOpA[Option[RegistryIndex]]
+  case object GetIndex extends RegistryOpA[RegistryIndex]
 
 }

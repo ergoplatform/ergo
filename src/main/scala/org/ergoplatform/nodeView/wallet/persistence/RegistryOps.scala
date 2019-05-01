@@ -84,14 +84,11 @@ object RegistryOps {
   def putIndex(index: RegistryIndex): RegistryOp[Unit] =
     liftF[RegistryOpA, Unit](PutIndex(index))
 
-  def getIndex: RegistryOp[Option[RegistryIndex]] =
-    liftF[RegistryOpA, Option[RegistryIndex]](GetIndex)
+  def getIndex: RegistryOp[RegistryIndex] =
+    liftF[RegistryOpA, RegistryIndex](GetIndex)
 
   def updateIndex(updateF: RegistryIndex => RegistryIndex): RegistryOp[Unit] =
-    getIndex.map { _
-      .map(v => putIndex(updateF(v)))
-      .getOrElse(Free.pure(()))
-    }
+    getIndex.map(v => putIndex(updateF(v)))
 
   private def interpreter(store: Store): RegistryOpA ~> RegistryOpState =
     new (RegistryOpA ~> RegistryOpState) {
@@ -140,6 +137,7 @@ object RegistryOps {
           State.inspect { _ =>
             store.get(ByteArrayWrapper(RegistryIndexKey))
               .flatMap(r => RegistryIndexSerializer.parseBytesTry(r.data).toOption)
+              .getOrElse(RegistryIndex.empty)
               .asInstanceOf[A]
           }
       }

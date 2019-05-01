@@ -29,7 +29,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   }
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
-    walletActor ! ScanOffchain(tx)
+    walletActor ! ScanOffChain(tx)
     this
   }
 
@@ -41,7 +41,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = {
     modifier match {
       case fb: ErgoFullBlock =>
-        walletActor ! ScanOnchain(fb)
+        walletActor ! ScanOnChain(fb)
       case _ =>
         log.debug("Not full block in ErgoWallet.scanPersistent, which could be the case only if " +
           "state = digest when bootstrapping")

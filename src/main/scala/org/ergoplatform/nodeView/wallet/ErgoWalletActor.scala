@@ -109,16 +109,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx, selfIndex = 0)
     val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty)
 
-    proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption) match {
-      case Some(_) =>
-        log.debug(s"Box certainty resolved for $box")
-        true
-      case None =>
-        log.debug(s"Failed to resolve uncertainty for ${Algos.encode(box.id)} created at " +
-          s"${box.creationHeight} while current height is ${stateContext.currentHeight}")
-        //todo: remove after some time? remove spent after some time?
-        false
-    }
+    proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined
   }
 
   private def extractOutputs(tx: ErgoTransaction): Seq[ErgoBox] = tx.outputs
@@ -230,10 +221,10 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   private def scanLogic: Receive = {
-    case ScanOffchain(tx) =>
+    case ScanOffChain(tx) =>
       // scan and put to in-memory storage
 
-    case ScanOnchain(block) =>
+    case ScanOnChain(block) =>
       proverOpt.foreach(_.IR.resetContext())
       height = block.header.height
       val (outputs, inputs) = block.transactions
@@ -342,9 +333,9 @@ object ErgoWalletActor {
 
   final case class WatchFor(address: ErgoAddress)
 
-  final case class ScanOffchain(tx: ErgoTransaction)
+  final case class ScanOffChain(tx: ErgoTransaction)
 
-  final case class ScanOnchain(block: ErgoFullBlock)
+  final case class ScanOnChain(block: ErgoFullBlock)
 
   final case class Rollback(version: VersionTag)
 

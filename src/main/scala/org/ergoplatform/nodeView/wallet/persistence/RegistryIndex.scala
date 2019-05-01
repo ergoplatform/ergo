@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import org.ergoplatform.ErgoBox.{BoxId, TokenId}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.ADKey
@@ -26,6 +27,13 @@ final case class RegistryIndex(height: Int,
     case _ =>
       false
   }
+
+}
+
+object RegistryIndex {
+
+  def empty: RegistryIndex =
+    RegistryIndex(ErgoHistory.EmptyHistoryHeight, 0, Seq.empty, Seq.empty)
 
 }
 

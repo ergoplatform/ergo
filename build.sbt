@@ -28,7 +28,7 @@ libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "iodb" % "0.3.2",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
-  "org.ergoplatform" %% "ergo-wallet" % "0.1.1",
+  "org.ergoplatform" %% "ergo-wallet" % "0.2-R1-SNAPSHOT",
 
   "javax.xml.bind" % "jaxb-api" % "2.+",
   "com.iheart" %% "ficus" % "1.4.+",

@@ -77,7 +77,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         val rootSk = ExtendedSecretKey.deriveMasterKey(seed)
         val childSks = walletSettings.testKeysQty.toIndexedSeq.flatMap(x => (0 until x).map(rootSk.child))
         proverOpt = Some(ErgoProvingInterpreter((rootSk +: childSks).map(_.key), parameters))
-        storage.addTrackedAddresses(proverOpt.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))).toSeq)
+        storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
       case None =>
         log.info("Trying to read wallet in secure mode ..")
         readSecretStorage.fold(
@@ -320,7 +320,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         case Some(secretStorage) =>
           sender() ! secretStorage.unlock(pass)
           proverOpt = Some(ErgoProvingInterpreter(secretStorage.secret.map(_.key).toIndexedSeq, parameters))
-          storage.addTrackedAddresses(proverOpt.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))).toSeq)
+          storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
         case None =>
           sender() ! Failure(new Exception("Wallet not initialized"))
       }

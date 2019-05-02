@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import java.io.File
+import java.util
 
 import akka.actor.Actor
 import io.iohk.iodb.LSMStore
@@ -296,13 +297,18 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private def walletCommands: Receive = {
 
-    case InitWallet(pass) if secretStorageOpt.isEmpty =>
-      val seed = scorex.utils.Random.randomBytes(ergoSettings.walletSettings.seedStrengthBits / 8)
+    case InitWallet(pass, mnemonicPassOpt) if secretStorageOpt.isEmpty =>
+      val entropy = scorex.utils.Random.randomBytes(ergoSettings.walletSettings.seedStrengthBits / 8)
       val mnemonicTry = new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
-        .toMnemonic(seed)
-      val secretStorage = JsonSecretStorage
-        .init(seed, pass)(ergoSettings.walletSettings.secretStorage)
-      secretStorageOpt = Some(secretStorage)
+        .toMnemonic(entropy)
+        .map { mnemonic =>
+          val secretStorage = JsonSecretStorage
+            .init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), pass)(ergoSettings.walletSettings.secretStorage)
+          secretStorageOpt = Some(secretStorage)
+          mnemonic
+        }
+      util.Arrays.fill(entropy, 0: Byte)
+    
       sender() ! mnemonicTry
 
     case RestoreWallet(mnemonic, passOpt, encryptionPass) if secretStorageOpt.isEmpty =>
@@ -311,7 +317,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
       secretStorageOpt = Some(secretStorage)
       sender() ! Success(())
 
-    case RestoreWallet | InitWallet(_) =>
+    case RestoreWallet | InitWallet(_, _) =>
       sender() ! Failure(new Exception("Wallet is already initialized"))
 
     case UnlockWallet(pass) =>
@@ -354,7 +360,7 @@ object ErgoWalletActor {
 
   final case class ReadPublicKeys(from: Int, until: Int)
 
-  final case class InitWallet(pass: String)
+  final case class InitWallet(pass: String, mnemonicPassOpt: Option[String])
 
   final case class RestoreWallet(mnemonic: String, passOpt: Option[String], encryptionPass: String)
 

@@ -36,7 +36,7 @@ that may be invoked by incoming transactions.
 Although this approach allows performing arbitrary computation, the implementation of complex spending conditions
 can lead to bugs such as the one in an Ethereum's `simple' multi-signature contract that caused a loss of \$150 million in 2017~\cite{parityLock}.
 In UTXO-based cryptocurrencies, every coin has a script associated with it, and to spend that coin, one must satisfy the conditions given in the script. 
-Although implementing such protecting conditions is much easier in the UTXO model, implementing arbitrary Turing-complete computation is quite complex~\cite{chepurnoy2018self}. However, most financial contracts do not require Turing-completeness. Ergo is based on the UTXO model and provides a convenient way to implement financial applications covering an
+Implementing such protecting conditions is much easier with the UTXO model but doing arbitrary Turing-complete computation is quite complex~\cite{chepurnoy2018self}. However, most financial contracts do not require Turing-completeness. Ergo is based on the UTXO model and provides a convenient way to implement financial applications covering an
 overwhelming majority of public blockchain use-cases.
 
 While the contractual component is important for building decentralized applications,

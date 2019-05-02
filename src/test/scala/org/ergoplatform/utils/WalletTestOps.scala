@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.fixtures.WalletFixture
-import scorex.crypto.hash.Digest32
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
@@ -21,7 +21,7 @@ import scala.concurrent.blocking
 
 trait WalletTestOps extends NodeViewBaseOps {
 
-  def newAssetIdStub: TokenId = Digest32 @@ Array.emptyByteArray
+  def newAssetIdStub: TokenId = Blake2b256.hash("new_asset")
 
   def withFixture[T](test: WalletFixture => T): T = {
     new WalletFixture(settings, getCurrentView(_).vault).apply(test)

@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
-import org.ergoplatform.nodeView.wallet.persistence.WalletRegistry
+import org.ergoplatform.nodeView.wallet.persistence.{InMemoryRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
@@ -24,7 +24,6 @@ import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
-import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.interpreter.ContextExtension
@@ -66,6 +65,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     new WalletRegistry(new LSMStore(dir))
   }
 
+  private var inMemoryRegistry: InMemoryRegistry = InMemoryRegistry.empty(height)
+
   private val parameters: Parameters = LaunchParameters
 
   override def preStart(): Unit = {
@@ -96,8 +97,6 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
 
-  private def trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.contentBytes)
-
   //we currently do not use off-chain boxes to create a transaction
   private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onChain
 
@@ -113,8 +112,10 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined
   }
 
-  private def extractOutputs(tx: ErgoTransaction): Seq[ErgoBox] = tx.outputs
-    .filter(bx => trackedBytes.exists(t => bx.propositionBytes.containsSlice(t)))
+  private def extractOutputs(tx: ErgoTransaction): Seq[ErgoBox] = {
+    val trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.contentBytes)
+    tx.outputs.filter(bx => trackedBytes.exists(t => bx.propositionBytes.containsSlice(t)))
+  }
 
   private def extractInputs(tx: ErgoTransaction): Seq[BoxId] = tx.inputs.map(_.boxId)
 
@@ -223,7 +224,18 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private def scanLogic: Receive = {
     case ScanOffChain(tx) =>
-      // scan and put to in-memory storage
+      val outputs = extractOutputs(tx)
+      val inputs = extractInputs(tx)
+      val (resolved, unresolved) = outputs
+        .filterNot(o => inputs.contains(o.id))
+        .partition(o => resolve(o))
+      val resolvedTrackedBoxes = resolved.map { bx =>
+        TrackedBox(tx.id, bx.index, Some(height), None, None, bx, BoxCertainty.Certain)
+      }
+      val unresolvedTrackedBoxes = unresolved.map { bx =>
+        TrackedBox(tx.id, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
+      }
+      inMemoryRegistry = inMemoryRegistry.updated(resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs)
 
     case ScanOnChain(block) =>
       proverOpt.foreach(_.IR.resetContext())
@@ -255,11 +267,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
 
   private def readers: Receive = {
     case ReadBalances(chainStatus) =>
-      if (chainStatus.onChain) {
-        sender() ! registry.readIndex
-      } else {
-        ???
-      }
+      sender() ! (if (chainStatus.onChain) registry.readIndex else inMemoryRegistry.readIndex)
 
     case ReadPublicKeys(from, until) =>
       sender() ! publicKeys.slice(from, until)

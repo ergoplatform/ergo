@@ -1,10 +1,9 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import io.iohk.iodb.{ByteArrayWrapper, Store}
-import org.ergoplatform.ErgoBox.{BoxId, TokenId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import scorex.core.VersionTag
-import scorex.crypto.hash.Digest32
+import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
@@ -17,6 +16,7 @@ import scala.util.Try
 final class WalletRegistry(store: Store) extends ScorexLogging {
 
   import RegistryOps._
+  import org.ergoplatform.nodeView.wallet.IdUtils._
 
   def readIndex: RegistryIndex =
     getIndex.transact(store)
@@ -35,32 +35,33 @@ final class WalletRegistry(store: Store) extends ScorexLogging {
   def readUncertainBoxes: Seq[TrackedBox] = {
     val query = for {
       index <- getIndex
-      uncertainBoxes <- getBoxes(index.uncertainBoxes)
+      uncertainBoxes <- getBoxes(ADKey @@ index.uncertainBoxes.map(decodedId))
     } yield uncertainBoxes.flatten
     query.transact(store)
   }
 
-  def updateOnBlock(certainBxs: Seq[TrackedBox], uncertainBxs: Seq[TrackedBox], inputs: Seq[BoxId])
+  def updateOnBlock(certainBxs: Seq[TrackedBox], uncertainBxs: Seq[TrackedBox], inputs: Seq[EncodedBoxId])
                    (blockId: ModifierId, blockHeight: Int): Unit = {
     val update = for {
       _ <- putBoxes(certainBxs ++ uncertainBxs)
-      spentBoxes <- getAllBoxes.map(_.filter(x => inputs.contains(x.box.id)))
+      spentBoxes <- getAllBoxes.map(_.filter(x => inputs.contains(encodedId(x.box.id))))
       _ <- updateIndex { case RegistryIndex(_, balance, tokensBalance, _) =>
         val spentAmt = spentBoxes.map(_.box.value).sum
         val spentTokensAmt = spentBoxes
           .flatMap(_.box.additionalTokens)
-          .foldLeft(Map.empty[ByteArrayWrapper, Long]) { case (acc, (id, amt)) =>
-            acc.updated(ByteArrayWrapper(id), acc.getOrElse(ByteArrayWrapper(id), 0L) + amt)
+          .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
+            acc.updated(encodedId(id), acc.getOrElse(encodedId(id), 0L) + amt)
           }
-        val tokensBalanceMap = tokensBalance.map(x => ByteArrayWrapper(x._1) -> x._2).toMap
-        val newTokensBalance = spentTokensAmt.foldLeft(Seq.empty[(TokenId, Long)]) {
-          case (acc, (wrappedId, amt)) =>
-            val newAmt = tokensBalanceMap.getOrElse(wrappedId, 0L) - amt
-            acc :+ (Digest32 @@ wrappedId.data -> newAmt)
+        val tokensBalanceMap = tokensBalance.map(x => x._1 -> x._2)
+        val newTokensBalance = spentTokensAmt.foldLeft(Seq.empty[(EncodedTokenId, Long)]) {
+          case (acc, (encodedId, amt)) =>
+            val newAmt = tokensBalanceMap.getOrElse(encodedId, 0L) - amt
+            acc :+ (encodedId -> newAmt)
         }
         val receivedAmt = certainBxs.map(_.box.value).sum
         val newBalance = balance - spentAmt + receivedAmt
-        RegistryIndex(blockHeight, newBalance, newTokensBalance, uncertainBxs.map(_.box.id))
+        val uncertain = uncertainBxs.map(x => encodedId(x.box.id))
+        RegistryIndex(blockHeight, newBalance, newTokensBalance.toMap, uncertain)
       }
       _ <- removeBoxes(spentBoxes.map(_.box.id))
     } yield ()

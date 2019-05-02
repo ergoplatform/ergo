@@ -11,6 +11,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.fixtures.WalletFixture
+import org.ergoplatform.nodeView.wallet.IdUtils._
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
@@ -90,9 +91,11 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def assetsByTokenId(boxes: Seq[ErgoBoxCandidate]): Map[TokenId, Long] = {
     boxes
-      .flatMap { _.additionalTokens }
-      .groupBy { case (tokenId, _) => tokenId }
-      .map { case (id, pairs) => id -> pairs.map(_._2).sum }
+      .flatMap(_.additionalTokens)
+      .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
+        acc.updated(encodedId(id), acc.getOrElse(encodedId(id), 0L) + amt)
+      }
+      .map(x => Digest32 @@ decodedId(x._1) -> x._2)
   }
 
   def getUtxoState(implicit ctx: Ctx): UtxoState = getCurrentState.asInstanceOf[UtxoState]

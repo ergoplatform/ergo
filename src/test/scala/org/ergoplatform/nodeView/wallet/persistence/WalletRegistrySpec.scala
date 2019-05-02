@@ -15,6 +15,7 @@ class WalletRegistrySpec
     with FileUtils {
 
   import RegistryOps._
+  import org.ergoplatform.nodeView.wallet.IdUtils._
 
   def createStore: Store = new LSMStore(createTempDir)
 
@@ -32,7 +33,7 @@ class WalletRegistrySpec
   it should "read uncertain boxes" in {
     forAll(trackedBoxGen) { box =>
       val uncertainBox = box.copy(certainty = Uncertain)
-      val index = RegistryIndex(0, 0, Seq.empty, Seq(uncertainBox.box.id))
+      val index = RegistryIndex(0, 0, Map.empty, Seq(encodedId(uncertainBox.box.id)))
       val store = createStore
       putBox(uncertainBox).flatMap(_ => putIndex(index)).transact(store)
       val registry = new WalletRegistry(store)

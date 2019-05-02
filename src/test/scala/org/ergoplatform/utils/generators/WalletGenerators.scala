@@ -1,12 +1,14 @@
 package org.ergoplatform.utils.generators
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.wallet.IdUtils.encodedId
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
 import org.scalacheck.Gen
+import scorex.crypto.hash.Digest32
 
 trait WalletGenerators extends ErgoTransactionGenerators {
 
@@ -98,7 +100,10 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       amount <- Gen.choose(1L, 100000L)
       balances <- additionalTokensGen
       uncertain <- Gen.listOf(boxIdGen)
-    } yield RegistryIndex(height, amount, balances, uncertain)
+    } yield {
+      val encodedBalances = balances.map { case (x1, x2) => encodedId(x1) -> x2 }.toMap
+      RegistryIndex(height, amount, encodedBalances, uncertain.map(encodedId))
+    }
   }
 
   private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)

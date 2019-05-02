@@ -8,6 +8,7 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequ
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils._
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import IdUtils._
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
@@ -237,6 +238,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val initialBalance = getConfirmedBalances
       val initialTotal = getBalancesWithUnconfirmed
       val initialAssets = initialBalance.assetBalances
+        .map { case (x1, x2) => Digest32 @@ decodedId(x1) -> x2 }
       log.info(s"Initial assets: ${boxesToSpend.flatMap(_.additionalTokens)}")
       log.info(s"Confirmed: $initialBalance")
       log.info(s"With unconfirmed: $initialTotal")
@@ -260,7 +262,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"With unconfirmed after spending: $balanceAfterSpending")
       val assets = balanceAfterSpending.assetBalances
       totalAfterSpending.assetBalances shouldBe assets
-      assets(1) shouldBe asset1ToReturn
+      assets.toSeq(1) shouldBe asset1ToReturn
       val asset2 = assets.filter(_._1 != asset1Token)
       asset2 should not be empty
       asset2.head._2 shouldBe asset2Sum

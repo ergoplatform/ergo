@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
-import org.ergoplatform.nodeView.wallet.persistence.{InMemoryRegistry, WalletRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.persistence.{InMemoryRegistry, RegistryIndex, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
@@ -36,6 +36,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     with ScorexEncoding {
 
   import ErgoWalletActor._
+  import IdUtils._
 
   private implicit val addressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
@@ -119,7 +120,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     tx.outputs.filter(bx => trackedBytes.exists(t => bx.propositionBytes.containsSlice(t)))
   }
 
-  private def extractInputs(tx: ErgoTransaction): Seq[BoxId] = tx.inputs.map(_.boxId)
+  private def extractInputs(tx: ErgoTransaction): Seq[EncodedBoxId] = tx.inputs.map(x => encodedId(x.boxId))
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
     requests.map {
@@ -229,7 +230,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val outputs = extractOutputs(tx)
       val inputs = extractInputs(tx)
       val (resolved, unresolved) = outputs
-        .filterNot(o => inputs.contains(o.id))
+        .filterNot(o => inputs.contains(encodedId(o.id)))
         .partition(resolve)
       val resolvedTrackedBoxes = resolved.map { bx =>
         TrackedBox(tx.id, bx.index, Some(height), None, None, bx, BoxCertainty.Certain)
@@ -243,13 +244,13 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       proverOpt.foreach(_.IR.resetContext())
       storage.updateHeight(block.header.height)
       val (outputs, inputs) = block.transactions
-        .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, BoxId)]) {
+        .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, EncodedBoxId)]) {
           case ((outAcc, inAcc), tx) =>
             (outAcc ++ extractOutputs(tx).map(tx.id -> _), inAcc ++ extractInputs(tx).map(tx.id -> _))
         }
       val prevUncertainBoxes = registry.readUncertainBoxes
       val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
-        .filterNot { case (_, o) => inputs.contains(o.id) }
+        .filterNot { case (_, o) => inputs.map(_._2).contains(encodedId(o.id)) }
         .partition { case (_, o) => resolve(o) }
       val resolvedTrackedBoxes = resolved.map { case (txId, bx) =>
         TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Certain)
@@ -269,7 +270,12 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def readers: Receive = {
     case ReadBalances(chainStatus) =>
-      sender() ! (if (chainStatus.onChain) registry.readIndex else inMemoryRegistry.readIndex)
+      val index = if (chainStatus.onChain) {
+        registry.readIndex
+      } else {
+        mergeIndexes(registry.readIndex, inMemoryRegistry.readIndex)
+      }
+      sender() ! index
 
     case ReadPublicKeys(from, until) =>
       sender() ! publicKeys.slice(from, until)
@@ -341,6 +347,17 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     //generate a transaction paying to a sequence of boxes payTo
     case GenerateTransaction(requests) =>
       sender() ! generateTransactionWithOutputs(requests)
+  }
+
+  private def mergeIndexes(indexA: RegistryIndex, indexB: RegistryIndex): RegistryIndex = {
+    val mergedBalance = indexA.balance + indexB.balance
+    val mergedAssets = indexA.assetBalances.foldLeft(indexB.assetBalances) {
+      case (acc, (id, amt)) =>
+        val curAmt = acc.getOrElse(id, 0L)
+        acc.updated(id, curAmt + amt)
+    }
+    val mergedUncertain = (indexA.uncertainBoxes ++ indexB.uncertainBoxes).distinct
+    RegistryIndex(math.max(indexA.height, indexB.height), mergedBalance, mergedAssets, mergedUncertain)
   }
 
 }

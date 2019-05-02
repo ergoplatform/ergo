@@ -78,9 +78,16 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     p.hcursor.downField("pass").as[String]
       .flatMap(pass => p.hcursor.downField("mnemonic").as[String]
         .flatMap(mnemo => p.hcursor.downField("mnemonicPass").as[Option[String]]
-          .map(mnemoPassOpt => (pass, mnemo, mnemoPassOpt)
-          )
+          .map(mnemoPassOpt => (pass, mnemo, mnemoPassOpt))
         )
+      )
+      .fold(_ => reject, s => provide(s))
+  }
+
+  private val initRequest: Directive1[(String, Option[String])] = entity(as[Json]).flatMap { p =>
+    p.hcursor.downField("pass").as[String]
+      .flatMap(pass => p.hcursor.downField("mnemonicPass").as[Option[String]]
+        .map(mnemoPassOpt => (pass, mnemoPassOpt))
       )
       .fold(_ => reject, s => provide(s))
   }
@@ -189,13 +196,14 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet(_.trackedAddresses())
   }
 
-  def initWalletR: Route = (path("init") & post & password) { pass =>
-    withWalletOp(_.initWallet(pass)) {
-      _.fold(
-        e => BadRequest(e.getMessage),
-        mnemonic => ApiResponse(Json.obj("mnemonic" -> mnemonic.asJson))
-      )
-    }
+  def initWalletR: Route = (path("init") & post & initRequest) {
+    case (pass, mnemonicPassOpt) =>
+      withWalletOp(_.initWallet(pass, mnemonicPassOpt)) {
+        _.fold(
+          e => BadRequest(e.getMessage),
+          mnemonic => ApiResponse(Json.obj("mnemonic" -> mnemonic.asJson))
+        )
+      }
   }
 
   def restoreWalletR: Route = (path("restore") & post & restoreRequest) {

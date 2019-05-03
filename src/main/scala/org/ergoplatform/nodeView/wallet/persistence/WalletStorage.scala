@@ -6,10 +6,8 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
-import org.ergoplatform.nodeView.wallet.IdUtils._
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
-import scorex.util.idToBytes
 
 import scala.util.Random
 
@@ -62,18 +60,33 @@ final class WalletStorage(store: Store, settings: ErgoSettings)
     .getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   def putBlock(block: PostponedBlock): Unit = {
-    val toInsert = Seq(ByteArrayWrapper(idToBytes(block.id)) ->
-      ByteArrayWrapper(PostponedBlockSerializer.toBytes(block)))
+    val toInsert = Seq(
+      key(block.height) -> ByteArrayWrapper(PostponedBlockSerializer.toBytes(block)),
+      LatestPostponedBlockHeightKey -> ByteArrayWrapper(Ints.toByteArray(block.height))
+    )
     store.update(randomVersion, Seq.empty, toInsert)
   }
+
+  def readBlocks(fromHeight: Int, toHeight: Int): Seq[PostponedBlock] =
+    (fromHeight to toHeight).foldLeft(Seq.empty[PostponedBlock]) { case (acc, h) =>
+      acc ++ store.get(key(h)).flatMap(r => PostponedBlockSerializer.parseBytesTry(r.data).toOption)
+    }
+
+  def removeBlock(height: Int): Unit =
+    store.update(randomVersion, Seq(key(height)), Seq.empty)
+
+  def removeBlocks(fromHeight: Int, toHeight: Int): Unit =
+    store.update(randomVersion, (fromHeight to toHeight).map(key), Seq.empty)
+
+  def readLatestPostponedBlockHeight: Option[Int] = store
+    .get(LatestPostponedBlockHeightKey)
+    .map(r => Ints.fromByteArray(r.data))
 
   private def randomVersion = Random.nextInt()
 
 }
 
 object WalletStorage {
-
-  val PubKeyLength: Int = 32
 
   val StateContextKey: ByteArrayWrapper =
     ByteArrayWrapper(Blake2b256.hash("state_ctx"))
@@ -83,5 +96,11 @@ object WalletStorage {
 
   val TrackedAddressesKey: ByteArrayWrapper =
     ByteArrayWrapper(Blake2b256.hash("tracked_pks"))
+
+  val LatestPostponedBlockHeightKey: ByteArrayWrapper =
+    ByteArrayWrapper(Blake2b256.hash("latest_block"))
+
+  def key(height: Int): ByteArrayWrapper =
+    ByteArrayWrapper(Blake2b256.hash(Ints.toByteArray(height)))
 
 }

@@ -28,6 +28,8 @@ libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "iodb" % "0.3.2",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
+  "org.ergoplatform" %% "ergo-wallet" % "0.2-R1-SNAPSHOT",
+
   "javax.xml.bind" % "jaxb-api" % "2.+",
   "com.iheart" %% "ficus" % "1.4.+",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
@@ -38,6 +40,7 @@ libraryDependencies ++= Seq(
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
+  
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.+" % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % "10.1.+" % "test",

@@ -3,16 +3,15 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
+import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils._
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import IdUtils._
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.util.idToBytes
 import sigmastate.Values.ByteArrayConstant
 import sigmastate._
 
@@ -320,7 +319,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val block = makeNextBlock(getUtxoState, Seq(tx))
       applyBlock(block) shouldBe 'success
-      wallet.scanPersistent(block)
       waitForScanning(block)
 
       val confirmedBalance = getConfirmedBalances

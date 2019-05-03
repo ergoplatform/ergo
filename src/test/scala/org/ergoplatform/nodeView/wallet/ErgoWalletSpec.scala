@@ -238,7 +238,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val initialBalance = getConfirmedBalances
       val initialTotal = getBalancesWithUnconfirmed
       val initialAssets = initialBalance.assetBalances
-        .map { case (x1, x2) => Digest32 @@ decodedId(x1) -> x2 }
       log.info(s"Initial assets: ${boxesToSpend.flatMap(_.additionalTokens)}")
       log.info(s"Confirmed: $initialBalance")
       log.info(s"With unconfirmed: $initialTotal")
@@ -249,7 +248,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val asset2Sum = randomLong()
       val asset1ToReturn = randomLong(asset1Sum)
-      val assets2Seq = Seq(asset1Token -> asset1ToReturn, newAssetIdStub -> asset2Sum)
+      val assets2Seq = Seq(Digest32 @@ decodedId(asset1Token) -> asset1ToReturn, newAssetIdStub -> asset2Sum)
       val balanceToReturn = 1000 * parameters.minValuePerByte
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assets2Seq)
       val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
@@ -262,7 +261,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"With unconfirmed after spending: $balanceAfterSpending")
       val assets = balanceAfterSpending.assetBalances
       totalAfterSpending.assetBalances shouldBe assets
-      assets.toSeq(1) shouldBe asset1ToReturn
+      assets(asset1Token) shouldBe asset1ToReturn
       val asset2 = assets.filter(_._1 != asset1Token)
       asset2 should not be empty
       asset2.head._2 shouldBe asset2Sum

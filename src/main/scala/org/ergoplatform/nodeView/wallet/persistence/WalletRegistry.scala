@@ -52,16 +52,23 @@ final class WalletRegistry(store: Store) extends ScorexLogging {
           .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
             acc.updated(encodedId(id), acc.getOrElse(encodedId(id), 0L) + amt)
           }
-        val tokensBalanceMap = tokensBalance.map(x => x._1 -> x._2)
-        val newTokensBalance = spentTokensAmt.foldLeft(Seq.empty[(EncodedTokenId, Long)]) {
-          case (acc, (encodedId, amt)) =>
-            val newAmt = tokensBalanceMap.getOrElse(encodedId, 0L) - amt
-            acc :+ (encodedId -> newAmt)
-        }
+        val receivedTokensAmt = certainBxs
+          .flatMap(_.box.additionalTokens)
+          .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
+            acc.updated(encodedId(id), acc.getOrElse(encodedId(id), 0L) + amt)
+          }
+        val decreasedTokensBalance = spentTokensAmt
+          .foldLeft(tokensBalance) { case (acc, (encodedId, amt)) =>
+            acc.updated(encodedId, acc.getOrElse(encodedId, 0L) - amt)
+          }
+        val newTokensBalance = receivedTokensAmt
+          .foldLeft(decreasedTokensBalance) { case (acc, (encodedId, amt)) =>
+            acc.updated(encodedId, acc.getOrElse(encodedId, 0L) + amt)
+          }
         val receivedAmt = certainBxs.map(_.box.value).sum
         val newBalance = balance - spentAmt + receivedAmt
         val uncertain = uncertainBxs.map(x => encodedId(x.box.id))
-        RegistryIndex(blockHeight, newBalance, newTokensBalance.toMap, uncertain)
+        RegistryIndex(blockHeight, newBalance, newTokensBalance, uncertain)
       }
       _ <- removeBoxes(spentBoxes.map(_.box.id))
     } yield ()

@@ -238,6 +238,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val unresolvedTrackedBoxes = unresolved.map { bx =>
         TrackedBox(tx.id, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
       }
+
       inMemoryRegistry = inMemoryRegistry.updated(resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs)
 
     case ScanOnChain(block) =>
@@ -273,7 +274,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val index = if (chainStatus.onChain) {
         registry.readIndex
       } else {
-        mergeIndexes(registry.readIndex, inMemoryRegistry.readIndex)
+        registry.readIndex merge inMemoryRegistry.readIndex
       }
       sender() ! index
 
@@ -347,17 +348,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     //generate a transaction paying to a sequence of boxes payTo
     case GenerateTransaction(requests) =>
       sender() ! generateTransactionWithOutputs(requests)
-  }
-
-  private def mergeIndexes(indexA: RegistryIndex, indexB: RegistryIndex): RegistryIndex = {
-    val mergedBalance = indexA.balance + indexB.balance
-    val mergedAssets = indexA.assetBalances.foldLeft(indexB.assetBalances) {
-      case (acc, (id, amt)) =>
-        val curAmt = acc.getOrElse(id, 0L)
-        acc.updated(id, curAmt + amt)
-    }
-    val mergedUncertain = (indexA.uncertainBoxes ++ indexB.uncertainBoxes).distinct
-    RegistryIndex(math.max(indexA.height, indexB.height), mergedBalance, mergedAssets, mergedUncertain)
   }
 
 }

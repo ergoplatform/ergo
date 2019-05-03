@@ -48,35 +48,21 @@ Two more features of Ergo shaping contracting possibilities are:
 \subsection{Contract Examples}
 \label{sec:examples}
 
- In this section we provide some examples which are clearly show superiority of Ergo contracts in comparison with
- Bitcoin. The examples are including a bet on oracle-provided data, non-interactive mixing, atomic swap,
- complementary currency, and initial coin offering implemented on top of the Ergo blockchain.
+ In this section we provide some examples which demonstratethe superiority of Ergo contracts compared to Bitcoin's. The examples include betting on oracle-provided data, non-interactive mixing, atomic swap, complementary currency, and an initial coin offering implemented on top of the Ergo blockchain.
 
  \subsubsection{An Oracle Example}
  \label{sec:platform}
 
- Equipped with custom tokens and data inputs, we can develop a simple oracle example, also showing on the way some
- design patterns that we have discovered while playing with Ergo contracts. Assume that Alice and Bob are going to bet
- on weather tomorrow. For that, they are putting money into a box, which is spendable by
- Alice if the temperature is more than 15 degrees, and is spendable by Bob otherwise. To deliver the temperature into the
- blockchain a trusted oracle is needed.
+ Equipped with custom tokens and data inputs, we can develop a simple oracle example which also shows some design patterns that we discovered while playing with Ergo contracts. Assume that Alice and Bob want to bet on tomorrow's weather by putting money into a box that becomes spendable by Alice if tomorrow's temperature is more than 15 degrees, and spendable by Bob otherwise. To deliver the temperature into the blockchain, a trusted oracle is needed.
 
- In opposite to Ethereum with its long-lived accounts, where trusted oracle identifier is usually known in advance,
- delivering data with one-time boxes is more tricky. For starters, a box which is protected by an oracle's key could
- not be trusted, as anyone can create such a box. It is possible to include a signed data into a box, and check the
- signature in the contract using the data, we have such an example, but this example is quite involved. With custom
- tokens, however, a solution is pretty simple.
+ In contract to Ethereum with its long-lived accounts, where a trusted oracle's identifier is usually known in advance, delivering data with one-time boxes is more tricky. For starters, a box protected by the oracle's key cannot be trusted, as anyone can create such a box. It is possible to include signed data into a box and check the oracle's signature in the contract (we have such an example), but this is quite involved. Instead, a solution with custom
+ tokens is very simple.
 
- In the first place, a token identifying the oracle should be issued. In the simplest case, the amount for the token could
- be equal to one. We call such a token {\em a singleton token}. Then the oracle is creating a box containing the token
- and also data, namely, temperature in the register number four~($R4$), and time~(in seconds since the beginning of
- the UNIX epoch) in the register number five($R5$).
- In order to update temperature, an oracle is destroying the box and creating a new one with updated temperature.
+ Firstly, a token identifying the oracle should be issued. In the simplest case, the amount of this token could be one. We call such a token {\em a singleton token}. The oracle creates a box containing this token along with its data (i.e., the temperature) in register $R_4$ and the UNIX epoch time in register $R_5$.
+ In order to update the temperature, the oracle destroys its box and creating a new one with the updated temperature.
 
- Assume that Alice and Bob know oracle's token identifier in advance. With this knowledge, they
- can jointly create a box which requires first data input (which is read-only) to contain the oracle's token. The
- contract is extracting temperature and time from the data input
- and decides who is getting the payout. The code is as simple as following:
+ Assume that Alice and Bob know the oracle's token identifier in advance. With this knowledge, they can jointly create a box with a contract that requires first (read-only) data input to contain the oracle's token. The contract extracts the temperature and time from the data input
+ and decides who gets the payout. The code is as simple as following:
 
  \begin{algorithm}[H]
     \caption{Oracle Contract Example}
@@ -92,38 +78,23 @@ Two more features of Ergo shaping contracting possibilities are:
     \end{algorithmic}
  \end{algorithm}
 
- This contract shows how a singleton token could be used for authentification. As a possible alternative, an oracle
- can put signed time and temperature into a box along with a signature for the data published. However, this requires
- signature checking in a contract which is using an oracle box, which is more complex and expensive, in comparison with
- the singleton token approach. Also the contract shows how read-only data inputs could be useful for contracts which do
- need access to data in some box in the state. Without data inputs, an oracle needs to issue a spendable box for every
- pair of Alice and Bob. With data inputs support, the oracle is issuing only a single box per arbitrary number of users.
+ This contract shows how a singleton token could be used for authentification. As a possible alternative, the oracle
+ can put the time and temperature into a box along with a signature on this data. However, this requires signature verification, which is more complex and expensive compared to
+ the singleton token approach. Also, the contract shows how read-only data inputs could be useful for contracts which need to access data stored in some other box in the state. Without data inputs, an oracle must issue one spendable box for each
+ pair of Alice and Bob. With data inputs, the oracle issues only a single box.
 
 \subsubsection{A Mixing Example}
  \label{sec:platform}
 
- Privacy is important for a digital currency, but implementing it in a protocol could be costly or require a trusted
- setup. Thus we are looking for ways to do coin mixing via cheap enough applications. As a first step towards that, we
- offer an application for non-interactive coin mixing, which is working in the following case:
+ Privacy is important for a digital currency but implementing it can be costly or require a trusted setup. Thus, it is desirable to find cheaper way for coin mixing. As a first step towards that, we offer a non-interactive mixing protocol between two users Alice and Bob that works as follows:
  \begin{enumerate}
-    \item{} Alice creates a box which demands any Bob's box to satisfy certain conditions in order to be mixed with
-    the coin of Alice. After that, Alice only listens to the blockchain, no any interaction with Bob is needed.
-    \item{} Bob is creating a box and then a spending transaction which has boxes of Alice and Bob as inputs,
-     and creates two outputs with the same script, but both Alice and Bob may spend only one box out of the two.
-     An external observer can not decide which output is spent by whom, as output boxes are indistinguishable.
+    \item{} Alice creates a box which demands the spending transaction to satisfy certain conditions. After that, Alice only listens to the blockchain, no any interaction with Bob is needed.
+    \item{} Bob creates a transaction spending Alice's box along with one of his own and generating two outputs with identical script but different data. Each of Alice and Bob may spend only one of the two outputs but to an external observer the two outputs look indistinguishable and he cannot decide which output belongs to whom.
  \end{enumerate}
 
- For simplicity, we are not considering fees in the example. The idea of mixing is similar to non-interactive
- Diffie-Hellman key exchange. First, Alice creates a secret value $x$~(a huge number) and publishing a corresponding
- public value $gX = g^x$. She demands from Bob to generate a secret number $y$, and to include into each output two
- values $c1$, $c2$, where one value is equal to $g^y$ and another is equal to $g^{x \cdot y}$. We assume that a Bob is using
- a random coin to choose meanings for $\{c_1, c_2\}$. With no access to the secret information, an external
- observer can not guess whether, for example, $c_1$ is about $g^y$ or $g^{x \cdot y}$, with probability above
- $\frac{1}{2}$ (as a cryptographic primitive we are using has a certain property, namely, the hardness of
- Diffie-Hellman decisional problem). To destroy an output box, a proof should be given that for $c_2$ whether $y$ is known,
-  such that $c_2 = g^y$, or $c_2 = g^{x \cdot y}$ has the same exponent $x$ against $c1 = g^y$ as $g^x$ against $g$.
- The contract of the Alice's box is checking that $c1$ and $c2$ are well-formed. The code snippets for the Alice's coin and
- a mixing transaction output are provided in Algorithm \ref{alg:alice} and Algorithm \ref{alg:mixing-out}, respectively.
+ For simplicity, we do not consider fee in the example. The idea of mixing is similar to non-interactive Diffie-Hellman key exchange. First, Alice generates a secret value $x$~(a huge number) and publishes the corresponding public value $gX = g^x$. She requires Bob to generate a secret number $y$, and to include into each output two
+ values $c_1$, $c_2$, where one value is equal to $g^y$ and the other is equal to $g^{xy}$. Bob uses a random coin to choose meanings for $\{c_1, c_2\}$. Without access to the secrets, an external observer cannot guess with probability better than  $\frac{1}{2}$ whether $c_1$ is equal to $g^y$ or to $g^{xy}$. This is assuming that the cryptographic primitive we use has a certain property, that the Decision Diffie-Hellman (DDH) problem is hard. To destroy an output box, a proof should be given that either $y$ is known such that $c_2 = g^y$, or $x$ is known such that $c_2 = c_1^x$.
+ The contract of Alice's box checks that $c_1$ and $c_2$ are well-formed. The code snippets for the Alice's coin and the mixing transaction's output are provided in Algorithms \ref{alg:alice} and \ref{alg:mixing-out} respectively. Note that because we don't yet have a primitive for proving knowledge of some $x$ that $c_2 = {c_1}^x$, we will prove a slightly longer statement that is supported, namely, proving knowledge of $x$ such that $gX = g^x$ and $c_2 = {c_1}^x$.
 
  \begin{algorithm}[H]
     \caption{Alice's Input Script}
@@ -152,79 +123,53 @@ Two more features of Ergo shaping contracting possibilities are:
         \State val c1 = SELF.R4[GroupElement].get
         \State val c2 = SELF.R5[GroupElement].get
         \State proveDlog(c2) $||$            // either c2 is $g^y$
-        \State proveDHTuple(g, c1, gX, c2) // or c2 is $u^y = g^{x \cdot y}$
+        \State proveDHTuple(g, c1, gX, c2) // or c2 is $u^y = g^{xy}$
     \end{algorithmic}
  \end{algorithm}
 
- We refer to the \cite{ergoAdvTutorial} for a proof of outputs indistinguishability and details on why
- Alice and Bob can spend only their respective coins.
+ We refer the reader to \cite{ergoAdvTutorial} for a proof of indistinguishability of the outputs and details on why Alice and Bob can spend only their respective coins.
 
 
 \subsubsection{More Examples}
 
- In this section we are briefly shedding a light on few more examples along with links to documents providing
- details and code.
+ In this section, we briefly shed light on a few more examples along with links to the documents providing the details and code.
 
 \paragraph{Atomic Swap}
-
-Cross-chain atomic swap Ergo and another blockchain~(supporting a payment to SHA-256 or Blake2b-256 hash preimage
-and a time-lock) could be done in the same way as proposed for Bitcoin, see initial protocol for Bitcoin in
-\cite{Nol13}, its Ergo alternative is provided in~\cite{ergoTutorial}. As Ergo has custom tokens,
-atomic exchange on a single block chain (Erg-to-token or token-to-token) is also possible, a solution for that can be
-found~\cite{ergoTutorial}.
+Cross-chain atomic swap between Ergo and any blockchain that supports payment to either SHA-256 or Blake2b-256 hash preimages and time-locks can be done in a similar way to that proposed for Bitcoin~\cite{Nol13}. An Ergo alternative implementation is provided in~\cite{ergoTutorial}. As Ergo also has custom tokens, atomic exchange on the single Ergo block chain (Erg-to-token or token-to-token) is also possible. An implementation for this can also be found in~\cite{ergoTutorial}.
 
 \paragraph{Crowdfunding}
 
- We consider a simplest crowdfunding scenario. In the example, a crowdfunding project with a known public key
- is considered successful if it
- can collect unspent outputs with total value not less than a certain amount before
- a certain height. A project backer creates an output box protected by the following statement: the box can be spent
- if a spending transaction is having its first output box protected by the project's key, and the output should have
- no less than the target amount.
- Then the project can collect biggest backer output boxes with total value not less
- than the amount with a single transaction~(it is possible to collect up to ~22,000 outputs in Bitcoin, which is
- enough even for a big crowdfunding campaign). For remaining small outputs over the amount, it is possible to
- construct follow-up transactions. The code can be found in~\cite{ergoTutorial}.
+ We consider the simplest crowdfunding scenario. In this example, a crowdfunding project with a known public key is considered successful if it can collect unspent outputs with total value not less than a certain amount before a certain height. A project backer creates an output box protected by the following statement: the box can be spent 
+ if the spending transaction has the first output box protected by the project's key and amount no less than the target amount.
+ Then the project can collect (in a single transaction) the biggest backer output boxes with total value not less than the target amount~(it is possible to collect up to ~22,000 outputs, which is
+ enough even for a big crowdfunding campaign). For remaining outputs, it is possible to construct follow-up transactions. The code can be found in~\cite{ergoTutorial}.
 
 \paragraph{The Local Exchange Trading System}
 
- Here we briefly overview a local exchange trading system implementation. In such a system, a member of a community may
- issue community currency via personal debt. For example, if Alice with zero balance is buying something for $5$
- community tokens from Bob, which balance is about zero as well, her balance after the trade would be $-5$ tokens, and
- Bob's balance would be $5$ tokens. Then Bob can buy something for his $5$ tokens, for example, from Carol.
- Usually, in such systems, there is a limit for negative balance (to avoid free-riding).
+ Here we briefly demonstrate a Local Exchange Trading System (LETS) in Ergo. In such a system, a member of a community may issue community currency via personal debt. For example, if Alice with zero balance is buying something for $5$
+ community tokens from Bob, whose balance is zero as well, her balance after the trade would be $-5$ tokens, and
+ Bob's balance would be $5$ tokens. Then Bob can buy something using his $5$ tokens, for example, from Carol.
+ Usually, in such systems, there is a limit on negative balances (to avoid free-riding).
 
- As digital community could be vulnerable to sybil attacks~(which allow to do free-riding again), thus some mechanism
- is needed in order to prevent the creation of sybils creating debts. We consider two solutions, namely, a committee of
- trusted managers approving new members of the community, or security deposits made in Ergs. For simplicity, we
- consider the approach with the committee here.
+ Since a digital community is vulnerable to Sybil attacks~(which also enable free-riding), some mechanism is needed to prevent such attacks where Sybil nodes create debts. 
+ The simplest solution is to use a committee of trusted managers that approve new members of the community. A trust-less but more complex solution is to use security deposits made in Ergs. For simplicity, we consider the approach with the committee here.
+ 
+ \snote{Give more details/references about Sybil attacks}
 
- This example is about two interacting contracts then. A management contract is about maintaining a
- community members list, and a new member could be added if management condition satisfied  (for example, a threshold
- signature is provided). A new member is associated with a box which contains a token identifying the member. The user
- box is protected by a special exchange script requiring to do a fair exchange only for a spending transaction.
- We skip the corresponding code, but it could be found in a separate article~\cite{icoTutorial}.
-
- What this contract shows, in comparison with previous example, is that instead of storing a members list, only a short
- digest of an authenticated AVL+ tree is to be included into a box. That allows to reduce storage requirements for the
- state. A transaction which is doing lookup or modification of the member list should provide a proof for AVL+ tree
- lookup or modification operations. Thus saving space in the state storage leads to bigger transactions, but the latter
- problem for scalability is easier to solve.
-
+ This example contains two interacting contracts. A {\em management contract} maintains a list of community members, and a new member can be added if some a management condition is satisfied  (for example, a threshold
+ signature is provided). A new member is associated with a box containing a token that identifies the member. This box, which contains the {\em member contract}, is protected by a special exchange script that requires the spending transaction to do a fair exchange.
+ We skip the corresponding code, which can be found in a separate article~\cite{letsTutorial}.
+ 
+ What this contract shows, in contrast to the previous example, is that instead of storing the members list, only a short digest of an authenticated AVL+ tree can be included in the box. This allows reduction in storage requirements for the state. A transaction doing lookup or modification of the member list should provide a proof for AVL+ tree lookup or modification operations. Thus, saving space in the state storage leads to bigger transactions, but this scalability problem is easier to solve.
 
 \paragraph{Initial Coin Offering}
 
- An initial coin offering (ICO) example shows very clearly how to develop a multi-stage contract in Ergo. Like most of
- ICOs, our example is about three stages. In the first stage the project is raising money in Ergs. In the second stage,
- the project is issuing a new token, with amount of tokens to be equal to an amount of nanoErgs raised in the stage. In
- the third stage, investors can withdraw issued tokens.
+ We discuss an Initial Coin Offering (ICO) example that shows how multi-stage contracts can be created in Ergo. Like most ICOs, our example has three stages. In the first stage, the project raises money in Ergs. In the second stage, the project issues a new token, whose amount equals the number of nanoErgs raised in the first stage. In the third stage, the investors can withdraw issued tokens.
 
- Note that the first stage could be about many transactions on
- the blockchain, as well as the third stage, while for the second stage a single transaction is enough. As in the
- previous example, an ICO contract box will contain a list of investors, now stored along with investments.
+ Note that the first and third stages have many transactions on
+ the blockchain, while a single transaction is enough for the second stage. Similar to the previous example, the ICO contract uses an AVL+ tree to store the list of (investor, amount) pairs. The complete code is available at~\cite{icoTutorial}.
 
 
-\paragraph{Even More Examples}
+\paragraph{More Examples}
 
- We have more examples of Ergo applications, such as time-controlled emission, cold wallet, rock-paper-scissors game,
- and so on. The examples could be found in \cite{ergoTutorial, ergoAdvTutorial}.
+ We have even more examples of Ergo applications in \cite{ergoTutorial, ergoAdvTutorial}. These examples include time-controlled emission, cold wallets contracts, rock-paper-scissors game, and many others.

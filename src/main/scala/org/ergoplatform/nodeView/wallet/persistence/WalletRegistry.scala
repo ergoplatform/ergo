@@ -27,7 +27,7 @@ final class WalletRegistry(store: Store) extends ScorexLogging {
       index <- getIndex
     } yield {
       val uncertainIds = index.uncertainBoxes
-      allBoxes.filterNot(b => uncertainIds.contains(b.box.id))
+      allBoxes.filterNot(b => uncertainIds.contains(encodedId(b.box.id)))
     }
     query.transact(store)
   }
@@ -59,7 +59,8 @@ final class WalletRegistry(store: Store) extends ScorexLogging {
           }
         val decreasedTokensBalance = spentTokensAmt
           .foldLeft(tokensBalance) { case (acc, (encodedId, amt)) =>
-            acc.updated(encodedId, acc.getOrElse(encodedId, 0L) - amt)
+            val decreasedAmt = acc.getOrElse(encodedId, 0L) - amt
+            if (decreasedAmt > 0) acc.updated(encodedId, decreasedAmt) else acc - encodedId
           }
         val newTokensBalance = receivedTokensAmt
           .foldLeft(decreasedTokensBalance) { case (acc, (encodedId, amt)) =>

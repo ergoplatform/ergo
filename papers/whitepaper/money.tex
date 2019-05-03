@@ -3,71 +3,46 @@
 \section{Contractual Money}
     \label{sec:contractual}
 
- In our opinion, the overwhelming majority of use-cases for a public blockchain are about financial applications,
- even in case of a platform which claims to be a general-purpose decentralized world computer.
- For example, if an oracle is writing down
- non-financial data into a blockchain~(such as temperature), this data is usually to be used further in a financial
- contract. Another trivial observation we have made is that many applications are using digital tokens with mechanics
- different from a native one.
+ In our opinion, the overwhelming majority of use-cases for a public blockchains (even those that claim to provide a general-purpose decentealized world computer) are for financial applications, which do not require Turing-completeness. For instance, if an oracle writes down non-financial data into the blockchain~(such as temperature), this data is usually used further in a financial
+ contract. Another trivial observation we make is that many applications use digital tokens with mechanics different from the native token.
 
- The Ergo Platform is offering an application developer custom tokens~(which are first-class citizens) and a
- domain-specific language for box protecting
- condition in order to implement flexible and secure financial applications.
- Ergo applications are defined in terms of protecting scripts built into boxes also containing
- data possibly involved into execution. We coin the term {\em contractual money} for Ergs and secondary tokens which
- usage is bounded by a contract, so all the tokens on the platform in existence.
-
- Any box with its contents~(Ergs, tokens, data) is bounded by a contract.
- However, we can distinguish Ergs in existence as ones which could easily
- change their contracts from Ergs which are bounded by contracts in the sense that a box with contractual Ergs is
- demanding from a spending transaction to create boxes with some properties. We will refer to the former as to ordinary
- (or cleared, or free) Ergs, and to the latter as to the bounded Ergs. Similarly, we can define bounded tokens. Both
- free and bounded Ergs are contractual, and in some cases hybrids are possible, for example, for one public key it could
- be a bounding contract, and for another public key not.
-
- For example, if a box is protected just by a public key~(so providing a signature against a spending transaction is
- enough in order to destroy the box), a public key owner may create an arbitrary box replacing the one being protected
- by the public key, thus the Ergs within the box are free to change the contract. In contrast, imagine a box "B" which
- is protected by combination of a public key and also condition which demands a spending transaction to create an output
- box which guarding script hash is equal to "rBMUEMuPQUx3GzgFZSsHmLMBouLabNZ4HcERm4N" (in Base58 encoding), and Ergs
- value of the output should equal to the value of the original box. In this case, box value is bounded by the contract,
- thus Ergs in the box are bounded Ergs.
+For an application developer, the Ergo Platform offers custom tokens~(which are first-class citizens) and a domain-specific language for writing box protecting
+ conditions in order to implement flexible and secure financial applications.
+ Ergo applications are defined in terms of protecting scripts built into boxes, which may also contain data involved in the execution.
+ We use the term {\em contractual money} to define Ergs (and secondary tokens) whose usage is bounded by a contract. This applies to all tokens on the platform in existance because any box with its contents~(Ergs, tokens, data) is bounded by a contract.
+ 
+ However, we can distinguish between two types of contractual Ergs. The first, called {\em free Ergs}, are the ones that could change their contracts easily and have no restrictions on the outputs of a spending transaction. The other, called {\em bounded Ergs}, are bounded by contracts which demand the spending transaction to create boxes with specific properties. 
+ 
+ For example, if a box $A$ is protected by just a public key~(so providing a signature against a spending transaction is enough in order to destroy the box), the public key owner can spend $A$ and transfer the Ergs to any arbitrary output box. Thus, the Ergs within $A$ are free. 
+% to change the contract. 
+In contrast, imagine a box $B$ protected by combination of a public key and a condition that demands the spending transaction to create an output box with the same amount of Ergs as in $B$ and whose guarding script has the hash \texttt{rBMUEMuPQUx3GzgFZSsHmLMBouLabNZ4HcERm4N} (in Base58 encoding). In this case, the Ergs in $B$ are bounded Ergs.
+ 
+ Similarly, we can define free and bounded tokens. An Ergo contract can have can have several hybrids such as bounded Ergs and free tokens or both bounded under one public key and free under another. 
 
 \subsection{Prelimiaries For Ergo Contracts}
 
-  While in Bitcoin a transaction output is protected by a program in a stack-based language named Bitcoin Script,
-  in Ergo a
- box is protected by a logic formula which combines predicates over a context and cryptographic statements provable
- via zero-knowledge protocols with AND, OR, and k-out-of-n connectives. The formula is represented as a typed direct
- acyclic graph, which serialized form is written in a box. To destroy a box, a spending transaction needs to provide
- arguments, including zero-knowledge proofs, which are enough to satisfy the formula.
+  While in Bitcoin, a transaction output is protected by a program in a stack-based language named {\em Script}, in Ergo a box is protected by a logic formula which combines predicates over a context with cryptographic statements provable via zero-knowledge protocols using AND, OR, and $k$-out-of-$n$ connectives. The formula is represented as a typed direct
+ acyclic graph, whose serialized form is written in a box. To destroy a box, a spending transaction needs to provide arguments (which include zero-knowledge proofs) satisfying the formula.
 
- However, in most cases, a developer is unlikely to develop box contracts in terms of graphs. Instead, he would likely
- using a high-level language, and we provide one with the reference client called ErgoScript. Writing scripts in this
- language is easy, for
- example, for a one-out-of-two signature, protecting script would be ${pk_1 \&\& pk_2}$, which means "prove knowledge of
- a secret key corresponding to the public key $pk_1$ and knowledge of a secret key corresponding to $pk_2$". We have
- two separate documents which are helping to develop contracts with ErgoScript, the "ErgoScript Tutorial"~\cite{ergoTutorial}
- and the "Advanced ErgoScript Tutorial"~\cite{ergoAdvTutorial}. Thus below we are not going to dive into developing contracts with
- ErgoScript, rather, we are going to provide a couple of motivating examples in the following sections.
+ However, in most cases, a developer is unlikely to develop contracts in terms of graphs. Instead, he would like to use a high-level language such as ErgoScript, which we provide with the reference client. 
+ 
+ Writing scripts in ErgoScript is easy. As an
+ example, for a one-out-of-two signature, the protecting script would be ${pk_1 \|pk_2}$, which means ``prove knowledge of
+ a secret key corresponding to the public key $pk_1$ or knowledge of a secret key corresponding to public key $pk_2$''. We have
+ two separate documents for help in developing contracts with ErgoScript: the ``ErgoScript Tutorial''~\cite{ergoTutorial}
+ and the ``Advanced ErgoScript Tutorial''~\cite{ergoAdvTutorial}. Thus, we do not get into the details of developing contracts with ErgoScript. Rather, we are provide a couple of motivating examples in the following sections.
 
- More features of Ergo which are shaping contracting possibilities:
+Two more features of Ergo shaping contracting possibilities are:
 
  \begin{itemize}
-    \item{Data Inputs: }
- a box could be not only destroyed by a transaction, but be read-only, in the latter case we refer to the
- box as to {\em data input} box of the transaction. Thus a transaction is getting two box sets as its arguments, inputs and
- data inputs, and produces a box set named {\em outputs}. Data inputs are useful for oracle applications and interacting
- contracts.
+    \item {\em Data Inputs: }
+ To be used in a transaction, a box need not be destroyed but can instead be read-only. In the latter case, we refer to the box as being part of the {\em data input} of the transaction. Thus, a transaction gets two box sets as its arguments, the inputs and
+ data inputs, and produces one box set named {\em outputs}. Data inputs are useful for oracle applications and interacting contracts.
 
-    \item{Custom tokens: }
- a transaction can carry many tokens, if only estimated complexity for processing them is not exceeding a limit. A
- transaction is also able to issue a token, but only one, and with a unique~(and cryptographically strong against
- finding a collision) identifier, which is equal to identifier of a first~(spendable) input box of the transaction.
- The amount of the tokens issued could be any number within the [1, 9223372036854775807] range. For the tokens, the weak
- preservation rule is defined, which is demanding total amount for a token in transaction outputs should be no more
- than total amount for the token in transaction inputs~(thus some amount of token could be burnt). In contrast, for Ergs
- a preservation rule is strong, thus total Ergs amount for inputs should be equal to total Ergs amount for outputs.
+    \item {\em Custom tokens: }
+ A transaction can carry many tokens as long as the estimated complexity for processing them does not exceed a limit. A transaction can also issue a single token with a unique identifier which is equal to identifier of a first~(spendable) input box of the transaction. The identifier is unique assuming the collision resistance of an underlying hash function. 
+ The amount of the tokens issued could be any number within the range $[1, 9223372036854775807]$. The weak preservation rule is followed for tokens, which requires that the total amount of any token in a transaction's outputs should be no more
+ than total amount of that token in the transaction's inputs~(i.e., some amount of token could be burnt). In contrast, the strong reservation rule is followed for Ergs, which requires that the total amount of Ergs in the inputs and outputs must be same.
  \end{itemize}
 
 \subsection{Contract Examples}

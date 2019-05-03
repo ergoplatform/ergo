@@ -96,6 +96,126 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       scanLogic orElse
       readers
 
+  private def scanLogic: Receive = {
+    case ScanOffChain(tx) =>
+      val outputs = extractOutputs(tx)
+      val inputs = extractInputs(tx)
+      val (resolved, _) = outputs
+        .filterNot(o => inputs.contains(encodedId(o.id)))
+        .partition(resolve)
+      val resolvedTrackedBoxes = resolved.map { bx =>
+        TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain)
+      }
+
+      offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
+
+    case ScanOnChain(block) =>
+      proverOpt.foreach(_.IR.resetContext())
+      storage.updateHeight(block.header.height)
+      val (outputs, inputs) = block.transactions
+        .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, EncodedBoxId)]) {
+          case ((outAcc, inAcc), tx) =>
+            (outAcc ++ extractOutputs(tx).map(tx.id -> _), inAcc ++ extractInputs(tx).map(tx.id -> _))
+        }
+      val prevUncertainBoxes = registry.readUncertainBoxes
+      val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
+        .filterNot { case (_, o) => inputs.map(_._2).contains(encodedId(o.id)) }
+        .partition { case (_, o) => resolve(o) }
+      val resolvedTrackedBoxes = resolved.map { case (txId, bx) =>
+        TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Certain)
+      }
+      val unresolvedTrackedBoxes = unresolved.map { case (txId, bx) =>
+        TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
+      }
+
+      registry.updateOnBlock(
+        resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs.map(_._2))(block.id, block.height)
+
+      val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedId(x.box.id))
+      offChainRegistry = offChainRegistry.updateOnBlock(block.height, registry.readCertainBoxes, newOnChainIds)
+
+
+    case Rollback(version: VersionTag) =>
+      registry.rollback(version).fold(
+        e => log.error(s"Failed to rollback wallet registry to version $version due to: $e"), _ => ())
+  }
+
+  private def readers: Receive = {
+    case ReadBalances(chainStatus) =>
+      sender() ! (if (chainStatus.onChain) registry.readIndex else offChainRegistry.readIndex)
+
+    case ReadPublicKeys(from, until) =>
+      sender() ! publicKeys.slice(from, until)
+
+    case GetFirstSecret =>
+      if (proverOpt.nonEmpty) {
+        proverOpt.foreach(_.secrets.headOption.foreach(s => sender() ! Success(s)))
+      } else {
+        sender() ! Failure(new Exception("Wallet is locked"))
+      }
+
+    case GetBoxes =>
+      sender() ! registry.readCertainBoxes.map(_.box).toIterator
+
+    case ReadRandomPublicKey =>
+      sender() ! publicKeys(Random.nextInt(publicKeys.size))
+
+    case ReadTrackedAddresses =>
+      sender() ! trackedAddresses.toIndexedSeq
+  }
+
+  private def onStateChanged: Receive = {
+    case ChangedState(s: ErgoStateReader@unchecked) =>
+      storage.updateStateContext(s.stateContext)
+  }
+
+  private def walletCommands: Receive = {
+
+    case InitWallet(pass, mnemonicPassOpt) if secretStorageOpt.isEmpty =>
+      val entropy = scorex.utils.Random.randomBytes(settings.walletSettings.seedStrengthBits / 8)
+      val mnemonicTry = new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
+        .toMnemonic(entropy)
+        .map { mnemonic =>
+          val secretStorage = JsonSecretStorage
+            .init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), pass)(settings.walletSettings.secretStorage)
+          secretStorageOpt = Some(secretStorage)
+          mnemonic
+        }
+      util.Arrays.fill(entropy, 0: Byte)
+
+      sender() ! mnemonicTry
+
+    case RestoreWallet(mnemonic, passOpt, encryptionPass) if secretStorageOpt.isEmpty =>
+      val secretStorage = JsonSecretStorage
+        .restore(mnemonic, passOpt, encryptionPass)(settings.walletSettings.secretStorage)
+      secretStorageOpt = Some(secretStorage)
+      sender() ! Success(())
+
+    case RestoreWallet | InitWallet(_, _) =>
+      sender() ! Failure(new Exception("Wallet is already initialized"))
+
+    case UnlockWallet(pass) =>
+      secretStorageOpt match {
+        case Some(secretStorage) =>
+          sender() ! secretStorage.unlock(pass)
+          proverOpt = Some(ErgoProvingInterpreter(secretStorage.secret.map(_.key).toIndexedSeq, parameters))
+          storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
+        case None =>
+          sender() ! Failure(new Exception("Wallet not initialized"))
+      }
+
+    case LockWallet =>
+      proverOpt = None
+      secretStorageOpt.foreach(_.lock())
+
+    case WatchFor(address) =>
+      storage.addTrackedAddress(address)
+
+    //generate a transaction paying to a sequence of boxes payTo
+    case GenerateTransaction(requests) =>
+      sender() ! generateTransactionWithOutputs(requests)
+  }
+
   private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
 
   private def trackedAddresses: Seq[ErgoAddress] = storage.readTrackedAddresses
@@ -223,126 +343,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     } else {
       Failure(new Exception("Secret dir does not exist"))
     }
-  }
-
-  private def scanLogic: Receive = {
-    case ScanOffChain(tx) =>
-      val outputs = extractOutputs(tx)
-      val inputs = extractInputs(tx)
-      val (resolved, _) = outputs
-        .filterNot(o => inputs.contains(encodedId(o.id)))
-        .partition(resolve)
-      val resolvedTrackedBoxes = resolved.map { bx =>
-        TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain)
-      }
-
-      offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
-
-    case ScanOnChain(block) =>
-      proverOpt.foreach(_.IR.resetContext())
-      storage.updateHeight(block.header.height)
-      val (outputs, inputs) = block.transactions
-        .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, EncodedBoxId)]) {
-          case ((outAcc, inAcc), tx) =>
-            (outAcc ++ extractOutputs(tx).map(tx.id -> _), inAcc ++ extractInputs(tx).map(tx.id -> _))
-        }
-      val prevUncertainBoxes = registry.readUncertainBoxes
-      val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
-        .filterNot { case (_, o) => inputs.map(_._2).contains(encodedId(o.id)) }
-        .partition { case (_, o) => resolve(o) }
-      val resolvedTrackedBoxes = resolved.map { case (txId, bx) =>
-        TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Certain)
-      }
-      val unresolvedTrackedBoxes = unresolved.map { case (txId, bx) =>
-        TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
-      }
-
-      registry.updateOnBlock(
-        resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs.map(_._2))(block.id, block.height)
-
-      val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedId(x.box.id))
-      offChainRegistry = offChainRegistry.updateOnBlock(block.height, registry.readCertainBoxes, newOnChainIds)
-
-
-    case Rollback(version: VersionTag) =>
-      registry.rollback(version).fold(
-        e => log.error(s"Failed to rollback wallet registry to version $version due to: $e"), _ => ())
-  }
-
-  private def readers: Receive = {
-    case ReadBalances(chainStatus) =>
-      sender() ! (if (chainStatus.onChain) registry.readIndex else offChainRegistry.readIndex)
-
-    case ReadPublicKeys(from, until) =>
-      sender() ! publicKeys.slice(from, until)
-
-    case GetFirstSecret =>
-      if (proverOpt.nonEmpty) {
-        proverOpt.foreach(_.secrets.headOption.foreach(s => sender() ! Success(s)))
-      } else {
-        sender() ! Failure(new Exception("Wallet is locked"))
-      }
-
-    case GetBoxes =>
-      sender() ! registry.readCertainBoxes.map(_.box)
-
-    case ReadRandomPublicKey =>
-      sender() ! publicKeys(Random.nextInt(publicKeys.size))
-
-    case ReadTrackedAddresses =>
-      sender() ! trackedAddresses.toIndexedSeq
-  }
-
-  private def onStateChanged: Receive = {
-    case ChangedState(s: ErgoStateReader@unchecked) =>
-      storage.updateStateContext(s.stateContext)
-  }
-
-  private def walletCommands: Receive = {
-
-    case InitWallet(pass, mnemonicPassOpt) if secretStorageOpt.isEmpty =>
-      val entropy = scorex.utils.Random.randomBytes(settings.walletSettings.seedStrengthBits / 8)
-      val mnemonicTry = new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
-        .toMnemonic(entropy)
-        .map { mnemonic =>
-          val secretStorage = JsonSecretStorage
-            .init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), pass)(settings.walletSettings.secretStorage)
-          secretStorageOpt = Some(secretStorage)
-          mnemonic
-        }
-      util.Arrays.fill(entropy, 0: Byte)
-
-      sender() ! mnemonicTry
-
-    case RestoreWallet(mnemonic, passOpt, encryptionPass) if secretStorageOpt.isEmpty =>
-      val secretStorage = JsonSecretStorage
-        .restore(mnemonic, passOpt, encryptionPass)(settings.walletSettings.secretStorage)
-      secretStorageOpt = Some(secretStorage)
-      sender() ! Success(())
-
-    case RestoreWallet | InitWallet(_, _) =>
-      sender() ! Failure(new Exception("Wallet is already initialized"))
-
-    case UnlockWallet(pass) =>
-      secretStorageOpt match {
-        case Some(secretStorage) =>
-          sender() ! secretStorage.unlock(pass)
-          proverOpt = Some(ErgoProvingInterpreter(secretStorage.secret.map(_.key).toIndexedSeq, parameters))
-          storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
-        case None =>
-          sender() ! Failure(new Exception("Wallet not initialized"))
-      }
-
-    case LockWallet =>
-      proverOpt = None
-      secretStorageOpt.foreach(_.lock())
-
-    case WatchFor(address) =>
-      storage.addTrackedAddress(address)
-
-    //generate a transaction paying to a sequence of boxes payTo
-    case GenerateTransaction(requests) =>
-      sender() ! generateTransactionWithOutputs(requests)
   }
 
 }

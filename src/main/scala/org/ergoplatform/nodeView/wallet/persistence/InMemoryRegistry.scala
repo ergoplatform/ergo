@@ -23,9 +23,11 @@ final case class InMemoryRegistry(height: Int,
 
   def updated(certain: Seq[TrackedBox],
               uncertain: Seq[TrackedBox],
-              spent: Seq[EncodedBoxId]): InMemoryRegistry =
-    this.copy(certainBoxes = certainBoxes.filterNot(x => spent.contains(encodedId(x.box.id))) ++ certain,
-              uncertainBoxes = uncertainBoxes.filterNot(x => spent.contains(encodedId(x.box.id))) ++ uncertain)
+              spent: Seq[EncodedBoxId]): InMemoryRegistry = {
+    val unspentCertain = certainBoxes.filterNot(x => spent.contains(encodedId(x.box.id))) ++ certain
+    val unspentUncertain = uncertainBoxes.filterNot(x => spent.contains(encodedId(x.box.id))) ++ uncertain
+    this.copy(certainBoxes = unspentCertain.distinct, uncertainBoxes = unspentUncertain.distinct)
+  }
 
 }
 

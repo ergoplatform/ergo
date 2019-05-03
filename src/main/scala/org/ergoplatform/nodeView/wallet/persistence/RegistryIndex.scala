@@ -33,17 +33,6 @@ final case class RegistryIndex(height: Int,
       false
   }
 
-  def merge(that: RegistryIndex): RegistryIndex = {
-    val mergedBalance = this.balance + that.balance
-    val mergedAssets = this.assetBalances.foldLeft(that.assetBalances) {
-      case (acc, (id, amt)) =>
-        val curAmt = acc.getOrElse(id, 0L)
-        acc.updated(id, curAmt + amt)
-    }
-    val mergedUncertain = (this.uncertainBoxes ++ that.uncertainBoxes).distinct
-    RegistryIndex(math.max(this.height, that.height), mergedBalance, mergedAssets, mergedUncertain)
-  }
-
 }
 
 object RegistryIndex {

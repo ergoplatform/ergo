@@ -6,8 +6,10 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
+import org.ergoplatform.nodeView.wallet.IdUtils._
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
+import scorex.util.idToBytes
 
 import scala.util.Random
 
@@ -58,6 +60,12 @@ final class WalletStorage(store: Store, settings: ErgoSettings)
     .get(HeightKey)
     .map(r => Ints.fromByteArray(r.data))
     .getOrElse(ErgoHistory.EmptyHistoryHeight)
+
+  def putBlock(block: PostponedBlock): Unit = {
+    val toInsert = Seq(ByteArrayWrapper(idToBytes(block.id)) ->
+      ByteArrayWrapper(PostponedBlockSerializer.toBytes(block)))
+    store.update(randomVersion, Seq.empty, toInsert)
+  }
 
   private def randomVersion = Random.nextInt()
 

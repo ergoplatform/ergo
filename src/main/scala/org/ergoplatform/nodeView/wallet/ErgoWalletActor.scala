@@ -110,30 +110,37 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
 
     case ScanOnChain(block) =>
-      proverOpt.foreach(_.IR.resetContext())
       storage.updateHeight(block.header.height)
       val (outputs, inputs) = block.transactions
         .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, EncodedBoxId)]) {
           case ((outAcc, inAcc), tx) =>
             (outAcc ++ extractOutputs(tx).map(tx.id -> _), inAcc ++ extractInputs(tx).map(tx.id -> _))
         }
-      val prevUncertainBoxes = registry.readUncertainBoxes
-      val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
-        .filterNot { case (_, o) => inputs.map(_._2).contains(encodedId(o.id)) }
-        .partition { case (_, o) => resolve(o) }
-      val resolvedTrackedBoxes = resolved.map { case (txId, bx) =>
-        TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Certain)
+      if (outputs.nonEmpty || inputs.nonEmpty) {
+        if (proverOpt.isDefined) {
+          proverOpt.foreach(_.IR.resetContext())
+          val prevUncertainBoxes = registry.readUncertainBoxes
+          val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
+            .filterNot { case (_, o) => inputs.map(_._2).contains(encodedId(o.id)) }
+            .partition { case (_, o) => resolve(o) }
+          val resolvedTrackedBoxes = resolved.map { case (txId, bx) =>
+            TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Certain)
+          }
+          val unresolvedTrackedBoxes = unresolved.map { case (txId, bx) =>
+            TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
+          }
+
+          registry.updateOnBlock(
+            resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs.map(_._2))(block.id, block.height)
+
+          val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedId(x.box.id))
+          offChainRegistry = offChainRegistry.updateOnBlock(block.height, registry.readCertainBoxes, newOnChainIds)
+        } else {
+          ???
+        }
       }
-      val unresolvedTrackedBoxes = unresolved.map { case (txId, bx) =>
-        TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
-      }
 
-      registry.updateOnBlock(
-        resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs.map(_._2))(block.id, block.height)
-
-      val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedId(x.box.id))
-      offChainRegistry = offChainRegistry.updateOnBlock(block.height, registry.readCertainBoxes, newOnChainIds)
-
+    case ScanOnChain(_) =>
 
     case Rollback(version: VersionTag) =>
       registry.rollback(version).fold(

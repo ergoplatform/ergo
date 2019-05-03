@@ -4,7 +4,6 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoAddress
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector
@@ -14,7 +13,7 @@ import scorex.util.ScorexLogging
 
 import scala.util.{Success, Try}
 
-class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
+class ErgoWallet(settings: ErgoSettings)
                 (implicit val actorSystem: ActorSystem)
   extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
     with ErgoWalletReader
@@ -58,8 +57,9 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
 }
 
 object ErgoWallet {
-  def readOrGenerate(historyReader: ErgoHistoryReader,
-                     settings: ErgoSettings)(implicit actorSystem: ActorSystem): ErgoWallet = {
-    new ErgoWallet(historyReader, settings)
-  }
+
+  def readOrGenerate(settings: ErgoSettings)
+                    (implicit actorSystem: ActorSystem): ErgoWallet =
+    new ErgoWallet(settings)
+
 }

@@ -15,12 +15,19 @@ final case class RegistryIndex(height: Int,
     case that: RegistryIndex =>
       val equalHeight = that.height == this.height
       val equalBalance = that.balance == this.balance
-      val equalTokens = that.assetBalances.zip(this.assetBalances).forall { case ((x1, y1), (x2, y2)) =>
-        x1 == x2 && y1 == y2
-      }
-      val equalUncertain = that.uncertainBoxes.zip(this.uncertainBoxes).forall { case (x1, x2) =>
-        x1 == x2
-      }
+      val equalTokens = that.assetBalances
+        .toSeq
+        .sortBy(_._1)
+        .zip(this.assetBalances.toSeq.sortBy(_._1))
+        .forall { case ((x1, y1), (x2, y2)) =>
+          x1 == x2 && y1 == y2
+        }
+      val equalUncertain = that.uncertainBoxes
+        .sorted
+        .zip(this.uncertainBoxes.sorted)
+        .forall { case (x1, x2) =>
+          x1 == x2
+        }
       equalHeight && equalBalance && equalTokens && equalUncertain
     case _ =>
       false

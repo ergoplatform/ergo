@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
-import org.ergoplatform.nodeView.wallet.persistence.{InMemoryRegistry, RegistryIndex, WalletRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.persistence._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
@@ -59,7 +59,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     new WalletRegistry(new LSMStore(dir))
   }
 
-  private var inMemoryRegistry: InMemoryRegistry = InMemoryRegistry.empty(height)
+  private var offChainRegistry: OffChainRegistry = OffChainRegistry.empty(height)
 
   private val parameters: Parameters = LaunchParameters
 
@@ -229,17 +229,14 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case ScanOffChain(tx) =>
       val outputs = extractOutputs(tx)
       val inputs = extractInputs(tx)
-      val (resolved, unresolved) = outputs
+      val (resolved, _) = outputs
         .filterNot(o => inputs.contains(encodedId(o.id)))
         .partition(resolve)
       val resolvedTrackedBoxes = resolved.map { bx =>
-        TrackedBox(tx.id, bx.index, Some(height), None, None, bx, BoxCertainty.Certain)
-      }
-      val unresolvedTrackedBoxes = unresolved.map { bx =>
-        TrackedBox(tx.id, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
+        TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain)
       }
 
-      inMemoryRegistry = inMemoryRegistry.updated(resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs)
+      offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
 
     case ScanOnChain(block) =>
       proverOpt.foreach(_.IR.resetContext())
@@ -263,6 +260,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       registry.updateOnBlock(
         resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs.map(_._2))(block.id, block.height)
 
+      val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedId(x.box.id))
+      offChainRegistry = offChainRegistry.updateOnBlock(block.height, registry.readCertainBoxes, newOnChainIds)
+
 
     case Rollback(version: VersionTag) =>
       registry.rollback(version).fold(
@@ -271,12 +271,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def readers: Receive = {
     case ReadBalances(chainStatus) =>
-      val index = if (chainStatus.onChain) {
-        registry.readIndex
-      } else {
-        registry.readIndex merge inMemoryRegistry.readIndex
-      }
-      sender() ! index
+      sender() ! (if (chainStatus.onChain) registry.readIndex else offChainRegistry.readIndex)
 
     case ReadPublicKeys(from, until) =>
       sender() ! publicKeys.slice(from, until)

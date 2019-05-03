@@ -47,7 +47,7 @@ a block header as well as the digest of the resulting state.
 So, light nodes that only keeps a small tree digest are able to verify the full block --- they can check that all spent boxes where
 removed from the state, all created boxes were added to it and no more changes where made.
 
-AVL+ trees allows to build efficient authenticated dictionaries that reduce proof size and speed
+AVL+ trees allow to build efficient authenticated dictionaries that reduce proof size and speed
 up verification by 1.4-2.5 times in comparison with prior solutions, making them better suited for the cryptocurrency application.
 For example, our proofs sizes are for about 3 times smaller, than proofs of Merkle Patricia trie used in Ethereum
 for the same purposes:

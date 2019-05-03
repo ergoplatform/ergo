@@ -23,7 +23,7 @@ The second known threat to a PoW network decentralization is that even big miner
 mining pools, leading to a situation when just a few pool operators (5 in Bitcoin, 2 in Ethereum
 at the time of writing) control more than 51\% of computational power.
 Although the problem has already been discussed in the community, no practical solutions were
-implementer before \Ergo{}.
+implemented before \Ergo{}.
 
 
 Ergo PoW protocol, Autolykos~\cite{Ergopow}, is the first consensus protocol, that is both memory-hard
@@ -35,7 +35,7 @@ Elements of list $R$ are obtained as a result of one-way computation from index 
 two miner public keys $pk,w$ and hash of block header $m$ as $r_i=H(i||M||pk||m||w)$,
 where $H$ is a hash function which returns the values in $\mathbb{Z}/q\mathbb{Z}$ and
 $M$ is a static big message that is used to make hash calculation slower.
-Also, we require a set of element indexes $J$ to be obtained
+Also, a set of element indexes $J$ is to be obtained
 by one-way pseudo-random function $genIndexes$, that prevents possible solutions
 search optimizations.
 
@@ -48,7 +48,7 @@ create a valid block.
     \begin{algorithmic}[1]
         \State \textbf{Input}: upcoming block header hash $m$, key pair $pk=g^{sk}$
         \State Generate randomly a new key pair $w=g^x$
-        \State Calculate $r_{i \in [0,N)}=H(j||M||pk||m||w)$
+        \State Calculate $r_{i \in [0,N)}=H(i||M||pk||m||w)$
         \While{$true$}
         \LetRnd{$nonce$}{$\mathsf{rand}$}
         \Let{$J$}{$genIndexes(m||nonce)$}
@@ -59,10 +59,6 @@ create a valid block.
         \EndWhile
     \end{algorithmic}
 \end{algorithm}
-
-\knote{no genIndexes details}
-\dnote{do you think we need full details in whitepaper? We've written that $genIndexes$ is "one-way pseudo-random function",
-I think it is enough to catch the general idea}
 
 Note that although the mining process utilizes private keys, the solution itself
 only contains public keys. Solution verification can be performed by Alg.~\ref{alg:verify}.
@@ -95,7 +91,7 @@ hash $H$ multiple~(for about $10^4$ for modern GPUs) times, reducing miner's eff
 
 Calculating the list $R$ is also quite a heavy computational task: our initial implementation~\cite{ergoMiner}
 consumes ~25 seconds on Nvidia GTX 1070 to fill all the $2^{26}$ elements of the list.
-This part, however, may be optimized if a miner also stores a list of unfinalized hashes $u_{i \in [0,N)}=H(i||M||pk$
+This part, however, may be optimized if a miner also stores a list of unfinalized hashes $u_{i \in [0,N)}=H(i||M||pk)$
 in memory, consuming 5 more Gigabytes of it. In such a case, work to calculate unfinalized hashes should
 be done only once during mining initialization while finalizing them and filling the list $R$
 for the new header only consumes milliseconds~(about 50 ms on Nvidia GTX 1070).
@@ -106,5 +102,4 @@ algorithm~\cite{meshkov2017short} to keep time interval between block close to 2
 This algorithm is trying to predict the hash rate of an upcoming 1024 block length epoch
 based on data from the previous 8 epochs via well-known linear least squares method,
 to predict it better than the usual difficulty adjustment algorithm while also makes possible
-``coin-hopping'' attacks less profitable. \knote{provide a link to the difficulty algo paper}
-\dnote{there is a link one to this paper one sentence ago, I don't think we need to provide it here one more time}
+``coin-hopping'' attacks less profitable.

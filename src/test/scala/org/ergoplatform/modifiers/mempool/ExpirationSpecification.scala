@@ -1,8 +1,8 @@
 package org.ergoplatform.modifiers.mempool
 
-import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion
 import sigmastate.Values.ShortConstant

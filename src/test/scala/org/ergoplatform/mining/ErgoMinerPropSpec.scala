@@ -3,13 +3,12 @@ package org.ergoplatform.mining
 import org.ergoplatform.ErgoScriptPredef
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{LaunchParameters, MonetarySettings}
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.interpreter.CryptoConstants.EcPointType
 
 import scala.util.Random
 

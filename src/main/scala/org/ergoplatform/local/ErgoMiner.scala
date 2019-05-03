@@ -14,7 +14,6 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -22,6 +21,7 @@ import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
@@ -71,11 +71,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   override def preStart(): Unit = {
     // in external miner mode key from wallet is used if `publicKeyOpt` is not set
     if ((publicKeyOpt.isEmpty && externalMinerMode) || (secretKeyOpt.isEmpty && !externalMinerMode)) {
-      log.info("Using key from wallet for mining")
-      val callback = self
-      viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        v.vault.firstSecret().onComplete(_.foreach(r => callback ! UpdateSecret(r)))
-      }
+      log.info("Trying to use key from wallet for mining")
+      self ! QueryWallet
     }
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
   }
@@ -87,6 +84,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   private def unknownMessage: Receive = {
+    case _: scala.runtime.BoxedUnit =>
+      // ignore, this message is caused by way of interaction with NVH.
     case m =>
       log.warn(s"Unexpected message $m of class: ${m.getClass}")
   }
@@ -95,6 +94,22 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case UpdateSecret(s) =>
       secretKeyOpt = Some(s)
       publicKeyOpt = Some(s.publicImage)
+  }
+
+  private def queryWallet: Receive = {
+    case QueryWallet =>
+      val callback = self
+      viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
+        v.vault.firstSecret().onComplete(_.foreach {
+          _.fold(
+            _ => {
+              log.warn("Failed to load key from wallet. Wallet is locked.")
+              context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet)(context.system.dispatcher)
+            },
+            r => callback ! UpdateSecret(r)
+          )
+        })
+      }
   }
 
   private def startMining: Receive = {
@@ -114,7 +129,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         }
       }
     case StartMining if candidateOpt.isEmpty =>
-      requestCandidate()
+      if (secretKeyOpt.isDefined || externalMinerMode) requestCandidate()
       context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)
   }
 
@@ -167,6 +182,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     onReaders orElse
     onUpdateSecret orElse
     mining orElse
+    queryWallet orElse
     unknownMessage
 
   private def onReaders: Receive = {
@@ -467,6 +483,8 @@ object ErgoMiner extends ScorexLogging {
   }
 
   case object StartMining
+
+  case object QueryWallet
 
   case object PrepareCandidate
 

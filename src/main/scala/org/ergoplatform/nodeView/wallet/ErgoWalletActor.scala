@@ -118,31 +118,19 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         }
       if (outputs.nonEmpty || inputs.nonEmpty) {
         if (proverOpt.isDefined) {
-          proverOpt.foreach(_.IR.resetContext())
-          val prevUncertainBoxes = registry.readUncertainBoxes
-          val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
-            .filterNot { case (_, o) => inputs.map(_._2).contains(encodedId(o.id)) }
-            .partition { case (_, o) => resolve(o) }
-          val resolvedTrackedBoxes = resolved.map { case (txId, bx) =>
-            TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Certain)
-          }
-          val unresolvedTrackedBoxes = unresolved.map { case (txId, bx) =>
-            TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
-          }
-
-          registry.updateOnBlock(
-            resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs.map(_._2))(block.id, block.height)
-
-          val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedId(x.box.id))
-          offChainRegistry = offChainRegistry.updateOnBlock(block.height, registry.readCertainBoxes, newOnChainIds)
+          processBlock(block.id, block.height, inputs, outputs)
         } else {
-          ???
+          // save wallet-critical data from block to process it later.
+          val postponedBlock = PostponedBlock(block.id, block.height, inputs, outputs)
+          storage.putBlock(postponedBlock)
         }
       }
 
-    case ScanOnChain(_) =>
-
-    case Rollback(version: VersionTag) =>
+    case Rollback(version: VersionTag, height: Int) =>
+      // remove postponed blocks which were rolled back.
+      storage.readLatestPostponedBlockHeight.foreach { h =>
+        (height to h).foreach(storage.removeBlock)
+      }
       registry.rollback(version).fold(
         e => log.error(s"Failed to rollback wallet registry to version $version due to: $e"), _ => ())
   }
@@ -177,7 +165,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   private def walletCommands: Receive = {
-
     case InitWallet(pass, mnemonicPassOpt) if secretStorageOpt.isEmpty =>
       val entropy = scorex.utils.Random.randomBytes(settings.walletSettings.seedStrengthBits / 8)
       val mnemonicTry = new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
@@ -207,6 +194,16 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           sender() ! secretStorage.unlock(pass)
           proverOpt = Some(ErgoProvingInterpreter(secretStorage.secret.map(_.key).toIndexedSeq, parameters))
           storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
+          // process postponed blocks when prover is available.
+          val lastProcessedHeight = registry.readIndex.height
+          storage.readLatestPostponedBlockHeight.foreach { lastPostponedHeight =>
+            val blocks = storage.readBlocks(lastProcessedHeight, lastPostponedHeight)
+            blocks.sortBy(_.height).foreach { case PostponedBlock(id, height, inputs, outputs) =>
+              processBlock(id, height, inputs, outputs)
+            }
+            // remove processed blocks from storage.
+            storage.removeBlocks(lastProcessedHeight, lastPostponedHeight)
+          }
         case None =>
           sender() ! Failure(new Exception("Wallet not initialized"))
       }
@@ -218,7 +215,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case WatchFor(address) =>
       storage.addTrackedAddress(address)
 
-    //generate a transaction paying to a sequence of boxes payTo
     case GenerateTransaction(requests) =>
       sender() ! generateTransactionWithOutputs(requests)
   }
@@ -329,6 +325,29 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         Failure(new Exception("Wallet is locked"))
     }
 
+  private def processBlock(id: ModifierId,
+                           height: Int,
+                           inputs: Seq[(ModifierId, EncodedBoxId)],
+                           outputs: Seq[(ModifierId, ErgoBox)]): Unit = {
+    proverOpt.foreach(_.IR.resetContext())
+    val prevUncertainBoxes = registry.readUncertainBoxes
+    val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
+      .filterNot { case (_, o) => inputs.map(_._2).contains(encodedId(o.id)) }
+      .partition { case (_, o) => resolve(o) }
+    val resolvedTrackedBoxes = resolved.map { case (txId, bx) =>
+      TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Certain)
+    }
+    val unresolvedTrackedBoxes = unresolved.map { case (txId, bx) =>
+      TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
+    }
+
+    registry.updateOnBlock(
+      resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs.map(_._2))(id, height)
+
+    val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedId(x.box.id))
+    offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainBoxes, newOnChainIds)
+  }
+
   private def inputsFor(targetAmount: Long,
                         targetAssets: Map[ModifierId, Long] = Map.empty): Seq[ErgoBox] =
     boxSelector
@@ -362,7 +381,7 @@ object ErgoWalletActor {
 
   final case class ScanOnChain(block: ErgoFullBlock)
 
-  final case class Rollback(version: VersionTag)
+  final case class Rollback(version: VersionTag, height: Int)
 
   final case class GenerateTransaction(requests: Seq[TransactionRequest])
 

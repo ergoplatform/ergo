@@ -4,6 +4,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoAddress
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector
@@ -11,13 +12,15 @@ import scorex.core.VersionTag
 import scorex.core.transaction.wallet.Vault
 import scorex.util.ScorexLogging
 
-import scala.util.{Success, Try}
+import scala.util.{Failure, Success, Try}
 
-class ErgoWallet(settings: ErgoSettings)
+class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
                 (implicit val actorSystem: ActorSystem)
   extends Vault[ErgoTransaction, ErgoPersistentModifier, ErgoWallet]
     with ErgoWalletReader
     with ScorexLogging {
+
+  override type NVCT = this.type
 
   override val walletActor: ActorRef =
     actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings, DefaultBoxSelector))
@@ -48,18 +51,19 @@ class ErgoWallet(settings: ErgoSettings)
     this
   }
 
-  override def rollback(to: VersionTag): Try[ErgoWallet] = {
-    walletActor ! Rollback(to)
-    Success(this)
-  }
-
-  override type NVCT = this.type
+  override def rollback(to: VersionTag): Try[ErgoWallet] =
+    historyReader.heightOf(scorex.core.versionToId(to)) match {
+      case Some(height) =>
+        walletActor ! Rollback(to, height)
+        Success(this)
+      case None =>
+        Failure(new Exception(s"Height of a modifier with id $to not found"))
+    }
 }
 
 object ErgoWallet {
-
-  def readOrGenerate(settings: ErgoSettings)
-                    (implicit actorSystem: ActorSystem): ErgoWallet =
-    new ErgoWallet(settings)
-
+  def readOrGenerate(historyReader: ErgoHistoryReader,
+                     settings: ErgoSettings)(implicit actorSystem: ActorSystem): ErgoWallet = {
+    new ErgoWallet(historyReader, settings)
+  }
 }

@@ -13,94 +13,77 @@
  \knote{I disagree, but you are free to propose an alternative text. Also, what was discussed in the "Systematic
  approach..." paper that is a fee structure, not usefulness of a token.}
 
- In this section, we are going to provide some reflections on the nature of the native Ergo token. For starters, we note that
- any currency is about three main functions: a medium of exchange, a unit of account, and a store of value.
+ In this section, we provide some reflections on the nature of the native Ergo token. For starters, we note that
+ any currency has three main functions: a medium of exchange, a unit of account, and a store of value.
 
- Bitcoin, being historically the first digital scarce asset, is perfect as store-of-value. It is even better than
- gold under certain assumptions~(such as SHA-256 hash function not being broken, and majority of miners are not willing
- to destroy the Bitcoin), as emission is limited and known in advance. However, being perfect store-of-value also means
- to be not so good as medium-of-exchange. In particular, if one knows that Bitcoin is indeed the best tool to store
- value in the long term, he would use fiat whenever possible in order to collect more bitcoins.
+ Bitcoin, being historically the first digitally scarce asset, is perfect as store-of-value. It is even better than gold under certain assumptions~(such as the SHA-256 hash function not being broken, and a majority of miners not willing to destroy Bitcoin), as emission is limited and known in advance. However, being the perfect store-of-value also means that it is not so good as medium-of-exchange. In particular, if one knows that Bitcoin is indeed the best tool to store value in the long term, he would use fiat whenever possible to collect more bitcoins.
 
  On the other hand, Ethereum is not just a currency, but a utility token used to pay for computations over the
- "decentralized world computer" (or "fully replicated programmable calculator"). However, Ethereum is not good as
- store-of-value, as emission in endless, and, historically, can be changed easily by the community core along with
- critical system assumptions.
+``decentralized world computer'' (or ``fully replicated programmable calculator''). However, Ethereum is not good as
+ store-of-value, as emission is endless, and, historically, can be changed easily by the community along with critical system parameters.
 
- Ergo combines best from these two top blockchains. Emission is predefined and limited, more, it will be finished within
- just ten years. The system assumptions are set in stone with precisely defined {\em social contract}~\ref{sec:social}. Also,
- Ergo is a utility token used to pay for storage rent. This storage rent is making the system more stable. Last, Ergo is
- suitable to build monetary systems on top of it with properties different from Ergo native token itself. However,
- participating in such systems would require to use Ergo native token as well in order to pay for storage rent.
+ Ergo combines best from these two top blockchains. Emission is predefined and limited. Furthermore, it will be finished within
+ just ten years. The system assumptions are set in stone with a precisely defined {\em social contract}~\ref{sec:social}. Also,
+ Ergo is a utility token used to pay storage rent. This storage rent makes the system more stable. Lastly, Ergo is suitable for building monetary systems on top of it with properties different from the Ergo native token itself. However, participating in such systems would require using the Ergo native token as well in order to pay storage rent.
 
 
 \subsection{Currency And Emission}
 \label{sec:currency}
 
-The native currency of \Ergo{} platform is \Erg{} token, which unique property is
-that it is the only currency to pay for storage rent in \Ergo{}~(see Section~\ref{sec:survivability} for more details).
-One \Erg{} token is divisible to up to $10^9$ smallest units, \nanoErg{}s.
+The native currency of \Ergo{} platform is the \Erg{} token, whose unique property is
+that it is the only currency for paying storage rent in \Ergo{}~(see Section~\ref{sec:survivability} for more details).
+One \Erg{} is divisible to up to $10^9$ smaller units, called \nanoErg{}s.
 
-All \Erg{} tokens that will ever circulate in the system are presented in
+All \Erg{} tokens that will ever circulate in the system are present in
 the initial state and are divided into 3 parts~(boxes):
 
 \knote{no any notion of a box was introduced before, the introduction is sudden}
 \dnote{I propose to add section about Ergo state before this one and introduce box notion in it}
 
 \begin{itemize}
-    \item{\em No premine proof.} This box contains exactly one~\Erg{} and is protected by the script
-    that is preventing it from spending by anyone.
-    Thus, it is a long-lived box that will stay in the system until storage-rent component
+    \item{\em No premine proof.} This box contains exactly one~\Erg{} and is protected by a script that prevents it from being spent by anyone.
+    Thus, it is a long-lived box that will stay in the system until the storage-rent component
     destroys it.
     Its main purpose is to prove that \Ergo{} mining was not started privately by anyone before
     the declared launch date.
-    To achieve this, additional registers of this box contains latest titles from media (The Guardian, Vedomosti, Xinhua)
-    as well as latest block identifiers from Bitcoin and Ethereum.
-    Thus, \Ergo{} mining could not be started before certain events in the real world and the
-    cryptocurrency space.
+    To achieve this, additional registers of this box contain latest headlines from the media (The Guardian, Vedomosti, Xinhua), as well as the latest block identifiers from Bitcoin and Ethereum.
+    Thus, \Ergo{} mining could not have started before certain events in the real world and the cryptocurrency space.
 
-    \item{\em Treasury.} This box contain 4,330,791.5 \Erg{} that will be used to fund \Ergo{}
+    \item{\em Treasury.} This box contains 4,330,791.5 \Erg{} that will be used to fund \Ergo{}
     development.
     Its protecting script~\cite{link to corresponding ergo tree} consists of two parts.
 
     First, it ensures that only a predefined portion of the box value is unlocked.
-    During blocks 1-525,599 (2 years) 7.5 \Erg{} will be released every block,
-    during blocks 525,600-590,399 (3 months) 4.5 \Erg{} will be released every block, and finally,
+    During blocks 1-525,599 (2 years) 7.5 \Erg{} will be released every block. Then during blocks 525,600-590,399 (3 months) 4.5 \Erg{} will be released every block. Finally, 
     during blocks 590,400-655,199 (3 months) 1.5 \Erg{} will be released every block.
     This rule ensures the presence of funds for \Ergo{} development for at least 2.5 years and, at any moment of time,
     rewards do not exceed 10\% of the total number of coins in circulation.
 
     Second, it has custom protection from unexpected spending.
-    Initially, it requires that spending transaction should be signed by at least 2 of 3 secret keys
-    that are under control of initial team members. When they spend the box, they are free to
+    Initially, it requires the spending transaction to be signed by at least 2 of 3 secret keys that are under control of the initial team members. When they spend the box, they are free to
     change this part of the script as they wish, for example by adding new members to protect foundation
     funds.
 
-    During the first year, these funds are going to be used to cover pre-issued EFYT token~\cite{our website with swap },
-    after that they will be distributed in a decentralized manner via a community voting system that is under development.
+    During the first year, these funds will be used to cover the pre-issued EFYT token~\cite{our website with swap }. After that they will be distributed in a decentralized manner via a community voting system that is under development.
 
 
     \item{\em Miners reward.} This box contains 93,409,132 \Erg{} that will be collected by block miners
-    as rewards for their work.
-    Its protecting script~\cite{link to corresponding ergo tree} requires that spending transaction
-    should have exactly two outputs with the following properties:
+    as reward for their work.
+    Its protecting script~\cite{link to corresponding ergo tree} requires the spending transaction to have exactly two outputs with the following properties:
 
     \begin{itemize}
-    \item{} the first output should be protected by the same script and number of \Erg{} in it should
+    \item{} The first output should be protected by the same script and the number of \Erg{} in it should
     equal to the remaining miners' reward.
-    During blocks 1 - 525,599 (2 years) miner will be able to collect 67.5 \Erg{} from this box,
-    during blocks 525,600 - 590,399 (3 month) miner will be able to collect 66 \Erg{} and after
-    that block reward will be reduced by 3 \Erg{} every 64,800 blocks (3 months) until it reaches zero
-    at block 2,080,799.
+    During blocks 1 - 525,599 (2 years), a miner will be able to collect 67.5 \Erg{} from this box. During blocks 525,600 - 590,399 (3 month), a miner will be able to collect 66 \Erg{}, and after that, the block reward will be reduced by 3 \Erg{} every 64,800 blocks (3 months) until it reaches zero at block 2,080,799.
 
-    \item{} the second output should contain the remaining coins and should be protected by the following condition:
+    \item{} The second output should contain the remaining coins and should be protected by the following condition:
     it can be spent by a miner that solved the block's PoW puzzle and not earlier than 720 blocks after the current block.
     % These restrictions are done to prevent mining pools formation, see~\ref{sec:autolykos} for more details.
     \end{itemize}
 
 \end{itemize}
 
-All these rules results in the following curve of the number of coins in circulation with time:
+All these rules results in the following curve denoting the number of coins in circulation with time:
 
 \begin{figure}[H]
     \centering

@@ -12,11 +12,13 @@ import scorex.util.Extensions._
 
 import scala.util.Try
 import Extension.SystemParametersPrefix
+import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
 
 /**
   * System parameters which could be readjusted via collective miners decision.
   */
-class Parameters(val height: Height, val parametersTable: Map[Byte, Int]) {
+class Parameters(val height: Height, val parametersTable: Map[Byte, Int])
+  extends ErgoLikeParameters {
 
   import Parameters._
 

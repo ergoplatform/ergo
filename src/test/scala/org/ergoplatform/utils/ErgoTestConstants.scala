@@ -5,11 +5,12 @@ import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.ExtensionCandidate
-import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants}
-import org.ergoplatform.nodeView.wallet.ErgoProvingInterpreter
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
+import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
+import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.{DataInput, ErgoBox, ErgoScriptPredef}
 import scorex.core.app.Version
 import scorex.core.network.PeerSpec
@@ -38,24 +39,28 @@ trait ErgoTestConstants extends ScorexLogging {
   val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
   val feeProp: ErgoTree = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
 
-
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
+  val defaultSeed: Array[Byte] = Mnemonic.toSeed(settings.walletSettings.testMnemonic.get)
+  val defaultRootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(defaultSeed)
+  val defaultChildSecrets: IndexedSeq[ExtendedSecretKey] = settings.walletSettings.testKeysQty
+    .toIndexedSeq
+    .flatMap(x => (0 until x).map(defaultRootSecret.child))
   val genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(settings.chainSettings)
   val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(settings.chainSettings).head
-  val defaultSeed: String = ErgoSettings.read(None).walletSettings.seed
-  val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(defaultSeed, 2, parameters)
+  val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(
+    (defaultRootSecret +: defaultChildSecrets).map(_.key), parameters)
   val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
   val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
   val defaultMinerPkPoint: EcPointType = defaultMinerPk.h
 
   val defaultTimestamp: Long = 1552217190000L
-  val defaultnBits: Long = settings.chainSettings.initialNBits
+  val defaultNBits: Long = settings.chainSettings.initialNBits
   val defaultVotes: Array[Byte] = Array.fill(3)(0.toByte)
   val defaultVersion: Byte = 0
   lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
   val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(genesisStateDigest, settings)
-    .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultnBits, defaultVotes, defaultVersion)
+    .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, defaultVersion)
 
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest

@@ -6,7 +6,7 @@ import com.google.common.primitives.Ints
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
@@ -25,7 +25,7 @@ final class WalletStorage(store: Store, settings: ErgoSettings)
     val updatedKeys = (readTrackedAddresses ++ addresses).toSet
     val toInsert = Ints.toByteArray(updatedKeys.size) ++ updatedKeys
       .foldLeft(Array.empty[Byte]) { case (acc, address) =>
-        val bytes = addressEncoder.toString(address).getBytes("UTF-8")
+        val bytes = addressEncoder.toString(address).getBytes(Constants.StringEncoding)
         acc ++ Ints.toByteArray(bytes.length) ++ bytes
       }
     store.update(randomVersion, Seq.empty, Seq(TrackedAddressesKey -> ByteArrayWrapper(toInsert)))
@@ -40,7 +40,7 @@ final class WalletStorage(store: Store, settings: ErgoSettings)
       val qty = Ints.fromByteArray(r.data.take(4))
       (0 until qty).foldLeft(Seq.empty[ErgoAddress], r.data.drop(4)) { case ((acc, bytes), _) =>
         val length = Ints.fromByteArray(bytes.take(4))
-        val addressTry = addressEncoder.fromString(new String(bytes.slice(4, 4 + length), "UTF-8"))
+        val addressTry = addressEncoder.fromString(new String(bytes.slice(4, 4 + length), Constants.StringEncoding))
         addressTry.map(acc :+ _).getOrElse(acc) -> bytes.drop(4 + length)
       }._1
     }

@@ -1,86 +1,57 @@
 \section{Resiliency and Survivability}
 \label{sec:survivability}
 
-Being a platform for contractual money, Ergo should also support long-term contracts for a
-period of a person's life.
-At the same time, even young existing smart contract platforms are experiencing issues with performance degradation and
-adaptability to external conditions.
-This leads to a situation where a cryptocurrency depends on a small group of developers
-that should provide a fixing hard-fork, or the cryptocurrency won't survive.
+Being a platform for contractual money, Ergo should also support long-term contracts for a period of at least an average person's lifetime.
+However, even young existing smart contract platforms are experiencing issues with performance degradation and adaptability to external conditions.
+This leads to a situation where the cryptocurrency depends on a small group of developers to provide a fixing hard-fork, or the cryptocurrency won't survive~\cite{???}.
 
-The first common survivability issue is that in pursuit of popularity blockchain developers implement ad-hoc
-solutions without proper preliminary research and testing.
-Such solutions inevitably lead to bugs, hasty bug fixes, fixes of bug fixes and so on, making the network even less secure~(e.g.~\cite{IOTA}).
-Ergo approach here is to use stable well-tested solutions, even if that leads to slower
-short-term innovations.
-Most of Ergo solutions are formalized in papers presented at peer-reviewed conferences
-and have been widely discussed in the community.
+The first common survivability issue is that in pursuit of popularity, developers tend to implement ad-hoc solutions without proper preliminary research and testing.
+Such solutions inevitably lead to bugs, which then lead to hasty bug fixes, then to fixes of those bug fixes, and so on, making the network unreliable and even less secure. \snote{Give some examples of hasty bug fixes.}
 
-A second problem decentralization and thus survivability faces is lack of secure trustless light clients.
-Ergo is trying to fix known problems of blockchain technology without creating new problems.
-As far as Ergo is a PoW blockchain, it easily allows extracting a small header from the block content.
-Header alone allows for validation of the work done on it, while headers-chain is enough for best chain selection
-and synchronization with the network.
-Headers-chain is much smaller than the full blockchain, however, it is still growing linearly with time.
-Hopefully, modern research of light clients~\cite{kiayias2017non,luuflyclient} provide a way to
-synchronize with the network by downloading even smaller amount of data, unlocking the ability to
-use the network without any trust from low-end hardware like mobile phones.
-Also, Ergo uses authenticated state~\ref{sec:utxo} and for transactions included
-a client may download a proof of their correctness.
+Ergo's approach here is to use stable well-tested solutions, even if they lead to slower short-term innovations.
+Most of the solutions used in Ergo are formalized in papers presented at peer-reviewed conferences and have been widely discussed in the community.
+ \snote{Give some references to papers and discussions.}
+
+A second problem that decentralization (and thus survivability) faces is the lack of secure trustless light clients. Ergo tries to fix this problem of blockchain technology without creating new problems. Since Ergo is a PoW blockchain, it easily allows extraction of a small header from the block content.
+This header alone allows for validation of the work done on it and a headers-chain is enough for best chain selection and synchronization with the network.
+A headers-chain, although much smaller than the full blockchain, still grows linearly with time.
+Recent research on light clients provides a way for light clients to synchronize with the network by downloading even smaller amount of data, thereby unlocking the ability to join the network using untrusted low-end hardware such as mobile phones~\cite{kiayias2017non,luuflyclient}.
+Ergo uses an authenticated state~\ref{sec:utxo} and for transactions included in a block, a client may download a proof of their correctness.
 Thus, regardless of the blockchain size a regular user with
 a mobile phone can join the network and start using Ergo with the same security
 guarantees as a full node.
 
-Readers may see a third potential problem in that although support of light clients
-solves problems of Ergo users, it does not solve problems
-of Ergo miners that still should keep the whole state for efficient
-transaction validation.
-In existing blockchain systems, users can put arbitrary data to this state forever,
-creating a lot of dust in it and increasing its size over time~\cite{perez2019another}.
-Big state size leads to serious security issues when the state does not fit in random-access memory,
-an adversary may generate transactions which validation become very slow due to required random
-access to miners storage
-leading to DoS attack like an attack to the Ethereum network in 2016~\cite{??}.
-Moreover the community`s fear of these attacks and the problem of ``state bloat'' without any sort of
-compensation to miners and users holding the state may have prevented scaling solutions that otherwise
-could have been implemented such as somewhat larger block sizes for example.
+Readers may notice a third potential problem in that although support for light clients solves the problem for Ergo users, it does not solve the problem for Ergo miners, who still need to keep the whole state for efficient transaction validation.
+In existing blockchain systems, users can put arbitrary data into this state. This data, which lasts forever, creates a lot of dust and its size increases monotonously over time~\cite{perez2019another}.
+A large state size leads to serious security issues, because when the state does not fit in random-access memory, an adversary can generate transactions whose validation become very slow due to required random access to the miner's storage. This can lead to DoS attacks such as the one on Ethereum in 2016~\cite{??}.
+Moreover the community's fear of such attacks along with the problem of ``state bloat'' without any sort of compensation to miners or users holding the state has prevented scaling solutions that otherwise
+could have been implemented (such as larger block sizes, for example).
 To prevent this, Ergo has a storage rent component: if an
 output remains in the state for 4 years without being moved, a miner may charge a small fee for every
 byte kept in the state.
-This idea is similar to regular cloud storage services however, it was only proposed quite recently for
-cryptocurrencies~\cite{chepurnoy2017space} and has several important consequences.
-First, Ergo mining will always be stable, unlike Bitcoin and other PoW currencies,
-in which mining may become unstable after emission done~\cite{carlsten2016instability}.
-Second, state size growth becomes controllable and predictable reducing hardware requirements for Ergo miners.
-Third, by collecting storage fees from outdated boxes, miners return coins to circulation preventing a steady decrease
-of circulating supply due to lost keys~\cite{wsj2018}.
-All these effects should support Ergo long-term survivability, both technically and economically.
 
-A fourth vital challenge to survivability is that the environment changes, so the network should
-adapt to ever changing hardware infrastructure, ideas that may improve security or
-scalability emerge over time, use-cases evolution, and so on.
+This idea, which is similar to regular cloud storage services, was only proposed quite recently for cryptocurrencies~\cite{chepurnoy2017space} and has several important consequences.
+Firstly, it ensures that Ergo mining will always be stable, unlike Bitcoin and other PoW currencies, where mining may become unstable after emission is done~\cite{carlsten2016instability}.
+Secondly, growth of the state's size becomes controllable and predictable, thereby reducing hardware requirements for Ergo miners.
+Thirdly, by collecting storage fees from outdated boxes, miners can return coins to circulation, and thus, prevent the steady decrease of circulating supply due to lost keys~\cite{wsj2018}. 
+All these effects should support Ergo's long-term survivability, both technically and economically.
+
+A fourth vital challenge to survivability is that of environment changes. A protocol should  adapt to the ever changing hardware infrastructure, new ideas to improve security or
+scalability that emerge over time, evolution of use-cases, and so on.
 If all the rules are fixed without any ability to change them in a decentralized manner, even
-simple constant change may lead to hot debates and community splits, e.g., discussion of a block
-size limit in Bitcoin led to the network split into several independent coins.
+a simple constant change can lead to heated debates and community splits. For instance,  discussion of the block-size limit in Bitcoin led to its splitting into several independent coins.
 In contrast, Ergo protocol is self-amendable and is able to adapt to the changing environment.
-In Ergo, parameters like block size can be changed on-the-fly via miners voting.
-At the beginning of a 1024-blocks voting epoch a miner is proposing changes~(up to 2 parameters,
-e.g., to increase block size and to decrease storage fee factor) and during the rest of the epoch miners
-vote to whether approve the changes or not.
-If the majority of votes within an epoch are supporting a change, a new value of
-the parameter should be written into the extension section of the first block of the next epoch, and
-the network starts to use this updated parameter value during block mining and validation.
+In Ergo, parameters like block size can be changed on-the-fly via voting of miners.
+At the beginning of each 1024-block voting epoch, a miner proposes changes of up to 2 parameters (such as an increase of block size and a decrease of storage fee factor). During the rest the epoch, miners vote to approve or reject the changes.
+If a majority of votes within the epoch support the change, the new values are written into the extension section of the first block of the next epoch, and
+the network starts using the updated values for block mining and validation.
 
-To absorb more fundamental changes, Ergo is following the approach of soft-forkability that
-allows to change protocol significantly with keeping old nodes operating.
-At the beginning of an epoch, a miner can also propose to vote for a fundamental change~(e.g., to add a new instruction to ErgoScript), describing affected validation rules.
-Voting for such breaking changes continues for 32,768 blocks and requires for at least $90\%$ of
-"Yes" votes to be accepted.
-Once being accepted, 32,768 blocks long activation period starts to give outdated
-nodes time to update their software version.
-If a node software is still not updated after the activation period, then it skips the specified checks, but continues
-to validate all the known rules.
+To absorb more fundamental changes, Ergo follows the approach of {\em soft-forkability} that
+allows changing protocol significantly while keeping old nodes operational.
+At the beginning of an epoch, a miner can also propose to vote for a more fundamental change~(e.g., adding a new instruction to ErgoScript) describing affected validation rules.
+Voting for such breaking changes continues for 32,768 blocks and requires at least $90\%$ of
+``Yes'' votes to be accepted. Once being accepted, a 32,768-blocks long activation period starts to give outdated nodes time to update their software version.
+If a node software is still not updated after the activation period, then it skips the specified checks, but continues to validate all the known rules.
 List of previous soft-fork changes is recorded into the extension to allow light nodes of
-any software version to join the network and catch up current validation rules.
-Combination of soft-forkability with the voting protocol allows to change almost all the parameters of the network,
-except of the the PoW rules that are responsible for the voting itself.
+any software version to join the network and catch up to the current validation rules.
+A combination of soft-forkability with the voting protocol allows changing of almost all the parameters of the network except the PoW rules that are responsible for the voting itself.

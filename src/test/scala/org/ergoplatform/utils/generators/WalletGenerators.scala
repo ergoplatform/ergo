@@ -1,19 +1,21 @@
 package org.ergoplatform.utils.generators
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.IdUtils.encodedId
-import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
+import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedId}
+import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlock, RegistryIndex}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
-import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
+import org.ergoplatform._
 import org.scalacheck.Gen
-import scorex.crypto.hash.Digest32
+import scorex.util.{ModifierId, idToBytes}
 
 trait WalletGenerators extends ErgoTransactionGenerators {
 
   private val ergoSettings = ErgoSettings.read(None)
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
+
+  def trackedAddressGen: Gen[ErgoAddress] = proveDlogGen.map(P2PKAddress.apply)
 
   def trackedBoxGen: Gen[TrackedBox] = {
     Gen.oneOf(
@@ -105,6 +107,23 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       RegistryIndex(height, amount, encodedBalances, uncertain.map(encodedId))
     }
   }
+
+  def postponedBlockGen: Gen[PostponedBlock] = for {
+    height <- Gen.posNum[Int]
+    id <- modifierIdGen
+    inputs <- Gen.listOf(inputsWithTxGen)
+    outputs <- Gen.listOf(outputsWithTxGen)
+  } yield PostponedBlock(id, height, inputs, outputs)
+
+  private def inputsWithTxGen: Gen[(ModifierId, EncodedBoxId)] = for {
+    txId <- modifierIdGen
+    id <- modifierIdGen
+  } yield txId -> encodedId(idToBytes(id))
+
+  private def outputsWithTxGen: Gen[(ModifierId, ErgoBox)] = for {
+    txId <- modifierIdGen
+    box <- ergoBoxGen
+  } yield txId -> box
 
   private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)
 

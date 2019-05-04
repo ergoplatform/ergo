@@ -4,7 +4,6 @@ import java.io.File
 import java.util
 
 import akka.actor.Actor
-import io.iohk.iodb.LSMStore
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -45,21 +44,13 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private var secretStorageOpt: Option[JsonSecretStorage] = None
 
+  private var offChainRegistry: OffChainRegistry = OffChainRegistry.empty(height)
+
   private val walletSettings: WalletSettings = settings.walletSettings
 
-  private val storage: WalletStorage = {
-    val dir = new File(s"${settings.directory}/wallet/storage")
-    dir.mkdirs()
-    new WalletStorage(new LSMStore(dir), settings)
-  }
+  private val storage: WalletStorage = WalletStorage.readOrCreate(settings)
 
-  private val registry: WalletRegistry = {
-    val dir = new File(s"${settings.directory}/wallet/registry")
-    dir.mkdirs()
-    new WalletRegistry(new LSMStore(dir))
-  }
-
-  private var offChainRegistry: OffChainRegistry = OffChainRegistry.empty(height)
+  private val registry: WalletRegistry = WalletRegistry.readOrCreate(settings)
 
   private val parameters: Parameters = LaunchParameters
 
@@ -100,9 +91,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case ScanOffChain(tx) =>
       val outputs = extractOutputs(tx)
       val inputs = extractInputs(tx)
-      val (resolved, _) = outputs
+      val resolved = outputs
         .filterNot(o => inputs.contains(encodedId(o.id)))
-        .partition(resolve)
+        .filter(resolve)
       val resolvedTrackedBoxes = resolved.map { bx =>
         TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain)
       }
@@ -227,6 +218,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   //we currently do not use off-chain boxes to create a transaction
   private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onChain
 
+  /**
+    * Tries to prove given box in order to define whether it could be spent by this wallet.
+    */
   private def resolve(box: ErgoBox): Boolean = {
     val testingTx = UnsignedErgoLikeTransaction(
       IndexedSeq(new UnsignedInput(box.id)),
@@ -239,11 +233,17 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined
   }
 
+  /**
+    * Extracts all outputs which contain tracked bytes from the given transaction.
+    */
   private def extractOutputs(tx: ErgoTransaction): Seq[ErgoBox] = {
     val trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.contentBytes)
     tx.outputs.filter(bx => trackedBytes.exists(t => bx.propositionBytes.containsSlice(t)))
   }
 
+  /**
+    * Extracts all inputs from the given transaction.
+    */
   private def extractInputs(tx: ErgoTransaction): Seq[EncodedBoxId] = tx.inputs.map(x => encodedId(x.boxId))
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
@@ -271,6 +271,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     }
   }
 
+  /**
+    * Generates new transaction according to a given requests using available boxes.
+    */
   private def generateTransactionWithOutputs(requests: Seq[TransactionRequest]): Try[ErgoTransaction] =
     proverOpt match {
       case Some(prover) =>
@@ -326,6 +329,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         Failure(new Exception("Wallet is locked"))
     }
 
+  /**
+    * Updates indexes according to a given wallet-critical data.
+    */
   private def processBlock(id: ModifierId,
                            height: Int,
                            inputs: Seq[(ModifierId, EncodedBoxId)],

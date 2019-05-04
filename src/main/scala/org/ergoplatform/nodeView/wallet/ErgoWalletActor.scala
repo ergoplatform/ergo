@@ -110,7 +110,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       if (outputs.nonEmpty || inputs.nonEmpty) {
         if (proverOpt.isDefined) {
           processBlock(block.id, block.height, inputs, outputs)
-        } else {
+        } else if (walletSettings.postponedScanning) {
           // save wallet-critical data from block to process it later.
           val postponedBlock = PostponedBlock(block.id, block.height, inputs, outputs)
           storage.putBlock(postponedBlock)
@@ -348,8 +348,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
     }
 
-    registry.updateOnBlock(
-      resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs.map(_._2))(id, height)
+    registry.updateOnBlock(resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs)(id, height)
 
     val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedId(x.box.id))
     offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainBoxes, newOnChainIds)

@@ -39,7 +39,7 @@ final case class OffChainRegistry(height: Int,
   }
 
   /**
-    * Update balances snapshot accordingly to a new block applied.
+    * Update balances snapshot according to a new block applied.
     */
   def updateOnBlock(newHeight: Int,
                     allCertainBoxes: Seq[TrackedBox],

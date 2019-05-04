@@ -3,7 +3,8 @@ package org.ergoplatform.nodeView.wallet.persistence
 import java.io.File
 
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA.RegistryOp
+import org.ergoplatform.settings.{ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
@@ -16,10 +17,12 @@ import scala.util.Try
   * Provides an access to version-sensitive wallet-specific indexes.
   * (Such as UTXO's, balances)
   */
-final class WalletRegistry(store: Store) extends ScorexLogging {
+final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLogging {
 
   import RegistryOps._
   import org.ergoplatform.nodeView.wallet.IdUtils._
+
+  private val keepHistory = ws.keepHistory
 
   def readIndex: RegistryIndex =
     getIndex.transact(store)
@@ -43,12 +46,15 @@ final class WalletRegistry(store: Store) extends ScorexLogging {
     query.transact(store)
   }
 
-  def updateOnBlock(certainBxs: Seq[TrackedBox], uncertainBxs: Seq[TrackedBox], inputs: Seq[EncodedBoxId])
+  def updateOnBlock(certainBxs: Seq[TrackedBox], uncertainBxs: Seq[TrackedBox],
+                    inputs: Seq[(ModifierId, EncodedBoxId)])
                    (blockId: ModifierId, blockHeight: Int): Unit = {
     val update = for {
       _ <- putBoxes(certainBxs ++ uncertainBxs)
-      spentBoxes <- getAllBoxes.map(_.filter(x => inputs.contains(encodedId(x.box.id))))
+      spentBoxesWithTx <- getAllBoxes.map(_.flatMap(bx =>
+        inputs.find(_._2 == encodedId(bx.box.id)).map { case (txId, _) => txId -> bx }))
       _ <- updateIndex { case RegistryIndex(_, balance, tokensBalance, _) =>
+        val spentBoxes = spentBoxesWithTx.map(_._2)
         val spentAmt = spentBoxes.map(_.box.value).sum
         val spentTokensAmt = spentBoxes
           .flatMap(_.box.additionalTokens)
@@ -74,7 +80,7 @@ final class WalletRegistry(store: Store) extends ScorexLogging {
         val uncertain = uncertainBxs.map(x => encodedId(x.box.id))
         RegistryIndex(blockHeight, newBalance, newTokensBalance, uncertain)
       }
-      _ <- removeBoxes(spentBoxes.map(_.box.id))
+      _ <- processHistoricalBoxes(spentBoxesWithTx, blockHeight)
     } yield ()
 
     update.transact(store, idToBytes(blockId))
@@ -83,6 +89,23 @@ final class WalletRegistry(store: Store) extends ScorexLogging {
   def rollback(version: VersionTag): Try[Unit] =
     Try(store.rollback(ByteArrayWrapper(Base16.decode(version).get)))
 
+  /**
+    * Transits used boxes to spent state or simply deletes them depending on settings.
+    */
+  private def processHistoricalBoxes(spentBoxes: Seq[(ModifierId, TrackedBox)],
+                                     spendingHeight: Int): RegistryOp[Unit] = {
+    if (keepHistory) {
+      updateBoxes(spentBoxes.map(_._2.box.id)) { tb =>
+        val spendingTxIdOpt = spentBoxes
+          .find { case (_, x) => encodedId(x.box.id) == encodedId(tb.box.id) }
+          .map(_._1)
+        tb.copy(spendingHeightOpt = Some(spendingHeight), spendingTxIdOpt = spendingTxIdOpt)
+      }
+    } else {
+      removeBoxes(spentBoxes.map(_._2.box.id))
+    }
+  }
+
 }
 
 object WalletRegistry {
@@ -90,7 +113,7 @@ object WalletRegistry {
   def readOrCreate(settings: ErgoSettings): WalletRegistry = {
     val dir = new File(s"${settings.directory}/wallet/registry")
     dir.mkdirs()
-    new WalletRegistry(new LSMStore(dir))
+    new WalletRegistry(new LSMStore(dir))(settings.walletSettings)
   }
 
 }

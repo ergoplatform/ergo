@@ -67,13 +67,13 @@ object RegistryOps {
   def removeBoxes(ids: Seq[BoxId]): RegistryOp[Unit] =
     liftF[RegistryOpA, Unit](RemoveBoxes(ids))
 
-  def updateBox(id: BoxId, updateF: TrackedBox => TrackedBox): RegistryOp[Unit] =
+  def updateBox(id: BoxId)(updateF: TrackedBox => TrackedBox): RegistryOp[Unit] =
     getBox(id).flatMap { _
       .map(v => putBox(updateF(v)))
       .getOrElse(Free.pure(()))
     }
 
-  def updateBoxes(ids: Seq[BoxId], updateF: TrackedBox => TrackedBox): RegistryOp[Unit] =
+  def updateBoxes(ids: Seq[BoxId])(updateF: TrackedBox => TrackedBox): RegistryOp[Unit] =
     getBoxes(ids).map { _
       .map { _
         .map(v => putBox(updateF(v)))

@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.wallet.boxes.TrackedBox
 
 /**
@@ -60,7 +61,7 @@ final case class OffChainRegistry(height: Int,
 
 object OffChainRegistry {
 
-  def empty(height: Int): OffChainRegistry =
-    OffChainRegistry(height, Seq.empty, Seq.empty)
+  def empty: OffChainRegistry =
+    OffChainRegistry(ErgoHistory.EmptyHistoryHeight, Seq.empty, Seq.empty)
 
 }

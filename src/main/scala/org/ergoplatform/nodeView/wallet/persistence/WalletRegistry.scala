@@ -1,6 +1,9 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import io.iohk.iodb.{ByteArrayWrapper, Store}
+import java.io.File
+
+import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.wallet.boxes.TrackedBox
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
@@ -79,5 +82,15 @@ final class WalletRegistry(store: Store) extends ScorexLogging {
 
   def rollback(version: VersionTag): Try[Unit] =
     Try(store.rollback(ByteArrayWrapper(Base16.decode(version).get)))
+
+}
+
+object WalletRegistry {
+
+  def readOrCreate(settings: ErgoSettings): WalletRegistry = {
+    val dir = new File(s"${settings.directory}/wallet/registry")
+    dir.mkdirs()
+    new WalletRegistry(new LSMStore(dir))
+  }
 
 }

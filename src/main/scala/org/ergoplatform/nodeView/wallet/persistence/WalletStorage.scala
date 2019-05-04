@@ -1,7 +1,9 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
+import java.io.File
+
 import com.google.common.primitives.Ints
-import io.iohk.iodb.{ByteArrayWrapper, Store}
+import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.settings.ErgoSettings
@@ -102,5 +104,12 @@ object WalletStorage {
 
   def key(height: Int): ByteArrayWrapper =
     ByteArrayWrapper(Blake2b256.hash(Ints.toByteArray(height)))
+
+  def readOrCreate(settings: ErgoSettings)
+                  (implicit addressEncoder: ErgoAddressEncoder): WalletStorage = {
+    val dir = new File(s"${settings.directory}/wallet/storage")
+    dir.mkdirs()
+    new WalletStorage(new LSMStore(dir), settings)
+  }
 
 }

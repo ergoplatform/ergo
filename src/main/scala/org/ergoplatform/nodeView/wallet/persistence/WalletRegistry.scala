@@ -33,7 +33,9 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
       index <- getIndex
     } yield {
       val uncertainIds = index.uncertainBoxes
-      allBoxes.filterNot(b => uncertainIds.contains(encodedId(b.box.id)))
+      allBoxes.filterNot(b =>
+        uncertainIds.contains(encodedId(b.box.id)) || b.spendingHeightOpt.isDefined
+      )
     }
     query.transact(store)
   }
@@ -41,11 +43,14 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
   def readUncertainBoxes: Seq[TrackedBox] = {
     val query = for {
       index <- getIndex
-      uncertainBoxes <- getBoxes(ADKey @@ index.uncertainBoxes.map(decodedId))
+      uncertainBoxes <- getBoxes(index.uncertainBoxes.map(id => ADKey @@ decodedId(id)))
     } yield uncertainBoxes.flatten
     query.transact(store)
   }
 
+  /**
+    * Updates indexes according to a data extracted from block and performs versioned update.
+    */
   def updateOnBlock(certainBxs: Seq[TrackedBox], uncertainBxs: Seq[TrackedBox],
                     inputs: Seq[(ModifierId, EncodedBoxId)])
                    (blockId: ModifierId, blockHeight: Int): Unit = {

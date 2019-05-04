@@ -24,6 +24,4 @@ class OffChainRegistrySpec
     }
   }
 
-  it should ""
-
 }

@@ -55,7 +55,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private val parameters: Parameters = LaunchParameters
 
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
-  // to the wallet (by executing testing transactions against them). The state context is being updating by listening
+  // to the wallet (by executing testing transactions against them). The state context is being updated by listening
   // to state updates.
   private def stateContext: ErgoStateContext = storage.readStateContext
 
@@ -215,8 +215,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def trackedAddresses: Seq[ErgoAddress] = storage.readTrackedAddresses
 
-  //we currently do not use off-chain boxes to create a transaction
-  private def filterFn(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onChain
+  private def onChainFilter(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onChain
 
   /**
     * Tries to prove given box in order to define whether it could be spent by this wallet.
@@ -301,7 +300,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
             }
 
           boxSelector.select(
-            registry.readCertainBoxes.toIterator, filterFn, targetBalance, targetAssets).map { r =>
+            registry.readCertainBoxes.toIterator, onChainFilter, targetBalance, targetAssets).map { r =>
             val inputs = r.boxes.toIndexedSeq
 
             val changeAddress = prover.pubKeys(Random.nextInt(prover.pubKeys.size))
@@ -357,7 +356,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def inputsFor(targetAmount: Long,
                         targetAssets: Map[ModifierId, Long] = Map.empty): Seq[ErgoBox] =
     boxSelector
-      .select(registry.readCertainBoxes.toIterator, filterFn, targetAmount, targetAssets)
+      .select(registry.readCertainBoxes.toIterator, onChainFilter, targetAmount, targetAssets)
       .toSeq
       .flatMap(_.boxes)
 

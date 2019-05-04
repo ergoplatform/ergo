@@ -44,7 +44,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private var secretStorageOpt: Option[JsonSecretStorage] = None
 
-  private var offChainRegistry: OffChainRegistry = OffChainRegistry.empty(height)
+  private var offChainRegistry: OffChainRegistry = OffChainRegistry.empty
 
   private val walletSettings: WalletSettings = settings.walletSettings
 

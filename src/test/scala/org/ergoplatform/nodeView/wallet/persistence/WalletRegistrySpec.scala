@@ -24,7 +24,7 @@ class WalletRegistrySpec
       val certainBox = box.copy(certainty = Certain)
       val store = createStore
       putBox(certainBox).transact(store)
-      val registry = new WalletRegistry(store)
+      val registry = new WalletRegistry(store)(settings.walletSettings)
 
       registry.readCertainBoxes shouldBe Seq(certainBox)
     }
@@ -36,7 +36,7 @@ class WalletRegistrySpec
       val index = RegistryIndex(0, 0, Map.empty, Seq(encodedId(uncertainBox.box.id)))
       val store = createStore
       putBox(uncertainBox).flatMap(_ => putIndex(index)).transact(store)
-      val registry = new WalletRegistry(store)
+      val registry = new WalletRegistry(store)(settings.walletSettings)
 
       registry.readUncertainBoxes shouldBe Seq(uncertainBox)
     }

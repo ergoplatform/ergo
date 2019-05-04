@@ -12,7 +12,7 @@ import scorex.crypto.hash.Blake2b256
 import scala.util.Random
 
 /**
-  * Persists wallet actor's mutable state.
+  * Persists version-agnostic wallet actor's mutable state.
   */
 final class WalletStorage(store: Store, settings: ErgoSettings)
                          (implicit val addressEncoder: ErgoAddressEncoder) {

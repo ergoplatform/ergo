@@ -32,7 +32,7 @@ One-time immutable objects (as in Bitcoin's UTXO model) have some advantages ove
 One major criticism of one-time coins is that this model does not seem suitable for non-trivial decentralized applications. However, Ergo has overcome the problems and shown this assertion to be false by
 % overcoming many of the supposed problems and and overcome such problems, 
 demonstrating many non-trivial prototype applications built on top of
-it~(see~\ref{sec:contractual}).
+it~(see Section~\ref{sec:contractual}).
 
 The Ergo protocol fixes the ledger snapshot representation in the form of boxes not destroyed by previous transactions.
 In detail, a miner should maintain a Merkle-tree like authenticated data structure built on top of the UTXO set and must include a short digest (just 33 bytes) of this structure in each block header. This digest must be calculated {\em after} applying the block.

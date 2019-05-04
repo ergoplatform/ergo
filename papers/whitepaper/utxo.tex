@@ -1,7 +1,7 @@
 \section{Ergo state}
 \label{sec:utxo}
 
-To check a new transaction, a cryptocurrency client does not use the ledger with all the transactions happened before this
+To check a new transaction, a cryptocurrency client does not use the ledger with all the transactions that happened before this
 one. Instead, it uses a ledger state snapshot from its history. In the Bitcoin Core reference implementation, this snapshot is the active one-time coins (i.e., UTXOs), and a transaction destroys some coins and also creates new ones.
 In Ethereum, this snapshot is of long-lived accounts and a transaction modifies monetary balance and internal storage of some accounts.  
 Also, in Ethereum (unlike Bitcoin), the representation of the snapshot is fixed within the protocol because an authenticating digest of the snapshot is written into the block header. 

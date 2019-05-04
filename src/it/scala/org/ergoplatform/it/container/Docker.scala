@@ -434,7 +434,10 @@ object Docker extends IntegrationTestConstants {
   }
 
   def renderProperties(props: Properties): String =
-    props.asScala.map { case (k, v) => s"-D$k=$v" } mkString " "
+    props.asScala.map {
+      case (k, v) if v.split(" ").length > 1 => s"-D$k=${v.split(" ").mkString("_")}"
+      case (k, v) => s"-D$k=$v"
+    } mkString " "
 
   def extractHostPort(portBindingMap: JMap[String, JList[PortBinding]], containerPort: Int): Int =
     portBindingMap.get(s"$containerPort/tcp").get(0).hostPort().toInt

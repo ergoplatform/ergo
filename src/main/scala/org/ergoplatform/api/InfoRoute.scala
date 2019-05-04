@@ -15,9 +15,7 @@ case class InfoRoute(statsCollector: ActorRef,
                      timeProvider: NetworkTimeProvider)
                     (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
-  override val route: Route = withCors {
-    info
-  }
+  override val route: Route = corsHandler(info)
 
   def info: Route = (path("info") & get) {
     val timeJson = Map("currentTime" -> timeProvider.time().asJson).asJson

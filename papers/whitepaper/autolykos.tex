@@ -28,7 +28,7 @@ Elements of list $R$ are obtained as a result of one-way computation from index 
 two miner public keys $pk,w$ and hash of block header $m$ as $r_i=H(i||M||pk||m||w)$,
 where $H$ is a hash function which returns the values in $\mathbb{Z}/q\mathbb{Z}$ and
 $M$ is a static big message that is used to make hash calculation slower.
-Also, we require a set of element indexes $J$ to be obtained
+Also, a set of element indexes $J$ is to be obtained
 by one-way pseudo-random function $genIndexes$, that prevents possible solutions
 search optimizations.
 
@@ -41,7 +41,7 @@ create a valid block.
     \begin{algorithmic}[1]
         \State \textbf{Input}: upcoming block header hash $m$, key pair $pk=g^{sk}$
         \State Generate randomly a new key pair $w=g^x$
-        \State Calculate $r_{i \in [0,N)}=H(j||M||pk||m||w)$
+        \State Calculate $r_{i \in [0,N)}=H(i||M||pk||m||w)$
         \While{$true$}
         \LetRnd{$nonce$}{$\mathsf{rand}$}
         \Let{$J$}{$genIndexes(m||nonce)$}
@@ -52,10 +52,6 @@ create a valid block.
         \EndWhile
     \end{algorithmic}
 \end{algorithm}
-
-\knote{no genIndexes details}
-\dnote{do you think we need full details in whitepaper? We've written that $genIndexes$ is "one-way pseudo-random function",
-I think it is enough to catch the general idea}
 
 Note that although the mining process utilizes private keys, the solution itself
 only contains public keys. Solution verification is done by Algorithm~\ref{alg:verify}.
@@ -85,7 +81,7 @@ hash $H$ multiple times~(about $10^4$ times for modern GPUs), thereby reducing e
 
 Calculating the list $R$ is also quite a heavy computational task: our initial implementation~\cite{ergoMiner}
 consumes ~25 seconds on Nvidia GTX 1070 to fill all the $2^{26}$ elements of the list.
-This part, however, may be optimized if a miner also stores a list of unfinalized hashes $u_{i \in [0,N)}=H(i||M||pk$
+This part, however, may be optimized if a miner also stores a list of unfinalized hashes $u_{i \in [0,N)}=H(i||M||pk)$
 in memory, consuming 5 more Gigabytes of it. In such a case, work to calculate unfinalized hashes should
 be done only once during mining initialization while finalizing them and filling the list $R$
 for the new header only consumes a few milliseconds~(about 50 ms on Nvidia GTX 1070).

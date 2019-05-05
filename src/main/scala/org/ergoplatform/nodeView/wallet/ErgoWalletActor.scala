@@ -142,7 +142,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       }
 
     case GetBoxes =>
-      sender() ! registry.readCertainBoxes.map(_.box).toIterator
+      sender() ! registry.readCertainUnspentBoxes.map(_.box).toIterator
 
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))
@@ -300,7 +300,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
             }
 
           boxSelector.select(
-            registry.readCertainBoxes.toIterator, onChainFilter, targetBalance, targetAssets).map { r =>
+            registry.readCertainUnspentBoxes.toIterator, onChainFilter, targetBalance, targetAssets).map { r =>
             val inputs = r.boxes.toIndexedSeq
 
             val changeAddress = prover.pubKeys(Random.nextInt(prover.pubKeys.size))
@@ -350,13 +350,13 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     registry.updateOnBlock(resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs)(id, height)
 
     val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedId(x.box.id))
-    offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainBoxes, newOnChainIds)
+    offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)
   }
 
   private def inputsFor(targetAmount: Long,
                         targetAssets: Map[ModifierId, Long] = Map.empty): Seq[ErgoBox] =
     boxSelector
-      .select(registry.readCertainBoxes.toIterator, onChainFilter, targetAmount, targetAssets)
+      .select(registry.readCertainUnspentBoxes.toIterator, onChainFilter, targetAmount, targetAssets)
       .toSeq
       .flatMap(_.boxes)
 

@@ -62,10 +62,7 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
       _ <- putBoxes(certainBxs ++ uncertainBxs)
       spentBoxesWithTx <- getAllBoxes.map(_.flatMap(bx =>
         inputs.find(_._2 == encodedId(bx.box.id)).map { case (txId, _) => txId -> bx }))
-      _ <- {
-        println(s">> ${spentBoxesWithTx}")
-        processHistoricalBoxes(spentBoxesWithTx, blockHeight)
-      }
+      _ <- processHistoricalBoxes(spentBoxesWithTx, blockHeight)
       _ <- updateIndex { case RegistryIndex(_, balance, tokensBalance, _) =>
         val spentBoxes = spentBoxesWithTx.map(_._2)
         val spentAmt = spentBoxes.map(_.box.value).sum

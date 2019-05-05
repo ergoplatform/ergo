@@ -74,10 +74,12 @@ object RegistryOps {
     }
 
   def updateBoxes(ids: Seq[BoxId])(updateF: TrackedBox => TrackedBox): RegistryOp[Unit] =
-    getBoxes(ids).map { _
-      .map { _
-        .map(v => putBox(updateF(v)))
-        .getOrElse(Free.pure(()))
+    ids.foldLeft(Free.pure[RegistryOpA, Unit](())) { case (acc, id) =>
+      acc.flatMap { _ =>
+        getBox(id).flatMap { _
+          .map(v => putBox(updateF(v)))
+          .getOrElse(Free.pure(()))
+        }
       }
     }
 

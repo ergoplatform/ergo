@@ -15,7 +15,7 @@ import scala.util.Try
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes.
-  * (Such as UTXO's, balances)
+  * (Such as on-chain UTXO's or balances)
   */
 final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLogging {
 
@@ -27,7 +27,7 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
   def readIndex: RegistryIndex =
     getIndex.transact(store)
 
-  def readCertainBoxes: Seq[TrackedBox] = {
+  def readCertainUnspentBoxes: Seq[TrackedBox] = {
     val query = for {
       allBoxes <- getAllBoxes
       index <- getIndex
@@ -48,8 +48,12 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
     query.transact(store)
   }
 
+  def readHistoricalBoxes: Seq[TrackedBox] = getAllBoxes
+    .map(_.filter(_.spendingHeightOpt.isDefined))
+    .transact(store)
+
   /**
-    * Updates indexes according to a data extracted from block and performs versioned update.
+    * Updates indexes according to a data extracted from a block and performs versioned update.
     */
   def updateOnBlock(certainBxs: Seq[TrackedBox], uncertainBxs: Seq[TrackedBox],
                     inputs: Seq[(ModifierId, EncodedBoxId)])
@@ -58,6 +62,10 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
       _ <- putBoxes(certainBxs ++ uncertainBxs)
       spentBoxesWithTx <- getAllBoxes.map(_.flatMap(bx =>
         inputs.find(_._2 == encodedId(bx.box.id)).map { case (txId, _) => txId -> bx }))
+      _ <- {
+        println(s">> ${spentBoxesWithTx}")
+        processHistoricalBoxes(spentBoxesWithTx, blockHeight)
+      }
       _ <- updateIndex { case RegistryIndex(_, balance, tokensBalance, _) =>
         val spentBoxes = spentBoxesWithTx.map(_._2)
         val spentAmt = spentBoxes.map(_.box.value).sum
@@ -85,7 +93,6 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
         val uncertain = uncertainBxs.map(x => encodedId(x.box.id))
         RegistryIndex(blockHeight, newBalance, newTokensBalance, uncertain)
       }
-      _ <- processHistoricalBoxes(spentBoxesWithTx, blockHeight)
     } yield ()
 
     update.transact(store, idToBytes(blockId))
@@ -95,10 +102,10 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
     Try(store.rollback(ByteArrayWrapper(Base16.decode(version).get)))
 
   /**
-    * Transits used boxes to spent state or simply deletes them depending on settings.
+    * Transits used boxes to a spent state or simply deletes them depending on a settings.
     */
-  private def processHistoricalBoxes(spentBoxes: Seq[(ModifierId, TrackedBox)],
-                                     spendingHeight: Int): RegistryOp[Unit] = {
+  private[persistence] def processHistoricalBoxes(spentBoxes: Seq[(ModifierId, TrackedBox)],
+                                                  spendingHeight: Int): RegistryOp[Unit] = {
     if (keepHistory) {
       updateBoxes(spentBoxes.map(_._2.box.id)) { tb =>
         val spendingTxIdOpt = spentBoxes

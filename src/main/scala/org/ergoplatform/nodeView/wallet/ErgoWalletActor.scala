@@ -79,7 +79,10 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
         readSecretStorage.fold(
           e => log.info(
             s"Failed to read wallet. Manual initialization is required to sign transactions. Cause: ${e.getCause}"),
-          _ => log.info("Wallet loaded successfully")
+          secretStorage => {
+            log.info("Wallet loaded successfully")
+            secretStorageOpt = Some(secretStorage)
+          }
         )
     }
   }

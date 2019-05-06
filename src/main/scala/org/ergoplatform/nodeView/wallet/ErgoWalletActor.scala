@@ -349,7 +349,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
         }
         .fold(catchLegalExc, _)
 
-        util.Arrays.fill(entropy, 0: Byte)
+      util.Arrays.fill(entropy, 0: Byte)
     
       sender() ! mnemonicTry
 

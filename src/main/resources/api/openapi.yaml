@@ -1050,30 +1050,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blocks/candidateBlock:
-    get:
-      summary: Get the candidate block for mining
-      operationId: getCandidateBlock
-      tags:
-      - blocks
-      responses:
-        '200':
-          description: Candidate Full Block object
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  isMining:
-                    type: boolean
-                  candidateBlock:
-                    $ref: '#/components/schemas/CandidateBlock'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
 
   /blocks/lastHeaders/{count}:
     get:

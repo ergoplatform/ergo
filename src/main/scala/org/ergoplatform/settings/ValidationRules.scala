@@ -4,6 +4,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.ValidationRules.txPositiveAssets
 import scorex.core.validation.{MapValidationSettings, ModifierValidator, ValidationSettings}
 import scorex.core.validation.ValidationResult.Invalid
 
@@ -40,12 +41,12 @@ object ValidationRules {
     txManyInputs -> (s => fatal(s"Number of transaction inputs should not exceed ${Short.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
     txManyDataInputs -> (s => fatal(s"Number of transaction data inputs should not exceed ${Short.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
     txManyOutputs -> (s => fatal(s"Number of transaction outputs should not exceed ${Short.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
-    txNegativeOutput -> (s => fatal(s"Amounts of transaction outputs should not be negative. $s"), true, Seq(classOf[ErgoTransaction])),
+    txNegativeOutput -> (s => fatal(s"Erg amounts of transaction outputs should not be negative. $s"), true, Seq(classOf[ErgoTransaction])),
     txOutputSum -> (s => fatal(s"Sum of transaction outputs should not exceed ${Long.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
     txInputsUnique -> (s => fatal(s"There should be no duplicate inputs. $s"), true, Seq(classOf[ErgoTransaction])),
-    txAssetRules -> (s => fatal(s"Number of assets in a single output should not exceed ${ErgoTransaction.MaxAssetsPerBox}, " +
-      s"amount of every individual asset should be positive and sum of assets of one type should " +
-      s"not exceed ${Long.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
+    txAssetsInOneBox -> (s => fatal(s"Number of tokens in one box should not exceed ${ErgoTransaction.MaxAssetsPerBox}" +
+      s" and sum of assets of one type should not exceed ${Long.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
+    txPositiveAssets -> (s => fatal(s"All token amounts of transaction outputs should be positive. $s"), true, Seq(classOf[ErgoTransaction])),
 
     // stateful transaction validation
     txCost -> (s => fatal(s"Total cost of transaction scripts should not exceed <maxBlockCost>. $s"), true, Seq(classOf[ErgoTransaction])),
@@ -55,7 +56,7 @@ object ValidationRules {
     txDataBoxes -> (s => fatal(s"Every data input of the transaction should be present in UTXO. $s"), true, Seq(classOf[ErgoTransaction])),
     txInputsSum -> (s => fatal(s"Sum of transaction inputs should not exceed ${Long.MaxValue}. $s"), true, Seq(classOf[ErgoTransaction])),
     txErgPreservation -> (s => fatal(s"Amount of Erg in inputs should equal to amount of Erg in outputs. $s"), true, Seq(classOf[ErgoTransaction])),
-    txAssetsPreservation -> (s => fatal(s"For every token, its amount in inputs should not exceed its amount of Erg in outputs. $s"), true, Seq(classOf[ErgoTransaction])),
+    txAssetsPreservation -> (s => fatal(s"For every token, its amount in inputs should not exceed its amount in outputs. $s"), true, Seq(classOf[ErgoTransaction])),
     txBoxToSpend -> (s => recoverable(s"Box id doesn't match input. $s"), true, Seq(classOf[ErgoTransaction])),
     txScriptValidation -> (s => fatal(s"Scripts of all transaction inputs should pass verification. $s"), true, Seq(classOf[ErgoTransaction])),
 
@@ -103,8 +104,9 @@ object ValidationRules {
   val txManyOutputs: Short = 104
   val txNegativeOutput: Short = 105
   val txOutputSum: Short = 106
-  val txAssetRules: Short = 107
-  val txInputsUnique: Short = 108
+  val txInputsUnique: Short = 107
+  val txPositiveAssets: Short = 108
+  val txAssetsInOneBox: Short = 109
 
   // stateful transaction validation
   val txCost: Short = 120

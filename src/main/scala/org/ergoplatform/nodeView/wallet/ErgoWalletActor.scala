@@ -95,7 +95,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val outputs = extractOutputs(tx)
       val inputs = extractInputs(tx)
       val resolved = outputs
-        .filterNot(o => inputs.contains(encodedId(o.id)))
+        .filterNot(o => inputs.contains(encodedBoxId(o.id)))
         .filter(resolve)
       val resolvedTrackedBoxes = resolved.map { bx =>
         TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain)
@@ -246,7 +246,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   /**
     * Extracts all inputs from the given transaction.
     */
-  private def extractInputs(tx: ErgoTransaction): Seq[EncodedBoxId] = tx.inputs.map(x => encodedId(x.boxId))
+  private def extractInputs(tx: ErgoTransaction): Seq[EncodedBoxId] = tx.inputs.map(x => encodedBoxId(x.boxId))
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
     requests.map {
@@ -341,7 +341,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     proverOpt.foreach(_.IR.resetContext())
     val prevUncertainBoxes = registry.readUncertainBoxes
     val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
-      .filterNot { case (_, o) => inputs.map(_._2).contains(encodedId(o.id)) }
+      .filterNot { case (_, o) => inputs.map(_._2).contains(encodedBoxId(o.id)) }
       .partition { case (_, o) => resolve(o) }
     val resolvedTrackedBoxes = resolved.map { case (txId, bx) =>
       TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Certain)
@@ -352,7 +352,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     registry.updateOnBlock(resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs)(id, height)
 
-    val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedId(x.box.id))
+    val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedBoxId(x.box.id))
     offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)
   }
 

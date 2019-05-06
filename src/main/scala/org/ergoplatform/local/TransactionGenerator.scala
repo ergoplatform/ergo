@@ -95,7 +95,7 @@ class TransactionGenerator(viewHolder: ActorRef,
           val tokenAmountToSpend = tokenToSpend._2 / 4
           val approximateBoxSize = 200
           val minimalErgoAmount = approximateBoxSize * (parameters.minValuePerByte + Parameters.MinValueStep)
-          val assets = Seq(Digest32 @@ IdUtils.decodedId(tokenToSpend._1) -> tokenAmountToSpend)
+          val assets = Seq(Digest32 @@ IdUtils.decodedTokenId(tokenToSpend._1) -> tokenAmountToSpend)
           Some(PaymentRequest(randProposition, minimalErgoAmount, Some(assets), None))
         case _ =>
           val assetInfo = genNewAssetInfo

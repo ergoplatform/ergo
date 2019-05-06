@@ -1,13 +1,14 @@
 package org.ergoplatform.utils.generators
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedId}
+import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlock, RegistryIndex}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import org.ergoplatform._
 import org.scalacheck.Gen
+import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, idToBytes}
 
 trait WalletGenerators extends ErgoTransactionGenerators {
@@ -103,8 +104,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       balances <- additionalTokensGen
       uncertain <- Gen.listOf(boxIdGen)
     } yield {
-      val encodedBalances = balances.map { case (x1, x2) => encodedId(x1) -> x2 }.toMap
-      RegistryIndex(height, amount, encodedBalances, uncertain.map(encodedId))
+      val encodedBalances = balances.map { case (x1, x2) => encodedTokenId(x1) -> x2 }.toMap
+      RegistryIndex(height, amount, encodedBalances, uncertain.map(encodedBoxId))
     }
   }
 
@@ -118,7 +119,7 @@ trait WalletGenerators extends ErgoTransactionGenerators {
   private def inputsWithTxGen: Gen[(ModifierId, EncodedBoxId)] = for {
     txId <- modifierIdGen
     id <- modifierIdGen
-  } yield txId -> encodedId(idToBytes(id))
+  } yield txId -> encodedBoxId(ADKey @@ idToBytes(id))
 
   private def outputsWithTxGen: Gen[(ModifierId, ErgoBox)] = for {
     txId <- modifierIdGen

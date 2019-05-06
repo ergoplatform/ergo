@@ -35,7 +35,7 @@ class WalletRegistrySpec
   it should "read uncertain boxes" in {
     forAll(trackedBoxGen) { box =>
       val uncertainBox = box.copy(certainty = Uncertain)
-      val index = RegistryIndex(0, 0, Map.empty, Seq(encodedId(uncertainBox.box.id)))
+      val index = RegistryIndex(0, 0, Map.empty, Seq(encodedBoxId(uncertainBox.box.id)))
       val store = createStore
       putBox(uncertainBox).flatMap(_ => putIndex(index)).transact(store)
       val registry = new WalletRegistry(store)(settings.walletSettings)
@@ -44,8 +44,8 @@ class WalletRegistrySpec
     }
   }
 
-  it should "update historical boxes when `keepHistory = true`" in {
-    val ws = settings.walletSettings.copy(keepHistory = true)
+  it should "update historical boxes when `keepSpentBoxes = true`" in {
+    val ws = settings.walletSettings.copy(keepSpentBoxes = true)
     val spendingHeight = 0
     forAll(Gen.nonEmptyListOf(trackedBoxGen), modifierIdGen) { (boxes, txId) =>
       val unspentBoxes = boxes.map(

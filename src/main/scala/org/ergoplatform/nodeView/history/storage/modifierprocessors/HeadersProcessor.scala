@@ -307,6 +307,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateEqualIds(hdrGenesisParent, header.parentId, Header.GenesisParentId)
         .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, (id: ModifierId) => id.equals(header.id))
         .validate(hdrGenesisHeight, header.height == GenesisHeight, header.toString)
+        .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
         .validateNoThrow(hdrVotes, checkVotes(header))
         .result
     }

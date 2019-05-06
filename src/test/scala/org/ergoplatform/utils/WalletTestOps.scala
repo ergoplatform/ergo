@@ -93,9 +93,9 @@ trait WalletTestOps extends NodeViewBaseOps {
     boxes
       .flatMap(_.additionalTokens)
       .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
-        acc.updated(encodedId(id), acc.getOrElse(encodedId(id), 0L) + amt)
+        acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
       }
-      .map(x => Digest32 @@ decodedId(x._1) -> x._2)
+      .map(x => decodedTokenId(x._1) -> x._2)
   }
 
   def getUtxoState(implicit ctx: Ctx): UtxoState = getCurrentState.asInstanceOf[UtxoState]

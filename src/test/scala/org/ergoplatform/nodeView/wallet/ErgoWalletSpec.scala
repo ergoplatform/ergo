@@ -247,7 +247,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val asset2Sum = randomLong()
       val asset1ToReturn = randomLong(asset1Sum)
-      val assets2Seq = Seq(Digest32 @@ decodedId(asset1Token) -> asset1ToReturn, newAssetIdStub -> asset2Sum)
+      val assets2Seq = Seq(decodedTokenId(asset1Token) -> asset1ToReturn, newAssetIdStub -> asset2Sum)
       val balanceToReturn = 1000 * parameters.minValuePerByte
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assets2Seq)
       val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))

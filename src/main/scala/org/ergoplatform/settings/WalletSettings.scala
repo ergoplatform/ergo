@@ -9,7 +9,7 @@ case class WalletSettings(secretStorage: SecretStorageSettings,
                           mnemonicPhraseLanguage: String,
                           scanningInterval: FiniteDuration,
                           postponedScanning: Boolean = true,
-                          keepHistory: Boolean = false,
+                          keepSpentBoxes: Boolean = false,
                           defaultTransactionFee: Long = 100000L,
                           testMnemonic: Option[String] = None,
                           testKeysQty: Option[Int] = None)

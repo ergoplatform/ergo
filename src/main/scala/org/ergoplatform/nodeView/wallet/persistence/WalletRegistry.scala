@@ -22,7 +22,7 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
   import RegistryOps._
   import org.ergoplatform.nodeView.wallet.IdUtils._
 
-  private val keepHistory = ws.keepHistory
+  private val keepHistory = ws.keepSpentBoxes
 
   def readIndex: RegistryIndex =
     getIndex.transact(store)
@@ -34,7 +34,7 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
     } yield {
       val uncertainIds = index.uncertainBoxes
       allBoxes.filterNot(b =>
-        uncertainIds.contains(encodedId(b.box.id)) || b.spendingHeightOpt.isDefined
+        uncertainIds.contains(encodedBoxId(b.box.id)) || b.spendingHeightOpt.isDefined
       )
     }
     query.transact(store)
@@ -43,7 +43,7 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
   def readUncertainBoxes: Seq[TrackedBox] = {
     val query = for {
       index <- getIndex
-      uncertainBoxes <- getBoxes(index.uncertainBoxes.map(id => ADKey @@ decodedId(id)))
+      uncertainBoxes <- getBoxes(index.uncertainBoxes.map(decodedBoxId))
     } yield uncertainBoxes.flatten
     query.transact(store)
   }
@@ -61,7 +61,7 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
     val update = for {
       _ <- putBoxes(certainBxs ++ uncertainBxs)
       spentBoxesWithTx <- getAllBoxes.map(_.flatMap(bx =>
-        inputs.find(_._2 == encodedId(bx.box.id)).map { case (txId, _) => txId -> bx }))
+        inputs.find(_._2 == encodedBoxId(bx.box.id)).map { case (txId, _) => txId -> bx }))
       _ <- processHistoricalBoxes(spentBoxesWithTx, blockHeight)
       _ <- updateIndex { case RegistryIndex(_, balance, tokensBalance, _) =>
         val spentBoxes = spentBoxesWithTx.map(_._2)
@@ -69,12 +69,12 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
         val spentTokensAmt = spentBoxes
           .flatMap(_.box.additionalTokens)
           .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
-            acc.updated(encodedId(id), acc.getOrElse(encodedId(id), 0L) + amt)
+            acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
           }
         val receivedTokensAmt = certainBxs
           .flatMap(_.box.additionalTokens)
           .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
-            acc.updated(encodedId(id), acc.getOrElse(encodedId(id), 0L) + amt)
+            acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
           }
         val decreasedTokensBalance = spentTokensAmt
           .foldLeft(tokensBalance) { case (acc, (encodedId, amt)) =>
@@ -87,7 +87,7 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
           }
         val receivedAmt = certainBxs.map(_.box.value).sum
         val newBalance = balance - spentAmt + receivedAmt
-        val uncertain = uncertainBxs.map(x => encodedId(x.box.id))
+        val uncertain = uncertainBxs.map(x => encodedBoxId(x.box.id))
         RegistryIndex(blockHeight, newBalance, newTokensBalance, uncertain)
       }
     } yield ()
@@ -106,7 +106,7 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
     if (keepHistory) {
       updateBoxes(spentBoxes.map(_._2.box.id)) { tb =>
         val spendingTxIdOpt = spentBoxes
-          .find { case (_, x) => encodedId(x.box.id) == encodedId(tb.box.id) }
+          .find { case (_, x) => encodedBoxId(x.box.id) == encodedBoxId(tb.box.id) }
           .map(_._1)
         tb.copy(spendingHeightOpt = Some(spendingHeight), spendingTxIdOpt = spendingTxIdOpt)
       }

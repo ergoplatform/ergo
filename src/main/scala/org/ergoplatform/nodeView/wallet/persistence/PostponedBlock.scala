@@ -5,11 +5,16 @@ import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.settings.Constants
 import scorex.core.serialization.ScorexSerializer
+import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 
 /**
   * Wallet-critic data extracted from full block to be processed later.
+  * @param id - header id of postponed block
+  * @param height - height of postponed block
+  * @param inputs - all inputs from postponed block
+  * @param outputs - outputs containing tracked addresses from postponed block
   */
 final case class PostponedBlock(id: ModifierId,
                                 height: Int,
@@ -23,7 +28,7 @@ object PostponedBlockSerializer extends ScorexSerializer[PostponedBlock] {
     w.putInt(obj.height)
     w.putInt(obj.inputs.size)
     obj.inputs.foreach { case (txId, id) =>
-      w.putBytes(idToBytes(txId) ++ decodedId(id))
+      w.putBytes(idToBytes(txId) ++ decodedBoxId(id))
     }
     w.putInt(obj.outputs.size)
     obj.outputs.foreach { case (txId, box) =>
@@ -40,7 +45,7 @@ object PostponedBlockSerializer extends ScorexSerializer[PostponedBlock] {
     val inputs = (0 until inputsQty)
       .foldLeft(Seq.empty[(ModifierId, EncodedBoxId)]) { case (acc, _) =>
         val txId = bytesToId(r.getBytes(Constants.ModifierIdSize))
-        val boxId = encodedId(r.getBytes(Constants.ModifierIdSize))
+        val boxId = encodedBoxId(ADKey @@ r.getBytes(Constants.ModifierIdSize))
         acc :+ (txId, boxId)
       }
     val outputsQty = r.getInt()

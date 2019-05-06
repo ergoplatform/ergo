@@ -78,7 +78,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val assetsNum = boxes.foldLeft(0) { case (acc, box) =>
       require(box.additionalTokens.length <= ErgoTransaction.MaxAssetsPerBox, "too many assets in one box")
       box.additionalTokens.foreach { case (assetId, amount) =>
-        require(amount > 0, s"non-positive asset amount for ${Algos.encode(assetId)}")
         val aiWrapped = ByteArrayWrapper(assetId)
         val total = map.getOrElse(aiWrapped, 0L)
         map.put(aiWrapped, Math.addExact(total, amount))
@@ -122,9 +121,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txManyDataInputs, dataInputs.size <= Short.MaxValue, toString)
       .validate(txManyOutputs, outputCandidates.size <= Short.MaxValue, toString)
       .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), toString)
-      .validate(txOutputSum, outputsSumTry.isSuccess, toString)
+      .validateNoFailure(txOutputSum, outputsSumTry)
       .validate(txInputsUnique, inputs.distinct.size == inputs.size, toString)
-      .validate(txAssetRules, outAssetsTry.isSuccess, s"$outAssetsTry in $this")
+      .validateNoFailure(txAssetsInOneBox, outAssetsTry)
+      .validate(txPositiveAssets, outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)), s" $this")
   }
 
   /**
@@ -180,9 +180,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       // Check that there are no overflow in input and output values
       .validate(txInputsSum, inputSumTry.isSuccess, this.toString)
       // Check that transaction is not creating money out of thin air.
-      .validate(txErgPreservation, inputSumTry == outputsSumTry, s"Ergo token preservation is broken in $this")
-      // Check that there are no more than 255 assets per box,
-      // and amount for each asset, its amount in a box is positive
+      .validate(txErgPreservation, inputSumTry == outputsSumTry, toString)
       .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", e)) { case (validation, (outAssets, outAssetsNum)) =>
       extractAssets(boxesToSpend) match {
         case Success((inAssets, inAssetsNum)) =>
@@ -205,7 +203,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                   s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
             }
             .map(_ + totalAssetsAccessCost)
-        case Failure(e) => ModifierValidator.fatal(e.getMessage)
+        case Failure(e) =>
+          // should never be here as far as we've already checked this when we've created the box
+          ModifierValidator.fatal(e.getMessage)
       }
     }
       // Check inputs, the most expensive check usually, so done last.

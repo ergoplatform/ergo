@@ -170,8 +170,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           secretStorageOpt = Some(secretStorage)
           mnemonic
         }
-      util.Arrays.fill(entropy, 0: Byte)
+        .fold(catchLegalExc, res => Success(res))
 
+      util.Arrays.fill(entropy, 0: Byte)
       sender() ! mnemonicTry
 
     case RestoreWallet(mnemonic, passOpt, encryptionPass) if secretStorageOpt.isEmpty =>
@@ -378,6 +379,15 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       Failure(new Exception("Secret dir does not exist"))
     }
   }
+
+  private def catchLegalExc[T](e: Throwable): Failure[T] =
+    if (e.getMessage.startsWith("Illegal key size")) {
+      val dkLen = settings.walletSettings.secretStorage.encryption.dkLen
+      Failure[T](new Exception(s"Key of length $dkLen is not allowed on your JVM version." +
+        s"Set `ergo.wallet.secretStorage.encryption.dkLen = 128` or update JVM"))
+    } else {
+      Failure[T](e)
+    }
 
 }
 

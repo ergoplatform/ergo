@@ -29,7 +29,7 @@ final case class OffChainRegistry(height: Int,
   }
 
   /**
-    *
+    * Update on receiving new off-chain transaction.
     */
   def updated(certainBoxes: Seq[TrackedBox],
               spentIds: Seq[EncodedBoxId]): OffChainRegistry = {
@@ -46,7 +46,11 @@ final case class OffChainRegistry(height: Int,
   }
 
   /**
-    * Update balances snapshot according to a new block applied.
+    * Update balances snapshot according to a new block applied
+    * @param newHeight - processed block height
+    * @param allCertainBoxes - all certain boxes extracted from block
+    *                          (required to update on-chain snapshot)
+    * @param onChainIds - ids of all boxes which became on-chain in result of a current block application
     */
   def updateOnBlock(newHeight: Int,
                     allCertainBoxes: Seq[TrackedBox],

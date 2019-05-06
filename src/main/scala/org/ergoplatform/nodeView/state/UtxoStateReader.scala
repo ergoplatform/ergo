@@ -5,15 +5,13 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
-import org.ergoplatform.nodeView.ErgoInterpreter
-import org.ergoplatform.settings.{Algos, ValidationRules}
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
-import scorex.core.validation.ValidationSettings
 import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
-import sigmastate.lang.Terms._
 
 import scala.util.{Failure, Try}
 

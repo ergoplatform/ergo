@@ -5,6 +5,9 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 
 /**
   * Holds version-agnostic indexes (such as off-chain boxes) in runtime memory.
+  * @param height - latest processed block height
+  * @param offChainBalances - balances from off-chain transactions
+  * @param onChainBalances - on-chain balances snapshot (required to calculate off-chain indexes)
   */
 final case class OffChainRegistry(height: Int,
                                   offChainBalances: Seq[Balance],
@@ -25,6 +28,9 @@ final case class OffChainRegistry(height: Int,
     RegistryIndex(height, balance, tokensBalance, Seq.empty)
   }
 
+  /**
+    *
+    */
   def updated(certainBoxes: Seq[TrackedBox],
               spentIds: Seq[EncodedBoxId]): OffChainRegistry = {
     val unspentCertain = offChainBalances.filterNot(x => spentIds.contains(x.id)) ++

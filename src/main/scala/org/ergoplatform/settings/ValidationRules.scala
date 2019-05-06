@@ -156,6 +156,14 @@ object ValidationRules {
   val fbDigestIncorrect: Short = 401
 
 
+  def errorMessage(id: Short, details: String): String = {
+    ValidationRules.rulesSpec(id)
+      ._1(details)
+      .errors
+      .last
+      .message
+  }
+
   private def recoverable(errorMessage: String): Invalid = ModifierValidator.error(errorMessage)
 
   private def fatal(errorMessage: String): Invalid = ModifierValidator.fatal(errorMessage)

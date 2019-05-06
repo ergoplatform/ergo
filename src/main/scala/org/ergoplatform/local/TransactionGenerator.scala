@@ -13,7 +13,6 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequ
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
-import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
 import sigmastate.Values.ErgoTree
@@ -95,7 +94,7 @@ class TransactionGenerator(viewHolder: ActorRef,
           val tokenAmountToSpend = tokenToSpend._2 / 4
           val approximateBoxSize = 200
           val minimalErgoAmount = approximateBoxSize * (parameters.minValuePerByte + Parameters.MinValueStep)
-          val assets = Seq(Digest32 @@ IdUtils.decodedTokenId(tokenToSpend._1) -> tokenAmountToSpend)
+          val assets = Seq(IdUtils.decodedTokenId(tokenToSpend._1) -> tokenAmountToSpend)
           Some(PaymentRequest(randProposition, minimalErgoAmount, Some(assets), None))
         case _ =>
           val assetInfo = genNewAssetInfo

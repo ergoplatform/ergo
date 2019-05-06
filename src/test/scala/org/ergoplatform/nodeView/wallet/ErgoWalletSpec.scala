@@ -11,7 +11,7 @@ import org.ergoplatform.utils._
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.Blake2b256
 import sigmastate.Values.ByteArrayConstant
 import sigmastate._
 

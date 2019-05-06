@@ -347,7 +347,9 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
           secretStorageOpt = Some(secretStorage)
           mnemonic
         }
-      util.Arrays.fill(entropy, 0: Byte)
+        .fold(catchLegalExc, _)
+
+        util.Arrays.fill(entropy, 0: Byte)
     
       sender() ! mnemonicTry
 
@@ -381,6 +383,15 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
     case GenerateTransaction(requests) =>
       sender() ! generateTransactionWithOutputs(requests)
   }
+
+  private def catchLegalExc(e: Throwable) =
+    if (e.getMessage.startsWith("Illegal key size")) {
+      val dkLen = ergoSettings.walletSettings.secretStorage.encryption.dkLen
+      Failure(new Exception(s"Key of length $dkLen is not allowed on your JVM version." +
+        s"Set `ergo.wallet.secretStorage.encryption.dkLen = 128` or update JVM"))
+    } else {
+      Failure(e)
+    }
 
 }
 

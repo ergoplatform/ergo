@@ -3,7 +3,8 @@ package org.ergoplatform.modifiers.mempool
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
+import org.ergoplatform.settings.ValidationRules.txCost
+import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters, ValidationRules}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
@@ -205,8 +206,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val validity = tx.statefulValidity(from, emptyDataBoxes, emptyStateContext)
       validity.isSuccess shouldBe false
       val e = validity.failed.get
-      log.info(s"Validation message: ${e.getMessage}", e)
-      e.getMessage should startWith("Input script verification failed for input #0")
+      e.getMessage should startWith(ValidationRules.errorMessage(ValidationRules.txScriptValidation, "#0"))
     }
   }
 
@@ -283,8 +283,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
     val validFailure = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext)
-    validFailure.isFailure shouldBe true
-    validFailure.failed.get.getMessage.startsWith("Spam") shouldBe true
+    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(txCost, "").take(30))
+
   }
 
   property("transaction with too many inputs should be rejected") {
@@ -315,7 +315,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     assert(time0 <= Timeout)
 
     val cause = validity.failed.get.getMessage
-    cause should startWith("Spam transaction detected")
+    cause should startWith(ValidationRules.errorMessage(txCost, "").take(30))
 
     //check that spam transaction validation with no cost limit is indeed taking too much time
     val relaxedParams = LaunchParameters.parametersTable.updated(Parameters.MaxBlockCostIncrease, Int.MaxValue)

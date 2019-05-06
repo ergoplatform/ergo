@@ -1156,7 +1156,7 @@ paths:
 
   /transactions:
     post:
-      summary: Send an anyone can spend transaction
+      summary: Send an Ergo transaction
       operationId: sendTransaction
       tags:
       - transactions
@@ -1208,7 +1208,7 @@ paths:
       - transactions
       responses:
         '200':
-          description: Array with anyone can spend transactions objects
+          description: Array with Ergo transactions
           content:
             application/json:
               schema:
@@ -1380,6 +1380,134 @@ paths:
               schema:
                 type: string
                 example: '7e1e79dd4936bdc7d09f4ba9212849136b589fba4bcf4263a0961a95b65d08cb16'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/init:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Initialize new wallet with randomly generated seed
+      operationId: walletInit
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pass
+              properties:
+                pass:
+                  type: string
+                  description: Password to encrypt wallet file with
+                mnemonicPass:
+                  type: string
+                  description: Optional pass to password-protect mnemonic seed
+      responses:
+        '200':
+          description: New wallet with randomly generated seed created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - mnemonic
+                properties:
+                  mnemonic:
+                    type: string
+                    description: Mnemonic seed phrase
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/restore:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Create new wallet from existing mnemonic seed
+      operationId: walletRestore
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pass
+                - mnemonic
+              properties:
+                pass:
+                  type: string
+                  description: Password to encrypt wallet file with
+                mnemonic:
+                  type: string
+                  description: Mnemonic seed
+                mnemonicPass:
+                  type: string
+                  description: Optional pass to password-protect mnemonic seed
+      responses:
+        '200':
+          description: Wallet restored successfully
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/unlock:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Unlock wallet
+      operationId: walletUnlock
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pass
+              properties:
+                pass:
+                  type: string
+                  description: Password to decrypt wallet file with
+      responses:
+        '200':
+          description: Wallet unlocked successfully
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/lock:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Lock wallet
+      operationId: walletLock
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Wallet locked successfully
         default:
           description: Error
           content:

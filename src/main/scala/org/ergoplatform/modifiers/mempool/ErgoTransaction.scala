@@ -7,16 +7,18 @@ import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
+import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.nodeView.{ErgoContext, ErgoInterpreter, TransactionContext}
-import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ValidationRules}
+import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import org.ergoplatform.wallet.protocol.context.TransactionContext
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings, ValidationState}
+import scorex.core.validation.{ModifierValidator, ValidationSettings, ValidationState}
 import scorex.crypto.authds.ADKey
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -53,8 +55,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val dataInputs: IndexedSeq[DataInput],
                            override val outputCandidates: IndexedSeq[ErgoBoxCandidate],
                            override val sizeOpt: Option[Int] = None)
-  extends Transaction
-    with ErgoLikeTransactionTemplate[Input]
+  extends ErgoLikeTransaction(inputs, dataInputs, outputCandidates)
+    with Transaction
     with MempoolModifier
     with ErgoNodeViewModifier
     with ScorexLogging {
@@ -260,6 +262,9 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
   def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction = {
     ErgoTransaction(inputs, IndexedSeq(), outputCandidates, None)
   }
+
+  def apply(tx: ErgoLikeTransaction): ErgoTransaction =
+    ErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)
 
   val MaxAssetsPerBox = 255
 

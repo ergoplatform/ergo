@@ -6,55 +6,48 @@
 % permissionless and is designed to disintermediate trusted third parties. But then we need to make clear if
 % not too directly that Bitcoin/Ethereum still face a lot of challenges that Ergo is built to address.
 
-Started more ten years ago with the Bitcoin~\cite{nakamoto2008bitcoin}, blockchain technology has so far proved
-to be a secure way of maintaining a public transaction ledger and disintermediating trusted third parties and
+Started more than ten years ago with Bitcoin~\cite{nakamoto2008bitcoin}, blockchain technology has so far proved
+to be a secure way of maintaining a public transaction ledger and disintermediating trusted third parties such as 
 traditional financial institutions to some degree.
 Even after achieving a market capitalization over \$300bn in 2017~\cite{btcPrice},
-no severe attacks were performed to the Bitcoin network despite the high potential yield.
-This resilience of cryptocurrencies and the financial empowerment and self-sovereignty it promises to bring is
+no severe attacks were performed on the Bitcoin network despite the high potential yield.
+This resilience of cryptocurrencies and the financial empowerment and self-sovereignty they promise to bring is
 achieved by a combination of modern cryptographic algorithms and decentralized architecture.
 
-However, this resilience does not come for free and has not yet been proven by existing systems in the long-term at economy wide-scale.
+However, this resilience comes at a cost 
+%does not come for free 
+and has not yet been proven for existing systems in the long-run at economy-wide scale.
 To use a blockchain without any trust, its participants should check each other by downloading and
 processing all the transactions in the network, utilizing network resources.
-Besides network utilization, transaction processing requires to utilize computational resources,
+Besides network utilization, transaction processing also utilizes computational resources,
 especially if the transactional language is flexible enough.
-Finally, blockchain participants should keep quite a significant amount of data in their local storages and
-the storage requirements are growing fast.
-Thus transaction processing utilize various resources of thousands of computers all over the world
-and these resources consumption is paid by regular users via transaction fees~\cite{chepurnoy2018systematic}.
-Despite the generous block reward subsidy in some existing systems, these fees may be very high~\cite{bitcoinFees}
-and ten years later blockchain technology is still mainly used in financial applications, where the advantage of
-high security outweighs the disadvantage of high transaction costs.
+Finally, blockchain participants have to keep quite a significant amount of data in their local storages and
+the storage requirements are growing fast. Of this, certain data must be maintained in memory.
+Thus, transaction processing utilizes various resources of hundreds of thousands of computers all over the world
+and consumption of these resources is paid for by regular users in the form of transaction fees~\cite{chepurnoy2018systematic}.
+Despite the generous block reward subsidy in some existing systems, their fees is still very high~\cite{bitcoinFees}. Due to this, despite being around for more than ten years, blockchain technology is still primarily being used in financial applications, where the advantage of high security outweighs the disadvantage of high transaction costs.
 
-Besides of a plain currency usage, most of the blockchains are used to build decentralized applications on top of them.
-Such applications utilize the ability to write smart contracts~\cite{szabo1994smart}, that implements their logic
-by means of blockchain-specific programming language.
-For now, there are two main approaches to write smart contracts~\cite{zahnentferner2018chimeric}:
-UTXO-based~(e.g., Bitcoin) and account-based~(e.g., Ethereum).
+Besides the vanilla currency example, the other use of blockchains is to build decentralized applications.
+Such applications utilize the ability of the underlying platform to write smart contracts~\cite{szabo1994smart} implementing their logic by means of a blockchain-specific programming language.
+One way to classify blockchains in terms of their ability to write smart contracts is based on if they are  
+{\em UTXO-based}~(e.g., Bitcoin) or {\em account-based}~(e.g., Ethereum)~\cite{zahnentferner2018chimeric}. 
 Account-based cryptocurrencies, such as Ethereum, introduce special contract accounts controlled by code,
 that may be invoked by incoming transactions.
-This approach allows performing arbitrary computations, however, implementation of complex coins spending conditions
-lead to bugs like \$150 million loss in 2017 in
-Ethereum from simple multi-signature contract~\cite{parityLock}.
-In UTXO-based cryptocurrencies, every coin has a script associated with it, and to spend the coin, one should
-satisfy script conditions.
-Implementation of coins protecting conditions is much easier in UTXO model,
-while arbitrary Turing-complete logic become quite complicated~(e.g., implementation of a trivial Turing-complete
-system become quite complicated~\cite{chepurnoy2018self}).
-Ergo is based on UTXO model as far as it is more convenient to implement financial applications covering the
+Although this approach allows performing arbitrary computation, the implementation of complex spending conditions
+can lead to bugs such as the one in an Ethereum's `simple' multi-signature contract that caused a loss of \$150 million in 2017~\cite{parityLock}.
+In UTXO-based cryptocurrencies, every coin has a script associated with it, and to spend that coin, one must satisfy the conditions given in the script. 
+Implementing such protecting conditions is much easier with the UTXO model but doing arbitrary Turing-complete computation is quite complex~\cite{chepurnoy2018self}. However, most financial contracts do not require Turing-completeness. Ergo is based on the UTXO model and provides a convenient way to implement financial applications covering an
 overwhelming majority of public blockchain use-cases.
 
-While the contractual component is attractive in for building decentralized applications,
-it is also essential that the blockchain will survive in the long term.
-For now, the whole area is young, and most of the application-oriented blockchain platforms exist just for several years,
-while they already have known problems with performance degradation over time~\cite{???} and their long-term survivability is questionable.
-And even older UTXO money-oriented blockchains have not yet been proven fully resilient in the long-run
-under changing conditions as we only have 10-years of blockchain history to this point.
-This problem led to concepts of light nodes with minimum storage requirements~\cite{reyzin2017improving},
-storage rent fee component that prevents bloating of full-node requirements~\cite{chepurnoy2018systematic},
+While the contractual component is important for building decentralized applications,
+it is also essential that the blockchain survives in the long-term.
+Application-oriented blockchain platforms have existed only for a few years and the whole area is quite young. Since such platforms have already encountered problems with performance degradation over time~\cite{???}, their long-term survivability is questionable.
+Even older UTXO-based money-oriented blockchains have not been proven to be fully resilient in the long-run
+under changing conditions because we only have about 10 years of blockchain history up to this point.
+Solutions for long-term survivability include concepts 
+such as light nodes with minimal storage requirements~\cite{reyzin2017improving},
+storage-rent fee component to prevent bloating of full-nodes~\cite{chepurnoy2018systematic}, and 
 self-amendable protocols that can adapt to the changing environment and improve themselves without
-trusted parties~\cite{goodman2014tezos}, and more.
-What is needed is the combination of various scientific ideas together to fix these problems, while also
+trusted parties~\cite{goodman2014tezos}.
+What is needed is a combination of various scientific ideas together to fix these problems, while also
 providing a way for further improvements without any breaking changes and this is exactly what Ergo seeks to accomplish.
-

@@ -259,8 +259,8 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
             val changeAddress = prover.pubKeys(Random.nextInt(prover.pubKeys.size))
 
             val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>
-              val assets = tokensChange.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toColl
-              new ErgoBoxCandidate(ergChange, changeAddress, height, assets)
+              val assets = tokensChange.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
+              new ErgoBoxCandidate(ergChange, changeAddress, height, assets.toColl)
             }
 
             val unsignedTx = new UnsignedErgoTransaction(
@@ -350,7 +350,7 @@ class ErgoWalletActor(ergoSettings: ErgoSettings, boxSelector: BoxSelector)
           mnemonic
         }
       util.Arrays.fill(entropy, 0: Byte)
-    
+
       sender() ! mnemonicTry
 
     case RestoreWallet(mnemonic, passOpt, encryptionPass) if secretStorageOpt.isEmpty =>

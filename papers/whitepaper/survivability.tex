@@ -23,7 +23,7 @@ guarantees as a full node.
 
 Readers may notice a third potential problem in that although support for light clients solves the problem for Ergo users, it does not solve the problem for Ergo miners, who still need to keep the whole state for efficient transaction validation.
 In existing blockchain systems, users can put arbitrary data into this state. This data, which lasts forever, creates a lot of dust and its size increases monotonously over time~\cite{perez2019another}.
-A large state size leads to serious security issues, because when the state does not fit in random-access memory, an adversary can generate transactions whose validation become very slow due to required random access to the miner's storage. This can lead to DoS attacks such as the one on Ethereum in 2016~\cite{??}.
+A large state size leads to serious security issues, because when the state does not fit in random-access memory, an adversary can generate transactions whose validation become very slow due to required random access to the miner's storage. This can lead to DoS attacks such as the one on Ethereum in 2016~\cite{ethDos2016}.
 Moreover the community's fear of such attacks along with the problem of ``state bloat'' without any sort of compensation to miners or users holding the state has prevented scaling solutions that otherwise
 could have been implemented (such as larger block sizes, for example).
 To prevent this, Ergo has a storage rent component: if an

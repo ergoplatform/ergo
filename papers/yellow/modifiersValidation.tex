@@ -14,15 +14,15 @@ Every rule is numerated and may be deactivated later via soft forks, while new r
     \hline
     Id & Validation rule & Active & Modifiers \\
     \hline
-    100 & Transaction should have at least one input. & true & ErgoTransaction \\
+    100 & A transaction should have at least one input. & true & ErgoTransaction \\
     \hline
-    101 & Transaction should have at least one output. & true & ErgoTransaction \\
+    101 & A transaction should have at least one output. & true & ErgoTransaction \\
     \hline
-    102 & Number of transaction inputs should not exceed 32767. & true & ErgoTransaction \\
+    102 & A transaction inputs number should not exceed 32767. & true & ErgoTransaction \\
     \hline
-    103 & Number of transaction data inputs should not exceed 32767. & true & ErgoTransaction \\
+    103 & A transaction data inputs number should not exceed 32767. & true & ErgoTransaction \\
     \hline
-    104 & Number of transaction outputs should not exceed 32767. & true & ErgoTransaction \\
+    104 & A transaction outputs number should not exceed 32767. & true & ErgoTransaction \\
     \hline
     105 & Erg amounts of transaction outputs should not be negative. & true & ErgoTransaction \\
     \hline
@@ -32,13 +32,13 @@ Every rule is numerated and may be deactivated later via soft forks, while new r
     \hline
     108 & All token amounts of transaction outputs should be positive. & true & ErgoTransaction \\
     \hline
-    109 & Number of tokens in one box should not exceed 255 and sum of assets of one type should not exceed 9223372036854775807. & true & ErgoTransaction \\
+    109 & Single box tokens number should not exceed 255 and sum of assets of one type should not exceed 9223372036854775807. & true & ErgoTransaction \\
     \hline
-    120 & Total cost of transaction scripts should not exceed <maxBlockCost>. & true & ErgoTransaction \\
+    120 & The total cost of transaction scripts should not exceed <maxBlockCost>. & true & ErgoTransaction \\
     \hline
     121 & Every output of the transaction should contain at least <minValuePerByte * outputSize> nanoErg. & true & ErgoTransaction \\
     \hline
-    122 & Every output of the transaction should have creationHeight less or equals than height of block with this transaction. & true & ErgoTransaction \\
+    122 & Every output of the transaction should have creationHeight less or equals than the height of the block with this transaction. & true & ErgoTransaction \\
     \hline
     123 & Every input of the transaction should be present in UTXO. & true & ErgoTransaction \\
     \hline
@@ -64,25 +64,25 @@ Every rule is numerated and may be deactivated later via soft forks, while new r
     \hline
     200 & Genesis header should have genesis parent id. & true & Header \\
     \hline
-    201 & Genesis header id should equals to to id from the config. & true & Header \\
+    201 & Genesis header id should equal to id from the config. & true & Header \\
     \hline
     203 & Genesis height should be 1. & true & Header \\
     \hline
-    204 & Header should contain 3 votes, with no duplicates and contradictory votes, that should be known by parametersDescs. & true & Header \\
+    204 & A header should contain three votes, with no duplicates and contradictory votes, that should be known by parametersDescs. & true & Header \\
     \hline
-    206 & Block timestamp should be greater than parents. & true & Header \\
+    206 & Header timestamp should be greater than parents. & true & Header \\
     \hline
-    207 & Header height should be greater by 1 than parents. & true & Header \\
+    207 & A header height should be greater by one than parents. & true & Header \\
     \hline
-    208 & Header should contain correct PoW solution. & true & Header \\
+    208 & A header should contain the correct PoW solution. & true & Header \\
     \hline
-    209 & Header should contain correct required difficulty. & true & Header \\
+    209 & A header should contain correct required difficulty. & true & Header \\
     \hline
-    210 & Header height should not be older, than current height minus <config.keepVersions>. & true & Header \\
+    210 & A header height should not be older, than current height minus <config.keepVersions>. & true & Header \\
     \hline
     211 & Parent header should not be marked as invalid. & true & Header \\
     \hline
-    212 & Header timestamp should not be more than 20 minutes in future. & true & Header \\
+    212 & Header timestamp should not be more than 20 minutes in the future. & true & Header \\
     \hline
 \end{tabular}
 
@@ -94,23 +94,23 @@ Every rule is numerated and may be deactivated later via soft forks, while new r
     \hline
     Id & Validation rule & Active & Modifiers \\
     \hline
-    300 & Modifier should not be applied yet. & true & Header, ADProofs, Extension, BlockTransactions \\
+    300 & A modifier should not be applied yet. & true & Header, ADProofs, Extension, BlockTransactions \\
     \hline
-    302 & Block sections should correspond to declared header. & true & ADProofs, Extension, BlockTransactions \\
+    302 & Block sections should correspond to the declared header. & true & ADProofs, Extension, BlockTransactions \\
     \hline
-    303 & Header for block section should not be marked as invalid. & true & ADProofs, Extension, BlockTransactions \\
+    303 & A header for the block section should not be marked as invalid. & true & ADProofs, Extension, BlockTransactions \\
     \hline
-    305 & Too old block section. & true & ADProofs, Extension, BlockTransactions \\
+    305 & Block section should correspond to a block header that is not pruned yet. & true & ADProofs, Extension, BlockTransactions \\
     \hline
     311 & Interlinks should be packed properly. & true & Extension \\
     \hline
-    312 & Interlinks should have correct structure. & true & Extension \\
+    312 & Interlinks should have the correct structure. & true & Extension \\
     \hline
     313 & Extension fields key length should be 2. & true & Extension \\
     \hline
-    314 & Extension field value length > 64. & true & Extension \\
+    314 & Extension field value length should be <= 64. & true & Extension \\
     \hline
-    315 & Extension should not contain duplicate keys. & true & Extension \\
+    315 & An extension should not contain duplicate keys. & true & Extension \\
     \hline
     316 & Extension of non-genesis block should not be empty. & true & Extension \\
     \hline
@@ -124,8 +124,8 @@ Every rule is numerated and may be deactivated later via soft forks, while new r
     \hline
     Id & Validation rule & Active & Modifiers \\
     \hline
-    400 & Operation applied to AVL+ tree should pass. & true & ErgoFullBlock \\
+    400 & Operations applied to AVL+ tree should pass. & true & ErgoFullBlock \\
     \hline
-    401 & Calucated AVL+ digest should be eqaul to the declared one. & true & ErgoFullBlock \\
+    401 & Calculated AVL+ digest should be equal to the declared one. & true & ErgoFullBlock \\
     \hline
 \end{tabular}

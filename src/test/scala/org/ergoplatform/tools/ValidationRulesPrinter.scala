@@ -8,7 +8,6 @@ object ValidationRulesPrinter extends App with ScorexLogging {
 
   val rules = ValidationRules.rulesSpec
 
-
   println("\\textbf{Transaction validation:}\n\n")
   println("\\begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{2.5cm}| }")
   println("    \\hline\nId & Validation rule & Active & Modifiers \\\\\n\\hline")

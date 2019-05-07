@@ -72,7 +72,7 @@ object ValidationRules {
     hdrRequiredDifficulty -> (s => fatal(s"A header should contain correct required difficulty. $s"), true, Seq(classOf[Header])),
     hdrTooOld -> (s => fatal(s"A header height should not be older, than current height minus <config.keepVersions>. $s"), true, Seq(classOf[Header])),
     hdrParentSemantics -> (s => fatal(s"Parent header should not be marked as invalid. $s"), true, Seq(classOf[Header])),
-    hdrFutureTimestamp -> (s => fatal(s"Header timestamp should not be more than 20 minutes in the future. $s"), true, Seq(classOf[Header])),
+    hdrFutureTimestamp -> (s => recoverable(s"Header timestamp should not be more than 20 minutes in the future. $s"), true, Seq(classOf[Header])),
 
     // block sections validation
     bsNoHeader -> (s => recoverable(s"A header for a modifier $s is not defined"), true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),

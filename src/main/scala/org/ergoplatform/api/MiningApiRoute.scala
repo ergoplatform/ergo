@@ -16,8 +16,10 @@ case class MiningApiRoute(miner: ActorRef, ergoSettings: ErgoSettings)
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  override val route: Route = (pathPrefix("mining") & withCors) {
-    candidateR ~ solutionR
+  override val route: Route = pathPrefix("mining") {
+    corsHandler {
+      candidateR ~ solutionR
+    }
   }
 
   def candidateR: Route = (path("candidate") & pathEndOrSingleSlash & get) {

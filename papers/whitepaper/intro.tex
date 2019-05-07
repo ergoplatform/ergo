@@ -30,13 +30,15 @@ Despite the generous block reward subsidy in some existing systems, their fees i
 Besides the vanilla currency example, the other use of blockchains is to build decentralized applications.
 Such applications utilize the ability of the underlying platform to write smart contracts~\cite{szabo1994smart} implementing their logic by means of a blockchain-specific programming language.
 One way to classify blockchains in terms of their ability to write smart contracts is based on if they are  
-{\em UTXO-based}~(e.g., Bitcoin) or {\em account-based}~(e.g., Ethereum)~\cite{zahnentferner2018chimeric}. 
+{\em UTXO-based}~(e.g., Bitcoin) or {\em account-based}~(e.g., Ethereum)~\cite{zahnentferner2018chimeric}.
 Account-based cryptocurrencies, such as Ethereum, introduce special contract accounts controlled by code,
 that may be invoked by incoming transactions.
 Although this approach allows performing arbitrary computation, the implementation of complex spending conditions
-can lead to bugs such as the one in an Ethereum's `simple' multi-signature contract that caused a loss of \$150 million in 2017~\cite{parityLock}.
-In UTXO-based cryptocurrencies, every coin has a script associated with it, and to spend that coin, one must satisfy the conditions given in the script. 
-Implementing such protecting conditions is much easier with the UTXO model but doing arbitrary Turing-complete computation is quite complex~\cite{chepurnoy2018self}. However, most financial contracts do not require Turing-completeness. Ergo is based on the UTXO model and provides a convenient way to implement financial applications covering an
+can lead to bugs such as the one in an Ethereum's ``simple'' multi-signature contract that caused a loss of \$150 million in 2017~\cite{parityLock}.
+In UTXO-based cryptocurrencies, every coin has a script associated with it, and to spend that coin, one must satisfy the conditions given in the script.
+Implementing such protecting conditions is much easier with the UTXO model but doing arbitrary Turing-complete computation is quite complex~\cite{chepurnoy2018self}.
+However, most financial contracts do not require Turing-completeness~\cite{jansenDo}.
+Ergo is based on the UTXO model and provides a convenient way to implement financial applications covering an
 overwhelming majority of public blockchain use-cases.
 
 While the contractual component is important for building decentralized applications,

@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer, PreHeader}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{Constants, _}
+import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
@@ -48,7 +49,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                        val currentParameters: Parameters,
                        val votingData: VotingData)
                       (implicit val votingSettings: VotingSettings)
-  extends BytesSerializable with ScorexEncoding {
+  extends ErgoLikeStateContext
+    with BytesSerializable
+    with ScorexEncoding {
 
   override type M = ErgoStateContext
 

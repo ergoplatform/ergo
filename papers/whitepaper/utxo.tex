@@ -20,7 +20,7 @@ An Ergo box is made of registers~(and nothing but registers). Such a box can hav
     \item{\em $R_1$ (guard script). } Serialized script protecting this box.
     \item{\em $R_2$ (tokens). } A box can carry multiple tokens. This register contains an array of
     $(token\_identifier \rightarrow amount)$ pairs locked in this box.
-    \item{\em $R_3$ (transaction info). } Contains (1) declared creation height~(that should not be bigger than the height of the block carrying this transaction), 
+    \item{\em $R_3$ (transaction info). } Contains (1) declared creation height~(should be no more than actual height of a block which contains the transaction),
     (2) a unique identifier of the transaction that created this box, and (3) the index of this box in that transaction's output boxes. 
     \item{\em $R_4-R_9$ (additional data). } Contains arbitrary user-defined data.
 \end{itemize}

@@ -1,44 +1,40 @@
 \section{Ergo's Native Token}
-
- \dnote{Bitcoin have utility usage to pay for network resources as well as Ethereum has a utility usage to pay for
- computations~(we've also discussed it in "Systematic approach to cryptocurrency fees" paper). Also Ethereum emission
- rate was only reduced making it better and better as a store of value and is following "set in stone social contract" that
- it will reach zero when it will switch to PoS. Keeping in mind lost coins, Ethereum may be better then Ergo even
- right now, as far as efficient number of coins in circullation may reduce with time unlike Ergo.}
-
- \dnote{Instead of comparision of medium of exchange or store of value properties with BTC/ETH, I propose to
- describe, that Erg is utility token with the different purpose~(pay storage fee) and also have limited
- supply~(that would be natural if we'll move this part into previous section)}
-
- \knote{I disagree, but you are free to propose an alternative text. Also, what was discussed in the "Systematic
- approach..." paper that is a fee structure, not usefulness of a token.}
-
- In this section, we provide some reflections on the nature of the native Ergo token. For starters, we note that
- any currency has three main functions: a medium of exchange, a unit of account, and a store of value.
-
- Bitcoin, being historically the first digitally scarce asset, is perfect as store-of-value. It is even better than gold under certain assumptions~(such as the SHA-256 hash function not being broken, and a majority of miners not willing to destroy Bitcoin), as emission is limited and known in advance. However, being the perfect store-of-value also means that it is not so good as medium-of-exchange. In particular, if one knows that Bitcoin is indeed the best tool to store value in the long term, he would use fiat whenever possible to collect more bitcoins.
-
- On the other hand, Ethereum is not just a currency, but a utility token used to pay for computations over the
-``decentralized world computer'' (or ``fully replicated programmable calculator''). However, Ethereum is not good as
- store-of-value, as emission is endless, and, historically, can be changed easily by the community along with critical system parameters.
-
- Ergo combines best from these two top blockchains. Emission is predefined and limited. Furthermore, it will be finished within
- just ten years. The system assumptions are set in stone with a precisely defined {\em social contract}~\ref{sec:social}. Also,
- Ergo is a utility token used to pay storage rent. This storage rent makes the system more stable. Lastly, Ergo is suitable for building monetary systems on top of it with properties different from the Ergo native token itself. However, participating in such systems would require using the Ergo native token as well in order to pay storage rent.
-
-
-\subsection{Currency And Emission}
 \label{sec:currency}
 
-The native currency of \Ergo{} platform is the \Erg{} token, whose unique property is
-that it is the only currency for paying storage rent in \Ergo{}~(see Section~\ref{sec:survivability} for more details).
-One \Erg{} is divisible to up to $10^9$ smaller units, called \nanoErg{}s.
+Ergo platform has its native token, which is
+called \Erg{} and is divisible to up to $10^9$ smallest units, \nanoErg{}s.
+\Erg{}s are important for Ergo platform stability and security by several reasons discussed below.
 
-All \Erg{} tokens that will ever circulate in the system are present in
-the initial state and are divided into 3 parts~(boxes):
+During an initial phase of Ergo life, miners will receive the reward in \Erg{}s
+according to a predefined and hard-coded token emission schedule~(see~\ref{sec:emission} for more details).
+This coins will incentivize miners to participate in the Ergo network, securing it from hashrate-based attacks
+like the known 51\% attack~\cite{reorgAttack}.
 
-\knote{no any notion of a box was introduced before, the introduction is sudden}
-\dnote{I propose to add section about Ergo state before this one and introduce box notion in it}
+\Erg{} emission will be finished within just eight years, and after that miner will only receive \Erg{} from
+fees.
+Ergo block size and block computation cost are limited, and thus miners are enforced to
+choose only a subset of transactions from mempool during high load.
+Fees will help miners to sort the transactions, preventing spam attacks while allowing
+to include transactions from honest users in blocks.
+
+Besides network and computation resources, a transaction utilizes storage by increasing state size.
+In existing cryptocurrencies, an element of the state once created lives possibly forever without
+paying anything for that, leading to continuously increasing state size.
+In contrast, Ergo has a storage rent component that periodically charges users for every byte
+included in the state.
+This storage rent is making the system more stable by limiting state size, returning lost coins into
+circulation and providing an additional stable and predictable reward to miners.
+
+Thus, being a platform for contractual money, Ergo is suitable to build applications and monetary systems
+on top of it.
+However, participating in such systems would require using the Ergo native token as well in order to pay
+storage rent and transaction fees.
+
+\subsection{Emission}
+\label{sec:emission}
+
+
+All \Erg{} tokens that will ever circulate in the system are presented in the initial state, which consists of 3 boxes:
 
 \begin{itemize}
     \item{\em No premine proof.} This box contains exactly one~\Erg{} and is protected by a script that prevents it from being spent by anyone.
@@ -54,7 +50,7 @@ the initial state and are divided into 3 parts~(boxes):
     Its protecting script~\cite{link to corresponding ergo tree} consists of two parts.
 
     First, it ensures that only a predefined portion of the box value is unlocked.
-    During blocks 1-525,599 (2 years) 7.5 \Erg{} will be released every block. Then during blocks 525,600-590,399 (3 months) 4.5 \Erg{} will be released every block. Finally, 
+    During blocks 1-525,599 (2 years) 7.5 \Erg{} will be released every block. Then during blocks 525,600-590,399 (3 months) 4.5 \Erg{} will be released every block. Finally,
     during blocks 590,400-655,199 (3 months) 1.5 \Erg{} will be released every block.
     This rule ensures the presence of funds for \Ergo{} development for at least 2.5 years and, at any moment of time,
     rewards do not exceed 10\% of the total number of coins in circulation.

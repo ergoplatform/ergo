@@ -1,30 +1,78 @@
 \section{Ergo state}
 \label{sec:utxo}
 
-\dnote{rewrite and provide detailed description of Ergo Box, AVL+ trees, digest nodes}
-\dnote{it might be useful to add info about block structure~(Header+Block transactions+Extension+ADProofs), transaction structure}
+To check a new transaction, a cryptocurrency client does not use the ledger with all the transactions that happened before this
+one. Instead, it uses a ledger state snapshot from its history. In the Bitcoin Core reference implementation, this snapshot is the active one-time coins (i.e., UTXOs), and a transaction destroys some coins and also creates new ones.
+In Ethereum, this snapshot is of long-lived accounts and a transaction modifies monetary balance and internal storage of some accounts.  
+Also, in Ethereum (unlike Bitcoin), the representation of the snapshot is fixed within the protocol because an authenticating digest of the snapshot is written into the block header. 
+%Also, the
+%representation of the snapshot in Ethereum~(unlike Bitcoin) is fixed by the protocol, as authenticating digest of the
+%snapshot is written into a block header.
 
-To check a new transaction, a cryptocurrency client is not using the ledger (all the transactions happened before the
-transaction), rather, it is using ledger state snapshot got from the history. In Bitcoin Core reference implementation,
-this snapshot is about active one-time coins, and a transaction is destroying some coins and also creating new ones.
-In Ethereum, the snapshot is about long-living accounts, where an account is controlled whether by a human or
-executable code; a transaction then is modifying monetary balance and internal memory of some accounts. Also, the
-representation of the snapshot in Ethereum~(unlike Bitcoin) is fixed by the protocol, as authenticating digest of the
-snapshot is written into a block header (thus, in order to have full security guarantees, a client needs to build
-the same snapshot as a miner).
+Ergo follows Bitcoin's UTXO design and represents the snapshots using one-time coins. The difference from Bitcoin is that in addition to monetary value and protecting script, an Ergo one-time coin, called a {\em box}, also contains user-defined data.
+Similar to Ethereum, an Ergo block also stores an authenticating digest, called the {\em stateRoot}, of the global state after applying the block. 
 
-Ergo is representing the snapshot in the form of one-time coins, like Bitcoin. The difference is, in addition to monetary
-value and protecting script, an Ergo coin contains additional registers with arbitrary data, thus we use term {\em box}
-instead of {\em coin}. Using one-time immutable objects is the easiest and safest solution for replay and reordering
-attacks. Also, it it is easier to process transactions in parallel when they are not modifying state of objects they
-are accessing. Also, with one-time coins, it seems it is easier to build fully stateless clients~\cite{chepurnoy2018edrax},
-however, research in this area is still in the initial stage. A major criticism for one-time coins says that this model
-is not suitable for non-trivial applications, but Ergo has overcome such problems, and we have many non-trivial
-prototype applications built on top of the Ergo Platform.
+An Ergo box is made of registers~(and nothing but registers). Such a box can have 10 registers labelled $R_0,R_1,\ldots,R_9$, of which the first four are filled with mandatory values and the rest may contain arbitrary data or be empty. 
 
-Like in Ethereum, the ledger snapshot representation~(in the form of boxes not destroyed by
-previous transactions) is fixed by the Ergo protocol. In details, a miner should maintain a Merkle-tree like
-authenticated data structure built on top of UTXO set, and include short digest (just 33 bytes) corresponding to UTXO
-set after application of a block into a header of the block. However, static Merkle trees are not suitable for evolving
-datasets, so we are using authenticated AVL+ trees as described in~\cite{reyzin2017improving}. We provide access to
-this datastructure via our transaction language as well.
+
+\begin{itemize}
+    \item{\em $R_0$ (monetary value). } Amount of Erg locked in this box.
+    \item{\em $R_1$ (guard script). } Serialized script protecting this box.
+    \item{\em $R_2$ (tokens). } A box can carry multiple tokens. This register contains an array of
+    $(token\_identifier \rightarrow amount)$ pairs locked in this box.
+    \item{\em $R_3$ (transaction info). } Contains (1) declared creation height~(that should not be bigger than the height of the block carrying this transaction), 
+    (2) a unique identifier of the transaction that created this box, and (3) the index of this box in that transaction's output boxes. 
+    \item{\em $R_4-R_9$ (additional data). } Contains arbitrary user-defined data.
+\end{itemize}
+
+%Using one-time immutable objects (i.e., Bitcoin's UTXO model) has some advantages compared to Ethereum's long-lived and mutable accounts. 
+
+One-time immutable objects (as in Bitcoin's UTXO model) have some advantages over Ethereum's long-lived mutable accounts. Firstly, it gives easier and safer protection from replay or reordering attacks. Secondly, it is easier to process transactions in parallel because they don't modify state of the objects they access. Finally, it seems easier to build fully stateless clients using one-time coins~\cite{chepurnoy2018edrax} (although research in this area is still in the initial stage).
+
+One major criticism of one-time coins is that this model does not seem suitable for non-trivial decentralized applications. However, Ergo has overcome the problems and shown this assertion to be false by
+% overcoming many of the supposed problems and and overcome such problems, 
+demonstrating many non-trivial prototype applications built on top of
+it~(see Section~\ref{sec:contractual}).
+
+The Ergo protocol fixes the ledger snapshot representation in the form of boxes not destroyed by previous transactions.
+In detail, a miner should maintain a Merkle-tree like authenticated data structure built on top of the UTXO set and must include a short digest (just 33 bytes) of this structure in each block header. This digest must be calculated {\em after} applying the block.
+This authenticated data structure is built on top of an AVL+ tree~\cite{reyzin2017improving}, which like a regular hash tree,
+allows generating proofs of existence or non-existence of particular elements in the tree.
+Thus, users maintaining the full tree are capable of generating proofs that their boxes are unspent and a small 33 bytes digest is sufficient for verifing these proofs.
+However, unlike regular hash trees, an AVL+ tree also allows generation of proofs of tree modifications that allow verifiers to compute the new tree digest.
+Ergo miners are required to generate proofs of block modifications and a hash of this proof is included into the block header along with the digest of the resulting state.
+Hence, light nodes that only maintain a small digest of the current state are able to verify a full block -- they can check that all spent boxes where
+removed from the state, all created boxes were added to it and no more changes where made. 
+
+AVL+ trees allow building efficient authenticated dictionaries that reduce proof size and speed up verification by 1.4-2.5 times in comparison to prior solutions, making them better suited for the cryptocurrency applications.
+For instance, our proofs are about 3 times smaller than proofs of a Merkle Patricia trie used in Ethereum for the same purpose (see Figure~\ref{fig:proofSize}).
+
+\dnote{find image sources and insert images of a better quality}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{img/proofSize.png}
+    \caption{Proof size comparison with Merkle patricia trie
+    \label{fig:proofSize} }
+\end{figure}
+
+Finally, proofs for multiple transactions in a single block are compressed together, reducing their total length
+by approximately an additional factor of 2:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{img/compression.png}
+    \caption{Left: proof size per modification for 2000 transactions as a function of starting tree size $n$.
+    Right: proof size per modification for a tree with $n = 1 000 000$ keys as a function of batch size $B$.
+    In both cases, half of the modifications were inserts of new (key, value) pairs and the other half were change of values for existing keys.
+    \label{fig:compression} }
+\end{figure}
+
+Thus, Ergo state provides an efficient and secure way to prove existence or non-existence of certain elements in
+it, as well as proofs of tree modifications.
+These tree operations are supported by the Ergo smart contract language, thereby providing ability to implement sophisticated contracts like those discussed in Section~\ref{sec:contractual}
+
+
+
+
+

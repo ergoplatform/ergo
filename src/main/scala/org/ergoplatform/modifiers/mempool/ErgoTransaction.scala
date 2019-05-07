@@ -115,16 +115,16 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     */
   def validateStateless: ValidationState[Unit] = {
     ModifierValidator(ValidationRules.initialSettings)
-      .validate(txNoInputs, inputs.nonEmpty, toString)
-      .validate(txNoOutputs, outputCandidates.nonEmpty, toString)
-      .validate(txManyInputs, inputs.size <= Short.MaxValue, toString)
-      .validate(txManyDataInputs, dataInputs.size <= Short.MaxValue, toString)
-      .validate(txManyOutputs, outputCandidates.size <= Short.MaxValue, toString)
-      .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), toString)
+      .validate(txNoInputs, inputs.nonEmpty, s"$id")
+      .validate(txNoOutputs, outputCandidates.nonEmpty, s"$id")
+      .validate(txManyInputs, inputs.size <= Short.MaxValue, s"$id: ${inputs.size}")
+      .validate(txManyDataInputs, dataInputs.size <= Short.MaxValue, s"$id: ${dataInputs.size}")
+      .validate(txManyOutputs, outputCandidates.size <= Short.MaxValue, s"$id: ${outputCandidates.size}")
+      .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), s"$id: ${outputCandidates.map(_.value)}")
       .validateNoFailure(txOutputSum, outputsSumTry)
-      .validate(txInputsUnique, inputs.distinct.size == inputs.size, toString)
+      .validate(txInputsUnique, inputs.distinct.size == inputs.size, s"$id: ${inputs.distinct.size} == ${inputs.size}")
       .validateNoFailure(txAssetsInOneBox, outAssetsTry)
-      .validate(txPositiveAssets, outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)), s" $this")
+      .validate(txPositiveAssets, outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)), s"$id: ${outputCandidates.map(_.additionalTokens)}")
   }
 
   /**
@@ -162,25 +162,25 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     ModifierValidator(vs)
       // Check that the transaction is not too big
-      .validate(txCost, initialCost < maxCost, s"Initial cost of $this")
+      .validate(txCost, initialCost < maxCost, s"$id: initial cost")
       // Starting validation
       .payload(initialCost)
       // Perform cheap checks first
       // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) =>
       validationState
-        .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"output: $out")
-        .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s"output: $out")
+        .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id: output $out")
+        .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s"$id: output $out")
     }
       // Just to be sure, check that all the input boxes to spend (and to read) are presented.
       // Normally, this check should always pass, if the client is implemented properly
       // so it is not part of the protocol really.
-      .validate(txBoxesToSpend, boxesToSpend.size == inputs.size, s"${boxesToSpend.size} != ${inputs.size}")
-      .validate(txDataBoxes, dataBoxes.size == dataInputs.size, s"${dataBoxes.size} != ${dataInputs.size}")
+      .validate(txBoxesToSpend, boxesToSpend.size == inputs.size, s"$id: ${boxesToSpend.size} == ${inputs.size}")
+      .validate(txDataBoxes, dataBoxes.size == dataInputs.size, s"$id: ${dataBoxes.size} == ${dataInputs.size}")
       // Check that there are no overflow in input and output values
-      .validate(txInputsSum, inputSumTry.isSuccess, this.toString)
+      .validate(txInputsSum, inputSumTry.isSuccess, s"$id")
       // Check that transaction is not creating money out of thin air.
-      .validate(txErgPreservation, inputSumTry == outputsSumTry, toString)
+      .validate(txErgPreservation, inputSumTry == outputsSumTry, s"$id: $inputSumTry == $outputsSumTry")
       .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", e)) { case (validation, (outAssets, outAssetsNum)) =>
       extractAssets(boxesToSpend) match {
         case Success((inAssets, inAssetsNum)) =>
@@ -191,7 +191,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
           validation
             // Check that transaction is not too costly considering all the assets
-            .validate(txCost, initialCost + totalAssetsAccessCost < maxCost, s"assets cost of $this")
+            .validate(txCost, initialCost + totalAssetsAccessCost < maxCost, s"$id: assets cost")
             .validateSeq(outAssets) {
               case (validationState, (outAssetId, outAmount)) =>
                 val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
@@ -200,7 +200,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                 // with a possible exception for a new asset created by the transaction
                 validationState.validate(txAssetsPreservation,
                   inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0),
-                  s"Amount in: $inAmount, out: $outAmount, Allowed new asset: $newAssetId out: $outAssetId")
+                  s"$id: Amount in = $inAmount, out = $outAmount. Allowed new asset = $newAssetId, out = $outAssetId")
             }
             .map(_ + totalAssetsAccessCost)
         case Failure(e) =>
@@ -228,9 +228,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         // Just in case, should always be true if client implementation is correct.
         .validateEquals(txBoxToSpend, box.id, input.boxId)
         // Check whether input box script interpreter raised exception
-        .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"#$idx: $costTry")
+        .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
         // Check that cost of the transaction after checking the input becomes too big
-        .validate(txCost, currentTxCost + scriptCost <= maxCost, s"cost exceeds limit after input #$idx: $this")
+        .validate(txCost, currentTxCost + scriptCost <= maxCost, s"$id: cost exceeds limit after input #$idx")
         .map(_ + scriptCost)
     }
   }

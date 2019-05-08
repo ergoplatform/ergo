@@ -52,8 +52,6 @@ removed from the state, all created boxes were added to it and no more changes w
 AVL+ trees allow building efficient authenticated dictionaries that reduce proof size and speed up verification by 1.4-2.5 times in comparison to prior solutions, making them better suited for the cryptocurrency applications.
 For instance, our proofs are about 3 times smaller than proofs of a Merkle Patricia trie used in Ethereum for the same purpose (see Figure~\ref{fig:proofSize}).
 
-\dnote{find image sources and insert images of a better quality}
-
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.5\textwidth]{img/proofSize.png}
@@ -65,13 +63,41 @@ Finally, proofs for multiple transactions in a single block are compressed toget
 by approximately an additional factor of 2:
 
 \begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{img/compression.png}
-    \caption{Left: proof size per modification for 2000 transactions as a function of starting tree size $n$.
-    Right: proof size per modification for a tree with $n = 1 000 000$ keys as a function of batch size $B$.
-    In both cases, half of the modifications were inserts of new (key, value) pairs and the other half were change of values for existing keys.
-    \label{fig:compression} }
+\begin{tabular}{cc}
+\ifnum\lncs=0
+\begin{minipage}{0.5\textwidth}
+\else
+\begin{minipage}{0.492\textwidth}
+\fi
+\begin{center}
+\ifnum\lncs=0
+\includegraphics[trim={1.5cm 0cm 1.4cm 2cm},clip,width=\textwidth]{img/batching/proofSizeFromTreeSize.png}
+\else
+\includegraphics[trim={1.5cm 0cm 2cm 2cm},clip,width=\textwidth]{img/batching/proofSizeFromTreeSize.png}
+\fi
+\end{center}
+\end{minipage}
+&
+\ifnum\lncs=0
+\begin{minipage}{0.5\textwidth}
+\else
+\begin{minipage}{0.492\textwidth}
+\fi
+\begin{center}
+\ifnum\lncs=0
+\includegraphics[trim={1.5cm 0cm 1.4cm 2cm},clip,width=\textwidth]{img/batching/proofSizeFromBatchSize2.png}
+\else
+\includegraphics[trim={1.5cm 0cm 2cm 2cm},clip,width=\textwidth]{img/batching/proofSizeFromBatchSize2.png}
+\fi
+\end{center}
+\end{minipage}
+\end{tabular}
+\caption{Left: proof size per modification for 2000 transactions as a function of starting tree size $n$.
+Right: proof size per modification for a tree with $n = 1 000 000$ keys as a function of batch size $B$.
+In both cases, half of the modifications were inserts of new (key, value) pairs and the other half were change of values for existing keys.}
+\label{fig:batching}
 \end{figure}
+
 
 Thus, Ergo state provides an efficient and secure way to prove existence or non-existence of certain elements in
 it, as well as proofs of tree modifications.

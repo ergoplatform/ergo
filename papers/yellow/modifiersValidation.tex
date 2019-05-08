@@ -38,7 +38,7 @@ Every rule is numerated and may be deactivated later via soft forks, while new r
     \hline
     121 & Every output of the transaction should contain at least <minValuePerByte * outputSize> nanoErg. & true & ErgoTransaction \\
     \hline
-    122 & Every output of the transaction should have creationHeight less or equals than the height of the block with this transaction. & true & ErgoTransaction \\
+    122 & Transaction outputs should have creationHeight the does not exceed the block height. & true & ErgoTransaction \\
     \hline
     123 & Every input of the transaction should be present in UTXO. & true & ErgoTransaction \\
     \hline
@@ -81,8 +81,6 @@ Every rule is numerated and may be deactivated later via soft forks, while new r
     210 & A header height should not be older, than current height minus <config.keepVersions>. & true & Header \\
     \hline
     211 & Parent header should not be marked as invalid. & true & Header \\
-    \hline
-    212 & Header timestamp should not be more than 20 minutes in the future. & true & Header \\
     \hline
 \end{tabular}
 

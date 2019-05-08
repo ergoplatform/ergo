@@ -3,19 +3,19 @@
 \section{Contractual Money}
     \label{sec:contractual}
 
- In our opinion, the overwhelming majority of use-cases for a public blockchains (even those that claim to provide a general-purpose decentralized world computer) are for financial applications, which do not require Turing-completeness. For instance, if an oracle writes down non-financial data into the blockchain~(such as temperature), this data is usually used further in a financial
+ In our opinion, the overwhelming majority of use-cases for public blockchains (even those that claim to provide a general-purpose decentralized world computer) are for financial applications, which do not require Turing-completeness. For instance, if an oracle writes down non-financial data into the blockchain~(such as temperature), this data is usually used further in a financial
  contract. Another trivial observation we make is that many applications use digital tokens with mechanics different from the native token.
 
 For an application developer, the Ergo Platform offers custom tokens~(which are first-class citizens) and a domain-specific language for writing box protecting
  conditions in order to implement flexible and secure financial applications.
  Ergo applications are defined in terms of protecting scripts built into boxes, which may also contain data involved in the execution.
- We use the term {\em contractual money} to define Ergs (and secondary tokens) whose usage is bounded by a contract. This applies to all tokens on the platform in existance because any box with its contents~(Ergs, tokens, data) is bounded by a contract.
+ We use the term {\em contractual money} to define Ergs (and secondary tokens) whose usage is bounded by a contract. This applies to all tokens on the platform in existence because any box with its contents~(Ergs, tokens, data) is bounded by a contract.
  
- However, we can distinguish between two types of contractual Ergs. The first, called {\em free Ergs}, are the ones that could change their contracts easily and have no restrictions on the outputs or the other inputs of a spending transaction. The second type are {\em bounded Ergs}, whose contracts require the spending transaction to have input and output boxes with specific properties. 
+ However, we can distinguish between two types of contractual Ergs. The first, called {\em free Ergs}, are the ones that could change their contracts easily and have no restrictions on the outputs or the other inputs of a spending transaction. The second type is {\em bounded Ergs}, whose contracts require the spending transaction to have input and output boxes with specific properties.
  
  For example, if a box $A$ is protected by just a public key~(so providing a signature against a spending transaction is enough in order to destroy the box), the public key owner can spend $A$ and transfer the Ergs to any arbitrary output box. Thus, the Ergs within $A$ are free. 
 % to change the contract. 
-In contrast, imagine a box $B$ protected by combination of a public key and a condition that demands the spending transaction to create an output box with the same amount of Ergs as in $B$ and whose guarding script has the hash \texttt{rBMUEMuPQUx3GzgFZSsHmLMBouLabNZ4HcERm4N} (in Base58 encoding). In this case, the Ergs in $B$ are bounded Ergs.
+In contrast, imagine a box $B$ protected by a combination of a public key and a condition that demands the spending transaction to create an output box with the same amount of Ergs as in $B$ and whose guarding script has the hash \texttt{rBMUEMuPQUx3GzgFZSsHmLMBouLabNZ4HcERm4N} (in Base58 encoding). In this case, the Ergs in $B$ are bounded Ergs.
  
  Similarly, we can define free and bounded tokens. An Ergo contract can have several hybrids such as bounded Ergs and free tokens or both bounded under one public key and free under another.
 
@@ -48,14 +48,14 @@ Two more features of Ergo shaping contracting possibilities are:
 \subsection{Contract Examples}
 \label{sec:examples}
 
- In this section we provide some examples which demonstrate the superiority of Ergo contracts compared to Bitcoin's. The examples include betting on oracle-provided data, non-interactive mixing, atomic swaps, complementary currency, and an initial coin offering implemented on top of the Ergo blockchain.
+ In this section, we provide some examples which demonstrate the superiority of Ergo contracts compared to Bitcoin's. The examples include betting on oracle-provided data, non-interactive mixing, atomic swaps, complementary currency, and an initial coin offering implemented on top of the Ergo blockchain.
 
  \subsubsection{An Oracle Example}
  \label{sec:platform}
 
  Equipped with custom tokens and data inputs, we can develop a simple oracle example which also shows some design patterns that we discovered while playing with Ergo contracts. Assume that Alice and Bob want to bet on tomorrow's weather by putting money into a box that becomes spendable by Alice if tomorrow's temperature is more than 15 degrees, and spendable by Bob otherwise. To deliver the temperature into the blockchain, a trusted oracle is needed.
 
- In contract to Ethereum with its long-lived accounts, where a trusted oracle's identifier is usually known in advance, delivering data with one-time boxes is more tricky. For starters, a box protected by the oracle's key cannot be trusted, as anyone can create such a box. It is possible to include signed data into a box and check the oracle's signature in the contract (we have such an example), but this is quite involved. Instead, a solution with custom
+ In contrast to Ethereum with its long-lived accounts, where a trusted oracle's identifier is usually known in advance, delivering data with one-time boxes is more tricky. For starters, a box protected by the oracle's key cannot be trusted, as anyone can create such a box. It is possible to include signed data into a box and check the oracle's signature in the contract (we have such an example), but this is quite involved. Instead, a solution with custom
  tokens is very simple.
 
  Firstly, a token identifying the oracle should be issued. In the simplest case, the amount of this token could be one. We call such a token {\em a singleton token}. The oracle creates a box containing this token along with its data (i.e., the temperature) in register $R_4$ and the UNIX epoch time in register $R_5$.
@@ -86,10 +86,10 @@ Two more features of Ergo shaping contracting possibilities are:
 \subsubsection{A Mixing Example}
  \label{sec:platform}
 
- Privacy is important for a digital currency but implementing it can be costly or require a trusted setup. Thus, it is desirable to find cheaper way for coin mixing. As a first step towards that, we offer a non-interactive mixing protocol between two users Alice and Bob that works as follows:
+ Privacy is important for a digital currency but implementing it can be costly or require a trusted setup. Thus, it is desirable to find a cheaper way for coin mixing. As a first step towards that, we offer a non-interactive mixing protocol between two users Alice and Bob that works as follows:
  \begin{enumerate}
     \item{} Alice creates a box which demands the spending transaction to satisfy certain conditions. After that, Alice only listens to the blockchain, no any interaction with Bob is needed.
-    \item{} Bob creates a transaction spending Alice's box along with one of his own and generating two outputs with identical script but different data. Each of Alice and Bob may spend only one of the two outputs but to an external observer the two outputs look indistinguishable and he cannot decide which output belongs to whom.
+    \item{} Bob creates a transaction spending Alice's box along with one of his own and generating two outputs with an identical script but different data. Each of Alice and Bob may spend only one of the two outputs but to an external observer the two outputs look indistinguishable and he cannot decide which output belongs to whom.
  \end{enumerate}
 
  For simplicity, we do not consider fee in the example. The idea of mixing is similar to non-interactive Diffie-Hellman key exchange. First, Alice generates a secret value $x$~(a huge number) and publishes the corresponding public value $gX = g^x$. She requires Bob to generate a secret number $y$, and to include into each output two
@@ -135,14 +135,14 @@ Two more features of Ergo shaping contracting possibilities are:
  In this section, we briefly shed light on a few more examples along with links to the documents providing the details and code.
 
 \paragraph{Atomic Swap}
-Cross-chain atomic swap between Ergo and any blockchain that supports payment to either SHA-256 or Blake2b-256 hash preimages and time-locks can be done in a similar way to that proposed for Bitcoin~\cite{Nol13}. An Ergo alternative implementation is provided in~\cite{ergoTutorial}. As Ergo also has custom tokens, atomic exchange on the single Ergo block chain (Erg-to-token or token-to-token) is also possible. An implementation for this can also be found in~\cite{ergoTutorial}.
+Cross-chain atomic swap between Ergo and any blockchain that supports payment to either SHA-256 or Blake2b-256 hash preimages and time-locks can be done in a similar way to that proposed for Bitcoin~\cite{Nol13}. An Ergo alternative implementation is provided in~\cite{ergoTutorial}. As Ergo also has custom tokens, atomic exchange on the single Ergo blockchain (Erg-to-token or token-to-token) is also possible. An implementation for this can also be found in~\cite{ergoTutorial}.
 
 \paragraph{Crowdfunding}
 
- We consider the simplest crowdfunding scenario. In this example, a crowdfunding project with a known public key is considered successful if it can collect unspent outputs with total value not less than a certain amount before a certain height. A project backer creates an output box protected by the following statement: the box can be spent 
+ We consider the simplest crowdfunding scenario. In this example, a crowdfunding project with a known public key is considered successful if it can collect unspent outputs with a total value not less than a certain amount before a certain height. A project backer creates an output box protected by the following statement: the box can be spent
  if the spending transaction has the first output box protected by the project's key and amount no less than the target amount.
- Then the project can collect (in a single transaction) the biggest backer output boxes with total value not less than the target amount~(it is possible to collect up to ~22,000 outputs, which is
- enough even for a big crowdfunding campaign). For remaining outputs, it is possible to construct follow-up transactions. The code can be found in~\cite{ergoTutorial}.
+ Then the project can collect (in a single transaction) the biggest backer output boxes with a total value not less than the target amount~(it is possible to collect up to ~22,000 outputs, which is
+ enough even for a big crowdfunding campaign). For the remaining outputs, it is possible to construct follow-up transactions. The code can be found in~\cite{ergoTutorial}.
 
 \paragraph{The Local Exchange Trading System}
 
@@ -160,7 +160,7 @@ Cross-chain atomic swap between Ergo and any blockchain that supports payment to
  signature is provided). A new member is associated with a box containing a token that identifies the member. This box, which contains the {\em member contract}, is protected by a special exchange script that requires the spending transaction to do a fair exchange.
  We skip the corresponding code, which can be found in a separate article~\cite{letsTutorial}.
  
- What this contract shows, in contrast to the previous example, is that instead of storing the members list, only a short digest of an authenticated AVL+ tree can be included in the box. This allows reduction in storage requirements for the state. A transaction doing lookup or modification of the member list should provide a proof for AVL+ tree lookup or modification operations. Thus, saving space in the state storage leads to bigger transactions, but this scalability problem is easier to solve.
+ What this contract shows, in contrast to the previous example, is that instead of storing the members list, only a short digest of an authenticated AVL+ tree can be included in the box. This allows a reduction in storage requirements for the state. A transaction doing lookup or modification of the member list should provide a proof for AVL+ tree lookup or modification operations. Thus, saving space in the state storage leads to bigger transactions, but this scalability problem is easier to solve.
 
 \paragraph{Initial Coin Offering}
 

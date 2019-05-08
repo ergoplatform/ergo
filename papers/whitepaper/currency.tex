@@ -37,7 +37,7 @@ storage rent and transaction fees.
 All \Erg{} tokens that will ever circulate in the system are presented in the initial state, which consists of 3 boxes:
 
 \begin{itemize}
-    \item{\em No premine proof.} This box contains exactly one~\Erg{} and is protected by a script that prevents it from being spent by anyone.
+    \item{\em No Premine Proof.} This box contains exactly one~\Erg{} and is protected by a script that prevents it from being spent by anyone.
     Thus, it is a long-lived box that will stay in the system until the storage-rent component
     destroys it.
     Its main purpose is to prove that \Ergo{} mining was not started privately by anyone before
@@ -52,7 +52,7 @@ All \Erg{} tokens that will ever circulate in the system are presented in the in
     First, it ensures that only a predefined portion of the box value is unlocked.
     During blocks 1-525,599 (2 years) 7.5 \Erg{} will be released every block. Then during blocks 525,600-590,399 (3 months) 4.5 \Erg{} will be released every block. Finally,
     during blocks 590,400-655,199 (3 months) 1.5 \Erg{} will be released every block.
-    This rule ensures the presence of funds for \Ergo{} development for at least 2.5 years and, at any moment of time,
+    This rule ensures the presence of funds for \Ergo{} development for 2.5 years and, at any moment of time,
     rewards do not exceed 10\% of the total number of coins in circulation.
 
     Second, it has custom protection from unexpected spending.
@@ -63,7 +63,7 @@ All \Erg{} tokens that will ever circulate in the system are presented in the in
     During the first year, these funds will be used to cover the pre-issued EFYT token~\cite{our website with swap }. After that they will be distributed in a decentralized manner via a community voting system that is under development.
 
 
-    \item{\em Miners reward.} This box contains 93,409,132 \Erg{} that will be collected by block miners
+    \item{\em Miners Reward.} This box contains 93,409,132 \Erg{} that will be collected by block miners
     as reward for their work.
     Its protecting script~\cite{scriptEmission} requires the spending transaction to have exactly two outputs with the following properties:
 

@@ -15,7 +15,7 @@ The first known problem of a PoW system is the development of specialized hardwa
 The second known threat to a PoW network decentralization is that even big miners trend to unite in
 mining pools, leading to a situation when just a few pool operators (5 in Bitcoin, 2 in Ethereum
 at the time of writing) control more than 51\% of computational power.
-Although the problem has already been discussed in the community, no practical solutions were
+Although the problem has already been discussed in the community, no practical solutions have been
 implemented before \Ergo{}.
 
 
@@ -69,7 +69,7 @@ only contains public keys. Solution verification is done by Algorithm~\ref{alg:v
     \end{algorithmic}
 \end{algorithm}
 
-This approach prevents mining pool formation because the secret key $sk$ is needed for mining: once any miner finds a correct solution, he can use this secret to steal the block reward. On the other hand, it is secure to reveal a single solution, as it only contains public keys and reveals a single linear relation between the 2 secrets $sk, w$.
+This approach prevents mining pool formation because the secret key $sk$ is needed for mining: once any pool miner finds a correct solution, he can use this secret to steal the block reward. On the other hand, it is secure to reveal a single solution, as it only contains public keys and reveals a single linear relation between the 2 secrets $sk, w$.
 
 Memory-hardness follows from the fact that Algorithm~\ref{alg:prove} requires keeping
 the whole list $R$ for the main loop execution.

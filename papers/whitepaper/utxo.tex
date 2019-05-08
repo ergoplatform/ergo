@@ -20,14 +20,19 @@ An Ergo box is made of registers~(and nothing but registers). Such a box can hav
     \item{\em $R_1$ (guard script). } Serialized script protecting this box.
     \item{\em $R_2$ (tokens). } A box can carry multiple tokens. This register contains an array of
     $(token\_identifier \rightarrow amount)$ pairs locked in this box.
-    \item{\em $R_3$ (transaction info). } Contains (1) declared creation height~(that should not be bigger than the height of the block carrying this transaction), 
+    \item{\em $R_3$ (transaction info). } Contains (1) declared creation height~(should be no more than actual height of a block which contains the transaction),
     (2) a unique identifier of the transaction that created this box, and (3) the index of this box in that transaction's output boxes. 
     \item{\em $R_4-R_9$ (additional data). } Contains arbitrary user-defined data.
 \end{itemize}
 
 %Using one-time immutable objects (i.e., Bitcoin's UTXO model) has some advantages compared to Ethereum's long-lived and mutable accounts. 
 
-One-time immutable objects (as in Bitcoin's UTXO model) have some advantages over Ethereum's long-lived mutable accounts. Firstly, it gives easier and safer protection from replay or reordering attacks. Secondly, it is easier to process transactions in parallel because they don't modify state of the objects they access. Finally, it seems easier to build fully stateless clients using one-time coins~\cite{chepurnoy2018edrax} (although research in this area is still in the initial stage).
+One-time immutable objects (as in Bitcoin's UTXO model) have some advantages over Ethereum's long-lived mutable accounts.
+Firstly, it gives easier and safer protection from replay or reordering attacks.
+Secondly, it is easier to process transactions in parallel because they don't modify state of the objects they access.
+Also, a transaction is whether modifying system state exactly as intended, or not changing the state at all~(with no
+possible side-effects resulting from out-of-gas exception, reentrancy issues, and so on).
+Finally, it seems easier to build fully stateless clients using one-time coins~\cite{chepurnoy2018edrax} (although research in this area is still in the initial stage).
 
 One major criticism of one-time coins is that this model does not seem suitable for non-trivial decentralized applications. However, Ergo has overcome the problems and shown this assertion to be false by
 % overcoming many of the supposed problems and and overcome such problems, 

@@ -30,9 +30,9 @@ a mobile phone can join the network and start using Ergo with the same security
 guarantees as a full node.
 
 Readers may notice a third potential problem in that although support for light clients solves the problem for Ergo users, it does not solve the problem for Ergo miners, who still need to keep the whole state for efficient transaction validation.
-In existing blockchain systems, users can put arbitrary data into this state. This data, which lasts forever, creates a lot of dust and its size increases monotonously over time~\cite{perez2019another}.
+In existing blockchain systems, users can put arbitrary data into this state. This data, which lasts forever, creates a lot of dust and its size increases endlessly over time~\cite{perez2019another}.
 A large state size leads to serious security issues, because when the state does not fit in random-access memory, an adversary can generate transactions whose validation become very slow due to required random access to the miner's storage. This can lead to DoS attacks such as the one on Ethereum in 2016~\cite{ethDos2016}.
-Moreover the community's fear of such attacks along with the problem of ``state bloat'' without any sort of compensation to miners or users holding the state has prevented scaling solutions that otherwise
+Moreover the community's fear of such attacks along with the problem of ``state bloat'' without any sort of compensation to miners or users holding the state may have prevented scaling solutions that otherwise
 could have been implemented (such as larger block sizes, for example).
 To prevent this, Ergo has a storage rent component: if an
 output remains in the state for 4 years without being moved, a miner may charge a small fee for every
@@ -40,11 +40,12 @@ byte kept in the state.
 
 This idea, which is similar to regular cloud storage services, was only proposed quite recently for cryptocurrencies~\cite{chepurnoy2017space} and has several important consequences.
 Firstly, it ensures that Ergo mining will always be stable, unlike Bitcoin and other PoW currencies, where mining may become unstable after emission is done~\cite{carlsten2016instability}.
-Secondly, growth of the state's size becomes controllable and predictable, thereby reducing hardware requirements for Ergo miners.
-Thirdly, by collecting storage fees from outdated boxes, miners can return coins to circulation, and thus, prevent the steady decrease of circulating supply due to lost keys~\cite{wsj2018}. 
+Secondly, growth of the state's size becomes controllable and predictable, thereby helping Ergo miners to manage their hardware requirements.
+Thirdly, by collecting storage fees from outdated boxes, miners can return coins to circulation, and thus, prevent the steady decrease of circulating supply due to lost keys~\cite{wsj2018}.
 All these effects should support Ergo's long-term survivability, both technically and economically.
 
-A fourth vital challenge to survivability is that of environment changes. A protocol should  adapt to the ever changing hardware infrastructure, new ideas to improve security or
+A fourth vital challenge to survivability is that of changes in the external environment and demands placed on the protocol.
+A protocol should  adapt to the ever changing hardware infrastructure, new ideas to improve security or
 scalability that emerge over time, evolution of use-cases, and so on.
 If all the rules are fixed without any ability to change them in a decentralized manner, even
 a simple constant change can lead to heated debates and community splits. For instance,  discussion of the block-size limit in Bitcoin led to its splitting into several independent coins.

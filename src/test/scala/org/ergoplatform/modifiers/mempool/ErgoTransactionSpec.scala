@@ -205,7 +205,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val validity = tx.statefulValidity(from, emptyDataBoxes, emptyStateContext)
       validity.isSuccess shouldBe false
       val e = validity.failed.get
-      e.getMessage should startWith(ValidationRules.errorMessage(ValidationRules.txScriptValidation, "#0"))
+      e.getMessage should startWith(ValidationRules.errorMessage(ValidationRules.txScriptValidation, ""))
     }
   }
 

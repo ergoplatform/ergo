@@ -3,10 +3,10 @@ package org.ergoplatform.api
 import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, ValidationRules}
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.api.ApiEncoderOption.Detalization
-import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
+import org.ergoplatform.mining.{groupElemToBytes, groupElemFromBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings.Algos
@@ -15,10 +15,10 @@ import scorex.core.validation.ValidationResult
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
-import sigmastate.Values.{ErgoTree, EvaluatedValue, Value}
+import sigmastate.Values.{Value, ErgoTree, EvaluatedValue}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
+import sigmastate.serialization.{ValueSerializer, ErgoTreeSerializer}
 import sigmastate.{SBoolean, SType}
 import special.collection.Coll
 import sigmastate.eval._
@@ -108,7 +108,7 @@ trait ApiCodecs {
 
   def decodeEvaluatedValue[T](transform: EvaluatedValue[SType] => T): Decoder[T] = { implicit cursor: ACursor =>
     cursor.as[Array[Byte]] flatMap { bytes =>
-      fromThrows(transform(ValueSerializer.deserialize(bytes).asInstanceOf[EvaluatedValue[SType]]))
+      fromThrows(transform(ValueSerializer.deserialize(bytes)(ValidationRules.currentSettings).asInstanceOf[EvaluatedValue[SType]]))
     }
   }
 

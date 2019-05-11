@@ -59,7 +59,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   // to state updates.
   private def stateContext: ErgoStateContext = storage.readStateContext
 
-  private def height = storage.readHeight
+  private def height: Int = stateContext.currentHeight
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
@@ -104,7 +104,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
 
     case ScanOnChain(block) =>
-      storage.updateHeight(block.header.height)
       val (outputs, inputs) = block.transactions
         .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, EncodedBoxId)]) {
           case ((outAcc, inAcc), tx) =>
@@ -121,7 +120,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       }
 
     case Rollback(version: VersionTag, height: Int) =>
-      storage.updateHeight(height)
       // remove postponed blocks which were rolled back.
       storage.readLatestPostponedBlockHeight.foreach { latestHeight =>
         (height to latestHeight).foreach(storage.removeBlock)

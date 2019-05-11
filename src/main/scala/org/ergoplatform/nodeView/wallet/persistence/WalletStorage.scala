@@ -53,14 +53,6 @@ final class WalletStorage(store: Store, settings: ErgoSettings)
     .flatMap(r => ErgoStateContextSerializer(settings.chainSettings.voting).parseBytesTry(r.data).toOption)
     .getOrElse(ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte), settings))
 
-  def updateHeight(height: Int): Unit = store
-    .update(randomVersion, Seq.empty, Seq(HeightKey -> ByteArrayWrapper(Ints.toByteArray(height))))
-
-  def readHeight: Int = store
-    .get(HeightKey)
-    .map(r => Ints.fromByteArray(r.data))
-    .getOrElse(ErgoHistory.EmptyHistoryHeight)
-
   def putBlock(block: PostponedBlock): Unit = {
     val toInsert = Seq(
       key(block.height) -> ByteArrayWrapper(PostponedBlockSerializer.toBytes(block)),
@@ -92,9 +84,6 @@ object WalletStorage {
 
   val StateContextKey: ByteArrayWrapper =
     ByteArrayWrapper(Blake2b256.hash("state_ctx"))
-
-  val HeightKey: ByteArrayWrapper =
-    ByteArrayWrapper(Blake2b256.hash("height"))
 
   val TrackedAddressesKey: ByteArrayWrapper =
     ByteArrayWrapper(Blake2b256.hash("tracked_pks"))

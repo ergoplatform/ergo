@@ -2,33 +2,39 @@
 \label{sec:currency}
 
 Ergo platform has its native token, which is
-called \Erg{} and is divisible to up to $10^9$ smallest units, \nanoErg{}s.
+called \Erg{} and is divisible to up to $10^9$ smallest units, \nanoErg{}s~(a \nanoErg is one billionth of an Erg).
 \Erg{}s are important for Ergo platform stability and security by several reasons discussed below.
 
-During an initial phase of Ergo life, miners will receive the reward in \Erg{}s
+During the initial phase of Ergo's life, miners will receive the reward in \Erg{}s
 according to a predefined and hard-coded token emission schedule~(see~\ref{sec:emission} for more details).
-This coins will incentivize miners to participate in the Ergo network, securing it from hashrate-based attacks
+These coins will incentivize miners to participate in the Ergo network, securing it from hashrate-based attacks
 like the known 51\% attack~\cite{reorgAttack}.
 
-\Erg{} emission will be finished within just eight years, and after that miner will only receive \Erg{} from
+\Erg{} emission will be finished within just eight years, and after that miners will only receive \Erg{} from
 fees.
-Ergo block size and block computation cost are limited, and thus miners are enforced to
-choose only a subset of transactions from mempool during high load.
+Although, adjustable over time through miner on-chain voting, Ergo block size and maximum block computational
+cost at any given point in time will be limited,
+and thus miners are enforced to
+choose only a subset of transactions from mempool during times of high load.
 Fees will help miners to sort the transactions, preventing spam attacks while allowing
 to include transactions from honest users in blocks.
 
 Besides network and computation resources, a transaction utilizes storage by increasing state size.
-In existing cryptocurrencies, an element of the state once created lives possibly forever without
-paying anything for that, leading to continuously increasing state size.
-In contrast, Ergo has a storage rent component that periodically charges users for every byte
+In existing cryptocurrencies, an element of the state, being  a UTXO  in  UTXO-based  blockchains,  called  a box
+in  Ergo, once created lives possibly forever without any compensation to miners and some users who must keep this state
+in high-cost random-access memory. This leads to a misalignment of incentives and continuously increasing state size.
+In contrast, Ergo has a storage rent component that periodically charges users Erg for every byte
 included in the state.
-This storage rent is making the system more stable by limiting state size, returning lost coins into
+This storage rent is making the system more stable by limiting state size or insuring proper compensation for larger
+state size, returning lost coins into
 circulation and providing an additional stable and predictable reward to miners.
 
 Thus, being a platform for contractual money, Ergo is suitable to build applications and monetary systems
 on top of it.
-However, participating in such systems would require using the Ergo native token as well in order to pay
-storage rent and transaction fees.
+However, participating in such systems would require using the Ergo native token, Erg, as well in order to pay
+storage rent and transaction fees which will provide miners strong ongoing incentives to secure the network with
+adequate hash power. Users, for their part, will be highly incentivized to purchase, use and save Ergs if they
+find applications for Ergo to be of high value.
 
 \subsection{Emission}
 \label{sec:emission}
@@ -60,7 +66,9 @@ All \Erg{} tokens that will ever circulate in the system are presented in the in
     change this part of the script as they wish, for example by adding new members to protect foundation
     funds.
 
-    During the first year, these funds will be used to cover the pre-issued EFYT token~\cite{our website with swap }. After that, they will be distributed in a decentralized manner via a community voting system that is under development.
+    During the first year, these funds will be used to cover the pre-issued EFYT token
+    %~\cite{our website with swap }
+    . After that, they will be distributed in a decentralized manner via a community voting system that is under development.
 
 
     \item{\em Miners Reward.} This box contains 93,409,132 \Erg{} that will be collected by block miners

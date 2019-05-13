@@ -23,8 +23,9 @@ class UpcomingStateContext(lastHeaders: Seq[Header],
                            val predictedHeader: PreHeader,
                            genesisStateDigest: ADDigest,
                            currentParameters: Parameters,
+                           validationSettings: ErgoValidationSettings,
                            votingData: VotingData)(implicit votingSettings: VotingSettings)
-  extends ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, votingData)(votingSettings) {
+  extends ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, validationSettings, votingData)(votingSettings) {
 
   override def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(predictedHeader)
 
@@ -47,6 +48,7 @@ class UpcomingStateContext(lastHeaders: Seq[Header],
 class ErgoStateContext(val lastHeaders: Seq[Header],
                        val genesisStateDigest: ADDigest,
                        val currentParameters: Parameters,
+                       val validationSettings: ErgoValidationSettings,
                        val votingData: VotingData)
                       (implicit val votingSettings: VotingSettings)
   extends ErgoLikeStateContext
@@ -88,7 +90,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val forkVote = votes.contains(Parameters.SoftFork)
     val height = ErgoHistory.heightOf(lastHeaderOpt)
     val calculatedParams = currentParameters.update(height, forkVote, votingData.epochVotes, votingSettings)
-    new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest, calculatedParams, votingData)
+    val calculatedValidationSettings = validationSettings.update(height, forkVote, votingData.epochVotes, votingSettings)
+    new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest, calculatedParams, calculatedValidationSettings, votingData)
   }
 
   protected def checkForkVote(height: Height): Unit = {
@@ -106,9 +109,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   /**
-    * Extracts parameters from [[Extension]] and compares them to locally calculated once.
+    * Extracts parameters and validationSettings from [[Extension]] and compares them to locally calculated once.
     */
-  def processExtension(extension: Extension, header: Header, forkVote: Boolean): Try[Parameters] = {
+  private def processExtension(extension: Extension, header: Header, forkVote: Boolean): Try[(Parameters, ErgoValidationSettings)] = {
     val height = header.height
 
     Parameters.parseExtension(height, extension).flatMap { parsedParams =>
@@ -119,6 +122,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       }
 
       Parameters.matchParameters(parsedParams, calculatedParams)
+    }.flatMap { parsedParams =>
+      // todo checks
+      val extractedValidatationSettingsTry = Success(validationSettings)
+      extractedValidatationSettingsTry.map(vs => (parsedParams, vs))
     }
   }
 
@@ -138,19 +145,21 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     if (forkVote) checkForkVote(height)
 
     if (epochStarts) {
-      val extractedParams = extensionOpt
+      val processedExtension = extensionOpt
         .map(processExtension(_, header, forkVote))
-        .getOrElse(Success(currentParameters))
+        .getOrElse(Success(currentParameters, validationSettings))
 
-      extractedParams.map { params =>
+      processedExtension.map { processed =>
+        val params = processed._1
+        val extractedValidationSettings = processed._2
         val proposedVotes = votes.map(_ -> 1)
         val newVoting = VotingData(proposedVotes)
-        new ErgoStateContext(lastHeaders, genesisStateDigest, params, newVoting)(votingSettings)
+        new ErgoStateContext(lastHeaders, genesisStateDigest, params, extractedValidationSettings, newVoting)(votingSettings)
       }
     } else {
       val newVotes = votes
       val newVotingResults = newVotes.foldLeft(votingData) { case (v, id) => v.update(id) }
-      Success(new ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, newVotingResults)(votingSettings))
+      Success(new ErgoStateContext(lastHeaders, genesisStateDigest, currentParameters, validationSettings, newVotingResults)(votingSettings))
     }
   }.flatten
 
@@ -184,7 +193,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }.flatten
 
   def updateHeaders(newHeaders: Seq[Header]): ErgoStateContext = {
-    new ErgoStateContext(newHeaders, genesisStateDigest, currentParameters, votingData)(votingSettings)
+    new ErgoStateContext(newHeaders, genesisStateDigest, currentParameters, validationSettings, votingData)(votingSettings)
   }
 
   override def toString: String =
@@ -201,7 +210,7 @@ object ErgoStateContext {
     * Initialize empty state context with fake PreHeader
     */
   def empty(genesisStateDigest: ADDigest, settings: ErgoSettings): ErgoStateContext = {
-    new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, VotingData.empty)(settings.chainSettings.voting)
+    new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, ValidationRules.initialSettings, VotingData.empty)(settings.chainSettings.voting)
       .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), 0.toByte)
   }
 
@@ -214,8 +223,10 @@ object ErgoStateContext {
              (vs: VotingSettings): Try[ErgoStateContext] = {
     if (lastHeaders.lastOption.exists(_.height % vs.votingLength == 0)) {
       val currentHeader = lastHeaders.last
-      Parameters.parseExtension(currentHeader.height, extension).map { params =>
-        new ErgoStateContext(lastHeaders.reverse, genesisStateDigest, params, VotingData.empty)(vs)
+      Parameters.parseExtension(currentHeader.height, extension).flatMap { params =>
+        ErgoValidationSettings.parseExtension(currentHeader.height, extension).map { validationSettings =>
+          new ErgoStateContext(lastHeaders.reverse, genesisStateDigest, params, validationSettings, VotingData.empty)(vs)
+        }
       }
     } else {
       Failure(new Exception("Context could only be recovered at the start of the voting epoch"))
@@ -232,6 +243,7 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Sc
     obj.lastHeaders.foreach(h => HeaderSerializer.serialize(h, w))
     VotingDataSerializer.serialize(obj.votingData, w)
     ParametersSerializer.serialize(obj.currentParameters, w)
+    ErgoValidationSettingsSerializer.serialize(obj.validationSettings, w)
   }
 
   override def parse(r: Reader): ErgoStateContext = {
@@ -240,7 +252,8 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Sc
     val lastHeaders = (1 to length).map(_ => HeaderSerializer.parse(r))
     val votingData = VotingDataSerializer.parse(r)
     val params = ParametersSerializer.parse(r)
-    new ErgoStateContext(lastHeaders, genesisDigest, params, votingData)(votingSettings)
+    val validationSettings = ErgoValidationSettingsSerializer.parse(r)
+    new ErgoStateContext(lastHeaders, genesisDigest, params, validationSettings, votingData)(votingSettings)
   }
 
 }

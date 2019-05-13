@@ -199,7 +199,7 @@ object UtxoState {
 
     implicit val votingSettings: VotingSettings = constants.votingSettings
 
-    val defaultStateContext = new ErgoStateContext(Seq.empty, p.digest, LaunchParameters, VotingData.empty)
+    val defaultStateContext = new ErgoStateContext(Seq.empty, p.digest, LaunchParameters, ValidationRules.initialSettings, VotingData.empty)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
     val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
     val persistentProver = PersistentBatchAVLProver.create(

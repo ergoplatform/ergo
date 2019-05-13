@@ -151,10 +151,8 @@ Cross-chain atomic swap between Ergo and any blockchain that supports payment to
  Bob's balance would be $5$ tokens. Then Bob can buy something using his $5$ tokens, for example, from Carol.
  Usually, in such systems, there is a limit on negative balances (to avoid free-riding).
 
- Since a digital community is vulnerable to Sybil attacks~(which also enable free-riding), some mechanism is needed to prevent such attacks where Sybil nodes create debts. 
+ Since a digital community is vulnerable to Sybil attacks~\cite{sybilDef}, some mechanism is needed to prevent such attacks where Sybil nodes create debts.
  The simplest solution is to use a committee of trusted managers that approve new members of the community. A trust-less but more complex solution is to use security deposits made in Ergs. For simplicity, we consider the approach with the committee here.
- 
- \snote{Give more details/references about Sybil attacks}
 
  This example contains two interacting contracts. A {\em management contract} maintains a list of community members, and a new member can be added if some a management condition is satisfied  (for example, a threshold
  signature is provided). A new member is associated with a box containing a token that identifies the member. This box, which contains the {\em member contract}, is protected by a special exchange script that requires the spending transaction to do a fair exchange.

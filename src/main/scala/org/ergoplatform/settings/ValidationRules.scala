@@ -11,7 +11,7 @@ import scorex.core.validation.ValidationResult.Invalid
 object ValidationRules {
 
   // TODO update via soft-forks
-  lazy val initialSettings: ValidationSettings = new MapValidationSettings(true, rulesSpec.map(r => r._1 -> (r._2._1, r._2._2)))
+  lazy val initialSettings: ErgoValidationSettings = new ErgoValidationSettings(rulesSpec.map(r => r._1 -> (r._2._1, r._2._2)))
 
   /**
     * Contains description of all the validation rules.

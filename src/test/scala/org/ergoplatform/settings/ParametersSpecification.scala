@@ -58,7 +58,7 @@ class ParametersSpecification extends ErgoPropertyTest {
 
     val p: Parameters = Parameters(2, Map(StorageFeeFactorIncrease -> kInit, BlockVersion -> 0))
     val vr: VotingData = VotingData.empty
-    val esc = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
+    val esc = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, validationSettings, vr)
     val votes = Array(StorageFeeFactorIncrease, NoParameter, NoParameter)
     val h = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
     val esc2 = esc.process(h, p).get
@@ -90,7 +90,7 @@ class ParametersSpecification extends ErgoPropertyTest {
   property("soft fork - w. activation") {
     val p: Parameters = Parameters(1, Map(BlockVersion -> 0))
     val vr: VotingData = VotingData.empty
-    val esc1 = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
+    val esc1 = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, validationSettings, vr)
     val forkVote = Array(SoftFork, NoParameter, NoParameter)
     val emptyVotes = Array(NoParameter, NoParameter, NoParameter)
 
@@ -240,7 +240,7 @@ class ParametersSpecification extends ErgoPropertyTest {
   property("soft fork - unsuccessful voting") {
     val p: Parameters = Parameters(1, Map(BlockVersion -> 0))
     val vr: VotingData = VotingData.empty
-    val esc1 = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, vr)
+    val esc1 = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, validationSettings, vr)
     val forkVote = Array(SoftFork, NoParameter, NoParameter)
     val emptyVotes = Array(NoParameter, NoParameter, NoParameter)
 

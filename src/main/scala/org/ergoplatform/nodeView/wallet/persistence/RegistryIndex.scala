@@ -13,6 +13,9 @@ final case class RegistryIndex(height: Int,
                                assetBalances: Map[EncodedTokenId, Long],
                                uncertainBoxes: Seq[EncodedBoxId]) {
 
+  assert(balance >= 0, s"Balance can not be negative, $balance given at heigh $height")
+  assetBalances.foreach(a => assert(a._2 > 0, s"Asset balance should be positive, $balance given at heigh $height"))
+
   override def equals(obj: Any): Boolean = obj match {
     case that: RegistryIndex =>
       val equalHeight = that.height == this.height

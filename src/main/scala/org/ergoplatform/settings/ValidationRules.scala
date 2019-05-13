@@ -14,21 +14,8 @@ object ValidationRules {
   lazy val initialSettings: ValidationSettings = new MapValidationSettings(true, rulesSpec.map(r => r._1 -> (r._2._1, r._2._2)))
 
   /**
-    * TODO
-    *
-    * txBoxToSpend - should always work for correct client implementation
-    * hdrGenesisNoneEmpty - should lead to troubles on launch
-    * bsTooOld - check
-    * hdrFutureTimestamp - is it fatal?
-    *
-    * add Parameters.maxBlockSize rule
-    *
-    * split hdrVotes into multiple checks?
-    * split hdrPoW into multiple checks?
-    *
-    * looks like recoverable errors are implementation-specific
-    * exEmpty - do we need it?
-    *
+    * Contains description of all the validation rules.
+    * Fatal errors are consensus-critical, while recoverable errors are implementation-specific.
     */
   lazy val rulesSpec: Map[Short, (String => Invalid, Boolean, Seq[Class[_]])] = Map(
 
@@ -119,9 +106,9 @@ object ValidationRules {
       true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
     bsTooOld -> (s => fatal(s"Block section should correspond to a block header that is not pruned yet. $s"),
       true, Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
-    fbOperationFailed -> (s => fatal(s"Operations applied to AVL+ tree should pass. $s"),
+    fbOperationFailed -> (s => fatal(s"Operations application to AVL+ tree should be successful. $s"),
       true, Seq(classOf[ErgoFullBlock])),
-    fbDigestIncorrect -> (s => fatal(s"Calculated AVL+ digest should be equal to the declared one. $s"),
+    fbDigestIncorrect -> (s => fatal(s"Calculated AVL+ digest should be equal to written in the block header. $s"),
       true, Seq(classOf[ErgoFullBlock])),
 
     // extension validation
@@ -155,18 +142,17 @@ object ValidationRules {
   val txInputsUnique: Short = 107
   val txPositiveAssets: Short = 108
   val txAssetsInOneBox: Short = 109
-
   // stateful transaction validation
-  val txCost: Short = 120
-  val txDust: Short = 121
-  val txFuture: Short = 122
-  val txBoxesToSpend: Short = 123
-  val txDataBoxes: Short = 124
-  val txInputsSum: Short = 125
-  val txErgPreservation: Short = 126
-  val txAssetsPreservation: Short = 127
-  val txBoxToSpend: Short = 128
-  val txScriptValidation: Short = 129
+  val txCost: Short = 110
+  val txDust: Short = 111
+  val txFuture: Short = 112
+  val txBoxesToSpend: Short = 113
+  val txDataBoxes: Short = 114
+  val txInputsSum: Short = 115
+  val txErgPreservation: Short = 116
+  val txAssetsPreservation: Short = 117
+  val txBoxToSpend: Short = 118
+  val txScriptValidation: Short = 119
 
   // header validation
   val hdrGenesisParent: Short = 200

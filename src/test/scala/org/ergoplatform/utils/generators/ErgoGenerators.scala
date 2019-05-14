@@ -10,7 +10,7 @@ import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ValidationRules}
 import org.ergoplatform.utils.ErgoTestConstants
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -159,8 +159,13 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   } yield ModeFeature(
     StateType.fromCode(stateTypeCode),
     Random.nextBoolean(),
-    if(Random.nextBoolean()) Some(popowSuffix) else None,
+    if (Random.nextBoolean()) Some(popowSuffix) else None,
     blocksToKeep)
+
+  lazy val ergoValidationSettingsGen: Gen[ErgoValidationSettings] = for {
+    n <- Gen.choose(1, 200)
+    rules = ValidationRules.rulesSpec.take(n).map(_.copy())
+  } yield new ErgoValidationSettings(rules)
 
   /** Random long from 1 to maximum - 1
     *

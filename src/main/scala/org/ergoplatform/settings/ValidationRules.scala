@@ -206,6 +206,14 @@ object ValidationRules {
 
 }
 
+/**
+  * Status of validation rule.
+  * The only mutable parameter is `isActive`
+  *
+  * @param error - function that construct validation error from details string
+  * @param affectedClasses - modifiers, that are validated via this rule
+  * @param isActive - whether rule is active or not
+  */
 case class RuleStatus(error: String => Invalid, affectedClasses: Seq[Class[_]], isActive: Boolean)
 
 object RuleStatus {

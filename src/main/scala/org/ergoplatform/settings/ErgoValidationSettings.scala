@@ -53,6 +53,10 @@ object ErgoValidationSettingsSerializer extends ScorexSerializer[ErgoValidationS
       val ruleSpec = ValidationRules.rulesSpec(id)
       id -> ruleSpec.copy(isActive = isActive)
     }
+<<<<<<< HEAD
     new ErgoValidationSettings(rules.toMap)
+=======
+    ErgoValidationSettings(rules.toMap)
+>>>>>>> fb3308295f3cbbaf8b2c03adc91e6f9bd41ddb13
   }
 }

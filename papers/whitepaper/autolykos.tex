@@ -1,0 +1,89 @@
+\section{Autolykos Consensus Protocol}
+\label{sec:autolykos}
+
+The core component of any blockchain system is its consensus protocol and Ergo utilizes a self-developed
+unique Proof of Work (PoW) consensus protocol called {\em Autolykos}, which is described below.
+Despite extensive research on possible alternatives, the original PoW protocol with the longest chain rule is still in demand due to its simplicity, high-security guarantees, and friendliness to light clients.
+However, a decade of extensive testing has revealed several problems with the original one-CPU-one-vote idea.
+
+The first known problem of a PoW system is the development of specialized hardware (ASICs), which allows a small group of ASIC-equipped miners to solve PoW puzzles orders of magnitude faster and more efficiently than everyone else. This problem can be solved with the help of memory-hard PoW schemes that reduce the disparity between ASICs and commodity hardware. The most promising approach here is to use asymmetric memory-hard PoW schemes that require significantly less memory to verify a solution than to find it~\cite{biryukov2017equihash,ethHash}.
+
+The second known threat to a PoW network decentralization is that even big miners tend to unite in
+mining pools, leading to a situation when just a few pool operators (5 in Bitcoin, 2 in Ethereum
+at the time of writing) control more than 51\% of computational power.
+Although the problem has already been discussed in the community, no practical solutions have been
+implemented before \Ergo{}.
+
+
+Ergo's PoW protocol, Autolykos~\cite{Ergopow}, is the first consensus protocol that is both memory-hard
+and pool-resistant.
+Autolykos is based on the {\em one list $k$-sum problem}: a miner has to find
+$k=32$ elements from a pre-defined list $R$ of size $N=2^{26}$~(which has a size of 2 Gb),
+such that $\sum_{j \in J} r_{j} - sk = d$ is in the interval $\{-b,\dots,0,\dots,b\mod q\}$.
+Elements of list $R$ are obtained as a result of one-way computation from index $i$,
+two miner public keys $pk,w$ and hash of block header $m$ as $r_i=H(i||M||pk||m||w)$,
+where $H$ is a hash function which returns the values in $\mathbb{Z}/q\mathbb{Z}$ and
+$M$ is a static big message that is used to make hash calculation slower.
+Also, a set of element indexes $J$ is to be obtained
+by one-way pseudo-random function $genIndexes$, that prevents possible solutions
+search optimizations.
+
+Thus, we assume that the only option for a miner is to use the simple brute-force method given in Algorithm~\ref{alg:prove} to
+create a valid block.
+
+\begin{algorithm}[H]
+    \caption{Block mining}
+    \label{alg:prove}
+    \begin{algorithmic}[1]
+        \State \textbf{Input}: upcoming block header hash $m$, key pair $pk=g^{sk}$
+        \State Generate randomly a new key pair $w=g^x$
+        \State Calculate $r_{i \in [0,N)}=H(i||M||pk||m||w)$
+        \While{$true$}
+        \LetRnd{$nonce$}{$\mathsf{rand}$}
+        \Let{$J$}{$genIndexes(m||nonce)$}
+        \Let{$d$}{$\sum_{j \in J}{r_j} \cdot x - sk \mod q$}
+        \If{$d < b$}
+        \State \Return $(m,pk,w,nonce,d)$
+        \EndIf
+        \EndWhile
+    \end{algorithmic}
+\end{algorithm}
+
+Note that although the mining process utilizes private keys, the solution itself
+only contains public keys. Solution verification is done by Algorithm~\ref{alg:verify}.
+
+\begin{algorithm}[H]
+    \caption{Solution verification}
+    \label{alg:verify}
+    \begin{algorithmic}[1]
+        \State \textbf{Input}: $m,pk,w,nonce,d$
+        \State require $d < b$
+        \State require $pk,w\in \mathbb{G}$ and $pk,w \ne e$
+        \Let{$J$}{$genIndexes(m||nonce)$}
+        \Let{$f$}{$\sum_{j \in J} H(j||M||pk||m||w)$}
+        \State require $w^f = g^d \cdot pk$
+    \end{algorithmic}
+\end{algorithm}
+
+This approach prevents mining pool formation because the secret key $sk$ is needed for mining: once any pool miner finds a correct solution, he can use this secret to steal the block reward. On the other hand, it is secure to reveal a single solution, as it only contains public keys and reveals a single linear relation between the 2 secrets $sk, w$.
+
+Memory-hardness follows from the fact that Algorithm~\ref{alg:prove} requires keeping
+the whole list $R$ for the main loop execution.
+Every list element takes 32 bytes, so the whole list of $N$ elements
+takes $N \cdot 32 = 2 Gb$ of memory for $N = 2^{26}$.
+A miner can try to reduce memory requirements by calculating these elements ``on the fly''
+without keeping them in memory, however, he'll need to calculate the same
+hash $H$ multiple times~(about $10^4$ times for modern GPUs), thereby reducing efficiency and profit.
+
+Calculating the list $R$ is also quite a heavy computational task: our initial implementation~\cite{ergoMiner}
+consumes ~25 seconds on Nvidia GTX 1070 to fill all the $2^{26}$ elements of the list.
+This part, however, may be optimized if a miner also stores a list of unfinalized hashes $u_{i \in [0,N)}=H(i||M||pk)$
+in memory, consuming 5 more Gigabytes of it. In such a case, work to calculate unfinalized hashes should
+be done only once during mining initialization while finalizing them and filling the list $R$
+for the new header only consumes a few milliseconds~(about 50 ms on Nvidia GTX 1070).
+
+The target parameter $b$ is built-in into the puzzle itself
+and is adjusted to the current network hash rate via a difficulty adjustment
+algorithm~\cite{meshkov2017short} to keep time interval between block close to 2 minutes.
+This algorithm tries to predict the hash rate of an upcoming 1024 blocks long epoch
+based on data from the previous 8 epochs via the well-known {\em linear least squares method}. This makes the predictions better than that of the usual difficulty adjustment algorithm and also makes ``coin-hopping'' attacks less profitable.

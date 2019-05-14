@@ -5,17 +5,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
-
-<<<<<<< HEAD
-
-import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsSerializer}
-
-=======
-
-import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsSerializer, ValidationRules}
-
->>>>>>> fb3308295f3cbbaf8b2c03adc91e6f9bd41ddb13
-
+import org.ergoplatform.settings.{Constants, ErgoValidationSettingsSerializer}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import org.scalatest.Assertion

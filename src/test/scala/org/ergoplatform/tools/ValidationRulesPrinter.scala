@@ -13,9 +13,9 @@ object ValidationRulesPrinter extends App with ScorexLogging {
   println("    \\hline\nId & Validation rule & Active & Modifiers \\\\\n\\hline")
   rules.toSeq.sortBy(_._1).foreach { r =>
 
-    val rule = r._2._1("").errors.head.message.trim
-    val activated = r._2._2
-    val modifiers = r._2._3.map(_.getSimpleName).mkString(", ")
+    val rule = r._2.error("").errors.head.message.trim
+    val activated = r._2.isActive
+    val modifiers = r._2.affectedClasses.map(_.getSimpleName).mkString(", ")
 
     if (r._1 == 200) {
       println("\\end{tabular}")
@@ -34,7 +34,7 @@ object ValidationRulesPrinter extends App with ScorexLogging {
       println("    \\hline\nId & Validation rule & Active & Modifiers \\\\\n\\hline")
     }
 
-    if (r._2._1("").isFatal) {
+    if (r._2.error("").isFatal) {
       // we only mention fatal errors here
 
       println(s"    ${r._1} & $rule & $activated & $modifiers \\\\")

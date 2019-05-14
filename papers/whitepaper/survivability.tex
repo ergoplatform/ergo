@@ -6,14 +6,14 @@ However, even young existing smart contract platforms are experiencing issues wi
 This leads to a situation where the cryptocurrency depends on a small group of developers to provide a fixing hard-fork, or the cryptocurrency won't survive.
 For example, the Ethereum network has started with the Proof-of-Work consensus algorithm and promises to switch to Proof-of-Stake in future.
 However, delays in Proof-of-Stake development lead to several fixing hard forks\cite{ethDifficultyBomb} and the community is
-still enforced to rely on core developers promised to implement the next one hard fork.
+still forced to rely on core developers promised to implement the next one hard fork.
 
 
 The first common survivability issue is that in pursuit of popularity, developers tend to implement ad-hoc solutions without proper preliminary research and testing.
 Such solutions inevitably lead to bugs, which then lead to hasty bug fixes, then to fixes of those bug fixes, and so on, making the network unreliable and even less secure.
-A notable example is IOTA cryptocurrency, that has implemented various scalability solutions, including own hash function and DAG structure,  that allowed it to achieve high popularity and capitalization.
-However, when analysis of these solutions was performed~\cite{heilmancryptanalysis, de2018break}, it revealed multiple serious problems including practical attacks that allow to steal money.
-The subsequent hard fork~\cite{IOTAReport} have fixed the problem by switching to a known SHA3 hash function, confirming useless of such kind of innovations.
+A notable example is IOTA cryptocurrency, that has implemented various scalability solutions, including own hash function and DAG structure,  that allowed it to achieve high popularity and market capitalization.
+However, when analysis of these solutions was performed~\cite{heilmancryptanalysis, de2018break}, it revealed multiple serious problems including practical attacks that enabled theft of tokens.
+The subsequent hard fork~\cite{IOTAReport} have fixed the problem by switching to a known SHA3 hash function, confirming the uselessness of such kind of innovations.
 Ergo's approach here is to use stable well-tested solutions, even if they lead to slower short-term innovations.
 Most of the solutions used in Ergo are formalized in papers presented at peer-reviewed
 conferences~\cite{reyzin2017improving,meshkov2017short,chepurnoy2018systematic,chepurnoy2018self,chepurnoy2018checking,duong2018multi}

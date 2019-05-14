@@ -11,6 +11,7 @@ import scorex.core.validation.ValidationResult.Invalid
 object ValidationRules {
 
   // TODO update via soft-forks
+  // TODO replace to ErgoValidationSettings.empty when really needed
   lazy val initialSettings: ErgoValidationSettings = new ErgoValidationSettings(rulesSpec)
 
   /**
@@ -106,6 +107,8 @@ object ValidationRules {
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
     bsTooOld -> RuleStatus(s => fatal(s"Block section should correspond to a block header that is not pruned yet. $s"),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
+    bsBlockTransactionsSize -> RuleStatus(s => fatal(s"Size of block transactions section should not exceed <maxBlockSize>. $s"),
+      Seq(classOf[BlockTransactions])),
     fbOperationFailed -> RuleStatus(s => fatal(s"Operations application to AVL+ tree should be successful. $s"),
       Seq(classOf[ErgoFullBlock])),
     fbDigestIncorrect -> RuleStatus(s => fatal(s"Calculated AVL+ digest should be equal to written in the block header. $s"),
@@ -175,6 +178,8 @@ object ValidationRules {
   val bsHeaderValid: Short = 303
   val bsHeadersChainSynced: Short = 304
   val bsTooOld: Short = 305
+  //todo implement this check
+  val bsBlockTransactionsSize: Short = 306
 
   // extension validation
   // validate interlinks

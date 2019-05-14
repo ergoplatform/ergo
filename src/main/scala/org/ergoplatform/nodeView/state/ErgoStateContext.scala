@@ -124,8 +124,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       Parameters.matchParameters(parsedParams, calculatedParams)
     }.flatMap { parsedParams =>
       // todo checks
-      val extractedValidatationSettingsTry = Success(validationSettings)
-      extractedValidatationSettingsTry.map(vs => (parsedParams, vs))
+      val extractedValidationSettingsTry = Success(validationSettings)
+      extractedValidationSettingsTry.map(vs => (parsedParams, vs))
     }
   }
 

@@ -40,6 +40,8 @@ case class Extension(headerId: ModifierId,
 
 case class ExtensionCandidate(fields: Seq[(Array[Byte], Array[Byte])]) {
   def toExtension(headerId: ModifierId): Extension = Extension(headerId, fields)
+
+  def update(newFields: Seq[(Array[Byte], Array[Byte])]): ExtensionCandidate = ExtensionCandidate(fields ++ newFields)
 }
 
 object Extension extends ApiCodecs {
@@ -49,6 +51,7 @@ object Extension extends ApiCodecs {
   //predefined key prefixes
   val SystemParametersPrefix: Byte = 0x00
   val InterlinksVectorPrefix: Byte = 0x01
+  val ValidationRulesPrefix: Byte = 0x02
 
   val FieldValueMaxSize: Int = 64
 

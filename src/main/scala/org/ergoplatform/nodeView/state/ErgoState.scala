@@ -14,8 +14,8 @@ import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, _}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.MinimalState
-import scorex.core.validation.ValidationResult.Valid
-import scorex.core.validation.{ValidationResult, ValidationSettings}
+import scorex.core.validation.ValidationResult.{Invalid, Valid}
+import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
 import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
@@ -67,7 +67,9 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
           .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
           .validateNoFailure(txDataBoxes, dataBoxesTry)
           .payload[Long](r.value)
-          .validate(tx.validateStateful(boxesToSpendTry.get.toIndexedSeq, dataBoxesTry.get.toIndexedSeq, currentStateContext, r.value).result)
+          .validateTry(dataBoxesTry, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, dataBoxes) =>
+            tx.validateStateful(boxesToSpendTry.get.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value).result
+          }
 
         execTx(tail, vs)
       case _ =>

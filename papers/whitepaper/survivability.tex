@@ -4,16 +4,16 @@
 Being a platform for contractual money, Ergo should also support long-term contracts for a period of at least an average person's lifetime.
 However, even young existing smart contract platforms are experiencing issues with performance degradation and adaptability to external conditions.
 This leads to a situation where the cryptocurrency depends on a small group of developers to provide a fixing hard-fork, or the cryptocurrency won't survive.
-For example, the Ethereum network has started with the Proof-of-Work consensus algorithm and promises to switch to Proof-of-Stake in future.
-However, delays in Proof-of-Stake development lead to several fixing hard forks\cite{ethDifficultyBomb} and the community is
-still forced to rely on core developers promised to implement the next one hard fork.
+For example, the Ethereum network has started with the Proof-of-Work consensus algorithm and promises to switch to Proof-of-Stake in the future.
+However, delays in Proof-of-Stake development lead to several fixing hard forks~\cite{ethDifficultyBomb} and the community is
+still forced to rely on core developers promised to implement the next hard fork.
 
 
 The first common survivability issue is that in pursuit of popularity, developers tend to implement ad-hoc solutions without proper preliminary research and testing.
 Such solutions inevitably lead to bugs, which then lead to hasty bug fixes, then to fixes of those bug fixes, and so on, making the network unreliable and even less secure.
 A notable example is IOTA cryptocurrency, that has implemented various scalability solutions, including own hash function and DAG structure,  that allowed it to achieve high popularity and market capitalization.
 However, when analysis of these solutions was performed~\cite{heilmancryptanalysis, de2018break}, it revealed multiple serious problems including practical attacks that enabled theft of tokens.
-The subsequent hard fork~\cite{IOTAReport} have fixed the problem by switching to a known SHA3 hash function, confirming the uselessness of such kind of innovations.
+The subsequent hard fork~\cite{IOTAReport} fixed the problem by switching to a known SHA3 hash function, confirming the uselessness of such kind of innovations.
 Ergo's approach here is to use stable well-tested solutions, even if they lead to slower short-term innovations.
 Most of the solutions used in Ergo are formalized in papers presented at peer-reviewed
 conferences~\cite{reyzin2017improving,meshkov2017short,chepurnoy2018systematic,chepurnoy2018self,chepurnoy2018checking,duong2018multi}
@@ -25,7 +25,7 @@ This header alone allows for validation of the work done on it and a headers-cha
 A headers-chain, although much smaller than the full blockchain, still grows linearly with time.
 Recent research on light clients provides a way for light clients to synchronize with the network by downloading an even smaller amount of data, thereby unlocking the ability to join the network using untrusted low-end hardware such as mobile phones~\cite{kiayias2017non,luuflyclient}.
 Ergo uses an authenticated state~\ref{sec:utxo} and for transactions included in a block, a client may download a proof of their correctness.
-Thus, regardless of the blockchain size a regular user with
+Thus, regardless of the blockchain size, a regular user with
 a mobile phone can join the network and start using Ergo with the same security
 guarantees as a full node.
 
@@ -51,12 +51,12 @@ If all the rules are fixed without any ability to change them in a decentralized
 a simple constant change can lead to heated debates and community splits. For instance,  discussion of the block-size limit in Bitcoin led to its splitting into several independent coins.
 In contrast, Ergo protocol is self-amendable and is able to adapt to the changing environment.
 In Ergo, parameters like block size can be changed on-the-fly via voting of miners.
-At the beginning of each 1024-block voting epoch, a miner proposes changes of up to 2 parameters (such as an increase of block size and a decrease of storage fee factor). During the rest epoch, miners vote to approve or reject the changes.
+At the beginning of each 1024-block voting epoch, a miner proposes changes of up to 2 parameters (such as an increase of block size and a decrease of storage fee factor). During the rest of the epoch, miners vote to approve or reject the changes.
 If a majority of votes within the epoch support the change, the new values are written into the extension section of the first block of the next epoch, and
 the network starts using the updated values for block mining and validation.
 
 To absorb more fundamental changes, Ergo follows the approach of {\em soft-forkability} that
-allows changing protocol significantly while keeping old nodes operational.
+allows changing the protocol significantly while keeping old nodes operational.
 At the beginning of an epoch, a miner can also propose to vote for a more fundamental change~(e.g., adding a new instruction to ErgoScript) describing affected validation rules.
 Voting for such breaking changes continues for 32,768 blocks and requires at least $90\%$ of
 ``Yes'' votes to be accepted. Once being accepted, a 32,768-blocks long activation period starts to give outdated nodes time to update their software version.

@@ -4,6 +4,9 @@ import cats.free.Free
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.wallet.boxes.TrackedBox
 
+/**
+  * ADT defining all primitive operations over wallet registry.
+  */
 sealed trait RegistryOpA[A]
 
 object RegistryOpA {

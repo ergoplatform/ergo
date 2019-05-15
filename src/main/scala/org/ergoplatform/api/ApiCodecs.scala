@@ -108,7 +108,7 @@ trait ApiCodecs {
 
   def decodeEvaluatedValue[T](transform: EvaluatedValue[SType] => T): Decoder[T] = { implicit cursor: ACursor =>
     cursor.as[Array[Byte]] flatMap { bytes =>
-      fromThrows(transform(ValueSerializer.deserialize(bytes)(ValidationRules.currentSettings).asInstanceOf[EvaluatedValue[SType]]))
+      fromThrows(transform(ValueSerializer.deserialize(bytes).asInstanceOf[EvaluatedValue[SType]]))
     }
   }
 

@@ -87,6 +87,9 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
         val receivedAmt = certainBxs.map(_.box.value).sum
         val newBalance = balance - spentAmt + receivedAmt
         val uncertain = uncertainBxs.map(x => encodedBoxId(x.box.id))
+        require(
+          (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
+          "Balance could not be negative")
         RegistryIndex(blockHeight, newBalance, newTokensBalance, uncertain)
       }
     } yield ()

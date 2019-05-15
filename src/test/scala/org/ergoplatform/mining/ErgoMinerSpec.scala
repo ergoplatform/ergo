@@ -125,6 +125,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     scorex.core.utils.untilTimeout(5.minute, 500.millis) {
       log.debug(s"Wait until transactions in mempool will be included into blocks. Currents size: ${requestReaders.m.size}")
       requestReaders.m.size shouldBe 0
+      system.terminate()
     }
   }
 
@@ -204,6 +205,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val passiveMiner: ActorRef = minerRef
 
     await((passiveMiner ? PrepareCandidate).mapTo[Future[ExternalCandidateBlock]].flatten)
+    system.terminate()
   }
 
 }

@@ -29,7 +29,7 @@ object ValidationRulesPrinter extends App with ScorexLogging {
       println("    \\hline\nId & Validation rule & Active & Modifiers \\\\\n\\hline")
     } else if (r._1 == 400) {
       println("\\end{tabular}")
-      println("\n\n\\textbf{Block application to state *validation:}\n\n")
+      println("\n\n\\textbf{Block application to state validation:}\n\n")
       println("\\begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{2.5cm}| }")
       println("    \\hline\nId & Validation rule & Active & Modifiers \\\\\n\\hline")
     }

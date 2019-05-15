@@ -7,7 +7,6 @@ import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA.RegistryOp
 import org.ergoplatform.settings.{ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import scorex.core.VersionTag
-import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 

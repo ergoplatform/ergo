@@ -78,14 +78,19 @@ epoch.
 
 \subsection{Voting for a soft-fork}
 
-A soft-fork happens when a protocol version supported by the network is being increased. This version is written in a block
-header. Semantics behind versioning is not defined ahead of time by the protocol and so up to clients and their
-developers. The protocol version is being written into every block header, with initial value during launch to be set
-to 1.
+A soft-fork happens when a protocol version supported by the network is being increased.
+The protocol version is being written into every block header, with initial value during launch to be set to 1.
+
+Semantics behind versioning is not defined ahead of time by the protocol and so up to clients and their developers.
+During a soft-fork, protocol developers are able do disable some existing validation rules from~\ref{sec:validation},
+while also introduce new ones.
 
 The protocol version upgrade is to be done in the following steps:
 \begin{enumerate}
-    \item{} A miner is proposing to increase protocol version.
+    \item{} A protocol developer implements and releases a software with changed rules.
+    This software may deactivate some of existing rules, while also introduce new logic.
+    \item{} A miner is proposing to increase protocol version and put deactivated rules
+    into extension.
     \item{} Other miners are voting within 32 epochs for the proposal
     \item{} If the soft-fork proposal is being rejected~(so if it gathers no more than $90\%$ of votes during voting period, i.e.
             no more than $\lfloor 32 * 1024 * 90 / 100 \rfloor = 29491$ votes), new voting may be proposed next epoch

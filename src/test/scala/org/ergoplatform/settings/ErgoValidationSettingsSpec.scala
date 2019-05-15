@@ -5,6 +5,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.ADDigest
+import scala.language.implicitConversions
 
 class ErgoValidationSettingsSpec extends ErgoPropertyTest {
 

@@ -68,7 +68,7 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
           .validateNoFailure(txDataBoxes, dataBoxesTry)
           .payload[Long](r.value)
           .validateTry(dataBoxesTry, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, dataBoxes) =>
-            tx.validateStateful(boxesToSpendTry.get.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value).result
+            tx.validateStateful(dataBoxes.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value).result
           }
 
         execTx(tail, vs)

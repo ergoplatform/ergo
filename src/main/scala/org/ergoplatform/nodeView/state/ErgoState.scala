@@ -55,20 +55,22 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
     def execTx(txs: List[ErgoTransaction], accCostTry: ValidationResult[Long]): ValidationResult[Long] = (txs, accCostTry) match {
       case (tx :: tail, r: Valid[Long]) =>
-        def boxesToSpendTry: Try[List[ErgoBox]] = tx.inputs.toList
+        val boxesToSpendTry: Try[List[ErgoBox]] = tx.inputs.toList
           .map(in => checkBoxExistence(in.boxId))
           .sequence
 
-        def dataBoxesTry: Try[List[ErgoBox]] = tx.dataInputs.toList
+        lazy val dataBoxesTry: Try[List[ErgoBox]] = tx.dataInputs.toList
           .map(in => checkBoxExistence(in.boxId))
           .sequence
+
+        lazy val boxes: Try[(List[ErgoBox], List[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
 
         val vs = tx.validateStateless
           .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
           .validateNoFailure(txDataBoxes, dataBoxesTry)
           .payload[Long](r.value)
-          .validateTry(dataBoxesTry, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, dataBoxes) =>
-            tx.validateStateful(dataBoxes.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value).result
+          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, (dataBoxes, toSpend)) =>
+            tx.validateStateful(toSpend.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value).result
           }
 
         execTx(tail, vs)

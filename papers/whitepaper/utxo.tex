@@ -30,8 +30,8 @@ An Ergo box is made of registers~(and nothing but registers). Such a box can hav
 One-time immutable objects (as in Bitcoin's UTXO model) have some advantages over Ethereum's long-lived mutable accounts.
 Firstly, it gives easier and safer protection from replay or reordering attacks.
 Secondly, it is easier to process transactions in parallel because they don't modify state of the objects they access.
-Also, a transaction is whether modifying system state exactly as intended, or not changing the state at all~(with no
-possible side-effects resulting from the out-of-gas exception, reentrancy issues, and so on).
+Also, a transaction either modifies the system state exactly as intended, or does not change it at all~(with no
+possible side-effects resulting from `out-of-gas' exceptions, reentrancy issues, and so on).
 Finally, it seems easier to build fully stateless clients using one-time coins~\cite{chepurnoy2018edrax} (although research in this area is still in the initial stage).
 
 One major criticism of one-time coins is that this model does not seem suitable for non-trivial decentralized applications. However, Ergo has overcome the problems and shown this assertion to be false by
@@ -55,7 +55,7 @@ For instance, our proofs are about 3 times smaller than proofs of a Merkle Patri
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.5\textwidth]{img/proofSize.png}
-    \caption{Proof size comparison with Merkle patricia trie
+    \caption{Proof size comparison with a Merkle patricia trie
     \label{fig:proofSize} }
 \end{figure}
 
@@ -101,5 +101,5 @@ In both cases, half of the modifications were inserts of new (key, value) pairs 
 
 Thus, Ergo state provides an efficient and secure way to prove existence or non-existence of certain elements in
 it, as well as proofs of tree modifications.
-These tree operations are supported by the Ergo smart contract language, thereby providing the ability to implement sophisticated contracts like those discussed in Section~\ref{sec:contractual}
+These tree operations are supported by the Ergo smart contract language, thereby providing the ability to implement sophisticated contracts like those discussed in Section~\ref{sec:contractual}.
 

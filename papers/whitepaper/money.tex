@@ -40,9 +40,9 @@ Two more features of Ergo shaping contracting possibilities are:
  data inputs, and produces one box set named {\em outputs}. Data inputs are useful for oracle applications and interacting contracts.
 
     \item {\em Custom Tokens: }
- A transaction can carry many tokens as long as the estimated complexity for processing them does not exceed a limit, a parameter that is set by miner voting. A transaction can also issue a single token with a unique identifier which is equal to identifier of a first~(spendable) input box of the transaction. The identifier is unique assuming the collision resistance of an underlying hash function.
+ A transaction can carry many tokens as long as the estimated complexity for processing them does not exceed a limit, a parameter that is set by miner voting. A transaction can also issue a single token with a unique identifier which is equal to the identifier of a first~(spendable) input box of the transaction. The identifier is unique assuming the collision resistance of an underlying hash function.
  The amount of the tokens issued could be any number within the range $[1, 9223372036854775807]$. The weak preservation rule is followed for tokens, which requires that the total amount of any token in a transaction's outputs should be no more
- than total amount of that token in the transaction's inputs~(i.e., some amount of token could be burnt). In contrast, the strong reservation rule is followed for Ergs, which requires that the total amount of Ergs in the inputs and outputs must be same.
+ than the total amount of that token in the transaction's inputs~(i.e., some amount of token could be burnt). In contrast, the strong reservation rule is followed for Ergs, which requires that the total amount of Ergs in the inputs and outputs must be the same.
  \end{itemize}
 
 \subsection{Contract Examples}
@@ -59,7 +59,7 @@ Two more features of Ergo shaping contracting possibilities are:
  tokens is very simple.
 
  Firstly, a token identifying the oracle should be issued. In the simplest case, the amount of this token could be one. We call such a token {\em a singleton token}. The oracle creates a box containing this token along with its data (i.e., the temperature) in register $R_4$ and the UNIX epoch time in register $R_5$.
- In order to update the temperature, the oracle destroys its box and creating a new one with the updated temperature.
+ In order to update the temperature, the oracle destroys its box and creates a new one with the updated temperature.
 
  Assume that Alice and Bob know the oracle's token identifier in advance. With this knowledge, they can jointly create a box with a contract that requires first (read-only) data input to contain the oracle's token. The contract extracts the temperature and time from the data input
  and decides who gets the payout. The code is as simple as following:
@@ -88,13 +88,13 @@ Two more features of Ergo shaping contracting possibilities are:
 
  Privacy is important for a digital currency but implementing it can be costly or require a trusted setup. Thus, it is desirable to find a cheaper way for coin mixing. As a first step towards that, we offer a non-interactive mixing protocol between two users Alice and Bob that works as follows:
  \begin{enumerate}
-    \item{} Alice creates a box which demands the spending transaction to satisfy certain conditions. After that, Alice only listens to the blockchain, no any interaction with Bob is needed.
+    \item{} Alice creates a box which demands the spending transaction to satisfy certain conditions. After that, Alice only listens to the blockchain, no interaction with Bob is needed.
     \item{} Bob creates a transaction spending Alice's box along with one of his own and generating two outputs with an identical script but different data. Each of Alice and Bob may spend only one of the two outputs but to an external observer the two outputs look indistinguishable and he cannot decide which output belongs to whom.
  \end{enumerate}
 
  For simplicity, we do not consider fee in the example. The idea of mixing is similar to non-interactive Diffie-Hellman key exchange. First, Alice generates a secret value $x$~(a huge number) and publishes the corresponding public value $gX = g^x$. She requires Bob to generate a secret number $y$, and to include into each output two
  values $c_1$, $c_2$, where one value is equal to $g^y$ and the other is equal to $g^{xy}$. Bob uses a random coin to choose meanings for $\{c_1, c_2\}$. Without access to the secrets, an external observer cannot guess with probability better than  $\frac{1}{2}$ whether $c_1$ is equal to $g^y$ or to $g^{xy}$. This is assuming that the cryptographic primitive we use has a certain property, that the Decision Diffie-Hellman (DDH) problem is hard. To destroy an output box, a proof should be given that either $y$ is known such that $c_2 = g^y$, or $x$ is known such that $c_2 = c_1^x$.
- The contract of Alice's box checks that $c_1$ and $c_2$ are well-formed. The code snippets for the Alice's coin and the mixing transaction's output are provided in Algorithms \ref{alg:alice} and \ref{alg:mixing-out} respectively. Since ErgoScript currently doesn't have support for proving knowledge of some $x$ such that $c_2 = {c_1}^x$ for arbitrary $c_1$,  we will prove a slightly longer statement that is supported, namely, proving knowledge of $x$ such that $gX = g^x$ and $c_2 = {c_1}^x$. This is called proveDHTuple.
+ The contract of Alice's box checks that $c_1$ and $c_2$ are well-formed. The code snippets for Alice's coin and the mixing transaction's output are provided in Algorithms \ref{alg:alice} and \ref{alg:mixing-out} respectively. Since ErgoScript currently doesn't have support for proving knowledge of some $x$ such that $c_2 = {c_1}^x$ for arbitrary $c_1$,  we will prove a slightly longer statement that is supported, namely, proving knowledge of $x$ such that $gX = g^x$ and $c_2 = {c_1}^x$. This is called proveDHTuple.
 
  \begin{algorithm}[H]
     \caption{Alice's Input Script}
@@ -154,7 +154,7 @@ Cross-chain atomic swap between Ergo and any blockchain that supports payment to
  Since a digital community is vulnerable to Sybil attacks~\cite{sybilDef}, some mechanism is needed to prevent such attacks where Sybil nodes create debts.
  The simplest solution is to use a committee of trusted managers that approve new members of the community. A trust-less but more complex solution is to use security deposits made in Ergs. For simplicity, we consider the approach with the committee here.
 
- This example contains two interacting contracts. A {\em management contract} maintains a list of community members, and a new member can be added if some a management condition is satisfied  (for example, a threshold
+ This example contains two interacting contracts. A {\em management contract} maintains a list of community members, and a new member can be added if some management condition is satisfied  (for example, a threshold
  signature is provided). A new member is associated with a box containing a token that identifies the member. This box, which contains the {\em member contract}, is protected by a special exchange script that requires the spending transaction to do a fair exchange.
  We skip the corresponding code, which can be found in a separate article~\cite{letsTutorial}.
  

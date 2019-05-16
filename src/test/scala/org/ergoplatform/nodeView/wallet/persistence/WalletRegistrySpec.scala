@@ -21,7 +21,7 @@ class WalletRegistrySpec
 
   def createStore: Store = new LSMStore(createTempDir)
 
-  it should "read certain uncertain boxes" in {
+  it should "read certain boxes" in {
     forAll(trackedBoxGen) { box =>
       val certainBox = box.copy(certainty = Certain, spendingHeightOpt = None, spendingTxIdOpt = None)
       val store = createStore

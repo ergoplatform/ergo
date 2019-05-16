@@ -10,7 +10,7 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 
 /**
-  * Wallet-critic data extracted from full block to be processed later.
+  * Wallet-critical data extracted from full block to be processed later.
   * @param id - header id of postponed block
   * @param height - height of postponed block
   * @param inputs - all inputs from postponed block

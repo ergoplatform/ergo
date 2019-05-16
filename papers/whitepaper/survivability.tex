@@ -4,25 +4,24 @@
 Being a platform for contractual money, Ergo should also support long-term contracts for a period of at least an average person's lifetime.
 However, even young existing smart contract platforms are experiencing issues with performance degradation and adaptability to external conditions.
 This leads to a situation where the cryptocurrency depends on a small group of developers to provide a fixing hard-fork, or the cryptocurrency won't survive.
-For example, the Ethereum network has started with the Proof-of-Work consensus algorithm and promises to switch to Proof-of-Stake in the future.
-However, delays in Proof-of-Stake development lead to several fixing hard forks~\cite{ethDifficultyBomb} and the community is
-still forced to rely on core developers promised to implement the next hard fork.
+For example, the Ethereum network was started with a Proof-of-Work consensus algorithm with a plan to switch to Proof-of-Stake in the near future.
+However, delays in the Proof-of-Stake development have led to several fixing hard-forks~\cite{ethDifficultyBomb} and the community is still forced to rely on core developers promising to implement the next hard-fork.
 
 
 The first common survivability issue is that in pursuit of popularity, developers tend to implement ad-hoc solutions without proper preliminary research and testing.
 Such solutions inevitably lead to bugs, which then lead to hasty bug fixes, then to fixes of those bug fixes, and so on, making the network unreliable and even less secure.
-A notable example is IOTA cryptocurrency, that has implemented various scalability solutions, including own hash function and DAG structure,  that allowed it to achieve high popularity and market capitalization.
-However, when analysis of these solutions was performed~\cite{heilmancryptanalysis, de2018break}, it revealed multiple serious problems including practical attacks that enabled theft of tokens.
-The subsequent hard fork~\cite{IOTAReport} fixed the problem by switching to a known SHA3 hash function, confirming the uselessness of such kind of innovations.
+A notable example is the IOTA cryptocurrency, which implemented various scaling solutions, including its own hash function and DAG structure, that allowed it to achieve high popularity and market capitalization.
+However, a detailed analysis of these solutions revealed multiple serious problems, including practical attacks that enabled token theft~\cite{heilmancryptanalysis, de2018break}.
+A subsequent hard-fork~\cite{IOTAReport} then fixed these problems by switching to the well-known SHA3 hash function, thereby confirming the uselessness of such kind of innovations.
 Ergo's approach here is to use stable well-tested solutions, even if they lead to slower short-term innovations.
 Most of the solutions used in Ergo are formalized in papers presented at peer-reviewed
 conferences~\cite{reyzin2017improving,meshkov2017short,chepurnoy2018systematic,chepurnoy2018self,chepurnoy2018checking,duong2018multi}
 and have been widely discussed in the community.
 
 
-A second problem that decentralization (and thus survivability) faces is the lack of secure trustless light clients. Ergo tries to fix this problem of blockchain technology without creating new problems. Since Ergo is a PoW blockchain, it easily allows extraction of a small header from the block content.
-This header alone allows for validation of the work done on it and a headers-chain is enough for best chain selection and synchronization with the network.
-A headers-chain, although much smaller than the full blockchain, still grows linearly with time.
+A second problem that decentralization (and thus survivability) faces is the lack of secure trustless light clients. Ergo tries to fix this problem of blockchain technology without creating new ones. Since Ergo is a PoW blockchain, it easily allows extraction of a small header from the block content.
+This header alone permits validation of the work done in the block and a headers-only chain is enough for best chain selection and synchronization with the network.
+A headers-only chain, although much smaller than the full blockchain, still grows linearly with time.
 Recent research on light clients provides a way for light clients to synchronize with the network by downloading an even smaller amount of data, thereby unlocking the ability to join the network using untrusted low-end hardware such as mobile phones~\cite{kiayias2017non,luuflyclient}.
 Ergo uses an authenticated state~\ref{sec:utxo} and for transactions included in a block, a client may download a proof of their correctness.
 Thus, regardless of the blockchain size, a regular user with
@@ -35,7 +34,7 @@ A large state size leads to serious security issues because when the state does 
 Moreover, the community's fear of such attacks along with the problem of ``state bloat'' without any sort of compensation to miners or users holding the state may have prevented scaling solutions that otherwise
 could have been implemented (such as larger block sizes, for example).
 To prevent this, Ergo has a storage rent component: if an
-output remains in the state for 4 years without being moved, a miner may charge a small fee for every
+output remains in the state for 4 years without being consumed, a miner may charge a small fee for every
 byte kept in the state.
 
 This idea, which is similar to regular cloud storage services, was only proposed quite recently for cryptocurrencies~\cite{chepurnoy2017space} and has several important consequences.

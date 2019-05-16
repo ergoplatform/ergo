@@ -179,8 +179,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       secretStorageOpt = Some(secretStorage)
       sender() ! Success(())
 
-    case RestoreWallet | InitWallet(_, _) =>
-      sender() ! Failure(new Exception("Wallet is already initialized"))
+    case _: RestoreWallet | _: InitWallet =>
+      sender() ! Failure(new Exception("Wallet is already initialized. Clear keystore to re-init it."))
 
     case UnlockWallet(pass) =>
       secretStorageOpt match {

@@ -9,13 +9,13 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.github.kxbmap" % "configs_2.12" % "0.4.4",
   "com.google.code.findbugs" % "jsr305" % "3.0.2",
   "com.google.guava" % "guava" % "21.0",
-  "com.iheart" % "ficus_2.12" % "1.4.5",
+  "com.iheart" % "ficus_2.12" % "1.4.6",
   "com.lihaoyi" % "fastparse-utils_2.12" % "1.0.0",
   "com.lihaoyi" % "fastparse_2.12" % "1.0.0",
   "com.lihaoyi" % "sourcecode_2.12" % "0.1.4",
   "com.sksamuel.scapegoat" % "scalac-scapegoat-plugin_2.12" % "1.3.3",
   "com.trueaccord.lenses" % "lenses_2.12" % "0.4.12",
-  "com.typesafe" % "config" % "1.3.3",
+  "com.typesafe" % "config" % "1.3.4",
   "com.typesafe" % "ssl-config-core_2.12" % "0.3.6",
   "com.typesafe.akka" % "akka-actor_2.12" % "2.5.22",
   "com.typesafe.akka" % "akka-http-core_2.12" % "10.1.6",
@@ -65,7 +65,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scodec" % "scodec-bits_2.12" % "1.1.6",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.15",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "cfa864a9-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "p2p-test-5c7a9dc3-SNAPSHOT",
   "org.scorexfoundation" % "scorex-util_2.12" % "0.1.3",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.6",
   "org.scorexfoundation" % "sigma-api_2.12" % "master-2b4b07a1-SNAPSHOT",
@@ -85,4 +85,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH ad2dc78c696c1b54694698c5a867cf3002b509a3
+// LIBRARY_DEPENDENCIES_HASH 581a78ccd897edbbe53a34f8c92e5d71e13d7c49

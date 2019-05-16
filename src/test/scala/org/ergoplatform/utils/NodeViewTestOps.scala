@@ -79,7 +79,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
 
   def expectModificationOutcome(section: ErgoPersistentModifier)(implicit ctx: Ctx): Try[Unit] = {
     expectMsgType[ModificationOutcome] match {
-      case SyntacticallySuccessfulModifier(mod) if mod.id == section.id =>
+      case SyntacticallySuccessfulModifier(mod, _) if mod.id == section.id =>
         Success(())
       case outcome =>
         val msg = section match {

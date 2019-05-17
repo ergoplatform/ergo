@@ -3,14 +3,15 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
+import org.ergoplatform.nodeView.wallet.IdUtils._
+import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils._
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
-import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.util.idToBytes
+import scorex.crypto.hash.Blake2b256
 import sigmastate.Values.ByteArrayConstant
 import sigmastate._
 
@@ -246,7 +247,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val asset2Sum = randomLong()
       val asset1ToReturn = randomLong(asset1Sum)
-      val assets2Seq = Seq(Digest32 @@ idToBytes(asset1Token) -> asset1ToReturn, newAssetIdStub -> asset2Sum)
+      val assets2Seq = Seq(decodedTokenId(asset1Token) -> asset1ToReturn, newAssetIdStub -> asset2Sum)
       val balanceToReturn = 1000 * parameters.minValuePerByte
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assets2Seq)
       val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
@@ -318,7 +319,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val block = makeNextBlock(getUtxoState, Seq(tx))
       applyBlock(block) shouldBe 'success
-      wallet.scanPersistent(block)
       waitForScanning(block)
 
       val confirmedBalance = getConfirmedBalances
@@ -400,7 +400,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       waitForScanning(block)
       val historyHeight = getHistory.headersHeight
 
-      val confirmedBeforeRollback: BalancesSnapshot = getConfirmedBalances
+      val confirmedBeforeRollback: RegistryIndex = getConfirmedBalances
       val totalBeforeRollback = getBalancesWithUnconfirmed
       wallet.rollback(initialState.version)
       blocking(Thread.sleep(100))

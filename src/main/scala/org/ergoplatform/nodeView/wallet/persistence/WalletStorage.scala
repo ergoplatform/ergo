@@ -4,7 +4,6 @@ import java.io.File
 
 import com.google.common.primitives.Ints
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
-import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}

@@ -94,9 +94,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case ScanOffChain(tx) =>
       val outputs = extractOutputs(tx)
       val inputs = extractInputs(tx)
-      val resolved = outputs
-        .filterNot(o => inputs.contains(encodedBoxId(o.id)))
-        .filter(resolve)
+      val resolved = outputs.filter(resolve)
       val resolvedTrackedBoxes = resolved.map { bx =>
         TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain)
       }

@@ -40,6 +40,9 @@ case class ErgoFullBlock(header: Header,
 
   override lazy val serializer: ScorexSerializer[ErgoFullBlock] =
     throw new Error("Serialization for ErgoFullBlock is not (and will be not) implemented")
+
+  def height: Int = header.height
+
 }
 
 object ErgoFullBlock extends ApiCodecs {

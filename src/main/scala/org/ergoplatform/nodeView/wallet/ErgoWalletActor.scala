@@ -159,6 +159,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def walletCommands: Receive = {
     case InitWallet(pass, mnemonicPassOpt) if secretStorageOpt.isEmpty =>
+      //Read high-quality random bits from Java's SecureRandom
       val entropy = scorex.utils.Random.randomBytes(settings.walletSettings.seedStrengthBits / 8)
       val mnemonicTry = new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
         .toMnemonic(entropy)

@@ -18,6 +18,9 @@ class ParametersSpecification extends ErgoPropertyTest {
   override implicit val votingSettings: VotingSettings =
     VotingSettings(votingEpochLength, softForkEpochs = 2, activationEpochs = 3)
 
+  private val toDisable = Seq(ValidationRules.exDuplicateKeys, ValidationRules.exValueLength)
+  private val toDisable2 = Seq(ValidationRules.fbOperationFailed)
+
   private implicit def toExtension(p: Parameters): Extension = p.toExtensionCandidate(Seq.empty).toExtension(headerId)
 
   property("extension processing") {
@@ -56,7 +59,7 @@ class ParametersSpecification extends ErgoPropertyTest {
   property("simple voting - start - conditions") {
     val kInit = 1000000
 
-    val p: Parameters = Parameters(2, Map(StorageFeeFactorIncrease -> kInit, BlockVersion -> 0))
+    val p: Parameters = Parameters(2, Map(StorageFeeFactorIncrease -> kInit, BlockVersion -> 0), toDisable)
     val vr: VotingData = VotingData.empty
     val esc = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, validationSettings, vr)
     val votes = Array(StorageFeeFactorIncrease, NoParameter, NoParameter)
@@ -73,7 +76,7 @@ class ParametersSpecification extends ErgoPropertyTest {
     val esc31 = esc2.process(h.copy(height = 3), p).get
     esc31.votingData.epochVotes.find(_._1 == StorageFeeFactorIncrease).get._2 shouldBe 2
 
-    val p4 = Parameters(4, Map(StorageFeeFactorIncrease -> (kInit + Parameters.StorageFeeFactorStep), BlockVersion -> 0))
+    val p4 = Parameters(4, Map(StorageFeeFactorIncrease -> (kInit + Parameters.StorageFeeFactorStep), BlockVersion -> 0), toDisable)
     val esc41 = esc31.process(he.copy(height = 4), p4).get
     esc41.currentParameters.storageFeeFactor shouldBe (kInit + Parameters.StorageFeeFactorStep)
   }
@@ -88,80 +91,89 @@ class ParametersSpecification extends ErgoPropertyTest {
     * So the fork would be activated only if 4 votes out of 4 are for it.
     */
   property("soft fork - w. activation") {
-    val p: Parameters = Parameters(1, Map(BlockVersion -> 0))
+
+    val p: Parameters = Parameters(1, Map(BlockVersion -> 0), toDisable)
     val vr: VotingData = VotingData.empty
     val esc1 = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, validationSettings, vr)
+    checkValidationSettings(esc1.validationSettings, Seq())
     val forkVote = Array(SoftFork, NoParameter, NoParameter)
     val emptyVotes = Array(NoParameter, NoParameter, NoParameter)
 
     // Soft-fork vote is proposed @ height == 2
     val h2 = defaultHeaderGen.sample.get.copy(votes = forkVote, version = 0: Byte, height = 2)
-    val expectedParameters2 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 0, BlockVersion -> 0))
+    val expectedParameters2 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 0, BlockVersion -> 0), toDisable)
     val esc2 = esc1.process(h2, expectedParameters2).get
     esc2.currentParameters.softForkStartingHeight.get shouldBe 2
+    esc2.currentParameters.rulesToDisable shouldBe toDisable
+    checkValidationSettings(esc2.validationSettings, Seq())
 
     // wrong parameters: started voting is not reflected in the parameters
-    val wrongParameters2 = Parameters(2, Map(BlockVersion -> 0))
+    val wrongParameters2 = Parameters(2, Map(BlockVersion -> 0), toDisable)
     esc1.process(h2, wrongParameters2).isFailure shouldBe true
 
     // wrong parameters: voting just started, but collected votes is more than 0
-    val wrongParameters2a = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 1, BlockVersion -> 0))
+    val wrongParameters2a = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 1, BlockVersion -> 0), toDisable)
     esc1.process(h2, wrongParameters2a).isFailure shouldBe true
 
     // wrong parameters: invalid starting height
-    val wrongParameters2b = Parameters(2, Map(SoftForkStartingHeight -> 4, SoftForkVotesCollected -> 0, BlockVersion -> 0))
+    val wrongParameters2b = Parameters(2, Map(SoftForkStartingHeight -> 4, SoftForkVotesCollected -> 0, BlockVersion -> 0), toDisable)
     esc1.process(h2, wrongParameters2b).isFailure shouldBe true
 
     // wrong parameters: incorrect block version
-    val wrongParameters2c = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 0, BlockVersion -> 1))
+    val wrongParameters2c = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 0, BlockVersion -> 1), toDisable)
     esc1.process(h2, wrongParameters2c).isFailure shouldBe true
-
 
     // voting for the fork @ height == 3
     val h3 = h2.copy(height = 3)
     val esc3 = esc2.process(h3, expectedParameters2).get
     esc3.currentParameters.softForkStartingHeight.get shouldBe 2
+    esc3.currentParameters.rulesToDisable shouldBe toDisable
+    checkValidationSettings(esc3.validationSettings, Seq())
 
 
     // voting for the fork @ height == 4
     // new epoch is starting, thus the block should contain number of votes for the fork collected in the previous epoch
     val h4 = h3.copy(height = 4)
-    val expectedParameters4 = Parameters(4, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 2, BlockVersion -> 0))
+    val expectedParameters4 = Parameters(4, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 2, BlockVersion -> 0), toDisable)
     val esc4 = esc3.process(h4, expectedParameters4).get
     esc4.currentParameters.softForkStartingHeight.get shouldBe 2
     esc4.currentParameters.softForkVotesCollected.get shouldBe 2
+    esc4.currentParameters.rulesToDisable shouldBe toDisable
+    checkValidationSettings(esc4.validationSettings, Seq())
 
     // wrong parameters: voting is not reflected in the parameters
-    val wrongParameters4 = Parameters(4, Map(BlockVersion -> 0))
+    val wrongParameters4 = Parameters(4, Map(BlockVersion -> 0), toDisable)
     esc3.process(h4, wrongParameters4).isFailure shouldBe true
 
     // wrong parameters: collected votes value is wrong
-    val wrongParameters4a = Parameters(4, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 3, BlockVersion -> 0))
+    val wrongParameters4a = Parameters(4, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 3, BlockVersion -> 0), toDisable)
     esc3.process(h4, wrongParameters4a).isFailure shouldBe true
 
     // wrong parameters: invalid starting height
-    val wrongParameters4b = Parameters(4, Map(SoftForkStartingHeight -> 3, SoftForkVotesCollected -> 2, BlockVersion -> 0))
+    val wrongParameters4b = Parameters(4, Map(SoftForkStartingHeight -> 3, SoftForkVotesCollected -> 2, BlockVersion -> 0), toDisable)
     esc3.process(h4, wrongParameters4b).isFailure shouldBe true
 
     // voting for the fork @ height == 5
     val h5 = h4.copy(height = 5)
     val esc5 = esc4.process(h5, expectedParameters4).get
+    checkValidationSettings(esc5.validationSettings, Seq())
 
     // voting is finished, and we check collected votes @ height == 6
     val h6 = h5.copy(height = 6, votes = emptyVotes)
-    val expectedParameters6 = Parameters(6, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 4, BlockVersion -> 0))
+    val expectedParameters6 = Parameters(6, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 4, BlockVersion -> 0), toDisable)
     val esc6 = esc5.process(h6, expectedParameters6).get
+    checkValidationSettings(esc5.validationSettings, Seq())
 
     // wrong parameters: voting is not reflected in the parameters
-    val wrongParameters6 = Parameters(6, Map(BlockVersion -> 0))
+    val wrongParameters6 = Parameters(6, Map(BlockVersion -> 0), toDisable)
     esc5.process(h6, wrongParameters6).isFailure shouldBe true
 
     // wrong parameters: collected votes value is wrong
-    val wrongParameters6a = Parameters(6, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 5, BlockVersion -> 0))
+    val wrongParameters6a = Parameters(6, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 5, BlockVersion -> 0), toDisable)
     esc5.process(h6, wrongParameters6a).isFailure shouldBe true
 
     // wrong parameters: invalid starting height
-    val wrongParameters6b = Parameters(6, Map(SoftForkStartingHeight -> 4, SoftForkVotesCollected -> 2, BlockVersion -> 0))
+    val wrongParameters6b = Parameters(6, Map(SoftForkStartingHeight -> 4, SoftForkVotesCollected -> 2, BlockVersion -> 0), toDisable)
     esc5.process(h6, wrongParameters6b).isFailure shouldBe true
 
     // voting for soft-fork is prohibited @ height == 6
@@ -179,29 +191,31 @@ class ParametersSpecification extends ErgoPropertyTest {
       // wrong parameters checks
       if (i % 2 == 0) {
         // wrong parameters: voting is not reflected in the parameters
-        val wrongParametersI = Parameters(i, Map(BlockVersion -> 0))
+        val wrongParametersI = Parameters(i, Map(BlockVersion -> 0), toDisable)
         esc.process(h, wrongParametersI).isFailure shouldBe true
 
         // wrong parameters: collected votes value is wrong
-        val wrongParametersIa = Parameters(i, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 5, BlockVersion -> 0))
+        val wrongParametersIa = Parameters(i, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 5, BlockVersion -> 0), toDisable)
         esc.process(h, wrongParametersIa).isFailure shouldBe true
 
         // wrong parameters: invalid starting height
-        val wrongParametersIb = Parameters(i, Map(SoftForkStartingHeight -> 4, SoftForkVotesCollected -> 4, BlockVersion -> 0))
+        val wrongParametersIb = Parameters(i, Map(SoftForkStartingHeight -> 4, SoftForkVotesCollected -> 4, BlockVersion -> 0), toDisable)
         esc.process(h, wrongParametersIb).isFailure shouldBe true
 
         // wrong parameters: invalid block version
-        val wrongParametersIc = Parameters(i, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 4, BlockVersion -> 1))
+        val wrongParametersIc = Parameters(i, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 4, BlockVersion -> 1), toDisable)
         esc.process(h, wrongParametersIc).isFailure shouldBe true
       }
 
       esc.process(h, expectedParameters6).get
     }
 
-    // activation period done @ height = 12, block version is increased
+    // activation period done @ height = 12, block version is increased, rules to disable are disabled
     val h12 = h6.copy(height = 12, version = 1: Byte)
-    val expectedParameters12 = Parameters(12, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 4, BlockVersion -> 1))
+    val expectedParameters12 = Parameters(12, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 4, BlockVersion -> 1), toDisable)
+
     val esc12 = esc11.process(h12, expectedParameters12).get
+    checkValidationSettings(esc12.validationSettings, toDisable)
 
     // vote for soft-fork @ activation height
     val h12w = h12.copy(votes = forkVote)
@@ -216,16 +230,18 @@ class ParametersSpecification extends ErgoPropertyTest {
 
     // voting for soft-fork is possible on the first block of the next epoch after activation height
     val h14 = h13.copy(height = 14, votes = forkVote)
-    val expectedParameters14 = Parameters(14, Map(SoftForkStartingHeight -> 14, SoftForkVotesCollected -> 0, BlockVersion -> 1))
+    val expectedParameters14 = Parameters(14, Map(SoftForkStartingHeight -> 14, SoftForkVotesCollected -> 0, BlockVersion -> 1), toDisable2)
     val esc14 = esc13.process(h14, expectedParameters14).get
+    checkValidationSettings(esc14.validationSettings, toDisable)
 
     // next epoch after activation height - soft-fork related parameters are cleared
     val h14b = h13.copy(height = 14, votes = emptyVotes)
-    val expectedParameters14a = Parameters(14, Map(BlockVersion -> 1))
+    val expectedParameters14a = Parameters(14, Map(BlockVersion -> 1), toDisable2)
     val esc14b = esc13.process(h14b, expectedParameters14a).get
+    checkValidationSettings(esc14.validationSettings, toDisable)
 
     //wrong parameters: no vote for the fork, but parameters are there
-    val wrongParameters14 = Parameters(14, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 4, BlockVersion -> 1))
+    val wrongParameters14 = Parameters(14, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 4, BlockVersion -> 1), toDisable2)
     esc13.process(h14b, wrongParameters14).isFailure shouldBe true
   }
 
@@ -238,7 +254,7 @@ class ParametersSpecification extends ErgoPropertyTest {
     *
     */
   property("soft fork - unsuccessful voting") {
-    val p: Parameters = Parameters(1, Map(BlockVersion -> 0))
+    val p: Parameters = Parameters(1, Map(BlockVersion -> 0), toDisable)
     val vr: VotingData = VotingData.empty
     val esc1 = new ErgoStateContext(Seq(), ADDigest @@ Array.fill(33)(0: Byte), p, validationSettings, vr)
     val forkVote = Array(SoftFork, NoParameter, NoParameter)
@@ -246,7 +262,7 @@ class ParametersSpecification extends ErgoPropertyTest {
 
     // Soft-fork vote is proposed @ height == 2
     val h2 = defaultHeaderGen.sample.get.copy(votes = forkVote, version = 0: Byte, height = 2)
-    val expectedParameters2 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 0, BlockVersion -> 0))
+    val expectedParameters2 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 0, BlockVersion -> 0), toDisable)
     val esc2 = esc1.process(h2, expectedParameters2).get
     esc2.currentParameters.softForkStartingHeight.get shouldBe 2
 
@@ -257,7 +273,7 @@ class ParametersSpecification extends ErgoPropertyTest {
 
     // voting for the fork @ height == 4
     val h4 = h3.copy(height = 4)
-    val expectedParameters4 = Parameters(4, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 2, BlockVersion -> 0))
+    val expectedParameters4 = Parameters(4, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 2, BlockVersion -> 0), toDisable)
     val esc4 = esc3.process(h4, expectedParameters4).get
     esc4.currentParameters.softForkStartingHeight.get shouldBe 2
     esc4.currentParameters.softForkVotesCollected.get shouldBe 2
@@ -268,7 +284,7 @@ class ParametersSpecification extends ErgoPropertyTest {
 
     // first epoch after the voting done, data should still be in the block
     val h6 = h5.copy(height = 6)
-    val expectedParameters6 = Parameters(6, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 3, BlockVersion -> 0))
+    val expectedParameters6 = Parameters(6, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 3, BlockVersion -> 0), toDisable)
     val esc6 = esc5.process(h6, expectedParameters6).get
 
     // in the first epoch after the voting done, it is prohibited to propose a new voting for a fork
@@ -284,18 +300,24 @@ class ParametersSpecification extends ErgoPropertyTest {
 
     // a new fork voting is proposed on the first block of the second epoch after voting (which has not gathered enough)
     val h8 = h7.copy(height = 8, votes = forkVote)
-    val expectedParameters8 = Parameters(8, Map(SoftForkStartingHeight -> 8, SoftForkVotesCollected -> 0, BlockVersion -> 0))
+    val expectedParameters8 = Parameters(8, Map(SoftForkStartingHeight -> 8, SoftForkVotesCollected -> 0, BlockVersion -> 0), toDisable)
     val esc8 = esc7.process(h8, expectedParameters8).get
 
     // on the second epoch after voting (not fathered enough) parameters are to be cleared,
     // and block version to be the same
     val h8e = h7.copy(height = 8, votes = emptyVotes)
-    val expectedParameters8e = Parameters(8, Map(BlockVersion -> 0))
+    val expectedParameters8e = Parameters(8, Map(BlockVersion -> 0), toDisable)
     val esc8e = esc7.process(h8e, expectedParameters8e).get
 
     // parameters are not cleared
-    val wrongParameters8 = Parameters(8, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 3, BlockVersion -> 0))
+    val wrongParameters8 = Parameters(8, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 3, BlockVersion -> 0), toDisable)
     esc7.process(h8e, wrongParameters8).isFailure shouldBe true
   }
 
+
+  def checkValidationSettings(vs: ErgoValidationSettings, deactivated: Seq[Short]): Unit = {
+    vs.rules.foreach { r =>
+      vs.isActive(r._1) shouldBe !deactivated.contains(r._1)
+    }
+  }
 }

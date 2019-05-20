@@ -21,8 +21,16 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends Validat
     rules.get(id).forall(_.isActive)
   }
 
-  def update(height: Height, forkVote: Boolean, epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): ErgoValidationSettings = {
-    //TODO
+  def update(disabled: Seq[Short]): ErgoValidationSettings = if(disabled.nonEmpty) {
+    val newRules = rules.map { currentRule =>
+      if (disabled.contains(currentRule._1)) {
+        currentRule._1 -> currentRule._2.copy(isActive = false)
+      } else {
+        currentRule
+      }
+    }
+    ErgoValidationSettings(newRules)
+  } else {
     this
   }
 
@@ -58,6 +66,6 @@ object ErgoValidationSettingsSerializer extends ScorexSerializer[ErgoValidationS
       val ruleSpec = ValidationRules.rulesSpec(id)
       id -> ruleSpec.copy(isActive = isActive)
     }
-   ErgoValidationSettings(rules.toMap)
+    ErgoValidationSettings(rules.toMap)
   }
 }

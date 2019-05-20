@@ -53,8 +53,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private implicit val timeout: Timeout = 5.seconds
 
-  //todo get from condif
-  private val rulesToDisable: Seq[Short] = Seq()
+  private val rulesToDisable: Seq[Short] = ergoSettings.votingTargets.rulesToDisable
 
   private val votingSettings = ergoSettings.chainSettings.voting
   private val votingEpochLength = votingSettings.votingLength
@@ -291,18 +290,18 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       val votingFinishHeight: Option[Height] = currentParams.softForkStartingHeight
         .map(_ + votingSettings.votingLength * votingSettings.softForkEpochs)
       val forkVotingAllowed = votingFinishHeight.forall(fh => newHeight < fh)
-      val forkOrdered = ergoSettings.votingTargets.getOrElse(Parameters.SoftFork, 0) != 0
+      val forkOrdered = ergoSettings.votingTargets.softFork != 0
       val voteForFork = betterVersion && forkOrdered && forkVotingAllowed
 
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
         val (newParams, disabled) = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, rulesToDisable, votingSettings)
         // todo put disabled to extension at the beggining of the epoch
         (newParams.toExtensionCandidate(packInterlinks(interlinks)),
-          newParams.suggestVotes(ergoSettings.votingTargets, voteForFork),
+          newParams.suggestVotes(ergoSettings.votingTargets.targets, voteForFork),
           newParams.blockVersion)
       } else {
         (ExtensionCandidate(packInterlinks(interlinks)),
-          currentParams.vote(ergoSettings.votingTargets, stateContext.votingData.epochVotes, voteForFork),
+          currentParams.vote(ergoSettings.votingTargets.targets, stateContext.votingData.epochVotes, voteForFork),
           currentParams.blockVersion)
       }
     }.getOrElse((ExtensionCandidate(packInterlinks(interlinks)), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))

@@ -175,17 +175,17 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       val votingFinishHeight: Option[Height] = currentParams.softForkStartingHeight
         .map(_ + votingSettings.votingLength * votingSettings.softForkEpochs)
       val forkVotingAllowed = votingFinishHeight.forall(fh => newHeight < fh)
-      val forkOrdered = settings.votingTargets.getOrElse(Parameters.SoftFork, 0) != 0
+      val forkOrdered = settings.votingTargets.softFork != 0
       val voteForFork = betterVersion && forkOrdered && forkVotingAllowed
 
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
         val (newParams, _) = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes,  Seq(), votingSettings)
         (newParams.toExtensionCandidate(packInterlinks(interlinks)),
-          newParams.suggestVotes(settings.votingTargets, voteForFork),
+          newParams.suggestVotes(settings.votingTargets.targets, voteForFork),
           newParams.blockVersion)
       } else {
         (ExtensionCandidate(packInterlinks(interlinks)),
-          currentParams.vote(settings.votingTargets, stateContext.votingData.epochVotes, voteForFork),
+          currentParams.vote(settings.votingTargets.targets, stateContext.votingData.epochVotes, voteForFork),
           currentParams.blockVersion)
       }
     }.getOrElse((ExtensionCandidate(packInterlinks(interlinks)), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))

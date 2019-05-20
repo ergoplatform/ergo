@@ -52,3 +52,12 @@ To run specific Ergo version as a service with custom config:
         ergoplatform/ergo:v2.0.3 /etc/myergo.conf
 
 This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf`. Every default config value would be overwritten with corresponding value in `myergo.conf`. This also would store your data in named Docker volume `ergo` (if you change default data location in your config file, do not forget mount `ergo` volume to new location in container) and open ports `9007` and `9052` on host system. Note that `9052` is used for API, so it is ok not to open it into whole Internet. Also, Ergo node works normally under NAT, so you can keep closed your `9007` port too, hence other nodes could not discover and connect to yours one, only your node could initiate connections.
+
+## Acknowledgements
+
+<img src="https://www.yourkit.com/images/yklogo.png" align="right" />
+
+YourKit supports open source projects with its full-featured Java Profiler.
+YourKit, LLC is the creator of <a href="https://www.yourkit.com/java/profiler/">YourKit Java Profiler</a>
+and <a href="https://www.yourkit.com/.net/profiler/">YourKit .NET Profiler</a>,
+innovative and intelligent tools for profiling Java and .NET applications.

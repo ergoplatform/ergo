@@ -85,12 +85,13 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                timestamp: Long,
                nBits: Long,
                votes: Array[Byte],
+               rulesToDisable: Seq[Short],
                version: Byte): ErgoStateContext = {
     val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
     val forkVote = votes.contains(Parameters.SoftFork)
     val height = ErgoHistory.heightOf(lastHeaderOpt)
-    val calculatedParams = currentParameters.update(height, forkVote, votingData.epochVotes, votingSettings)
-    val calculatedValidationSettings = validationSettings.update(height, forkVote, votingData.epochVotes, votingSettings)
+    val (calculatedParams, disabled) = currentParameters.update(height, forkVote, votingData.epochVotes, rulesToDisable, votingSettings)
+    val calculatedValidationSettings = validationSettings.update(disabled)
     new UpcomingStateContext(lastHeaders, upcomingHeader, genesisStateDigest, calculatedParams, calculatedValidationSettings, votingData)
   }
 
@@ -115,17 +116,15 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val height = header.height
 
     Parameters.parseExtension(height, extension).flatMap { parsedParams =>
-      val calculatedParams = currentParameters.update(height, forkVote, votingData.epochVotes, votingSettings)
+      val (calculatedParams, disabled) = currentParameters
+        .update(height, forkVote, votingData.epochVotes, parsedParams.rulesToDisable, votingSettings)
+      val newValidationSettings = validationSettings.update(disabled)
 
       if (calculatedParams.blockVersion != header.version) {
         throw new Exception("Versions in header and parameters section are different")
       }
 
-      Parameters.matchParameters(parsedParams, calculatedParams)
-    }.flatMap { parsedParams =>
-      // todo checks
-      val extractedValidationSettingsTry = Success(validationSettings)
-      extractedValidationSettingsTry.map(vs => (parsedParams, vs))
+      Parameters.matchParameters(parsedParams, calculatedParams).map(r => (r, newValidationSettings))
     }
   }
 
@@ -147,7 +146,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     if (epochStarts) {
       val processedExtension = extensionOpt
         .map(processExtension(_, header, forkVote))
-        .getOrElse(Success(currentParameters, validationSettings))
+        .get
 
       processedExtension.map { processed =>
         val params = processed._1
@@ -211,7 +210,7 @@ object ErgoStateContext {
     */
   def empty(genesisStateDigest: ADDigest, settings: ErgoSettings): ErgoStateContext = {
     new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, ValidationRules.initialSettings, VotingData.empty)(settings.chainSettings.voting)
-      .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), 0.toByte)
+      .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), Seq(), 0.toByte)
   }
 
   /**

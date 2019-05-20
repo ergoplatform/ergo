@@ -53,6 +53,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private implicit val timeout: Timeout = 5.seconds
 
+  //todo get from condif
+  private val rulesToDisable: Seq[Short] = Seq()
+
   private val votingSettings = ergoSettings.chainSettings.voting
   private val votingEpochLength = votingSettings.votingLength
   private val protocolVersion = ergoSettings.chainSettings.protocolVersion
@@ -189,7 +192,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def onReaders: Receive = {
     case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
       publicKeyOpt.foreach { minerProp =>
-        createCandidate(minerProp, h, m, s.asInstanceOf[UtxoStateReader]) match {
+        createCandidate(minerProp, h, m, rulesToDisable, s.asInstanceOf[UtxoStateReader]) match {
           case Success(candidate) =>
             val candidateMsg = powScheme.msgByHeader(AutolykosPowScheme.deriveUnprovedHeader(candidate))
             log.info(s"New candidate with msg ${Base16.encode(candidateMsg)} generated")
@@ -214,7 +217,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
           publicKeyOpt
             .flatMap { pk =>
-              createCandidate(pk, h, m, s.asInstanceOf[UtxoStateReader])
+              createCandidate(pk, h, m, rulesToDisable, s.asInstanceOf[UtxoStateReader])
                 .map { c =>
                   candidateOpt = Some(c)
                   powScheme.deriveExternalCandidate(c, pk)
@@ -264,6 +267,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def createCandidate(minerPk: ProveDlog,
                               history: ErgoHistoryReader,
                               pool: ErgoMemPoolReader,
+                              rulesToDisable: Seq[Short],
                               state: UtxoStateReader): Try[CandidateBlock] = Try {
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
     val timestamp = timeProvider.time()
@@ -291,7 +295,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       val voteForFork = betterVersion && forkOrdered && forkVotingAllowed
 
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
-        val newParams = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, votingSettings)
+        val (newParams, disabled) = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, rulesToDisable, votingSettings)
+        // todo put disabled to extension at the beggining of the epoch
         (newParams.toExtensionCandidate(packInterlinks(interlinks)),
           newParams.suggestVotes(ergoSettings.votingTargets, voteForFork),
           newParams.blockVersion)
@@ -302,7 +307,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       }
     }.getOrElse((ExtensionCandidate(packInterlinks(interlinks)), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
-    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, version)
+    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, rulesToDisable, version)
     //only transactions valid from against the current utxo state we take from the mem pool
     val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules).map { tx =>
       implicit val verifier: ErgoInterpreter = ErgoInterpreter(state.stateContext.currentParameters)

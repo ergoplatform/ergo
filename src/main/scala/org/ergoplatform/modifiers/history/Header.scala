@@ -67,7 +67,7 @@ case class Header(version: Version,
   lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
 
   /**
-    * Checks, that modifier m corresponds to this header
+    * Checks that modifier m corresponds to this header
     */
   def isCorrespondingModifier(m: ErgoPersistentModifier): Boolean = sectionIds.exists(_._2 == m.id)
 

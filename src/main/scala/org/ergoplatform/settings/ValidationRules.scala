@@ -4,8 +4,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.ValidationRules.txPositiveAssets
-import scorex.core.validation.{MapValidationSettings, ModifierValidator, ValidationSettings}
+import scorex.core.validation.ModifierValidator
 import scorex.core.validation.ValidationResult.Invalid
 
 object ValidationRules {
@@ -28,19 +27,19 @@ object ValidationRules {
       Seq(classOf[ErgoTransaction])),
     txNoOutputs -> RuleStatus(s => fatal(s"A transaction should have at least one output. $s"),
       Seq(classOf[ErgoTransaction])),
-    txManyInputs -> RuleStatus(s => fatal(s"A transaction inputs number should not exceed ${Short.MaxValue}. $s"),
+    txManyInputs -> RuleStatus(s => fatal(s"A number of transaction inputs should not exceed ${Short.MaxValue}. $s"),
       Seq(classOf[ErgoTransaction])),
-    txManyDataInputs -> RuleStatus(s => fatal(s"A transaction data inputs number should not exceed ${Short.MaxValue}. $s"),
+    txManyDataInputs -> RuleStatus(s => fatal(s"A number transaction data inputs should not exceed ${Short.MaxValue}. $s"),
       Seq(classOf[ErgoTransaction])),
-    txManyOutputs -> RuleStatus(s => fatal(s"A transaction outputs number should not exceed ${Short.MaxValue}. $s"),
+    txManyOutputs -> RuleStatus(s => fatal(s"A number of transaction outputs should not exceed ${Short.MaxValue}. $s"),
       Seq(classOf[ErgoTransaction])),
-    txNegativeOutput -> RuleStatus(s => fatal(s"Erg amounts of transaction outputs should not be negative. $s"),
+    txNegativeOutput -> RuleStatus(s => fatal(s"Erg amount for a transaction output should not be negative. $s"),
       Seq(classOf[ErgoTransaction])),
-    txOutputSum -> RuleStatus(s => fatal(s"Sum of transaction outputs should not exceed ${Long.MaxValue}. $s"),
+    txOutputSum -> RuleStatus(s => fatal(s"Sum of transaction output values should not exceed ${Long.MaxValue}. $s"),
       Seq(classOf[ErgoTransaction])),
     txInputsUnique -> RuleStatus(s => fatal(s"There should be no duplicate inputs. $s"),
       Seq(classOf[ErgoTransaction])),
-    txAssetsInOneBox -> RuleStatus(s => fatal(s"Single box tokens number should not exceed ${ErgoTransaction.MaxAssetsPerBox}" +
+    txAssetsInOneBox -> RuleStatus(s => fatal(s"A number of tokens within a box should not exceed ${ErgoTransaction.MaxAssetsPerBox}" +
       s" and sum of assets of one type should not exceed ${Long.MaxValue}. $s"),
       Seq(classOf[ErgoTransaction])),
     txPositiveAssets -> RuleStatus(s => fatal(s"All token amounts of transaction outputs should be positive. $s"),

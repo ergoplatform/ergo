@@ -4,15 +4,18 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderSerializer, PreHeader}
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.ValidationRules.hdrVotes
 import org.ergoplatform.settings.{Constants, _}
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
+import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.ADDigest
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import special.collection.{Coll, CollOverArray}
 
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -177,19 +180,23 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     */
   def appendBlock(header: Header,
                   extensionOpt: Option[Extension],
-                  votingSettings: VotingSettings): Try[ErgoStateContext] = Try {
-    val height = header.height
-    val expectedHeight = lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)
+                  votingSettings: VotingSettings): Try[ErgoStateContext] = {
+    ModifierValidator(validationSettings).validateNoThrow(hdrVotes, checkVotes(header)).result.toTry.map { _ =>
 
-    if (height != expectedHeight) {
-      throw new Error(s"Incorrect header ${header.id} height: $height != $expectedHeight")
-    }
+      val height = header.height
+      val expectedHeight = lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)
 
-    process(header, extensionOpt).map { sc =>
-      val newHeaders = header +: lastHeaders.take(Constants.LastHeadersInContext - 1)
-      sc.updateHeaders(newHeaders)
-    }
-  }.flatten
+      if (height != expectedHeight) {
+        throw new Error(s"Incorrect header ${header.id} height: $height != $expectedHeight")
+      }
+
+      process(header, extensionOpt).map { sc =>
+        val newHeaders = header +: lastHeaders.take(Constants.LastHeadersInContext - 1)
+        sc.updateHeaders(newHeaders)
+      }
+    }.flatten
+  }
+
 
   def updateHeaders(newHeaders: Seq[Header]): ErgoStateContext = {
     new ErgoStateContext(newHeaders, genesisStateDigest, currentParameters, validationSettings, votingData)(votingSettings)
@@ -197,6 +204,24 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   override def toString: String =
     s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
+
+  /**
+    * Check that non-zero votes extracted from block header are correct
+    */
+  private def checkVotes(header: Header): Unit = {
+    val votes: Array[Byte] = header.votes.filter(_ != Parameters.NoParameter)
+    val epochStarts = header.votingStarts(votingSettings.votingLength)
+    val votesCount = votes.count(_ != Parameters.SoftFork)
+    if (votesCount > Parameters.ParamVotesCount) throw new Error(s"Too many votes $votesCount")
+
+    val prevVotes = mutable.Buffer[Byte]()
+    votes.foreach { v =>
+      if (prevVotes.contains(v)) throw new Error(s"Double vote in ${votes.mkString}")
+      if (prevVotes.contains((-v).toByte)) throw new Error(s"Contradictory votes in ${votes.mkString}")
+      if (epochStarts && !Parameters.parametersDescs.contains(v)) throw new Error("Incorrect vote proposed")
+      prevVotes += v
+    }
+  }
 }
 
 object ErgoStateContext {

@@ -51,7 +51,7 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
                                 (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     import cats.implicits._
     implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
-    implicit val vs: ValidationSettings = stateContext.validationSettings
+    val validationSettings: ValidationSettings = stateContext.validationSettings
 
     def execTx(txs: List[ErgoTransaction], accCostTry: ValidationResult[Long]): ValidationResult[Long] = (txs, accCostTry) match {
       case (tx :: tail, r: Valid[Long]) =>
@@ -70,7 +70,7 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
           .validateNoFailure(txDataBoxes, dataBoxesTry)
           .payload[Long](r.value)
           .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, (dataBoxes, toSpend)) =>
-            tx.validateStateful(toSpend.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value).result
+            tx.validateStateful(toSpend.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value)(verifier, validationSettings).result
           }
 
         execTx(tail, vs)

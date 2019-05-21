@@ -9,6 +9,7 @@ import scorex.util.serialization.{Reader, Writer}
 
 import scala.util.Try
 
+
 case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends ValidationSettings {
 
   override val isFailFast: Boolean = true
@@ -21,7 +22,7 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends Validat
     rules.get(id).forall(_.isActive)
   }
 
-  def update(disabled: Seq[Short]): ErgoValidationSettings = if(disabled.nonEmpty) {
+  def update(disabled: Seq[Short]): ErgoValidationSettings = if (disabled.nonEmpty) {
     val newRules = rules.map { currentRule =>
       if (disabled.contains(currentRule._1)) {
         currentRule._1 -> currentRule._2.copy(isActive = false)
@@ -68,4 +69,5 @@ object ErgoValidationSettingsSerializer extends ScorexSerializer[ErgoValidationS
     }
     ErgoValidationSettings(rules.toMap)
   }
+
 }

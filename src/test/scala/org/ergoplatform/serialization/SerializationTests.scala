@@ -34,7 +34,7 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
     forAll(invalidHeaderGen) { b: Header =>
       val recovered = serializer.parseBytes(serializer.toBytes(b))
       recovered shouldBe b
-      recovered.size shouldBe serializer.toBytes(b).size
+      recovered.size shouldBe serializer.toBytes(b).length
     }
   }
 

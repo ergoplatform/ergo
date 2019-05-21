@@ -9,10 +9,6 @@ import scorex.core.validation.ValidationResult.Invalid
 
 object ValidationRules {
 
-  // TODO update via soft-forks
-  // TODO replace to ErgoValidationSettings.empty when really needed
-  lazy val initialSettings: ErgoValidationSettings = new ErgoValidationSettings(rulesSpec)
-
   /**
     * Contains description of all the validation rules.
     * Fatal errors are consensus-critical, while recoverable errors are implementation-specific.

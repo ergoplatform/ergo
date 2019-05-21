@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, Parameters, ValidationRules}
+import org.ergoplatform.settings._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
@@ -269,7 +269,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   class HeaderValidator extends ScorexEncoding {
 
-    private def validationState: ValidationState[Unit] = ModifierValidator(ValidationRules.initialSettings)
+    private def validationState: ValidationState[Unit] = ModifierValidator(ErgoValidationSettings.initial)
 
     def validate(header: Header): ValidationResult[Unit] = {
       if (header.isGenesis) {

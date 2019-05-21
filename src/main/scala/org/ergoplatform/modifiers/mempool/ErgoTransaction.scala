@@ -9,7 +9,7 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.{Algos, ValidationRules}
+import org.ergoplatform.settings.{Algos, ErgoValidationSettings, ValidationRules}
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -114,7 +114,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * @note Consensus-critical!
     */
   def validateStateless: ValidationState[Unit] = {
-    ModifierValidator(ValidationRules.initialSettings)
+    ModifierValidator(ErgoValidationSettings.initial)
       .validate(txNoInputs, inputs.nonEmpty, s"$id")
       .validate(txNoOutputs, outputCandidates.nonEmpty, s"$id")
       .validate(txManyInputs, inputs.size <= Short.MaxValue, s"$id: ${inputs.size}")
@@ -147,8 +147,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long)
-                      (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
-    val vs: ValidationSettings = ValidationRules.initialSettings
+                      (implicit verifier: ErgoInterpreter, vs: ValidationSettings): ValidationState[Long] = {
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 

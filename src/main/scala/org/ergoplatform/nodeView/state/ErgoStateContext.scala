@@ -209,7 +209,7 @@ object ErgoStateContext {
     * Initialize empty state context with fake PreHeader
     */
   def empty(genesisStateDigest: ADDigest, settings: ErgoSettings): ErgoStateContext = {
-    new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, ValidationRules.initialSettings, VotingData.empty)(settings.chainSettings.voting)
+    new ErgoStateContext(Seq.empty, genesisStateDigest, LaunchParameters, ErgoValidationSettings.initial, VotingData.empty)(settings.chainSettings.voting)
       .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), Seq(), 0.toByte)
   }
 

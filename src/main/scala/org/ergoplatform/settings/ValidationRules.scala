@@ -46,19 +46,19 @@ object ValidationRules {
       Seq(classOf[ErgoTransaction])),
 
     // stateful transaction validation
-    txCost -> RuleStatus(s => fatal(s"The total cost of transaction scripts should not exceed <maxBlockCost>. $s"),
+    txCost -> RuleStatus(s => fatal(s"The total cost of transaction input scripts should not exceed <maxBlockCost>. $s"),
       Seq(classOf[ErgoTransaction])),
-    txDust -> RuleStatus(s => fatal(s"Every output of the transaction should contain at least <minValuePerByte * outputSize> nanoErg. $s"),
+    txDust -> RuleStatus(s => fatal(s"Every output of the transaction should contain at least <minValuePerByte * outputSize> nanoErgs. $s"),
       Seq(classOf[ErgoTransaction])),
     txFuture -> RuleStatus(s => fatal(s"Transaction outputs should have creationHeight the does not exceed the block height. $s"),
       Seq(classOf[ErgoTransaction])),
-    txBoxesToSpend -> RuleStatus(s => fatal(s"Every input of the transaction should be present in UTXO. $s"),
+    txBoxesToSpend -> RuleStatus(s => fatal(s"Every input of the transaction should be in UTXO. $s"),
       Seq(classOf[ErgoTransaction])),
-    txDataBoxes -> RuleStatus(s => fatal(s"Every data input of the transaction should be present in UTXO. $s"),
+    txDataBoxes -> RuleStatus(s => fatal(s"Every data input of the transaction should be in UTXO. $s"),
       Seq(classOf[ErgoTransaction])),
     txInputsSum -> RuleStatus(s => fatal(s"Sum of transaction inputs should not exceed ${Long.MaxValue}. $s"),
       Seq(classOf[ErgoTransaction])),
-    txErgPreservation -> RuleStatus(s => fatal(s"Amount of Erg in inputs should equal to amount of Erg in outputs. $s"),
+    txErgPreservation -> RuleStatus(s => fatal(s"Amount of Ergs in inputs should be equal to amount of Erg in outputs. $s"),
       Seq(classOf[ErgoTransaction])),
     txAssetsPreservation -> RuleStatus(s => fatal(s"For every token, its amount in inputs should not exceed its amount in outputs. $s"),
       Seq(classOf[ErgoTransaction])),
@@ -79,15 +79,15 @@ object ValidationRules {
     hdrVotes -> RuleStatus(s => fatal(s"A header should contain three votes, with no duplicates and contradictory votes, " +
       s"that should be known by parametersDescs. $s"),
       Seq(classOf[Header])),
-    hdrNonIncreasingTimestamp -> RuleStatus(s => fatal(s"Header timestamp should be greater than parents. $s"),
+    hdrNonIncreasingTimestamp -> RuleStatus(s => fatal(s"Header timestamp should be greater than the parent's. $s"),
       Seq(classOf[Header])),
-    hdrHeight -> RuleStatus(s => fatal(s"A header height should be greater by one than parents. $s"),
+    hdrHeight -> RuleStatus(s => fatal(s"A header height should be greater by one than the parent's. $s"),
       Seq(classOf[Header])),
-    hdrPoW -> RuleStatus(s => fatal(s"A header should contain the correct PoW solution. $s"),
+    hdrPoW -> RuleStatus(s => fatal(s"A header should contain correct PoW solution. $s"),
       Seq(classOf[Header])),
     hdrRequiredDifficulty -> RuleStatus(s => fatal(s"A header should contain correct required difficulty. $s"),
       Seq(classOf[Header])),
-    hdrTooOld -> RuleStatus(s => fatal(s"A header height should not be older, than current height minus <config.keepVersions>. $s"),
+    hdrTooOld -> RuleStatus(s => fatal(s"A header height should not be older than current height minus <config.keepVersions>. $s"),
       Seq(classOf[Header])),
     hdrParentSemantics -> RuleStatus(s => fatal(s"Parent header should not be marked as invalid. $s"),
       Seq(classOf[Header])),
@@ -101,13 +101,13 @@ object ValidationRules {
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
     bsHeaderValid -> RuleStatus(s => fatal(s"A header for the block section should not be marked as invalid. $s"),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
-    bsHeadersChainSynced -> RuleStatus(s => recoverable(s"Headers chain is not synchronized yet"),
+    bsHeadersChainSynced -> RuleStatus(s => recoverable(s"Headers-chain is not synchronized yet"),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
     bsTooOld -> RuleStatus(s => fatal(s"Block section should correspond to a block header that is not pruned yet. $s"),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
-    fbOperationFailed -> RuleStatus(s => fatal(s"Operations application to AVL+ tree should be successful. $s"),
+    fbOperationFailed -> RuleStatus(s => fatal(s"Operations against the state AVL+ tree should be successful. $s"),
       Seq(classOf[ErgoFullBlock])),
-    fbDigestIncorrect -> RuleStatus(s => fatal(s"Calculated AVL+ digest should be equal to written in the block header. $s"),
+    fbDigestIncorrect -> RuleStatus(s => fatal(s"Calculated AVL+ digest should be equal to one written in the block header. $s"),
       Seq(classOf[ErgoFullBlock])),
 
     // extension validation
@@ -200,9 +200,7 @@ object ValidationRules {
   }
 
   private def recoverable(errorMessage: String): Invalid = ModifierValidator.error(errorMessage)
-
   private def fatal(errorMessage: String): Invalid = ModifierValidator.fatal(errorMessage)
-
 }
 
 /**

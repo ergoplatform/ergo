@@ -10,7 +10,7 @@ import scorex.core.validation.ValidationResult.Invalid
 object ValidationRules {
 
   // TODO update via soft-forks
-  lazy val initialSettings: ErgoValidationSettings = new ErgoValidationSettings(rulesSpec)
+  lazy val initialSettings: ErgoValidationSettings = ErgoValidationSettings(rulesSpec)
 
   /**
     * Contains description of all the validation rules.

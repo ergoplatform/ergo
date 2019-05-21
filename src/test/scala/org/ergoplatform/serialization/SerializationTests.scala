@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
-import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsSerializer, ValidationRules}
+import org.ergoplatform.settings.{Constants, ErgoValidationSettingsSerializer}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import org.scalatest.Assertion
@@ -34,7 +34,7 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
     forAll(invalidHeaderGen) { b: Header =>
       val recovered = serializer.parseBytes(serializer.toBytes(b))
       recovered shouldBe b
-      recovered.size shouldBe serializer.toBytes(b).size
+      recovered.size shouldBe serializer.toBytes(b).length
     }
   }
 

@@ -8,7 +8,6 @@ import scorex.util.serialization.{Reader, Writer}
 
 case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends ValidationSettings {
 
-
   override val isFailFast: Boolean = true
 
   override def getError(id: Short, details: String): ValidationResult.Invalid = {
@@ -40,4 +39,5 @@ object ErgoValidationSettingsSerializer extends ScorexSerializer[ErgoValidationS
     }
     ErgoValidationSettings(rules.toMap)
   }
+
 }

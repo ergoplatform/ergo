@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Algos, ValidationRules}
+import org.ergoplatform.settings.{Algos, ErgoValidationSettings, ValidationRules}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, _}
@@ -18,7 +18,7 @@ import scala.util.Try
   */
 trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProcessor {
 
-  private def validationState: ValidationState[Unit] = ModifierValidator(ValidationRules.initialSettings)
+  private def validationState: ValidationState[Unit] = ModifierValidator(ErgoValidationSettings.initial)
 
   /**
     * Process block section.

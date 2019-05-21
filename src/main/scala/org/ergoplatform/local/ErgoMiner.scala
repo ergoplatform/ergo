@@ -88,7 +88,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def unknownMessage: Receive = {
     case _: scala.runtime.BoxedUnit =>
-      // ignore, this message is caused by way of interaction with NVH.
+    // ignore, this message is caused by way of interaction with NVH.
     case m =>
       log.warn(s"Unexpected message $m of class: ${m.getClass}")
   }
@@ -181,12 +181,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   override def receive: Receive =
     receiveSemanticallySuccessfulModifier orElse
-    startMining orElse
-    onReaders orElse
-    onUpdateSecret orElse
-    mining orElse
-    queryWallet orElse
-    unknownMessage
+      startMining orElse
+      onReaders orElse
+      onUpdateSecret orElse
+      mining orElse
+      queryWallet orElse
+      unknownMessage
 
   private def onReaders: Receive = {
     case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
@@ -208,7 +208,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           publicKeyOpt.map(powScheme.deriveExternalCandidate(c, _))
         }
         .fold[Future[ExternalCandidateBlock]](
-          Future.failed(new Exception("Failed to create candidate")))(Future.successful)
+        Future.failed(new Exception("Failed to create candidate")))(Future.successful)
 
     case PrepareCandidate =>
       val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
@@ -224,7 +224,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 .toOption
             }
             .fold[Future[ExternalCandidateBlock]](
-              Future.failed(new Exception("Failed to create candidate")))(Future.successful)
+            Future.failed(new Exception("Failed to create candidate")))(Future.successful)
         case _ =>
           Future.failed(new Exception("Invalid readers state"))
       }
@@ -320,7 +320,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       state,
       upcomingContext,
       pool.getAllPrioritized,
-      emissionTxOpt.toSeq)
+      emissionTxOpt.toSeq)(state.stateContext.validationSettings)
 
     // remove transactions which turned out to be invalid
     if (toEliminate.nonEmpty) viewHolderRef ! EliminateTransactions(toEliminate)
@@ -419,8 +419,8 @@ object ErgoMiner extends ScorexLogging {
                  us: UtxoStateReader,
                  upcomingContext: ErgoStateContext,
                  mempoolTxsIn: Iterable[ErgoTransaction],
-                 startTransactions: Seq[(ErgoTransaction, Long)]): (Seq[ErgoTransaction], Seq[ModifierId]) = {
-    implicit val vs: ValidationSettings = ValidationRules.initialSettings
+                 startTransactions: Seq[(ErgoTransaction, Long)])
+                (implicit vs: ValidationSettings): (Seq[ErgoTransaction], Seq[ModifierId]) = {
 
     def correctLimits(blockTxs: Seq[(ErgoTransaction, Long)]): Boolean = {
       blockTxs.map(_._2).sum < maxBlockCost && blockTxs.map(_._1.size).sum < maxBlockSize
@@ -432,7 +432,8 @@ object ErgoMiner extends ScorexLogging {
              lastFeeTx: Option[(ErgoTransaction, Long)],
              invalidTxs: Seq[ModifierId]): (Seq[ErgoTransaction], Seq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
-      def current = (acc ++ lastFeeTx).map(_._1)
+      def current: Seq[ErgoTransaction] = (acc ++ lastFeeTx).map(_._1)
+
       mempoolTxs.headOption match {
         case Some(tx) =>
           implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)

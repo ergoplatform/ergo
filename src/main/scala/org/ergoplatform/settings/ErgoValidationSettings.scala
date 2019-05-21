@@ -43,7 +43,12 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends Validat
 
 object ErgoValidationSettings {
 
-  val empty: ErgoValidationSettings = new ErgoValidationSettings(ValidationRules.rulesSpec)
+  /**
+    * Initial validation settings.
+    * To be used during genesis state creation or to perform checks that are not allowed
+    * to be deactivated via soft-forks.
+    */
+  val initial: ErgoValidationSettings = new ErgoValidationSettings(ValidationRules.rulesSpec)
 
   def parseExtension(h: Height, extension: Extension): Try[ErgoValidationSettings] = Try {
     ???

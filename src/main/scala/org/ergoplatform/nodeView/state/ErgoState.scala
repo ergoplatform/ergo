@@ -51,7 +51,7 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
                                 (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     import cats.implicits._
     implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
-    implicit val vs: ValidationSettings = ValidationRules.initialSettings
+    implicit val vs: ValidationSettings = stateContext.validationSettings
 
     def execTx(txs: List[ErgoTransaction], accCostTry: ValidationResult[Long]): ValidationResult[Long] = (txs, accCostTry) match {
       case (tx :: tail, r: Valid[Long]) =>

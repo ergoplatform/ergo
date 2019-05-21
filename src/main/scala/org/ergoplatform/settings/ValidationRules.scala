@@ -70,14 +70,13 @@ object ValidationRules {
     // header validation
     hdrGenesisParent -> RuleStatus(s => fatal(s"Genesis header should have genesis parent id. $s"),
       Seq(classOf[Header])),
-    hdrGenesisFromConfig -> RuleStatus(s => fatal(s"Genesis header id should equal to id from the config. $s"),
+    hdrGenesisFromConfig -> RuleStatus(s => fatal(s"Genesis header id should be equal to id from the config. $s"),
       Seq(classOf[Header])),
     hdrGenesisHeight -> RuleStatus(s => fatal(s"Genesis height should be ${ErgoHistory.GenesisHeight}. $s"),
       Seq(classOf[Header])),
     hdrParent -> RuleStatus(s => recoverable(s"Parent header with id $s is not defined"),
       Seq(classOf[Header])),
-    hdrVotes -> RuleStatus(s => fatal(s"A header should contain three votes, with no duplicates and contradictory votes, " +
-      s"that should be known by parametersDescs. $s"),
+    hdrVotes -> RuleStatus(s => fatal(s"A header should contain three votes, with no duplicates and contradictory votes. $s"),
       Seq(classOf[Header])),
     hdrNonIncreasingTimestamp -> RuleStatus(s => fatal(s"Header timestamp should be greater than the parent's. $s"),
       Seq(classOf[Header])),

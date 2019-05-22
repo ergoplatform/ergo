@@ -67,11 +67,11 @@ Rules that are not listed in this table should not be considered as consensus-cr
     \hline
     200 & Genesis header should have genesis parent id. & \xmark & \cmark & Header \\
     \hline
-    201 & Genesis header id should equal to id from the config. & \xmark & \cmark & Header \\
+    201 & Genesis header id should be equal to id from the config. & \xmark & \cmark & Header \\
     \hline
     203 & Genesis height should be 1. & \xmark & \cmark & Header \\
     \hline
-    204 & A header should contain three votes, with no duplicates and contradictory votes, that should be known by parametersDescs. & \cmark & \cmark & Header \\
+    204 & A header should contain three votes, with no duplicates and contradictory votes. & \cmark & \cmark & Header \\
     \hline
     206 & Header timestamp should be greater than the parent's. & \xmark & \cmark & Header \\
     \hline
@@ -103,19 +103,19 @@ Rules that are not listed in this table should not be considered as consensus-cr
     \hline
     305 & Block section should correspond to a block header that is not pruned yet. & \xmark & \cmark & ADProofs, Extension, BlockTransactions \\
     \hline
-    306 & Size of block transactions section should not exceed <maxBlockSize>. & \xmark & \cmark & BlockTransactions \\
+    306 & Size of block transactions section should not exceed <maxBlockSize>. & \cmark & \cmark & BlockTransactions \\
     \hline
-    311 & Interlinks should be packed properly. & \xmark & \cmark & Extension \\
+    311 & Interlinks should be packed properly. & \cmark & \cmark & Extension \\
     \hline
-    312 & Interlinks should have the correct structure. & \xmark & \cmark & Extension \\
+    312 & Interlinks should have the correct structure. & \cmark & \cmark & Extension \\
     \hline
-    313 & Extension fields key length should be 2. & \xmark & \cmark & Extension \\
+    313 & Extension fields key length should be 2. & \cmark & \cmark & Extension \\
     \hline
-    314 & Extension field value length should be <= 64. & \xmark & \cmark & Extension \\
+    314 & Extension field value length should be <= 64. & \cmark & \cmark & Extension \\
     \hline
-    315 & An extension should not contain duplicate keys. & \xmark & \cmark & Extension \\
+    315 & An extension should not contain duplicate keys. & \cmark & \cmark & Extension \\
     \hline
-    316 & Extension of non-genesis block should not be empty. & \xmark & \cmark & Extension \\
+    316 & Extension of non-genesis block should not be empty. & \cmark & \cmark & Extension \\
     \hline
 \end{tabular}
 
@@ -127,8 +127,8 @@ Rules that are not listed in this table should not be considered as consensus-cr
     \hline
     Id & Validation rule & Soft-forkable & Active & Modifiers \\
     \hline
-    400 & Operations against the state AVL+ tree should be successful. & \xmark & \cmark & ErgoFullBlock \\
+    400 & Operations against the state AVL+ tree should be successful. & \cmark & \cmark & ErgoFullBlock \\
     \hline
-    401 & Calculated AVL+ digest should be equal to one written in the block header. & \xmark & \cmark & ErgoFullBlock \\
+    401 & Calculated AVL+ digest should be equal to one written in the block header. & \cmark & \cmark & ErgoFullBlock \\
     \hline
 \end{tabular}

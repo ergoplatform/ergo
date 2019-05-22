@@ -16,7 +16,7 @@ import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, Parameters, 
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings, ValidationState}
+import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationState}
 import scorex.util._
 
 import scala.annotation.tailrec

@@ -22,9 +22,9 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends Validat
     rules.get(id).forall(_.isActive)
   }
 
-  def update(disabled: Seq[Short]): ErgoValidationSettings = if (disabled.nonEmpty) {
+  def disable(ids: Seq[Short]): ErgoValidationSettings = if (ids.nonEmpty) {
     val newRules = rules.map { currentRule =>
-      if (disabled.contains(currentRule._1)) {
+      if (ids.contains(currentRule._1)) {
         currentRule._1 -> currentRule._2.copy(isActive = false)
       } else {
         currentRule

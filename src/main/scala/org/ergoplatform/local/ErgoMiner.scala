@@ -306,7 +306,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       }
     }.getOrElse((ExtensionCandidate(packInterlinks(interlinks)), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
-    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, rulesToDisable, version)
+    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, rulesToDisable, version, Some(extensionCandidate))
     //only transactions valid from against the current utxo state we take from the mem pool
     val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules).map { tx =>
       implicit val verifier: ErgoInterpreter = ErgoInterpreter(state.stateContext.currentParameters)

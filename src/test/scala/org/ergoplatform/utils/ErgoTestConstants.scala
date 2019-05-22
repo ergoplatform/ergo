@@ -7,6 +7,7 @@ import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.ExtensionCandidate
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants}
 import org.ergoplatform.settings.Constants.HashLength
+import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
@@ -27,9 +28,11 @@ import scala.concurrent.duration._
 
 trait ErgoTestConstants extends ScorexLogging {
 
+
   implicit val votingSettings: VotingSettings = VotingSettings(1024, 32, 128)
 
   implicit val validationSettings: ErgoValidationSettings = ErgoValidationSettings.initial
+    .disable(Seq(exIlUnableToValidate, exIlEncoding, exIlStructure, exEmpty, exKeyLength, exValueLength, exDuplicateKeys))
   val parameters: Parameters = LaunchParameters
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(None)
@@ -61,7 +64,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultVersion: Byte = 0
   lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
   val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(genesisStateDigest, settings)
-    .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes,  Seq(), defaultVersion)
+    .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes,  Seq(), defaultVersion, None)
 
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest

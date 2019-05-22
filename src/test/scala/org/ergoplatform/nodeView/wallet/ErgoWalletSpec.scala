@@ -43,7 +43,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val req = AssetIssueRequest(address, emissionAmount, tokenName, tokenDescription, tokenDecimals)
       val tx = await(wallet.generateTransaction(Seq(feeReq, req))).get
       log.info(s"Generated transaction $tx")
-      val context = new ErgoStateContext(Seq(genesisBlock.header), startDigest, parameters, validationSettings, VotingData.empty)
+      val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettings, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
     }
@@ -71,7 +71,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Payment request $req")
       val tx = await(wallet.generateTransaction(req)).get
       log.info(s"Generated transaction $tx")
-      val context = new ErgoStateContext(Seq(genesisBlock.header), startDigest, parameters, validationSettings, VotingData.empty)
+      val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension),startDigest, parameters, validationSettings, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
 
@@ -86,7 +86,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Payment requests 2 $req2")
       val tx2 = await(wallet.generateTransaction(req2)).get
       log.info(s"Generated transaction $tx2")
-      val context2 = new ErgoStateContext(Seq(block.header), startDigest, parameters, validationSettings, VotingData.empty)
+      val context2 = new ErgoStateContext(Seq(block.header), Some(block.extension), startDigest, parameters, validationSettings, VotingData.empty)
       val knownBoxes = tx.outputs ++ genesisTx.outputs
       val boxesToSpend2 = tx2.inputs.map(i => knownBoxes.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx2.statefulValidity(boxesToSpend2, emptyDataBoxes, context2) shouldBe 'success

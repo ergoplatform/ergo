@@ -144,20 +144,26 @@ object ValidationRules {
     // extension validation
     // interlinks validation
     exIlUnableToValidate -> RuleStatus(s => recoverable(s"Unable to validate interlinks. $s"),
-      Seq(classOf[Extension])),
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
     exIlEncoding -> RuleStatus(s => fatal(s"Interlinks should be packed properly. $s"),
-      Seq(classOf[Extension])),
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
     exIlStructure -> RuleStatus(s => fatal(s"Interlinks should have the correct structure. $s"),
-      Seq(classOf[Extension])),
-
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
     exKeyLength -> RuleStatus(s => fatal(s"Extension fields key length should be ${Extension.FieldKeySize}. $s"),
-      Seq(classOf[Extension])),
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
     exValueLength -> RuleStatus(s => fatal(s"Extension field value length should be <= ${Extension.FieldValueMaxSize}. $s"),
-      Seq(classOf[Extension])),
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
     exDuplicateKeys -> RuleStatus(s => fatal(s"An extension should not contain duplicate keys. $s"),
-      Seq(classOf[Extension])),
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
     exEmpty -> RuleStatus(s => fatal(s"Extension of non-genesis block should not be empty. $s"),
-      Seq(classOf[Extension]))
+      Seq(classOf[Extension]),
+      mayBeDisabled = true)
   )
 
 

@@ -11,7 +11,7 @@ class ErgoStateContextSpec extends ErgoPropertyTest with HistoryTestHelpers {
     import org.ergoplatform.settings.Parameters._
     val p: Parameters = Parameters(1, Map(BlockVersion -> 0), Seq())
     val vr: VotingData = VotingData.empty
-    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettings, vr)
+    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)
 
     val fb = genChain(1).head
     val header = fb.header

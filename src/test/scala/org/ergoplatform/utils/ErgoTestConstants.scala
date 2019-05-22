@@ -30,9 +30,10 @@ trait ErgoTestConstants extends ScorexLogging {
 
 
   implicit val votingSettings: VotingSettings = VotingSettings(1024, 32, 128)
+  val validationSettings: ErgoValidationSettings = ErgoValidationSettings.initial
+  implicit val validationSettingsNoIl: ErgoValidationSettings = validationSettings
+    .disable(Seq(exIlUnableToValidate, exIlEncoding, exIlStructure))
 
-  implicit val validationSettings: ErgoValidationSettings = ErgoValidationSettings.initial
-    .disable(Seq(exIlUnableToValidate, exIlEncoding, exIlStructure, exEmpty, exKeyLength, exValueLength, exDuplicateKeys))
   val parameters: Parameters = LaunchParameters
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(None)

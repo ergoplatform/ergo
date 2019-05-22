@@ -55,7 +55,7 @@ class DigestState protected(override val version: VersionTag,
 
     execTransactions(transactions, currentStateContext)(checkBoxExistence)
       .toTry
-      .map(tc => ().ensuring(tc <= currentStateContext.currentParameters.maxBlockCost))
+      .map(_ => ())
   }
 
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {

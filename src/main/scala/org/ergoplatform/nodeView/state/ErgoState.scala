@@ -14,7 +14,7 @@ import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, _}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.MinimalState
-import scorex.core.validation.ValidationResult.{Invalid, Valid}
+import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
 import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}

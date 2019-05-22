@@ -5,13 +5,15 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
+import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlockSerializer, RegistryIndexSerializer}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
 import org.scalatest.Assertion
 import scorex.core.serialization.ScorexSerializer
 
-class SerializationTests extends ErgoPropertyTest with scorex.testkit.SerializationTests {
+class SerializationTests extends ErgoPropertyTest with WalletGenerators with scorex.testkit.SerializationTests {
 
   def checkSerializationRoundtripAndSize[A <: ErgoNodeViewModifier](generator: Gen[A],
                                                                     serializer: ScorexSerializer[A]): Assertion = {
@@ -81,4 +83,17 @@ class SerializationTests extends ErgoPropertyTest with scorex.testkit.Serializat
       mf.serializer.parseBytes(mf.serializer.toBytes(mf)) shouldEqual mf
     }
   }
+
+  property("RegistryIndex serialization") {
+    forAll(registryIndexGen) { index =>
+      RegistryIndexSerializer.parseBytes(RegistryIndexSerializer.toBytes(index)) shouldEqual index
+    }
+  }
+
+  property("PostponedBlock serialization") {
+    forAll(postponedBlockGen) { block =>
+      PostponedBlockSerializer.parseBytes(PostponedBlockSerializer.toBytes(block)) shouldEqual block
+    }
+  }
+
 }

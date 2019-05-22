@@ -76,13 +76,14 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.spire-math" % "debox_2.12" % "0.8.0",
   "org.spire-math" % "jawn-parser_2.12" % "0.13.0",
   "org.typelevel" % "algebra_2.12" % "0.7.0",
-  "org.typelevel" % "cats-core_2.12" % "1.4.0",
-  "org.typelevel" % "cats-kernel_2.12" % "1.4.0",
-  "org.typelevel" % "cats-macros_2.12" % "1.4.0",
-  "org.typelevel" % "machinist_2.12" % "0.6.5",
+  "org.typelevel" % "cats-core_2.12" % "1.6.0",
+  "org.typelevel" % "cats-free_2.12" % "1.6.0",
+  "org.typelevel" % "cats-kernel_2.12" % "1.6.0",
+  "org.typelevel" % "cats-macros_2.12" % "1.6.0",
+  "org.typelevel" % "machinist_2.12" % "0.6.6",
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.typelevel" % "spire-macros_2.12" % "0.14.1",
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 68670cab88f489c3e1f0a8110cb15f08e6fa3aec
+// LIBRARY_DEPENDENCIES_HASH ed0d85393a3b29742d5323bce50d4f7e5b9604ab

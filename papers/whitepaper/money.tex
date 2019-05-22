@@ -59,7 +59,7 @@ Two more features of Ergo shaping contracting possibilities are:
  tokens is very simple.
 
  Firstly, a token identifying the oracle should be issued. In the simplest case, the amount of this token could be one. We call such a token {\em a singleton token}. The oracle creates a box containing this token along with its data (i.e., the temperature) in register $R_4$ and the UNIX epoch time in register $R_5$.
- In order to update the temperature, the oracle destroys its box and creates a new one with the updated temperature.
+ In order to update the temperature, the oracle destroys this box and creates a new one with the updated temperature.
 
  Assume that Alice and Bob know the oracle's token identifier in advance. With this knowledge, they can jointly create a box with a contract that requires first (read-only) data input to contain the oracle's token. The contract extracts the temperature and time from the data input
  and decides who gets the payout. The code is as simple as following:
@@ -88,8 +88,8 @@ Two more features of Ergo shaping contracting possibilities are:
 
  Privacy is important for a digital currency but implementing it can be costly or require a trusted setup. Thus, it is desirable to find a cheaper way for coin mixing. As a first step towards that, we offer a non-interactive mixing protocol between two users Alice and Bob that works as follows:
  \begin{enumerate}
-    \item{} Alice creates a box which demands the spending transaction to satisfy certain conditions. After that, Alice only listens to the blockchain, no interaction with Bob is needed.
-    \item{} Bob creates a transaction spending Alice's box along with one of his own and generating two outputs with an identical script but different data. Each of Alice and Bob may spend only one of the two outputs but to an external observer the two outputs look indistinguishable and he cannot decide which output belongs to whom.
+    \item{} Alice creates a box which demands the spending transaction to satisfy certain conditions. After that, Alice only listens to the blockchain; no interaction with Bob is needed.
+    \item{} Bob creates a transaction spending Alice's box along with one of his own to generate two outputs having identical scripts but different data. Each of Alice and Bob may spend only one of the two outputs but to an external observer the two outputs look indistinguishable and he cannot decide which output belongs to whom.
  \end{enumerate}
 
  For simplicity, we do not consider fee in the example. The idea of mixing is similar to non-interactive Diffie-Hellman key exchange. First, Alice generates a secret value $x$~(a huge number) and publishes the corresponding public value $gX = g^x$. She requires Bob to generate a secret number $y$, and to include into each output two

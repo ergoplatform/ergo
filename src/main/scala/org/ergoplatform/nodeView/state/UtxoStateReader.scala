@@ -12,7 +12,6 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
-import sigmastate.lang.Terms._
 
 import scala.util.{Failure, Try}
 

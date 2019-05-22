@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransactionSer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlockSerializer, RegistryIndexSerializer}
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, ErgoValidationSettingsSerializer}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
@@ -36,7 +36,7 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
     forAll(invalidHeaderGen) { b: Header =>
       val recovered = serializer.parseBytes(serializer.toBytes(b))
       recovered shouldBe b
-      recovered.size shouldBe serializer.toBytes(b).size
+      recovered.size shouldBe serializer.toBytes(b).length
     }
   }
 
@@ -81,6 +81,13 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
   property("ModeFeature serialization") {
     forAll(modeFeatureGen) {mf =>
       mf.serializer.parseBytes(mf.serializer.toBytes(mf)) shouldEqual mf
+    }
+  }
+
+  property("ErgoValidationSettings serialization") {
+    val serializer = ErgoValidationSettingsSerializer
+    forAll(ergoValidationSettingsGen) { mf =>
+      serializer.parseBytes(serializer.toBytes(mf)) shouldEqual mf
     }
   }
 

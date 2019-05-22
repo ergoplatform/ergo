@@ -28,7 +28,8 @@ class DigestState protected(override val version: VersionTag,
                             ergoSettings: ErgoSettings)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
-    with ScorexLogging {
+    with ScorexLogging
+    with ScorexEncoding {
 
   override val constants: StateConstants = StateConstants(None, ergoSettings)
 
@@ -52,11 +53,9 @@ class DigestState protected(override val version: VersionTag,
       .get(ByteArrayWrapper(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
 
-    execTransactionsTry(transactions, currentStateContext)(checkBoxExistence) match {
-      case Success(executionCost) if executionCost <= currentStateContext.currentParameters.maxBlockCost => Success(())
-      case Success(executionCost) => Failure(new Exception(s"Transaction cost $executionCost exceeds limit"))
-      case failure => failure.map(_ => ())
-    }
+    execTransactions(transactions, currentStateContext)(checkBoxExistence)
+      .toTry
+      .map(_ => ())
   }
 
   def validate(mod: ErgoPersistentModifier): Try[Unit] = mod match {

@@ -25,9 +25,9 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
-import sigmastate.interpreter.ContextExtension
-import sigmastate.eval._
 import sigmastate.eval.Extensions._
+import sigmastate.eval._
+import sigmastate.interpreter.ContextExtension
 
 import scala.util.{Failure, Random, Success, Try}
 

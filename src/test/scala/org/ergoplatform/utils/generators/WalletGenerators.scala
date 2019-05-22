@@ -1,16 +1,22 @@
 package org.ergoplatform.utils.generators
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.wallet.IdUtils._
+import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlock, RegistryIndex}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
-import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress}
+import org.ergoplatform._
 import org.scalacheck.Gen
+import scorex.crypto.authds.ADKey
+import scorex.util.{ModifierId, idToBytes}
 
 trait WalletGenerators extends ErgoTransactionGenerators {
 
   private val ergoSettings = ErgoSettings.read(None)
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
+
+  def trackedAddressGen: Gen[ErgoAddress] = proveDlogGen.map(P2PKAddress.apply)
 
   def trackedBoxGen: Gen[TrackedBox] = {
     Gen.oneOf(
@@ -90,6 +96,35 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       decimals <- Gen.choose(4, 16)
     } yield AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), amount, name, description, decimals)
   }
+
+  def registryIndexGen: Gen[RegistryIndex] = {
+    for {
+      height <- Gen.posNum[Int]
+      amount <- Gen.choose(1L, 100000L)
+      balances <- additionalTokensGen
+      uncertain <- Gen.listOf(boxIdGen)
+    } yield {
+      val encodedBalances = balances.map { case (x1, x2) => encodedTokenId(x1) -> x2 }.toMap
+      RegistryIndex(height, amount, encodedBalances, uncertain.map(encodedBoxId))
+    }
+  }
+
+  def postponedBlockGen: Gen[PostponedBlock] = for {
+    height <- Gen.posNum[Int]
+    id <- modifierIdGen
+    inputs <- Gen.listOf(inputsWithTxGen)
+    outputs <- Gen.listOf(outputsWithTxGen)
+  } yield PostponedBlock(id, height, inputs, outputs)
+
+  private def inputsWithTxGen: Gen[(ModifierId, EncodedBoxId)] = for {
+    txId <- modifierIdGen
+    id <- modifierIdGen
+  } yield txId -> encodedBoxId(ADKey @@ idToBytes(id))
+
+  private def outputsWithTxGen: Gen[(ModifierId, ErgoBox)] = for {
+    txId <- modifierIdGen
+    box <- ergoBoxGen
+  } yield txId -> box
 
   private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)
 

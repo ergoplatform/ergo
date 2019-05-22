@@ -41,7 +41,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val feeProp: ErgoTree = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
 
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
-  val defaultSeed: Array[Byte] = Mnemonic.toSeed(settings.walletSettings.testMnemonic.get)
+  lazy val defaultSeed: Array[Byte] = Mnemonic.toSeed(settings.walletSettings.testMnemonic.get)
   val defaultRootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(defaultSeed)
   val defaultChildSecrets: IndexedSeq[ExtendedSecretKey] = settings.walletSettings.testKeysQty
     .toIndexedSeq

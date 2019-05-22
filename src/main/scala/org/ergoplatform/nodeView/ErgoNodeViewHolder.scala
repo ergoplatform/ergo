@@ -57,7 +57,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         updateNodeView(updatedVault = Some(newVault), updatedMempool = Some(newPool))
         context.system.eventStream.publish(SuccessfulTransaction[ErgoTransaction](tx))
       case (newPool, ProcessingOutcome.Invalidated(e)) =>
-        log.debug(s"Transaction $tx invalidated")
+        log.debug(s"Transaction $tx invalidated. Cause: ${e.getMessage}")
         updateNodeView(updatedMempool = Some(newPool))
         context.system.eventStream.publish(FailedTransaction[ErgoTransaction](tx, e))
       case (_, ProcessingOutcome.Declined) => // do nothing

@@ -31,6 +31,7 @@ libraryDependencies ++= Seq(
 
   "org.ergoplatform" %% "ergo-wallet" % "0.2-R1-SNAPSHOT",
 
+  "org.typelevel" %% "cats-free" % "1.6.0",
   "javax.xml.bind" % "jaxb-api" % "2.+",
   "com.iheart" %% "ficus" % "1.4.+",
   "ch.qos.logback" % "logback-classic" % "1.2.3",

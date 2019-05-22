@@ -319,7 +319,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     //check that spam transaction validation with no cost limit is indeed taking too much time
     val relaxedParams = LaunchParameters.parametersTable.updated(Parameters.MaxBlockCostIncrease, Int.MaxValue)
     val relaxedVerifier = ErgoInterpreter(Parameters(0, relaxedParams, Seq()))
-    val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(relaxedVerifier, validationSettings))
+    val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(relaxedVerifier, validationSettingsNoIl))
 
     assert(time > Timeout)
   }

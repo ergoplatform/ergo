@@ -1,16 +1,12 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.modifiers.history.Extension
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
 import scorex.util.serialization.{Reader, Writer}
 
-import scala.util.Try
 
 case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends ValidationSettings {
-
 
   override val isFailFast: Boolean = true
 
@@ -43,4 +39,5 @@ object ErgoValidationSettingsSerializer extends ScorexSerializer[ErgoValidationS
     }
     ErgoValidationSettings(rules.toMap)
   }
+
 }

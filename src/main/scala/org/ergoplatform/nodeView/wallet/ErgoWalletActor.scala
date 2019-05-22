@@ -267,8 +267,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         val lockWithAddress = (addressOpt orElse publicKeys.headOption)
           .getOrElse(throw new Exception("No address available for box locking"))
         val minimalErgoAmount =
-          BoxUtils.minimalErgoAmountSimulated(lockWithAddress.script, Seq(assetId -> amount).toColl, nonMandatoryRegisters, parameters)
-        new ErgoBoxCandidate(minimalErgoAmount, lockWithAddress.script, height, Seq(assetId -> amount).toColl, nonMandatoryRegisters)
+          BoxUtils.minimalErgoAmountSimulated(lockWithAddress.script, Colls.fromItems(assetId -> amount), nonMandatoryRegisters, parameters)
+        new ErgoBoxCandidate(minimalErgoAmount, lockWithAddress.script, height, Colls.fromItems(assetId -> amount), nonMandatoryRegisters)
       case other => throw new Exception(s"Unknown TransactionRequest type: $other")
     }
   }

@@ -16,7 +16,8 @@ object ValidationRules {
   lazy val rulesSpec: Map[Short, RuleStatus] = Map(
 
     alreadyApplied -> RuleStatus(s => fatal(s"A modifier should not be applied yet. $s"),
-      Seq(classOf[Header], classOf[ADProofs], classOf[Extension], classOf[BlockTransactions])),
+      Seq(classOf[Header], classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
+      mayBeDisabled = false),
 
 
     // transaction validation
@@ -84,7 +85,8 @@ object ValidationRules {
 
     // header validation
     hdrGenesisParent -> RuleStatus(s => fatal(s"Genesis header should have genesis parent id. $s"),
-      Seq(classOf[Header])),
+      Seq(classOf[Header]),
+      mayBeDisabled = false),
     hdrGenesisFromConfig -> RuleStatus(s => fatal(s"Genesis header id should be equal to id from the config. $s"),
       Seq(classOf[Header]),
       mayBeDisabled = false),
@@ -98,7 +100,8 @@ object ValidationRules {
       Seq(classOf[Header]),
       mayBeDisabled = true),
     hdrNonIncreasingTimestamp -> RuleStatus(s => fatal(s"Header timestamp should be greater than the parent's. $s"),
-      Seq(classOf[Header])),
+      Seq(classOf[Header]),
+      mayBeDisabled = false),
     hdrHeight -> RuleStatus(s => fatal(s"A header height should be greater by one than the parent's. $s"),
       Seq(classOf[Header]),
       mayBeDisabled = false),
@@ -135,11 +138,14 @@ object ValidationRules {
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
     bsBlockTransactionsSize -> RuleStatus(s => fatal(s"Size of block transactions section should not exceed <maxBlockSize>. $s"),
-      Seq(classOf[BlockTransactions])),
+      Seq(classOf[BlockTransactions]),
+      mayBeDisabled = true),
     fbOperationFailed -> RuleStatus(s => fatal(s"Operations against the state AVL+ tree should be successful. $s"),
-      Seq(classOf[ErgoFullBlock])),
+      Seq(classOf[ErgoFullBlock]),
+      mayBeDisabled = true),
     fbDigestIncorrect -> RuleStatus(s => fatal(s"Calculated AVL+ digest should be equal to one written in the block header. $s"),
-      Seq(classOf[ErgoFullBlock])),
+      Seq(classOf[ErgoFullBlock]),
+      mayBeDisabled = true),
 
     // extension validation
     // interlinks validation
@@ -259,10 +265,6 @@ case class RuleStatus(error: String => Invalid,
 object RuleStatus {
   def apply(error: String => Invalid, affectedClasses: Seq[Class[_]], mayBeDisabled: Boolean): RuleStatus = {
     RuleStatus(error, affectedClasses, mayBeDisabled, isActive = true)
-  }
-
-  def apply(error: String => Invalid, affectedClasses: Seq[Class[_]]): RuleStatus = {
-    RuleStatus(error, affectedClasses, mayBeDisabled = false, isActive = true)
   }
 
 }

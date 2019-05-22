@@ -1,0 +1,57 @@
+\section{Introduction}
+\label{sec:intro}
+
+% say the WHY creating Ergo. And also attack the existing financial system a few times.
+% Important the readers know that Ergo really is in the same spirit of Bitcoin in the sense it is open,
+% permissionless and is designed to disintermediate trusted third parties. But then we need to make clear if
+% not too directly that Bitcoin/Ethereum still face a lot of challenges that Ergo is built to address.
+
+Beginning more than ten years ago with Bitcoin~\cite{nakamoto2008bitcoin}, blockchain technology has so far proved
+to be a secure way of maintaining a public transaction ledger and disintermediating trusted third parties such as 
+traditional financial institutions to some degree.
+Even after achieving a market capitalization over \$300bn in 2017~\cite{btcPrice},
+no severe attacks were performed on the Bitcoin network despite the high potential yield.
+This resilience of cryptocurrencies and the financial empowerment and self-sovereignty they promise to bring is
+achieved by a combination of modern cryptographic algorithms and decentralized architecture.
+
+However, this resilience comes at a cost 
+%does not come for free 
+and has not yet been proven for existing systems in the long-run at economy-wide scale.
+To use a blockchain without any trust, its participants should check each other by downloading and
+processing all the transactions in the network, utilizing network resources.
+Besides network utilization, transaction processing also utilizes computational resources,
+especially if the transactional language is sufficiently flexible.
+Finally, blockchain participants have to keep a significant amount of data in their local storages and
+the storage requirements are growing fast.
+Of this, certain data must be maintained in memory.
+Thus, transaction processing utilizes various resources of hundreds of thousands of computers all over the world
+and consumption of these resources is paid for by regular users in the form of transaction fees~\cite{chepurnoy2018systematic}.
+Despite the generous block reward subsidy in some existing systems, their fees can still be very high at times~\cite{bitcoinFees}.
+Due to this, even after being around for more than ten years, blockchain technology is still primarily being used in financial applications, where the advantage of high security outweighs the disadvantage of high transaction costs.
+
+Besides the vanilla currency example, the other use of blockchains is to build decentralized applications.
+Such applications utilize the ability of the underlying platform to write smart contracts~\cite{szabo1994smart} implementing their logic by means of a blockchain-specific programming language.
+One way to classify blockchains in terms of their ability to write smart contracts is based on if they are  
+{\em UTXO-based}~(e.g., Bitcoin) or {\em account-based}~(e.g., Ethereum)~\cite{zahnentferner2018chimeric}.
+Account-based cryptocurrencies, such as Ethereum, introduce special contract accounts controlled by code,
+that may be invoked by incoming transactions.
+Although this approach allows performing arbitrary computation, the implementation of complex spending conditions
+can lead to bugs such as the one in an Ethereum's ``simple'' multi-signature contract that caused a loss of \$150 million in 2017~\cite{parityLock}.
+In UTXO-based cryptocurrencies, every coin has a script associated with it, and to spend that coin, one must satisfy the conditions given in the script.
+Implementing such protecting conditions is much easier with the UTXO model but doing arbitrary Turing-complete computation is quite complex~\cite{chepurnoy2018self}.
+However, most financial contracts do not require Turing-completeness~\cite{jansenDo}.
+Ergo is based on the UTXO model and provides a convenient way to implement financial applications covering an
+overwhelming majority of public blockchain use-cases.
+
+While the contractual component is important for building decentralized applications,
+it is also essential that the blockchain survives in the long-term.
+Application-oriented blockchain platforms have existed only for a few years and the whole area is quite young. Since such platforms have already encountered problems with performance degradation over time~\cite{ethSlow1, ethSlow2}, their long-term survivability is questionable.
+Even older UTXO-based money-oriented blockchains have not been proven to be fully resilient in the long-run
+under changing conditions because we only have about 10 years of blockchain history up to this point.
+Solutions for long-term survivability include concepts 
+such as light nodes with minimal storage requirements~\cite{reyzin2017improving},
+storage-rent fee component to prevent bloating of full-nodes~\cite{chepurnoy2018systematic}, and 
+self-amendable protocols that can adapt to the changing environment and improve themselves without
+trusted parties~\cite{goodman2014tezos}.
+What is needed is a combination of various scientific ideas together to fix these problems, while also
+providing a way for further improvements without any breaking changes and this is exactly what Ergo seeks to accomplish.

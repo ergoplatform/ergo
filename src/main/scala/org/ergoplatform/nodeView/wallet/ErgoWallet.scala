@@ -20,6 +20,8 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
     with ErgoWalletReader
     with ScorexLogging {
 
+  override type NVCT = this.type
+
   override val walletActor: ActorRef =
     actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings, DefaultBoxSelector))
 
@@ -29,7 +31,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   }
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
-    walletActor ! ScanOffchain(tx)
+    walletActor ! ScanOffChain(tx)
     this
   }
 
@@ -41,7 +43,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   override def scanPersistent(modifier: ErgoPersistentModifier): ErgoWallet = {
     modifier match {
       case fb: ErgoFullBlock =>
-        walletActor ! ScanOnchain(fb)
+        walletActor ! ScanOnChain(fb)
       case _ =>
         log.debug("Not full block in ErgoWallet.scanPersistent, which could be the case only if " +
           "state = digest when bootstrapping")
@@ -52,15 +54,12 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   override def rollback(to: VersionTag): Try[ErgoWallet] =
     historyReader.heightOf(scorex.core.versionToId(to)) match {
       case Some(height) =>
-        walletActor ! Rollback(height)
+        walletActor ! Rollback(to, height)
         Success(this)
       case None =>
         Failure(new Exception(s"Height of a modifier with id $to not found"))
     }
-
-  override type NVCT = this.type
 }
-
 
 object ErgoWallet {
   def readOrGenerate(historyReader: ErgoHistoryReader,

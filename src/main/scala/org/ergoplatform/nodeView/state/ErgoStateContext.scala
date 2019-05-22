@@ -128,6 +128,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
         .update(height, forkVote, votingData.epochVotes, parsedParams.rulesToDisable, votingSettings)
       val newValidationSettings = validationSettings.disable(disabled)
 
+      //todo move to ValidationRules and allow to disable
       if (calculatedParams.blockVersion != header.version) {
         throw new Exception("Versions in header and parameters section are different")
       }
@@ -183,7 +184,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     * @param votingSettings - chain-wide voting settings
     * @return updated state context or error
     */
-  def appendFullBlock(fb: ErgoFullBlock, votingSettings: VotingSettings): Try[ErgoStateContext] = {
+  def appendFullBlock(fb: ErgoFullBlock, votingSettings: VotingSettings): Try[ErgoStateContext] = Try {
     new ExtensionValidator(validationSettings)
       .validateExtension(fb.extension, fb.header, lastExtensionOpt, lastHeaderOpt)
       .validateNoThrow(hdrVotes, checkVotes(fb.header))
@@ -198,7 +199,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       .flatMap { _ =>
         process(fb.header, Some(fb.extension))
       }
-  }
+  }.flatten
 
   /**
     * This function verifies whether a full block is valid against the ErgoStateContext instance, and modifies

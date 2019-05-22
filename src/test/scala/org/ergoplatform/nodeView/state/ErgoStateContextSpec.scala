@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.settings.Parameters
+import org.ergoplatform.settings.LaunchParameters
 import org.ergoplatform.utils.{ErgoPropertyTest, HistoryTestHelpers}
 import scorex.crypto.authds.ADDigest
 
@@ -9,9 +9,8 @@ class ErgoStateContextSpec extends ErgoPropertyTest with HistoryTestHelpers {
 
   property("Header votes") {
     import org.ergoplatform.settings.Parameters._
-    val p: Parameters = Parameters(1, Map(BlockVersion -> 0), Seq())
     val vr: VotingData = VotingData.empty
-    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)
+    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), LaunchParameters, validationSettingsNoIl, vr)
 
     val fb = genChain(1).head
     val header = fb.header
@@ -38,6 +37,10 @@ class ErgoStateContextSpec extends ErgoPropertyTest with HistoryTestHelpers {
     //a vote proposed on non-existing parameter
     val wrongVotes4 = Array((-50).toByte, NoParameter, MaxBlockSizeDecrease)
     esc.appendFullBlock(fbWithVotes(wrongVotes4, 2), votingSettings) shouldBe 'failure
+
+    //correct votes
+    val correctVotes = Array(StorageFeeFactorIncrease, MaxBlockSizeDecrease, NoParameter)
+    esc.appendFullBlock(fbWithVotes(correctVotes), votingSettings) shouldBe 'success
   }
 
 

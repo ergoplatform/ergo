@@ -211,7 +211,6 @@ object ValidationRules {
   val bsHeaderValid: Short = 303
   val bsHeadersChainSynced: Short = 304
   val bsTooOld: Short = 305
-  //todo implement this check
   val bsBlockTransactionsSize: Short = 306
 
   // extension validation

@@ -187,7 +187,12 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     new ExtensionValidator(validationSettings)
       .validateExtension(fb.extension, fb.header, lastExtensionOpt, lastHeaderOpt)
       .validateNoThrow(hdrVotes, checkVotes(fb.header))
-      .validate(hdrHeight, lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight) == fb.header.height)
+      .validate(hdrHeight,
+        lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight) == fb.header.height,
+        s"${fb.id} => ${lastHeaderOpt.map(_.height)} == ${fb.header.height}")
+      .validate(bsBlockTransactionsSize,
+        fb.blockTransactions.size <= currentParameters.maxBlockSize,
+        s"${fb.id} => ${fb.blockTransactions.size} == ${currentParameters.maxBlockSize}")
       .result
       .toTry
       .flatMap { _ =>

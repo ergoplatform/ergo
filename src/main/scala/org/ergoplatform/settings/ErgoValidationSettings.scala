@@ -1,16 +1,19 @@
 package org.ergoplatform.settings
 
+import com.google.common.primitives.Ints
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
-import scorex.core.serialization.ScorexSerializer
+import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
 import scorex.util.serialization.{Reader, Writer}
 
 import scala.util.Try
 
 
-case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends ValidationSettings {
+case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends ValidationSettings with BytesSerializable {
+
+  override type M = ErgoValidationSettings
 
   override val isFailFast: Boolean = true
 
@@ -36,8 +39,13 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends Validat
   }
 
   def toExtensionCandidate(): ExtensionCandidate = {
-    ???
+    val fields = bytes.sliding(Extension.FieldValueMaxSize, Extension.FieldValueMaxSize).zipWithIndex.map { case (b, i) =>
+      Array(Extension.ValidationRulesPrefix, i.toByte) -> b
+    }
+    ExtensionCandidate(fields.toSeq)
   }
+
+  override def serializer: ScorexSerializer[ErgoValidationSettings] = ErgoValidationSettingsSerializer
 
 }
 
@@ -50,8 +58,9 @@ object ErgoValidationSettings {
     */
   val initial: ErgoValidationSettings = new ErgoValidationSettings(ValidationRules.rulesSpec)
 
-  def parseExtension(h: Height, extension: ExtensionCandidate): Try[ErgoValidationSettings] = Try {
-    ???
+  def parseExtension(extension: ExtensionCandidate): Try[ErgoValidationSettings] = Try {
+    val bytes = extension.fields.filter(_._1.head == Extension.ValidationRulesPrefix).sortBy(_._1.last).flatMap(_._2)
+    ErgoValidationSettingsSerializer.parseBytes(bytes.toArray)
   }
 }
 

@@ -269,7 +269,7 @@ object ErgoStateContext {
     if (lastHeaders.lastOption.exists(_.height % vs.votingLength == 0)) {
       val currentHeader = lastHeaders.last
       Parameters.parseExtension(currentHeader.height, extension).flatMap { params =>
-        ErgoValidationSettings.parseExtension(currentHeader.height, extension).map { validationSettings =>
+        ErgoValidationSettings.parseExtension(extension).map { validationSettings =>
           new ErgoStateContext(lastHeaders.reverse, Some(extension), genesisStateDigest, params, validationSettings, VotingData.empty)(vs)
         }
       }

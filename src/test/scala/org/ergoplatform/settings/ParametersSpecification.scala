@@ -26,7 +26,7 @@ class ParametersSpecification extends ErgoPropertyTest {
   property("extension processing") {
     val ctx = {
       new ErgoStateContext(Seq.empty, None, genesisStateDigest, LaunchParameters, validationSettingsNoIl, VotingData.empty)(votingSettings)
-        .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), Seq(), 0.toByte, None)
+        .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), Seq(), 0.toByte)
     }
     val chain = genChain(votingEpochLength * 4).map { b =>
       b.copy(extension = b.extension.copy(fields = LaunchParameters.toExtensionCandidate(Seq.empty).fields))

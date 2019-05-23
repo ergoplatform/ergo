@@ -12,17 +12,20 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{GenerateTransaction, ReadBalances, ReadPublicKeys, ReadTrackedAddresses}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
+import org.ergoplatform.wallet.boxes.ChainStatus
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.core.app.Version
-import scorex.core.network.{Handshake, PeerSpec}
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
+import scorex.core.network.{Handshake, PeerSpec}
 import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -123,19 +126,26 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class WalletActorStub extends Actor {
-    def seed: String = "walletstub"
 
     private implicit val addressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
-    private val prover = ErgoProvingInterpreter(seed, 2, parameters)
-    private val trackedAddresses: Seq[P2PKAddress] = prover.dlogPubkeys.map(P2PKAddress.apply)
+    private val prover: ErgoProvingInterpreter = defaultProver
+    private val trackedAddresses: Seq[P2PKAddress] = prover.pubKeys.map(P2PKAddress.apply)
 
     def receive: Receive = {
+
+      case _: InitWallet => sender() ! Success(WalletActorStub.mnemonic)
+
+      case _: RestoreWallet => sender() ! Success(())
+
+      case _: UnlockWallet => sender() ! Success(())
+
+      case LockWallet => ()
 
       case ReadPublicKeys(from, until) =>
         sender() ! trackedAddresses.slice(from, until)
 
       case ReadBalances(chainStatus) =>
-        sender ! BalancesSnapshot(0, WalletActorStub.balance(chainStatus), Map.empty)
+        sender ! RegistryIndex(0, WalletActorStub.balance(chainStatus), Map.empty, Seq.empty)
 
       case ReadTrackedAddresses =>
         sender ! trackedAddresses
@@ -148,14 +158,18 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   object WalletActorStub {
+
+    val seed: String = "walletstub"
+    val mnemonic: String = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
+
     def props(): Props = Props(new WalletActorStub)
-    def balance(chainStatus: ChainStatus): Long = if (chainStatus.onchain) confirmedBalance else unconfirmedBalance
+    def balance(chainStatus: ChainStatus): Long = if (chainStatus.onChain) confirmedBalance else unconfirmedBalance
     def confirmedBalance: Long = 1L
     def unconfirmedBalance: Long = 2L
   }
 
   class WalletStub extends ErgoWalletReader {
-    val actor: ActorRef = system.actorOf(WalletActorStub.props())
+    val walletActor: ActorRef = system.actorOf(WalletActorStub.props())
   }
 
 

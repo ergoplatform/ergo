@@ -205,10 +205,12 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     val unsignedTx = UnsignedErgoTransaction(inputs, dataInputs, newBoxes)
     require(unsignedTx.dataInputs.length == dataBoxes.length, s"${unsignedTx.dataInputs.length} == ${dataBoxes.length}")
 
-    defaultProver.sign(unsignedTx, boxesToSpend, dataBoxes, stateCtxOpt.getOrElse(emptyStateContext)).getOrElse {
-      log.debug(s"Going to generate a transaction with incorrect spending proofs: $unsignedTx")
-      ErgoTransaction(inputs, dataInputs, newBoxes)
-    }
+    defaultProver.sign(unsignedTx, boxesToSpend, dataBoxes, stateCtxOpt.getOrElse(emptyStateContext))
+      .map(ErgoTransaction.apply)
+      .getOrElse {
+        log.debug(s"Going to generate a transaction with incorrect spending proofs: $unsignedTx")
+        ErgoTransaction(inputs, dataInputs, newBoxes)
+      }
   }
 
   def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {

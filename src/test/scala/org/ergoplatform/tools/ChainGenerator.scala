@@ -18,6 +18,7 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
+import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector}
 import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.ProveDlog
 
@@ -44,7 +45,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val MaxTxsPerBlock: Int = 10
 
   val prover = defaultProver
-  val minerPk = prover.dlogPubkeys.head
+  val minerPk = prover.pubKeys.head
   val selfAddressScript = P2PKAddress(minerPk).script
   val minerProp = ErgoScriptPredef.rewardOutputScript(RewardDelay, minerPk)
 
@@ -96,7 +97,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       val (txs, lastOut) = genTransactions(last.map(_.height).getOrElse(ErgoHistory.GenesisHeight),
         initBox, state.stateContext)
 
-      val candidate = genCandidate(prover.dlogPubkeys.head, last, time, txs, state)
+      val candidate = genCandidate(prover.pubKeys.head, last, time, txs, state)
       val block = proveCandidate(candidate.get)
 
       history.append(block.header).get
@@ -140,7 +141,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
             )
 
             prover.sign(unsignedTx, inputs, emptyDataBoxes, ctx)
-              .fold(_ => acc -> in, tx => (acc :+ tx) -> unsignedTx.outputs.head)
+              .fold(_ => acc -> in, tx => (acc :+ ErgoTransaction(tx)) -> unsignedTx.outputs.head)
           }
           ._1
         (x, Some(x.last.outputs.head))

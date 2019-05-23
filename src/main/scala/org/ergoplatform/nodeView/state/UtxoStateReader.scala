@@ -5,9 +5,9 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
-import org.ergoplatform.nodeView.ErgoInterpreter
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
@@ -57,7 +57,8 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   protected[state] def extractEmissionBox(fb: ErgoFullBlock): Option[ErgoBox] = emissionBoxIdOpt match {
     case Some(id) =>
       fb.blockTransactions.txs.view.reverse.find(_.inputs.exists(t => java.util.Arrays.equals(t.boxId, id))) match {
-        case Some(tx) if tx.outputs.head.proposition == constants.settings.chainSettings.monetary.emissionBoxProposition =>
+        case Some(tx) if tx.outputs.head.proposition.toSigmaProp ==
+          constants.settings.chainSettings.monetary.emissionBoxProposition =>
           tx.outputs.headOption
         case Some(_) =>
           log.info(s"Last possible emission box consumed")

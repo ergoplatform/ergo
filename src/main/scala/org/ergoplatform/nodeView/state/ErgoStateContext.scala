@@ -24,7 +24,7 @@ import scala.util.{Failure, Success, Try}
   * The predicted header only contains fields that can be predicted.
   */
 class UpcomingStateContext(lastHeaders: Seq[Header],
-                           lastExtensionOpt: Option[ExtensionCandidate],
+                           lastExtensionOpt: Option[Extension],
                            val predictedHeader: PreHeader,
                            genesisStateDigest: ADDigest,
                            currentParameters: Parameters,
@@ -52,7 +52,7 @@ class UpcomingStateContext(lastHeaders: Seq[Header],
   * @param votingData         - votes for parameters change within the current voting epoch
   */
 class ErgoStateContext(val lastHeaders: Seq[Header],
-                       val lastExtensionOpt: Option[ExtensionCandidate],
+                       val lastExtensionOpt: Option[Extension],
                        val genesisStateDigest: ADDigest,
                        val currentParameters: Parameters,
                        val validationSettings: ErgoValidationSettings,
@@ -93,14 +93,13 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                nBits: Long,
                votes: Array[Byte],
                rulesToDisable: Seq[Short],
-               version: Byte,
-               extensionOpt: Option[ExtensionCandidate]): ErgoStateContext = {
+               version: Byte): ErgoStateContext = {
     val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
     val forkVote = votes.contains(Parameters.SoftFork)
     val height = ErgoHistory.heightOf(lastHeaderOpt)
     val (calculatedParams, disabled) = currentParameters.update(height, forkVote, votingData.epochVotes, rulesToDisable, votingSettings)
     val calculatedValidationSettings = validationSettings.disable(disabled)
-    new UpcomingStateContext(lastHeaders, extensionOpt, upcomingHeader, genesisStateDigest, calculatedParams, calculatedValidationSettings, votingData)
+    new UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams, calculatedValidationSettings, votingData)
   }
 
   protected def checkForkVote(height: Height): Unit = {
@@ -257,7 +256,7 @@ object ErgoStateContext {
     */
   def empty(genesisStateDigest: ADDigest, settings: ErgoSettings): ErgoStateContext = {
     new ErgoStateContext(Seq.empty, None, genesisStateDigest, LaunchParameters, ErgoValidationSettings.initial, VotingData.empty)(settings.chainSettings.voting)
-      .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), Seq(), 0.toByte, None)
+      .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), Seq(), 0.toByte)
   }
 
   /**

@@ -5,7 +5,8 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, PoPowAlgos}
+import org.ergoplatform.modifiers.history.PoPowAlgos.{packInterlinks, updateInterlinks}
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -203,9 +204,10 @@ trait ValidBlocksGenerators
     * Full block valid against state only - allows to create blocks form headers and state,
     * does not contain valid interlinks.
     */
-  def statefulyValidFullBlock(parentOpt: Option[Header],
-                              wrappedState: WrappedUtxoState,
+  def statefulyValidFullBlock(wrappedState: WrappedUtxoState,
                               timeOpt: Option[Long] = None): ErgoFullBlock = {
+    val parentOpt: Option[Header] = wrappedState.stateContext.lastHeaderOpt
+    val parentExtensionOpt: Option[Extension] = wrappedState.stateContext.lastExtensionOpt
     val bh = wrappedState.versionedBoxHolder
     val transactions = validTransactionsFromBoxHolder(bh, new Random())._1
 
@@ -214,7 +216,8 @@ trait ValidBlocksGenerators
     val (adProofBytes, updStateDigest) = wrappedState.proofsForTransactions(transactions).get
 
     val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
-    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(Seq.empty)
+    val packedInterlinks = packInterlinks(updateInterlinks(parentOpt, parentExtensionOpt))
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(packedInterlinks)
     val votes = Array.fill(3)(0: Byte)
 
     powScheme.proveBlock(parentOpt, Header.CurrentVersion, settings.chainSettings.initialNBits, updStateDigest,

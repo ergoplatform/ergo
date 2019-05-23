@@ -12,9 +12,8 @@ import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalacheck.Gen
-import scorex.core.app.Version
+import scorex.core.network.ConnectedPeer
 import scorex.core.network.peer.PeerInfo
-import scorex.core.network.{ConnectedPeer, Outgoing}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
 
@@ -29,8 +28,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings))
 
   override def semanticallyValidModifier(state: UTXO_ST): PM = {
-    val parentOpt = state.stateContext.lastHeaderOpt
-    statefulyValidFullBlock(parentOpt, state.asInstanceOf[WrappedUtxoState])
+    statefulyValidFullBlock(state.asInstanceOf[WrappedUtxoState])
   }
 
   override def semanticallyInvalidModifier(state: UTXO_ST): PM = invalidErgoFullBlockGen.sample.get
@@ -78,7 +76,6 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
 
 
-
     val peerInfo = PeerInfo(defaultPeerSpec, timeProvider.time())
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(
@@ -96,4 +93,5 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     val id = modifierIdGen.sample.get
     BlockTransactions(id, txs)
   }
+
 }

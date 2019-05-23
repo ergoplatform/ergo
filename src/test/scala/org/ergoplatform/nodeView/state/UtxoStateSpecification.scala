@@ -480,11 +480,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
 
   private def genExtension(header: Header, sc: ErgoStateContext): Extension = {
-    genExtension(header, sc.lastHeaderOpt, sc.lastExtensionOpt.flatMap(e => sc.lastHeaderOpt.map(h => e.toExtension(h.id))))
-  }
-
-  private def genExtension(header: Header, lastHeader: Option[Header], lastExtension: Option[Extension]): Extension = {
-    val packedInterlinks = packInterlinks(updateInterlinks(lastHeader, lastExtension))
+    val packedInterlinks = packInterlinks(updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt))
     Extension(header.id, packedInterlinks)
   }
 

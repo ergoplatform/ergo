@@ -7,9 +7,9 @@ import com.google.common.primitives.Longs
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
+import org.ergoplatform.mining._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.mining._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
@@ -20,18 +20,19 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{ErgoSettings, Parameters}
+import org.ergoplatform.settings.{ErgoSettings, Parameters, ValidationRules}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
+import scorex.core.validation.ValidationSettings
 import scorex.util.encode.Base16
-import scorex.util.{ScorexLogging, ModifierId}
-import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
-import sigmastate.interpreter.{ProverResult, ContextExtension}
-import sigmastate.eval._
-import sigmastate.eval.Extensions._
+import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.SType.ErgoBoxRType
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.eval.Extensions._
+import sigmastate.eval._
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 import special.collection.Coll
 
 import scala.annotation.tailrec
@@ -415,6 +416,8 @@ object ErgoMiner extends ScorexLogging {
                  upcomingContext: ErgoStateContext,
                  mempoolTxsIn: Iterable[ErgoTransaction],
                  startTransactions: Seq[(ErgoTransaction, Long)]): (Seq[ErgoTransaction], Seq[ModifierId]) = {
+    implicit val vs: ValidationSettings = ValidationRules.initialSettings
+
     def correctLimits(blockTxs: Seq[(ErgoTransaction, Long)]): Boolean = {
       blockTxs.map(_._2).sum < maxBlockCost && blockTxs.map(_._1.size).sum < maxBlockSize
     }

@@ -65,7 +65,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scodec" % "scodec-bits_2.12" % "1.1.6",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.15",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "cfa864a9-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "e1142a21-SNAPSHOT",
   "org.scorexfoundation" % "scorex-util_2.12" % "0.1.3",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.6",
   "org.scorexfoundation" % "sigma-api_2.12" % "soft-forkability2-c4824a5e-SNAPSHOT",
@@ -76,13 +76,14 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.spire-math" % "debox_2.12" % "0.8.0",
   "org.spire-math" % "jawn-parser_2.12" % "0.13.0",
   "org.typelevel" % "algebra_2.12" % "0.7.0",
-  "org.typelevel" % "cats-core_2.12" % "1.4.0",
-  "org.typelevel" % "cats-kernel_2.12" % "1.4.0",
-  "org.typelevel" % "cats-macros_2.12" % "1.4.0",
-  "org.typelevel" % "machinist_2.12" % "0.6.5",
+  "org.typelevel" % "cats-core_2.12" % "1.6.0",
+  "org.typelevel" % "cats-free_2.12" % "1.6.0",
+  "org.typelevel" % "cats-kernel_2.12" % "1.6.0",
+  "org.typelevel" % "cats-macros_2.12" % "1.6.0",
+  "org.typelevel" % "machinist_2.12" % "0.6.6",
   "org.typelevel" % "macro-compat_2.12" % "1.1.1",
   "org.typelevel" % "spire-macros_2.12" % "0.14.1",
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 5577ca6dc38d476df93cb679d7e964c66f477ba7
+// LIBRARY_DEPENDENCIES_HASH ca740128a390625ef21be54dfe9215e3ac8195bc

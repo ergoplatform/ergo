@@ -1,5 +1,7 @@
-\section{Ergo Block Structure}
-Ergo block consists of 4 parts:
+\section{Ergo Modifiers}
+
+
+Unlike most of blockchain systems, Ergo block consists of 4 parts:
 
 \begin{itemize}
     \item{\em Header } - minimal amount of data required to synchronize the chain and check PoW correctness.
@@ -37,7 +39,7 @@ Ergo block consists of 4 parts:
     \hline
     extensionRoot & 32 & root hash of extension section  \\
     \hline
-    powSolution & 75-107 (depends on d) & solution of Autolykos PoW puzzle  \\
+    powSolution & 75-107 & solution of Autolykos PoW puzzle  \\
     \hline
     votes & 3 & votes for changes in system parameteres, one byte per vote  \\
     \hline

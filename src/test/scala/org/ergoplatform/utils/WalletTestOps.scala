@@ -1,31 +1,30 @@
 package org.ergoplatform.utils
 
 import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform._
+import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
-import org.ergoplatform.nodeView.wallet.{BalancesSnapshot, ErgoWallet}
-import org.ergoplatform.utils.fixtures.WalletFixture
-import org.ergoplatform._
-import org.ergoplatform.local.ErgoMiner
+import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.wallet.IdUtils._
+import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.settings.Constants
-import scorex.crypto.hash.Digest32
+import org.ergoplatform.utils.fixtures.WalletFixture
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, bytesToId}
-import sigmastate.Values.{ErgoTree, TrueLeaf, Value}
+import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.interpreter.ProverResult
-import sigmastate.serialization.ValueSerializer
-import sigmastate.eval._
 import sigmastate.eval.Extensions._
-import sigmastate.SBoolean
+import sigmastate.eval._
+import sigmastate.interpreter.ProverResult
 
 import scala.concurrent.blocking
 
-
 trait WalletTestOps extends NodeViewBaseOps {
 
-  def newAssetIdStub: TokenId = Digest32 @@ Array.emptyByteArray
+  def newAssetIdStub: TokenId = Blake2b256.hash("new_asset")
 
   def withFixture[T](test: WalletFixture => T): T = {
     new WalletFixture(settings, getCurrentView(_).vault).apply(test)
@@ -36,10 +35,10 @@ trait WalletTestOps extends NodeViewBaseOps {
   def getPublicKeys(implicit w: WalletFixture): Seq[P2PKAddress] =
     await(w.wallet.publicKeys(0, Int.MaxValue))
 
-  def getConfirmedBalances(implicit w: WalletFixture): BalancesSnapshot =
+  def getConfirmedBalances(implicit w: WalletFixture): RegistryIndex =
     await(w.wallet.confirmedBalances())
 
-  def getBalancesWithUnconfirmed(implicit w: WalletFixture): BalancesSnapshot =
+  def getBalancesWithUnconfirmed(implicit w: WalletFixture): RegistryIndex =
     await(w.wallet.balancesWithUnconfirmed())
 
   def scanningInterval(implicit ctx: Ctx): Long = ctx.settings.walletSettings.scanningInterval.toMillis
@@ -94,9 +93,11 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def assetsByTokenId(boxes: Seq[ErgoBoxCandidate]): Map[TokenId, Long] = {
     boxes
-      .flatMap { _.additionalTokens.toArray }
-      .groupBy { case (tokenId, _) => tokenId }
-      .map { case (id, pairs) => id -> pairs.map(_._2).sum }
+      .flatMap(_.additionalTokens.toArray)
+      .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
+        acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
+      }
+      .map(x => decodedTokenId(x._1) -> x._2)
   }
 
   def getUtxoState(implicit ctx: Ctx): UtxoState = getCurrentState.asInstanceOf[UtxoState]

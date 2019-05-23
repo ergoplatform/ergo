@@ -14,7 +14,7 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "cfa864a9-SNAPSHOT"
+val scorexVersion = "e1142a21-SNAPSHOT"
 val sigmaStateVersion = "soft-forkability2-c4824a5e-SNAPSHOT"
 val ergoWalletVersion = "soft-forkability2-89850804-SNAPSHOT"
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -33,6 +33,7 @@ libraryDependencies ++= Seq(
 
 //  "org.ergoplatform" %% "ergo-wallet" % "0.2-R1-SNAPSHOT",
 
+  "org.typelevel" %% "cats-free" % "1.6.0",
   "javax.xml.bind" % "jaxb-api" % "2.+",
   "com.iheart" %% "ficus" % "1.4.+",
   "ch.qos.logback" % "logback-classic" % "1.2.3",

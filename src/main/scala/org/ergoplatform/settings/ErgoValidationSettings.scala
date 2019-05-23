@@ -1,9 +1,7 @@
 package org.ergoplatform.settings
 
-import com.google.common.primitives.Ints
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
 import scorex.util.serialization.{Reader, Writer}
@@ -47,9 +45,23 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends Validat
 
   override def serializer: ScorexSerializer[ErgoValidationSettings] = ErgoValidationSettingsSerializer
 
+  override def equals(obj: Any): Boolean = obj match {
+    case p: ErgoValidationSettings => ErgoValidationSettings.matchSettings(this, p).isSuccess
+    case _ => false
+  }
 }
 
 object ErgoValidationSettings {
+
+  def matchSettings(s1: ErgoValidationSettings, s2: ErgoValidationSettings): Try[Unit] = Try {
+    if (s1.rules.size != s2.rules.size) {
+      throw new Exception(s"Rules differ in size, s1 = $s1, s2 = $s2")
+    }
+    s1.rules.foreach { case (k, v) =>
+      val v2 = s2.rules(k)
+      if (v2 != v) throw new Exception(s"Calculated and received settings differ in $k ($v != $v2)")
+    }
+  }
 
   /**
     * Initial validation settings.

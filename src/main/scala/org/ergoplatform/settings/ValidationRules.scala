@@ -167,6 +167,25 @@ object ValidationRules {
     exDuplicateKeys -> RuleStatus(s => fatal(s"An extension should not contain duplicate keys. $s"),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
+    exCheckForkVote -> RuleStatus(s => fatal(s"Voting for fork may only be done after activation period of a previous soft-fork voting. $s"),
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
+    exParseParameters -> RuleStatus(s => fatal(s"At the beginning of the epoch, the extension should contain correctly packed parameters. $s"),
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
+    exMatchParameters -> RuleStatus(s => fatal(s"At the beginning of the epoch, the extension should contain all the system parameters. $s"),
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
+    exBlockVersion -> RuleStatus(s => fatal(s"Versions in header and parameters section should be equal. $s"),
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
+    exParseValidationSettings -> RuleStatus(s => fatal(s"At the beginning of the epoch, the extension should contain correctly packed validation settings. $s"),
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
+    exMatchValidationSettings -> RuleStatus(s => fatal(s"At the beginning of the epoch, the extension should contain all the validation settings. $s"),
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
+
     exEmpty -> RuleStatus(s => fatal(s"Extension of non-genesis block should not be empty. $s"),
       Seq(classOf[Extension]),
       mayBeDisabled = true)
@@ -220,19 +239,23 @@ object ValidationRules {
   val bsBlockTransactionsSize: Short = 306
 
   // extension validation
-  // validate interlinks
-  val exIlUnableToValidate: Short = 310
-  val exIlEncoding: Short = 311
-  val exIlStructure: Short = 312
-  // rest extension validation
-  val exKeyLength: Short = 313
-  val exValueLength: Short = 314
-  val exDuplicateKeys: Short = 315
-  val exEmpty: Short = 316
+  val exIlUnableToValidate: Short = 400
+  val exIlEncoding: Short = 401
+  val exIlStructure: Short = 402
+  val exKeyLength: Short = 403
+  val exValueLength: Short = 404
+  val exDuplicateKeys: Short = 405
+  val exEmpty: Short = 406
+  val exCheckForkVote: Short = 407
+  val exParseParameters: Short = 408
+  val exMatchParameters: Short = 409
+  val exBlockVersion: Short = 410
+  val exParseValidationSettings: Short = 411
+  val exMatchValidationSettings: Short = 412
 
   // full block application
-  val fbOperationFailed: Short = 400
-  val fbDigestIncorrect: Short = 401
+  val fbOperationFailed: Short = 500
+  val fbDigestIncorrect: Short = 501
 
 
   def errorMessage(id: Short, details: String): String = {

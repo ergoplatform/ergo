@@ -109,7 +109,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     pk <- genECPoint
     w <- genECPoint
     n <- genBytes(8)
-    d <- Arbitrary.arbitrary[BigInt].map(_.mod(q))
+    d <- Arbitrary.arbitrary[BigInt].map(_.mod(q - 1) + 1)
   } yield AutolykosSolution(pk, w, n, d)
 
   /**
@@ -121,7 +121,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   /**
     * Generates required difficulty in interval [1, 2^255]
-    */
+    **/
   lazy val requiredDifficultyGen: Gen[BigInt] = Arbitrary.arbitrary[BigInt].map(_.mod(BigInt(2).pow(255)).abs + 1)
 
   lazy val invalidHeaderGen: Gen[Header] = for {

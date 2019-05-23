@@ -50,29 +50,26 @@ object ErgoValidationSettings {
     */
   val initial: ErgoValidationSettings = new ErgoValidationSettings(ValidationRules.rulesSpec)
 
-  def parseExtension(h: Height, extension: Extension): Try[ErgoValidationSettings] = Try {
+  def parseExtension(h: Height, extension: ExtensionCandidate): Try[ErgoValidationSettings] = Try {
     ???
   }
 }
 
 object ErgoValidationSettingsSerializer extends ScorexSerializer[ErgoValidationSettings] with ApiCodecs {
   override def serialize(obj: ErgoValidationSettings, w: Writer): Unit = {
-    w.putInt(obj.rules.size)
-    obj.rules.toSeq.sortBy(_._1).foreach { r =>
+    val disabledRules = obj.rules.filter(r => !r._2.isActive)
+    w.putInt(disabledRules.size)
+    disabledRules.foreach { r =>
       w.putShort(r._1)
-      if (r._2.isActive) w.put(1.toByte) else w.put(0.toByte)
     }
   }
 
   override def parse(r: Reader): ErgoValidationSettings = {
-    val ruleNum = r.getInt()
-    val rules = (0 until ruleNum).map { _ =>
-      val id = r.getShort()
-      val isActive = if (r.getByte() == 1.toByte) true else false
-      val ruleSpec = ValidationRules.rulesSpec(id)
-      id -> ruleSpec.copy(isActive = isActive)
+    val disabledRulesNum = r.getInt()
+    val disabledRules = (0 until disabledRulesNum).map { _ =>
+      r.getShort()
     }
-    ErgoValidationSettings(rules.toMap)
+    ErgoValidationSettings.initial.disable(disabledRules)
   }
 
 }

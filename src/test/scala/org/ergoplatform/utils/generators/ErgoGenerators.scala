@@ -169,8 +169,8 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val ergoValidationSettingsGen: Gen[ErgoValidationSettings] = for {
     n <- Gen.choose(1, 200)
-    rules = ValidationRules.rulesSpec.take(n).map(_.copy())
-  } yield ErgoValidationSettings(rules)
+    disabledRules = ValidationRules.rulesSpec.keys.take(n).toSeq
+  } yield ErgoValidationSettings.initial.disable(disabledRules)
 
   /** Random long from 1 to maximum - 1
     *

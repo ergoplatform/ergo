@@ -62,8 +62,6 @@ object Extension extends ApiCodecs {
 
   val FieldValueMaxSize: Int = 64
 
-  def apply(header: Header): Extension = Extension(header.id, Seq())
-
   def rootHash(e: Extension): Digest32 = rootHash(e.fields)
 
   def rootHash(e: ExtensionCandidate): Digest32 = rootHash(e.fields)

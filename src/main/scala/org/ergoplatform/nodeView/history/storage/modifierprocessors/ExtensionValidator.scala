@@ -32,10 +32,13 @@ class ExtensionValidator(settings: ErgoValidationSettings) extends ScorexEncodin
       case (Some(parent), Some(parentExt)) =>
         val parentLinksTry = unpackInterlinks(parentExt.fields)
         val currentLinksTry = unpackInterlinks(extension.fields)
+
+        val expectedLinksTry = parentLinksTry
+          .map { prev => updateInterlinks(parent, prev) }
+
         validationState
           .validateNoFailure(exIlEncoding, currentLinksTry)
-          .validate(exIlStructure, parentLinksTry.flatMap(parLinks => currentLinksTry.map(parLinks -> _))
-            .toOption.exists { case (prev, cur) => updateInterlinks(parent, prev) == cur })
+          .validate(exIlStructure, expectedLinksTry == currentLinksTry, s"$expectedLinksTry == $currentLinksTry")
       case _ =>
         validationState
           .validate(exIlUnableToValidate, header.isGenesis || prevExtensionOpt.isEmpty)

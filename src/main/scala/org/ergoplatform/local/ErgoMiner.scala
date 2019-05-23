@@ -269,19 +269,15 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                               rulesToDisable: Seq[Short],
                               state: UtxoStateReader): Try[CandidateBlock] = Try {
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
+    val bestExtensionOpt: Option[Extension] = bestHeaderOpt
+      .flatMap(h => history.typedModifierById[Extension](h.extensionId))
     val timestamp = timeProvider.time()
     val stateContext = state.stateContext
     val nBits: Long = bestHeaderOpt
       .map(parent => history.requiredDifficultyAfter(parent))
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(ergoSettings.chainSettings.initialNBits)
-    val interlinks = bestHeaderOpt
-      .flatMap { h =>
-        history.typedModifierById[Extension](h.extensionId)
-          .flatMap(ext => unpackInterlinks(ext.fields).toOption)
-          .map(updateInterlinks(h, _))
-      }
-      .getOrElse(Seq.empty)
+    val packedInterlinks = packInterlinks(updateInterlinks(bestHeaderOpt, bestExtensionOpt))
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt.map { header =>
       val newHeight = header.height + 1
@@ -296,15 +292,15 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
         val (newParams, disabled) = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, rulesToDisable, votingSettings)
         // todo put disabled to extension at the beggining of the epoch
-        (newParams.toExtensionCandidate(packInterlinks(interlinks)),
+        (newParams.toExtensionCandidate(packedInterlinks),
           newParams.suggestVotes(ergoSettings.votingTargets.targets, voteForFork),
           newParams.blockVersion)
       } else {
-        (ExtensionCandidate(packInterlinks(interlinks)),
+        (ExtensionCandidate(packedInterlinks),
           currentParams.vote(ergoSettings.votingTargets.targets, stateContext.votingData.epochVotes, voteForFork),
           currentParams.blockVersion)
       }
-    }.getOrElse((ExtensionCandidate(packInterlinks(interlinks)), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
+    }.getOrElse((ExtensionCandidate(packedInterlinks), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
     val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, rulesToDisable, version, Some(extensionCandidate))
     //only transactions valid from against the current utxo state we take from the mem pool

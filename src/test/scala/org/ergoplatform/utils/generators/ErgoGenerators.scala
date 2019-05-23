@@ -119,13 +119,18 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     h.copy(powSolution = h.powSolution.copy(pk = defaultMinerPkPoint))
   }
 
+  /**
+    * Generates required difficulty in interval [1, 2^255]
+    */
+  lazy val requiredDifficultyGen: Gen[BigInt] = Arbitrary.arbitrary[BigInt].map(_.mod(BigInt(2).pow(255)).abs + 1)
+
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
     parentId <- modifierIdGen
     stateRoot <- stateRootGen
     adRoot <- digest32Gen
     transactionsRoot <- digest32Gen
-    requiredDifficulty <- Arbitrary.arbitrary[BigInt]
+    requiredDifficulty <- requiredDifficultyGen
     height <- Gen.choose(1, Int.MaxValue)
     powSolution <- powSolutionGen
     timestamp <- positiveLongGen

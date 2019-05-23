@@ -50,6 +50,7 @@ object Constants {
 
   val SoftForkEpochs = 32 //about 45.5 days
 
+  // todo move to parameters
   val ExtensionMaxSize: Int = 16 * 1024 //16 kb
 
   val TrueLeaf: ErgoTree = Values.TrueLeaf.toSigmaProp

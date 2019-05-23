@@ -86,7 +86,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
 
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(
-      inetSocketAddressGen.sample.get,
+      connectionIdGen.sample.get,
       pchProbe.ref,
       Some(peerInfo)
     )

@@ -198,6 +198,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       .validate(bsBlockTransactionsSize,
         fb.blockTransactions.size <= currentParameters.maxBlockSize,
         s"${fb.id} => ${fb.blockTransactions.size} == ${currentParameters.maxBlockSize}")
+      .validate(exSize,
+        fb.extension.size <= currentParameters.maxExtensionSize,
+        s"${fb.id} => ${fb.extension.size} == ${currentParameters.maxExtensionSize}")
       .result
       .toTry
       .flatMap { _ =>

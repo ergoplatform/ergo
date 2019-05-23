@@ -185,6 +185,9 @@ object ValidationRules {
     exMatchValidationSettings -> RuleStatus(s => fatal(s"At the beginning of the epoch, the extension should contain all the validation settings. $s"),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
+    exSize -> RuleStatus(s => fatal(s"Size of extension section should not exceed <maxExtensionSize>. $s"),
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
 
     exEmpty -> RuleStatus(s => fatal(s"Extension of non-genesis block should not be empty. $s"),
       Seq(classOf[Extension]),
@@ -239,7 +242,7 @@ object ValidationRules {
   val bsBlockTransactionsSize: Short = 306
 
   // extension validation
-  val exIlUnableToValidate: Short = 400
+  val exSize: Short = 400
   val exIlEncoding: Short = 401
   val exIlStructure: Short = 402
   val exKeyLength: Short = 403
@@ -252,6 +255,7 @@ object ValidationRules {
   val exBlockVersion: Short = 410
   val exParseValidationSettings: Short = 411
   val exMatchValidationSettings: Short = 412
+  val exIlUnableToValidate: Short = 413
 
   // full block application
   val fbOperationFailed: Short = 500

@@ -38,6 +38,11 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int], val ru
   lazy val maxBlockSize: Int = parametersTable(MaxBlockSizeIncrease)
 
   /**
+    * Max size of extension section of a block.
+    */
+  lazy val maxExtensionSize: Int = parametersTable(MaxExtensionSizeIncrease)
+
+  /**
     * Validation cost of accessing a single token.
     */
   lazy val tokenAccessCost: Int = parametersTable(TokenAccessCostIncrease)
@@ -248,28 +253,43 @@ object Parameters {
   val OutputCostIncrease: Byte = 8
   val OutputCostDecrease: Byte = (-OutputCostIncrease).toByte
 
-  val StorageFeeFactorDefault = 1250000
-  val StorageFeeFactorMax = 2500000
-  val StorageFeeFactorMin = 0
-  val StorageFeeFactorStep = 25000
+  val MaxExtensionSizeIncrease: Byte = 9
+  val MaxExtensionSizeDecrease: Byte = (-MaxExtensionSizeIncrease).toByte
+
+
+  val StorageFeeFactorDefault: Int = 1250000
+  val StorageFeeFactorMax: Int = 2500000
+  val StorageFeeFactorMin: Int = 0
+  val StorageFeeFactorStep: Int = 25000
 
   val MinValuePerByteDefault: Int = 30 * 12
-  val MinValueStep = 10
-  val MinValueMin = 0
-  val MinValueMax = 10000 //0.00001 Erg
+  val MinValueStep: Int = 10
+  val MinValueMin: Int = 0
+  val MinValueMax: Int = 10000 //0.00001 Erg
 
-  val TokenAccessCostDefault = 100
+  val TokenAccessCostDefault: Int = 100
 
-  val InputCostDefault = 2000
+  val InputCostDefault: Int = 2000
 
-  val DataInputCostDefault = 100
+  val DataInputCostDefault: Int = 100
 
-  val OutputCostDefault = 100
+  val OutputCostDefault: Int = 100
+
+  val MaxExtensionSizeDefault: Int = 32 * 1024
+  val MaxExtensionSizeMax: Int = 1024 * 1024
+  val MaxExtensionSizeMin: Int = 16 * 1024
+
+  val MaxBlockSizeDefault: Int = 512 * 1024
+  val MaxBlockSizeMax: Int = 1024 * 1024
+  val MaxBlockSizeMin: Int = 16 * 1024
+
+  val MaxBlockCostDefault: Int = 1000000
 
   val parametersDescs: Map[Byte, String] = Map(
     StorageFeeFactorIncrease -> "Storage fee factor (per byte per storage period)",
     MinValuePerByteIncrease -> "Minimum monetary value of a box",
     MaxBlockSizeIncrease -> "Maximum block size",
+    MaxExtensionSizeIncrease -> "Maximum extension size",
     MaxBlockCostIncrease -> "Maximum cumulative computational cost of a block",
     SoftFork -> "Soft-fork (increasing version of a block)",
     TokenAccessCostIncrease -> "Token access cost",
@@ -286,11 +306,13 @@ object Parameters {
   val minValues: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorMin,
     MinValuePerByteIncrease -> MinValueMin,
-    MaxBlockSizeIncrease -> 16 * 1024,
+    MaxBlockSizeIncrease -> MaxBlockSizeMin,
+    MaxExtensionSizeIncrease -> MaxExtensionSizeMin,
     MaxBlockCostIncrease -> 16 * 1024
   )
 
   val maxValues: Map[Byte, Int] = Map(
+    MaxExtensionSizeIncrease -> MaxExtensionSizeMax,
     StorageFeeFactorIncrease -> StorageFeeFactorMax,
     MinValuePerByteIncrease -> MinValueMax
   )

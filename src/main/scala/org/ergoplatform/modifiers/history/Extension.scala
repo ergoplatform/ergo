@@ -5,7 +5,7 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.BlockSection
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.{Algos, Constants, Parameters}
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.LeafData
@@ -113,8 +113,8 @@ object ExtensionSerializer extends ScorexSerializer[Extension] {
       val value = r.getBytes(length)
       (key, value)
     }
-    val fields = fieldsView.takeWhile(_ => r.position - startPosition < Constants.ExtensionMaxSize)
-    require(r.position - startPosition < Constants.ExtensionMaxSize)
+    val fields = fieldsView.takeWhile(_ => r.position - startPosition < Parameters.MaxExtensionSizeMax)
+    require(r.position - startPosition < Parameters.MaxExtensionSizeMax)
     Extension(headerId, fields, Some(r.position - startPosition))
   }
 

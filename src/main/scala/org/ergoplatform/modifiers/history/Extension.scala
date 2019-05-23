@@ -44,8 +44,6 @@ case class Extension(headerId: ModifierId,
 class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
   def toExtension(headerId: ModifierId): Extension = Extension(headerId, fields)
 
-  def update(newFields: Seq[(Array[Byte], Array[Byte])]): ExtensionCandidate = ExtensionCandidate(fields ++ newFields)
-
   def ++(that: ExtensionCandidate): ExtensionCandidate = ExtensionCandidate(fields ++ that.fields)
 }
 

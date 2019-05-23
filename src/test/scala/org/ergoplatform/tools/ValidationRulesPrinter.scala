@@ -27,6 +27,10 @@ object ValidationRulesPrinter extends App with ScorexLogging {
       printHeader()
     } else if (r._1 == 400) {
       println("\\end{tabular}")
+      println("\n\n\\textbf{Extension validation:}\n\n")
+      printHeader()
+    } else if (r._1 == 500) {
+      println("\\end{tabular}")
       println("\n\n\\textbf{Block application to state validation:}\n\n")
       printHeader()
     }

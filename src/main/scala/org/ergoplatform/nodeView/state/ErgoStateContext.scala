@@ -10,7 +10,7 @@ import org.ergoplatform.settings.{Constants, _}
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.ModifierValidator
+import scorex.core.validation.{ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADDigest
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
@@ -117,59 +117,64 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   /**
+    * Called at the beginning of the epoch.
     * Extracts parameters and validationSettings from [[Extension]] and compares them to locally calculated once.
     */
-  private def processExtension(extension: Extension, header: Header, forkVote: Boolean): Try[(Parameters, ErgoValidationSettings)] = {
+  private def processExtension(extension: Extension, header: Header, forkVote: Boolean)
+                              (validationState: ValidationState[Unit]): Try[(Parameters, ErgoValidationSettings)] = {
     val height = header.height
+    val parsedParamsTry = Parameters.parseExtension(height, extension)
+    val parsedValidationTry = ErgoValidationSettings.parseExtension(extension)
 
-    Parameters.parseExtension(height, extension).flatMap { parsedParams =>
-      val (calculatedParams, disabled) = currentParameters
-        .update(height, forkVote, votingData.epochVotes, parsedParams.rulesToDisable, votingSettings)
-      val newValidationSettings = validationSettings.disable(disabled)
+    validationState
+      .validateNoFailure(exParseParameters, parsedParamsTry)
+      .validateNoFailure(exParseValidationSettings, parsedValidationTry)
+      .validateTry(parsedParamsTry, e => ModifierValidator.fatal("Failed to parse parameters", e)) {
+        case (currentValidationState, parsedParams) =>
 
-      //todo move to ValidationRules and allow to disable
-      if (calculatedParams.blockVersion != header.version) {
-        throw new Exception("Versions in header and parameters section are different")
-      }
+          val (calculatedParams, disabled) = currentParameters
+            .update(height, forkVote, votingData.epochVotes, parsedParams.rulesToDisable, votingSettings)
+          val calculatedSettings = validationSettings.disable(disabled)
 
-      Parameters.matchParameters(parsedParams, calculatedParams).map(r => (r, newValidationSettings))
-    }
+          currentValidationState
+            .validate(exBlockVersion, calculatedParams.blockVersion == header.version, s"${calculatedParams.blockVersion} == ${header.version}")
+            .validateNoFailure(exMatchParameters, Parameters.matchParameters(parsedParams, calculatedParams))
+            .validateTry(parsedValidationTry, e => ModifierValidator.fatal("Failed to parse validation settings", e)) {
+              case (vs, parsedSettings) =>
+                vs.validateNoFailure(exMatchValidationSettings, ErgoValidationSettings.matchSettings(parsedSettings, calculatedSettings))
+            }
+      }.result.toTry
+      .flatMap(_ => parsedParamsTry.flatMap(p => parsedValidationTry.map(vs => (p, vs))))
+
   }
 
-  def process(header: Header, extension: Extension): Try[ErgoStateContext] = process(header, Some(extension))
-
-  def process(header: Header, extensionOpt: Option[Extension]): Try[ErgoStateContext] = {
+  def process(header: Header, extension: Extension): Try[ErgoStateContext] = {
     def newHeaders: Seq[Header] = header +: lastHeaders.take(Constants.LastHeadersInContext - 1)
 
-    Try {
 
+    Try {
       val headerVotes: Array[Byte] = header.votes
       val height = header.height
-
       val votes = headerVotes.filter(_ != Parameters.NoParameter)
-
       val epochStarts = header.votingStarts(votingEpochLength)
-
       val forkVote = votes.contains(Parameters.SoftFork)
 
-      if (forkVote) checkForkVote(height)
+      val state = ModifierValidator(validationSettings)
+        .validateNoThrow(exCheckForkVote, checkForkVote(height))
 
       if (epochStarts) {
-        val processedExtension = extensionOpt
-          .map(processExtension(_, header, forkVote))
-          .get
 
-        processedExtension.map { processed =>
+        processExtension(extension, header, forkVote)(state).map { processed =>
           val params = processed._1
           val extractedValidationSettings = processed._2
           val proposedVotes = votes.map(_ -> 1)
           val newVoting = VotingData(proposedVotes)
-          new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, params, extractedValidationSettings, newVoting)(votingSettings)
+          new ErgoStateContext(newHeaders, Some(extension), genesisStateDigest, params, extractedValidationSettings, newVoting)(votingSettings)
         }
       } else {
         val newVotes = votes
         val newVotingResults = newVotes.foldLeft(votingData) { case (v, id) => v.update(id) }
-        Success(new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, currentParameters, validationSettings, newVotingResults)(votingSettings))
+        Success(new ErgoStateContext(newHeaders, Some(extension), genesisStateDigest, currentParameters, validationSettings, newVotingResults)(votingSettings))
       }
     }.flatten
   }
@@ -196,32 +201,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       .result
       .toTry
       .flatMap { _ =>
-        process(fb.header, Some(fb.extension))
+        process(fb.header, fb.extension)
       }
   }.flatten
-
-  /**
-    * This function verifies whether a full block is valid against the ErgoStateContext instance, and modifies
-    * the latter according to the former.
-    *
-    * @param header         - header of a block
-    * @param votingSettings - chain-wide voting settings
-    * @return updated state context or error
-    */
-  def appendHeader(header: Header,
-                   votingSettings: VotingSettings): Try[ErgoStateContext] = {
-    ModifierValidator(validationSettings).validateNoThrow(hdrVotes, checkVotes(header)).result.toTry.map { _ =>
-
-      val height = header.height
-      val expectedHeight = lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight)
-
-      if (height != expectedHeight) {
-        throw new Error(s"Incorrect header ${header.id} height: $height != $expectedHeight")
-      }
-
-      process(header, None)
-    }.flatten
-  }
 
   override def toString: String =
     s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"

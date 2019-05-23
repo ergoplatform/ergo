@@ -291,8 +291,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
         val (newParams, disabled) = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, rulesToDisable, votingSettings)
-        // todo put disabled to extension at the beggining of the epoch
-        (newParams.toExtensionCandidate(packedInterlinks),
+        val newValidationSettings = stateContext.validationSettings.disable(disabled)
+        (newParams.toExtensionCandidate(packedInterlinks) ++ newValidationSettings.toExtensionCandidate(),
           newParams.suggestVotes(ergoSettings.votingTargets.targets, voteForFork),
           newParams.blockVersion)
       } else {

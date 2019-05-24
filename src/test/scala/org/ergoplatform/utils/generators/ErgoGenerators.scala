@@ -109,7 +109,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     pk <- genECPoint
     w <- genECPoint
     n <- genBytes(8)
-    d <- Arbitrary.arbitrary[BigInt].map(_.mod(q))
+    d <- Arbitrary.arbitrary[BigInt].map(_.mod(q - 1) + 1)
   } yield AutolykosSolution(pk, w, n, d)
 
   /**
@@ -119,13 +119,18 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     h.copy(powSolution = h.powSolution.copy(pk = defaultMinerPkPoint))
   }
 
+  /**
+    * Generates required difficulty in interval [1, 2^255]
+    **/
+  lazy val requiredDifficultyGen: Gen[BigInt] = Arbitrary.arbitrary[BigInt].map(_.mod(BigInt(2).pow(255)).abs + 1)
+
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
     parentId <- modifierIdGen
     stateRoot <- stateRootGen
     adRoot <- digest32Gen
     transactionsRoot <- digest32Gen
-    requiredDifficulty <- Arbitrary.arbitrary[BigInt]
+    requiredDifficulty <- requiredDifficultyGen
     height <- Gen.choose(1, Int.MaxValue)
     powSolution <- powSolutionGen
     timestamp <- positiveLongGen
@@ -159,14 +164,13 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   } yield ModeFeature(
     StateType.fromCode(stateTypeCode),
     Random.nextBoolean(),
-    if(Random.nextBoolean()) Some(popowSuffix) else None,
+    if (Random.nextBoolean()) Some(popowSuffix) else None,
     blocksToKeep)
 
   lazy val ergoValidationSettingsGen: Gen[ErgoValidationSettings] = for {
     n <- Gen.choose(1, 200)
-    rules = ValidationRules.rulesSpec.take(n).map(_.copy())
-  } yield ErgoValidationSettings(rules)
-
+    disabledRules = ValidationRules.rulesSpec.keys.take(n).toSeq
+  } yield ErgoValidationSettings.initial.disable(disabledRules)
 
   /** Random long from 1 to maximum - 1
     *

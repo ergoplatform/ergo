@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.mempool
 
+import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -40,7 +41,12 @@ class ExpirationSpecification extends ErgoPropertyTest {
     val fb0 = invalidErgoFullBlockGen.sample.get
     val fakeHeader = fb0.header.copy(height = h - 1)
     val fb = fb0.copy(fb0.header.copy(height = h, parentId = fakeHeader.id))
-    val updContext = emptyStateContext.updateHeaders(Seq(fakeHeader)).appendFullBlock(fb, votingSettings).get
+
+    val updContext = {
+      val inContext = new ErgoStateContext(Seq(fakeHeader), None, genesisStateDigest, LaunchParameters, validationSettingsNoIl,
+        VotingData.empty)(votingSettings)
+      inContext.appendFullBlock(fb, votingSettings).get
+    }
 
     tx.statelessValidity.isSuccess shouldBe true
     tx.statefulValidity(IndexedSeq(from), emptyDataBoxes, updContext).isSuccess shouldBe expectedValidity
@@ -63,7 +69,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
   }
 
   property("unsuccessful spending due too big storage fee charged") {
-    forAll(unspendableErgoBoxGen(parameters.storageFeeFactor  * 100 + 1, Long.MaxValue)) { from =>
+    forAll(unspendableErgoBoxGen(parameters.storageFeeFactor * 100 + 1, Long.MaxValue)) { from =>
       constructTest(from, 0, h => {
         val fee = Math.min(parameters.storageFeeFactor * from.bytes.length + 1, from.value)
         val feeBoxCandidate = new ErgoBoxCandidate(fee, Constants.TrueLeaf, creationHeight = h)

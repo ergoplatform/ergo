@@ -287,7 +287,8 @@ object ValidationRules {
 case class RuleStatus(error: String => Invalid,
                       affectedClasses: Seq[Class[_]],
                       mayBeDisabled: Boolean,
-                      isActive: Boolean)
+                      isActive: Boolean,
+                      ruleDataOpt: Option[Array[Byte]] = None)
 
 object RuleStatus {
   def apply(error: String => Invalid, affectedClasses: Seq[Class[_]], mayBeDisabled: Boolean): RuleStatus = {

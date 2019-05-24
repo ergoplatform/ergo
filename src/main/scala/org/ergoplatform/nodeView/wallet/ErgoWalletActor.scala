@@ -230,7 +230,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     )
 
     val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx, selfIndex = 0)
-    val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty)
+    val sigmaValidationSettings = ErgoValidationSettings.toSigmaValidationSettings(stateContext.validationSettings)
+    val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty, sigmaValidationSettings)
 
     proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined
   }

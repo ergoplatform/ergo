@@ -1,10 +1,13 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
-import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
-import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
+import org.ergoplatform.modifiers.history.{ExtensionCandidate, Extension}
+import scorex.core.serialization.{ScorexSerializer, BytesSerializable}
+import scorex.core.validation.{ValidationSettings, ModifierValidator, ValidationResult}
 import scorex.util.serialization.{Reader, Writer}
+import org.ergoplatform.{DisabledRule, ChangedRule, ReplacedRule, RuleStatus => SRuleStatus, ValidationRules => SValidationRules, ValidationSettings => SValidationSettings}
+import sigmastate.serialization.SigmaSerializer
+import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 
 import scala.util.Try
 
@@ -74,6 +77,45 @@ object ErgoValidationSettings {
     val bytes = extension.fields.filter(_._1.head == Extension.ValidationRulesPrefix).sortBy(_._1.last).flatMap(_._2)
     ErgoValidationSettingsSerializer.parseBytes(bytes.toArray)
   }
+
+  object RuleStatusSerializer extends SigmaSerializer[SRuleStatus, SRuleStatus] {
+    val ReplacedRuleCode = 1
+    val ChangedRuleCode = 2
+
+    override def serialize(obj: SRuleStatus, w: SigmaByteWriter): Unit = {
+    }
+
+    override def parse(r: SigmaByteReader): SRuleStatus = {
+      val statusType = r.getByte()
+      statusType match {
+        case ReplacedRuleCode =>
+          ReplacedRule(r.getShort())
+        case ChangedRuleCode =>
+          ChangedRule(r.getBytes(r.remaining))
+      }
+    }
+  }
+
+  def toSigmaValidationSettings(ergoVS: ErgoValidationSettings): SValidationSettings = {
+    val initVs = SValidationRules.currentSettings
+    val sigmaRules = ergoVS.rules.filter { case (id, _) => initVs.get(id).isDefined }
+    val res = sigmaRules.foldLeft(initVs) { case (vs, (id, status)) =>
+      val vs1 = if (status.isActive) {
+        status.ruleDataOpt match {
+          case Some(data) =>
+            val sigmaStatus = RuleStatusSerializer.parse(SigmaSerializer.startReader(data))
+            vs.updated(id, sigmaStatus)
+          case None =>
+            vs
+        }
+      } else {
+        vs.updated(id, DisabledRule)
+      }
+      vs1
+    }
+    res
+  }
+
 }
 
 object ErgoValidationSettingsSerializer extends ScorexSerializer[ErgoValidationSettings] with ApiCodecs {

@@ -30,7 +30,6 @@ class VotingSpecification extends ErgoPropertyTest {
     LaunchParameters.toExtensionCandidate(initialVs.toExtensionCandidate().fields)
   }
 
-
   property("Parameters should be defined at the beginning of the epoch") {
     val chain = genChain(votingEpochLength * 4).map { b =>
       if (b.header.votingStarts(votingEpochLength)) {
@@ -71,20 +70,20 @@ class VotingSpecification extends ErgoPropertyTest {
     val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)
     val votes = Array(StorageFeeFactorIncrease, NoParameter, NoParameter)
     val h = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
-    val esc2 = esc.process(h, toExtension(p, initialVs)).get
+    val esc2 = process(esc, p, h).get
 
     //no quorum gathered - no parameter change
     val he = defaultHeaderGen.sample.get.copy(votes = Array.fill(3)(NoParameter), version = 0: Byte)
-    val esc30 = esc2.process(he, toExtension(p, initialVs)).get
-    val esc40 = esc30.process(he, toExtension(p, initialVs)).get
+    val esc30 = process(esc2, p, he).get
+    val esc40 = process(esc30, p, he).get
     esc40.currentParameters.storageFeeFactor shouldBe kInit
 
     //quorum gathered - parameter change
-    val esc31 = esc2.process(h.copy(height = 3), toExtension(p, initialVs)).get
+    val esc31 = process(esc2, p, h.copy(height = 3)).get
     esc31.votingData.epochVotes.find(_._1 == StorageFeeFactorIncrease).get._2 shouldBe 2
 
     val p4 = Parameters(4, Map(StorageFeeFactorIncrease -> (kInit + Parameters.StorageFeeFactorStep), BlockVersion -> 0), toDisable)
-    val esc41 = esc31.process(he.copy(height = 4), toExtension(p4, initialVs)).get
+    val esc41 = process(esc31, p4, he.copy(height = 4)).get
     esc41.currentParameters.storageFeeFactor shouldBe (kInit + Parameters.StorageFeeFactorStep)
   }
 
@@ -334,6 +333,6 @@ class VotingSpecification extends ErgoPropertyTest {
   private def process(esc: ErgoStateContext, p: Parameters, h2: Header): Try[ErgoStateContext] = {
     val upcoming = esc.upcoming(h2.minerPk, h2.timestamp, h2.nBits, h2.votes, toDisable, h2.version)
     val extension = p.toExtensionCandidate(upcoming.validationSettings.toExtensionCandidate().fields).toExtension(headerId)
-    esc.process(h2, extension)
+    esc.process(h2, Some(extension))
   }
 }

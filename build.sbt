@@ -14,7 +14,7 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "4fa5f5f0-SNAPSHOT"
+val scorexVersion = "59a4a72f-SNAPSHOT"
 val sigmaStateVersion = "v2.1-b5a50364-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)

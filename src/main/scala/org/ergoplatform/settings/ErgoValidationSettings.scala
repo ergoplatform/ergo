@@ -8,7 +8,14 @@ import scorex.util.serialization.{Reader, Writer}
 
 import scala.util.Try
 
-
+/**
+  * Ergo configuration of validation.
+  *
+  * Specifies the strategy to by used (fail-fast) and
+  * validation rules with their statuses
+  *
+  * @param rules - map from rule id to it's current status
+  */
 case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends ValidationSettings with BytesSerializable {
 
   override type M = ErgoValidationSettings
@@ -23,6 +30,9 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends Validat
     rules.get(id).forall(_.isActive)
   }
 
+  /**
+    * Disable sequience of rules
+    */
   def disable(ids: Seq[Short]): ErgoValidationSettings = if (ids.nonEmpty) {
     val newRules = rules.map { currentRule =>
       if (ids.contains(currentRule._1)) {
@@ -36,6 +46,9 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends Validat
     this
   }
 
+  /**
+    * Generates extension candidate with serialized ErgoValidationSettings in it
+    */
   def toExtensionCandidate(): ExtensionCandidate = {
     val fields = bytes.sliding(Extension.FieldValueMaxSize, Extension.FieldValueMaxSize).zipWithIndex.map { case (b, i) =>
       Array(Extension.ValidationRulesPrefix, i.toByte) -> b
@@ -53,6 +66,9 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends Validat
 
 object ErgoValidationSettings {
 
+  /**
+    * Checks that s1 and s2 are equals
+    */
   def matchSettings(s1: ErgoValidationSettings, s2: ErgoValidationSettings): Try[Unit] = Try {
     if (s1.rules.size != s2.rules.size) {
       throw new Exception(s"Rules differ in size, s1 = $s1, s2 = $s2")
@@ -70,6 +86,9 @@ object ErgoValidationSettings {
     */
   val initial: ErgoValidationSettings = new ErgoValidationSettings(ValidationRules.rulesSpec)
 
+  /**
+    * Extracts ErgoValidationSettings from extension section of the block
+    */
   def parseExtension(extension: ExtensionCandidate): Try[ErgoValidationSettings] = Try {
     val bytes = extension.fields.filter(_._1.head == Extension.ValidationRulesPrefix).sortBy(_._1.last).flatMap(_._2)
     ErgoValidationSettingsSerializer.parseBytes(bytes.toArray)

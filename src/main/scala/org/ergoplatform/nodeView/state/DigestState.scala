@@ -80,7 +80,7 @@ class DigestState protected(override val version: VersionTag,
   }
 
   override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] =
-    (processFullBlock orElse processOther) (mod)
+    (processFullBlock orElse processHeader orElse processOther) (mod)
 
   @SuppressWarnings(Array("OptionGet"))
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
@@ -111,6 +111,13 @@ class DigestState protected(override val version: VersionTag,
           log.warn(s"Invalid block ${fb.encodedId}, reason: ${LoggingUtil.getReasonMsg(e)}")
           Failure(e)
         }
+  }
+
+  private def processHeader: ModifierProcessing[DigestState] = {
+    case h: Header =>
+      log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
+      val version: VersionTag = idToVersion(h.id)
+      stateContext.appendHeader(h, votingSettings).flatMap(update(version, h.stateRoot, _))
   }
 
   private def processOther: ModifierProcessing[DigestState] = {

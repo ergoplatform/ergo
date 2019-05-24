@@ -17,7 +17,7 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
 import special.collection.{Coll, CollOverArray}
 
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 /**
   * State context with predicted header.
@@ -148,9 +148,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   }
 
-  def process(header: Header, extension: Extension): Try[ErgoStateContext] = {
+  def process(header: Header, extensionOpt: Option[Extension]): Try[ErgoStateContext] = {
     def newHeaders: Seq[Header] = header +: lastHeaders.take(Constants.LastHeadersInContext - 1)
-
 
     Try {
       val headerVotes: Array[Byte] = header.votes
@@ -160,27 +159,40 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       val forkVote = votes.contains(Parameters.SoftFork)
 
       val state = ModifierValidator(validationSettings)
-        .validateNoThrow(exCheckForkVote, if(forkVote) checkForkVote(height))
+        .validateNoThrow(exCheckForkVote, if (forkVote) checkForkVote(height))
 
-      if (epochStarts) {
-
-        processExtension(extension, header, forkVote)(state).map { processed =>
-          val params = processed._1
-          val extractedValidationSettings = processed._2
-          val proposedVotes = votes.map(_ -> 1)
-          val newVoting = VotingData(proposedVotes)
-          new ErgoStateContext(newHeaders, Some(extension), genesisStateDigest, params, extractedValidationSettings, newVoting)(votingSettings)
-        }
-      } else {
-        val newVotes = votes
-        val newVotingResults = newVotes.foldLeft(votingData) { case (v, id) => v.update(id) }
-        state.result.toTry.map { _ =>
-          new ErgoStateContext(newHeaders, Some(extension), genesisStateDigest, currentParameters, validationSettings, newVotingResults)(votingSettings)
-        }
+      extensionOpt match {
+        case Some(extension) if epochStarts =>
+          processExtension(extension, header, forkVote)(state).map { processed =>
+            val params = processed._1
+            val extractedValidationSettings = processed._2
+            val proposedVotes = votes.map(_ -> 1)
+            val newVoting = VotingData(proposedVotes)
+            new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, params, extractedValidationSettings, newVoting)(votingSettings)
+          }
+        case _ =>
+          val newVotes = votes
+          val newVotingResults = newVotes.foldLeft(votingData) { case (v, id) => v.update(id) }
+          state.result.toTry.map { _ =>
+            new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, currentParameters, validationSettings, newVotingResults)(votingSettings)
+          }
       }
     }.flatten
   }
 
+  def appendHeader(header: Header, votingSettings: VotingSettings): Try[ErgoStateContext] = {
+    ModifierValidator(validationSettings)
+      .payload(this)
+      .validateNoThrow(hdrVotes, checkVotes(header))
+      .validate(hdrHeight,
+        lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight) == header.height,
+        s"${header.id} => ${lastHeaderOpt.map(_.height)} == ${header.height}")
+      .result
+      .toTry
+      .flatMap { _ =>
+        process(header, None)
+      }
+  }
 
   /**
     * This function verifies whether a full block is valid against the ErgoStateContext instance, and modifies
@@ -206,7 +218,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       .result
       .toTry
       .flatMap { _ =>
-        process(fb.header, fb.extension)
+        process(fb.header, Some(fb.extension))
       }
   }.flatten
 

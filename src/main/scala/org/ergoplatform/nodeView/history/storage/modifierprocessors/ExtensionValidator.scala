@@ -8,6 +8,9 @@ import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, ValidationState}
 import scorex.util.bytesToId
 
+/**
+  * Class that implements extension validation based on current to ErgoValidationSettings
+  */
 class ExtensionValidator(settings: ErgoValidationSettings) extends ScorexEncoding {
 
   private def validationState: ValidationState[Unit] = ModifierValidator(settings)
@@ -22,7 +25,6 @@ class ExtensionValidator(settings: ErgoValidationSettings) extends ScorexEncodin
       .validate(exDuplicateKeys, extension.fields.map(kv => bytesToId(kv._1)).distinct.length == extension.fields.length, extension.encodedId)
       .validate(exEmpty, header.isGenesis || extension.fields.nonEmpty, extension.encodedId)
   }
-
 
   private def validateInterlinks(extension: Extension,
                                  header: Header,

@@ -10,14 +10,13 @@ import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters}
+import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.scalatest.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
-import sigmastate.Values
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Random, Try}
@@ -193,7 +192,8 @@ trait ValidBlocksGenerators
     val interlinks = parentOpt.toSeq.flatMap { block =>
       PoPowAlgos.updateInterlinks(block.header, PoPowAlgos.unpackInterlinks(block.extension.fields).get)
     }
-    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(PoPowAlgos.packInterlinks(interlinks))
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(PoPowAlgos.packInterlinks(interlinks)) ++
+      utxoState.stateContext.validationSettings.toExtensionCandidate()
     val votes = Array.fill(3)(0: Byte)
 
     powScheme.proveBlock(parentOpt.map(_.header), Header.CurrentVersion, settings.chainSettings.initialNBits, updStateDigest, adProofBytes,

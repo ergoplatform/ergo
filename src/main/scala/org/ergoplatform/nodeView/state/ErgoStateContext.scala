@@ -96,7 +96,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                version: Byte): ErgoStateContext = {
     val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
     val forkVote = votes.contains(Parameters.SoftFork)
-    val height = ErgoHistory.heightOf(lastHeaderOpt)
+    val height = ErgoHistory.heightOf(lastHeaderOpt) + 1
     val (calculatedParams, disabled) = currentParameters.update(height, forkVote, votingData.epochVotes, rulesToDisable, votingSettings)
     val calculatedValidationSettings = validationSettings.disable(disabled)
     new UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams, calculatedValidationSettings, votingData)
@@ -160,7 +160,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       val forkVote = votes.contains(Parameters.SoftFork)
 
       val state = ModifierValidator(validationSettings)
-        .validateNoThrow(exCheckForkVote, checkForkVote(height))
+        .validateNoThrow(exCheckForkVote, if(forkVote) checkForkVote(height))
 
       if (epochStarts) {
 
@@ -174,7 +174,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       } else {
         val newVotes = votes
         val newVotingResults = newVotes.foldLeft(votingData) { case (v, id) => v.update(id) }
-        Success(new ErgoStateContext(newHeaders, Some(extension), genesisStateDigest, currentParameters, validationSettings, newVotingResults)(votingSettings))
+        state.result.toTry.map { _ =>
+          new ErgoStateContext(newHeaders, Some(extension), genesisStateDigest, currentParameters, validationSettings, newVotingResults)(votingSettings)
+        }
       }
     }.flatten
   }

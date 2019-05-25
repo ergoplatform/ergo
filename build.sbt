@@ -14,7 +14,7 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "ab4d0d9d-SNAPSHOT"
+val scorexVersion = "fc3d3c23-SNAPSHOT"
 val sigmaStateVersion = "v2.1-b5a50364-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -27,7 +27,7 @@ libraryDependencies ++= Seq(
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   ("org.scorexfoundation" %% "avl-iodb" % "0.2.15").exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "iodb" % "0.3.2",
-  ("org.scorexfoundation" %% "scorex-core" % "i177_2-5eee62e8-SNAPSHOT").exclude("ch.qos.logback", "logback-classic"),
+  ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
   "org.ergoplatform" %% "ergo-wallet" % "0.2-R1-SNAPSHOT",
 

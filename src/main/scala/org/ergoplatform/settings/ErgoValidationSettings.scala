@@ -22,12 +22,14 @@ import scala.util.Try
   */
 case class ErgoValidationSettings(
     rules: Map[Short, RuleStatus],
-    disabledRules: Seq[Short],
     sigmaRules: Map[Short, SRuleStatus]) extends ValidationSettings with BytesSerializable {
 
   override type M = ErgoValidationSettings
 
   override val isFailFast: Boolean = true
+
+  /** Sequence of disabled rules ordered by ruleId. */
+  def disabledRules: Seq[(Short, RuleStatus)] = rules.filter(r => !r._2.isActive).toSeq.sortBy(_._1)
 
   override def getError(id: Short, details: String): ValidationResult.Invalid = {
     rules.get(id).map(_.error(details)).getOrElse(ModifierValidator.fatal("Unknown message"))
@@ -48,14 +50,7 @@ case class ErgoValidationSettings(
         rule
       }
     }
-    val newSigmaRules = sigmaRules.map { case rule @ (ruleId, status) =>
-      if (ids.contains(ruleId)) {
-        ruleId -> DisabledRule
-      } else {
-        rule
-      }
-    }
-    ErgoValidationSettings(newRules, disabledRules, newSigmaRules)
+    ErgoValidationSettings(newRules, sigmaRules)
   } else {
     this
   }
@@ -100,7 +95,7 @@ object ErgoValidationSettings {
     * To be used during genesis state creation or to perform checks that are not allowed
     * to be deactivated via soft-forks.
     */
-  val initial: ErgoValidationSettings = new ErgoValidationSettings(ValidationRules.rulesSpec, Seq.empty, Map.empty)
+  val initial: ErgoValidationSettings = new ErgoValidationSettings(ValidationRules.rulesSpec, Map.empty)
 
   def parseBytesByPrefix(extension: ExtensionCandidate, prefix: Byte): Array[Byte] = {
     val values = extension.fields
@@ -170,9 +165,16 @@ object ErgoValidationSettings {
 
 }
 
+/** Serializes mutable state of validation rules as delta from `ErgoValidationSettings.inital` value.
+  * To make serialization roundtrip an identity, we require a sequence of disable rules to be sorted.
+  * This serializer doesn't save `sigmaRules` and require it to be empty, this is again to enforce
+  * a roundtrip identity invariant.
+  * @see `disabledRules`
+  */
 object ErgoValidationSettingsSerializer extends ScorexSerializer[ErgoValidationSettings] with ApiCodecs {
   override def serialize(obj: ErgoValidationSettings, w: Writer): Unit = {
-    val disabledRules = obj.rules.filter(r => !r._2.isActive)
+    assert(obj.sigmaRules.isEmpty, s"Non empty sigmaRules: ${obj.sigmaRules}")
+    val disabledRules = obj.disabledRules
     w.putInt(disabledRules.size)
     disabledRules.foreach { r =>
       w.putShort(r._1)

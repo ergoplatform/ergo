@@ -116,7 +116,7 @@ object ErgoValidationSettings {
       val r = SigmaSerializer.startReader(sigmaRulesBytes)
       val nRules = r.getUShort()
       val sigmaRules = (0 until nRules).map { _ =>
-        val ruleId = r.getShort()
+        val ruleId = (r.getUShort() + RuleStatusSerializer.FirstRuleId).toShort
         val status = RuleStatusSerializer.parse(r)
         ruleId -> status
       }
@@ -126,39 +126,38 @@ object ErgoValidationSettings {
   }
 
   object RuleStatusSerializer extends SigmaSerializer[SRuleStatus, SRuleStatus] {
-    val ReplacedRuleCode = 1
-    val ChangedRuleCode = 2
+    val DisabledRuleCode = 1
+    val ReplacedRuleCode = 2
+    val ChangedRuleCode = 3
+    val FirstRuleId = 1000
 
     override def serialize(obj: SRuleStatus, w: SigmaByteWriter): Unit = {
     }
 
     override def parse(r: SigmaByteReader): SRuleStatus = {
+      val numBytes = r.getUShort() // read number of bytes occupied by status data
       val statusType = r.getByte()
       statusType match {
+        case DisabledRuleCode =>
+          DisabledRule  // the rule is explicitly disabled
         case ReplacedRuleCode =>
-          ReplacedRule(r.getShort())
+          val newRule = (r.getUShort() + FirstRuleId).toShort // store small offsets using single byte
+          ReplacedRule(newRule) // the rule is disabled, but we also have info about new rule
         case ChangedRuleCode =>
-          ChangedRule(r.getBytes(r.remaining))
+          val bytes = r.getBytes(numBytes - 1) // value bytes except statusType
+          ChangedRule(bytes)
+        case _ =>
+          r.position += numBytes - 1 // skip status bytes which we don't understand
+          ReplacedRule(0)  // unrecognized status code, the old code should process it as soft-fork
       }
     }
   }
 
   def toSigmaValidationSettings(ergoVS: ErgoValidationSettings): SValidationSettings = {
     val initVs = SValidationRules.currentSettings
-    val sigmaRules = ergoVS.rules.filter { case (id, _) => initVs.get(id).isDefined }
-    val res = sigmaRules.foldLeft(initVs) { case (vs, (id, status)) =>
-      val vs1 = if (status.isActive) {
-        status.ruleDataOpt match {
-          case Some(data) =>
-            val sigmaStatus = RuleStatusSerializer.parse(SigmaSerializer.startReader(data))
-            vs.updated(id, sigmaStatus)
-          case None =>
-            vs
-        }
-      } else {
-        vs.updated(id, DisabledRule)
-      }
-      vs1
+    val sigmaRules = ergoVS.sigmaRules.filter { rule => initVs.get(rule._1).isDefined }
+    val res = sigmaRules.foldLeft(initVs) { (vs, rule) =>
+      vs.updated(rule._1, rule._2)
     }
     res
   }

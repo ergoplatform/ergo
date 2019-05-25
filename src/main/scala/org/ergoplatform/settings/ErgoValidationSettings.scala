@@ -43,11 +43,11 @@ case class ErgoValidationSettings(
     * Disable sequience of rules
     */
   def disable(ids: Seq[Short]): ErgoValidationSettings = if (ids.nonEmpty) {
-    val newRules = rules.map { case rule @ (ruleId, status) =>
-      if (ids.contains(ruleId)) {
-        ruleId -> status.copy(isActive = false)
+    val newRules = rules.map { currentRule =>
+      if (ids.contains(currentRule._1)) {
+        currentRule._1 -> currentRule._2.copy(isActive = false)
       } else {
-        rule
+        currentRule
       }
     }
     ErgoValidationSettings(newRules, sigmaRules)
@@ -74,12 +74,11 @@ case class ErgoValidationSettings(
 }
 
 object ErgoValidationSettings {
-  // TODO optimize: throwing exception by default incur building of a stack trace, which is 10-100x
-  //  slowdown comparing to returning Option
-
   /**
     * Checks that s1 and s2 are equals
     */
+  // TODO optimize: throwing exception by default incur building of a stack trace, which is 10-100x
+  //  slowdown comparing to returning Option
   def matchSettings(s1: ErgoValidationSettings, s2: ErgoValidationSettings): Try[Unit] = Try {
     if (s1.rules.size != s2.rules.size) {
       throw new Exception(s"Rules differ in size, s1 = $s1, s2 = $s2")
@@ -120,9 +119,10 @@ object ErgoValidationSettings {
         val status = RuleStatusSerializer.parse(r)
         ruleId -> status
       }
+      ergoVSettings.copy(sigmaRules = sigmaRules.toMap)
+    } else {
+      ergoVSettings
     }
-
-    ergoVSettings
   }
 
   object RuleStatusSerializer extends SigmaSerializer[SRuleStatus, SRuleStatus] {

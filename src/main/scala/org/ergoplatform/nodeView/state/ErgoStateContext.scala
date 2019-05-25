@@ -163,7 +163,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
       extensionOpt match {
         case Some(extension) if epochStarts =>
-          processExtension(extension, header, forkVote)(state).map { case (params, extractedValidationSettings) =>
+          processExtension(extension, header, forkVote)(state).map { processed =>
+            val params = processed._1
+            val extractedValidationSettings = processed._2
             val proposedVotes = votes.map(_ -> 1)
             val newVoting = VotingData(proposedVotes)
             new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, params, extractedValidationSettings, newVoting)(votingSettings)

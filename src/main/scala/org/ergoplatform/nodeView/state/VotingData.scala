@@ -14,11 +14,12 @@ case class VotingData(epochVotes: Array[(Byte, Int)]) {
 
   override def canEqual(that: Any): Boolean = that.isInstanceOf[VotingData]
 
-  override def equals(obj: scala.Any): Boolean = obj match {
+  override def equals(obj: Any): Boolean = obj match {
     case v: VotingData => v.epochVotes.sameElements(this.epochVotes)
     case _ => false
   }
 
+  override def hashCode(): Int = java.util.Objects.hash(epochVotes: _*)
 }
 
 object VotingData {

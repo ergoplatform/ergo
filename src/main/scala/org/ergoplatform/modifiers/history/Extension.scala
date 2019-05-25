@@ -60,6 +60,7 @@ object Extension extends ApiCodecs {
   val SystemParametersPrefix: Byte = 0x00
   val InterlinksVectorPrefix: Byte = 0x01
   val ValidationRulesPrefix: Byte = 0x02
+  val SigmaValidationRulesPrefix: Byte = 0x03
 
   def rootHash(e: Extension): Digest32 = rootHash(e.fields)
 

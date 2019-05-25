@@ -5,9 +5,10 @@ import org.ergoplatform.modifiers.history.{ExtensionCandidate, Extension}
 import scorex.core.serialization.{ScorexSerializer, BytesSerializable}
 import scorex.core.validation.{ValidationSettings, ModifierValidator, ValidationResult}
 import scorex.util.serialization.{Reader, Writer}
-import org.ergoplatform.{DisabledRule, ChangedRule, ReplacedRule, RuleStatus => SRuleStatus, ValidationRules => SValidationRules, ValidationSettings => SValidationSettings}
+import org.ergoplatform.{DisabledRule, ChangedRule, ReplacedRule}
+import org.ergoplatform.{RuleStatus => SRuleStatus, ValidationRules => SValidationRules, ValidationSettings => SValidationSettings}
 import sigmastate.serialization.SigmaSerializer
-import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
+import sigmastate.utils.{SigmaByteReader, SigmaByteWriter, Helpers}
 
 import scala.util.Try
 
@@ -19,7 +20,10 @@ import scala.util.Try
   *
   * @param rules - map from rule id to it's current status
   */
-case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends ValidationSettings with BytesSerializable {
+case class ErgoValidationSettings(
+    rules: Map[Short, RuleStatus],
+    disabledRules: Seq[Short],
+    sigmaRules: Map[Short, SRuleStatus]) extends ValidationSettings with BytesSerializable {
 
   override type M = ErgoValidationSettings
 
@@ -37,14 +41,21 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends Validat
     * Disable sequience of rules
     */
   def disable(ids: Seq[Short]): ErgoValidationSettings = if (ids.nonEmpty) {
-    val newRules = rules.map { currentRule =>
-      if (ids.contains(currentRule._1)) {
-        currentRule._1 -> currentRule._2.copy(isActive = false)
+    val newRules = rules.map { case rule @ (ruleId, status) =>
+      if (ids.contains(ruleId)) {
+        ruleId -> status.copy(isActive = false)
       } else {
-        currentRule
+        rule
       }
     }
-    ErgoValidationSettings(newRules)
+    val newSigmaRules = sigmaRules.map { case rule @ (ruleId, status) =>
+      if (ids.contains(ruleId)) {
+        ruleId -> DisabledRule
+      } else {
+        rule
+      }
+    }
+    ErgoValidationSettings(newRules, disabledRules, newSigmaRules)
   } else {
     this
   }
@@ -68,6 +79,8 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends Validat
 }
 
 object ErgoValidationSettings {
+  // TODO optimize: throwing exception by default incur building of a stack trace, which is 10-100x
+  //  slowdown comparing to returning Option
 
   /**
     * Checks that s1 and s2 are equals
@@ -87,14 +100,34 @@ object ErgoValidationSettings {
     * To be used during genesis state creation or to perform checks that are not allowed
     * to be deactivated via soft-forks.
     */
-  val initial: ErgoValidationSettings = new ErgoValidationSettings(ValidationRules.rulesSpec)
+  val initial: ErgoValidationSettings = new ErgoValidationSettings(ValidationRules.rulesSpec, Seq.empty, Map.empty)
+
+  def parseBytesByPrefix(extension: ExtensionCandidate, prefix: Byte): Array[Byte] = {
+    val values = extension.fields
+        .filter(_._1(0) == prefix)
+        .sortBy(_._1(1))
+        .map(_._2)
+    Helpers.concatArrays(values)
+  }
 
   /**
     * Extracts ErgoValidationSettings from extension section of the block
     */
   def parseExtension(extension: ExtensionCandidate): Try[ErgoValidationSettings] = Try {
-    val bytes = extension.fields.filter(_._1.head == Extension.ValidationRulesPrefix).sortBy(_._1.last).flatMap(_._2)
-    ErgoValidationSettingsSerializer.parseBytes(bytes.toArray)
+    val ergoRulesBytes = parseBytesByPrefix(extension, Extension.ValidationRulesPrefix)
+    val ergoVSettings = ErgoValidationSettingsSerializer.parseBytes(ergoRulesBytes)
+    val sigmaRulesBytes = parseBytesByPrefix(extension, Extension.SigmaValidationRulesPrefix)
+    if (sigmaRulesBytes.nonEmpty) {
+      val r = SigmaSerializer.startReader(sigmaRulesBytes)
+      val nRules = r.getUShort()
+      val sigmaRules = (0 until nRules).map { _ =>
+        val ruleId = r.getShort()
+        val status = RuleStatusSerializer.parse(r)
+        ruleId -> status
+      }
+    }
+
+    ergoVSettings
   }
 
   object RuleStatusSerializer extends SigmaSerializer[SRuleStatus, SRuleStatus] {

@@ -163,9 +163,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
       extensionOpt match {
         case Some(extension) if epochStarts =>
-          processExtension(extension, header, forkVote)(state).map { processed =>
-            val params = processed._1
-            val extractedValidationSettings = processed._2
+          processExtension(extension, header, forkVote)(state).map { case (params, extractedValidationSettings) =>
             val proposedVotes = votes.map(_ -> 1)
             val newVoting = VotingData(proposedVotes)
             new ErgoStateContext(newHeaders, extensionOpt, genesisStateDigest, params, extractedValidationSettings, newVoting)(votingSettings)
@@ -186,7 +184,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       .validateNoThrow(hdrVotes, checkVotes(header))
       .validate(hdrHeight,
         lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight) == header.height,
-        s"${header.id} => ${lastHeaderOpt.map(_.height)} == ${header.height}")
+        s"${header.id} => ${lastHeaderOpt.map(_.height)} == ${header.height}") // TODO correct message when lastHeaderOpt is None
       .result
       .toTry
       .flatMap { _ =>

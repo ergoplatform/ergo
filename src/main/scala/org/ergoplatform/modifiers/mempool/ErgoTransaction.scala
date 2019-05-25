@@ -14,6 +14,7 @@ import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
+import org.ergoplatform.ErgoConstants
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
@@ -120,6 +121,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txManyInputs, inputs.size <= Short.MaxValue, s"$id: ${inputs.size}")
       .validate(txManyDataInputs, dataInputs.size <= Short.MaxValue, s"$id: ${dataInputs.size}")
       .validate(txManyOutputs, outputCandidates.size <= Short.MaxValue, s"$id: ${outputCandidates.size}")
+      .validate(txMaxTokens, outputCandidates.forall(_.additionalTokens.size <= ErgoConstants.MaxTokens.get),
+        s"$id: ${outputCandidates.map(_.additionalTokens.size)}")
       .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), s"$id: ${outputCandidates.map(_.value)}")
       .validateNoFailure(txOutputSum, outputsSumTry)
       .validate(txInputsUnique, inputs.distinct.size == inputs.size, s"$id: ${inputs.distinct.size} == ${inputs.size}")

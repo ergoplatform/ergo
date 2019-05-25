@@ -140,6 +140,7 @@ object ValidationRules {
   val txInputsUnique: Short = 107
   val txPositiveAssets: Short = 108
   val txAssetsInOneBox: Short = 109
+  val txMaxTokens: Short = 120
   // stateful transaction validation
   val txCost: Short = 110
   val txDust: Short = 111

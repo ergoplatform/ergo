@@ -9,7 +9,7 @@ import akka.testkit.TestDuration
 import akka.util.Timeout
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
-import org.ergoplatform.Version
+//import org.ergoplatform.Version
 import org.ergoplatform.api.InfoRoute
 import org.ergoplatform.local.ErgoStatsCollector.NodeInfo.difficultyEncoder
 import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
@@ -52,7 +52,7 @@ class InfoRoutesSpec extends FlatSpec
       log.info(s"Received node info: $json")
       val c = json.hcursor
       c.downField("name").as[String] shouldEqual Right(settings.scorexSettings.network.nodeName)
-      c.downField("appVersion").as[String] shouldEqual Right(Version.VersionString)
+      c.downField("appVersion").as[String] shouldEqual Right(/*Version.VersionString*/"")
       c.downField("stateType").as[String] shouldEqual Right(settings.nodeSettings.stateType.stateTypeName)
       c.downField("isMining").as[Boolean] shouldEqual Right(settings.nodeSettings.mining)
       c.downField("launchTime").as[Long] shouldEqual Right(fakeTimeProvider.time())

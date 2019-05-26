@@ -51,7 +51,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         initWalletR ~
         restoreWalletR ~
         unlockWalletR ~
-        lockWalletR
+        lockWalletR ~
+        deriveKeyR
     }
   }
 
@@ -71,6 +72,11 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   private val password: Directive1[String] = entity(as[Json]).flatMap { p =>
     p.hcursor.downField("pass").as[String]
+      .fold(_ => reject, s => provide(s))
+  }
+
+  private val derivationPath: Directive1[String] = entity(as[Json]).flatMap { p =>
+    p.hcursor.downField("derivationPath").as[String]
       .fold(_ => reject, s => provide(s))
   }
 
@@ -229,6 +235,15 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet { w =>
       w.lockWallet()
       Future.successful(())
+    }
+  }
+
+  def deriveKeyR: Route = (path("deriveKey") & post & derivationPath) { path =>
+    withWalletOp(_.deriveNewKey(path)) {
+      _.fold(
+        e => BadRequest(e.getMessage),
+        _ => ApiResponse.toRoute(ApiResponse.OK)
+      )
     }
   }
 

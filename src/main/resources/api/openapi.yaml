@@ -1491,6 +1491,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/deriveKey:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Derive new key
+      operationId: walletDeriveKey
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - derivationPath
+              properties:
+                derivationPath:
+                  type: string
+                  description: Derivation path for new secret to derive
+      responses:
+        '200':
+          description: New secret derived and saved in wallet successfully
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/balances:
     get:
       security:

@@ -141,6 +141,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case LockWallet => ()
 
+      case DeriveNewKey(_) => sender() ! Success(())
+
       case ReadPublicKeys(from, until) =>
         sender() ! trackedAddresses.slice(from, until)
 

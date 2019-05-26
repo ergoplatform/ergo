@@ -3,7 +3,7 @@ package org.ergoplatform.local
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import io.circe.Encoder
 import io.circe.syntax._
-//import org.ergoplatform.Version
+import org.ergoplatform.Version
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -40,8 +40,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 
   private var nodeInfo = NodeInfo(
     settings.scorexSettings.network.nodeName,
-//    Version.VersionString,
-    "",
+    Version.VersionString,
     0,
     0,
     None,
@@ -140,7 +139,7 @@ object ErgoStatsCollector {
     implicit val jsonEncoder: Encoder[NodeInfo] = (ni: NodeInfo) =>
       Map(
         "name" -> ni.nodeName.asJson,
-        "appVersion" -> /*Version.VersionString.asJson*/"".asJson,
+        "appVersion" -> Version.VersionString.asJson,
         "headersHeight" -> ni.bestHeaderOpt.map(_.height).asJson,
         "fullHeight" -> ni.bestFullBlockOpt.map(_.header.height).asJson,
         "bestHeaderId" -> ni.bestHeaderOpt.map(_.encodedId).asJson,

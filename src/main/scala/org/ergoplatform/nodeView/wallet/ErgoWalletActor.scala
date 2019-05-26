@@ -18,7 +18,7 @@ import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, Tr
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.TransactionContext
-import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, JsonSecretStorage}
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, JsonSecretStorage}
 import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
@@ -69,7 +69,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         val seed = Mnemonic.toSeed(testMnemonic)
         val rootSk = ExtendedSecretKey.deriveMasterKey(seed)
         val childSks = walletSettings.testKeysQty.toIndexedSeq.flatMap(x => (0 until x).map(rootSk.child))
-        proverOpt = Some(ErgoProvingInterpreter((rootSk +: childSks).map(_.key), parameters))
+        proverOpt = Some(ErgoProvingInterpreter(rootSk +: childSks, parameters))
         storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
       case None =>
         log.info("Trying to read wallet in secure mode ..")
@@ -185,18 +185,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       secretStorageOpt match {
         case Some(secretStorage) =>
           sender() ! secretStorage.unlock(pass)
-          proverOpt = Some(ErgoProvingInterpreter(secretStorage.secret.map(_.key).toIndexedSeq, parameters))
-          storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
-          // process postponed blocks when prover is available.
-          val lastProcessedHeight = registry.readIndex.height
-          storage.readLatestPostponedBlockHeight.foreach { lastPostponedHeight =>
-            val blocks = storage.readBlocks(lastProcessedHeight, lastPostponedHeight)
-            blocks.sortBy(_.height).foreach { case PostponedBlock(id, height, inputs, outputs) =>
-              processBlock(id, height, inputs, outputs)
-            }
-            // remove processed blocks from storage.
-            storage.removeBlocks(lastProcessedHeight, lastPostponedHeight)
-          }
+          processUnlock(secretStorage)
         case None =>
           sender() ! Failure(new Exception("Wallet not initialized"))
       }
@@ -210,6 +199,24 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case GenerateTransaction(requests) =>
       sender() ! generateTransactionWithOutputs(requests)
+
+    case DeriveNewKey(encodedPath) =>
+      secretStorageOpt match {
+        case Some(secretStorage) =>
+          secretStorage.secret.foreach { rootSecret =>
+            DerivationPath.fromEncoded(encodedPath).foreach {
+              case path if !path.publicBranch =>
+                processSecretAddition {
+                  rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
+                }
+                sender() ! Success(())
+              case path =>
+                sender() ! Failure(new Exception(s"A private path is expected, but the public one given: $path"))
+            }
+          }
+        case None =>
+          sender() ! Failure(new Exception("Wallet not initialized"))
+      }
   }
 
   private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
@@ -354,6 +361,32 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)
   }
 
+  private def processSecretAddition(secret: ExtendedSecretKey): Unit =
+    proverOpt.foreach { prover =>
+      val secrets = proverOpt.toIndexedSeq.flatMap(_.secretKeys) :+ secret
+      proverOpt = Some(new ErgoProvingInterpreter(secrets, parameters)(prover.IR))
+      storage.addTrackedAddress(P2PKAddress(secret.publicKey.key))
+      storage.addPath(secret.path)
+    }
+
+  private def processUnlock(secretStorage: JsonSecretStorage): Unit = {
+    val secrets = secretStorage.secret.toIndexedSeq ++ storage.readPaths.flatMap { path =>
+      secretStorage.secret.toSeq.map(_.derive(path).asInstanceOf[ExtendedSecretKey])
+    }
+    proverOpt = Some(ErgoProvingInterpreter(secrets, parameters))
+    storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
+    // process postponed blocks when prover is available.
+    val lastProcessedHeight = registry.readIndex.height
+    storage.readLatestPostponedBlockHeight.foreach { lastPostponedHeight =>
+      val blocks = storage.readBlocks(lastProcessedHeight, lastPostponedHeight)
+      blocks.sortBy(_.height).foreach { case PostponedBlock(id, height, inputs, outputs) =>
+        processBlock(id, height, inputs, outputs)
+      }
+      // remove processed blocks from storage.
+      storage.removeBlocks(lastProcessedHeight, lastPostponedHeight)
+    }
+  }
+
   private def inputsFor(targetAmount: Long,
                         targetAssets: Map[ModifierId, Long] = Map.empty): Seq[ErgoBox] =
     boxSelector
@@ -409,6 +442,8 @@ object ErgoWalletActor {
   final case class RestoreWallet(mnemonic: String, passOpt: Option[String], encryptionPass: String)
 
   final case class UnlockWallet(pass: String)
+
+  final case class DeriveNewKey(path: String)
 
   final case object LockWallet
 

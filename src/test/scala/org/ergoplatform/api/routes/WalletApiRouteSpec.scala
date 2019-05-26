@@ -168,4 +168,10 @@ class WalletApiRouteSpec extends FlatSpec
     }
   }
 
+  it should "derive new key" in {
+    Post(prefix + "/deriveKey", Json.obj("derivationPath" -> "M/1/2".asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
 }

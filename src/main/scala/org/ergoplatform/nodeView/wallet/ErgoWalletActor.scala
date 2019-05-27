@@ -205,10 +205,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         _.secret.foreach { rootSecret =>
           DerivationPath.fromEncoded(encodedPath).foreach {
             case path if !path.publicBranch =>
-              processSecretAddition {
-                rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
-              }
-              sender() ! Success(())
+              val secret = rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
+              processSecretAddition(secret)
+              sender() ! Success(P2PKAddress(secret.publicKey.key))
             case path =>
               sender() ! Failure(new Exception(
                 s"A private path is expected, but the public one given: $path"))
@@ -220,10 +219,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       withWalletLockHandler(sender()) {
         _.secret.foreach { rootSecret =>
           sender() ! nextPath.map { path =>
-            processSecretAddition {
-              rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
-            }
-            path.encoded
+            val secret = rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
+            processSecretAddition(secret)
+            path.encoded -> P2PKAddress(secret.publicKey.key)
           }
         }
       }

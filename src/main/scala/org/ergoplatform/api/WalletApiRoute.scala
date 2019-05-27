@@ -243,7 +243,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWalletOp(_.deriveKey(path)) {
       _.fold(
         e => BadRequest(e.getMessage),
-        _ => ApiResponse.toRoute(ApiResponse.OK)
+        address => ApiResponse(Json.obj("address" -> address.toString.asJson))
       )
     }
   }
@@ -252,7 +252,12 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWalletOp(_.deriveNextKey) {
       _.fold(
         e => BadRequest(e.getMessage),
-        path => ApiResponse(Json.obj("derivationPath" -> path.asJson))
+        x => ApiResponse(
+          Json.obj(
+            "derivationPath" -> x._1.asJson,
+            "address" -> x._2.toString.asJson
+          )
+        )
       )
     }
   }

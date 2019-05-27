@@ -1514,7 +1514,16 @@ paths:
                   example: 'm/1/2'
       responses:
         '200':
-          description: New secret derived and saved in wallet successfully
+          description: Resulted address
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - address
+                properties:
+                  address:
+                    $ref: '#/components/schemas/ErgoAddress'
         default:
           description: Error
           content:
@@ -1532,18 +1541,21 @@ paths:
         - wallet
       responses:
         '200':
-          description: Resulted secret path
+          description: Resulted secret path and address
           content:
             application/json:
               schema:
                 type: object
                 required:
                   - derivationPath
+                  - address
                 properties:
                   derivationPath:
                     type: string
                     description: Derivation path of the resulted secret
                     example: 'm/1/2'
+                  address:
+                    $ref: '#/components/schemas/ErgoAddress'
         default:
           description: Error
           content:

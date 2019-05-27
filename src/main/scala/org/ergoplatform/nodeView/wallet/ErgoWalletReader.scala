@@ -41,12 +41,12 @@ trait ErgoWalletReader extends VaultReader {
     walletActor ! LockWallet
   }
 
-  def deriveKey(path: String): Future[Try[Unit]] = {
-    (walletActor ? DeriveKey(path)).mapTo[Try[Unit]]
+  def deriveKey(path: String): Future[Try[P2PKAddress]] = {
+    (walletActor ? DeriveKey(path)).mapTo[Try[P2PKAddress]]
   }
 
-  def deriveNextKey: Future[Try[String]] = {
-    (walletActor ? DeriveNextKey).mapTo[Try[String]]
+  def deriveNextKey: Future[Try[(String, P2PKAddress)]] = {
+    (walletActor ? DeriveNextKey).mapTo[Try[(String, P2PKAddress)]]
   }
 
   def balances(chainStatus: ChainStatus): Future[RegistryIndex] = {

@@ -50,7 +50,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bitbucket.inkytonik.kiama" % "kiama_2.12" % "2.1.0",
   "org.bitlet" % "weupnp" % "0.1.4",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
-  "org.ergoplatform" % "ergo-wallet_2.12" % "interpreter-refactoring-c2169f72-SNAPSHOT",
+  "org.ergoplatform" % "ergo-wallet_2.12" % "master-535fcdde-SNAPSHOT",
   "org.objenesis" % "objenesis" % "2.4",
   "org.ow2.asm" % "asm" % "5.0.4",
   "org.reactivestreams" % "reactive-streams" % "1.0.2",
@@ -86,4 +86,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 0a8dc6643d904219fe53717b110422e6cc827196
+// LIBRARY_DEPENDENCIES_HASH 6632c78283f145f866f81b6a3b69cbb478131500

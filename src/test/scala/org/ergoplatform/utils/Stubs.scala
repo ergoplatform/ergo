@@ -141,7 +141,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case LockWallet => ()
 
-      case DeriveNewKey(_) => sender() ! Success(())
+      case DeriveKey(_) => sender() ! Success(())
+
+      case DeriveNextKey => sender() ! Success(WalletActorStub.path)
 
       case ReadPublicKeys(from, until) =>
         sender() ! trackedAddresses.slice(from, until)
@@ -163,6 +165,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     val seed: String = "walletstub"
     val mnemonic: String = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
+    val path = "M/1/2"
 
     def props(): Props = Props(new WalletActorStub)
     def balance(chainStatus: ChainStatus): Long = if (chainStatus.onChain) confirmedBalance else unconfirmedBalance

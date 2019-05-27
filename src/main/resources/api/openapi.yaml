@@ -1511,7 +1511,7 @@ paths:
                 derivationPath:
                   type: string
                   description: Derivation path for a new secret to derive
-                  example: 'M/1/2'
+                  example: 'm/1/2'
       responses:
         '200':
           description: New secret derived and saved in wallet successfully
@@ -1543,7 +1543,7 @@ paths:
                   derivationPath:
                     type: string
                     description: Derivation path of the resulted secret
-                    example: 'M/1/2'
+                    example: 'm/1/2'
         default:
           description: Error
           content:

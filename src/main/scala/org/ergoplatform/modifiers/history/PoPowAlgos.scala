@@ -23,7 +23,8 @@ object PoPowAlgos {
         prevExtensionOpt
           .flatMap(ext => unpackInterlinks(ext.fields).toOption)
           .map(updateInterlinks(h, _))
-      }.getOrElse(Seq.empty)
+      }
+      .getOrElse(Seq.empty)
   }
 
   /**

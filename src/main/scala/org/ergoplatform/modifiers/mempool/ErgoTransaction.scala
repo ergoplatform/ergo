@@ -123,6 +123,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txManyOutputs, outputCandidates.size <= Short.MaxValue, s"$id: ${outputCandidates.size}")
       .validate(txMaxTokens, outputCandidates.forall(_.additionalTokens.size <= ErgoConstants.MaxTokens.get),
         s"$id: ${outputCandidates.map(_.additionalTokens.size)}")
+      .validateSeq(outputCandidates)((validationState, out) => validationState
+        .validate(txMaxBoxSize, out.toBox(id, 0).bytes.length <= ErgoConstants.MaxBoxSize.get)
+        .validate(txRegistersCount, out.additionalRegisters.size <= ErgoBox.nonMandatoryRegistersCount)
+      )
       .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), s"$id: ${outputCandidates.map(_.value)}")
       .validateNoFailure(txOutputSum, outputsSumTry)
       .validate(txInputsUnique, inputs.distinct.size == inputs.size, s"$id: ${inputs.distinct.size} == ${inputs.size}")

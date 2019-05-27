@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import java.io.File
 import java.util
 
-import akka.actor.Actor
+import akka.actor.{Actor, ActorRef}
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -201,39 +201,44 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! generateTransactionWithOutputs(requests)
 
     case DeriveKey(encodedPath) =>
-      secretStorageOpt match {
-        case Some(secretStorage) =>
-          secretStorage.secret.foreach { rootSecret =>
-            DerivationPath.fromEncoded(encodedPath).foreach {
-              case path if !path.publicBranch =>
-                processSecretAddition {
-                  rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
-                }
-                sender() ! Success(())
-              case path =>
-                sender() ! Failure(new Exception(s"A private path is expected, but the public one given: $path"))
-            }
-          }
-        case None =>
-          sender() ! Failure(new Exception("Wallet not initialized"))
-      }
-
-    case DeriveNextKey =>
-      secretStorageOpt match {
-        case Some(secretStorage) =>
-          secretStorage.secret.foreach { rootSecret =>
-            val secrets = proverOpt.toIndexedSeq.flatMap(_.secretKeys)
-            nextPath(List.empty, secrets.map(_.path.decodedPath.tail)).foreach { path =>
+      withWalletLockHandler(sender()) {
+        _.secret.foreach { rootSecret =>
+          DerivationPath.fromEncoded(encodedPath).foreach {
+            case path if !path.publicBranch =>
               processSecretAddition {
                 rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
               }
-              sender() ! Success(path.encoded)
-            }
+              sender() ! Success(())
+            case path =>
+              sender() ! Failure(new Exception(
+                s"A private path is expected, but the public one given: $path"))
           }
-        case None =>
-          sender() ! Failure(new Exception("Wallet not initialized"))
+        }
+      }
+
+    case DeriveNextKey =>
+      withWalletLockHandler(sender()) {
+        _.secret.foreach { rootSecret =>
+          sender() ! nextPath.map { path =>
+            processSecretAddition {
+              rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
+            }
+            path.encoded
+          }
+        }
       }
   }
+
+  private def withWalletLockHandler(callback: ActorRef)
+                                   (body: JsonSecretStorage => Unit): Unit =
+    secretStorageOpt match {
+      case Some(secretStorage) if !secretStorage.isLocked =>
+        body(secretStorage)
+      case Some(_) =>
+        callback ! Failure(new Exception("Wallet is locked"))
+      case None =>
+        callback ! Failure(new Exception("Wallet is not initialized"))
+    }
 
   private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
 
@@ -438,17 +443,25 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   /**
     * Finds next available path index for a new key.
     */
-  private def nextPath(accPath: List[Int], rem: Seq[List[Int]]): Try[DerivationPath] = {
-    if (!rem.forall(_.isEmpty)) {
-      val maxChildIdx = rem.flatMap(_.headOption).max
-      if (maxChildIdx < Index.HardRangeStart) {
-        Success(DerivationPath(0 +: accPath, publicBranch = false))
+  private def nextPath: Try[DerivationPath] = {
+    def nextPath(accPath: List[Int], rem: Seq[List[Int]]): Try[DerivationPath] = {
+      if (!rem.forall(_.isEmpty)) {
+        val maxChildIdx = rem.flatMap(_.headOption).max
+        if (!Index.isHardened(maxChildIdx)) {
+          Success(DerivationPath(0 +: (accPath :+ maxChildIdx + 1), publicBranch = false))
+        } else {
+          nextPath(accPath :+ maxChildIdx, rem.map(_.drop(1)))
+        }
       } else {
-        nextPath(accPath :+ maxChildIdx, rem.map(_.tail))
+        Failure(
+          new Exception("Out of non-hardened index space. Try to derive hardened key specifying path manually"))
       }
+    }
+    val secrets = proverOpt.toIndexedSeq.flatMap(_.secretKeys)
+    if (secrets.size == 1) {
+      Success(DerivationPath(List(0, 1), publicBranch = false))
     } else {
-      Failure(
-        new Exception("Out of non-hardened index space. Try to derive hardened key specifying path manually"))
+      nextPath(List.empty, secrets.map(_.path.decodedPath.tail))
     }
   }
 

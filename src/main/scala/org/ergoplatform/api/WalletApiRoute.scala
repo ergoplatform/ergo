@@ -52,7 +52,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         restoreWalletR ~
         unlockWalletR ~
         lockWalletR ~
-        deriveKeyR
+        deriveKeyR ~
+        deriveNextKeyR
     }
   }
 
@@ -239,10 +240,19 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def deriveKeyR: Route = (path("deriveKey") & post & derivationPath) { path =>
-    withWalletOp(_.deriveNewKey(path)) {
+    withWalletOp(_.deriveKey(path)) {
       _.fold(
         e => BadRequest(e.getMessage),
         _ => ApiResponse.toRoute(ApiResponse.OK)
+      )
+    }
+  }
+
+  def deriveNextKeyR: Route = (path("deriveNextKey") & get) {
+    withWalletOp(_.deriveNextKey) {
+      _.fold(
+        e => BadRequest(e.getMessage),
+        path => ApiResponse(Json.obj("derivationPath" -> path.asJson))
       )
     }
   }

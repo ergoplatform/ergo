@@ -168,9 +168,16 @@ class WalletApiRouteSpec extends FlatSpec
     }
   }
 
-  it should "derive new key" in {
+  it should "derive new key according to a provided path" in {
     Post(prefix + "/deriveKey", Json.obj("derivationPath" -> "M/1/2".asJson)) ~> route ~> check {
       status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "derive next key" in {
+    Get(prefix + "/deriveNextKey") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("derivationPath").as[String] shouldEqual Right(WalletActorStub.path)
     }
   }
 

@@ -19,7 +19,7 @@ val sigmaStateVersion = "v2.1-b5a50364-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
-val ergoWalletVersion = "0.2-R1-SNAPSHOT"
+val ergoWalletVersion = "v2.1-b620fbf2-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)

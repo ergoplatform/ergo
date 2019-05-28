@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.ErgoSettings
@@ -12,7 +13,7 @@ import scala.util.Try
 /**
   * Immutable memory pool implementation.
   */
-class ErgoMemPool private[mempool](pool: OrderedTxPool)
+class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoSettings)
   extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {
 
   import ErgoMemPool._
@@ -54,16 +55,35 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)
     new ErgoMemPool(pool.invalidate(tx))
   }
 
-  def putIfValid(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
-    state match {
-      case validator: TransactionValidation[ErgoTransaction@unchecked] if pool.canAccept(tx) =>
-        validator.validate(tx).fold(
-          new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
-          _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
-        )
-      case _ =>
-        this -> ProcessingOutcome.Declined
+  def process(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
+    val fee = extractFee(tx)
+    val minFee = settings.nodeSettings.minimalFeeAmount
+    if (fee >= minFee) {
+      state match {
+        case validator: TransactionValidation[ErgoTransaction@unchecked] if pool.canAccept(tx) =>
+          validator.validate(tx).fold(
+            new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
+            _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+          )
+        case _ =>
+          this -> ProcessingOutcome.Declined(
+            new Exception("Transaction validation not supported"))
+      }
+    } else {
+      val den = EmissionRules.CoinsInOneErgo
+      this -> ProcessingOutcome.Declined(
+        new Exception(
+          s"Minimal fee amount not met. ${minFee.toDouble / den} Ergo required, ${fee.toDouble / den} Ergo given")
+      )
     }
+  }
+
+  private def extractFee(tx: ErgoTransaction): Long = {
+    val propositionBytes = settings.chainSettings.monetary.feePropositionBytes
+    ErgoState.boxChanges(Seq(tx))._2
+      .filter(_.ergoTree == settings.chainSettings.monetary.feeProposition)
+      .map(_.value)
+      .sum
   }
 
 }
@@ -74,7 +94,7 @@ object ErgoMemPool {
 
   object ProcessingOutcome {
     case object Accepted extends ProcessingOutcome
-    case object Declined extends ProcessingOutcome
+    case class Declined(e: Throwable) extends ProcessingOutcome
     case class Invalidated(e: Throwable) extends ProcessingOutcome
   }
 
@@ -82,8 +102,7 @@ object ErgoMemPool {
 
   type MemPoolResponse = Seq[ErgoTransaction]
 
-  def empty(settings: ErgoSettings): ErgoMemPool = {
-    new ErgoMemPool(OrderedTxPool.empty(settings))
-  }
+  def empty(settings: ErgoSettings): ErgoMemPool =
+    new ErgoMemPool(OrderedTxPool.empty(settings))(settings)
 
 }

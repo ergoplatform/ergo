@@ -23,7 +23,7 @@ class ErgoMemPoolSpec extends FlatSpec
     val txs = validTransactionsFromUtxoState(wus, Random)
     val pool = ErgoMemPool.empty(settings)
     txs.foreach { tx =>
-      pool.putIfValid(tx, us)._2 shouldBe ProcessingOutcome.Accepted
+      pool.process(tx, us)._2 shouldBe ProcessingOutcome.Accepted
     }
   }
 
@@ -37,7 +37,7 @@ class ErgoMemPoolSpec extends FlatSpec
       pool = pool.putWithoutCheck(Seq(tx))
     }
     txs.foreach { tx =>
-      pool.putIfValid(tx, us)._2 shouldBe ProcessingOutcome.Declined
+      pool.process(tx, us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
     }
   }
 
@@ -45,8 +45,21 @@ class ErgoMemPoolSpec extends FlatSpec
     val us = createUtxoState()._1
     var pool = ErgoMemPool.empty(settings)
     forAll(invalidBlockTransactionsGen) { blockTransactions =>
-      blockTransactions.txs.foreach(tx => pool = pool.putIfValid(tx, us)._1)
-      blockTransactions.txs.foreach(tx => pool.putIfValid(tx, us)._2 shouldBe ProcessingOutcome.Declined)
+      blockTransactions.txs.foreach(tx => pool = pool.process(tx, us)._1)
+      blockTransactions.txs.foreach(tx =>
+        pool.process(tx, us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true)
+    }
+  }
+
+  it should "decline transactions not meeting min fee" in {
+    val (us, bh) = createUtxoState()
+    val genesis = validFullBlock(None, us, bh, Random)
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val txs = validTransactionsFromUtxoState(wus, Random)
+    val maxSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = Long.MaxValue))
+    val pool = ErgoMemPool.empty(maxSettings)
+    txs.foreach { tx =>
+      pool.process(tx, us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
     }
   }
 
@@ -54,7 +67,7 @@ class ErgoMemPoolSpec extends FlatSpec
     val us = createUtxoState()._1
     val pool = ErgoMemPool.empty(settings)
     forAll(invalidBlockTransactionsGen) { blockTransactions =>
-      blockTransactions.txs.forall(pool.putIfValid(_, us)._2.isInstanceOf[ProcessingOutcome.Invalidated]) shouldBe true
+      blockTransactions.txs.forall(pool.process(_, us)._2.isInstanceOf[ProcessingOutcome.Invalidated]) shouldBe true
     }
   }
 

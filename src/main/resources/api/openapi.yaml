@@ -1491,6 +1491,78 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/deriveKey:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Derive new key according to a provied path
+      operationId: walletDeriveKey
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - derivationPath
+              properties:
+                derivationPath:
+                  type: string
+                  description: Derivation path for a new secret to derive
+                  example: 'm/1/2'
+      responses:
+        '200':
+          description: Resulted address
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - address
+                properties:
+                  address:
+                    $ref: '#/components/schemas/ErgoAddress'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/deriveNextKey:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Derive next key
+      operationId: walletDeriveNextKey
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Resulted secret path and address
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - derivationPath
+                  - address
+                properties:
+                  derivationPath:
+                    type: string
+                    description: Derivation path of the resulted secret
+                    example: 'm/1/2'
+                  address:
+                    $ref: '#/components/schemas/ErgoAddress'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/balances:
     get:
       security:

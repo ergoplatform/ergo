@@ -11,6 +11,7 @@ import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
+import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.{ErgoAddress, ErgoBox, P2PKAddress}
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import scorex.core.transaction.wallet.VaultReader
@@ -45,8 +46,8 @@ trait ErgoWalletReader extends VaultReader {
     (walletActor ? DeriveKey(path)).mapTo[Try[P2PKAddress]]
   }
 
-  def deriveNextKey: Future[Try[(String, P2PKAddress)]] = {
-    (walletActor ? DeriveNextKey).mapTo[Try[(String, P2PKAddress)]]
+  def deriveNextKey: Future[Try[(DerivationPath, P2PKAddress)]] = {
+    (walletActor ? DeriveNextKey).mapTo[Try[(DerivationPath, P2PKAddress)]]
   }
 
   def balances(chainStatus: ChainStatus): Future[RegistryIndex] = {

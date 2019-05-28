@@ -221,7 +221,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           sender() ! nextPath.map { path =>
             val secret = rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
             processSecretAddition(secret)
-            path.encoded -> P2PKAddress(secret.publicKey.key)
+            path -> P2PKAddress(secret.publicKey.key)
           }
         }
       }

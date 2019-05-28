@@ -254,7 +254,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         e => BadRequest(e.getMessage),
         x => ApiResponse(
           Json.obj(
-            "derivationPath" -> x._1.asJson,
+            "derivationPath" -> x._1.encoded.asJson,
             "address" -> x._2.toString.asJson
           )
         )

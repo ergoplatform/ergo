@@ -21,6 +21,7 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
+import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
@@ -141,9 +142,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case LockWallet => ()
 
-      case DeriveKey(_) => sender() ! Success(())
+      case DeriveKey(_) => sender() ! Success(WalletActorStub.address)
 
-      case DeriveNextKey => sender() ! Success(WalletActorStub.path)
+      case DeriveNextKey => sender() ! Success(WalletActorStub.path -> WalletActorStub.address)
 
       case ReadPublicKeys(from, until) =>
         sender() ! trackedAddresses.slice(from, until)
@@ -163,9 +164,13 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   object WalletActorStub {
 
+    private implicit val addressEncoder: ErgoAddressEncoder =
+      ErgoAddressEncoder(settings.chainSettings.addressPrefix)
+
     val seed: String = "walletstub"
     val mnemonic: String = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
-    val path = "m/1/2"
+    val path = DerivationPath(List(0, 1, 2), publicBranch = false)
+    val address = P2PKAddress(proveDlogGen.sample.get)
 
     def props(): Props = Props(new WalletActorStub)
     def balance(chainStatus: ChainStatus): Long = if (chainStatus.onChain) confirmedBalance else unconfirmedBalance

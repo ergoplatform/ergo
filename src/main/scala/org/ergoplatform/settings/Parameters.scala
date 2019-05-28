@@ -285,6 +285,19 @@ object Parameters {
 
   val MaxBlockCostDefault: Int = 1000000
 
+  val DefaultParameters: Map[Byte, Int] = Map(
+    StorageFeeFactorIncrease -> StorageFeeFactorDefault,
+    MinValuePerByteIncrease -> MinValuePerByteDefault,
+    TokenAccessCostIncrease -> TokenAccessCostDefault,
+    InputCostIncrease -> InputCostDefault,
+    DataInputCostIncrease -> DataInputCostDefault,
+    OutputCostIncrease -> OutputCostDefault,
+    MaxExtensionSizeIncrease -> MaxExtensionSizeDefault,
+    MaxBlockSizeIncrease -> MaxBlockSizeDefault,
+    MaxBlockCostIncrease -> MaxBlockCostDefault,
+    BlockVersion -> 1
+  )
+
   val parametersDescs: Map[Byte, String] = Map(
     StorageFeeFactorIncrease -> "Storage fee factor (per byte per storage period)",
     MinValuePerByteIncrease -> "Minimum monetary value of a box",

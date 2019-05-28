@@ -40,7 +40,7 @@ case class ErgoValidationSettings(
   }
 
   /**
-    * Disable sequience of rules
+    * Disable sequence of rules
     */
   def disable(ids: Seq[Short]): ErgoValidationSettings = if (ids.nonEmpty) {
     val newRules = rules.map { currentRule =>

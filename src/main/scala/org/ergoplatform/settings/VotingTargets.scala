@@ -24,11 +24,12 @@ object VotingTargets {
     val toDisable = config.as[Array[Int]](s"$configPath.voting.${Parameters.SoftForkDisablingRules}")
     val votingObject = config.getObject(s"$configPath.voting")
 
-    val parameterTargets = votingObject.keySet().asScala
-      .filter(_.toInt.toByte != Parameters.SoftForkDisablingRules)
-      .map { id =>
-        id.toInt.toByte -> votingObject.get(id).render().toInt
-      }.toMap
+    val parameterTargets = votingObject
+      .keySet()
+      .asScala
+      .filter(_.toByte != Parameters.SoftForkDisablingRules)
+      .map(id => id.toByte -> votingObject.get(id).render().toInt)
+      .toMap
 
     VotingTargets(parameterTargets, toDisable.map(_.toShort))
   }

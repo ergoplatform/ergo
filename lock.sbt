@@ -9,15 +9,15 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.github.kxbmap" % "configs_2.12" % "0.4.4",
   "com.google.code.findbugs" % "jsr305" % "3.0.2",
   "com.google.guava" % "guava" % "21.0",
-  "com.iheart" % "ficus_2.12" % "1.4.5",
+  "com.iheart" % "ficus_2.12" % "1.4.6",
   "com.lihaoyi" % "fastparse-utils_2.12" % "1.0.0",
   "com.lihaoyi" % "fastparse_2.12" % "1.0.0",
   "com.lihaoyi" % "sourcecode_2.12" % "0.1.4",
   "com.sksamuel.scapegoat" % "scalac-scapegoat-plugin_2.12" % "1.3.3",
   "com.trueaccord.lenses" % "lenses_2.12" % "0.4.12",
-  "com.typesafe" % "config" % "1.3.3",
+  "com.typesafe" % "config" % "1.3.4",
   "com.typesafe" % "ssl-config-core_2.12" % "0.3.6",
-  "com.typesafe.akka" % "akka-actor_2.12" % "2.5.22",
+  "com.typesafe.akka" % "akka-actor_2.12" % "2.5.23",
   "com.typesafe.akka" % "akka-http-core_2.12" % "10.1.6",
   "com.typesafe.akka" % "akka-http_2.12" % "10.1.6",
   "com.typesafe.akka" % "akka-parsing_2.12" % "10.1.6",
@@ -50,7 +50,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bitbucket.inkytonik.kiama" % "kiama_2.12" % "2.1.0",
   "org.bitlet" % "weupnp" % "0.1.4",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
-  "org.ergoplatform" % "ergo-wallet_2.12" % "0.1.1",
+  "org.ergoplatform" % "ergo-wallet_2.12" % "master-535fcdde-SNAPSHOT",
   "org.objenesis" % "objenesis" % "2.4",
   "org.ow2.asm" % "asm" % "5.0.4",
   "org.reactivestreams" % "reactive-streams" % "1.0.2",
@@ -86,4 +86,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH ed0d85393a3b29742d5323bce50d4f7e5b9604ab
+// LIBRARY_DEPENDENCIES_HASH 6632c78283f145f866f81b6a3b69cbb478131500

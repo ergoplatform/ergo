@@ -81,7 +81,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
   private def extractFee(tx: ErgoTransaction): Long = {
     val propositionBytes = settings.chainSettings.monetary.feePropositionBytes
     ErgoState.boxChanges(Seq(tx))._2
-      .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes))
+      .filter(_.ergoTree == settings.chainSettings.monetary.feeProposition)
       .map(_.value)
       .sum
   }

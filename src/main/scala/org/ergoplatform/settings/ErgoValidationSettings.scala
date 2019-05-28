@@ -5,8 +5,8 @@ import org.ergoplatform.modifiers.history.{ExtensionCandidate, Extension}
 import scorex.core.serialization.{ScorexSerializer, BytesSerializable}
 import scorex.core.validation.{ValidationSettings, ModifierValidator, ValidationResult}
 import scorex.util.serialization.{Reader, Writer}
-import org.ergoplatform.{DisabledRule, ChangedRule, ReplacedRule}
-import org.ergoplatform.{RuleStatus => SRuleStatus, ValidationRules => SValidationRules, ValidationSettings => SValidationSettings}
+import org.ergoplatform.validation.{DisabledRule, ChangedRule, ReplacedRule}
+import org.ergoplatform.validation.{RuleStatus => SRuleStatus, ValidationRules => SValidationRules, SigmaValidationSettings}
 import sigmastate.serialization.SigmaSerializer
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter, Helpers}
 
@@ -153,7 +153,7 @@ object ErgoValidationSettings {
     }
   }
 
-  def toSigmaValidationSettings(ergoVS: ErgoValidationSettings): SValidationSettings = {
+  def toSigmaValidationSettings(ergoVS: ErgoValidationSettings): SigmaValidationSettings = {
     val initVs = SValidationRules.currentSettings
     val sigmaRules = ergoVS.sigmaRules.filter { rule => initVs.get(rule._1).isDefined }
     val res = sigmaRules.foldLeft(initVs) { (vs, rule) =>

@@ -4,12 +4,13 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
 import org.ergoplatform._
+import org.ergoplatform.validation.{SigmaValidationSettings, ValidationRules}
 import sigmastate.interpreter.ContextExtension
 
 class ErgoContext(val stateContext: ErgoStateContext,
                   transactionContext: TransactionContext,
                   override val extension: ContextExtension = ContextExtension(Map()),
-                  override val validationSettings: ValidationSettings = ValidationRules.currentSettings)
+                  override val validationSettings: SigmaValidationSettings = ValidationRules.currentSettings)
   extends ErgoLikeContext(stateContext.currentHeight,
     ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
     stateContext.lastBlockMinerPk,

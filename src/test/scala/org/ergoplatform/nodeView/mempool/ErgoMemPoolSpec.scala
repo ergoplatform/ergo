@@ -56,10 +56,21 @@ class ErgoMemPoolSpec extends FlatSpec
     val genesis = validFullBlock(None, us, bh, Random)
     val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
     val txs = validTransactionsFromUtxoState(wus, Random)
+
     val maxSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = Long.MaxValue))
     val pool = ErgoMemPool.empty(maxSettings)
     txs.foreach { tx =>
-      pool.process(tx, us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
+      val (_, outcome) = pool.process(tx, us)
+      outcome.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
+      outcome.asInstanceOf[ProcessingOutcome.Declined]
+        .e.getMessage.contains("Minimal fee amount not met") shouldBe true
+    }
+
+    val minSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = 0))
+    val pool2 = ErgoMemPool.empty(minSettings)
+    txs.foreach { tx =>
+      val (_, outcome) = pool2.process(tx, us)
+      outcome shouldBe ProcessingOutcome.Accepted
     }
   }
 

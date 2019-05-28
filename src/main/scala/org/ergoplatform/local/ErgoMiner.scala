@@ -96,15 +96,17 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case QueryWallet =>
       val callback = self
       viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        v.vault.firstSecret().onComplete(_.foreach {
-          _.fold(
-            _ => {
-              log.warn("Failed to load key from wallet. Wallet is locked.")
-              context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet)(context.system.dispatcher)
-            },
-            r => callback ! UpdateSecret(r)
-          )
-        })
+        v.vault.firstSecret().onComplete(
+          _.foreach {
+            _.fold(
+              _ => {
+                log.warn("Failed to load key from wallet. Wallet is locked.")
+                context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet)(context.system.dispatcher)
+              },
+              r => callback ! UpdateSecret(r)
+            )
+          }
+        )
       }
   }
 
@@ -393,7 +395,6 @@ object ErgoMiner extends ScorexLogging {
     }
     Seq(emissionTxOpt, feeTxOpt).flatten
   }
-
 
   /**
     * Collects valid non-conflicting transactions from `mempoolTxsIn` and adds a transaction collecting fees from

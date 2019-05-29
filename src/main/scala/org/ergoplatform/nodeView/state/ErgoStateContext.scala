@@ -106,7 +106,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   /**
-    * Extracts parameters from [[Extension]] and compares them to locally calculated once.
+    * Extracts parameters from `Extension` and compares them to locally calculated once.
     */
   def processExtension(extension: Extension, header: Header, forkVote: Boolean): Try[Parameters] = {
     val height = header.height

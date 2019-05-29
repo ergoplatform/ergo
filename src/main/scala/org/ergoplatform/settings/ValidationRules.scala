@@ -144,6 +144,7 @@ object ValidationRules {
   val txRegistersCount: Short = 121
   val txDataInputsSize: Short = 122
   val txMaxBoxSize: Short = 123
+  val txRegisterData: Short = 124
   // stateful transaction validation
   val txCost: Short = 110
   val txDust: Short = 111

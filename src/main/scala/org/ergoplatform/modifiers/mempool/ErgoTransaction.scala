@@ -23,7 +23,7 @@ import scorex.core.validation.{ModifierValidator, ValidationSettings, Validation
 import scorex.crypto.authds.ADKey
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.SType
+import sigmastate.{SBox, SType}
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
@@ -108,6 +108,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry
   }
 
+  private def validateRegister[T <: sigmastate.Values.EvaluatedValue[_ <: sigmastate.SType]](reg: T): Boolean = {
+    true
+  }
+
   /**
     * Stateless transaction validation with result returned as `ValidationResult`
     * to accumulate further validation results
@@ -124,7 +128,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txMaxTokens, outputCandidates.forall(_.additionalTokens.size <= ErgoConstants.MaxTokens.get),
         s"$id: ${outputCandidates.map(_.additionalTokens.size)}")
       .validateSeq(outputCandidates)((validationState, out) => validationState
+//        .validate(txMaxBoxSize, SBox.dataSize(out.asInstanceOf[SType#WrappedType]) <= ErgoConstants.MaxBoxSize.get)
         .validate(txRegistersCount, out.additionalRegisters.size <= ErgoBox.nonMandatoryRegistersCount)
+        /*.validateSeq(out.additionalRegisters)((validationState, reg) => validationState
+          .validate(txRegisterData, validateRegister(reg))
+        )*/
       )
       .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), s"$id: ${outputCandidates.map(_.value)}")
       .validateNoFailure(txOutputSum, outputsSumTry)

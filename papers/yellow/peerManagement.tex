@@ -31,7 +31,7 @@ Penalties are divided into 4 categories:
 Once some penalty is applied a penalized peer is added to the penalty book.
 A \emph{penalty book} is a mapping $\term{ip} \rightarrow (\term{score}, \term{ts})$, where $\term{ip}$
 is a peer IP address, $\term{score}$ is an accumulated penalty score and $\term{ts}$ is a timestamp when a corresponding
-peer was penalised last time.
+peer was penalized last time.
 
 Penalties of type $\term{NonDeliveryPenalty}$, $\term{MisbehaviorPenalty}$, $\term{SpamPenalty}$ are not applied
 to the same peer repeatedly within a safe interval.

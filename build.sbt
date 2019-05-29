@@ -107,6 +107,16 @@ assemblyMergeStrategy in assembly := {
 }
 
 enablePlugins(sbtdocker.DockerPlugin)
+enablePlugins(JavaAppPackaging)
+
+mappings in Universal += {
+  val confFile = buildEnv.value match {
+    case BuildEnv.MainNet => "mainnet.conf"
+    case BuildEnv.TestNet => "testnet.conf"
+    case BuildEnv.DevNet => "devnet.conf"
+  }
+  ((resourceDirectory in Compile).value / confFile) -> "conf/application.conf"
+}
 
 Defaults.itSettings
 configs(IntegrationTest extend Test)

@@ -100,6 +100,8 @@ mainClass in assembly := Some("org.ergoplatform.ErgoApp")
 
 test in assembly := {}
 
+assemblyJarName in assembly := s"ergo-${version.value}.jar"
+
 assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first
   case "module-info.class" => MergeStrategy.discard
@@ -115,8 +117,32 @@ mappings in Universal += {
     case BuildEnv.TestNet => "testnet.conf"
     case BuildEnv.DevNet => "devnet.conf"
   }
-  ((resourceDirectory in Compile).value / confFile) -> "conf/application.conf"
+  ((resourceDirectory in Compile).value / confFile) -> "bin/application.conf"
 }
+
+// removes all jar mappings in universal and appends the fat jar
+mappings in Universal ++= {
+  // universalMappings: Seq[(File,String)]
+  val universalMappings = (mappings in Universal).value
+  val fatJar = (assembly in Compile).value
+  // removing means filtering
+  val filtered = universalMappings filter {
+    case (file, name) => !name.endsWith(".jar")
+  }
+  // add the fat jar
+  filtered :+ (fatJar -> ("lib/" + fatJar.getName))
+}
+
+// add jvm parameter for typesafe config
+bashScriptExtraDefines += """addJava "-Dconfig.file=${app_home}/application.conf""""
+
+inConfig(Linux)(
+  Seq(
+    maintainer := "ergoplatform.org",
+    packageSummary := "Ergo node",
+    packageDescription := "Ergo node"
+  )
+)
 
 Defaults.itSettings
 configs(IntegrationTest extend Test)

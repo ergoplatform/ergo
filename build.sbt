@@ -19,6 +19,7 @@ val sigmaStateVersion = "v2.1-b5a50364-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
+val ergoWalletVersion = "v2.1-b620fbf2-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)
@@ -29,7 +30,7 @@ libraryDependencies ++= Seq(
   "org.scorexfoundation" %% "iodb" % "0.3.2",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
-  "org.ergoplatform" %% "ergo-wallet" % "0.2-R1-SNAPSHOT",
+  "org.ergoplatform" %% "ergo-wallet" % ergoWalletVersion,
 
   "org.typelevel" %% "cats-free" % "1.6.0",
   "javax.xml.bind" % "jaxb-api" % "2.+",

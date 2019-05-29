@@ -20,7 +20,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{ErgoSettings, Parameters, ValidationRules}
+import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters, ValidationRules}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
@@ -53,7 +53,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private implicit val timeout: Timeout = 5.seconds
 
-  private val rulesToDisable: Seq[Short] = ergoSettings.votingTargets.rulesToDisable
+  private val desiredUpdate = ergoSettings.votingTargets.desiredUpdate
 
   private val votingSettings = ergoSettings.chainSettings.voting
   private val votingEpochLength = votingSettings.votingLength
@@ -193,7 +193,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def onReaders: Receive = {
     case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
       publicKeyOpt.foreach { minerProp =>
-        createCandidate(minerProp, h, m, rulesToDisable, s.asInstanceOf[UtxoStateReader]) match {
+        createCandidate(minerProp, h, m, desiredUpdate, s.asInstanceOf[UtxoStateReader]) match {
           case Success(candidate) =>
             val candidateMsg = powScheme.msgByHeader(AutolykosPowScheme.deriveUnprovedHeader(candidate))
             log.info(s"New candidate with msg ${Base16.encode(candidateMsg)} generated")
@@ -218,7 +218,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
           publicKeyOpt
             .flatMap { pk =>
-              createCandidate(pk, h, m, rulesToDisable, s.asInstanceOf[UtxoStateReader])
+              createCandidate(pk, h, m, desiredUpdate, s.asInstanceOf[UtxoStateReader])
                 .map { c =>
                   candidateOpt = Some(c)
                   powScheme.deriveExternalCandidate(c, pk)
@@ -268,7 +268,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def createCandidate(minerPk: ProveDlog,
                               history: ErgoHistoryReader,
                               pool: ErgoMemPoolReader,
-                              rulesToDisable: Seq[Short],
+                              proposedUpdate: ErgoValidationSettingsUpdate,
                               state: UtxoStateReader): Try[CandidateBlock] = Try {
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
     val bestExtensionOpt: Option[Extension] = bestHeaderOpt
@@ -292,8 +292,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       val voteForFork = betterVersion && forkOrdered && forkVotingAllowed
 
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
-        val (newParams, disabled) = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, rulesToDisable, votingSettings)
-        val newValidationSettings = stateContext.validationSettings.disable(disabled)
+        val (newParams, activatedUpdate) = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, proposedUpdate, votingSettings)
+        val newValidationSettings = stateContext.validationSettings.updated(activatedUpdate)
         (newParams.toExtensionCandidate(packedInterlinks) ++ newValidationSettings.toExtensionCandidate(),
           newParams.suggestVotes(ergoSettings.votingTargets.targets, voteForFork),
           newParams.blockVersion)
@@ -304,7 +304,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       }
     }.getOrElse((ExtensionCandidate(packedInterlinks), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
-    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, rulesToDisable, version)
+    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, proposedUpdate, version)
     //only transactions valid from against the current utxo state we take from the mem pool
     val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules).map { tx =>
       implicit val verifier: ErgoInterpreter = ErgoInterpreter(state.stateContext.currentParameters)

@@ -2,6 +2,7 @@ package org.ergoplatform.settings
 
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
+import org.ergoplatform.validation.SigmaValidationSettings
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
 import scorex.util.serialization.{Reader, Writer}
@@ -14,9 +15,13 @@ import scala.util.Try
   * Specifies the strategy to by used (fail-fast) and
   * validation rules with their statuses
   *
-  * @param rules - map from rule id to it's current status
+  * @param rules             - map from rule id to it's current status
+  * @param sigmaSettings     - validation settings of sigma script
+  * @param updateFromInitial - update from initial ErgoValidationSettings
   */
-case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends ValidationSettings with BytesSerializable {
+case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
+                                  sigmaSettings: SigmaValidationSettings,
+                                  updateFromInitial: ErgoValidationSettingsUpdate) extends ValidationSettings with BytesSerializable {
 
   override type M = ErgoValidationSettings
 
@@ -30,20 +35,28 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends Validat
     rules.get(id).forall(_.isActive)
   }
 
+  def updated(u: ErgoValidationSettingsUpdate): ErgoValidationSettings = {
+    val newSigmaSettings = u.statusUpdates.foldLeft(sigmaSettings)((s, u) => s.updated(u._1, u._2))
+    val newRules = updateRules(rules, u.rulesToDisable)
+    val totalUpdate = updateFromInitial ++ u
+
+    ErgoValidationSettings(newRules, newSigmaSettings, totalUpdate)
+  }
+
   /**
     * Disable sequence of rules
     */
-  def disable(ids: Seq[Short]): ErgoValidationSettings = if (ids.nonEmpty) {
-    val newRules = rules.map { currentRule =>
-      if (ids.contains(currentRule._1)) {
+  private def updateRules(rules: Map[Short, RuleStatus],
+                          toDisable: Seq[Short]): Map[Short, RuleStatus] = if (toDisable.nonEmpty) {
+    rules.map { currentRule =>
+      if (toDisable.contains(currentRule._1)) {
         currentRule._1 -> currentRule._2.copy(isActive = false)
       } else {
         currentRule
       }
     }
-    ErgoValidationSettings(newRules)
   } else {
-    this
+    rules
   }
 
   /**
@@ -56,12 +69,15 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus]) extends Validat
     ExtensionCandidate(fields.toSeq)
   }
 
+
   override def serializer: ScorexSerializer[ErgoValidationSettings] = ErgoValidationSettingsSerializer
 
   override def equals(obj: Any): Boolean = obj match {
     case p: ErgoValidationSettings => ErgoValidationSettings.matchSettings(this, p).isSuccess
     case _ => false
   }
+
+  override def hashCode(): Int = super.hashCode()
 }
 
 object ErgoValidationSettings {
@@ -84,32 +100,33 @@ object ErgoValidationSettings {
     * To be used during genesis state creation or to perform checks that are not allowed
     * to be deactivated via soft-forks.
     */
-  val initial: ErgoValidationSettings = new ErgoValidationSettings(ValidationRules.rulesSpec)
+  val initial: ErgoValidationSettings = new ErgoValidationSettings(ValidationRules.rulesSpec,
+    org.ergoplatform.validation.ValidationRules.currentSettings,
+    ErgoValidationSettingsUpdate.empty)
 
   /**
     * Extracts ErgoValidationSettings from extension section of the block
     */
   def parseExtension(extension: ExtensionCandidate): Try[ErgoValidationSettings] = Try {
-    val bytes = extension.fields.filter(_._1.head == Extension.ValidationRulesPrefix).sortBy(_._1.last).flatMap(_._2)
-    ErgoValidationSettingsSerializer.parseBytes(bytes.toArray)
+    val values = extension.fields
+      .filter(_._1(0) == Extension.ValidationRulesPrefix)
+      .sortBy(_._1(1))
+      .map(_._2)
+    val bytes = scorex.core.utils.concatBytes(values)
+
+    ErgoValidationSettingsSerializer.parseBytes(bytes)
   }
+
 }
 
 object ErgoValidationSettingsSerializer extends ScorexSerializer[ErgoValidationSettings] with ApiCodecs {
   override def serialize(obj: ErgoValidationSettings, w: Writer): Unit = {
-    val disabledRules = obj.rules.filter(r => !r._2.isActive)
-    w.putInt(disabledRules.size)
-    disabledRules.foreach { r =>
-      w.putShort(r._1)
-    }
+    ErgoValidationSettingsUpdateSerializer.serialize(obj.updateFromInitial, w)
   }
 
   override def parse(r: Reader): ErgoValidationSettings = {
-    val disabledRulesNum = r.getInt()
-    val disabledRules = (0 until disabledRulesNum).map { _ =>
-      r.getShort()
-    }
-    ErgoValidationSettings.initial.disable(disabledRules)
+    val updateFromInitial = ErgoValidationSettingsUpdateSerializer.parse(r)
+    ErgoValidationSettings.initial.updated(updateFromInitial)
   }
 
 }

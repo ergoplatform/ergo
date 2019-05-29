@@ -6,13 +6,14 @@ lazy val commonSettings = Seq(
   name := "ergo",
   version := "2.1.0-SNAPSHOT",
   scalaVersion := "2.12.8",
-  resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
-    "SonaType" at "https://oss.sonatype.org/content/groups/public",
-    "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
-    "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"),
-  homepage := Some(url("http://ergoplatform.org/")),
+  resolvers ++= dependencyResolvers,
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
+
+lazy val dependencyResolvers = Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
+  "SonaType" at "https://oss.sonatype.org/content/groups/public",
+  "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
+  "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/")
 
 val scorexVersion = "e1142a21-SNAPSHOT"
 val sigmaStateVersion = "soft-forkability2-1a0e5d54-SNAPSHOT"
@@ -30,8 +31,6 @@ libraryDependencies ++= Seq(
   ("org.scorexfoundation" %% "avl-iodb" % "0.2.15").exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "iodb" % "0.3.2",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
-
-//  "org.ergoplatform" %% "ergo-wallet" % "0.2-R1-SNAPSHOT",
 
   "org.typelevel" %% "cats-free" % "1.6.0",
   "javax.xml.bind" % "jaxb-api" % "2.+",
@@ -109,6 +108,7 @@ assemblyMergeStrategy in assembly := {
 }
 
 enablePlugins(sbtdocker.DockerPlugin)
+enablePlugins(JavaAppPackaging)
 
 Defaults.itSettings
 configs(IntegrationTest extend Test)
@@ -155,3 +155,42 @@ lazy val benchmarks = (project in file("benchmarks"))
   .settings(commonSettings, name := "ergo-benchmarks")
   .dependsOn(ergo % "test->test")
   .enablePlugins(JmhPlugin)
+
+lazy val testnetPackage = project
+  .in(file("build/testnet"))
+  .enablePlugins(JavaAppPackaging)
+  .settings(
+    resolvers ++= dependencyResolvers,
+    // override the resource directory
+    resourceDirectory in Compile := (resourceDirectory in (ergo, Compile)).value,
+    mappings in Universal += {
+      ((resourceDirectory in Compile).value / "testnet.conf") -> "conf/application.conf"
+    }
+  )
+  .dependsOn(ergo)
+
+lazy val mainnetPackage = project
+  .in(file("build/mainnet"))
+  .enablePlugins(JavaAppPackaging)
+  .settings(
+    resolvers ++= dependencyResolvers,
+    // override the resource directory
+    resourceDirectory in Compile := (resourceDirectory in (ergo, Compile)).value,
+    mappings in Universal += {
+      ((resourceDirectory in Compile).value / "mainnet.conf") -> "conf/application.conf"
+    }
+  )
+  .dependsOn(ergo)
+
+lazy val devnetPackage = project
+  .in(file("build/devnet"))
+  .enablePlugins(JavaAppPackaging)
+  .settings(
+    resolvers ++= dependencyResolvers,
+    // override the resource directory
+    resourceDirectory in Compile := (resourceDirectory in (ergo, Compile)).value,
+    mappings in Universal += {
+      ((resourceDirectory in Compile).value / "devnet.conf") -> "conf/application.conf"
+    }
+  )
+  .dependsOn(ergo)

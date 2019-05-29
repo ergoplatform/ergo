@@ -75,7 +75,8 @@ val opts = Seq(
   // probably can't use these with jstack and others tools
   "-XX:+PerfDisableSharedMem",
   "-XX:+ParallelRefProcEnabled",
-  "-XX:+UseStringDeduplication")
+  "-XX:+UseStringDeduplication"
+)
 
 // -J prefix is required by the bash script
 javaOptions in run ++= opts
@@ -100,7 +101,14 @@ mainClass in assembly := Some("org.ergoplatform.ErgoApp")
 
 test in assembly := {}
 
-assemblyJarName in assembly := s"ergo-${version.value}.jar"
+assemblyJarName in assembly := {
+  val networkType = buildEnv.value match {
+    case BuildEnv.MainNet => "mainnet"
+    case BuildEnv.TestNet => "testnet"
+    case BuildEnv.DevNet =>  "devnet"
+  }
+  s"ergo-$networkType-${version.value}.jar"
+}
 
 assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first
@@ -115,7 +123,7 @@ mappings in Universal += {
   val confFile = buildEnv.value match {
     case BuildEnv.MainNet => "mainnet.conf"
     case BuildEnv.TestNet => "testnet.conf"
-    case BuildEnv.DevNet => "devnet.conf"
+    case BuildEnv.DevNet =>  "devnet.conf"
   }
   ((resourceDirectory in Compile).value / confFile) -> "bin/application.conf"
 }
@@ -127,7 +135,7 @@ mappings in Universal ++= {
   val fatJar = (assembly in Compile).value
   // removing means filtering
   val filtered = universalMappings filter {
-    case (file, name) => !name.endsWith(".jar")
+    case (_, name) => !name.endsWith(".jar")
   }
   // add the fat jar
   filtered :+ (fatJar -> ("lib/" + fatJar.getName))
@@ -168,7 +176,6 @@ dockerfile in docker := {
 buildOptions in docker := BuildOptions(
   removeIntermediateContainers = BuildOptions.Remove.OnSuccess
 )
-
 
 //FindBugs settings
 

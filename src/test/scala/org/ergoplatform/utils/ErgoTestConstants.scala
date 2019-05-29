@@ -32,7 +32,7 @@ trait ErgoTestConstants extends ScorexLogging {
   implicit val votingSettings: VotingSettings = VotingSettings(1024, 32, 128)
   val validationSettings: ErgoValidationSettings = ErgoValidationSettings.initial
   implicit val validationSettingsNoIl: ErgoValidationSettings = validationSettings
-    .disable(Seq(exIlUnableToValidate, exIlEncoding, exIlStructure, exEmpty))
+    .updated(ErgoValidationSettingsUpdate(Seq(exIlUnableToValidate, exIlEncoding, exIlStructure, exEmpty), Seq()))
 
   val parameters: Parameters = LaunchParameters
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
@@ -64,8 +64,9 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultVotes: Array[Byte] = Array.fill(3)(0.toByte)
   val defaultVersion: Byte = 0
   lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
+  val emptyVSUpdate = ErgoValidationSettingsUpdate.empty
   val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(genesisStateDigest, settings)
-    .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, Seq(), defaultVersion)
+    .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, emptyVSUpdate, defaultVersion)
 
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest

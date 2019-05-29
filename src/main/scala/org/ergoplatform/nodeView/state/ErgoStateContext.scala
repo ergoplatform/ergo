@@ -92,13 +92,13 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                timestamp: Long,
                nBits: Long,
                votes: Array[Byte],
-               rulesToDisable: Seq[Short],
+               proposedUpdate: ErgoValidationSettingsUpdate,
                version: Byte): ErgoStateContext = {
     val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
     val forkVote = votes.contains(Parameters.SoftFork)
     val height = ErgoHistory.heightOf(lastHeaderOpt) + 1
-    val (calculatedParams, disabled) = currentParameters.update(height, forkVote, votingData.epochVotes, rulesToDisable, votingSettings)
-    val calculatedValidationSettings = validationSettings.disable(disabled)
+    val (calculatedParams, updated) = currentParameters.update(height, forkVote, votingData.epochVotes, proposedUpdate, votingSettings)
+    val calculatedValidationSettings = validationSettings.updated(updated)
     new UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams, calculatedValidationSettings, votingData)
   }
 
@@ -133,8 +133,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
         case (currentValidationState, parsedParams) =>
 
           val (calculatedParams, disabled) = currentParameters
-            .update(height, forkVote, votingData.epochVotes, parsedParams.rulesToDisable, votingSettings)
-          val calculatedSettings = validationSettings.disable(disabled)
+            .update(height, forkVote, votingData.epochVotes, parsedParams.proposedUpdate, votingSettings)
+          val calculatedSettings = validationSettings.updated(disabled)
 
           currentValidationState
             .validate(exBlockVersion, calculatedParams.blockVersion == header.version, s"${calculatedParams.blockVersion} == ${header.version}")
@@ -255,7 +255,8 @@ object ErgoStateContext {
     */
   def empty(genesisStateDigest: ADDigest, settings: ErgoSettings): ErgoStateContext = {
     new ErgoStateContext(Seq.empty, None, genesisStateDigest, LaunchParameters, ErgoValidationSettings.initial, VotingData.empty)(settings.chainSettings.voting)
-      .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), Seq(), 0.toByte)
+      .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte),
+        ErgoValidationSettingsUpdate.empty, 0.toByte)
   }
 
   /**

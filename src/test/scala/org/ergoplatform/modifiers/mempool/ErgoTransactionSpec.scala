@@ -288,6 +288,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
   property("transaction with too many inputs should be rejected") {
 
+    val hashCalculations = 5000000
+
     //we assume that verifier must finish verification of any script in less time than 500K hash calculations
     // (for the Blake2b256 hash function over a single block input)
     val Timeout: Long = {
@@ -295,15 +297,15 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val hf = Blake2b256
 
       //just in case to heat up JVM
-      (1 to 5000000).foreach(_ => hf(block))
+      (1 to hashCalculations).foreach(_ => hf(block))
 
       val t0 = System.currentTimeMillis()
-      (1 to 500000).foreach(_ => hf(block))
+      (1 to hashCalculations).foreach(_ => hf(block))
       val t = System.currentTimeMillis()
       t - t0
     }
 
-    val gen = validErgoTransactionGenTemplate(0, 0, 600, 1000, trueLeafGen)
+    val gen = validErgoTransactionGenTemplate(0, 0, 5000, 5001, trueLeafGen)
     val (from, tx) = gen.sample.get
     tx.statelessValidity.isSuccess shouldBe true
 

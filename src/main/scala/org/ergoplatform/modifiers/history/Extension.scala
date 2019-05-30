@@ -22,7 +22,9 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
   */
 case class Extension(headerId: ModifierId,
                      override val fields: Seq[(Array[Byte], Array[Byte])],
-                     override val sizeOpt: Option[Int] = None) extends ExtensionCandidate(fields) with BlockSection {
+                     override val sizeOpt: Option[Int] = None)
+  extends ExtensionCandidate(fields) with BlockSection {
+
   override val modifierTypeId: ModifierTypeId = Extension.modifierTypeId
 
   override def digest: Digest32 = Extension.rootHash(fields)

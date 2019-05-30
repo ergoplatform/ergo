@@ -21,7 +21,8 @@ import scala.util.Try
   */
 case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
                                   sigmaSettings: SigmaValidationSettings,
-                                  updateFromInitial: ErgoValidationSettingsUpdate) extends ValidationSettings with BytesSerializable {
+                                  updateFromInitial: ErgoValidationSettingsUpdate)
+  extends ValidationSettings with BytesSerializable {
 
   override type M = ErgoValidationSettings
 

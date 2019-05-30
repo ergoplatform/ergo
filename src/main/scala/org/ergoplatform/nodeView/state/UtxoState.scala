@@ -104,10 +104,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
         log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
 
-        stateContext.appendFullBlock(fb, votingSettings).flatMap { newStateContext =>
-          val inRoot = rootHash
+        val inRoot = rootHash
 
-          val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
+        val stateTry = stateContext.appendFullBlock(fb, votingSettings).flatMap { newStateContext =>
+          applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
@@ -125,14 +125,15 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
               s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
             new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
-          stateTry.recoverWith[UtxoState] { case e =>
-            log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
-              s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
-            persistentProver.rollback(inRoot)
-              .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
-            Failure(e)
-          }
         }
+        stateTry.recoverWith[UtxoState] { case e =>
+          log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
+            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
+          persistentProver.rollback(inRoot)
+            .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
+          Failure(e)
+        }
+
       }
 
     case h: Header =>

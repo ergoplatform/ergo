@@ -3,6 +3,7 @@ package org.ergoplatform.settings
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.ergoplatform.validation.{DisabledRule, ReplacedRule, ValidationRules => VR}
 import scorex.crypto.authds.ADDigest
 
 import scala.language.implicitConversions
@@ -19,7 +20,9 @@ class VotingSpecification extends ErgoPropertyTest {
   override implicit val votingSettings: VotingSettings =
     VotingSettings(votingEpochLength, softForkEpochs = 2, activationEpochs = 3)
 
-  private val proposedUpdate = ErgoValidationSettingsUpdate(Seq(ValidationRules.exDuplicateKeys, ValidationRules.exValueLength), Seq())
+  private val proposedUpdate = ErgoValidationSettingsUpdate(
+    Seq(ValidationRules.exDuplicateKeys, ValidationRules.exValueLength),
+    Seq(VR.CheckDeserializedScriptType.id -> DisabledRule, VR.CheckValidOpCode.id -> ReplacedRule((VR.FirstRuleId + 11).toShort)))
   private val proposedUpdate2 = ErgoValidationSettingsUpdate(Seq(ValidationRules.fbOperationFailed), Seq())
   val ctx: ErgoStateContext = {
     new ErgoStateContext(Seq.empty, None, genesisStateDigest, LaunchParameters, validationSettingsNoIl, VotingData.empty)(votingSettings)
@@ -324,7 +327,9 @@ class VotingSpecification extends ErgoPropertyTest {
     vs.rules.foreach { r =>
       vs.isActive(r._1) shouldBe !updated.rulesToDisable.contains(r._1)
     }
-    // todo check sigma settings
+    updated.statusUpdates.foreach { su =>
+      vs.sigmaSettings.getStatus(su._1).get shouldBe su._2
+    }
   }
 
   private def toExtension(p: Parameters, vs: ErgoValidationSettings): Extension = {

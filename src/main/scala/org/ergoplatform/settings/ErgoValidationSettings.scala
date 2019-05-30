@@ -64,17 +64,22 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
     * Generates extension candidate with serialized ErgoValidationSettings in it
     */
   def toExtensionCandidate(): ExtensionCandidate = {
-    val fields = bytes.sliding(Extension.FieldValueMaxSize, Extension.FieldValueMaxSize).zipWithIndex.map { case (b, i) =>
-      Array(Extension.ValidationRulesPrefix, i.toByte) -> b
+    if (isInitial) {
+      ExtensionCandidate(Seq())
+    } else {
+      val fields = bytes.sliding(Extension.FieldValueMaxSize, Extension.FieldValueMaxSize).zipWithIndex.map { case (b, i) =>
+        Array(Extension.ValidationRulesPrefix, i.toByte) -> b
+      }
+      ExtensionCandidate(fields.toSeq)
     }
-    ExtensionCandidate(fields.toSeq)
   }
 
+  def isInitial: Boolean = this == ErgoValidationSettings.initial
 
   override def serializer: ScorexSerializer[ErgoValidationSettings] = ErgoValidationSettingsSerializer
 
   override def equals(obj: Any): Boolean = obj match {
-    case p: ErgoValidationSettings => ErgoValidationSettings.matchSettings(this, p).isSuccess
+    case p: ErgoValidationSettings => p.updateFromInitial == updateFromInitial
     case _ => false
   }
 
@@ -82,19 +87,6 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
 }
 
 object ErgoValidationSettings {
-
-  /**
-    * Checks that s1 and s2 are equals
-    */
-  def matchSettings(s1: ErgoValidationSettings, s2: ErgoValidationSettings): Try[Unit] = Try {
-    if (s1.rules.size != s2.rules.size) {
-      throw new Exception(s"Rules differ in size, s1 = $s1, s2 = $s2")
-    }
-    s1.rules.foreach { case (k, v) =>
-      val v2 = s2.rules(k)
-      if (v2 != v) throw new Exception(s"Calculated and received settings differ in $k ($v != $v2)")
-    }
-  }
 
   /**
     * Initial validation settings.
@@ -113,9 +105,12 @@ object ErgoValidationSettings {
       .filter(_._1(0) == Extension.ValidationRulesPrefix)
       .sortBy(_._1(1))
       .map(_._2)
-    val bytes = scorex.core.utils.concatBytes(values)
-
-    ErgoValidationSettingsSerializer.parseBytes(bytes)
+    if (values.isEmpty) {
+      ErgoValidationSettings.initial
+    } else {
+      val bytes = scorex.core.utils.concatBytes(values)
+      ErgoValidationSettingsSerializer.parseBytes(bytes)
+    }
   }
 
 }

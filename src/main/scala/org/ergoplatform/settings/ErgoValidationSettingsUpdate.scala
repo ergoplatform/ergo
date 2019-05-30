@@ -25,12 +25,12 @@ object ErgoValidationSettingsUpdateSerializer extends ScorexSerializer[ErgoValid
     val sigmaWriter = new SigmaByteWriter(w, None)
     w.putInt(obj.rulesToDisable.length)
     obj.rulesToDisable.foreach { r =>
-      w.putShort(r)
+      w.putUShort(r)
     }
 
     w.putInt(obj.statusUpdates.length)
     obj.statusUpdates.foreach { r =>
-      w.putShort(r._1)
+      w.putUShort(r._1)
       RuleStatusSerializer.serialize(r._2, sigmaWriter)
     }
   }
@@ -39,11 +39,11 @@ object ErgoValidationSettingsUpdateSerializer extends ScorexSerializer[ErgoValid
     val sigmaReader = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
     val disabledRulesNum = r.getInt()
     val disabledRules = (0 until disabledRulesNum).map { _ =>
-      r.getShort()
+      r.getUShort().toShort
     }
     val statusUpdatesNum = r.getInt()
     val parsed = (0 until statusUpdatesNum).map { _ =>
-      val ruleId = r.getShort()
+      val ruleId = r.getUShort().toShort
       val status = RuleStatusSerializer.parse(sigmaReader)
       ruleId -> status
     }

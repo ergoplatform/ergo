@@ -13,7 +13,6 @@ import Extension.InterlinksVectorPrefix
   */
 object PoPowAlgos {
 
-
   /**
     * Computes interlinks vector for the next level after `prevHeader`.
     */

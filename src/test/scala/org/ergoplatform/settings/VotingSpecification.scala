@@ -33,6 +33,19 @@ class VotingSpecification extends ErgoPropertyTest {
     LaunchParameters.toExtensionCandidate(initialVs.toExtensionCandidate().fields)
   }
 
+  property("ErgoValidationSettings toExtension/fromExtension roundtrip") {
+    // initial settings should not be written into Extension at all
+    val initial = ErgoValidationSettings.initial
+    val extension = initial.toExtensionCandidate()
+    extension.fields.size shouldBe 0
+    initial shouldBe ErgoValidationSettings.parseExtension(extension).get
+
+    forAll(ergoValidationSettingsGen) { vs =>
+      val extension = vs.toExtensionCandidate()
+      vs shouldBe ErgoValidationSettings.parseExtension(extension).get
+    }
+  }
+
   property("Parameters should be defined at the beginning of the epoch") {
     val chain = genChain(votingEpochLength * 4).map { b =>
       if (b.header.votingStarts(votingEpochLength)) {

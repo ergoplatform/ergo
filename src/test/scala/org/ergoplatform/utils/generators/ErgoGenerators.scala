@@ -12,6 +12,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
 import org.ergoplatform.utils.ErgoTestConstants
+import org.ergoplatform.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
@@ -170,8 +171,11 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   lazy val ergoValidationSettingsGen: Gen[ErgoValidationSettings] = for {
     n <- Gen.choose(1, 200)
     disabledRules = ValidationRules.rulesSpec.keys.take(n).toSeq
-    // todo sigma rules
-  } yield ErgoValidationSettings.initial.updated(ErgoValidationSettingsUpdate(disabledRules, Seq()))
+    replacedRuleCode <- Gen.choose(org.ergoplatform.validation.ValidationRules.FirstRuleId, Short.MaxValue)
+    changedRuleValue <- genBoundedBytes(0, 127)
+    statuses <- Gen.listOf(Gen.oneOf(DisabledRule, EnabledRule, ReplacedRule(replacedRuleCode), ChangedRule(changedRuleValue)))
+    statusUpdates= org.ergoplatform.validation.ValidationRules.ruleSpecs.take(statuses.size).map(_.id).zip(statuses)
+  } yield ErgoValidationSettings.initial.updated(ErgoValidationSettingsUpdate(disabledRules, statusUpdates))
 
   /** Random long from 1 to maximum - 1
     *

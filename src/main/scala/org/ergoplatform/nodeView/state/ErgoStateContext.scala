@@ -141,7 +141,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
             .validateNoFailure(exMatchParameters, Parameters.matchParameters(parsedParams, calculatedParams))
             .validateTry(parsedValidationTry, e => ModifierValidator.fatal("Failed to parse validation settings", e)) {
               case (vs, parsedSettings) =>
-                vs.validateNoFailure(exMatchValidationSettings, ErgoValidationSettings.matchSettings(parsedSettings, calculatedSettings))
+                vs.validate(exMatchValidationSettings, parsedSettings == calculatedSettings, s"$parsedSettings vs $calculatedSettings")
             }
       }.result.toTry
       .flatMap(_ => parsedParamsTry.flatMap(p => parsedValidationTry.map(vs => (p, vs))))

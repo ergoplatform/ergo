@@ -185,7 +185,7 @@ object ValidationRules {
     exMatchValidationSettings -> RuleStatus(s => fatal(s"At the beginning of the epoch, the extension should contain all the validation settings. $s"),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exSize -> RuleStatus(s => fatal(s"Size of extension section should not exceed <maxExtensionSize>. $s"),
+    exSize -> RuleStatus(s => fatal(s"Size of extension section should not exceed ${Constants.MaxExtensionSize}. $s"),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
 

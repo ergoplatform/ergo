@@ -30,7 +30,7 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
-  val ergoSettings: ErgoSettings = {
+  lazy val ergoSettings: ErgoSettings = {
     val settings_ = ErgoSettings.read(args.headOption)
     def isEmptyState: Boolean = {
       val dir = ErgoState.stateDir(settings_)

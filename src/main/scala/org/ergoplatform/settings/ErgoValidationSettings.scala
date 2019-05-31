@@ -88,7 +88,7 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
     case _ => false
   }
 
-  override def hashCode(): Int = super.hashCode()
+  override def hashCode(): Int = java.util.Objects.hash(updateFromInitial)
 }
 
 object ErgoValidationSettings {

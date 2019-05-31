@@ -168,14 +168,17 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     if (Random.nextBoolean()) Some(popowSuffix) else None,
     blocksToKeep)
 
-  lazy val ergoValidationSettingsGen: Gen[ErgoValidationSettings] = for {
+  lazy val ergoValidationSettingsUpdateGen: Gen[ErgoValidationSettingsUpdate] = for {
     n <- Gen.choose(1, 200)
     disabledRules = ValidationRules.rulesSpec.keys.take(n).toSeq
     replacedRuleCode <- Gen.choose(org.ergoplatform.validation.ValidationRules.FirstRuleId, Short.MaxValue)
     changedRuleValue <- genBoundedBytes(0, 127)
     statuses <- Gen.listOf(Gen.oneOf(DisabledRule, EnabledRule, ReplacedRule(replacedRuleCode), ChangedRule(changedRuleValue)))
-    statusUpdates= org.ergoplatform.validation.ValidationRules.ruleSpecs.take(statuses.size).map(_.id).zip(statuses)
-  } yield ErgoValidationSettings.initial.updated(ErgoValidationSettingsUpdate(disabledRules, statusUpdates))
+    statusUpdates = org.ergoplatform.validation.ValidationRules.ruleSpecs.take(statuses.size).map(_.id).zip(statuses)
+  } yield ErgoValidationSettingsUpdate(disabledRules, statusUpdates)
+
+  lazy val ergoValidationSettingsGen: Gen[ErgoValidationSettings] = ergoValidationSettingsUpdateGen
+    .map(u => ErgoValidationSettings.initial.updated(u))
 
   /** Random long from 1 to maximum - 1
     *

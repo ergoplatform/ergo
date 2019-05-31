@@ -144,7 +144,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                 vs.validate(exMatchValidationSettings, parsedSettings == calculatedSettings, s"$parsedSettings vs $calculatedSettings")
             }
       }.result.toTry
-      .flatMap(_ => parsedParamsTry.flatMap(p => parsedValidationTry.map(vs => (p, vs))))
+      .flatMap(_ => parsedValidationTry.map(vs => (calculatedParams, vs)))
 
   }
 

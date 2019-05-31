@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
+import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
@@ -29,7 +30,31 @@ class ErgoApp(args: Seq[String]) extends Application {
 
   override implicit lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
-  lazy val ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
+  val ergoSettings: ErgoSettings = {
+    val settings_ = ErgoSettings.read(args.headOption)
+    def isEmptyState: Boolean = {
+      val dir = ErgoState.stateDir(settings_)
+      dir.listFiles().isEmpty
+    }
+    settings_.bootstrapSettingsOpt match {
+      case Some(bs) if isEmptyState =>
+        log.info("Entering network bootstrap procedure ..")
+        val (noPremineProof, genesisDigest) =
+          new BootstrapController(bs).waitForBootSettings()
+        log.info("Boot settings received, starting the node ..")
+        settings_.copy(
+          chainSettings = settings_.chainSettings.copy(
+            noPremineProof = noPremineProof,
+            genesisStateDigestHex = genesisDigest
+          )
+        )
+      case Some(_) =>
+        log.warn("State is already initialized")
+        sys.exit()
+      case None =>
+        settings_
+    }
+  }
 
   override protected lazy val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
 
@@ -63,7 +88,8 @@ class ErgoApp(args: Seq[String]) extends Application {
     minerRef ! StartMining
   }
 
-  val actorsToStop = Seq(minerRef,
+  val actorsToStop: Seq[ActorRef] = Seq(
+    minerRef,
     peerManagerRef,
     networkControllerRef,
     readersHolderRef,
@@ -85,6 +111,7 @@ class ErgoApp(args: Seq[String]) extends Application {
 }
 
 object ErgoApp extends ScorexLogging {
+
   def main(args: Array[String]): Unit = new ErgoApp(args).run()
 
   def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)

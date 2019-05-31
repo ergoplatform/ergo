@@ -338,9 +338,9 @@ object Parameters {
   def parseExtension(h: Height, extension: Extension): Try[Parameters] = Try {
     val paramsTable = extension.fields.flatMap { case (k, v) =>
       require(k.length == 2, s"Wrong key during parameters parsing in extension: $extension")
-      if (k.head == Extension.SystemParametersPrefix && k.last != SoftForkDisablingRules) {
+      if (k(0) == Extension.SystemParametersPrefix && k(1) != SoftForkDisablingRules) {
         require(v.length == 4, s"Wrong value during parameters parsing in extension: $extension")
-        Some(k.last -> Ints.fromByteArray(v))
+        Some(k(1) -> Ints.fromByteArray(v))
       } else {
         None
       }

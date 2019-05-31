@@ -22,29 +22,31 @@ object ErgoValidationSettingsUpdate {
 
 object ErgoValidationSettingsUpdateSerializer extends ScorexSerializer[ErgoValidationSettingsUpdate] {
 
+  private val FirstRule = org.ergoplatform.validation.ValidationRules.FirstRuleId
+
   override def serialize(obj: ErgoValidationSettingsUpdate, w: Writer): Unit = {
     val sigmaWriter = new SigmaByteWriter(w, None)
-    w.putInt(obj.rulesToDisable.length)
+    w.putUInt(obj.rulesToDisable.length)
     obj.rulesToDisable.foreach { r =>
       w.putUShort(r)
     }
 
-    w.putInt(obj.statusUpdates.length)
+    w.putUInt(obj.statusUpdates.length)
     obj.statusUpdates.foreach { r =>
-      w.putUShort(r._1)
+      w.putUShort(r._1 - FirstRule)
       RuleStatusSerializer.serialize(r._2, sigmaWriter)
     }
   }
 
   override def parse(r: Reader): ErgoValidationSettingsUpdate = {
     val sigmaReader = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
-    val disabledRulesNum = r.getInt()
+    val disabledRulesNum = r.getUInt().toInt
     val disabledRules = (0 until disabledRulesNum).map { _ =>
       r.getUShort().toShort
     }
-    val statusUpdatesNum = r.getInt()
+    val statusUpdatesNum = r.getUInt().toInt
     val parsed = (0 until statusUpdatesNum).map { _ =>
-      val ruleId = r.getUShort().toShort
+      val ruleId = (r.getUShort() + FirstRule).toShort
       val status = RuleStatusSerializer.parse(sigmaReader)
       ruleId -> status
     }

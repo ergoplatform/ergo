@@ -9,13 +9,12 @@ import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.PoPowAlgos.{packInterlinks, unpackInterlinks, updateInterlinks}
+import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector}
@@ -167,6 +166,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
           .map(updateInterlinks(h, _))
       }
       .getOrElse(Seq.empty)
+    val interlinksExtension = interlinksToExtension(interlinks)
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = lastHeaderOpt.map { header =>
       val newHeight = header.height + 1
@@ -180,15 +180,15 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
 
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
         val (newParams, _) = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, emptyVSUpdate, votingSettings)
-        (newParams.toExtensionCandidate(packInterlinks(interlinks)),
+        ((newParams.toExtensionCandidate() ++ interlinksExtension),
           newParams.suggestVotes(settings.votingTargets.targets, voteForFork),
           newParams.blockVersion)
       } else {
-        (ExtensionCandidate(packInterlinks(interlinks)),
+        (interlinksToExtension(interlinks),
           currentParams.vote(settings.votingTargets.targets, stateContext.votingData.epochVotes, voteForFork),
           currentParams.blockVersion)
       }
-    }.getOrElse((ExtensionCandidate(packInterlinks(interlinks)), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
+    }.getOrElse((interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
     val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, cs.emissionRules)
     val txs = emissionTxOpt.toSeq ++ txsFromPool
@@ -211,9 +211,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
         val minerTag = scorex.utils.Random.randomBytes(Extension.FieldKeySize)
         proveCandidate {
           candidate.copy(
-            extension = ExtensionCandidate(
-              Seq(Array(0: Byte, 2: Byte) -> minerTag) ++ PoPowAlgos.packInterlinks(interlinks)
-            )
+            extension = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> minerTag)) ++ PoPowAlgos.interlinksToExtension(interlinks)
           )
         }
     }

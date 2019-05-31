@@ -5,7 +5,7 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.PoPowAlgos.{packInterlinks, updateInterlinks}
+import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
@@ -48,7 +48,7 @@ trait ValidBlocksGenerators
     validTransactionsFromBoxes(sizeLimit, stateBoxesIn, Seq(), rnd)
   }
 
-    /** @param sizeLimit maximum transactions size in bytes */
+  /** @param sizeLimit maximum transactions size in bytes */
   protected def validTransactionsFromBoxes(sizeLimit: Int,
                                            stateBoxesIn: Seq[ErgoBox],
                                            dataBoxesIn: Seq[ErgoBox],
@@ -192,7 +192,7 @@ trait ValidBlocksGenerators
     val interlinks = parentOpt.toSeq.flatMap { block =>
       PoPowAlgos.updateInterlinks(block.header, PoPowAlgos.unpackInterlinks(block.extension.fields).get)
     }
-    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(PoPowAlgos.packInterlinks(interlinks)) ++
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate() ++ interlinksToExtension(interlinks) ++
       utxoState.stateContext.validationSettings.toExtensionCandidate()
     val votes = Array.fill(3)(0: Byte)
 
@@ -216,8 +216,8 @@ trait ValidBlocksGenerators
     val (adProofBytes, updStateDigest) = wrappedState.proofsForTransactions(transactions).get
 
     val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
-    val packedInterlinks = packInterlinks(updateInterlinks(parentOpt, parentExtensionOpt))
-    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(packedInterlinks)
+    val interlinksExtension = interlinksToExtension(updateInterlinks(parentOpt, parentExtensionOpt))
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate() ++ interlinksExtension
     val votes = Array.fill(3)(0: Byte)
 
     powScheme.proveBlock(parentOpt, Header.CurrentVersion, settings.chainSettings.initialNBits, updStateDigest,

@@ -60,9 +60,9 @@ class ErgoStateContextSpec extends HistoryTestHelpers {
     sc.appendFullBlock(fbWithFields(imvValue +: oldFields), votingSettings) shouldBe 'failure
 
     // validation of incorrect interlinks
-    val invalidInterlinks = PoPowAlgos.packInterlinks(
+    val invalidInterlinks = PoPowAlgos.interlinksToExtension(
       PoPowAlgos.unpackInterlinks(fb.extension.fields).get ++ Seq(fb.header.id)
-    )
+    ).fields
     sc.appendFullBlock(fbWithFields(invalidInterlinks ++ oldFields), votingSettings) shouldBe 'failure
 
     // validation of key duplicates in fields

@@ -97,6 +97,22 @@ sourceGenerators in Compile += Def.task {
   Seq(versionFile)
 }
 
+resourceGenerators in Compile += Def.task {
+  val confName = buildEnv.value match {
+    case BuildEnv.MainNet => "mainnet.conf"
+    case BuildEnv.TestNet => "testnet.conf"
+    case BuildEnv.DevNet =>  "devnet.conf"
+  }
+  val confFile = (resourceDirectory in Compile).value / confName
+  val targetFile = (resourceManaged in Compile).value / "application.conf"
+  IO.copyFile(confFile, targetFile)
+  Seq(targetFile)
+}
+
+mappings in Compile := Seq(
+  ((resourceManaged in Compile).value / "application.conf") -> "application.conf"
+)
+
 mainClass in assembly := Some("org.ergoplatform.ErgoApp")
 
 test in assembly := {}
@@ -113,20 +129,12 @@ assemblyJarName in assembly := {
 assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first
   case "module-info.class" => MergeStrategy.discard
+  case "reference.conf" => CustomMergeStrategy.concatReversed
   case other => (assemblyMergeStrategy in assembly).value(other)
 }
 
 enablePlugins(sbtdocker.DockerPlugin)
 enablePlugins(JavaAppPackaging)
-
-mappings in Universal += {
-  val confFile = buildEnv.value match {
-    case BuildEnv.MainNet => "mainnet.conf"
-    case BuildEnv.TestNet => "testnet.conf"
-    case BuildEnv.DevNet =>  "devnet.conf"
-  }
-  ((resourceDirectory in Compile).value / confFile) -> "bin/application.conf"
-}
 
 // removes all jar mappings in universal and appends the fat jar
 mappings in Universal ++= {
@@ -140,9 +148,6 @@ mappings in Universal ++= {
   // add the fat jar
   filtered :+ (fatJar -> ("lib/" + fatJar.getName))
 }
-
-// add jvm parameter for typesafe config
-bashScriptExtraDefines += """addJava "-Dconfig.file=${app_home}/application.conf""""
 
 inConfig(Linux)(
   Seq(

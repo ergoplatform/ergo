@@ -23,15 +23,13 @@ val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION"
 libraryDependencies ++= Seq(
   ("org.ergoplatform" %% "ergo-wallet" % ergoWalletVersion)
     .exclude("ch.qos.logback", "logback-classic"),
-  ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)
+  ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion).force()
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   ("org.scorexfoundation" %% "avl-iodb" % "0.2.15").exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "iodb" % "0.3.2",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
-
-//  "org.ergoplatform" %% "ergo-wallet" % "0.2-R1-SNAPSHOT",
 
   "org.typelevel" %% "cats-free" % "1.6.0",
   "javax.xml.bind" % "jaxb-api" % "2.+",

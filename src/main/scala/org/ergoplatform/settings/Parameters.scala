@@ -195,14 +195,14 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int], val pr
     padVotes(if (voteForFork) vs :+ SoftFork else vs)
   }
 
-  def toExtensionCandidate(otherFields: Seq[(Array[Byte], Array[Byte])]): ExtensionCandidate = {
+  def toExtensionCandidate(): ExtensionCandidate = {
     val paramFields = parametersTable.toSeq.map { case (k, v) =>
       Array(SystemParametersPrefix, k) -> Ints.toByteArray(v)
     }
     val rulesToDisableFields: Seq[(Array[Byte], Array[Byte])] = {
       Seq(SoftForkDisablingRulesKey -> ErgoValidationSettingsUpdateSerializer.toBytes(proposedUpdate))
     }
-    ExtensionCandidate(paramFields ++ otherFields ++ rulesToDisableFields)
+    ExtensionCandidate(paramFields ++ rulesToDisableFields)
   }
 
   override def toString: String = s"Parameters(height: $height; ${parametersTable.mkString("; ")}; $proposedUpdate)"

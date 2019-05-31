@@ -12,7 +12,7 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -279,7 +279,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       .map(parent => history.requiredDifficultyAfter(parent))
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(ergoSettings.chainSettings.initialNBits)
-    val packedInterlinks = packInterlinks(updateInterlinks(bestHeaderOpt, bestExtensionOpt))
+    val interlinksExtension = PoPowAlgos.interlinksToExtension(updateInterlinks(bestHeaderOpt, bestExtensionOpt))
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt.map { header =>
       val newHeight = header.height + 1
@@ -294,15 +294,15 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
         val (newParams, activatedUpdate) = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, proposedUpdate, votingSettings)
         val newValidationSettings = stateContext.validationSettings.updated(activatedUpdate)
-        (newParams.toExtensionCandidate(packedInterlinks) ++ newValidationSettings.toExtensionCandidate(),
+        (newParams.toExtensionCandidate() ++ interlinksExtension ++ newValidationSettings.toExtensionCandidate(),
           newParams.suggestVotes(ergoSettings.votingTargets.targets, voteForFork),
           newParams.blockVersion)
       } else {
-        (ExtensionCandidate(packedInterlinks),
+        (interlinksExtension,
           currentParams.vote(ergoSettings.votingTargets.targets, stateContext.votingData.epochVotes, voteForFork),
           currentParams.blockVersion)
       }
-    }.getOrElse((ExtensionCandidate(packedInterlinks), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
+    }.getOrElse((interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
     val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, proposedUpdate, version)
     //only transactions valid from against the current utxo state we take from the mem pool

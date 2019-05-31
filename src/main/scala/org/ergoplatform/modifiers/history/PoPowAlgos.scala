@@ -64,6 +64,10 @@ object PoPowAlgos {
     loop(links.zipWithIndex.toList, Seq.empty)
   }
 
+  @inline def interlinksToExtension(links: Seq[ModifierId]): ExtensionCandidate = {
+    ExtensionCandidate(packInterlinks(links))
+  }
+
   /**
     * Unpacks interlinks from key-value format of extension.
     */

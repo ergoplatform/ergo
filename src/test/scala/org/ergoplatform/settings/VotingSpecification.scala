@@ -31,7 +31,7 @@ class VotingSpecification extends ErgoPropertyTest {
   }
   val initialVs: ErgoValidationSettings = ctx.validationSettings
   val extensionWithAllParams: ExtensionCandidate = {
-    LaunchParameters.toExtensionCandidate(initialVs.toExtensionCandidate().fields)
+    LaunchParameters.toExtensionCandidate() ++ initialVs.toExtensionCandidate()
   }
 
   property("correct rule ids") {
@@ -70,7 +70,7 @@ class VotingSpecification extends ErgoPropertyTest {
     }
     val invalidExtBlock2 = { // extension contains redundant parameter
       lastBlock.copy(extension = lastBlock.extension.copy(
-        fields = LaunchParameters.toExtensionCandidate(Seq.empty).fields :+ Array(0: Byte, 99: Byte) -> Array.fill(4)(2: Byte))
+        fields = LaunchParameters.toExtensionCandidate().fields :+ Array(0: Byte, 99: Byte) -> Array.fill(4)(2: Byte))
       )
     }
     val invalidExtBlock3 = { // extension does not contain params at all
@@ -352,13 +352,9 @@ class VotingSpecification extends ErgoPropertyTest {
     }
   }
 
-  private def toExtension(p: Parameters, vs: ErgoValidationSettings): Extension = {
-    p.toExtensionCandidate(vs.toExtensionCandidate().fields).toExtension(headerId)
-  }
-
   private def process(esc: ErgoStateContext, p: Parameters, h2: Header): Try[ErgoStateContext] = {
     val upcoming = esc.upcoming(h2.minerPk, h2.timestamp, h2.nBits, h2.votes, proposedUpdate, h2.version)
-    val extension = p.toExtensionCandidate(upcoming.validationSettings.toExtensionCandidate().fields).toExtension(headerId)
+    val extension = (p.toExtensionCandidate() ++ upcoming.validationSettings.toExtensionCandidate()).toExtension(headerId)
     esc.process(h2, Some(extension))
   }
 }

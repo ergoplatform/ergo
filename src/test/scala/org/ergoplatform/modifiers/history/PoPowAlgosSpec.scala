@@ -32,8 +32,8 @@ class PoPowAlgosSpec extends PropSpec with Matchers with ChainGenerator with Erg
     val diffInterlinks = Gen.listOfN(255, modifierIdGen).sample.get
     val modId = modifierIdGen.sample.get
     val sameInterlinks = List.fill(255)(modId)
-    val packedDiff = PoPowAlgos.packInterlinks(diffInterlinks)
-    val packedSame = PoPowAlgos.packInterlinks(sameInterlinks)
+    val packedDiff = PoPowAlgos.interlinksToExtension(diffInterlinks).fields
+    val packedSame = PoPowAlgos.interlinksToExtension(sameInterlinks).fields
 
     packedDiff.map(_._1.last).toSet.size shouldEqual diffInterlinks.size
     packedSame.map(_._1.last).toSet.size shouldEqual 1
@@ -41,7 +41,7 @@ class PoPowAlgosSpec extends PropSpec with Matchers with ChainGenerator with Erg
 
   property("unpackInterlinks") {
     val interlinks = Gen.listOfN(255, modifierIdGen).sample.get
-    val packed = PoPowAlgos.packInterlinks(interlinks)
+    val packed = PoPowAlgos.interlinksToExtension(interlinks).fields
     val improperlyPacked = packed.map(x => x._1 -> (x._2 :+ (127: Byte)))
 
     val unpackedTry = unpackInterlinks(packed)

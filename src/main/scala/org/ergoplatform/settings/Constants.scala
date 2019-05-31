@@ -54,4 +54,9 @@ object Constants {
   val FalseLeaf: ErgoTree = Values.FalseLeaf.toSigmaProp
 
   val StringEncoding = "UTF-8"
+
+  // Maximum extension size
+  val MaxExtensionSize: Int = 32 * 1024
+  // Maximum extension size during bytes parsing. Allows to move MaxExtensionSize to Parameters in future
+  val MaxExtensionSizeMax: Int = 1024 * 1024
 }

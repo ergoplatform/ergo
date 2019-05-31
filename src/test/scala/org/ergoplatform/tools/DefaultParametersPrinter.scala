@@ -10,7 +10,7 @@ object DefaultParametersPrinter extends App {
       |Id & Description & Default & Step & Min & Max \\
       |\hline
     """.stripMargin +
-      parametersDescs.map { case (id, desc) =>
+      parametersDescs.map { case (id, (_, desc)) =>
         val defaultOpt = parametersTable.get(id)
         val stepOpt = stepsTable.get(id)
         val minValue = minValues.get(id)

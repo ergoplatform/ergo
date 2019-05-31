@@ -13,6 +13,7 @@ import scorex.util.Extensions._
 import scala.util.Try
 import Extension.SystemParametersPrefix
 import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
+import scorex.core.block.Block.Version
 
 /**
   * System parameters which could be readjusted via collective miners decision.
@@ -21,6 +22,12 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int], val pr
   extends ErgoLikeParameters {
 
   import Parameters._
+
+  /**
+    * Set of parameters that are activated at current version of the block
+    */
+  private lazy val currentVersionTable: Map[Byte, Int] = parametersTable
+    .filter(p => Parameters.parametersDescs.get(p._1).map(_._1).getOrElse(Byte.MaxValue) <= blockVersion)
 
   /**
     * Cost of storing 1 byte per Constants.StoragePeriod blocks, in nanoErgs.
@@ -299,18 +306,22 @@ object Parameters {
     BlockVersion -> 1
   )
 
-  val parametersDescs: Map[Byte, String] = Map(
-    StorageFeeFactorIncrease -> "Storage fee factor (per byte per storage period)",
-    MinValuePerByteIncrease -> "Minimum monetary value of a box",
-    MaxBlockSizeIncrease -> "Maximum block size",
-    MaxExtensionSizeIncrease -> "Maximum extension size",
-    MaxBlockCostIncrease -> "Maximum cumulative computational cost of a block",
-    SoftFork -> "Soft-fork (increasing version of a block)",
-    TokenAccessCostIncrease -> "Token access cost",
-    InputCostIncrease -> "Cost per one transaction input",
-    DataInputCostIncrease -> "Cost per one data input",
-    OutputCostIncrease -> "Cost per one transaction output"
+  /**
+    * Map from parameter id to it's description and block version when it was introduced
+    */
+  val parametersDescs: Map[Byte, (Version, String)] = Map(
+    StorageFeeFactorIncrease -> (1.toByte, "Storage fee factor (per byte per storage period)"),
+    MinValuePerByteIncrease -> (1.toByte, "Minimum monetary value of a box"),
+    MaxBlockSizeIncrease -> (1.toByte, "Maximum block size"),
+    MaxBlockCostIncrease -> (1.toByte, "Maximum cumulative computational cost of a block"),
+    SoftFork -> (1.toByte, "Soft-fork (increasing version of a block)"),
+    TokenAccessCostIncrease -> (1.toByte, "Token access cost"),
+    InputCostIncrease -> (1.toByte, "Cost per one transaction input"),
+    DataInputCostIncrease -> (1.toByte, "Cost per one data input"),
+    OutputCostIncrease -> (1.toByte, "Cost per one transaction output"),
+    MaxExtensionSizeIncrease -> (2.toByte, "Maximum extension size")
   )
+
 
   val stepsTable: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorStep,
@@ -366,14 +377,14 @@ object Parameters {
     if (p1.height != p2.height) {
       throw new Exception(s"Different height in parameters, p1 = $p1, p2 = $p2")
     }
-    if (p1.parametersTable.size != p2.parametersTable.size) {
+    if (p1.currentVersionTable.size != p2.currentVersionTable.size) {
       throw new Exception(s"Parameters differ in size, p1 = $p1, p2 = $p2")
     }
     if (p1.proposedUpdate != p2.proposedUpdate) {
       throw new Exception(s"Parameters proposedUpdate differs, p1 = ${p1.proposedUpdate}, p2 = ${p2.proposedUpdate}")
     }
-    p1.parametersTable.foreach { case (k, v) =>
-      val v2 = p2.parametersTable(k)
+    p1.currentVersionTable.foreach { case (k, v) =>
+      val v2 = p2.currentVersionTable(k)
       if (v2 != v) throw new Exception(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
     }
   }

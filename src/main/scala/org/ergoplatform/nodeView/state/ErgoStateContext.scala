@@ -125,6 +125,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val height = header.height
     val parsedParamsTry = Parameters.parseExtension(height, extension)
     val parsedValidationTry = ErgoValidationSettings.parseExtension(extension)
+    val (calculatedParams, disabled) = currentParameters
+      .update(height, forkVote, votingData.epochVotes, currentParameters.proposedUpdate, votingSettings)
 
     validationState
       .validateNoFailure(exParseParameters, parsedParamsTry)
@@ -132,8 +134,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       .validateTry(parsedParamsTry, e => ModifierValidator.fatal("Failed to parse parameters", e)) {
         case (currentValidationState, parsedParams) =>
 
-          val (calculatedParams, disabled) = currentParameters
-            .update(height, forkVote, votingData.epochVotes, parsedParams.proposedUpdate, votingSettings)
           val calculatedSettings = validationSettings.updated(disabled)
 
           currentValidationState

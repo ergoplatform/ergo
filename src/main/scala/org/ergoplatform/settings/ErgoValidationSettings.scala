@@ -12,8 +12,9 @@ import scala.util.Try
 /**
   * Ergo configuration of validation.
   *
-  * Specifies the strategy to by used (fail-fast) and
-  * validation rules with their statuses
+  * Specifies the strategy to be used (fail-fast) and validation rules with their statuses.
+  * Contains delta from the initial validation rules `updateFromInitial` as well as calculated current rules,
+  * that might also be computed by applying `updateFromInitial` to `ErgoValidationSettings.initial`
   *
   * @param rules             - map from rule id to it's current status
   * @param sigmaSettings     - validation settings of sigma script
@@ -78,6 +79,10 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
 
   override def serializer: ScorexSerializer[ErgoValidationSettings] = ErgoValidationSettingsSerializer
 
+  /**
+    * We only cares about `updateFromInitial`, as far as `rules` and `sigmaSettings` may be
+    * deterministically computed from it and initial validation settings.
+    */
   override def equals(obj: Any): Boolean = obj match {
     case p: ErgoValidationSettings => p.updateFromInitial == updateFromInitial
     case _ => false
@@ -90,7 +95,7 @@ object ErgoValidationSettings {
 
   /**
     * Initial validation settings.
-    * To be used during genesis state creation or to perform checks that are not allowed
+    * To be used during genesis state creation or to perform static checks that are not allowed
     * to be deactivated via soft-forks.
     */
   val initial: ErgoValidationSettings = new ErgoValidationSettings(ValidationRules.rulesSpec,

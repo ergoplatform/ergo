@@ -21,6 +21,7 @@ object ErgoValidationSettingsUpdate {
 }
 
 object ErgoValidationSettingsUpdateSerializer extends ScorexSerializer[ErgoValidationSettingsUpdate] {
+
   override def serialize(obj: ErgoValidationSettingsUpdate, w: Writer): Unit = {
     val sigmaWriter = new SigmaByteWriter(w, None)
     w.putInt(obj.rulesToDisable.length)

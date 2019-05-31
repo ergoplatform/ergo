@@ -2,6 +2,7 @@ package org.ergoplatform.settings
 
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
+import org.ergoplatform.settings.ValidationRules.rulesSpec
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.validation.{DisabledRule, ReplacedRule, ValidationRules => VR}
 import scorex.crypto.authds.ADDigest
@@ -31,6 +32,12 @@ class VotingSpecification extends ErgoPropertyTest {
   val initialVs: ErgoValidationSettings = ctx.validationSettings
   val extensionWithAllParams: ExtensionCandidate = {
     LaunchParameters.toExtensionCandidate(initialVs.toExtensionCandidate().fields)
+  }
+
+  property("correct rule ids") {
+    rulesSpec foreach { r =>
+      r._1 < org.ergoplatform.validation.ValidationRules.FirstRuleId shouldBe true
+    }
   }
 
   property("ErgoValidationSettings toExtension/fromExtension roundtrip") {

@@ -194,7 +194,6 @@ object ValidationRules {
       mayBeDisabled = true)
   )
 
-
   // stateless transaction validation
   val txNoInputs: Short = 100
   val txNoOutputs: Short = 101

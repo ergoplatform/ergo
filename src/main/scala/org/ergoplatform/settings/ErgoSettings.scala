@@ -55,7 +55,7 @@ object ErgoSettings extends ScorexLogging
     val directory = config.as[String](s"$configPath.directory")
 
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
-    val bootstrappingSettingsOpt = config.as[Option[BootstrapSettings]](s"$configPath.bootstrapping")
+    val bootstrappingSettingsOpt = config.as[Option[BootstrapSettings]](s"$configPath.bootstrap")
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
     val testingSettings = config.as[TestingSettings](s"$configPath.testing")
     val walletSettings = config.as[WalletSettings](s"$configPath.wallet")

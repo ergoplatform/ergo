@@ -136,6 +136,11 @@ assemblyMergeStrategy in assembly := {
 enablePlugins(sbtdocker.DockerPlugin)
 enablePlugins(JavaAppPackaging)
 
+mappings in Universal += {
+  val sampleFile = (resourceDirectory in Compile).value / "samples" / "local.conf.sample"
+  sampleFile -> "conf/local.conf"
+}
+
 // removes all jar mappings in universal and appends the fat jar
 mappings in Universal ++= {
   // universalMappings: Seq[(File,String)]
@@ -148,6 +153,9 @@ mappings in Universal ++= {
   // add the fat jar
   filtered :+ (fatJar -> ("lib/" + fatJar.getName))
 }
+
+// add jvm parameter for typesafe config
+bashScriptExtraDefines += """addJava "-Dconfig.file=${app_home}/../conf/local.conf""""
 
 inConfig(Linux)(
   Seq(

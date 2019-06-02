@@ -78,7 +78,7 @@ Two more features of Ergo shaping contracting possibilities are:
     \end{algorithmic}
  \end{algorithm}
 
- This contract shows how a singleton token could be used for authentification. As a possible alternative, the oracle
+ This contract shows how a singleton token could be used for authentication. As a possible alternative, the oracle
  can put the time and temperature into a box along with a signature on this data. However, this requires signature verification, which is more complex and expensive compared to
  the singleton token approach. Also, the contract shows how read-only data inputs could be useful for contracts which need to access data stored in some other box in the state. Without data inputs, an oracle must issue one spendable box for each
  pair of Alice and Bob. With data inputs, the oracle issues only a single box.
@@ -89,7 +89,7 @@ Two more features of Ergo shaping contracting possibilities are:
  Privacy is important for a digital currency but implementing it can be costly or require a trusted setup. Thus, it is desirable to find a cheaper way for coin mixing. As a first step towards that, we offer a non-interactive mixing protocol between two users Alice and Bob that works as follows:
  \begin{enumerate}
     \item{} Alice creates a box which demands the spending transaction to satisfy certain conditions. After that, Alice only listens to the blockchain; no interaction with Bob is needed.
-    \item{} Bob creates a transaction spending Alice's box along with one of his own to generate two outputs having identical scripts but different data. Each of Alice and Bob may spend only one of the two outputs but to an external observer the two outputs look indistinguishable and he cannot decide which output belongs to whom.
+    \item{} Bob creates a transaction spending Alice's box along with one of his own to generate two outputs having identical scripts but different data. Each of Alice and Bob may spend only one of the two outputs but an observer decide which output belongs to whom because they look indistinguishable.
  \end{enumerate}
 
  For simplicity, we do not consider fee in the example. The idea of mixing is similar to non-interactive Diffie-Hellman key exchange. First, Alice generates a secret value $x$~(a huge number) and publishes the corresponding public value $gX = g^x$. She requires Bob to generate a secret number $y$, and to include into each output two

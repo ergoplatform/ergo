@@ -244,6 +244,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         case None =>
           Future.failed(new Exception("Invalid miner state"))
       }
+      log.debug(s"Processed solution $solution with the result result $result")
       if (externalMinerMode) sender() ! result
   }
 

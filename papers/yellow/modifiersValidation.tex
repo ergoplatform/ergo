@@ -17,8 +17,8 @@ voting via soft forks, while new rules may also be added at the same time.
 
 \begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{1.0cm}|p{2.5cm}| }
     \hline
-    Id & Validation rule & Soft-forkable & Active & Modifiers \\
-    \hline
+Id & Validation rule & Soft-forkable & Active & Modifiers \\
+\hline
     100 & A transaction should have at least one input. & \xmark & \cmark & ErgoTransaction \\
     \hline
     101 & A transaction should have at least one output. & \xmark & \cmark & ErgoTransaction \\
@@ -51,7 +51,7 @@ voting via soft forks, while new rules may also be added at the same time.
     \hline
     116 & Amount of Ergs in inputs should be equal to amount of Erg in outputs. & \xmark & \cmark & ErgoTransaction \\
     \hline
-    117 & For every token, its amount in inputs should not exceed its amount in outputs. & \xmark & \cmark & ErgoTransaction \\
+    117 & For every token, its amount in outputs should not exceed its amount in inputs. & \xmark & \cmark & ErgoTransaction \\
     \hline
     119 & Scripts of all transaction inputs should pass verification. & \xmark & \cmark & ErgoTransaction \\
     \hline
@@ -63,8 +63,8 @@ voting via soft forks, while new rules may also be added at the same time.
 
 \begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{1.0cm}|p{2.5cm}| }
     \hline
-    Id & Validation rule & Soft-forkable & Active & Modifiers \\
-    \hline
+Id & Validation rule & Soft-forkable & Active & Modifiers \\
+\hline
     200 & Genesis header should have genesis parent id. & \xmark & \cmark & Header \\
     \hline
     201 & Genesis header id should be equal to id from the config. & \xmark & \cmark & Header \\
@@ -99,9 +99,9 @@ voting via soft forks, while new rules may also be added at the same time.
 
 \begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{1.0cm}|p{2.5cm}| }
     \hline
-    Id & Validation rule & Soft-forkable & Active & Modifiers \\
-    \hline
-    300 & A modifier should not be applied yet. & \xmark & \cmark & Header, ADProofs, Extension, BlockTransactions \\
+Id & Validation rule & Soft-forkable & Active & Modifiers \\
+\hline
+    300 & Double application of a modifier is prohibited. & \xmark & \cmark & Header, ADProofs, Extension, BlockTransactions \\
     \hline
     302 & Block sections should correspond to the declared header. & \xmark & \cmark & ADProofs, Extension, BlockTransactions \\
     \hline
@@ -121,8 +121,8 @@ voting via soft forks, while new rules may also be added at the same time.
 
 \begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{1.0cm}|p{2.5cm}| }
     \hline
-    Id & Validation rule & Soft-forkable & Active & Modifiers \\
-    \hline
+Id & Validation rule & Soft-forkable & Active & Modifiers \\
+\hline
     400 & Size of extension section should not exceed 32768. & \cmark & \cmark & Extension \\
     \hline
     401 & Interlinks should be packed properly. & \cmark & \cmark & Extension \\
@@ -137,7 +137,7 @@ voting via soft forks, while new rules may also be added at the same time.
     \hline
     406 & Extension of non-genesis block should not be empty. & \cmark & \cmark & Extension \\
     \hline
-    407 & Voting for fork may only be done after activation period of a previous soft-fork voting. & \cmark & \cmark & Extension \\
+    407 & Voting for fork could be started only after activation period of a previous soft-fork. & \cmark & \cmark & Extension \\
     \hline
     408 & At the beginning of the epoch, the extension should contain correctly packed parameters. & \cmark & \cmark & Extension \\
     \hline
@@ -157,8 +157,8 @@ voting via soft forks, while new rules may also be added at the same time.
 
 \begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{1.0cm}|p{2.5cm}| }
     \hline
-    Id & Validation rule & Soft-forkable & Active & Modifiers \\
-    \hline
+Id & Validation rule & Soft-forkable & Active & Modifiers \\
+\hline
     500 & Operations against the state AVL+ tree should be successful. & \xmark & \cmark & ErgoFullBlock \\
     \hline
     501 & Calculated AVL+ digest should be equal to one written in the block header. & \xmark & \cmark & ErgoFullBlock \\

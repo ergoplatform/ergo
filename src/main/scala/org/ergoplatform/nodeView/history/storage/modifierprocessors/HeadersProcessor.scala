@@ -20,7 +20,6 @@ import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSt
 import scorex.util._
 
 import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.util.Try
 
 /**

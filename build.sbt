@@ -15,11 +15,11 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "e1142a21-SNAPSHOT"
-val sigmaStateVersion = "v2.1-b5a50364-SNAPSHOT"
+val sigmaStateVersion = "validation-settings-serializer-1846f6c2-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
-val ergoWalletVersion = "v2.1-b620fbf2-SNAPSHOT"
+val ergoWalletVersion = "soft-forkability2-b2b1b341-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)

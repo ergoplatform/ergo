@@ -18,11 +18,13 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
   * represented as Seq[(Array[Byte], Array[Byte])] with mandatory and optional fields.
   *
   * @param headerId - id of corresponding header
-  * @param fields - fields as a sequence of key -> value records. A key is 2-bytes long, value is 64 bytes max.
+  * @param fields   - fields as a sequence of key -> value records. A key is 2-bytes long, value is 64 bytes max.
   */
 case class Extension(headerId: ModifierId,
-                     fields: Seq[(Array[Byte], Array[Byte])],
-                     override val sizeOpt: Option[Int] = None) extends BlockSection {
+                     override val fields: Seq[(Array[Byte], Array[Byte])],
+                     override val sizeOpt: Option[Int] = None)
+  extends ExtensionCandidate(fields) with BlockSection {
+
   override val modifierTypeId: ModifierTypeId = Extension.modifierTypeId
 
   override def digest: Digest32 = Extension.rootHash(fields)
@@ -38,21 +40,28 @@ case class Extension(headerId: ModifierId,
 
 }
 
-case class ExtensionCandidate(fields: Seq[(Array[Byte], Array[Byte])]) {
+/**
+  * Extension block section with not filled header id
+  */
+class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
   def toExtension(headerId: ModifierId): Extension = Extension(headerId, fields)
+
+  def ++(that: ExtensionCandidate): ExtensionCandidate = ExtensionCandidate(fields ++ that.fields)
+}
+
+object ExtensionCandidate {
+  def apply(fields: Seq[(Array[Byte], Array[Byte])]): ExtensionCandidate = new ExtensionCandidate(fields)
 }
 
 object Extension extends ApiCodecs {
 
   val FieldKeySize: Int = 2
+  val FieldValueMaxSize: Int = 64
 
   //predefined key prefixes
   val SystemParametersPrefix: Byte = 0x00
   val InterlinksVectorPrefix: Byte = 0x01
-
-  val FieldValueMaxSize: Int = 64
-
-  def apply(header: Header): Extension = Extension(header.id, Seq())
+  val ValidationRulesPrefix: Byte = 0x02
 
   def rootHash(e: Extension): Digest32 = rootHash(e.fields)
 
@@ -99,15 +108,14 @@ object ExtensionSerializer extends ScorexSerializer[Extension] {
     val startPosition = r.position
     val headerId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val fieldsSize = r.getUShort()
-    val fieldsView = (1 to fieldsSize).toStream.map {_ =>
+    val fieldsView = (1 to fieldsSize).toStream.map { _ =>
       val key = r.getBytes(Extension.FieldKeySize)
       val length = r.getUByte()
-      require(length <= Extension.FieldValueMaxSize, "value size should be <= " + Extension.FieldValueMaxSize)
       val value = r.getBytes(length)
       (key, value)
     }
-    val fields = fieldsView.takeWhile(_ => r.position - startPosition < Constants.ExtensionMaxSize)
-    require(r.position - startPosition < Constants.ExtensionMaxSize)
+    val fields = fieldsView.takeWhile(_ => r.position - startPosition < Constants.MaxExtensionSizeMax)
+    require(r.position - startPosition < Constants.MaxExtensionSizeMax)
     Extension(headerId, fields, Some(r.position - startPosition))
   }
 

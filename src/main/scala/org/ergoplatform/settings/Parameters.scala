@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import com.google.common.primitives.{Ints, Shorts}
+import com.google.common.primitives.Ints
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.api.ApiCodecs
@@ -190,7 +190,7 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int], val pr
     padVotes(if (voteForFork) vs :+ SoftFork else vs)
   }
 
-  def toExtensionCandidate(): ExtensionCandidate = {
+  def toExtensionCandidate: ExtensionCandidate = {
     val paramFields = parametersTable.toSeq.map { case (k, v) =>
       Array(SystemParametersPrefix, k) -> Ints.toByteArray(v)
     }

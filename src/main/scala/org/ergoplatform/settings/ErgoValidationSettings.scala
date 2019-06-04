@@ -64,7 +64,7 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
   /**
     * Generates extension candidate with serialized ErgoValidationSettings in it
     */
-  def toExtensionCandidate(): ExtensionCandidate = {
+  def toExtensionCandidate: ExtensionCandidate = {
     if (isInitial) {
       ExtensionCandidate(Seq())
     } else {

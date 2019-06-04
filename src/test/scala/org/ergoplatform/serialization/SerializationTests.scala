@@ -90,7 +90,7 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
       // to bytes / from bytes
       serializer.parseBytes(serializer.toBytes(vs)) shouldEqual vs
       // to extension / from extension
-      ErgoValidationSettings.parseExtension(vs.toExtensionCandidate()).get shouldEqual vs
+      ErgoValidationSettings.parseExtension(vs.toExtensionCandidate).get shouldEqual vs
     }
   }
 

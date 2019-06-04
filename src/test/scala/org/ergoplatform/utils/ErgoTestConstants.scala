@@ -28,7 +28,6 @@ import scala.concurrent.duration._
 
 trait ErgoTestConstants extends ScorexLogging {
 
-
   implicit val votingSettings: VotingSettings = VotingSettings(1024, 32, 128)
   val validationSettings: ErgoValidationSettings = ErgoValidationSettings.initial
   implicit val validationSettingsNoIl: ErgoValidationSettings = validationSettings

@@ -192,8 +192,8 @@ trait ValidBlocksGenerators
     val interlinks = parentOpt.toSeq.flatMap { block =>
       PoPowAlgos.updateInterlinks(block.header, PoPowAlgos.unpackInterlinks(block.extension.fields).get)
     }
-    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate() ++ interlinksToExtension(interlinks) ++
-      utxoState.stateContext.validationSettings.toExtensionCandidate()
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate ++ interlinksToExtension(interlinks) ++
+      utxoState.stateContext.validationSettings.toExtensionCandidate
     val votes = Array.fill(3)(0: Byte)
 
     powScheme.proveBlock(parentOpt.map(_.header), Header.CurrentVersion, settings.chainSettings.initialNBits, updStateDigest, adProofBytes,
@@ -217,7 +217,7 @@ trait ValidBlocksGenerators
 
     val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
     val interlinksExtension = interlinksToExtension(updateInterlinks(parentOpt, parentExtensionOpt))
-    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate() ++ interlinksExtension
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate ++ interlinksExtension
     val votes = Array.fill(3)(0: Byte)
 
     powScheme.proveBlock(parentOpt, Header.CurrentVersion, settings.chainSettings.initialNBits, updStateDigest,

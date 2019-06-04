@@ -180,7 +180,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
 
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
         val (newParams, _) = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, emptyVSUpdate, votingSettings)
-        ((newParams.toExtensionCandidate() ++ interlinksExtension),
+        (newParams.toExtensionCandidate ++ interlinksExtension,
           newParams.suggestVotes(settings.votingTargets.targets, voteForFork),
           newParams.blockVersion)
       } else {

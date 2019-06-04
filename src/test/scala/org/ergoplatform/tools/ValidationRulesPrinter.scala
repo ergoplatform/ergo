@@ -5,7 +5,6 @@ import scorex.util.ScorexLogging
 
 object ValidationRulesPrinter extends App with ScorexLogging {
 
-
   val rules = ValidationRules.rulesSpec
 
   println("\\textbf{Transaction validation:}\n\n")

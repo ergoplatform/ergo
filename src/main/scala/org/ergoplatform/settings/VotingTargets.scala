@@ -5,6 +5,7 @@ import net.ceedubs.ficus.Ficus._
 import org.ergoplatform.settings.ErgoSettings.configPath
 
 import scala.collection.JavaConverters._
+import scala.util.Try
 
 /**
   * Local miner settings to determine, how to vote
@@ -21,14 +22,13 @@ object VotingTargets {
   val empty: VotingTargets = VotingTargets(Map(), ErgoValidationSettingsUpdate.empty)
 
   def fromConfig(config: Config): VotingTargets = {
-    val toDisable = config.as[Array[Int]](s"$configPath.voting.${Parameters.SoftForkDisablingRules}")
     val votingObject = config.getObject(s"$configPath.voting")
+    val toDisable = config.getConfig(s"$configPath.voting").as[Array[Int]](s"rulesToDisable")
 
     val parameterTargets = votingObject
       .keySet()
       .asScala
-      .filter(_.toByte != Parameters.SoftForkDisablingRules)
-      .map(id => id.toByte -> votingObject.get(id).render().toInt)
+      .flatMap(id => Try(id.toByte -> votingObject.get(id).render().toInt).toOption)
       .toMap
     val desiredUpdate = ErgoValidationSettingsUpdate(toDisable.map(_.toShort), Seq())
 

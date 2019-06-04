@@ -48,10 +48,10 @@ object ValidationRules {
     txAssetsInOneBox -> RuleStatus(s => fatal(s"A number of tokens within a box should not exceed ${ErgoTransaction.MaxAssetsPerBox}" +
       s" and sum of assets of one type should not exceed ${Long.MaxValue}. $s"),
       Seq(classOf[ErgoTransaction]),
-      mayBeDisabled = true),
+      mayBeDisabled = false),
     txPositiveAssets -> RuleStatus(s => fatal(s"All token amounts of transaction outputs should be positive. $s"),
       Seq(classOf[ErgoTransaction]),
-      mayBeDisabled = true),
+      mayBeDisabled = false),
     txCost -> RuleStatus(s => fatal(s"The total cost of transaction input scripts should not exceed <maxBlockCost>. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
@@ -60,28 +60,28 @@ object ValidationRules {
       mayBeDisabled = true),
     txFuture -> RuleStatus(s => fatal(s"Transaction outputs should have creationHeight the does not exceed the block height. $s"),
       Seq(classOf[ErgoTransaction]),
-      mayBeDisabled = true),
+      mayBeDisabled = false),
     txBoxesToSpend -> RuleStatus(s => fatal(s"Every input of the transaction should be in UTXO. $s"),
       Seq(classOf[ErgoTransaction]),
-      mayBeDisabled = true),
+      mayBeDisabled = false),
     txDataBoxes -> RuleStatus(s => fatal(s"Every data input of the transaction should be in UTXO. $s"),
       Seq(classOf[ErgoTransaction]),
-      mayBeDisabled = true),
+      mayBeDisabled = false),
     txInputsSum -> RuleStatus(s => fatal(s"Sum of transaction inputs should not exceed ${Long.MaxValue}. $s"),
       Seq(classOf[ErgoTransaction]),
-      mayBeDisabled = true),
+      mayBeDisabled = false),
     txErgPreservation -> RuleStatus(s => fatal(s"Amount of Ergs in inputs should be equal to amount of Erg in outputs. $s"),
       Seq(classOf[ErgoTransaction]),
-      mayBeDisabled = true),
+      mayBeDisabled = false),
     txAssetsPreservation -> RuleStatus(s => fatal(s"For every token, its amount in inputs should not exceed its amount in outputs. $s"),
       Seq(classOf[ErgoTransaction]),
-      mayBeDisabled = true),
+      mayBeDisabled = false),
     txBoxToSpend -> RuleStatus(s => recoverable(s"Box id doesn't match the input. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
     txScriptValidation -> RuleStatus(s => fatal(s"Scripts of all transaction inputs should pass verification. $s"),
       Seq(classOf[ErgoTransaction]),
-      mayBeDisabled = true),
+      mayBeDisabled = false),
 
     // header validation
     hdrGenesisParent -> RuleStatus(s => fatal(s"Genesis header should have genesis parent id. $s"),
@@ -96,9 +96,6 @@ object ValidationRules {
     hdrParent -> RuleStatus(s => recoverable(s"Parent header with id $s is not defined"),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrVotes -> RuleStatus(s => fatal(s"A header should contain three votes, with no duplicates and contradictory votes. $s"),
-      Seq(classOf[Header]),
-      mayBeDisabled = true),
     hdrNonIncreasingTimestamp -> RuleStatus(s => fatal(s"Header timestamp should be greater than the parent's. $s"),
       Seq(classOf[Header]),
       mayBeDisabled = false),
@@ -121,6 +118,19 @@ object ValidationRules {
       Seq(classOf[Header]),
       mayBeDisabled = false),
 
+    hdrVotesNumber -> RuleStatus(s => fatal(s"Number of non-zero votes should be <= ${Parameters.ParamVotesCount}. $s"),
+      Seq(classOf[Header]),
+      mayBeDisabled = true),
+    hdrVotesDuplicates -> RuleStatus(s => fatal(s"A header votes should contain no duplicates. $s"),
+      Seq(classOf[Header]),
+      mayBeDisabled = false),
+    hdrVotesContradictory -> RuleStatus(s => fatal(s"A header votes should contain no contradictory votes. $s"),
+      Seq(classOf[Header]),
+      mayBeDisabled = false),
+    hdrVotesUnknown -> RuleStatus(s => fatal(s"A header should not contain votes for unknown parameters. $s"),
+      Seq(classOf[Header]),
+      mayBeDisabled = true),
+
     // block sections validation
     bsNoHeader -> RuleStatus(s => recoverable(s"A header for a modifier $s is not defined"),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
@@ -142,10 +152,10 @@ object ValidationRules {
       mayBeDisabled = true),
     fbOperationFailed -> RuleStatus(s => fatal(s"Operations against the state AVL+ tree should be successful. $s"),
       Seq(classOf[ErgoFullBlock]),
-      mayBeDisabled = true),
+      mayBeDisabled = false),
     fbDigestIncorrect -> RuleStatus(s => fatal(s"Calculated AVL+ digest should be equal to one written in the block header. $s"),
       Seq(classOf[ErgoFullBlock]),
-      mayBeDisabled = true),
+      mayBeDisabled = false),
 
     // extension validation
     // interlinks validation
@@ -160,7 +170,7 @@ object ValidationRules {
       mayBeDisabled = true),
     exKeyLength -> RuleStatus(s => fatal(s"Extension fields key length should be ${Extension.FieldKeySize}. $s"),
       Seq(classOf[Extension]),
-      mayBeDisabled = true),
+      mayBeDisabled = false),
     exValueLength -> RuleStatus(s => fatal(s"Extension field value length should be <= ${Extension.FieldValueMaxSize}. $s"),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
@@ -221,15 +231,18 @@ object ValidationRules {
   val hdrGenesisParent: Short = 200
   val hdrGenesisFromConfig: Short = 201
   val hdrGenesisHeight: Short = 203
-  val hdrVotes: Short = 204
-  val hdrParent: Short = 205
-  val hdrNonIncreasingTimestamp: Short = 206
-  val hdrHeight: Short = 207
-  val hdrPoW: Short = 208
-  val hdrRequiredDifficulty: Short = 209
-  val hdrTooOld: Short = 210
-  val hdrParentSemantics: Short = 211
-  val hdrFutureTimestamp: Short = 212
+  val hdrParent: Short = 204
+  val hdrNonIncreasingTimestamp: Short = 205
+  val hdrHeight: Short = 206
+  val hdrPoW: Short = 207
+  val hdrRequiredDifficulty: Short = 208
+  val hdrTooOld: Short = 209
+  val hdrParentSemantics: Short = 210
+  val hdrFutureTimestamp: Short = 211
+  val hdrVotesNumber: Short = 212
+  val hdrVotesDuplicates: Short = 213
+  val hdrVotesContradictory: Short = 214
+  val hdrVotesUnknown: Short = 215
 
   // block sections validation
   val alreadyApplied: Short = 300

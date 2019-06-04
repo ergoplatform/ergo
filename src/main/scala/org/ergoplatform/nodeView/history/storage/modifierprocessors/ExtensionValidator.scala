@@ -11,14 +11,12 @@ import scorex.util.bytesToId
 /**
   * Class that implements extension validation based on current to ErgoValidationSettings
   */
-class ExtensionValidator(settings: ErgoValidationSettings) extends ScorexEncoding {
-
-  private def validationState: ValidationState[Unit] = ModifierValidator(settings)
+class ExtensionValidator[T](validationState: ValidationState[T]) extends ScorexEncoding {
 
   def validateExtension(extension: Extension,
                         header: Header,
                         prevExtensionOpt: Option[ExtensionCandidate],
-                        prevHeaderOpt: Option[Header]): ValidationState[Unit] = {
+                        prevHeaderOpt: Option[Header]): ValidationState[T] = {
     validateInterlinks(extension, header, prevExtensionOpt, prevHeaderOpt)
       .validate(exKeyLength, extension.fields.forall(_._1.lengthCompare(Extension.FieldKeySize) == 0), extension.encodedId)
       .validate(exValueLength, extension.fields.forall(_._2.lengthCompare(Extension.FieldValueMaxSize) <= 0), extension.encodedId)
@@ -29,7 +27,7 @@ class ExtensionValidator(settings: ErgoValidationSettings) extends ScorexEncodin
   private def validateInterlinks(extension: Extension,
                                  header: Header,
                                  prevExtensionOpt: Option[ExtensionCandidate],
-                                 prevHeaderOpt: Option[Header]): ValidationState[Unit] = {
+                                 prevHeaderOpt: Option[Header]): ValidationState[T] = {
     (prevHeaderOpt, prevExtensionOpt) match {
       case (Some(parent), Some(parentExt)) =>
         val parentLinksTry = unpackInterlinks(parentExt.fields)

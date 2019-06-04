@@ -170,7 +170,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val ergoValidationSettingsUpdateGen: Gen[ErgoValidationSettingsUpdate] = for {
     n <- Gen.choose(1, 200)
-    disabledRules = ValidationRules.rulesSpec.keys.take(n).toSeq
+    disabledRules = ValidationRules.rulesSpec.filter(_._2.mayBeDisabled).keys.take(n).toSeq
     replacedRuleCode <- Gen.choose(org.ergoplatform.validation.ValidationRules.FirstRuleId, Short.MaxValue)
     changedRuleValue <- genBoundedBytes(0, 127)
     statuses <- Gen.listOf(Gen.oneOf(DisabledRule, EnabledRule, ReplacedRule(replacedRuleCode), ChangedRule(changedRuleValue)))

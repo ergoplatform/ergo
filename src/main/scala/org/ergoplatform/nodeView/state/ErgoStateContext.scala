@@ -7,6 +7,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionValidator
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Constants, _}
+import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
@@ -181,9 +182,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   def appendHeader(header: Header, votingSettings: VotingSettings): Try[ErgoStateContext] = {
-    ModifierValidator(validationSettings)
-      .payload(this)
-      .validateNoThrow(hdrVotes, checkVotes(header))
+    validateVotes(header)
       .validate(hdrHeight,
         lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight) == header.height,
         s"${header.id} => ${lastHeaderOpt.map(_.height)} == ${header.height}")
@@ -203,9 +202,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     * @return updated state context or error
     */
   def appendFullBlock(fb: ErgoFullBlock, votingSettings: VotingSettings): Try[ErgoStateContext] = Try {
-    new ExtensionValidator(validationSettings)
+    val votesValidationState = validateVotes(fb.header)
+    new ExtensionValidator(votesValidationState)
       .validateExtension(fb.extension, fb.header, lastExtensionOpt, lastHeaderOpt)
-      .validateNoThrow(hdrVotes, checkVotes(fb.header))
       .validate(hdrHeight,
         lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight) == fb.header.height,
         s"${fb.id} => ${lastHeaderOpt.map(_.height)} == ${fb.header.height}")
@@ -225,23 +224,31 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   override def toString: String =
     s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
 
+
   /**
     * Check that non-zero votes extracted from block header are correct
     */
-  private def checkVotes(header: Header): Unit = {
+  private def validateVotes(header: Header): ValidationState[ErgoStateContext] = {
     val votes: Array[Byte] = header.votes.filter(_ != Parameters.NoParameter)
     val epochStarts = header.votingStarts(votingSettings.votingLength)
     val votesCount = votes.count(_ != Parameters.SoftFork)
-    if (votesCount > Parameters.ParamVotesCount) throw new Error(s"Too many votes $votesCount")
-
     val prevVotes = mutable.Buffer[Byte]()
-    votes.foreach { v =>
-      if (prevVotes.contains(v)) throw new Error(s"Double vote in ${votes.mkString}")
-      if (prevVotes.contains((-v).toByte)) throw new Error(s"Contradictory votes in ${votes.mkString}")
-      if (epochStarts && !Parameters.parametersDescs.contains(v)) throw new Error("Incorrect vote proposed")
-      prevVotes += v
-    }
+
+    @inline def vs: String = votes.mkString("")
+
+    ModifierValidator(validationSettings)
+      .payload(this)
+      .validate(hdrVotesNumber, votesCount <= Parameters.ParamVotesCount, s"votesCount=$votesCount")
+      .validateSeq(votes) { case (validationState, v) =>
+        val newVs = validationState
+          .validate(hdrVotesDuplicates, !prevVotes.contains(v), s"Double vote in $vs")
+          .validate(hdrVotesContradictory, !prevVotes.contains((-v).toByte, s"Contradictory votes in $vs"))
+          .validate(hdrVotesUnknown, !(epochStarts && !Parameters.parametersDescs.contains(v)), s"Incorrect vote proposed in $vs")
+        prevVotes += v
+        newVs
+      }
   }
+
 }
 
 object ErgoStateContext {

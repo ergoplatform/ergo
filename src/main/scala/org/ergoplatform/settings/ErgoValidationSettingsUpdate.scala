@@ -44,6 +44,10 @@ object ErgoValidationSettingsUpdateSerializer extends ScorexSerializer[ErgoValid
     val disabledRules = (0 until disabledRulesNum).map { _ =>
       r.getUShort().toShort
     }
+    disabledRules.foreach { rd =>
+      require(ValidationRules.rulesSpec.get(rd).forall(_.mayBeDisabled),
+        s"Trying to deactivate rule $rd, that may not be disabled")
+    }
     val statusUpdatesNum = r.getUInt().toInt
     val parsed = (0 until statusUpdatesNum).map { _ =>
       val ruleId = (r.getUShort() + FirstRule).toShort

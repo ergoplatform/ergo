@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain, PoPowAlgos}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.History._
 import scorex.crypto.hash.Digest32

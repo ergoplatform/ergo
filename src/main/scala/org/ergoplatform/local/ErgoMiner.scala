@@ -12,7 +12,7 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
+import org.ergoplatform.modifiers.history.{Extension, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -20,7 +20,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters, ValidationRules}
+import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
@@ -295,7 +295,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
         val (newParams, activatedUpdate) = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, proposedUpdate, votingSettings)
         val newValidationSettings = stateContext.validationSettings.updated(activatedUpdate)
-        (newParams.toExtensionCandidate() ++ interlinksExtension ++ newValidationSettings.toExtensionCandidate(),
+        (newParams.toExtensionCandidate ++ interlinksExtension ++ newValidationSettings.toExtensionCandidate,
           newParams.suggestVotes(ergoSettings.votingTargets.targets, voteForFork),
           newParams.blockVersion)
       } else {

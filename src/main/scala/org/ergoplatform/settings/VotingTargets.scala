@@ -21,7 +21,7 @@ object VotingTargets {
   val empty: VotingTargets = VotingTargets(Map(), ErgoValidationSettingsUpdate.empty)
 
   def fromConfig(config: Config): VotingTargets = {
-    val toDisable = config.as[Array[Int]](s"$configPath.voting.${Parameters.SoftForkDisablingRules}")
+    val toDisable = config.as[Array[Int]](s"$configPath.voting.rulesToDisable")
     val votingObject = config.getObject(s"$configPath.voting")
 
     val parameterTargets = votingObject

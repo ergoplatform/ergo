@@ -3,11 +3,11 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Algos, ErgoValidationSettings, ValidationRules}
+import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, _}
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.ModifierId
 
 import scala.reflect.ClassTag
 import scala.util.Try

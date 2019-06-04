@@ -15,7 +15,7 @@ object ValidationRules {
     */
   lazy val rulesSpec: Map[Short, RuleStatus] = Map(
 
-    alreadyApplied -> RuleStatus(s => fatal(s"A modifier should not be applied yet. $s"),
+    alreadyApplied -> RuleStatus(s => fatal(s"Double application of a modifier is prohibited. $s"),
       Seq(classOf[Header], classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
 
@@ -70,7 +70,7 @@ object ValidationRules {
     txErgPreservation -> RuleStatus(s => fatal(s"Amount of Ergs in inputs should be equal to amount of Erg in outputs. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txAssetsPreservation -> RuleStatus(s => fatal(s"For every token, its amount in inputs should not exceed its amount in outputs. $s"),
+    txAssetsPreservation -> RuleStatus(s => fatal(s"For every token, its amount in outputs should not exceed its amount in inputs. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
     txBoxToSpend -> RuleStatus(s => recoverable(s"Box id doesn't match the input. $s"),
@@ -179,7 +179,7 @@ object ValidationRules {
     exDuplicateKeys -> RuleStatus(s => fatal(s"An extension should not contain duplicate keys. $s"),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exCheckForkVote -> RuleStatus(s => fatal(s"Voting for fork may only be done after activation period of a previous soft-fork voting. $s"),
+    exCheckForkVote -> RuleStatus(s => fatal(s"Voting for fork could be started only after activation period of a previous soft-fork. $s"),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
     exParseParameters -> RuleStatus(s => fatal(s"At the beginning of the epoch, the extension should contain correctly packed parameters. $s"),

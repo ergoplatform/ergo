@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.ValidationRules.rulesSpec
 import org.ergoplatform.utils.ErgoPropertyTest

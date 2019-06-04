@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.mempool
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.settings.ValidationRules.txCost
+import org.ergoplatform.settings.ValidationRules.bsBlockTransactionsCost
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters, ValidationRules}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -282,7 +282,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
     val validFailure = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext)
-    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(txCost, "").take(30))
+    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "").take(30))
 
   }
 
@@ -314,7 +314,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     assert(time0 <= Timeout)
 
     val cause = validity.failed.get.getMessage
-    cause should startWith(ValidationRules.errorMessage(txCost, "").take(30))
+    cause should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "").take(30))
 
     //check that spam transaction validation with no cost limit is indeed taking too much time
     val relaxedParams = LaunchParameters.parametersTable.updated(Parameters.MaxBlockCostIncrease, Int.MaxValue)

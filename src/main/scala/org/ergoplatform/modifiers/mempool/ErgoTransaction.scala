@@ -159,7 +159,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     ModifierValidator(vs)
       // Check that the transaction is not too big
-      .validate(txCost, initialCost < maxCost, s"$id: initial cost")
+      .validate(bsBlockTransactionsCost, initialCost < maxCost, s"$id: initial cost")
       // Starting validation
       .payload(initialCost)
       // Perform cheap checks first
@@ -190,7 +190,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
           validation
             // Check that transaction is not too costly considering all the assets
-            .validate(txCost, initialCost + totalAssetsAccessCost < maxCost, s"$id: assets cost")
+            .validate(bsBlockTransactionsCost, initialCost + totalAssetsAccessCost < maxCost, s"$id: assets cost")
             .validateSeq(outAssets) {
               case (validationState, (outAssetId, outAmount)) =>
                 val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
@@ -229,7 +229,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         // Check whether input box script interpreter raised exception
         .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
         // Check that cost of the transaction after checking the input becomes too big
-        .validate(txCost, currentTxCost + scriptCost <= maxCost, s"$id: cost exceeds limit after input #$idx")
+        .validate(bsBlockTransactionsCost, currentTxCost + scriptCost <= maxCost, s"$id: cost exceeds limit after input #$idx")
         .map(_ + scriptCost)
     }
   }

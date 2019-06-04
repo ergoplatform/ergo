@@ -52,9 +52,6 @@ object ValidationRules {
     txPositiveAssets -> RuleStatus(s => fatal(s"All token amounts of transaction outputs should be positive. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txCost -> RuleStatus(s => fatal(s"The total cost of transaction input scripts should not exceed <maxBlockCost>. $s"),
-      Seq(classOf[ErgoTransaction]),
-      mayBeDisabled = true),
     txDust -> RuleStatus(s => fatal(s"Every output of the transaction should contain at least <minValuePerByte * outputSize> nanoErgs. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
@@ -150,6 +147,11 @@ object ValidationRules {
     bsBlockTransactionsSize -> RuleStatus(s => fatal(s"Size of block transactions section should not exceed <maxBlockSize>. $s"),
       Seq(classOf[BlockTransactions]),
       mayBeDisabled = true),
+    bsBlockTransactionsCost -> RuleStatus(s => fatal(s"Accumulated cost of block transactions should not exceed <maxBlockCost>. $s"),
+      Seq(classOf[ErgoTransaction], classOf[BlockTransactions]),
+      mayBeDisabled = true),
+
+    // full block processing validation
     fbOperationFailed -> RuleStatus(s => fatal(s"Operations against the state AVL+ tree should be successful. $s"),
       Seq(classOf[ErgoFullBlock]),
       mayBeDisabled = false),
@@ -216,7 +218,6 @@ object ValidationRules {
   val txPositiveAssets: Short = 108
   val txAssetsInOneBox: Short = 109
   // stateful transaction validation
-  val txCost: Short = 110
   val txDust: Short = 111
   val txFuture: Short = 112
   val txBoxesToSpend: Short = 113
@@ -252,6 +253,7 @@ object ValidationRules {
   val bsHeadersChainSynced: Short = 304
   val bsTooOld: Short = 305
   val bsBlockTransactionsSize: Short = 306
+  val bsBlockTransactionsCost: Short = 307
 
   // extension validation
   val exSize: Short = 400

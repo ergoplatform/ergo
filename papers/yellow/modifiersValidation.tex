@@ -39,8 +39,6 @@ voting via soft forks, while new rules may also be added at the same time.
     \hline
     109 & A number of tokens within a box should not exceed 255 and sum of assets of one type should not exceed 9223372036854775807. & \xmark & \cmark & ErgoTransaction \\
     \hline
-    110 & The total cost of transaction input scripts should not exceed <maxBlockCost>. & \cmark & \cmark & ErgoTransaction \\
-    \hline
     111 & Every output of the transaction should contain at least <minValuePerByte * outputSize> nanoErgs. & \cmark & \cmark & ErgoTransaction \\
     \hline
     112 & Transaction outputs should have creationHeight the does not exceed the block height. & \xmark & \cmark & ErgoTransaction \\
@@ -112,6 +110,8 @@ voting via soft forks, while new rules may also be added at the same time.
     305 & Block section should correspond to a block header that is not pruned yet. & \xmark & \cmark & ADProofs, Extension, BlockTransactions \\
     \hline
     306 & Size of block transactions section should not exceed <maxBlockSize>. & \cmark & \cmark & BlockTransactions \\
+    \hline
+    307 & Accumulated cost of block transactions should not exceed <maxBlockCost>. & \cmark & \cmark & ErgoTransaction, BlockTransactions \\
     \hline
 \end{tabular}
 

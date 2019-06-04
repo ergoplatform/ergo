@@ -365,7 +365,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                            height: Int,
                            inputs: Seq[(ModifierId, EncodedBoxId)],
                            outputs: Seq[(ModifierId, ErgoBox)]): Unit = {
-    proverOpt.foreach(_.IR.resetContext())
+    // re-create interpreter in order to avoid IR context bloating.
+    proverOpt = proverOpt.map(oldInterpreter => ErgoProvingInterpreter(oldInterpreter.secretKeys, parameters))
     val prevUncertainBoxes = registry.readUncertainBoxes
     val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
       .filterNot { case (_, o) => inputs.map(_._2).contains(encodedBoxId(o.id)) }

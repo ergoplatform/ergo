@@ -232,7 +232,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val votes: Array[Byte] = header.votes.filter(_ != Parameters.NoParameter)
     val epochStarts = header.votingStarts(votingSettings.votingLength)
     val votesCount = votes.count(_ != Parameters.SoftFork)
-    val prevVotes = mutable.Buffer[Byte]()
+    val reverseVotes: Array[Byte] = votes.map(v => (-v).toByte)
 
     @inline def vs: String = votes.mkString("")
 
@@ -240,12 +240,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       .payload(this)
       .validate(hdrVotesNumber, votesCount <= Parameters.ParamVotesCount, s"votesCount=$votesCount")
       .validateSeq(votes) { case (validationState, v) =>
-        val newVs = validationState
-          .validate(hdrVotesDuplicates, !prevVotes.contains(v), s"Double vote in $vs")
-          .validate(hdrVotesContradictory, !prevVotes.contains((-v).toByte, s"Contradictory votes in $vs"))
+        validationState
+          .validate(hdrVotesDuplicates, votes.count(_ == v) == 1, s"Double vote in $vs")
+          .validate(hdrVotesContradictory, !reverseVotes.contains(v), s"Contradictory votes in $vs")
           .validate(hdrVotesUnknown, !(epochStarts && !Parameters.parametersDescs.contains(v)), s"Incorrect vote proposed in $vs")
-        prevVotes += v
-        newVs
       }
   }
 

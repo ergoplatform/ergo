@@ -11,12 +11,14 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
 import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStorage}
 import org.ergoplatform.settings._
+import org.ergoplatform.utils.LoggingUtil
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
+import scorex.core.validation.RecoverableModifierError
 import scorex.util.ScorexLogging
 
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 /**
   * History implementation. It is processing persistent modifiers generated locally or coming from network.
@@ -60,6 +62,12 @@ trait ErgoHistory
         case chunk: UTXOSnapshotChunk =>
           (this, process(chunk))
       }
+    }.recoverWith { case e =>
+      if (!e.isInstanceOf[RecoverableModifierError]) {
+        log.warn(s"Error while applying modifier ${modifier.encodedId} of type ${modifier.modifierTypeId}, " +
+          s"reason: ${LoggingUtil.getReasonMsg(e)} ")
+      }
+      Failure(e)
     }
   }
 
@@ -183,6 +191,7 @@ object ErgoHistory extends ScorexLogging {
 
   val EmptyHistoryHeight: Int = 0
   val GenesisHeight: Int = EmptyHistoryHeight + 1
+
   def heightOf(headerOpt: Option[Header]): Int = headerOpt.map(_.height).getOrElse(EmptyHistoryHeight)
 
   def historyDir(settings: ErgoSettings): File = {

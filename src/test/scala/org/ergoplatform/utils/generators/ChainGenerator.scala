@@ -109,7 +109,7 @@ trait ChainGenerator extends ErgoTestConstants {
                 nBits: Long = settings.chainSettings.initialNBits): ErgoFullBlock = {
     val interlinks = prev.toSeq.flatMap(x =>
       PoPowAlgos.updateInterlinks(x.header, PoPowAlgos.unpackInterlinks(x.extension.fields).get))
-    val validExtension = extension.copy(fields = extension.fields ++ PoPowAlgos.packInterlinks(interlinks))
+    val validExtension = extension ++ PoPowAlgos.interlinksToExtension(interlinks)
     powScheme.proveBlock(
       prev.map(_.header),
       Header.CurrentVersion,

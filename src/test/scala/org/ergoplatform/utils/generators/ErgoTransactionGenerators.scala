@@ -282,7 +282,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield {
     blocks match {
       case _ :: _ =>
-        blocks.foldLeft(new ErgoStateContext(Seq(), startDigest, parameters, VotingData.empty) -> 1) { case ((c, h), b) =>
+        blocks.foldLeft(
+          new ErgoStateContext(Seq(), None, startDigest, parameters, validationSettingsNoIl, VotingData.empty) -> 1) { case ((c, h), b) =>
           val block = b.copy(header = b.header.copy(height = h, votes = votes(h - 1)))
           c.appendFullBlock(block, votingSettings).get -> (h + 1)
         }._1

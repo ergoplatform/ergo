@@ -73,19 +73,25 @@ voting via soft forks, while new rules may also be added at the same time.
     \hline
     203 & Genesis height should be 1. & \xmark & \cmark & Header \\
     \hline
-    204 & A header should contain three votes, with no duplicates and contradictory votes. & \cmark & \cmark & Header \\
+    205 & Header timestamp should be greater than the parent's. & \xmark & \cmark & Header \\
     \hline
-    206 & Header timestamp should be greater than the parent's. & \xmark & \cmark & Header \\
+    206 & A header height should be greater by one than the parent's. & \xmark & \cmark & Header \\
     \hline
-    207 & A header height should be greater by one than the parent's. & \xmark & \cmark & Header \\
+    207 & A header should contain correct PoW solution. & \xmark & \cmark & Header \\
     \hline
-    208 & A header should contain correct PoW solution. & \xmark & \cmark & Header \\
+    208 & A header should contain correct required difficulty. & \xmark & \cmark & Header \\
     \hline
-    209 & A header should contain correct required difficulty. & \xmark & \cmark & Header \\
+    209 & A header height should not be older than current height minus <config.keepVersions>. & \xmark & \cmark & Header \\
     \hline
-    210 & A header height should not be older than current height minus <config.keepVersions>. & \xmark & \cmark & Header \\
+    210 & Parent header should not be marked as invalid. & \xmark & \cmark & Header \\
     \hline
-    211 & Parent header should not be marked as invalid. & \xmark & \cmark & Header \\
+    212 & Number of non-zero votes should be <= 2. & \cmark & \cmark & Header \\
+    \hline
+    213 & A header votes should contain no duplicates. & \xmark & \cmark & Header \\
+    \hline
+    214 & A header votes should contain no contradictory votes. & \xmark & \cmark & Header \\
+    \hline
+    215 & A header should not contain votes for unknown parameters. & \cmark & \cmark & Header \\
     \hline
 \end{tabular}
 

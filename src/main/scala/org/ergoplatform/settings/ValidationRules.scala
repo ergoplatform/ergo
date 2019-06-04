@@ -96,9 +96,6 @@ object ValidationRules {
     hdrParent -> RuleStatus(s => recoverable(s"Parent header with id $s is not defined"),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrVotes -> RuleStatus(s => fatal(s"A header should contain three votes, with no duplicates and contradictory votes. $s"),
-      Seq(classOf[Header]),
-      mayBeDisabled = true),
     hdrNonIncreasingTimestamp -> RuleStatus(s => fatal(s"Header timestamp should be greater than the parent's. $s"),
       Seq(classOf[Header]),
       mayBeDisabled = false),
@@ -120,6 +117,19 @@ object ValidationRules {
     hdrFutureTimestamp -> RuleStatus(s => recoverable(s"Header timestamp should not be more than 20 minutes in the future. $s"),
       Seq(classOf[Header]),
       mayBeDisabled = false),
+
+    hdrVotesNumber -> RuleStatus(s => fatal(s"Number of non-zero votes should be <= ${Parameters.ParamVotesCount}. $s"),
+      Seq(classOf[Header]),
+      mayBeDisabled = true),
+    hdrVotesDuplicates -> RuleStatus(s => fatal(s"A header votes should contain no duplicates. $s"),
+      Seq(classOf[Header]),
+      mayBeDisabled = false),
+    hdrVotesContradictory -> RuleStatus(s => fatal(s"A header votes should contain no contradictory votes. $s"),
+      Seq(classOf[Header]),
+      mayBeDisabled = false),
+    hdrVotesUnknown -> RuleStatus(s => fatal(s"A header should not contain votes for unknown parameters. $s"),
+      Seq(classOf[Header]),
+      mayBeDisabled = true),
 
     // block sections validation
     bsNoHeader -> RuleStatus(s => recoverable(s"A header for a modifier $s is not defined"),
@@ -221,15 +231,18 @@ object ValidationRules {
   val hdrGenesisParent: Short = 200
   val hdrGenesisFromConfig: Short = 201
   val hdrGenesisHeight: Short = 203
-  val hdrVotes: Short = 204
-  val hdrParent: Short = 205
-  val hdrNonIncreasingTimestamp: Short = 206
-  val hdrHeight: Short = 207
-  val hdrPoW: Short = 208
-  val hdrRequiredDifficulty: Short = 209
-  val hdrTooOld: Short = 210
-  val hdrParentSemantics: Short = 211
-  val hdrFutureTimestamp: Short = 212
+  val hdrParent: Short = 204
+  val hdrNonIncreasingTimestamp: Short = 205
+  val hdrHeight: Short = 206
+  val hdrPoW: Short = 207
+  val hdrRequiredDifficulty: Short = 208
+  val hdrTooOld: Short = 209
+  val hdrParentSemantics: Short = 210
+  val hdrFutureTimestamp: Short = 211
+  val hdrVotesNumber: Short = 212
+  val hdrVotesDuplicates: Short = 213
+  val hdrVotesContradictory: Short = 214
+  val hdrVotesUnknown: Short = 215
 
   // block sections validation
   val alreadyApplied: Short = 300

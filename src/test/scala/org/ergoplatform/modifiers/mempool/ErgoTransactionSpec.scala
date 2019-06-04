@@ -14,6 +14,8 @@ import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.encode.Base16
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate._
+import sigmastate.lang.StdSigmaBuilder
 import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
 import special.collection.{Coll, CollOverArray}
@@ -31,13 +33,14 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       boxCandidate.additionalRegisters)
   }
 
-  private def modifyAdditionalTokens(boxCandidate: ErgoBoxCandidate, appendableTokens: Coll[(TokenId, Long)]): ErgoBoxCandidate = {
+  private def modifyRegister[T <: sigmastate.Values.EvaluatedValue[_ <: sigmastate.SType]](boxCandidate: ErgoBoxCandidate, additional: T): ErgoBoxCandidate = {
+    var newMap = boxCandidate.additionalRegisters
     new ErgoBoxCandidate(
       boxCandidate.value,
       boxCandidate.ergoTree,
       boxCandidate.creationHeight,
-      boxCandidate.additionalTokens.append(appendableTokens),
-      boxCandidate.additionalRegisters)
+      boxCandidate.additionalTokens,
+      Map(ErgoBox.R4 -> additional))
   }
 
   private def modifyAsset(boxCandidate: ErgoBoxCandidate,
@@ -124,6 +127,36 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
   }
 
+  property("check coll size") {
+    import sigmastate.Values._
+    var coll = IndexedSeq(StdSigmaBuilder.mkConstant[SInt.type](131072, SInt))
+    for (i <- 1 to Short.MaxValue / 3)
+      coll = coll.head +: coll
+
+    forAll(validErgoTransactionGen) { case (from, tx) =>
+      val wrongTx = tx.copy(outputCandidates =
+        modifyRegister(tx.outputCandidates.head, ConcreteCollection[SInt.type](coll))
+          +: tx.outputCandidates.tail)
+
+      val res = wrongTx.statelessValidity.isSuccess
+      res &&
+        wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
+    }
+  }
+
+  property("check bigint size") {
+    import sigmastate.Values._
+    forAll(validErgoTransactionGen) { case (from, tx) =>
+      val wrongTx = tx.copy(outputCandidates =
+        modifyRegister(tx.outputCandidates.head, BigIntConstant(BigInt("123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789").bigInteger))
+          +: tx.outputCandidates.tail)
+
+      val res = wrongTx.statelessValidity.isSuccess
+      res &&
+        wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
+    }
+  }
+
   property("impossible to create a negative-value output") {
     forAll(validErgoTransactionGen) { case (from, tx) =>
       val negValue = Math.min(Math.abs(Random.nextLong()), Long.MaxValue - tx.outputCandidates.head.value)
@@ -144,21 +177,6 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
       wrongTx.statelessValidity.isSuccess shouldBe false
       wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
-    }
-  }
-
-  property("impossible to make more ergo tokens than maxtokens") {
-    forAll(invalidTokenErgoTransactionGen) { case (from, tx) =>
-      var res = true
-      for (output <- tx.outputCandidates) {
-        if (output.additionalTokens.size > ErgoConstants.MaxTokens.get) {
-          res = false
-        }
-      }
-
-      tx.statelessValidity.isSuccess shouldBe res
-      // The next line crashes, consider if it shouldn't
-      // tx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe res
     }
   }
 

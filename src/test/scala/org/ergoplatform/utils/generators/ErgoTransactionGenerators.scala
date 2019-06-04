@@ -41,14 +41,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     value <- validValueGen(prop, tokens, ar)
   } yield new ErgoBoxCandidate(value, prop, h, tokens.toColl, ar)
 
-  lazy val invalidErgoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
-    h <- creationHeightGen
-    prop <- trueLeafGen
-    ar <- additionalRegistersGen
-    tokens <- invalidAdditionalTokensGen
-    value <- validValueGen(prop, tokens, ar)
-  } yield new ErgoBoxCandidate(value, prop, h, tokens.toColl, ar)
-
   def ergoBoxGen(propGen: Gen[ErgoTree] = ergoPropositionGen,
                  tokensGen: Gen[Seq[(TokenId, Long)]] = additionalTokensGen,
                  valueGenOpt: Option[Gen[Long]] = None,
@@ -64,18 +56,11 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   lazy val ergoBoxGen: Gen[ErgoBox] = ergoBoxGen()
 
-  lazy val invalidTokensErgoBoxGen: Gen[ErgoBox] = ergoBoxGen(tokensGen = invalidAdditionalTokensGen)
-
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = ergoBoxGen(propGen = trueLeafGen)
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
                           propositionGen: Gen[ErgoTree]): Gen[ErgoBox] = {
     ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens), heightGen = ErgoHistory.EmptyHistoryHeight)
-  }
-
-  def invalidErgoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
-                          propositionGen: Gen[ErgoTree]): Gen[ErgoBox] = {
-    ergoBoxGen(propGen = propositionGen, tokensGen = invalidAdditionalTokensGen, heightGen = ErgoHistory.EmptyHistoryHeight)
   }
 
   def unspendableErgoBoxGen(minValue: Long = LaunchParameters.minValuePerByte * 200,
@@ -106,11 +91,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   def additionalTokensGen: Gen[Seq[(TokenId, Long)]] = for {
     cnt <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
-    assets <- additionalTokensGen(cnt)
-  } yield assets
-
-  def invalidAdditionalTokensGen: Gen[Seq[(TokenId, Long)]] = for {
-    cnt <- Gen.chooseNum[Byte](5, 20)
     assets <- additionalTokensGen(cnt)
   } yield assets
 
@@ -235,102 +215,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       }
   }
 
-  /**
-    * Generates a transaction that has more tokens, than MaxTokens
-    */
-  def invalidTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
-                                rnd: Random = new Random,
-                                issueNew: Boolean = true,
-                                outputsProposition: ErgoTree = Constants.TrueLeaf,
-                                stateCtxOpt: Option[ErgoStateContext] = None,
-                                dataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()): ErgoTransaction = {
-    require(boxesToSpend.nonEmpty, "At least one box is needed to generate a transaction")
-
-    val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
-    val assetsMap: mutable.Map[ByteArrayWrapper, Long] =
-      mutable.Map(boxesToSpend.flatMap(_.additionalTokens.toArray).map { case (bs, amt) =>
-        ByteArrayWrapper(bs) -> amt
-      }: _*)
-
-    //randomly creating a new asset
-    if (rnd.nextBoolean() && issueNew) {
-      assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), rnd.nextInt(Int.MaxValue))
-    }
-
-    val minValue = LaunchParameters.minValuePerByte * 200 //assuming that output is 200 bytes max
-
-    require(inputSum >= minValue)
-    val inputsCount = boxesToSpend.size
-    val maxOutputs = Math.min(Short.MaxValue, inputSum / minValue).toInt
-    val outputsCount = Math.min(maxOutputs, Math.max(inputsCount + 1, rnd.nextInt(inputsCount * 2)))
-    require(outputsCount > 0, s"outputs count is not positive: $outputsCount")
-
-    require(minValue * outputsCount <= inputSum)
-    val outputPreamounts = (1 to outputsCount).map(_ => minValue.toLong).toBuffer
-
-    var remainder = inputSum - minValue * outputsCount
-    do {
-      val idx = Random.nextInt(outputsCount)
-      if (remainder < inputSum / inputsCount) {
-        outputPreamounts.update(idx, outputPreamounts(idx) + remainder)
-        remainder = 0
-      } else {
-        val value = Math.abs(rnd.nextLong()) % (remainder / outputsCount)
-        outputPreamounts.update(idx, outputPreamounts(idx) + value)
-        remainder = remainder - value
-      }
-    } while (remainder > 0)
-
-    val outputAmounts = outputPreamounts.toIndexedSeq
-
-    val tokenAmounts: mutable.IndexedSeq[mutable.Map[ByteArrayWrapper, Long]] =
-      mutable.IndexedSeq.fill(outputsCount)(mutable.Map[ByteArrayWrapper, Long]())
-
-    var availableTokenSlots = outputsCount * 100
-
-    if (assetsMap.nonEmpty) {
-      do {
-        val in = assetsMap.head
-        val outIdx = Stream.from(1, 1).map(_ => rnd.nextInt(tokenAmounts.size))
-          .find(idx => tokenAmounts(idx).size < 100).get
-        val out = tokenAmounts(outIdx)
-        val contains = out.contains(in._1)
-
-        val amt = if (in._2 == 1 || (availableTokenSlots < assetsMap.size * 2 && !contains) || rnd.nextBoolean()) {
-          in._2
-        } else {
-          Math.max(1, Math.min((rnd.nextDouble() * in._2).toLong, in._2))
-        }
-
-        if (amt == in._2) assetsMap.remove(in._1) else assetsMap.update(in._1, in._2 - amt)
-        if (contains) {
-          val outAmt = out(in._1)
-          out.update(in._1, outAmt + amt)
-        } else {
-          availableTokenSlots = availableTokenSlots - 1
-          out.update(in._1, amt)
-        }
-        tokenAmounts(outIdx) = out
-      } while (assetsMap.nonEmpty && availableTokenSlots > 0)
-    }
-
-    val newBoxes = outputAmounts.zip(tokenAmounts.toIndexedSeq).map { case (amt, tokens) =>
-      val normalizedTokens = tokens.toSeq.map(t => (Digest32 @@ t._1.data) -> t._2)
-      ErgoBox(amt, outputsProposition, 0, normalizedTokens)
-    }
-    val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
-    val dataInputs = dataBoxes.map(b => DataInput(b.id))
-    val unsignedTx = UnsignedErgoTransaction(inputs, dataInputs, newBoxes)
-    require(unsignedTx.dataInputs.length == dataBoxes.length, s"${unsignedTx.dataInputs.length} == ${dataBoxes.length}")
-
-    defaultProver.sign(unsignedTx, boxesToSpend, dataBoxes, stateCtxOpt.getOrElse(emptyStateContext))
-      .map(ErgoTransaction.apply)
-      .getOrElse {
-        log.debug(s"Going to generate a transaction with incorrect spending proofs: $unsignedTx")
-        ErgoTransaction(inputs, dataInputs, newBoxes)
-      }
-  }
-
   def disperseTokens(inputsCount: Int, tokensCount: Byte): Gen[IndexedSeq[Seq[(TokenId, Long)]]] = {
     val tokensDistribution = mutable.IndexedSeq.fill(inputsCount)(Seq[(TokenId, Long)]())
     (1 to tokensCount).foreach { i =>
@@ -358,24 +242,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     tx = validTransactionFromBoxes(from.asScala.toIndexedSeq, outputsProposition = prop)
   } yield from.asScala.toIndexedSeq -> tx
 
-  def invalidTokenErgoTransactionGenTemplate(minAssets: Int,
-                                      maxAssets: Int = -1,
-                                      minInputs: Int = 1,
-                                      maxInputs: Int = 100,
-                                      propositionGen: Gen[ErgoTree] = trueLeafGen
-                                     ): Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = for {
-    inputsCount <- Gen.choose(minInputs, maxInputs)
-    tokensCount <- Gen.choose(
-      minAssets,
-      Math.max(100 * maxAssets, 100 * inputsCount))
-    tokensDistribution <- disperseTokens(inputsCount, tokensCount.toByte)
-    from <- Gen.sequence(tokensDistribution.map(tokens => invalidErgoBoxGenForTokens(tokens, propositionGen)))
-    prop <- propositionGen
-    tx = invalidTransactionFromBoxes(from.asScala.toIndexedSeq, outputsProposition = prop)
-  } yield from.asScala.toIndexedSeq -> tx
-
   lazy val validErgoTransactionGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = validErgoTransactionGenTemplate(0)
-  lazy val invalidTokenErgoTransactionGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = invalidTokenErgoTransactionGenTemplate(0)
   lazy val validErgoTransactionWithAssetsGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] =
     validErgoTransactionGenTemplate(1)
 

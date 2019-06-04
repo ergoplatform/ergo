@@ -4,17 +4,16 @@ import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
-import org.ergoplatform._
+import org.ergoplatform.{ErgoConstants, _}
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.{Algos, ValidationRules}
 import org.ergoplatform.settings.ValidationRules._
+import org.ergoplatform.settings.{Algos, ValidationRules}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
-import org.ergoplatform.ErgoConstants
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
@@ -23,13 +22,13 @@ import scorex.core.validation.{ModifierValidator, ValidationSettings, Validation
 import scorex.crypto.authds.ADKey
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.{SBox, SType}
-import sigmastate.Values.{ErgoTree, EvaluatedValue}
+import sigmastate.Values.{ConcreteCollection, Constant, ErgoTree, EvaluatedValue}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-import sigmastate.serialization.ConstantStore
+import sigmastate.serialization.{ConstantStore, DataSerializer, SigmaSerializer, ValueSerializer}
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
+import sigmastate.{SBigInt, SType}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
@@ -108,8 +107,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry
   }
 
-  private def validateRegister[T <: sigmastate.Values.EvaluatedValue[_ <: sigmastate.SType]](reg: T): Boolean = {
-    true
+  def getByteLength[T](b: T, serializer: ScorexSerializer[T]): Long = {
+    return serializer.toBytes(b).length
   }
 
   /**
@@ -125,14 +124,27 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txManyInputs, inputs.size <= Short.MaxValue, s"$id: ${inputs.size}")
       .validate(txManyDataInputs, dataInputs.size <= Short.MaxValue, s"$id: ${dataInputs.size}")
       .validate(txManyOutputs, outputCandidates.size <= Short.MaxValue, s"$id: ${outputCandidates.size}")
-      .validate(txMaxTokens, outputCandidates.forall(_.additionalTokens.size <= ErgoConstants.MaxTokens.get),
-        s"$id: ${outputCandidates.map(_.additionalTokens.size)}")
       .validateSeq(outputCandidates)((validationState, out) => validationState
-//        .validate(txMaxBoxSize, SBox.dataSize(out.asInstanceOf[SType#WrappedType]) <= ErgoConstants.MaxBoxSize.get)
+        .validate(txMaxBoxSize, getByteLength[ErgoBox](out.toBox(id, 0), ErgoBoxSerializer) <= ErgoConstants.MaxBoxSize.get)
         .validate(txRegistersCount, out.additionalRegisters.size <= ErgoBox.nonMandatoryRegistersCount)
-        /*.validateSeq(out.additionalRegisters)((validationState, reg) => validationState
-          .validate(txRegisterData, validateRegister(reg))
-        )*/
+        .validateSeq(out.additionalRegisters)((validationState, reg) => validationState
+          .validate(txRegisterData, reg._2 match {
+            case (coll: ConcreteCollection[_]) =>
+              val w = SigmaSerializer.startWriter()
+              ValueSerializer.serialize(coll, w)
+              w.length <= ErgoConstants.MaxByteArrayLength.get
+            case (constant: Constant[_]) =>
+              constant.tpe match {
+                case l: SBigInt.type =>
+                  val w = SigmaSerializer.startWriter()
+                  DataSerializer.serialize(constant.value, constant.tpe, w)
+                  println(w.length)
+                  w.length <= ErgoConstants.MaxBigIntSizeInBytes.get
+                case _ => true
+              }
+            case _ => true
+          })
+        )
       )
       .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), s"$id: ${outputCandidates.map(_.value)}")
       .validateNoFailure(txOutputSum, outputsSumTry)

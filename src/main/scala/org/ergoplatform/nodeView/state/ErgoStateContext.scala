@@ -7,7 +7,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionValidator
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Constants, _}
-import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
@@ -17,7 +16,6 @@ import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import special.collection.{Coll, CollOverArray}
 
-import scala.collection.mutable
 import scala.util.{Failure, Try}
 
 /**

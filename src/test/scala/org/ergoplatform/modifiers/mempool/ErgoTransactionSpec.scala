@@ -7,18 +7,17 @@ import org.ergoplatform.settings.ValidationRules.bsBlockTransactionsCost
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters, ValidationRules}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoConstants, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
 import scalan.util.BenchmarkUtil
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.encode.Base16
-import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate._
-import sigmastate.lang.StdSigmaBuilder
+import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
-import special.collection.{Coll, CollOverArray}
+import sigmastate.lang.StdSigmaBuilder
 
 import scala.util.{Random, Try}
 

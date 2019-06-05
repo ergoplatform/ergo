@@ -4,7 +4,7 @@ import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
+import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.api.ApiEncoderOption.Detalization
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
@@ -19,8 +19,10 @@ import scorex.util.ModifierId
 import sigmastate.Values.{ErgoTree, EvaluatedValue, Value}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.serialization.ErgoTreeSerializer
+import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
 import sigmastate.{SBoolean, SType}
+import special.collection.Coll
+import sigmastate.eval._
 
 import scala.util.Try
 
@@ -97,25 +99,17 @@ trait ApiCodecs {
     decodeErgoTree(_.asInstanceOf[ErgoTree])
   }
 
-  implicit val valueEncoder: Encoder[Value[SType]] = { value =>
-    ErgoTreeSerializer.DefaultSerializer.serializeWithSegregation(value).asJson
-  }
-
-  implicit val booleanValueEncoder: Encoder[Value[SBoolean.type]] = { value =>
-    valueEncoder(value)
-  }
-
-  implicit val booleanValueDecoder: Decoder[Value[SBoolean.type]] = {
-    valueDecoder(_.asInstanceOf[Value[SBoolean.type]])
+  implicit val evaluatedValueEncoder: Encoder[EvaluatedValue[SType]] = { value =>
+    ValueSerializer.serialize(value).asJson
   }
 
   implicit val evaluatedValueDecoder: Decoder[EvaluatedValue[SType]] = {
-    valueDecoder(_.asInstanceOf[EvaluatedValue[SType]])
+    decodeEvaluatedValue(_.asInstanceOf[EvaluatedValue[SType]])
   }
 
-  def valueDecoder[T](transform: Value[SType] => T): Decoder[T] = { implicit cursor: ACursor =>
+  def decodeEvaluatedValue[T](transform: EvaluatedValue[SType] => T): Decoder[T] = { implicit cursor: ACursor =>
     cursor.as[Array[Byte]] flatMap { bytes =>
-      fromThrows(transform(ErgoTreeSerializer.DefaultSerializer.deserialize(bytes)))
+      fromThrows(transform(ValueSerializer.deserialize(bytes).asInstanceOf[EvaluatedValue[SType]]))
     }
   }
 
@@ -145,7 +139,7 @@ trait ApiCodecs {
 
   implicit val registersEncoder: Encoder[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = {
     _.map { case (key, value) =>
-      registerIdEncoder(key) -> valueEncoder(value)
+      registerIdEncoder(key) -> evaluatedValueEncoder(value)
     }.asJson
   }
 
@@ -161,7 +155,7 @@ trait ApiCodecs {
       "boxId" -> box.id.asJson,
       "value" -> box.value.asJson,
       "ergoTree" -> ergoTreeEncoder(box.ergoTree),
-      "assets" -> box.additionalTokens.asJson,
+      "assets" -> box.additionalTokens.toArray.toSeq.asJson,
       "creationHeight" -> box.creationHeight.asJson,
       "additionalRegisters" -> registersEncoder(box.additionalRegisters)
     )

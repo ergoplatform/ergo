@@ -9,11 +9,14 @@ import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
-import org.ergoplatform.settings.{Algos, LaunchParameters, VotingSettings}
+import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
+import org.ergoplatform.settings.{Algos, VotingSettings}
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
 import scorex.core.transaction.state.TransactionValidation
+import scorex.core.utils.ScorexEncoding
+import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
@@ -34,7 +37,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                 override val constants: StateConstants)
   extends ErgoState[UtxoState]
     with TransactionValidation[ErgoTransaction]
-    with UtxoStateReader {
+    with UtxoStateReader
+    with ScorexEncoding {
 
   override def rootHash: ADDigest = persistentProver.synchronized {
     persistentProver.digest
@@ -76,20 +80,19 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       .orElse(boxById(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
 
-    execTransactionsTry(transactions, currentStateContext)(checkBoxExistence) match {
-      case Success(executionCost) if executionCost <= currentStateContext.currentParameters.maxBlockCost =>
-        persistentProver.synchronized {
-          val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
-          val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
-          if (java.util.Arrays.equals(expectedDigest, persistentProver.digest) || resultTry.isFailure) {
-            resultTry
-          } else {
-            Failure(new Exception(s"Digest after txs application is wrong. ${Algos.encode(expectedDigest)} expected, " +
-              s"${Algos.encode(persistentProver.digest)} given"))
-          }
-        }
-      case Success(executionCost) => Failure(new Exception(s"Transaction cost $executionCost exceeds limit"))
-      case failure => failure.map(_ => ())
+    val txProcessing = execTransactions(transactions, currentStateContext)(checkBoxExistence)
+    if (txProcessing.isValid) {
+      persistentProver.synchronized {
+        val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
+        val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
+        ModifierValidator(stateContext.validationSettings)
+          .validateNoFailure(fbOperationFailed, resultTry)
+          .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
+          .result
+          .toTry
+      }
+    } else {
+      txProcessing.toTry.map(_ => ())
     }
   }
 
@@ -101,10 +104,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
         log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
 
-        stateContext.appendFullBlock(fb, votingSettings).flatMap { newStateContext =>
-          val inRoot = rootHash
+        val inRoot = rootHash
 
-          val stateTry: Try[UtxoState] = applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
+        val stateTry = stateContext.appendFullBlock(fb, votingSettings).flatMap { newStateContext =>
+          applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
@@ -122,14 +125,15 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
               s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
             new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
-          stateTry.recoverWith[UtxoState] { case e =>
-            log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
-              s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
-            persistentProver.rollback(inRoot)
-              .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
-            Failure(e)
-          }
         }
+        stateTry.recoverWith[UtxoState] { case e =>
+          log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
+            s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
+          persistentProver.rollback(inRoot)
+            .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
+          Failure(e)
+        }
+
       }
 
     case h: Header =>
@@ -196,7 +200,7 @@ object UtxoState {
 
     implicit val votingSettings: VotingSettings = constants.votingSettings
 
-    val defaultStateContext = new ErgoStateContext(Seq.empty, p.digest, LaunchParameters, VotingData.empty)
+    val defaultStateContext = ErgoStateContext.empty(constants)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
     val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
     val persistentProver = PersistentBatchAVLProver.create(

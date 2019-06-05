@@ -6,7 +6,6 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosSolution, AutolykosSolutionSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
@@ -67,7 +66,7 @@ case class Header(version: Version,
   lazy val isGenesis: Boolean = height == ErgoHistory.GenesisHeight
 
   /**
-    * Checks, that modifier m corresponds t this header
+    * Checks that modifier m corresponds to this header
     */
   def isCorrespondingModifier(m: ErgoPersistentModifier): Boolean = sectionIds.exists(_._2 == m.id)
 

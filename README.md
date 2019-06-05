@@ -25,13 +25,30 @@ and currently the reference implementation code should be considered as a specif
 
 ## Installation
 
-You can check our [Wiki](https://github.com/ergoplatform/ergo/wiki) page for different installation methods:
-
-- [How to install Ergo node on Mac OS X](https://github.com/ergoplatform/ergo/wiki/How-to-install-Ergo-node-on-Mac-OS-X)
-- [How to install Ergo node on Ubuntu](https://github.com/ergoplatform/ergo/wiki/How-to-install-Ergo-node-on-Ubuntu)
-- [How to install Ergo node on Windows](https://github.com/ergoplatform/ergo/wiki/How-to-install-Ergo-node-on-Windows)
+You can check our [Wiki](https://github.com/ergoplatform/ergo/wiki/Set-up-a-full-node) page for node installation and configuration guide.
 
 Also, reference with [Node Configuration File](https://github.com/ergoplatform/ergo/wiki/Node-Configuration-File) wiki page for creating your own configuration file.
+
+
+# Build from sources
+
+In order to build the Ergo node from sources you need JDK (>= 1.8) and SBT to be installed on your machine.
+The build system supports different environments which should be specified (through `-Denv=<env_type>``) depending on the network type you want to build for:
+ - `testnet`
+ - `mainnet`
+ - `devnet`
+ 
+Depending on the platform you want to create a package for one of the following packager commands could be chosen:
+ - `universal:packageBin` - Generates a universal zip file
+ - `universal:packageZipTarball` - Generates a universal tgz file
+ - `debian:packageBin` - Generates a deb
+ - `docker:publishLocal` - Builds a Docker image using the local Docker server
+ - `rpm:packageBin` - Generates an rpm
+ - `universal:packageOsxDmg` - Generates a DMG file with the same contents as the universal zip/tgz.
+ - `windows:packageBin` - Generates an MSI
+ 
+ The final build command should look like: `sbt Denv=<env_type> <packager_command>`, example: `sbt -Denv=testnet universal:packageBin`. 
+ A resulted package could be found in the `target/scala-2.12/<platform_type>` directory.
 
 
 ## Docker Quick Start

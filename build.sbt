@@ -76,7 +76,8 @@ val opts = Seq(
   // probably can't use these with jstack and others tools
   "-XX:+PerfDisableSharedMem",
   "-XX:+ParallelRefProcEnabled",
-  "-XX:+UseStringDeduplication")
+  "-XX:+UseStringDeduplication"
+)
 
 // -J prefix is required by the bash script
 javaOptions in run ++= opts
@@ -97,17 +98,73 @@ sourceGenerators in Compile += Def.task {
   Seq(versionFile)
 }
 
+resourceGenerators in Compile += Def.task {
+  val confName = buildEnv.value match {
+    case BuildEnv.MainNet => "mainnet.conf"
+    case BuildEnv.TestNet => "testnet.conf"
+    case BuildEnv.DevNet =>  "devnet.conf"
+  }
+  val confFile = (resourceDirectory in Compile).value / confName
+  val targetFile = (resourceManaged in Compile).value / "application.conf"
+  IO.copyFile(confFile, targetFile)
+  Seq(targetFile)
+}
+
+mappings in Compile := Seq(
+  ((resourceManaged in Compile).value / "application.conf") -> "application.conf"
+)
+
 mainClass in assembly := Some("org.ergoplatform.ErgoApp")
 
 test in assembly := {}
 
+assemblyJarName in assembly := {
+  val networkType = buildEnv.value match {
+    case BuildEnv.MainNet => "mainnet"
+    case BuildEnv.TestNet => "testnet"
+    case BuildEnv.DevNet =>  "devnet"
+  }
+  s"ergo-$networkType-${version.value}.jar"
+}
+
 assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first
   case "module-info.class" => MergeStrategy.discard
+  case "reference.conf" => CustomMergeStrategy.concatReversed
   case other => (assemblyMergeStrategy in assembly).value(other)
 }
 
 enablePlugins(sbtdocker.DockerPlugin)
+enablePlugins(JavaAppPackaging)
+
+mappings in Universal += {
+  val sampleFile = (resourceDirectory in Compile).value / "samples" / "local.conf.sample"
+  sampleFile -> "conf/local.conf"
+}
+
+// removes all jar mappings in universal and appends the fat jar
+mappings in Universal ++= {
+  // universalMappings: Seq[(File,String)]
+  val universalMappings = (mappings in Universal).value
+  val fatJar = (assembly in Compile).value
+  // removing means filtering
+  val filtered = universalMappings filter {
+    case (_, name) => !name.endsWith(".jar")
+  }
+  // add the fat jar
+  filtered :+ (fatJar -> ("lib/" + fatJar.getName))
+}
+
+// add jvm parameter for typesafe config
+bashScriptExtraDefines += """addJava "-Dconfig.file=${app_home}/../conf/local.conf""""
+
+inConfig(Linux)(
+  Seq(
+    maintainer := "ergoplatform.org",
+    packageSummary := "Ergo node",
+    packageDescription := "Ergo node"
+  )
+)
 
 Defaults.itSettings
 configs(IntegrationTest extend Test)
@@ -133,7 +190,6 @@ dockerfile in docker := {
 buildOptions in docker := BuildOptions(
   removeIntermediateContainers = BuildOptions.Remove.OnSuccess
 )
-
 
 //FindBugs settings
 

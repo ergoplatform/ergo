@@ -15,10 +15,11 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "e1142a21-SNAPSHOT"
-val sigmaStateVersion = "v2.1-d62d0bab-SNAPSHOT"
-val ergoWalletVersion = "soft-forkability2-89850804-SNAPSHOT"
+val sigmaStateVersion = "v2.1-76fc50da-SNAPSHOT"
+
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
+val ergoWalletVersion = "soft-forkability2-b2b1b341-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   ("org.ergoplatform" %% "ergo-wallet" % ergoWalletVersion)
@@ -30,8 +31,6 @@ libraryDependencies ++= Seq(
   ("org.scorexfoundation" %% "avl-iodb" % "0.2.15").exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "iodb" % "0.3.2",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
-
-//  "org.ergoplatform" %% "ergo-wallet" % "0.2-R1-SNAPSHOT",
 
   "org.typelevel" %% "cats-free" % "1.6.0",
   "javax.xml.bind" % "jaxb-api" % "2.+",

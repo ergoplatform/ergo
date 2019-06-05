@@ -50,7 +50,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   override protected def txModify(tx: ErgoTransaction): Unit = {
-    memoryPool().putIfValid(tx, minimalState()) match {
+    memoryPool().process(tx, minimalState()) match {
       case (newPool, ProcessingOutcome.Accepted) =>
         log.debug(s"Unconfirmed transaction $tx added to the memory pool")
         val newVault = vault().scanOffchain(tx)
@@ -60,8 +60,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         log.debug(s"Transaction $tx invalidated. Cause: ${e.getMessage}")
         updateNodeView(updatedMempool = Some(newPool))
         context.system.eventStream.publish(FailedTransaction[ErgoTransaction](tx, e))
-      case (_, ProcessingOutcome.Declined) => // do nothing
-        log.debug(s"Transaction $tx declined")
+      case (_, ProcessingOutcome.Declined(e)) => // do nothing
+        log.debug(s"Transaction $tx declined, reason: ${e.getMessage}")
     }
   }
 

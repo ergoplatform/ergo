@@ -7,6 +7,7 @@ import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.ExtensionCandidate
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants}
 import org.ergoplatform.settings.Constants.HashLength
+import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
@@ -28,6 +29,9 @@ import scala.concurrent.duration._
 trait ErgoTestConstants extends ScorexLogging {
 
   implicit val votingSettings: VotingSettings = VotingSettings(1024, 32, 128)
+  val validationSettings: ErgoValidationSettings = ErgoValidationSettings.initial
+  implicit val validationSettingsNoIl: ErgoValidationSettings = validationSettings
+    .updated(ErgoValidationSettingsUpdate(Seq(exIlUnableToValidate, exIlEncoding, exIlStructure, exEmpty), Seq()))
 
   val parameters: Parameters = LaunchParameters
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
@@ -48,7 +52,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(settings.chainSettings)
   val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(settings.chainSettings).head
   val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(
-    (defaultRootSecret +: defaultChildSecrets).map(_.key), parameters)
+    defaultRootSecret +: defaultChildSecrets, parameters)
   val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
   val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
@@ -59,8 +63,9 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultVotes: Array[Byte] = Array.fill(3)(0.toByte)
   val defaultVersion: Byte = 0
   lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
+  val emptyVSUpdate = ErgoValidationSettingsUpdate.empty
   val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(genesisStateDigest, settings)
-    .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, defaultVersion)
+    .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, emptyVSUpdate, defaultVersion)
 
   val startHeight: Int = emptyStateContext.currentHeight
   val startDigest: ADDigest = emptyStateContext.genesisStateDigest

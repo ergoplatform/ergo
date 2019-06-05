@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import java.io.File
 import java.util
 
-import akka.actor.Actor
+import akka.actor.{Actor, ActorRef}
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -18,7 +18,7 @@ import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, Tr
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.TransactionContext
-import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, JsonSecretStorage}
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage}
 import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
@@ -71,7 +71,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         val seed = Mnemonic.toSeed(testMnemonic)
         val rootSk = ExtendedSecretKey.deriveMasterKey(seed)
         val childSks = walletSettings.testKeysQty.toIndexedSeq.flatMap(x => (0 until x).map(rootSk.child))
-        proverOpt = Some(ErgoProvingInterpreter((rootSk +: childSks).map(_.key), parameters))
+        proverOpt = Some(ErgoProvingInterpreter(rootSk +: childSks, parameters))
         storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
       case None =>
         log.info("Trying to read wallet in secure mode ..")
@@ -187,18 +187,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       secretStorageOpt match {
         case Some(secretStorage) =>
           sender() ! secretStorage.unlock(pass)
-          proverOpt = Some(ErgoProvingInterpreter(secretStorage.secret.map(_.key).toIndexedSeq, parameters))
-          storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
-          // process postponed blocks when prover is available.
-          val lastProcessedHeight = registry.readIndex.height
-          storage.readLatestPostponedBlockHeight.foreach { lastPostponedHeight =>
-            val blocks = storage.readBlocks(lastProcessedHeight, lastPostponedHeight)
-            blocks.sortBy(_.height).foreach { case PostponedBlock(id, height, inputs, outputs) =>
-              processBlock(id, height, inputs, outputs)
-            }
-            // remove processed blocks from storage.
-            storage.removeBlocks(lastProcessedHeight, lastPostponedHeight)
-          }
+          processUnlock(secretStorage)
         case None =>
           sender() ! Failure(new Exception("Wallet not initialized"))
       }
@@ -212,7 +201,44 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case GenerateTransaction(requests) =>
       sender() ! generateTransactionWithOutputs(requests)
+
+    case DeriveKey(encodedPath) =>
+      withWalletLockHandler(sender()) {
+        _.secret.foreach { rootSecret =>
+          DerivationPath.fromEncoded(encodedPath).foreach {
+            case path if !path.publicBranch =>
+              val secret = rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
+              processSecretAddition(secret)
+              sender() ! Success(P2PKAddress(secret.publicKey.key))
+            case path =>
+              sender() ! Failure(new Exception(
+                s"A private path is expected, but the public one given: $path"))
+          }
+        }
+      }
+
+    case DeriveNextKey =>
+      withWalletLockHandler(sender()) {
+        _.secret.foreach { rootSecret =>
+          sender() ! nextPath.map { path =>
+            val secret = rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
+            processSecretAddition(secret)
+            path -> P2PKAddress(secret.publicKey.key)
+          }
+        }
+      }
   }
+
+  private def withWalletLockHandler(callback: ActorRef)
+                                   (body: JsonSecretStorage => Unit): Unit =
+    secretStorageOpt match {
+      case Some(secretStorage) if !secretStorage.isLocked =>
+        body(secretStorage)
+      case Some(_) =>
+        callback ! Failure(new Exception("Wallet is locked"))
+      case None =>
+        callback ! Failure(new Exception("Wallet is not initialized"))
+    }
 
   private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
 
@@ -339,7 +365,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                            height: Int,
                            inputs: Seq[(ModifierId, EncodedBoxId)],
                            outputs: Seq[(ModifierId, ErgoBox)]): Unit = {
-    proverOpt.foreach(_.IR.resetContext())
+    // re-create interpreter in order to avoid IR context bloating.
+    proverOpt = proverOpt.map(oldInterpreter => ErgoProvingInterpreter(oldInterpreter.secretKeys, parameters))
     val prevUncertainBoxes = registry.readUncertainBoxes
     val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
       .filterNot { case (_, o) => inputs.map(_._2).contains(encodedBoxId(o.id)) }
@@ -355,6 +382,32 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedBoxId(x.box.id))
     offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)
+  }
+
+  private def processSecretAddition(secret: ExtendedSecretKey): Unit =
+    proverOpt.foreach { prover =>
+      val secrets = proverOpt.toIndexedSeq.flatMap(_.secretKeys) :+ secret
+      proverOpt = Some(new ErgoProvingInterpreter(secrets, parameters)(prover.IR))
+      storage.addTrackedAddress(P2PKAddress(secret.publicKey.key))
+      storage.addPath(secret.path)
+    }
+
+  private def processUnlock(secretStorage: JsonSecretStorage): Unit = {
+    val secrets = secretStorage.secret.toIndexedSeq ++ storage.readPaths.flatMap { path =>
+      secretStorage.secret.toSeq.map(_.derive(path).asInstanceOf[ExtendedSecretKey])
+    }
+    proverOpt = Some(ErgoProvingInterpreter(secrets, parameters))
+    storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
+    // process postponed blocks when prover is available.
+    val lastProcessedHeight = registry.readIndex.height
+    storage.readLatestPostponedBlockHeight.foreach { lastPostponedHeight =>
+      val blocks = storage.readBlocks(lastProcessedHeight, lastPostponedHeight)
+      blocks.sortBy(_.height).foreach { case PostponedBlock(id, height, inputs, outputs) =>
+        processBlock(id, height, inputs, outputs)
+      }
+      // remove processed blocks from storage.
+      storage.removeBlocks(lastProcessedHeight, lastPostponedHeight)
+    }
   }
 
   private def inputsFor(targetAmount: Long,
@@ -389,6 +442,31 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       Failure[T](e)
     }
 
+  /**
+    * Finds next available path index for a new key.
+    */
+  private def nextPath: Try[DerivationPath] = {
+    def nextPath(accPath: List[Int], rem: Seq[List[Int]]): Try[DerivationPath] = {
+      if (!rem.forall(_.isEmpty)) {
+        val maxChildIdx = rem.flatMap(_.headOption).max
+        if (!Index.isHardened(maxChildIdx)) {
+          Success(DerivationPath(0 +: (accPath :+ maxChildIdx + 1), publicBranch = false))
+        } else {
+          nextPath(accPath :+ maxChildIdx, rem.map(_.drop(1)))
+        }
+      } else {
+        Failure(
+          new Exception("Out of non-hardened index space. Try to derive hardened key specifying path manually"))
+      }
+    }
+    val secrets = proverOpt.toIndexedSeq.flatMap(_.secretKeys)
+    if (secrets.size == 1) {
+      Success(DerivationPath(List(0, 1), publicBranch = false))
+    } else {
+      nextPath(List.empty, secrets.map(_.path.decodedPath.tail))
+    }
+  }
+
 }
 
 object ErgoWalletActor {
@@ -413,14 +491,18 @@ object ErgoWalletActor {
 
   final case class UnlockWallet(pass: String)
 
-  final case object LockWallet
+  final case class DeriveKey(path: String)
 
-  final case object ReadRandomPublicKey
+  case object DeriveNextKey
 
-  final case object ReadTrackedAddresses
+  case object LockWallet
 
-  final case object GetFirstSecret
+  case object ReadRandomPublicKey
 
-  final case object GetBoxes
+  case object ReadTrackedAddresses
+
+  case object GetFirstSecret
+
+  case object GetBoxes
 
 }

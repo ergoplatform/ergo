@@ -3,7 +3,7 @@ package org.ergoplatform.api
 import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
-import org.ergoplatform.{ErgoBox, ValidationRules}
+import org.ergoplatform.{ErgoBox}
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.api.ApiEncoderOption.Detalization
 import org.ergoplatform.mining.{groupElemToBytes, groupElemFromBytes}

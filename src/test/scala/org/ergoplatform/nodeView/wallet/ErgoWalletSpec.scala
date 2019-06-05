@@ -43,7 +43,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val req = AssetIssueRequest(address, emissionAmount, tokenName, tokenDescription, tokenDecimals)
       val tx = await(wallet.generateTransaction(Seq(feeReq, req))).get
       log.info(s"Generated transaction $tx")
-      val context = new ErgoStateContext(Seq(genesisBlock.header), startDigest, parameters, VotingData.empty)
+      val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
     }
@@ -65,18 +65,18 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val sumToSpend = snap.balance / (addresses.length + 1)
       val req =
-        PaymentRequest(addresses.head, sumToSpend,  Some(assetsToSpend), None) +:
-        addresses.tail.map(a => PaymentRequest(a, sumToSpend, None, None))
+        PaymentRequest(addresses.head, sumToSpend, Some(assetsToSpend), None) +:
+          addresses.tail.map(a => PaymentRequest(a, sumToSpend, None, None))
       log.info(s"Confirmed balance $snap")
       log.info(s"Payment request $req")
       val tx = await(wallet.generateTransaction(req)).get
       log.info(s"Generated transaction $tx")
-      val context = new ErgoStateContext(Seq(genesisBlock.header), startDigest, parameters, VotingData.empty)
+      val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension),startDigest, parameters, validationSettingsNoIl, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
 
       val block = makeNextBlock(getUtxoState, Seq(tx))
-      applyBlock(block) shouldBe 'success    //scan by wallet happens during apply
+      applyBlock(block) shouldBe 'success //scan by wallet happens during apply
       waitForScanning(block)
       val newSnap = getConfirmedBalances
       val newSumToSpend = newSnap.balance / addresses.length
@@ -86,7 +86,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Payment requests 2 $req2")
       val tx2 = await(wallet.generateTransaction(req2)).get
       log.info(s"Generated transaction $tx2")
-      val context2 = new ErgoStateContext(Seq(block.header), startDigest, parameters, VotingData.empty)
+      val context2 = new ErgoStateContext(Seq(block.header), Some(block.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
       val knownBoxes = tx.outputs ++ genesisTx.outputs
       val boxesToSpend2 = tx2.inputs.map(i => knownBoxes.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx2.statefulValidity(boxesToSpend2, emptyDataBoxes, context2) shouldBe 'success
@@ -175,7 +175,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val balanceToReturn = randomLong(balanceToSpend)
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsWithRandom(boxesToSpend))
-//      val doubleSpendingTx = makeSpendingTx(boxesToSpend, address, randomLong(balanceToSpend))
+      //      val doubleSpendingTx = makeSpendingTx(boxesToSpend, address, randomLong(balanceToSpend))
       val assets = assetAmount(boxesAvailable(spendingTx, address.pubkey))
       assets should not be empty
 

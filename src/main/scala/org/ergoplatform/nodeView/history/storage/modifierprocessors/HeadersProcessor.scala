@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.settings.{Algos, NodeConfigurationSettings, Parameters, ValidationRules}
+import org.ergoplatform.settings._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
@@ -20,7 +20,6 @@ import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSt
 import scorex.util._
 
 import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.util.Try
 
 /**
@@ -269,7 +268,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   class HeaderValidator extends ScorexEncoding {
 
-    private def validationState: ValidationState[Unit] = ModifierValidator(ValidationRules.initialSettings)
+    private def validationState: ValidationState[Unit] = ModifierValidator(ErgoValidationSettings.initial)
 
     def validate(header: Header): ValidationResult[Unit] = {
       if (header.isGenesis) {
@@ -284,31 +283,12 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       }
     }
 
-    /**
-      * Check that non-zero votes extracted from block header are correct
-      */
-    private def checkVotes(header: Header): Unit = {
-      val votes: Array[Byte] = header.votes.filter(_ != Parameters.NoParameter)
-      val epochStarts = header.votingStarts(chainSettings.voting.votingLength)
-      val votesCount = votes.count(_ != Parameters.SoftFork)
-      if (votesCount > Parameters.ParamVotesCount) throw new Error(s"Too many votes $votesCount")
-
-      val prevVotes = mutable.Buffer[Byte]()
-      votes.foreach { v =>
-        if (prevVotes.contains(v)) throw new Error(s"Double vote in ${votes.mkString}")
-        if (prevVotes.contains((-v).toByte)) throw new Error(s"Contradictory votes in ${votes.mkString}")
-        if (epochStarts && !Parameters.parametersDescs.contains(v)) throw new Error("Incorrect vote proposed")
-        prevVotes += v
-      }
-    }
-
     private def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
       validationState
         .validateEqualIds(hdrGenesisParent, header.parentId, Header.GenesisParentId)
         .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, (id: ModifierId) => id.equals(header.id))
         .validate(hdrGenesisHeight, header.height == GenesisHeight, header.toString)
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
-        .validateNoThrow(hdrVotes, checkVotes(header))
         .result
     }
 
@@ -322,7 +302,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
-        .validateNoThrow(hdrVotes, checkVotes(header))
         .result
     }
 

@@ -17,7 +17,7 @@ import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
 /**
   * System parameters which could be readjusted via collective miners decision.
   */
-class Parameters(val height: Height, val parametersTable: Map[Byte, Int])
+class Parameters(val height: Height, val parametersTable: Map[Byte, Int], val proposedUpdate: ErgoValidationSettingsUpdate)
   extends ErgoLikeParameters {
 
   import Parameters._
@@ -67,21 +67,29 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int])
 
   lazy val blockVersion: Byte = parametersTable(BlockVersion).toByte
 
-  def update(height: Height, forkVote: Boolean, epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): Parameters = {
-    val table1 = updateFork(height, parametersTable, forkVote, epochVotes, votingSettings)
+  def update(height: Height,
+             forkVote: Boolean,
+             epochVotes: Seq[(Byte, Int)],
+             proposedUpdate: ErgoValidationSettingsUpdate,
+             votingSettings: VotingSettings): (Parameters, ErgoValidationSettingsUpdate) = {
+    val (table1, activatedUpdate) = updateFork(height, parametersTable, forkVote, epochVotes, proposedUpdate, votingSettings)
     val table2 = updateParams(table1, epochVotes, votingSettings)
-    Parameters(height, table2)
+    (Parameters(height, table2, proposedUpdate), activatedUpdate)
   }
 
-
-  def updateFork(height: Height, parametersTable: Map[Byte, Int], forkVote: Boolean,
-                 epochVotes: Seq[(Byte, Int)], votingSettings: VotingSettings): Map[Byte, Int] = {
+  def updateFork(height: Height,
+                 parametersTable: Map[Byte, Int],
+                 forkVote: Boolean,
+                 epochVotes: Seq[(Byte, Int)],
+                 proposedUpdate: ErgoValidationSettingsUpdate,
+                 votingSettings: VotingSettings): (Map[Byte, Int], ErgoValidationSettingsUpdate) = {
 
     import votingSettings.{activationEpochs, softForkApproved, softForkEpochs => votingEpochs, votingLength => votingEpochLength}
 
     lazy val votesInPrevEpoch = epochVotes.find(_._1 == SoftFork).map(_._2).getOrElse(0)
     lazy val votes = votesInPrevEpoch + parametersTable(SoftForkVotesCollected)
     var table = parametersTable
+    var activatedUpdate = ErgoValidationSettingsUpdate.empty
 
     //successful voting - cleaning after activation
     if (softForkStartingHeight.nonEmpty
@@ -115,8 +123,9 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int])
       && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs)
       && softForkApproved(votes)) {
       table = table.updated(BlockVersion, table(BlockVersion) + 1)
+      activatedUpdate = proposedUpdate
     }
-    table
+    (table, activatedUpdate)
   }
 
   //Update non-fork parameters
@@ -181,14 +190,17 @@ class Parameters(val height: Height, val parametersTable: Map[Byte, Int])
     padVotes(if (voteForFork) vs :+ SoftFork else vs)
   }
 
-  def toExtensionCandidate(otherFields: Seq[(Array[Byte], Array[Byte])]): ExtensionCandidate = {
+  def toExtensionCandidate: ExtensionCandidate = {
     val paramFields = parametersTable.toSeq.map { case (k, v) =>
       Array(SystemParametersPrefix, k) -> Ints.toByteArray(v)
     }
-    ExtensionCandidate(paramFields ++ otherFields)
+    val rulesToDisableFields: Seq[(Array[Byte], Array[Byte])] = {
+      Seq(SoftForkDisablingRulesKey -> ErgoValidationSettingsUpdateSerializer.toBytes(proposedUpdate))
+    }
+    ExtensionCandidate(paramFields ++ rulesToDisableFields)
   }
 
-  override def toString: String = s"Parameters(height: $height; ${parametersTable.mkString("; ")})"
+  override def toString: String = s"Parameters(height: $height; ${parametersTable.mkString("; ")}; $proposedUpdate)"
 
   def canEqual(o: Any): Boolean = o.isInstanceOf[Parameters]
 
@@ -206,6 +218,8 @@ object Parameters {
   val SoftForkVotesCollected: Byte = 121
   val SoftForkStartingHeight: Byte = 122
   val BlockVersion: Byte = 123
+  val SoftForkDisablingRules: Byte = 124
+  val SoftForkDisablingRulesKey: Array[Byte] = Array(Extension.SystemParametersPrefix, SoftForkDisablingRules)
 
   //A vote for nothing
   val NoParameter: Byte = 0
@@ -235,23 +249,42 @@ object Parameters {
   val OutputCostIncrease: Byte = 8
   val OutputCostDecrease: Byte = (-OutputCostIncrease).toByte
 
-  val StorageFeeFactorDefault = 1250000
-  val StorageFeeFactorMax = 2500000
-  val StorageFeeFactorMin = 0
-  val StorageFeeFactorStep = 25000
+
+  val StorageFeeFactorDefault: Int = 1250000
+  val StorageFeeFactorMax: Int = 2500000
+  val StorageFeeFactorMin: Int = 0
+  val StorageFeeFactorStep: Int = 25000
 
   val MinValuePerByteDefault: Int = 30 * 12
-  val MinValueStep = 10
-  val MinValueMin = 0
-  val MinValueMax = 10000 //0.00001 Erg
+  val MinValueStep: Int = 10
+  val MinValueMin: Int = 0
+  val MinValueMax: Int = 10000 //0.00001 Erg
 
-  val TokenAccessCostDefault = 100
+  val TokenAccessCostDefault: Int = 100
 
-  val InputCostDefault = 2000
+  val InputCostDefault: Int = 2000
 
-  val DataInputCostDefault = 100
+  val DataInputCostDefault: Int = 100
 
-  val OutputCostDefault = 100
+  val OutputCostDefault: Int = 100
+
+  val MaxBlockSizeDefault: Int = 512 * 1024
+  val MaxBlockSizeMax: Int = 1024 * 1024
+  val MaxBlockSizeMin: Int = 16 * 1024
+
+  val MaxBlockCostDefault: Int = 1000000
+
+  val DefaultParameters: Map[Byte, Int] = Map(
+    StorageFeeFactorIncrease -> StorageFeeFactorDefault,
+    MinValuePerByteIncrease -> MinValuePerByteDefault,
+    TokenAccessCostIncrease -> TokenAccessCostDefault,
+    InputCostIncrease -> InputCostDefault,
+    DataInputCostIncrease -> DataInputCostDefault,
+    OutputCostIncrease -> OutputCostDefault,
+    MaxBlockSizeIncrease -> MaxBlockSizeDefault,
+    MaxBlockCostIncrease -> MaxBlockCostDefault,
+    BlockVersion -> 1
+  )
 
   val parametersDescs: Map[Byte, String] = Map(
     StorageFeeFactorIncrease -> "Storage fee factor (per byte per storage period)",
@@ -273,7 +306,7 @@ object Parameters {
   val minValues: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorMin,
     MinValuePerByteIncrease -> MinValueMin,
-    MaxBlockSizeIncrease -> 16 * 1024,
+    MaxBlockSizeIncrease -> MaxBlockSizeMin,
     MaxBlockCostIncrease -> 16 * 1024
   )
 
@@ -284,20 +317,26 @@ object Parameters {
 
   val ParamVotesCount = 2
 
-  def apply(h: Height, paramsTable: Map[Byte, Int]): Parameters = new Parameters(h, paramsTable)
+  def apply(h: Height, paramsTable: Map[Byte, Int], update: ErgoValidationSettingsUpdate): Parameters = new Parameters(h, paramsTable, update)
 
   def parseExtension(h: Height, extension: Extension): Try[Parameters] = Try {
     val paramsTable = extension.fields.flatMap { case (k, v) =>
       require(k.length == 2, s"Wrong key during parameters parsing in extension: $extension")
-      if (k.head == 0) {
+      if (k(0) == Extension.SystemParametersPrefix && k(1) != SoftForkDisablingRules) {
         require(v.length == 4, s"Wrong value during parameters parsing in extension: $extension")
-        Some(k.last -> Ints.fromByteArray(v))
+        Some(k(1) -> Ints.fromByteArray(v))
       } else {
         None
       }
     }.toMap
+    val proposedUpdate = extension
+      .fields
+      .find(k => java.util.Arrays.equals(k._1, SoftForkDisablingRulesKey))
+      .flatMap(b => ErgoValidationSettingsUpdateSerializer.parseBytesTry(b._2).toOption)
+      .getOrElse(ErgoValidationSettingsUpdate.empty)
+
     require(paramsTable.nonEmpty, s"Parameters table is empty in extension: $extension")
-    Parameters(h, paramsTable)
+    Parameters(h, paramsTable, proposedUpdate)
   }
 
   /**
@@ -307,18 +346,21 @@ object Parameters {
     * @param p2 - parameters set
     * @return Success(p1), if parameters match, Failure(_) otherwise
     */
-  def matchParameters(p1: Parameters, p2: Parameters): Try[Parameters] = Try {
+  def matchParameters(p1: Parameters, p2: Parameters): Try[Unit] = Try {
     if (p1.height != p2.height) {
       throw new Exception(s"Different height in parameters, p1 = $p1, p2 = $p2")
     }
     if (p1.parametersTable.size != p2.parametersTable.size) {
       throw new Exception(s"Parameters differ in size, p1 = $p1, p2 = $p2")
     }
+    if (p1.proposedUpdate != p2.proposedUpdate) {
+      throw new Exception(s"Parameters proposedUpdate differs, p1 = ${p1.proposedUpdate}, p2 = ${p2.proposedUpdate}")
+    }
     p1.parametersTable.foreach { case (k, v) =>
       val v2 = p2.parametersTable(k)
       if (v2 != v) throw new Exception(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
     }
-  }.map(_ => p1)
+  }
 
 }
 
@@ -332,15 +374,17 @@ object ParametersSerializer extends ScorexSerializer[Parameters] with ApiCodecs 
       w.put(k)
       w.putInt(v)
     }
+    ErgoValidationSettingsUpdateSerializer.serialize(params.proposedUpdate, w)
   }
 
   override def parse(r: Reader): Parameters = {
     val height = r.getUInt().toIntExact
     val tableLength = r.getUInt().toIntExact
-    val table = (0 until tableLength).map {_ =>
+    val table = (0 until tableLength).map { _ =>
       r.getByte() -> r.getInt()
     }
-    Parameters(height, table.toMap)
+    val proposedUpdate = ErgoValidationSettingsUpdateSerializer.parse(r)
+    Parameters(height, table.toMap, proposedUpdate)
   }
 
   implicit val jsonEncoder: Encoder[Parameters] = { p: Parameters =>

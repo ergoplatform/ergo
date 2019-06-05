@@ -50,7 +50,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bitbucket.inkytonik.kiama" % "kiama_2.12" % "2.1.0",
   "org.bitlet" % "weupnp" % "0.1.4",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
-  "org.ergoplatform" % "ergo-wallet_2.12" % "soft-forkability2-89850804-SNAPSHOT",
+  "org.ergoplatform" % "ergo-wallet_2.12" % "soft-forkability2-b2b1b341-SNAPSHOT",
   "org.objenesis" % "objenesis" % "2.4",
   "org.ow2.asm" % "asm" % "5.0.4",
   "org.reactivestreams" % "reactive-streams" % "1.0.2",
@@ -68,10 +68,10 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scorexfoundation" % "scorex-core_2.12" % "e1142a21-SNAPSHOT",
   "org.scorexfoundation" % "scorex-util_2.12" % "0.1.3",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.6",
-  "org.scorexfoundation" % "sigma-api_2.12" % "i506-smethod-test-88d567e3-SNAPSHOT",
-  "org.scorexfoundation" % "sigma-impl_2.12" % "i506-smethod-test-88d567e3-SNAPSHOT",
-  "org.scorexfoundation" % "sigma-library_2.12" % "i506-smethod-test-88d567e3-SNAPSHOT",
-  "org.scorexfoundation" % "sigma-state_2.12" % "i506-smethod-test-88d567e3-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-api_2.12" % "v2.1-76fc50da-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-impl_2.12" % "v2.1-76fc50da-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-library_2.12" % "v2.1-76fc50da-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-state_2.12" % "v2.1-76fc50da-SNAPSHOT",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "debox_2.12" % "0.8.0",
   "org.spire-math" % "jawn-parser_2.12" % "0.13.0",
@@ -86,4 +86,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 92aaa399b1345c709fea9b35b8a4241ca4ab45ca
+// LIBRARY_DEPENDENCIES_HASH 6cc2c7ff03ee8b05a5a7103f58e12d0875fcc8e2

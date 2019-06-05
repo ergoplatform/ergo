@@ -204,6 +204,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   private def mining: Receive = {
+    case PrepareCandidate if !ergoSettings.nodeSettings.mining =>
+      sender() ! Future.failed(
+        new Exception("Candidate creation is not supported when mining is disabled"))
+
     case PrepareCandidate if candidateOpt.isDefined =>
       sender() ! candidateOpt
         .flatMap { c =>

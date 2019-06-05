@@ -3,14 +3,14 @@ language: scala
 sudo: false
 branches:
   only:
-    - v2.0
+    - v2.1
     - master
     - /^\d\.\d+$/
-    - height-as-int
+    - sigma454-type-check-on-script-deser
 jdk:
 - oraclejdk9
 scala:
-- 2.12.6
+- 2.12.8
 script:
   - sbt clean coverage test coverageReport
   - sbt benchmarks/compile

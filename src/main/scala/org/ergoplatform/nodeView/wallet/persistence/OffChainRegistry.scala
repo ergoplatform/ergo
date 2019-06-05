@@ -36,7 +36,7 @@ final case class OffChainRegistry(height: Int,
     val unspentCertain = offChainBalances.filterNot(x => spentIds.contains(x.id)) ++
       certainBoxes.map { tb =>
         Balance(encodedBoxId(tb.box.id), tb.box.value,
-          tb.box.additionalTokens.map(x => encodedTokenId(x._1) -> x._2).toMap)
+          tb.box.additionalTokens.toArray.map(x => encodedTokenId(x._1) -> x._2).toMap)
       }
     val onChainBalancesUpdated = onChainBalances.filterNot(x => spentIds.contains(x.id))
     this.copy(
@@ -57,7 +57,7 @@ final case class OffChainRegistry(height: Int,
                     onChainIds: Seq[EncodedBoxId]): OffChainRegistry = {
     val updatedOnChainBalances = allCertainBoxes.map { tb =>
       Balance(encodedBoxId(tb.box.id), tb.box.value,
-        tb.box.additionalTokens.map(x => encodedTokenId(x._1) -> x._2).toMap)
+        tb.box.additionalTokens.toArray.map(x => encodedTokenId(x._1) -> x._2).toMap)
     }
     val cleanedOffChainBalances = offChainBalances.filterNot(b => onChainIds.contains(b.id))
     this.copy(

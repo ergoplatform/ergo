@@ -3,7 +3,8 @@ package org.ergoplatform.modifiers.mempool
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
+import org.ergoplatform.settings.ValidationRules.bsBlockTransactionsCost
+import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters, ValidationRules}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
@@ -13,9 +14,10 @@ import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.encode.Base16
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
 
-import scala.util.Random
+import scala.util.{Random, Try}
 
 class ErgoTransactionSpec extends ErgoPropertyTest {
 
@@ -45,6 +47,10 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       boxCandidate.additionalRegisters)
   }
 
+  private def checkTx(from: IndexedSeq[ErgoBox], wrongTx: ErgoTransaction): Try[Long] = {
+    wrongTx.statelessValidity.flatMap(_ => wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext))
+  }
+
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
   property("serialization vector") {
@@ -66,8 +72,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
         new ProverResult(Base16.decode("5aea4d78a234c35accacdf8996b0af5b51e26fee29ea5c05468f23707d31c0df39400127391cd57a70eb856710db48bb9833606e0bf90340").get, new ContextExtension(Map()))),
     )
     val outputCandidates: IndexedSeq[ErgoBoxCandidate] = IndexedSeq(
-      new ErgoBoxCandidate(1000000000L, minerPk, height, Seq(), Map()),
-      new ErgoBoxCandidate(1000000L, settings.chainSettings.monetary.feeProposition, height, Seq(), Map())
+      new ErgoBoxCandidate(1000000000L, minerPk, height, Colls.emptyColl, Map()),
+      new ErgoBoxCandidate(1000000L, settings.chainSettings.monetary.feeProposition, height, Colls.emptyColl, Map())
     )
     val tx = ErgoTransaction(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate])
 
@@ -152,24 +158,20 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
   property("assets preservation law holds") {
     forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
-      val wrongTx = updateAnAsset(tx, from, _ + 1)
-      wrongTx.statelessValidity.isSuccess shouldBe true
-      wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
+      checkTx(from, updateAnAsset(tx, from, _ + 1)) shouldBe 'failure
     }
   }
 
   property("impossible to create an asset of non-positive amount") {
     forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
-      val wrongTx = updateAnAsset(tx, from, _ => -1)
-      wrongTx.statelessValidity.isSuccess shouldBe false
-      wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
+      checkTx(from, updateAnAsset(tx, from, _ => -1)) shouldBe 'failure
     }
   }
 
   property("impossible to overflow an asset value") {
     val gen = validErgoTransactionGenTemplate(1, 1, 8, 16)
     forAll(gen) { case (from, tx) =>
-      val tokenOpt = tx.outputCandidates.flatMap(_.additionalTokens).map(t => ByteArrayWrapper.apply(t._1) -> t._2)
+      val tokenOpt = tx.outputCandidates.flatMap(_.additionalTokens.toArray).map(t => ByteArrayWrapper.apply(t._1) -> t._2)
         .groupBy(_._1).find(_._2.size >= 2)
 
       whenever(tokenOpt.nonEmpty) {
@@ -190,8 +192,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
         }
 
         val wrongTx = tx.copy(outputCandidates = updCandidates)
-        wrongTx.statelessValidity.isSuccess shouldBe false
-        wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
+        checkTx(from, wrongTx) shouldBe 'failure
       }
     }
   }
@@ -204,8 +205,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val validity = tx.statefulValidity(from, emptyDataBoxes, emptyStateContext)
       validity.isSuccess shouldBe false
       val e = validity.failed.get
-      log.info(s"Validation message: ${e.getMessage}", e)
-      e.getMessage should startWith("Input script verification failed for input #0")
+      e.getMessage should startWith(ValidationRules.errorMessage(ValidationRules.txScriptValidation, ""))
     }
   }
 
@@ -215,29 +215,29 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val initTxCost = tx.statefulValidity(from, emptyDataBoxes, emptyStateContext).get
 
       // already existing token from one of the inputs
-      val existingToken = from.flatMap(_.additionalTokens).toSet.head
+      val existingToken = from.flatMap(_.additionalTokens.toArray).toSet.head
       // completely new token
       val randomToken = (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextInt(100000000).toLong)
 
       val in0 = from.last
       // new token added to the last input
       val modifiedIn0 = ErgoBox(in0.value, in0.ergoTree, in0.creationHeight,
-        in0.additionalTokens :+ randomToken, in0.additionalRegisters, in0.transactionId, in0.index)
+        in0.additionalTokens.toArray.toSeq :+ randomToken, in0.additionalRegisters, in0.transactionId, in0.index)
       val txInMod0 = tx.inputs.last.copy(boxId = modifiedIn0.id)
 
       val in1 = from.last
       // existing token added to the last input
       val modifiedIn1 = ErgoBox(in1.value, in1.ergoTree, in1.creationHeight,
-        in1.additionalTokens :+ existingToken, in1.additionalRegisters, in1.transactionId, in1.index)
+        in1.additionalTokens.toArray.toSeq :+ existingToken, in1.additionalRegisters, in1.transactionId, in1.index)
       val txInMod1 = tx.inputs.last.copy(boxId = modifiedIn1.id)
 
       val out0 = tx.outputs.last
       // new token added to the last output
       val modifiedOut0 = ErgoBox(out0.value, out0.ergoTree, out0.creationHeight,
-        out0.additionalTokens :+ randomToken, out0.additionalRegisters, out0.transactionId, out0.index)
+        out0.additionalTokens.toArray.toSeq :+ randomToken, out0.additionalRegisters, out0.transactionId, out0.index)
       // existing token added to the last output
       val modifiedOut1 = ErgoBox(out0.value, out0.ergoTree, out0.creationHeight,
-        out0.additionalTokens :+ existingToken, out0.additionalRegisters, out0.transactionId, out0.index)
+        out0.additionalTokens.toArray.toSeq :+ existingToken, out0.additionalRegisters, out0.transactionId, out0.index)
 
       // update transaction inputs and outputs accordingly
       val txMod0 = tx.copy(inputs = tx.inputs.init :+ txInMod0) // new token group added to one input
@@ -282,13 +282,13 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
     val validFailure = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext)
-    validFailure.isFailure shouldBe true
-    validFailure.failed.get.getMessage.startsWith("Spam") shouldBe true
+    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "").take(30))
+
   }
 
   property("transaction with too many inputs should be rejected") {
 
-    //we assume that verifier must finish verification of any script in less time than 3M hash calculations
+    //we assume that verifier must finish verification of any script in less time than 500K hash calculations
     // (for the Blake2b256 hash function over a single block input)
     val Timeout: Long = {
       val block = Array.fill(16)(0: Byte)
@@ -298,7 +298,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       (1 to 5000000).foreach(_ => hf(block))
 
       val t0 = System.currentTimeMillis()
-      (1 to 3000000).foreach(_ => hf(block))
+      (1 to 500000).foreach(_ => hf(block))
       val t = System.currentTimeMillis()
       t - t0
     }
@@ -314,12 +314,12 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     assert(time0 <= Timeout)
 
     val cause = validity.failed.get.getMessage
-    cause should startWith("Spam transaction detected")
+    cause should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "").take(30))
 
     //check that spam transaction validation with no cost limit is indeed taking too much time
     val relaxedParams = LaunchParameters.parametersTable.updated(Parameters.MaxBlockCostIncrease, Int.MaxValue)
-    val relaxedVerifier = ErgoInterpreter(Parameters(0, relaxedParams))
-    val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(relaxedVerifier))
+    val relaxedVerifier = ErgoInterpreter(Parameters(0, relaxedParams, emptyVSUpdate))
+    val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(relaxedVerifier, validationSettingsNoIl))
 
     assert(time > Timeout)
   }

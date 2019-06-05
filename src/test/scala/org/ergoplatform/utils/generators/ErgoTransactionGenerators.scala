@@ -16,6 +16,8 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate._
+import sigmastate.eval._
+import sigmastate.eval.Extensions._
 import org.ergoplatform.settings.Parameters._
 
 import scala.collection.JavaConverters._
@@ -37,7 +39,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     ar <- additionalRegistersGen
     tokens <- additionalTokensGen
     value <- validValueGen(prop, tokens, ar)
-  } yield new ErgoBoxCandidate(value, prop, h, tokens, ar)
+  } yield new ErgoBoxCandidate(value, prop, h, tokens.toColl, ar)
 
   def ergoBoxGen(propGen: Gen[ErgoTree] = ergoPropositionGen,
                  tokensGen: Gen[Seq[(TokenId, Long)]] = additionalTokensGen,
@@ -130,7 +132,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
     val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
     val assetsMap: mutable.Map[ByteArrayWrapper, Long] =
-      mutable.Map(boxesToSpend.flatMap(_.additionalTokens).map { case (bs, amt) =>
+      mutable.Map(boxesToSpend.flatMap(_.additionalTokens.toArray).map { case (bs, amt) =>
         ByteArrayWrapper(bs) -> amt
       }: _*)
 
@@ -280,7 +282,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield {
     blocks match {
       case _ :: _ =>
-        blocks.foldLeft(new ErgoStateContext(Seq(), startDigest, parameters, VotingData.empty) -> 1) { case ((c, h), b) =>
+        blocks.foldLeft(
+          new ErgoStateContext(Seq(), None, startDigest, parameters, validationSettingsNoIl, VotingData.empty) -> 1) { case ((c, h), b) =>
           val block = b.copy(header = b.header.copy(height = h, votes = votes(h - 1)))
           c.appendFullBlock(block, votingSettings).get -> (h + 1)
         }._1

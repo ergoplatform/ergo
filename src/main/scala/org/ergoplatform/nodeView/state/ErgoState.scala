@@ -10,9 +10,12 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.MinimalState
+import scorex.core.validation.ValidationResult.Valid
+import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
 import scorex.core.{VersionTag, bytesToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
@@ -23,7 +26,7 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.serialization.ValueSerializer
 
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 /**
   * Implementation of minimal state concept in Scorex. Minimal state (or just state from now) is some data structure
@@ -40,35 +43,42 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
   /**
     * Tries to validate and execute transactions.
+    *
     * @return Result of transactions execution with total cost inside
     */
-  protected def execTransactionsTry(transactions: Seq[ErgoTransaction],
-                                    currentStateContext: ErgoStateContext)
-                                   (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): Try[Long] = {
+  protected def execTransactions(transactions: Seq[ErgoTransaction],
+                                 currentStateContext: ErgoStateContext)
+                                (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     import cats.implicits._
     implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
-    def execTry(txs: List[ErgoTransaction], accCostTry: Try[Long]): Try[Long] = (txs, accCostTry) match {
-      case (tx :: tail, Success(accumulatedCost)) =>
-        val costTry = tx.statelessValidity.flatMap { _ =>
-          val boxesToSpendTry: Try[List[ErgoBox]] = tx.inputs.toList
-            .map(in => checkBoxExistence(in.boxId))
-            .sequence
-          val dataBoxesTry: Try[List[ErgoBox]] = tx.dataInputs.toList
-            .map(in => checkBoxExistence(in.boxId))
-            .sequence
-          boxesToSpendTry.flatMap { boxes =>
-            dataBoxesTry.flatMap { dataBoxes =>
-              tx.statefulValidity(boxes.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, accumulatedCost)
-            }
+    val validationSettings: ValidationSettings = stateContext.validationSettings
+
+    def execTx(txs: List[ErgoTransaction], accCostTry: ValidationResult[Long]): ValidationResult[Long] = (txs, accCostTry) match {
+      case (tx :: tail, r: Valid[Long]) =>
+        val boxesToSpendTry: Try[List[ErgoBox]] = tx.inputs.toList
+          .map(in => checkBoxExistence(in.boxId))
+          .sequence
+
+        lazy val dataBoxesTry: Try[List[ErgoBox]] = tx.dataInputs.toList
+          .map(in => checkBoxExistence(in.boxId))
+          .sequence
+
+        lazy val boxes: Try[(List[ErgoBox], List[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
+
+        val vs = tx.validateStateless
+          .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
+          .validateNoFailure(txDataBoxes, dataBoxesTry)
+          .payload[Long](r.value)
+          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, (dataBoxes, toSpend)) =>
+            tx.validateStateful(toSpend.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value)(verifier, validationSettings).result
           }
-        }
-        execTry(tail, costTry.map(_ + accumulatedCost))
-      case (_, acc: Success[Long]) =>
-        acc
-      case (_, failure: Failure[Long]) =>
-        failure
+
+        execTx(tail, vs)
+      case _ =>
+        accCostTry
     }
-    execTry(transactions.toList, Success(0L))
+
+    execTx(transactions.toList, Valid[Long](0L))
   }
 
   def closeStorage(): Unit = {

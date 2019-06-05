@@ -9,13 +9,12 @@ import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.PoPowAlgos.{packInterlinks, unpackInterlinks, updateInterlinks}
+import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector}
@@ -126,7 +125,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
     inOpt
       .find { bx =>
         val canUnlock = (bx.creationHeight + RewardDelay <= height) || (bx.proposition.toSigmaProp != minerProp)
-        canUnlock && bx.proposition.toSigmaProp != cs.monetary.emissionBoxProposition && bx.value >= MinTxAmount
+        canUnlock && bx.ergoTree != cs.monetary.emissionBoxProposition && bx.value >= MinTxAmount
       }
       .map { input =>
         val qty = MaxTxsPerBlock
@@ -167,6 +166,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
           .map(updateInterlinks(h, _))
       }
       .getOrElse(Seq.empty)
+    val interlinksExtension = interlinksToExtension(interlinks)
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = lastHeaderOpt.map { header =>
       val newHeight = header.height + 1
@@ -175,20 +175,20 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       val votingFinishHeight: Option[Height] = currentParams.softForkStartingHeight
         .map(_ + votingSettings.votingLength * votingSettings.softForkEpochs)
       val forkVotingAllowed = votingFinishHeight.forall(fh => newHeight < fh)
-      val forkOrdered = settings.votingTargets.getOrElse(Parameters.SoftFork, 0) != 0
+      val forkOrdered = settings.votingTargets.softFork != 0
       val voteForFork = betterVersion && forkOrdered && forkVotingAllowed
 
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
-        val newParams = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, votingSettings)
-        (newParams.toExtensionCandidate(packInterlinks(interlinks)),
-          newParams.suggestVotes(settings.votingTargets, voteForFork),
+        val (newParams, _) = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, emptyVSUpdate, votingSettings)
+        (newParams.toExtensionCandidate ++ interlinksExtension,
+          newParams.suggestVotes(settings.votingTargets.targets, voteForFork),
           newParams.blockVersion)
       } else {
-        (ExtensionCandidate(packInterlinks(interlinks)),
-          currentParams.vote(settings.votingTargets, stateContext.votingData.epochVotes, voteForFork),
+        (interlinksToExtension(interlinks),
+          currentParams.vote(settings.votingTargets.targets, stateContext.votingData.epochVotes, voteForFork),
           currentParams.blockVersion)
       }
-    }.getOrElse((ExtensionCandidate(packInterlinks(interlinks)), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
+    }.getOrElse((interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
     val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, cs.emissionRules)
     val txs = emissionTxOpt.toSeq ++ txsFromPool
@@ -211,9 +211,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
         val minerTag = scorex.utils.Random.randomBytes(Extension.FieldKeySize)
         proveCandidate {
           candidate.copy(
-            extension = ExtensionCandidate(
-              Seq(Array(0: Byte, 2: Byte) -> minerTag) ++ PoPowAlgos.packInterlinks(interlinks)
-            )
+            extension = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> minerTag)) ++ PoPowAlgos.interlinksToExtension(interlinks)
           )
         }
     }

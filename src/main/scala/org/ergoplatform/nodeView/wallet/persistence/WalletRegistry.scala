@@ -67,12 +67,12 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
         val spentBoxes = spentBoxesWithTx.map(_._2)
         val spentAmt = spentBoxes.map(_.box.value).sum
         val spentTokensAmt = spentBoxes
-          .flatMap(_.box.additionalTokens)
+          .flatMap(_.box.additionalTokens.toArray)
           .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
             acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
           }
         val receivedTokensAmt = certainBxs
-          .flatMap(_.box.additionalTokens)
+          .flatMap(_.box.additionalTokens.toArray)
           .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
             acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
           }

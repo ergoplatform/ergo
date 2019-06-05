@@ -6,12 +6,12 @@ import org.ergoplatform.{ErgoBox, ErgoScriptPredef, Height, Self}
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.utils.ErgoPropertyTest
 import sigmastate._
-import sigmastate.Values.{ErgoTree, IntConstant, SigmaPropConstant}
+import sigmastate.Values._
+import sigmastate.lang.Terms._
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.CryptoConstants.dlogGroup
 import sigmastate.lang.{SigmaCompiler, TransformingSigmaBuilder}
-import sigmastate.lang.Terms._
 
 import scala.util.{Random, Try}
 
@@ -58,7 +58,7 @@ class ScriptsSpec extends ErgoPropertyTest {
 
 
   private def fromString(str: String): ErgoTree = {
-    compiler.compile(Map(), str).asSigmaProp
+    compiler.compile(Map(), str).asBoolValue.toSigmaProp
   }
 
   private def applyBlockSpendingScript(script: ErgoTree): Try[UtxoState] = {

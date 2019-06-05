@@ -7,6 +7,7 @@ import org.ergoplatform.ErgoBox.{BoxId, R4, TokenId}
 import org.ergoplatform._
 import org.ergoplatform.mining._
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -95,7 +96,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         height = height,
         parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId))
       val adProofs = ADProofs(realHeader.id, adProofBytes)
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader), Some(adProofs))
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), genExtension(realHeader, us.stateContext), Some(adProofs))
       us = us.applyModifier(fb).get
       val remaining = emission.remainingFoundationRewardAtHeight(height)
 
@@ -172,7 +173,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         height = height,
         parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId))
       val adProofs = ADProofs(realHeader.id, adProofBytes)
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader), Some(adProofs))
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), genExtension(realHeader, us.stateContext), Some(adProofs))
       us = us.applyModifier(fb).get
       height = height + 1
     }
@@ -198,7 +199,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId))
       val adProofs = ADProofs(realHeader.id, adProofBytes)
       height = height + 1
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), Extension(realHeader), Some(adProofs))
+      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), genExtension(realHeader, us.stateContext), Some(adProofs))
       us = us.applyModifier(fb).get
       fb
     }
@@ -287,18 +288,18 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       us.proofsForTransactions(txs1) shouldBe 'success
       us.proofsForTransactions(txs2) shouldBe 'success
 
-      val inputs = headTx.outputs.map(b =>  Input(b.id, ProverResult.empty))
+      val inputs = headTx.outputs.map(b => Input(b.id, ProverResult.empty))
       val txWithDataInputs2 = ErgoTransaction(inputs, dataInputs, headTx.outputCandidates)
 
       val version = us.version
 
       val txs3 = IndexedSeq(headTx, nextTx, txWithDataInputs2)
-      val (_, digest3) =  us.proofsForTransactions(txs3).get
+      val (_, digest3) = us.proofsForTransactions(txs3).get
       us.applyTransactions(txs3, digest3, emptyStateContext) shouldBe 'success
       us.rollbackTo(version)
 
       val txs4 = IndexedSeq(headTx, txWithDataInputs2, nextTx)
-      val (_, digest4) =  us.proofsForTransactions(txs4).get
+      val (_, digest4) = us.proofsForTransactions(txs4).get
       us.applyTransactions(txs4, digest4, emptyStateContext) shouldBe 'success
       us.rollbackTo(version)
 
@@ -357,7 +358,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val digest = us.proofsForTransactions(txs).get._2
 
       val header = invalidHeaderGen.sample.get.copy(stateRoot = digest, height = 1)
-      val fb = new ErgoFullBlock(header, new BlockTransactions(header.id, txs), Extension(header), None)
+      val fb = new ErgoFullBlock(header, new BlockTransactions(header.id, txs), genExtension(header, us.stateContext), None)
       val newSC = us.stateContext.appendFullBlock(fb, votingSettings).get
       us.applyTransactions(txs, digest, newSC).get
     }
@@ -475,6 +476,11 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         finalState2.rootHash shouldEqual finalRoot
       }
     }
+  }
+
+
+  private def genExtension(header: Header, sc: ErgoStateContext): Extension = {
+    interlinksToExtension(updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt)).toExtension(header.id)
   }
 
 }

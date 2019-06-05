@@ -14,7 +14,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 import sigmastate.Values
 import sigmastate.interpreter.{ContextExtension, ProverResult}
-
+import sigmastate.eval._
 import scala.util.Random
 
 trait ChainGenerator extends ErgoTestConstants {
@@ -92,7 +92,7 @@ trait ChainGenerator extends ErgoTestConstants {
                             extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
-    val minimalAmount = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, Seq(), Map(), parameters)
+    val minimalAmount = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, Colls.emptyColl, Map(), parameters)
     val outputs = IndexedSeq(ErgoBox(minimalAmount, Constants.TrueLeaf, creationHeight = startHeight))
 
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
@@ -109,7 +109,7 @@ trait ChainGenerator extends ErgoTestConstants {
                 nBits: Long = settings.chainSettings.initialNBits): ErgoFullBlock = {
     val interlinks = prev.toSeq.flatMap(x =>
       PoPowAlgos.updateInterlinks(x.header, PoPowAlgos.unpackInterlinks(x.extension.fields).get))
-    val validExtension = extension.copy(fields = extension.fields ++ PoPowAlgos.packInterlinks(interlinks))
+    val validExtension = extension ++ PoPowAlgos.interlinksToExtension(interlinks)
     powScheme.proveBlock(
       prev.map(_.header),
       Header.CurrentVersion,

@@ -100,7 +100,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     c.downField("boxId").as[String] shouldBe Right(Algos.encode(b.id))
     c.downField("value").as[Long] shouldBe Right(b.value)
     c.downField("ergoTree").as[ErgoTree] shouldBe Right(b.ergoTree)
-    checkAssets(c.downField("assets"), b.additionalTokens)
+    checkAssets(c.downField("assets"), b.additionalTokens.toArray.toSeq)
     checkRegisters(c.downField("additionalRegisters"), b.additionalRegisters)
     c.downField("creationHeight").as[Int] shouldBe Right(b.creationHeight)
   }

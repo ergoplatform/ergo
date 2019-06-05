@@ -4,7 +4,7 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "2.0.5",
+  version := "2.1.0",
   scalaVersion := "2.12.8",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
@@ -14,14 +14,15 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "cfa864a9-SNAPSHOT"
-val sigmaStateVersion = "master-2b4b07a1-SNAPSHOT"
+val scorexVersion = "e699882d-SNAPSHOT"
+val sigmaStateVersion = "master-a6e7e7b7-SNAPSHOT"
+val ergoWalletVersion = "master-5b187f16-SNAPSHOT"
+
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
-val ergoWalletVersion = "master-535fcdde-SNAPSHOT"
 
 libraryDependencies ++= Seq(
-  ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)
+  ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion).force()
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",

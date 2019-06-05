@@ -55,7 +55,7 @@ components:
           additionalProperties:
             $ref: '#/components/schemas/SValue'
           example:
-            '1': '0101'
+            '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
     ErgoTransactionOutput:
       type: object
@@ -150,7 +150,7 @@ components:
           description: Transaction fee
           type: integer
           format: int64
-          example: 100
+          example: 1000000
 
     SourceHolder:
       type: object
@@ -186,7 +186,7 @@ components:
           description: Optional, default transaction fee from settings will be used if not defined
           type: integer
           format: int64
-          example: 100
+          example: 1000000
 
     AssetIssueRequest:
       description: Request for generation of asset issue transaction
@@ -204,7 +204,7 @@ components:
           description: Supply amount
           type: integer
           format: int64
-          example: 100
+          example: 1000000
         name:
           description: Assets name
           type: string
@@ -222,7 +222,7 @@ components:
           description: Optional, default transaction fee from settings will be used if not defined
           type: integer
           format: int64
-          example: 100
+          example: 1000000
 
     FullBlock:
       description: Block with header and transactions
@@ -700,7 +700,7 @@ components:
       description: Base16-encoded ergo tree bytes
       type: string
       format: base16
-      example: '0101'
+      example: '0008cd0336100ef59ced80ba5f89c4178ebd57b6c1dd0f3d135ee1db9f62fc634d637041'
 
     Transactions:
       description: Ergo transaction objects
@@ -729,13 +729,13 @@ components:
       additionalProperties:
         $ref: '#/components/schemas/SValue'
       example:
-        R4: '0101'
+        R4: '100204a00b08cd0336100ef59ced80ba5f89c4178ebd57b6c1dd0f3d135ee1db9f62fc634d637041ea02d192a39a8cc7a70173007301'
 
     SValue:
       description: Base-16 encoded serialized Sigma-state value
       type: string
       format: base16
-      example: '0101'
+      example: '100204a00b08cd0336100ef59ced80ba5f89c4178ebd57b6c1dd0f3d135ee1db9f62fc634d637041ea02d192a39a8cc7a70173007301'
 
     Votes:
       description: Base16-encoded votes for a soft-fork and parameters

@@ -14,12 +14,12 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "e1142a21-SNAPSHOT"
-val sigmaStateVersion = "v2.1-76fc50da-SNAPSHOT"
+val scorexVersion = "e699882d-SNAPSHOT"
+val sigmaStateVersion = "master-a6e7e7b7-SNAPSHOT"
+val ergoWalletVersion = "sigma-v2.1-85a3055d-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
-val ergoWalletVersion = "soft-forkability2-b2b1b341-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion).force()

@@ -10,6 +10,6 @@ case class WalletSettings(secretStorage: SecretStorageSettings,
                           scanningInterval: FiniteDuration,
                           postponedScanning: Boolean = true,
                           keepSpentBoxes: Boolean = false,
-                          defaultTransactionFee: Long = 100000L,
+                          defaultTransactionFee: Long = 1000000L,
                           testMnemonic: Option[String] = None,
                           testKeysQty: Option[Int] = None)

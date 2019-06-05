@@ -47,7 +47,8 @@ Depending on the platform you want to create a package for one of the following 
  - `universal:packageOsxDmg` - Generates a DMG file with the same contents as the universal zip/tgz.
  - `windows:packageBin` - Generates an MSI
  
- The final build command should look like: `sbt Denv=<env_type> <packager_command>`, example: `sbt -Denv=testnet universal:packageBin`
+ The final build command should look like: `sbt Denv=<env_type> <packager_command>`, example: `sbt -Denv=testnet universal:packageBin`. 
+ A resulted package could be found in the `target/scala-2.12/<platform_type>` directory.
 
 
 ## Docker Quick Start

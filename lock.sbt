@@ -50,7 +50,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bitbucket.inkytonik.kiama" % "kiama_2.12" % "2.1.0",
   "org.bitlet" % "weupnp" % "0.1.4",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
-  "org.ergoplatform" % "ergo-wallet_2.12" % "soft-forkability2-b2b1b341-SNAPSHOT",
+  "org.ergoplatform" % "ergo-wallet_2.12" % "master-5b187f16-SNAPSHOT",
   "org.objenesis" % "objenesis" % "2.4",
   "org.ow2.asm" % "asm" % "5.0.4",
   "org.reactivestreams" % "reactive-streams" % "1.0.2",
@@ -65,13 +65,13 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scodec" % "scodec-bits_2.12" % "1.1.6",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.15",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "e1142a21-SNAPSHOT",
-  "org.scorexfoundation" % "scorex-util_2.12" % "0.1.3",
+  "org.scorexfoundation" % "scorex-core_2.12" % "e699882d-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-util_2.12" % "0.1.4",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.6",
-  "org.scorexfoundation" % "sigma-api_2.12" % "validation-settings-serializer-1846f6c2-SNAPSHOT",
-  "org.scorexfoundation" % "sigma-impl_2.12" % "validation-settings-serializer-1846f6c2-SNAPSHOT",
-  "org.scorexfoundation" % "sigma-library_2.12" % "validation-settings-serializer-1846f6c2-SNAPSHOT",
-  "org.scorexfoundation" % "sigma-state_2.12" % "validation-settings-serializer-1846f6c2-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-api_2.12" % "master-a6e7e7b7-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-impl_2.12" % "master-a6e7e7b7-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-library_2.12" % "master-a6e7e7b7-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-state_2.12" % "master-a6e7e7b7-SNAPSHOT",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "debox_2.12" % "0.8.0",
   "org.spire-math" % "jawn-parser_2.12" % "0.13.0",
@@ -86,4 +86,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 6cc2c7ff03ee8b05a5a7103f58e12d0875fcc8e2
+// LIBRARY_DEPENDENCIES_HASH aacbe190203746ac21a9e412042b5a8ba34235ca

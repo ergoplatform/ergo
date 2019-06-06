@@ -1,0 +1,58 @@
+
+  ############################################
+  # UNCOMMENT SETTINGS YOU NEED TO OVERWRITE #
+  ############################################
+
+ergo {
+  node {
+     # State type.  Possible options are:
+     # "utxo" - keep full utxo set, that allows to validate arbitrary block and generate ADProofs
+     # "digest" - keep state root hash only and validate transactions via ADProofs
+     # stateType = "utxo"
+
+     # Is the node is doing mining
+     # mining = false
+
+     # Use external miner, native miner is used if set to `false`
+     # useExternalMiner = true
+
+     # Public key mining rewards will be dedicated to (P2PK address is also accepted)
+     # miningPubKeyHex = null
+  }
+  wallet {
+    # Language to be used in mnemonic seed
+    # Options: "chinese_simplified", "chinese_traditional", "english", "french", "italian", "japanese", "korean", "spanish"
+    # mnemonicPhraseLanguage = "english"
+
+    # Interval to re-scan uncertain boxes. When a block arrives, its transaction outputs are to be scanned, and if
+    # certain bytes are found in the output script (e.g. public key bytes), the box is to be put to a queue of a boxes
+    # which are potentially wallet's. But to be sure, script execution is needed, which could be costly to do in a bulk.
+    # So we check from a queue only one box per "scanningInterval".
+    # scanningInterval = 1s
+
+    # Perform scanning of missed blocks on wallet unlock (may consume additinal disk space)
+    # postponedScanning = true
+
+    # Save used boxes (may consume additional disk space) or delete them immediately
+    # keepSpentBoxes = false
+  }
+}
+scorex {
+  network {
+    # Node name to send during handshake
+    # nodeName = "my-node"
+
+    # A list of `IP:port` pairs of well known nodes.
+    # knownPeers = []
+
+    # Network address
+    # bindAddress = "0.0.0.0:9020"
+  }
+  restApi {
+    # Network address to bind to
+    # bindAddress = "0.0.0.0:9052"
+
+    # Hex-encoded Blake2b256 hash of an API key. Should be 64-chars long Base16 string.
+    # apiKeyHash = "1111"
+  }
+}

@@ -117,7 +117,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   /**
     * Called at the beginning of the epoch.
-    * Extracts parameters and validationSettings from [[Extension]] and compares them to locally calculated once.
+    * Extracts parameters and validationSettings from `Extension` and compares them to locally calculated once.
     */
   private def processExtension(extension: Extension, header: Header, forkVote: Boolean)
                               (validationState: ValidationState[Unit]): Try[(Parameters, ErgoValidationSettings)] = {

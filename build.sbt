@@ -15,8 +15,8 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "61389071-SNAPSHOT"
-val sigmaStateVersion = "master-a6e7e7b7-SNAPSHOT"
-val ergoWalletVersion = "master-5b187f16-SNAPSHOT"
+val sigmaStateVersion = "master-6baf579a-SNAPSHOT"
+val ergoWalletVersion = "master-1e09a19c-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -82,6 +82,12 @@ val opts = Seq(
 // -J prefix is required by the bash script
 javaOptions in run ++= opts
 scalacOptions ++= Seq("-Xfatal-warnings", "-feature", "-deprecation")
+
+// set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
+// see https://github.com/eclipse/jetty.project/issues/3244
+// these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
+// see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
+scalacOptions in(Compile, compile) ++= Seq("-release", "8")
 
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"

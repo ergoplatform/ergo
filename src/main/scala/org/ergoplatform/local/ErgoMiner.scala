@@ -128,6 +128,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
               runMiningThreads(candidate)
             } else {
               log.info("Ready to serve external miner")
+              requestCandidate()
             }
           case None =>
             log.warn("Got start mining command while public key is not ready")

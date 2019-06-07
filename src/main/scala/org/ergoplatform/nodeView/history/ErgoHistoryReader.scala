@@ -262,11 +262,11 @@ trait ErgoHistoryReader
       if (r._1.head == r._2.head) {
         r
       } else {
-        val biggerOther = headerChainBack(numberBack, otherChain.head, _ => false) ++ otherChain.tail
         if (!otherChain.head.isGenesis) {
+          val biggerOther = headerChainBack(numberBack, otherChain.head, _ => false) ++ otherChain.tail
           loop(biggerOther.size, biggerOther)
         } else {
-          throw new Error(s"Common point not found for headers $header1 and $header2")
+          (HeaderChain(PreGenesisHeader +: r._1.headers), HeaderChain(PreGenesisHeader +: r._2.headers))
         }
       }
     }

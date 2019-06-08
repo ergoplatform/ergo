@@ -107,9 +107,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry
   }
 
-  def getByteLength[T](b: T, serializer: ScorexSerializer[T]): Long = {
-    return serializer.toBytes(b).length
-  }
+  def getByteLength[T](b: T, serializer: ScorexSerializer[T]): Long = serializer.toBytes(b).length
 
   /**
     * Stateless transaction validation with result returned as `ValidationResult`
@@ -127,7 +125,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validateSeq(outputCandidates)((validationState, out) => validationState
         .validate(txMaxBoxSize, getByteLength[ErgoBox](out.toBox(id, 0), ErgoBoxSerializer) <= ErgoConstants.MaxBoxSize.get)
         .validate(txAdditionalRegistersCount, out.additionalRegisters.size <= ErgoBox.nonMandatoryRegistersCount)
-        .validateSeq(out.additionalRegisters)((validationState, reg) => validationState
+        .validateSeq(out.additionalRegisters)((validationState, reg) =>
+          validationState
           .validate(txRegisterData, reg._2 match {
             case (coll: ConcreteCollection[_]) =>
               val w = SigmaSerializer.startWriter()

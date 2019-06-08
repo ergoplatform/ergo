@@ -11,7 +11,7 @@ object BuildEnvPlugin extends AutoPlugin {
 
   object autoImport {
     object BuildEnv extends Enumeration {
-      val MainNet, TestNet, DevNet = Value
+      val MainNet, TestNet, DevNet, Test = Value
     }
 
     val buildEnv = settingKey[BuildEnv.Value]("the current build environment")
@@ -26,9 +26,10 @@ object BuildEnvPlugin extends AutoPlugin {
           case "mainnet" => Some(BuildEnv.MainNet)
           case "testnet" => Some(BuildEnv.TestNet)
           case "devnet" => Some(BuildEnv.DevNet)
-          case unkown => None
+          case "test" => Some(BuildEnv.Test)
+          case _ => None
         }
-        .getOrElse(BuildEnv.DevNet)
+        .getOrElse(BuildEnv.TestNet)
     },
     // give feed back
     onLoadMessage := {

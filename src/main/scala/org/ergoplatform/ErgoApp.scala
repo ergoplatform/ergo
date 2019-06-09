@@ -46,7 +46,7 @@ class ErgoApp(args: Seq[String]) extends ScorexLogging {
       log.info("Entering coordinated network bootstrap procedure ..")
       val (npmProof, genesisDigest) =
         new BootstrapController(bs).waitForBootSettings()
-      log.info("Boot settings received, starting the node ..")
+      log.info("Boot settings received. Starting the node ..")
       ergoSettings.copy(
         chainSettings = ergoSettings.chainSettings.copy(
           noPremineProof = npmProof,

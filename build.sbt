@@ -105,15 +105,19 @@ sourceGenerators in Compile += Def.task {
 }
 
 resourceGenerators in Compile += Def.task {
-  val confName = buildEnv.value match {
-    case BuildEnv.MainNet => "mainnet.conf"
-    case BuildEnv.TestNet => "testnet.conf"
-    case BuildEnv.DevNet =>  "devnet.conf"
+  if (buildEnv.value != BuildEnv.Test) {
+    val confName = buildEnv.value match {
+      case BuildEnv.MainNet => "mainnet.conf"
+      case BuildEnv.TestNet => "testnet.conf"
+      case _ =>                "devnet.conf"
+    }
+    val confFile = (resourceDirectory in Compile).value / confName
+    val targetFile = (resourceManaged in Compile).value / "application.conf"
+    IO.copyFile(confFile, targetFile)
+    Seq(targetFile)
+  } else {
+    Seq.empty
   }
-  val confFile = (resourceDirectory in Compile).value / confName
-  val targetFile = (resourceManaged in Compile).value / "application.conf"
-  IO.copyFile(confFile, targetFile)
-  Seq(targetFile)
 }
 
 mappings in Compile := Seq(
@@ -129,6 +133,7 @@ assemblyJarName in assembly := {
     case BuildEnv.MainNet => "mainnet"
     case BuildEnv.TestNet => "testnet"
     case BuildEnv.DevNet =>  "devnet"
+    case BuildEnv.Test =>    "test"
   }
   s"ergo-$networkType-${version.value}.jar"
 }

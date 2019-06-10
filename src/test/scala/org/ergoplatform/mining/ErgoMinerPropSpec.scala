@@ -83,14 +83,14 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       val head = txsWithFees.head
 
       val h = validFullBlock(None, us, bh, rnd).header
-      val upcomingContext = us.stateContext.upcoming(h.minerPk, h.timestamp, h.nBits, h.votes, h.version)
+      val upcomingContext = us.stateContext.upcoming(h.minerPk, h.timestamp, h.nBits, h.votes, emptyVSUpdate, h.version)
       upcomingContext.currentHeight shouldBe (us.stateContext.currentHeight + 1)
 
-      val fromSmallMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, us, upcomingContext, Seq(head), Seq())._1
+      val fromSmallMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, us, upcomingContext, Seq(head), Seq())(validationSettingsNoIl)._1
       fromSmallMempool.size shouldBe 2
       fromSmallMempool.contains(head) shouldBe true
 
-      val fromBigMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, us, upcomingContext, txsWithFees, Seq())._1
+      val fromBigMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, us, upcomingContext, txsWithFees, Seq())(validationSettingsNoIl)._1
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
       val costs: Seq[Long] = fromBigMempool.map { tx =>

@@ -7,6 +7,8 @@ import scorex.crypto.hash.Digest32
 import scorex.utils.Random
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.{ProverResult, ContextExtension}
+import sigmastate.eval._
+import sigmastate.eval.Extensions._
 
 object FeeSimulator extends App {
 
@@ -22,7 +24,7 @@ object FeeSimulator extends App {
   val input = Input(ADKey @@ Random.randomBytes(32), ProverResult(Random.randomBytes(65), ContextExtension(Map())))
   val creationHeight: Int = 100000
 
-  val box1 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k1, creationHeight, Seq((Digest32 @@ Random.randomBytes(32)) -> scala.util.Random.nextLong()))
+  val box1 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k1, creationHeight, Colls.fromItems((Digest32 @@ Random.randomBytes(32)) -> scala.util.Random.nextLong()))
   val box2 = new ErgoBoxCandidate(scala.util.Random.nextLong(), k2, creationHeight)
 
   val simpleTx = ErgoTransaction(IndexedSeq(input, input), IndexedSeq(box1, box2))

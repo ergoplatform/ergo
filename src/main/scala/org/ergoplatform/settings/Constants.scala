@@ -50,10 +50,13 @@ object Constants {
 
   val SoftForkEpochs = 32 //about 45.5 days
 
-  val ExtensionMaxSize: Int = 16 * 1024 //16 kb
-
   val TrueLeaf: ErgoTree = Values.TrueLeaf.toSigmaProp
   val FalseLeaf: ErgoTree = Values.FalseLeaf.toSigmaProp
 
   val StringEncoding = "UTF-8"
+
+  // Maximum extension size
+  val MaxExtensionSize: Int = 32 * 1024
+  // Maximum extension size during bytes parsing. Allows to move MaxExtensionSize to Parameters in future
+  val MaxExtensionSizeMax: Int = 1024 * 1024
 }

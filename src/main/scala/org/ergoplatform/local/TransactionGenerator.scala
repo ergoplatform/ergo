@@ -84,7 +84,11 @@ class TransactionGenerator(viewHolder: ActorRef,
   }
 
   private def genTransaction(wallet: ErgoWallet, parameters: Parameters): Future[Try[ErgoTransaction]] = {
-    val feeReq = PaymentRequest(Pay2SAddress(feeProp), 100000L, None, None)
+    val approximateBoxSize = 200
+    val minimalErgoAmount = approximateBoxSize * (parameters.minValuePerByte + Parameters.MinValueStep)
+    val feeAmount = Math.max(minimalErgoAmount, settings.nodeSettings.minimalFeeAmount)
+    val feeReq = PaymentRequest(Pay2SAddress(feeProp), feeAmount, None, None)
+
     val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances().map { balances =>
       Random.nextInt(100) match {
         case i if i < 70 =>
@@ -92,8 +96,6 @@ class TransactionGenerator(viewHolder: ActorRef,
         case i if i < 95 && balances.assetBalances.nonEmpty =>
           val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
           val tokenAmountToSpend = tokenToSpend._2 / 4
-          val approximateBoxSize = 200
-          val minimalErgoAmount = approximateBoxSize * (parameters.minValuePerByte + Parameters.MinValueStep)
           val assets = Seq(IdUtils.decodedTokenId(tokenToSpend._1) -> tokenAmountToSpend)
           Some(PaymentRequest(randProposition, minimalErgoAmount, Some(assets), None))
         case _ =>

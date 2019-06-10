@@ -5,18 +5,18 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, PoPowAlgos}
+import org.ergoplatform.modifiers.history.PoPowAlgos._
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters}
+import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
 import org.scalatest.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
-import sigmastate.Values
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Random, Try}
@@ -48,7 +48,7 @@ trait ValidBlocksGenerators
     validTransactionsFromBoxes(sizeLimit, stateBoxesIn, Seq(), rnd)
   }
 
-    /** @param sizeLimit maximum transactions size in bytes */
+  /** @param sizeLimit maximum transactions size in bytes */
   protected def validTransactionsFromBoxes(sizeLimit: Int,
                                            stateBoxesIn: Seq[ErgoBox],
                                            dataBoxesIn: Seq[ErgoBox],
@@ -67,7 +67,7 @@ trait ValidBlocksGenerators
 
       val currentSize = acc.map(_.size).sum
       val averageSize = if (currentSize > 0) currentSize / acc.length else 1000
-      val customTokens = (stateBoxes ++ selfBoxes).flatMap(_.additionalTokens)
+      val customTokens = (stateBoxes ++ selfBoxes).flatMap(_.additionalTokens.toArray)
       val customTokensNum = customTokens.map(ct => ByteArrayWrapper(ct._1)).toSet.size
       val issueNew = customTokensNum == 0
 
@@ -192,7 +192,8 @@ trait ValidBlocksGenerators
     val interlinks = parentOpt.toSeq.flatMap { block =>
       PoPowAlgos.updateInterlinks(block.header, PoPowAlgos.unpackInterlinks(block.extension.fields).get)
     }
-    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(PoPowAlgos.packInterlinks(interlinks))
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate ++ interlinksToExtension(interlinks) ++
+      utxoState.stateContext.validationSettings.toExtensionCandidate
     val votes = Array.fill(3)(0: Byte)
 
     powScheme.proveBlock(parentOpt.map(_.header), Header.CurrentVersion, settings.chainSettings.initialNBits, updStateDigest, adProofBytes,
@@ -203,9 +204,10 @@ trait ValidBlocksGenerators
     * Full block valid against state only - allows to create blocks form headers and state,
     * does not contain valid interlinks.
     */
-  def statefulyValidFullBlock(parentOpt: Option[Header],
-                              wrappedState: WrappedUtxoState,
+  def statefulyValidFullBlock(wrappedState: WrappedUtxoState,
                               timeOpt: Option[Long] = None): ErgoFullBlock = {
+    val parentOpt: Option[Header] = wrappedState.stateContext.lastHeaderOpt
+    val parentExtensionOpt: Option[Extension] = wrappedState.stateContext.lastExtensionOpt
     val bh = wrappedState.versionedBoxHolder
     val transactions = validTransactionsFromBoxHolder(bh, new Random())._1
 
@@ -214,7 +216,8 @@ trait ValidBlocksGenerators
     val (adProofBytes, updStateDigest) = wrappedState.proofsForTransactions(transactions).get
 
     val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
-    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate(Seq.empty)
+    val interlinksExtension = interlinksToExtension(updateInterlinks(parentOpt, parentExtensionOpt))
+    val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate ++ interlinksExtension
     val votes = Array.fill(3)(0: Byte)
 
     powScheme.proveBlock(parentOpt, Header.CurrentVersion, settings.chainSettings.initialNBits, updStateDigest,

@@ -5,15 +5,14 @@ import java.io.File
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, P2PKAddress}
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.nodeView.state.StateType.Digest
+import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, P2PKAddress}
 import scorex.core.settings.{ScorexSettings, SettingsReaders}
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
 import sigmastate.basics.DLogProtocol.ProveDlog
 
-import scala.collection.JavaConverters._
 import scala.util.Try
 
 case class ErgoSettings(directory: String,
@@ -23,7 +22,7 @@ case class ErgoSettings(directory: String,
                         scorexSettings: ScorexSettings,
                         walletSettings: WalletSettings,
                         cacheSettings: CacheSettings,
-                        votingTargets: Map[Byte, Int] = Map()) {
+                        votingTargets: VotingTargets = VotingTargets.empty) {
 
   val addressEncoder = ErgoAddressEncoder(chainSettings.addressPrefix)
 
@@ -59,12 +58,7 @@ object ErgoSettings extends ScorexLogging
     val walletSettings = config.as[WalletSettings](s"$configPath.wallet")
     val cacheSettings = config.as[CacheSettings](s"$configPath.cache")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
-
-    val votingSettings = config.getObject(s"$configPath.voting")
-    val votingTargets = votingSettings.keySet().asScala.map{id =>
-      id.toInt.toByte -> votingSettings.get(id).render().toInt
-    }.toMap
-
+    val votingTargets = VotingTargets.fromConfig(config)
 
     if (nodeSettings.stateType == Digest && nodeSettings.mining) {
       log.error("Malformed configuration file was provided! Mining is not possible with digest state. Aborting!")
@@ -86,7 +80,7 @@ object ErgoSettings extends ScorexLogging
     maybeConfigFile match {
       // if no user config is supplied, the library will handle overrides/application/reference automatically
       case None =>
-        log.warn("NO CONFIGURATION FILE WAS PROVIDED. STARTING WITH DEFAULT SETTINGS FOR TESTNET!")
+        log.warn("NO CONFIGURATION FILE WAS PROVIDED. STARTING WITH DEFAULT SETTINGS!")
         ConfigFactory.load()
       // application config needs to be resolved wrt both system properties *and* user-supplied config.
       case Some(file) =>

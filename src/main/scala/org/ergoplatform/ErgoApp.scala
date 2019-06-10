@@ -46,7 +46,7 @@ class ErgoApp(args: Seq[String]) extends ScorexLogging {
       log.info("Entering coordinated network bootstrap procedure ..")
       val (npmProof, genesisDigest) =
         new BootstrapController(bs).waitForBootSettings()
-      log.info("Boot settings received, starting the node ..")
+      log.info("Boot settings received. Starting the node ..")
       ergoSettings.copy(
         chainSettings = ergoSettings.chainSettings.copy(
           noPremineProof = npmProof,
@@ -103,9 +103,6 @@ class ErgoApp(args: Seq[String]) extends ScorexLogging {
   private val networkControllerRef: ActorRef = NetworkControllerRef(
     "networkController", settings.network, peerManagerRef, scorexContext)
 
-  private val combinedRoute: Route =
-    CompositeHttpService(actorSystem, apiRoutes, settings.restApi, swaggerConfig).compositeRoute
-
   private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
   private val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
@@ -118,6 +115,20 @@ class ErgoApp(args: Seq[String]) extends ScorexLogging {
   private val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
       settings.network, timeProvider)
+
+  private val apiRoutes: Seq[ApiRoute] = Seq(
+    EmissionApiRoute(ergoSettings),
+    UtilsApiRoute(settings.restApi),
+    PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
+    InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
+    BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
+    WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
+    MiningApiRoute(minerRef, ergoSettings)
+  )
+
+  private val combinedRoute: Route =
+    CompositeHttpService(actorSystem, apiRoutes, settings.restApi, swaggerConfig).compositeRoute
 
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     minerRef ! StartMining
@@ -142,17 +153,6 @@ class ErgoApp(args: Seq[String]) extends ScorexLogging {
   if (!ergoSettings.nodeSettings.stateType.requireProofs) {
     MempoolAuditorRef(nodeViewHolderRef, ergoSettings.nodeSettings)
   }
-
-  private def apiRoutes: Seq[ApiRoute] = Seq(
-    EmissionApiRoute(ergoSettings),
-    UtilsApiRoute(settings.restApi),
-    PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
-    InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
-    BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
-    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
-    WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
-    MiningApiRoute(minerRef, ergoSettings)
-  )
 
   private def swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 

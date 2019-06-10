@@ -33,7 +33,7 @@ class ErgoApp(args: Seq[String]) extends ScorexLogging {
 
   private var ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
 
-  implicit private val settings: ScorexSettings = ergoSettings.scorexSettings
+  implicit private def settings: ScorexSettings = ergoSettings.scorexSettings
 
   implicit def exceptionHandler: ExceptionHandler = ApiErrorHandler.exceptionHandler
   implicit def rejectionHandler: RejectionHandler = ApiRejectionHandler.rejectionHandler

@@ -2,20 +2,23 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.ValidationRules._
+import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, RecoverableModifierError, ValidationResult, ValidationState}
-import scorex.util.{ModifierId, bytesToId}
+import scorex.core.validation.{ModifierValidator, _}
+import scorex.util.ModifierId
 
 import scala.reflect.ClassTag
-import scala.util.{Failure, Try}
+import scala.util.Try
 
 /**
   * Trait that implements BlockSectionProcessor interfaces for regimes where the node
   * downloads and process full blocks.
   */
 trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProcessor {
+
+  private def initialValidationState: ValidationState[Unit] = ModifierValidator(ErgoValidationSettings.initial)
 
   /**
     * Process block section.
@@ -39,9 +42,16 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
   }
 
   override protected def validate(m: BlockSection): Try[Unit] = {
-    typedModifierById[Header](m.headerId).map { header =>
-      PayloadValidator.validate(m, header).toTry
-    }.getOrElse(Failure(new RecoverableModifierError(s"Header for modifier $m is not defined")))
+    typedModifierById[Header](m.headerId) map { header =>
+      new PayloadValidator(initialValidationState)
+        .validate(m, header)
+        .toTry
+    } getOrElse {
+      initialValidationState
+        .validate(bsNoHeader, condition = false, Algos.encode(m.id))
+        .result
+        .toTry
+    }
   }
 
   /**
@@ -77,28 +87,17 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
   }
 
   /**
-    * Validator for BlockTransactions and ADProofs
+    * Validator for BlockTransactions, ADProofs and Extension
     */
-  object PayloadValidator extends ModifierValidator with ScorexEncoding {
+  class PayloadValidator(validator: ValidationState[Unit]) extends ScorexEncoding {
 
     def validate(m: BlockSection, header: Header): ValidationResult[Unit] = {
-      modifierSpecificValidation(m, header)
-        .validate(header.isCorrespondingModifier(m)) {
-          fatal(s"Modifier ${m.encodedId} does not corresponds to header ${header.encodedId}")
-        }
-        .validateSemantics(isSemanticallyValid(header.id)) {
-          fatal(s"Header ${header.encodedId} for modifier ${m.encodedId} is semantically invalid")
-        }
-        .validate(isHeadersChainSynced) {
-          error("Headers chain is not synced yet")
-        }
-        .validate(isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
-          fatal(s"Too old modifier ${m.encodedId}: " +
-            s"${header.height} < ${pruningProcessor.minimalFullBlockHeight}")
-        }
-        .validate(!historyStorage.contains(m.id)) {
-          error(s"Modifier ${m.encodedId} is already in history")
-        }
+      initialValidationState
+        .validate(alreadyApplied, !historyStorage.contains(m.id), s"${m.encodedId}")
+        .validate(bsCorrespondsToHeader, header.isCorrespondingModifier(m), s"header=${header.encodedId}, id=${m.encodedId}")
+        .validateSemantics(bsHeaderValid, isSemanticallyValid(header.id), s"header=${header.encodedId}, id=${m.encodedId}")
+        .validate(bsHeadersChainSynced, isHeadersChainSynced)
+        .validate(bsTooOld, isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height), s"header=${header.encodedId}, id=${m.encodedId}")
         .result
     }
 
@@ -108,57 +107,6 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
       case _ => false
     }
 
-    private def validateExtension(extension: Extension, header: Header): ValidationState[Unit] = {
-      validateInterlinks(extension, header) {
-        failFast
-          .validate(extension.fields.forall(_._1.lengthCompare(Extension.FieldKeySize) == 0)) {
-            fatal(s"Extension ${extension.encodedId} field key length is not ${Extension.FieldKeySize}")
-          }
-          .validate(extension.fields.forall(_._2.lengthCompare(Extension.FieldValueMaxSize) <= 0)) {
-            fatal(s"Extension ${extension.encodedId} field value length > ${Extension.FieldValueMaxSize}")
-          }
-          .validate(extension.fields.map(kv => bytesToId(kv._1)).distinct.length == extension.fields.length) {
-            fatal(s"Extension ${extension.encodedId} contains duplicate keys")
-          }
-          .validate(header.isGenesis || extension.fields.nonEmpty) {
-            fatal("Empty fields in non-genesis block")
-          }
-      }
-    }
-
-    private def validateInterlinks(extension: Extension, header: Header)
-                                  (vs: ValidationState[Unit]): ValidationState[Unit] = {
-      import PoPowAlgos._
-      val prevHeaderOpt = typedModifierById[Header](header.parentId)
-      val prevExtensionOpt = prevHeaderOpt.flatMap(parent => typedModifierById[Extension](parent.extensionId))
-      (prevHeaderOpt, prevExtensionOpt) match {
-        case (Some(parent), Some(parentExt)) =>
-          val parentLinksTry = unpackInterlinks(parentExt.fields)
-          val currentLinksTry = unpackInterlinks(extension.fields)
-          vs
-            .validate(currentLinksTry.isSuccess)(fatal("Interlinks improperly packed"))
-            .validate(parentLinksTry.flatMap(parLinks => currentLinksTry.map(parLinks -> _))
-              .toOption.exists { case (prev, cur) => updateInterlinks(parent, prev) == cur }) {
-              fatal("Invalid interlinks")
-            }
-        case _ =>
-          vs.validate(header.isGenesis || header.height == pruningProcessor.minimalFullBlockHeight) {
-            error("Unable to validate interlinks")
-          }
-      }
-    }
-
-    /**
-      * Validation specific to concrete type of block payload
-      */
-    private def modifierSpecificValidation(m: BlockSection, header: Header): ValidationState[Unit] = {
-      m match {
-        case extension: Extension =>
-          validateExtension(extension, header)
-        case _ =>
-          failFast
-      }
-    }
 
   }
 

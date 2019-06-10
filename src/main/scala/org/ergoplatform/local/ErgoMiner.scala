@@ -7,12 +7,12 @@ import com.google.common.primitives.Longs
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
+import org.ergoplatform.mining._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.mining._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
+import org.ergoplatform.modifiers.history.{Extension, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -20,15 +20,20 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{ErgoSettings, Parameters}
+import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
+import scorex.core.validation.ValidationSettings
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
+import sigmastate.SType.ErgoBoxRType
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.eval.Extensions._
+import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
+import special.collection.Coll
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -47,6 +52,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   import ErgoMiner._
 
   private implicit val timeout: Timeout = 5.seconds
+
+  private val desiredUpdate = ergoSettings.votingTargets.desiredUpdate
 
   private val votingSettings = ergoSettings.chainSettings.voting
   private val votingEpochLength = votingSettings.votingLength
@@ -81,7 +88,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def unknownMessage: Receive = {
     case _: scala.runtime.BoxedUnit =>
-      // ignore, this message is caused by way of interaction with NVH.
+    // ignore, this message is caused by way of interaction with NVH.
     case m =>
       log.warn(s"Unexpected message $m of class: ${m.getClass}")
   }
@@ -176,17 +183,17 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   override def receive: Receive =
     receiveSemanticallySuccessfulModifier orElse
-    startMining orElse
-    onReaders orElse
-    onUpdateSecret orElse
-    mining orElse
-    queryWallet orElse
-    unknownMessage
+      startMining orElse
+      onReaders orElse
+      onUpdateSecret orElse
+      mining orElse
+      queryWallet orElse
+      unknownMessage
 
   private def onReaders: Receive = {
     case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
       publicKeyOpt.foreach { minerProp =>
-        createCandidate(minerProp, h, m, s.asInstanceOf[UtxoStateReader]) match {
+        createCandidate(minerProp, h, m, desiredUpdate, s.asInstanceOf[UtxoStateReader]) match {
           case Success(candidate) =>
             val candidateMsg = powScheme.msgByHeader(AutolykosPowScheme.deriveUnprovedHeader(candidate))
             log.info(s"New candidate with msg ${Base16.encode(candidateMsg)} generated")
@@ -197,13 +204,17 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   private def mining: Receive = {
+    case PrepareCandidate if !ergoSettings.nodeSettings.mining =>
+      sender() ! Future.failed(
+        new Exception("Candidate creation is not supported when mining is disabled"))
+
     case PrepareCandidate if candidateOpt.isDefined =>
       sender() ! candidateOpt
         .flatMap { c =>
           publicKeyOpt.map(powScheme.deriveExternalCandidate(c, _))
         }
         .fold[Future[ExternalCandidateBlock]](
-          Future.failed(new Exception("Failed to create candidate")))(Future.successful)
+        Future.failed(new Exception("Failed to create candidate")))(Future.successful)
 
     case PrepareCandidate =>
       val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
@@ -211,7 +222,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
           publicKeyOpt
             .flatMap { pk =>
-              createCandidate(pk, h, m, s.asInstanceOf[UtxoStateReader])
+              createCandidate(pk, h, m, desiredUpdate, s.asInstanceOf[UtxoStateReader])
                 .map { c =>
                   candidateOpt = Some(c)
                   powScheme.deriveExternalCandidate(c, pk)
@@ -219,7 +230,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 .toOption
             }
             .fold[Future[ExternalCandidateBlock]](
-              Future.failed(new Exception("Failed to create candidate")))(Future.successful)
+            Future.failed(new Exception("Failed to create candidate")))(Future.successful)
         case _ =>
           Future.failed(new Exception("Invalid readers state"))
       }
@@ -237,6 +248,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         case None =>
           Future.failed(new Exception("Invalid miner state"))
       }
+      log.debug(s"Processed solution $solution with the result result $result")
       if (externalMinerMode) sender() ! result
   }
 
@@ -261,21 +273,18 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def createCandidate(minerPk: ProveDlog,
                               history: ErgoHistoryReader,
                               pool: ErgoMemPoolReader,
+                              proposedUpdate: ErgoValidationSettingsUpdate,
                               state: UtxoStateReader): Try[CandidateBlock] = Try {
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
+    val bestExtensionOpt: Option[Extension] = bestHeaderOpt
+      .flatMap(h => history.typedModifierById[Extension](h.extensionId))
     val timestamp = timeProvider.time()
     val stateContext = state.stateContext
     val nBits: Long = bestHeaderOpt
       .map(parent => history.requiredDifficultyAfter(parent))
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(ergoSettings.chainSettings.initialNBits)
-    val interlinks = bestHeaderOpt
-      .flatMap { h =>
-        history.typedModifierById[Extension](h.extensionId)
-          .flatMap(ext => unpackInterlinks(ext.fields).toOption)
-          .map(updateInterlinks(h, _))
-      }
-      .getOrElse(Seq.empty)
+    val interlinksExtension = PoPowAlgos.interlinksToExtension(updateInterlinks(bestHeaderOpt, bestExtensionOpt))
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt.map { header =>
       val newHeight = header.height + 1
@@ -284,22 +293,23 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       val votingFinishHeight: Option[Height] = currentParams.softForkStartingHeight
         .map(_ + votingSettings.votingLength * votingSettings.softForkEpochs)
       val forkVotingAllowed = votingFinishHeight.forall(fh => newHeight < fh)
-      val forkOrdered = ergoSettings.votingTargets.getOrElse(Parameters.SoftFork, 0) != 0
+      val forkOrdered = ergoSettings.votingTargets.softFork != 0
       val voteForFork = betterVersion && forkOrdered && forkVotingAllowed
 
       if (newHeight % votingEpochLength == 0 && newHeight > 0) {
-        val newParams = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, votingSettings)
-        (newParams.toExtensionCandidate(packInterlinks(interlinks)),
-          newParams.suggestVotes(ergoSettings.votingTargets, voteForFork),
+        val (newParams, activatedUpdate) = currentParams.update(newHeight, voteForFork, stateContext.votingData.epochVotes, proposedUpdate, votingSettings)
+        val newValidationSettings = stateContext.validationSettings.updated(activatedUpdate)
+        (newParams.toExtensionCandidate ++ interlinksExtension ++ newValidationSettings.toExtensionCandidate,
+          newParams.suggestVotes(ergoSettings.votingTargets.targets, voteForFork),
           newParams.blockVersion)
       } else {
-        (ExtensionCandidate(packInterlinks(interlinks)),
-          currentParams.vote(ergoSettings.votingTargets, stateContext.votingData.epochVotes, voteForFork),
+        (interlinksExtension,
+          currentParams.vote(ergoSettings.votingTargets.targets, stateContext.votingData.epochVotes, voteForFork),
           currentParams.blockVersion)
       }
-    }.getOrElse((ExtensionCandidate(packInterlinks(interlinks)), Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
+    }.getOrElse((interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.CurrentVersion))
 
-    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, version)
+    val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, proposedUpdate, version)
     //only transactions valid from against the current utxo state we take from the mem pool
     val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules).map { tx =>
       implicit val verifier: ErgoInterpreter = ErgoInterpreter(state.stateContext.currentParameters)
@@ -313,7 +323,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       state,
       upcomingContext,
       pool.getAllPrioritized,
-      emissionTxOpt.toSeq)
+      emissionTxOpt.toSeq)(state.stateContext.validationSettings)
 
     // remove transactions which turned out to be invalid
     if (toEliminate.nonEmpty) viewHolderRef ! EliminateTransactions(toEliminate)
@@ -338,7 +348,7 @@ object ErgoMiner extends ScorexLogging {
   def collectEmission(state: UtxoStateReader,
                       minerPk: ProveDlog,
                       emission: EmissionRules): Option[ErgoTransaction] = {
-    collectRewards(state.emissionBoxOpt, state.stateContext.currentHeight, Seq.empty, minerPk, emission, Seq.empty)
+    collectRewards(state.emissionBoxOpt, state.stateContext.currentHeight, Seq.empty, minerPk, emission, Colls.emptyColl)
       .headOption
   }
 
@@ -347,7 +357,7 @@ object ErgoMiner extends ScorexLogging {
                   txs: Seq[ErgoTransaction],
                   minerPk: ProveDlog,
                   emission: EmissionRules): Option[ErgoTransaction] = {
-    collectRewards(None, currentHeight, txs, minerPk, emission, Seq.empty).headOption
+    collectRewards(None, currentHeight, txs, minerPk, emission, Colls.emptyColl).headOption
   }
 
   /**
@@ -359,7 +369,7 @@ object ErgoMiner extends ScorexLogging {
                      txs: Seq[ErgoTransaction],
                      minerPk: ProveDlog,
                      emission: EmissionRules,
-                     assets: Seq[(TokenId, Long)] = Seq()): Seq[ErgoTransaction] = {
+                     assets: Coll[(TokenId, Long)] = Colls.emptyColl): Seq[ErgoTransaction] = {
     val propositionBytes = emission.settings.feePropositionBytes
 
     val inputs = txs.flatMap(_.inputs)
@@ -372,11 +382,11 @@ object ErgoMiner extends ScorexLogging {
     val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
       val prop = emissionBox.ergoTree
       val emissionAmount = emission.minersRewardAtHeight(nextHeight)
-      val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop,
-        nextHeight, Seq(), Map())
+      val newEmissionBox: ErgoBoxCandidate = new ErgoBoxCandidate(
+        emissionBox.value - emissionAmount, prop, nextHeight)
       val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
 
-      val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, nextHeight, assets, Map())
+      val minerBox = new ErgoBoxCandidate(emissionAmount, minerProp, nextHeight, assets)
 
       ErgoTransaction(
         inputs,
@@ -386,7 +396,7 @@ object ErgoMiner extends ScorexLogging {
     }
     val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
       val feeAmount = feeBoxes.map(_.value).sum
-      val feeAssets = feeBoxes.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
+      val feeAssets = feeBoxes.toColl.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty)))
       val minerBox = new ErgoBoxCandidate(feeAmount, minerProp, nextHeight, feeAssets, Map())
       Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(), IndexedSeq(minerBox)))
@@ -411,7 +421,9 @@ object ErgoMiner extends ScorexLogging {
                  us: UtxoStateReader,
                  upcomingContext: ErgoStateContext,
                  mempoolTxsIn: Iterable[ErgoTransaction],
-                 startTransactions: Seq[(ErgoTransaction, Long)]): (Seq[ErgoTransaction], Seq[ModifierId]) = {
+                 startTransactions: Seq[(ErgoTransaction, Long)])
+                (implicit vs: ValidationSettings): (Seq[ErgoTransaction], Seq[ModifierId]) = {
+
     def correctLimits(blockTxs: Seq[(ErgoTransaction, Long)]): Boolean = {
       blockTxs.map(_._2).sum < maxBlockCost && blockTxs.map(_._1.size).sum < maxBlockSize
     }
@@ -422,7 +434,8 @@ object ErgoMiner extends ScorexLogging {
              lastFeeTx: Option[(ErgoTransaction, Long)],
              invalidTxs: Seq[ModifierId]): (Seq[ErgoTransaction], Seq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
-      def current = (acc ++ lastFeeTx).map(_._1)
+      def current: Seq[ErgoTransaction] = (acc ++ lastFeeTx).map(_._1)
+
       mempoolTxs.headOption match {
         case Some(tx) =>
           implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)

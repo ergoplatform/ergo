@@ -8,14 +8,16 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.fixtures.WalletFixture
-import org.ergoplatform.nodeView.wallet.IdUtils._
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.eval.Extensions._
+import sigmastate.eval._
 import sigmastate.interpreter.ProverResult
 
 import scala.concurrent.blocking
@@ -47,7 +49,7 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def scanTime(block: ErgoFullBlock)(implicit ctx: Ctx): Long = {
     val boxes = block.transactions.flatMap(_.outputs)
-    val tokens = boxes.flatMap(_.additionalTokens)
+    val tokens = boxes.flatMap(_.additionalTokens.toArray)
     scanTime(boxes.size, tokens.size)
   }
 
@@ -91,7 +93,7 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def assetsByTokenId(boxes: Seq[ErgoBoxCandidate]): Map[TokenId, Long] = {
     boxes
-      .flatMap(_.additionalTokens)
+      .flatMap(_.additionalTokens.toArray)
       .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
         acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
       }
@@ -117,7 +119,7 @@ trait WalletTestOps extends NodeViewBaseOps {
       Seq.empty,
       publicKey,
       emission,
-      assets).head
+      Colls.fromArray(assets.toArray)).head
   }
 
   def makeSpendingTx(boxesToSpend: Seq[ErgoBox],
@@ -134,7 +136,7 @@ trait WalletTestOps extends NodeViewBaseOps {
              assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
     val inputs = boxesToSpend.map(box => Input(box.id, proofToSpend))
     val balanceToSpend = boxesToSpend.map(_.value).sum - balanceToReturn
-    def creatingCandidate = new ErgoBoxCandidate(balanceToReturn, scriptToReturn, startHeight, replaceNewAssetStub(assets, inputs))
+    def creatingCandidate = new ErgoBoxCandidate(balanceToReturn, scriptToReturn, startHeight, replaceNewAssetStub(assets, inputs).toColl)
     val spendingOutput = if (balanceToSpend > 0) Some(new ErgoBoxCandidate(balanceToSpend, Constants.TrueLeaf, creationHeight = startHeight)) else None
     val creatingOutput = if (balanceToReturn > 0) Some(creatingCandidate) else None
     ErgoTransaction(inputs.toIndexedSeq, spendingOutput.toIndexedSeq ++ creatingOutput.toIndexedSeq)

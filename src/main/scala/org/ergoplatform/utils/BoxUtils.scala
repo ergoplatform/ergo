@@ -6,13 +6,16 @@ import org.ergoplatform.settings.{Algos, Parameters}
 import scorex.util.ModifierId
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
+import sigmastate.eval._
+import sigmastate.eval.Extensions._
+import special.collection.Coll
 
 object BoxUtils {
 
   /** Used when complete instance of ErgoBox is unavailable. */
   @inline
   def minimalErgoAmountSimulated(script: ErgoTree,
-                                 tokens: Seq[(TokenId, Long)] = Seq(),
+                                 tokens: Coll[(TokenId, Long)] = Colls.emptyColl,
                                  additionalRegisters: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]] = Map(),
                                  parameters: Parameters): Long = {
     val candidateMock = new ErgoBoxCandidate(value = Long.MaxValue, script, creationHeight = Int.MaxValue, tokens, additionalRegisters)
@@ -22,7 +25,7 @@ object BoxUtils {
 
   @inline
   def minimalErgoAmountSimulated(script: ErgoTree, parameters: Parameters): Long =
-    minimalErgoAmountSimulated(script, Seq(), Map(), parameters)
+    minimalErgoAmountSimulated(script, Colls.emptyColl, Map(), parameters)
 
   @inline
   def minimalErgoAmountSimulated(candidate: ErgoBoxCandidate, parameters: Parameters): Long =

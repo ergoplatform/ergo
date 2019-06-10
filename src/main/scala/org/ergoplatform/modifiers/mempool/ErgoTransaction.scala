@@ -9,7 +9,7 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.{Algos, ValidationRules}
+import org.ergoplatform.settings.{Algos, ErgoValidationSettings, ValidationRules}
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -103,7 +103,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long = 0L)
-                      (implicit verifier: ErgoInterpreter): Try[Long] = {
+                      (implicit verifier: ErgoInterpreter, vs: ValidationSettings): Try[Long] = {
     validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry
   }
 
@@ -114,7 +114,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * @note Consensus-critical!
     */
   def validateStateless: ValidationState[Unit] = {
-    ModifierValidator(ValidationRules.initialSettings)
+    ModifierValidator(ErgoValidationSettings.initial)
       .validate(txNoInputs, inputs.nonEmpty, s"$id")
       .validate(txNoOutputs, outputCandidates.nonEmpty, s"$id")
       .validate(txManyInputs, inputs.size <= Short.MaxValue, s"$id: ${inputs.size}")
@@ -123,8 +123,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), s"$id: ${outputCandidates.map(_.value)}")
       .validateNoFailure(txOutputSum, outputsSumTry)
       .validate(txInputsUnique, inputs.distinct.size == inputs.size, s"$id: ${inputs.distinct.size} == ${inputs.size}")
-      .validateNoFailure(txAssetsInOneBox, outAssetsTry)
-      .validate(txPositiveAssets, outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)), s"$id: ${outputCandidates.map(_.additionalTokens)}")
   }
 
   /**
@@ -147,8 +145,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long)
-                      (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
-    val vs: ValidationSettings = ValidationRules.initialSettings
+                      (implicit verifier: ErgoInterpreter, vs: ValidationSettings): ValidationState[Long] = {
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
@@ -162,10 +159,12 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     ModifierValidator(vs)
       // Check that the transaction is not too big
-      .validate(txCost, initialCost < maxCost, s"$id: initial cost")
+      .validate(bsBlockTransactionsCost, initialCost < maxCost, s"$id: initial cost")
       // Starting validation
       .payload(initialCost)
       // Perform cheap checks first
+      .validateNoFailure(txAssetsInOneBox, outAssetsTry)
+      .validate(txPositiveAssets, outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)), s"$id: ${outputCandidates.map(_.additionalTokens)}")
       // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) =>
       validationState
@@ -191,7 +190,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
           validation
             // Check that transaction is not too costly considering all the assets
-            .validate(txCost, initialCost + totalAssetsAccessCost < maxCost, s"$id: assets cost")
+            .validate(bsBlockTransactionsCost, initialCost + totalAssetsAccessCost < maxCost, s"$id: assets cost")
             .validateSeq(outAssets) {
               case (validationState, (outAssetId, outAmount)) =>
                 val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
@@ -230,7 +229,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         // Check whether input box script interpreter raised exception
         .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
         // Check that cost of the transaction after checking the input becomes too big
-        .validate(txCost, currentTxCost + scriptCost <= maxCost, s"$id: cost exceeds limit after input #$idx")
+        .validate(bsBlockTransactionsCost, currentTxCost + scriptCost <= maxCost, s"$id: cost exceeds limit after input #$idx")
         .map(_ + scriptCost)
     }
   }

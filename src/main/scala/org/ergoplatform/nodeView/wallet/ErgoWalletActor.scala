@@ -173,12 +173,14 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
       util.Arrays.fill(entropy, 0: Byte)
       sender() ! mnemonicTry
+      self ! UnlockWallet(pass)
 
     case RestoreWallet(mnemonic, passOpt, encryptionPass) if secretStorageOpt.isEmpty =>
       val secretStorage = JsonSecretStorage
         .restore(mnemonic, passOpt, encryptionPass)(settings.walletSettings.secretStorage)
       secretStorageOpt = Some(secretStorage)
       sender() ! Success(())
+      self ! UnlockWallet(encryptionPass)
 
     case _: RestoreWallet | _: InitWallet =>
       sender() ! Failure(new Exception("Wallet is already initialized. Clear keystore to re-init it."))
@@ -365,7 +367,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                            height: Int,
                            inputs: Seq[(ModifierId, EncodedBoxId)],
                            outputs: Seq[(ModifierId, ErgoBox)]): Unit = {
-    proverOpt.foreach(_.IR.resetContext())
+    // re-create interpreter in order to avoid IR context bloating.
+    proverOpt = proverOpt.map(oldInterpreter => ErgoProvingInterpreter(oldInterpreter.secretKeys, parameters))
     val prevUncertainBoxes = registry.readUncertainBoxes
     val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
       .filterNot { case (_, o) => inputs.map(_._2).contains(encodedBoxId(o.id)) }

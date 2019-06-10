@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.mempool
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.settings.ValidationRules.txCost
+import org.ergoplatform.settings.ValidationRules.bsBlockTransactionsCost
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters, ValidationRules}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -17,7 +17,7 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
 
-import scala.util.Random
+import scala.util.{Random, Try}
 
 class ErgoTransactionSpec extends ErgoPropertyTest {
 
@@ -45,6 +45,10 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       boxCandidate.creationHeight,
       tokens,
       boxCandidate.additionalRegisters)
+  }
+
+  private def checkTx(from: IndexedSeq[ErgoBox], wrongTx: ErgoTransaction): Try[Long] = {
+    wrongTx.statelessValidity.flatMap(_ => wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext))
   }
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
@@ -154,16 +158,13 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
   property("assets preservation law holds") {
     forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
-      val wrongTx = updateAnAsset(tx, from, _ + 1)
-      wrongTx.statelessValidity.isSuccess shouldBe true
-      wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
+      checkTx(from, updateAnAsset(tx, from, _ + 1)) shouldBe 'failure
     }
   }
 
   property("impossible to create an asset of non-positive amount") {
     forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
-      val wrongTx = updateAnAsset(tx, from, _ => -1)
-      wrongTx.statelessValidity.isSuccess shouldBe false
+      checkTx(from, updateAnAsset(tx, from, _ => -1)) shouldBe 'failure
     }
   }
 
@@ -191,8 +192,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
         }
 
         val wrongTx = tx.copy(outputCandidates = updCandidates)
-        wrongTx.statelessValidity.isSuccess shouldBe false
-        wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
+        checkTx(from, wrongTx) shouldBe 'failure
       }
     }
   }
@@ -282,7 +282,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
     val validFailure = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext)
-    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(txCost, "").take(30))
+    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "").take(30))
 
   }
 
@@ -314,12 +314,12 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     assert(time0 <= Timeout)
 
     val cause = validity.failed.get.getMessage
-    cause should startWith(ValidationRules.errorMessage(txCost, "").take(30))
+    cause should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "").take(30))
 
     //check that spam transaction validation with no cost limit is indeed taking too much time
     val relaxedParams = LaunchParameters.parametersTable.updated(Parameters.MaxBlockCostIncrease, Int.MaxValue)
-    val relaxedVerifier = ErgoInterpreter(Parameters(0, relaxedParams))
-    val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(relaxedVerifier))
+    val relaxedVerifier = ErgoInterpreter(Parameters(0, relaxedParams, emptyVSUpdate))
+    val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(relaxedVerifier, validationSettingsNoIl))
 
     assert(time > Timeout)
   }

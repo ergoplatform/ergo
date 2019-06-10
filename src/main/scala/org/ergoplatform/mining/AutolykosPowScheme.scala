@@ -154,7 +154,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
-    * Assembles [[ErgoFullBlock]] using candidate block and external pow solution.
+    * Assembles `ErgoFullBlock` using candidate block and external pow solution.
     */
   def completeBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
     val header = AutolykosPowScheme.deriveUnprovedHeader(candidate).copy(powSolution = solution)

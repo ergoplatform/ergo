@@ -16,6 +16,19 @@ object PoPowAlgos {
   /**
     * Computes interlinks vector for the next level after `prevHeader`.
     */
+  @inline def updateInterlinks(prevHeaderOpt: Option[Header], prevExtensionOpt: Option[Extension]): Seq[ModifierId] = {
+    prevHeaderOpt
+      .flatMap { h =>
+        prevExtensionOpt
+          .flatMap(ext => unpackInterlinks(ext.fields).toOption)
+          .map(updateInterlinks(h, _))
+      }
+      .getOrElse(Seq.empty)
+  }
+
+  /**
+    * Computes interlinks vector for the next level after `prevHeader`.
+    */
   @inline def updateInterlinks(prevHeader: Header, prevInterlinks: Seq[ModifierId]): Seq[ModifierId] = {
     if (!prevHeader.isGenesis) {
       require(prevInterlinks.nonEmpty, "Interlinks vector could not be empty in case of non-genesis header")
@@ -47,7 +60,12 @@ object PoPowAlgos {
           acc
       }
     }
+
     loop(links.zipWithIndex.toList, Seq.empty)
+  }
+
+  @inline def interlinksToExtension(links: Seq[ModifierId]): ExtensionCandidate = {
+    ExtensionCandidate(packInterlinks(links))
   }
 
   /**
@@ -61,7 +79,7 @@ object PoPowAlgos {
         case head :: tail =>
           val value = head._2
           if (value.lengthCompare(Constants.ModifierIdSize + 1) == 0) {
-            val duplicatesQty = value.head.toInt
+            val duplicatesQty = 0xff & value.head.toInt
             val link = bytesToId(value.tail)
             loop(tail, acc ++ Seq.fill(duplicatesQty)(link))
           } else {
@@ -71,6 +89,7 @@ object PoPowAlgos {
           Success(acc)
       }
     }
+
     loop(fields.filter(_._1.headOption.contains(InterlinksVectorPrefix)).toList)
   }
 
@@ -80,6 +99,7 @@ object PoPowAlgos {
   private def maxLevelOf(header: Header): Int = {
     if (!header.isGenesis) {
       def log2(x: Double) = math.log(x) / math.log(2)
+
       val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
       val realTarget = header.powSolution.d
       val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)

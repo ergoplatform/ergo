@@ -117,7 +117,7 @@ class DigestState protected(override val version: VersionTag,
     case h: Header =>
       log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
       val version: VersionTag = idToVersion(h.id)
-      stateContext.appendBlock(h, None, votingSettings).flatMap(update(version, h.stateRoot, _))
+      stateContext.appendHeader(h, votingSettings).flatMap(update(version, h.stateRoot, _))
   }
 
   private def processOther: ModifierProcessing[DigestState] = {

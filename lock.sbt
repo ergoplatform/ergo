@@ -49,7 +49,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bitbucket.inkytonik.dsprofile" % "dsprofile_2.12" % "0.4.0",
   "org.bitbucket.inkytonik.kiama" % "kiama_2.12" % "2.1.0",
   "org.bitlet" % "weupnp" % "0.1.4",
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.62",
   "org.ergoplatform" % "ergo-wallet_2.12" % "v2.1-b620fbf2-SNAPSHOT",
   "org.objenesis" % "objenesis" % "2.4",
   "org.ow2.asm" % "asm" % "5.0.4",
@@ -65,7 +65,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scodec" % "scodec-bits_2.12" % "1.1.6",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.15",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "c552cdf7-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "b58f225e-SNAPSHOT",
   "org.scorexfoundation" % "scorex-util_2.12" % "0.1.3",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.6",
   "org.scorexfoundation" % "sigma-api_2.12" % "v2.1-faa53f4b-SNAPSHOT",
@@ -86,4 +86,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH d40120bdab84e0750c1c81fe7fc3c4e116189318
+// LIBRARY_DEPENDENCIES_HASH 877ad1a13172349492c931a6ea3faac0e6c4a7cf

@@ -32,6 +32,30 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
     }
   }
 
+  property("Forks that include genesis block") {
+    var (history, _) = genHistory()
+    val fork1 = genChain(3, history)
+    val fork2 = genChain(2, history)
+    val fork3 = genChain(4, history)
+
+    // apply 3 headers long chain
+    history = applyChain(history, fork1)
+    history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
+    history.bestHeaderOpt.get shouldBe fork1.last.header
+
+    // apply 2 headers long chain, should stay on previous one
+    history = applyChain(history, fork2)
+    history.bestFullBlockOpt.get.header shouldBe history.bestHeaderOpt.get
+    history.bestHeaderOpt.get shouldBe fork1.last.header
+
+    // apply 4 headers long chain, should update chain
+    history = applyChain(history, fork3)
+    history.bestHeaderOpt.get shouldBe fork3.last.header
+    history.bestFullBlockOpt.get.header.height shouldBe fork3.last.header.height
+
+  }
+
+
   property("ErgoModifiersCache.findCandidateKey() should find headers in case of forks") {
     val modifiersCache = new ErgoModifiersCache(Int.MaxValue)
 

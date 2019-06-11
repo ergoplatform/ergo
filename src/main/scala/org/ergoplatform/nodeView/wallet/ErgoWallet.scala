@@ -4,7 +4,8 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoAddress
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector
@@ -55,6 +56,9 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
     historyReader.heightOf(scorex.core.versionToId(to)) match {
       case Some(height) =>
         walletActor ! Rollback(to, height)
+        Success(this)
+      case None if to == ErgoState.genesisStateVersion =>
+        walletActor ! Rollback(to, ErgoHistory.GenesisHeight)
         Success(this)
       case None =>
         Failure(new Exception(s"Height of a modifier with id $to not found"))

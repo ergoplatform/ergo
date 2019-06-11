@@ -84,6 +84,15 @@ case class Header(version: Version,
 
 }
 
+/**
+  * A fake header that is used to fill the chain that starts from the beginning
+  */
+object PreGenesisHeader extends Header(0.toByte, Header.GenesisParentId, null, null, null, 0L, 0L, 0, null, null, null, None) {
+
+  override def serializedId: Array[Byte] = idToBytes(Header.GenesisParentId)
+
+}
+
 object Header extends ApiCodecs {
 
   def toSigma(header: Header): special.sigma.Header = new special.sigma.Header {

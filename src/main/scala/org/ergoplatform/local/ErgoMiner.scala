@@ -128,6 +128,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
               runMiningThreads(candidate)
             } else {
               log.info("Ready to serve external miner")
+              // Refresh candidate block if it was formed before NVH state restore in response to API requests
+              requestCandidate()
             }
           case None =>
             log.warn("Got start mining command while public key is not ready")

@@ -7,6 +7,7 @@ import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -16,7 +17,7 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.MinimalState
 import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
-import scorex.core.{VersionTag, bytesToVersion}
+import scorex.core.{VersionTag, bytesToVersion, idToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -203,7 +204,7 @@ object ErgoState extends ScorexLogging {
 
   val preGenesisStateDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
 
-  lazy val genesisStateVersion: VersionTag = bytesToVersion(Array.fill(32)(1: Byte))
+  lazy val genesisStateVersion: VersionTag = idToVersion(Header.GenesisParentId)
 
   def readOrGenerate(settings: ErgoSettings,
                      constants: StateConstants): ErgoState[_] = {

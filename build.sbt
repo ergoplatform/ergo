@@ -4,7 +4,7 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "2.1.1",
+  version := "2.1.2",
   scalaVersion := "2.12.8",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
@@ -15,7 +15,7 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "b58f225e-SNAPSHOT"
-val sigmaStateVersion = "master-6baf579a-SNAPSHOT"
+val sigmaStateVersion = "master-47514218-SNAPSHOT"
 val ergoWalletVersion = "master-1e09a19c-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)

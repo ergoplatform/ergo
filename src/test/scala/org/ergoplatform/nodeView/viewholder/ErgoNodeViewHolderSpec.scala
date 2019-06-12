@@ -100,7 +100,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
       boxes.nonEmpty shouldBe true
 
       val tx = validTransactionFromBoxes(boxes.toIndexedSeq)
-      subscribeEvents(classOf[FailedTransaction[_]])
+      subscribeEvents(classOf[FailedTransaction])
       nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       expectNoMsg()
       getPoolSize shouldBe 1

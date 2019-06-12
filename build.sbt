@@ -14,7 +14,7 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "61389071-SNAPSHOT"
+val scorexVersion = "b58f225e-SNAPSHOT"
 val sigmaStateVersion = "master-6baf579a-SNAPSHOT"
 val ergoWalletVersion = "master-1e09a19c-SNAPSHOT"
 

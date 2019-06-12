@@ -1,0 +1,52 @@
+\section{Peer management protocol}\label{sec:peer-management-protocol}
+
+\newcommand{\peers}{\mathcal{P}}
+
+A \emph{peer} is a pair $(\term{addr}, \term{port})$,
+where $\term{addr}$ is it IPv4/6 address and $\term{port}$ is its port.
+
+A \emph{peer management structure} is a tuple $(G, B, C)$,
+where $G$ is the set of \emph{good peers}, $B$ is the set of \emph{banned peers}, and
+$C$ is the set of \emph{connected peers}, satisfying the following conditions:
+$G \cap B = \emptyset$,
+$C \subseteq G$,
+$G \subseteq \peers$,
+$B \subseteq \peers$.
+
+\subsection{Peers penalization and blacklisting}\label{subsec:peers-penalization-and-blacklisting}
+
+A \emph{penalty} is a tuple $(\term{descr}, \term{score})$, where $\term{descr}$ is a misbehavior
+description and $\term{score}$ is a penalty score.
+A \emph{penalty score} is a number defining how bad concrete kind of misbehavior is.
+
+Penalties are divided into 4 categories:
+
+\begin{itemize}
+    \item{\em NonDeliveryPenalty} - applied when a peer did not deliver requested modifier in time
+    \item{\em MisbehaviorPenalty} - applied when some modifier delivered by peer appeared to be invalid
+    \item{\em SpamPenalty} - applied when a peer delivered non-requested modifier
+    \item{\em PermanentPenalty} - applied to peers deviating from an actual network protocol
+\end{itemize}
+
+Once some penalty is applied a penalized peer is added to the penalty book.
+A \emph{penalty book} is a mapping $\term{ip} \rightarrow (\term{score}, \term{ts})$, where $\term{ip}$
+is a peer IP address, $\term{score}$ is an accumulated penalty score and $\term{ts}$ is a timestamp when a corresponding
+peer was penalized last time.
+
+Penalties of type $\term{NonDeliveryPenalty}$, $\term{MisbehaviorPenalty}$, $\term{SpamPenalty}$ are not applied
+to the same peer repeatedly within a safe interval.
+
+A \emph{safe interval} is a delay between penalties application.
+
+Once some peer accumulates a critical penalty score it is added to the blacklist.
+A \emph{blacklist} is a mapping $\term{ip} \rightarrow \term{ts}$, where $\term{ip}$ is a peer IP address
+and $\term{ts}$ is a timestamp a peer is banned till.
+
+The $\term{PermanentPenalty}$ is applied immediately and leads to a permanent ban of a peer
+
+\subsection{Peer Discovery}\label{subsec:peer-discovery}
+
+A peer discovery protocol requests new peers from a source and inserts them into
+the set of good peers $G$.
+Generally, a source may be another peer, a trusted central server or an untrusted communication
+channel (e.g. IRC, Twitter, \ldots).

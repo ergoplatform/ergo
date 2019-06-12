@@ -155,7 +155,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         outputCandidates.size * stateContext.currentParameters.outputCost
 
     // Maximum transaction cost the validation procedure could tolerate
-    val maxCost = verifier.maxCost - accumulatedCost
+    val maxCost = stateContext.currentParameters.maxBlockCost - accumulatedCost
 
     ModifierValidator(vs)
       // Check that the transaction is not too big
@@ -214,7 +214,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       val proof = input.spendingProof
       val proverExtension = proof.extension
       val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
-      val ctx = new ErgoContext(stateContext, transactionContext, proverExtension)
+      val ctx = new ErgoContext(stateContext, transactionContext, proverExtension, costLimit = maxCost)
 
       val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
       costTry.recover { case t => t.printStackTrace() }

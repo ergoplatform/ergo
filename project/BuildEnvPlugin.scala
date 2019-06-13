@@ -29,7 +29,7 @@ object BuildEnvPlugin extends AutoPlugin {
           case "test" => Some(BuildEnv.Test)
           case _ => None
         }
-        .getOrElse(BuildEnv.TestNet)
+        .getOrElse(BuildEnv.Test)
     },
     // give feed back
     onLoadMessage := {

@@ -1933,6 +1933,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /mining/rewardAddress:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Read miner reward address
+      operationId: miningReadMinerRewardAddress
+      tags:
+        - mining
+      responses:
+        '200':
+          description: External candidate
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - rewardAddress
+                properties:
+                  rewardAddress:
+                    $ref: '#/components/schemas/ErgoAddress'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /mining/solution:
     post:
       security:

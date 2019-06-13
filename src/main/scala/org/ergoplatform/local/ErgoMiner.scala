@@ -93,10 +93,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       log.warn(s"Unexpected message $m of class: ${m.getClass}")
   }
 
-  private def onUpdateSecret: Receive = {
+  private def keysManagement: Receive = {
     case UpdateSecret(s) =>
       secretKeyOpt = Some(s)
       publicKeyOpt = Some(s.publicImage)
+    case ReadMinerPk =>
+      sender() ! publicKeyOpt
   }
 
   private def queryWallet: Receive = {
@@ -187,7 +189,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     receiveSemanticallySuccessfulModifier orElse
       startMining orElse
       onReaders orElse
-      onUpdateSecret orElse
+      keysManagement orElse
       mining orElse
       queryWallet orElse
       unknownMessage
@@ -499,6 +501,8 @@ object ErgoMiner extends ScorexLogging {
   case object QueryWallet
 
   case object PrepareCandidate
+
+  case object ReadMinerPk
 
   case class UpdateSecret(s: DLogProverInput)
 

@@ -3,8 +3,9 @@ package org.ergoplatform.modifiers.mempool
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.ValidationRules.bsBlockTransactionsCost
-import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters, ValidationRules}
+import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, LaunchParameters, Parameters, ValidationRules}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
@@ -317,9 +318,19 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     cause should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "").take(30))
 
     //check that spam transaction validation with no cost limit is indeed taking too much time
-    val relaxedParams = LaunchParameters.parametersTable.updated(Parameters.MaxBlockCostIncrease, Int.MaxValue)
-    val relaxedVerifier = ErgoInterpreter(Parameters(0, relaxedParams, emptyVSUpdate))
-    val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(relaxedVerifier, validationSettingsNoIl))
+    import Parameters._
+    val ps = Parameters(0, DefaultParameters.updated(MaxBlockCostIncrease, Int.MaxValue), emptyVSUpdate)
+    val sc = new ErgoStateContext(Seq.empty, None, genesisStateDigest, ps, ErgoValidationSettings.initial,
+      VotingData.empty)(settings.chainSettings.voting)
+      .upcoming(org.ergoplatform.mining.group.generator,
+        0L,
+        settings.chainSettings.initialNBits,
+        Array.fill(3)(0.toByte),
+        ErgoValidationSettingsUpdate.empty,
+        0.toByte)
+    val (_, time) = BenchmarkUtil.measureTime(
+      tx.statefulValidity(from, IndexedSeq(), sc)(verifier,validationSettingsNoIl)
+    )
 
     assert(time > Timeout)
   }

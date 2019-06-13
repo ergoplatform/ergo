@@ -22,6 +22,7 @@ case class ErgoSettings(directory: String,
                         scorexSettings: ScorexSettings,
                         walletSettings: WalletSettings,
                         cacheSettings: CacheSettings,
+                        bootstrapSettingsOpt: Option[BootstrapSettings] = None,
                         votingTargets: VotingTargets = VotingTargets.empty) {
 
   val addressEncoder = ErgoAddressEncoder(chainSettings.addressPrefix)
@@ -53,20 +54,30 @@ object ErgoSettings extends ScorexLogging
     val directory = config.as[String](s"$configPath.directory")
 
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
+    val bootstrappingSettingsOpt = config.as[Option[BootstrapSettings]](s"$configPath.bootstrap")
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
     val testingSettings = config.as[TestingSettings](s"$configPath.testing")
     val walletSettings = config.as[WalletSettings](s"$configPath.wallet")
     val cacheSettings = config.as[CacheSettings](s"$configPath.cache")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
     val votingTargets = VotingTargets.fromConfig(config)
-
     if (nodeSettings.stateType == Digest && nodeSettings.mining) {
       log.error("Malformed configuration file was provided! Mining is not possible with digest state. Aborting!")
       ErgoApp.forceStopApplication()
     }
 
     consistentSettings(
-      ErgoSettings(directory, chainSettings, testingSettings, nodeSettings, scorexSettings, walletSettings, cacheSettings, votingTargets)
+      ErgoSettings(
+        directory,
+        chainSettings,
+        testingSettings,
+        nodeSettings,
+        scorexSettings,
+        walletSettings,
+        cacheSettings,
+        bootstrappingSettingsOpt,
+        votingTargets
+      )
     )
   }
 
@@ -80,7 +91,7 @@ object ErgoSettings extends ScorexLogging
     maybeConfigFile match {
       // if no user config is supplied, the library will handle overrides/application/reference automatically
       case None =>
-        log.warn("NO CONFIGURATION FILE WAS PROVIDED. STARTING WITH DEFAULT SETTINGS FOR TESTNET!")
+        log.warn("NO CONFIGURATION FILE WAS PROVIDED. STARTING WITH DEFAULT SETTINGS!")
         ConfigFactory.load()
       // application config needs to be resolved wrt both system properties *and* user-supplied config.
       case Some(file) =>

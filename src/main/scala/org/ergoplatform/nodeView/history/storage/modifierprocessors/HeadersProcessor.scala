@@ -136,9 +136,14 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * Data to insert for genesis block
     */
   private def genesisToInsert(h: Header, requiredDifficulty: Difficulty) = {
-    log.info(s"Initialize header chain with genesis header ${h.encodedId}")
-    (Seq(
-      BestHeaderKey -> Algos.idToBAW(h.id),
+    log.info(s"Process genesis header ${h.encodedId}")
+    val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = if (requiredDifficulty > bestHeadersChainScore) {
+      Seq(BestHeaderKey -> Algos.idToBAW(h.id))
+    } else {
+      Seq.empty
+    }
+
+    (bestRow ++ Seq(
       heightIdsKey(GenesisHeight) -> Algos.idToBAW(h.id),
       headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
       headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
@@ -289,6 +294,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, (id: ModifierId) => id.equals(header.id))
         .validate(hdrGenesisHeight, header.height == GenesisHeight, header.toString)
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
+        .validate(hdrTooOld, fullBlockHeight < config.keepVersions, heightOf(header.parentId).toString)
         .result
     }
 

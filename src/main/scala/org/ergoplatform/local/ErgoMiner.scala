@@ -93,10 +93,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       log.warn(s"Unexpected message $m of class: ${m.getClass}")
   }
 
-  private def onUpdateSecret: Receive = {
+  private def keysManagement: Receive = {
     case UpdateSecret(s) =>
       secretKeyOpt = Some(s)
       publicKeyOpt = Some(s.publicImage)
+    case ReadMinerPk =>
+      sender() ! publicKeyOpt
   }
 
   private def queryWallet: Receive = {
@@ -128,6 +130,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
               runMiningThreads(candidate)
             } else {
               log.info("Ready to serve external miner")
+              // Refresh candidate block if it was formed before NVH state restore in response to API requests
+              requestCandidate()
             }
           case None =>
             log.warn("Got start mining command while public key is not ready")
@@ -185,7 +189,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     receiveSemanticallySuccessfulModifier orElse
       startMining orElse
       onReaders orElse
-      onUpdateSecret orElse
+      keysManagement orElse
       mining orElse
       queryWallet orElse
       unknownMessage
@@ -204,6 +208,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   private def mining: Receive = {
+    case PrepareCandidate if !ergoSettings.nodeSettings.mining =>
+      sender() ! Future.failed(
+        new Exception("Candidate creation is not supported when mining is disabled"))
+
     case PrepareCandidate if candidateOpt.isDefined =>
       sender() ! candidateOpt
         .flatMap { c =>
@@ -493,6 +501,8 @@ object ErgoMiner extends ScorexLogging {
   case object QueryWallet
 
   case object PrepareCandidate
+
+  case object ReadMinerPk
 
   case class UpdateSecret(s: DLogProverInput)
 

@@ -3,10 +3,10 @@ package org.ergoplatform.api
 import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
-import org.ergoplatform.{ErgoBox}
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.api.ApiEncoderOption.Detalization
-import org.ergoplatform.mining.{groupElemToBytes, groupElemFromBytes}
+import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
@@ -16,13 +16,11 @@ import scorex.core.validation.ValidationResult
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
-import sigmastate.Values.{Value, ErgoTree, EvaluatedValue}
+import sigmastate.SType
+import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.serialization.{ValueSerializer, ErgoTreeSerializer}
-import sigmastate.{SBoolean, SType}
-import special.collection.Coll
-import sigmastate.eval._
+import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
 
 import scala.util.Try
 
@@ -62,8 +60,8 @@ trait ApiCodecs {
     } yield groupElemFromBytes(bytes)
   }
 
-  implicit val ecPointEncoder: Encoder[EcPointType] = { point:EcPointType =>
-      groupElemToBytes(point).asJson
+  implicit val ecPointEncoder: Encoder[EcPointType] = { point: EcPointType =>
+    groupElemToBytes(point).asJson
   }
 
   implicit val byteSeqEncoder: Encoder[IndexedSeq[Byte]] = { in =>

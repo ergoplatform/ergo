@@ -1495,7 +1495,7 @@ paths:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Derive new key according to a provied path
+      summary: Derive new key according to a provided path
       operationId: walletDeriveKey
       tags:
         - wallet

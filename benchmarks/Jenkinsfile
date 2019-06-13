@@ -1,0 +1,11 @@
+pipeline {
+    agent { label 'slave' }
+    stages {
+
+        stage('org.ergoplatform.bench.BenchRunner') {
+            steps {
+                sh('sbt "benchmarks/test:runMain org.ergoplatform.bench.BenchRunner"')
+            }
+        }
+    }
+}

@@ -105,24 +105,24 @@ sourceGenerators in Compile += Def.task {
 }
 
 resourceGenerators in Compile += Def.task {
+  val confName = buildEnv.value match {
+    case BuildEnv.MainNet => "mainnet.conf"
+    case BuildEnv.TestNet => "testnet.conf"
+    case _ =>                "devnet.conf"
+  }
+  val confFile = (resourceDirectory in Compile).value / confName
+  val targetFile = (resourceManaged in Compile).value / "application.conf"
+  IO.copyFile(confFile, targetFile)
+  Seq(targetFile)
+}
+
+mappings in Compile := {
   if (buildEnv.value != BuildEnv.Test) {
-    val confName = buildEnv.value match {
-      case BuildEnv.MainNet => "mainnet.conf"
-      case BuildEnv.TestNet => "testnet.conf"
-      case _ =>                "devnet.conf"
-    }
-    val confFile = (resourceDirectory in Compile).value / confName
-    val targetFile = (resourceManaged in Compile).value / "application.conf"
-    IO.copyFile(confFile, targetFile)
-    Seq(targetFile)
+    Seq(((resourceManaged in Compile).value / "application.conf") -> "application.conf")
   } else {
     Seq.empty
   }
 }
-
-mappings in Compile := Seq(
-  ((resourceManaged in Compile).value / "application.conf") -> "application.conf"
-)
 
 mainClass in assembly := Some("org.ergoplatform.ErgoApp")
 

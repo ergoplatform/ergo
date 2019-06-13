@@ -120,9 +120,13 @@ resourceGenerators in Compile += Def.task {
   }
 }
 
-mappings in Compile := Seq(
-  ((resourceManaged in Compile).value / "application.conf") -> "application.conf"
-)
+mappings in Compile := {
+  if (buildEnv.value != BuildEnv.Test) {
+    Seq(((resourceManaged in Compile).value / "application.conf") -> "application.conf")
+  } else {
+    Seq.empty
+  }
+}
 
 mainClass in assembly := Some("org.ergoplatform.ErgoApp")
 

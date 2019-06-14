@@ -7,11 +7,12 @@ import org.ergoplatform.{ErgoLikeContext, ErgoLikeTransactionTemplate, UnsignedI
 import sigmastate.interpreter.ContextExtension
 import org.ergoplatform.validation.{SigmaValidationSettings, ValidationRules}
 
-
+/**
+  * Context to be used during transaction verification
+  */
 class ErgoContext(val stateContext: ErgoStateContext,
                   transactionContext: TransactionContext,
-                  override val extension: ContextExtension = ContextExtension(Map()),
-                  override val validationSettings: SigmaValidationSettings = ValidationRules.currentSettings,
+                  override val extension: ContextExtension,
                   override val costLimit: Long)
   extends ErgoLikeContext(stateContext.currentHeight,
     ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
@@ -23,16 +24,16 @@ class ErgoContext(val stateContext: ErgoStateContext,
     transactionContext.spendingTransaction,
     transactionContext.self,
     extension,
-    validationSettings,
+    stateContext.validationSettings.sigmaSettings,
     costLimit
   ) {
 
   override def withExtension(newExtension: ContextExtension): ErgoContext =
-    new ErgoContext(stateContext, transactionContext, newExtension, costLimit = costLimit)
+    new ErgoContext(stateContext, transactionContext, newExtension, costLimit)
 
   override def withTransaction(newSpendingTransaction: ErgoLikeTransactionTemplate[_ <: UnsignedInput]): ErgoContext =
     new ErgoContext(stateContext,
       transactionContext.copy(spendingTransaction = newSpendingTransaction),
       extension,
-      costLimit = costLimit)
+      costLimit)
 }

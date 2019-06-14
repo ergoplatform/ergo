@@ -329,7 +329,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
         ErgoValidationSettingsUpdate.empty,
         0.toByte)
     val (_, time) = BenchmarkUtil.measureTime(
-      tx.statefulValidity(from, IndexedSeq(), sc)(verifier,validationSettingsNoIl)
+      tx.statefulValidity(from, IndexedSeq(), sc)(verifier)
     )
 
     assert(time > Timeout)

@@ -37,7 +37,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       tx.statefulValidity(
         tx.inputs.flatMap(i => boxById(i.boxId)),
         tx.dataInputs.flatMap(i => boxById(i.boxId)),
-        context)(verifier, context.validationSettings)
+        context)(verifier)
     }
   }
 

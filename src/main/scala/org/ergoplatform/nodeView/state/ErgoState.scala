@@ -108,7 +108,7 @@ object ErgoState extends ScorexLogging {
           .validateNoFailure(txDataBoxes, dataBoxesTry)
           .payload[Long](r.value)
           .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, (dataBoxes, toSpend)) =>
-            tx.validateStateful(toSpend.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value)(verifier, validationSettings).result
+            tx.validateStateful(toSpend.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value)(verifier).result
           }
 
         execTx(tail, vs)

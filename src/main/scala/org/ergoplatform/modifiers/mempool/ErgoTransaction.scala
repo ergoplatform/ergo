@@ -103,7 +103,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long = 0L)
-                      (implicit verifier: ErgoInterpreter, vs: ValidationSettings): Try[Long] = {
+                      (implicit verifier: ErgoInterpreter): Try[Long] = {
     validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry
   }
 
@@ -145,7 +145,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long)
-                      (implicit verifier: ErgoInterpreter, vs: ValidationSettings): ValidationState[Long] = {
+                      (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
@@ -157,7 +157,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     // Maximum transaction cost the validation procedure could tolerate
     val remainingCost = stateContext.currentParameters.maxBlockCost - initialCost - accumulatedCost
 
-    ModifierValidator(vs)
+    ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big
       .validate(bsBlockTransactionsCost, remainingCost >= 0, s"$id: initial cost")
       // Starting validation
@@ -218,7 +218,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       val proof = input.spendingProof
       val proverExtension = proof.extension
       val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
-      val ctx = new ErgoContext(stateContext, transactionContext, proverExtension, costLimit = newRemainingCost)
+      val ctx = new ErgoContext(stateContext, transactionContext, proverExtension, newRemainingCost)
 
       val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
       costTry.recover { case t => t.printStackTrace() }

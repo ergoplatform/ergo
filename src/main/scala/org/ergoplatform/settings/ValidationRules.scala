@@ -149,7 +149,7 @@ object ValidationRules {
       mayBeDisabled = true),
     bsBlockTransactionsCost -> RuleStatus(s => fatal(s"Accumulated cost of block transactions should not exceed <maxBlockCost>. $s"),
       Seq(classOf[ErgoTransaction], classOf[BlockTransactions]),
-      mayBeDisabled = true),
+      mayBeDisabled = false),
 
     // full block processing validation
     fbOperationFailed -> RuleStatus(s => fatal(s"Operations against the state AVL+ tree should be successful. $s"),

@@ -42,7 +42,7 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
               log.trace(s"Cache miss for existing modifier $id")
               modifiersCache.put(id, pm)
               Some(pm)
-            case Failure(e) =>
+            case Failure(_) =>
               log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bBytes)})")
               None
           }
@@ -68,7 +68,6 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
       modifiersCache.put(o.id, o)
       // TODO saving object to disc may be async here for performance reasons
       objectsStore.put(o).get
-      assert(objectsStore.get(o.id).isDefined, s"Failed to save mod with id = ${o.id}") // todo: remove when i629 solved
     }
     if (indexesToInsert.nonEmpty) {
       indexesToInsert.foreach(kv => indexCache.put(kv._1, kv._2))

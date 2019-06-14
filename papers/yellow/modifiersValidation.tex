@@ -17,8 +17,8 @@ voting via soft forks, while new rules may also be added at the same time.
 
 \begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{1.0cm}|p{2.5cm}| }
     \hline
-Id & Validation rule & Soft-forkable & Active & Modifiers \\
-\hline
+    Id & Validation rule & Soft-forkable & Active & Modifiers \\
+    \hline
     100 & A transaction should have at least one input. & \xmark & \cmark & ErgoTransaction \\
     \hline
     101 & A transaction should have at least one output. & \xmark & \cmark & ErgoTransaction \\
@@ -63,8 +63,8 @@ Id & Validation rule & Soft-forkable & Active & Modifiers \\
 
 \begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{1.0cm}|p{2.5cm}| }
     \hline
-Id & Validation rule & Soft-forkable & Active & Modifiers \\
-\hline
+    Id & Validation rule & Soft-forkable & Active & Modifiers \\
+    \hline
     200 & Genesis header should have genesis parent id. & \xmark & \cmark & Header \\
     \hline
     201 & Genesis header id should be equal to id from the config. & \xmark & \cmark & Header \\
@@ -99,8 +99,8 @@ Id & Validation rule & Soft-forkable & Active & Modifiers \\
 
 \begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{1.0cm}|p{2.5cm}| }
     \hline
-Id & Validation rule & Soft-forkable & Active & Modifiers \\
-\hline
+    Id & Validation rule & Soft-forkable & Active & Modifiers \\
+    \hline
     300 & Double application of a modifier is prohibited. & \xmark & \cmark & Header, ADProofs, Extension, BlockTransactions \\
     \hline
     302 & Block sections should correspond to the declared header. & \xmark & \cmark & ADProofs, Extension, BlockTransactions \\
@@ -111,7 +111,7 @@ Id & Validation rule & Soft-forkable & Active & Modifiers \\
     \hline
     306 & Size of block transactions section should not exceed <maxBlockSize>. & \cmark & \cmark & BlockTransactions \\
     \hline
-    307 & Accumulated cost of block transactions should not exceed <maxBlockCost>. & \cmark & \cmark & ErgoTransaction, BlockTransactions \\
+    307 & Accumulated cost of block transactions should not exceed <maxBlockCost>. & \xmark & \cmark & ErgoTransaction, BlockTransactions \\
     \hline
 \end{tabular}
 
@@ -121,8 +121,8 @@ Id & Validation rule & Soft-forkable & Active & Modifiers \\
 
 \begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{1.0cm}|p{2.5cm}| }
     \hline
-Id & Validation rule & Soft-forkable & Active & Modifiers \\
-\hline
+    Id & Validation rule & Soft-forkable & Active & Modifiers \\
+    \hline
     400 & Size of extension section should not exceed 32768. & \cmark & \cmark & Extension \\
     \hline
     401 & Interlinks should be packed properly. & \cmark & \cmark & Extension \\
@@ -157,8 +157,8 @@ Id & Validation rule & Soft-forkable & Active & Modifiers \\
 
 \begin{tabular}{ |p{1.0cm}||p{7.5cm}|p{1.0cm}|p{1.0cm}|p{2.5cm}| }
     \hline
-Id & Validation rule & Soft-forkable & Active & Modifiers \\
-\hline
+    Id & Validation rule & Soft-forkable & Active & Modifiers \\
+    \hline
     500 & Operations against the state AVL+ tree should be successful. & \xmark & \cmark & ErgoFullBlock \\
     \hline
     501 & Calculated AVL+ digest should be equal to one written in the block header. & \xmark & \cmark & ErgoFullBlock \\

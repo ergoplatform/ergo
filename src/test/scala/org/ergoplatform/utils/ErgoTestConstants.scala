@@ -5,7 +5,7 @@ import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.ExtensionCandidate
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants}
+import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, UpcomingStateContext}
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
@@ -64,7 +64,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val defaultVersion: Byte = 0
   lazy val powScheme: AutolykosPowScheme = settings.chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
   val emptyVSUpdate = ErgoValidationSettingsUpdate.empty
-  val emptyStateContext: ErgoStateContext = ErgoStateContext.empty(genesisStateDigest, settings)
+  val emptyStateContext: UpcomingStateContext = ErgoStateContext.empty(genesisStateDigest, settings)
     .upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, defaultVotes, emptyVSUpdate, defaultVersion)
 
   val startHeight: Int = emptyStateContext.currentHeight

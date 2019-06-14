@@ -65,29 +65,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
-  /**
-    * Extracts a mapping (assets -> total amount) from a set of boxes passed as a parameter.
-    * That is, the method is checking amounts of assets in the boxes(i.e. that a box contains positive
-    * amount for an asset) and then summarize and group their corresponding amounts.
-    *
-    * @param boxes - boxes to check and extract assets from
-    * @return a mapping from asset id to to balance and total assets number
-    */
-  private def extractAssets(boxes: IndexedSeq[ErgoBoxCandidate]): Try[(Map[ByteArrayWrapper, Long], Int)] = Try {
-    val map: mutable.Map[ByteArrayWrapper, Long] = mutable.Map[ByteArrayWrapper, Long]()
-    val assetsNum = boxes.foldLeft(0) { case (acc, box) =>
-      require(box.additionalTokens.length <= ErgoTransaction.MaxAssetsPerBox, "too many assets in one box")
-      box.additionalTokens.foreach { case (assetId, amount) =>
-        val aiWrapped = ByteArrayWrapper(assetId)
-        val total = map.getOrElse(aiWrapped, 0L)
-        map.put(aiWrapped, Math.addExact(total, amount))
-      }
-      acc + box.additionalTokens.size
-    }
-    map.toMap -> assetsNum
-  }
-
-  lazy val outAssetsTry: Try[(Map[ByteArrayWrapper, Long], Int)] = extractAssets(outputCandidates)
+  lazy val outAssetsTry: Try[(Map[ByteArrayWrapper, Long], Int)] = ErgoTransaction.extractAssets(outputCandidates)
 
   lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
@@ -155,11 +133,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         outputCandidates.size * stateContext.currentParameters.outputCost
 
     // Maximum transaction cost the validation procedure could tolerate
-    val remainingCost = stateContext.currentParameters.maxBlockCost - initialCost - accumulatedCost
+    val remainingCost = stateContext.currentParameters.maxBlockCost - accumulatedCost
 
     ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big
-      .validate(bsBlockTransactionsCost, remainingCost >= 0, s"$id: initial cost")
+      .validate(bsBlockTransactionsCost, remainingCost >= initialCost, s"$id: initial cost")
       // Starting validation
       .payload(initialCost)
       // Perform cheap checks first
@@ -181,7 +159,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       // Check that transaction is not creating money out of thin air.
       .validate(txErgPreservation, inputSumTry == outputsSumTry, s"$id: $inputSumTry == $outputsSumTry")
       .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", e)) { case (validation, (outAssets, outAssetsNum)) =>
-        extractAssets(boxesToSpend) match {
+        ErgoTransaction.extractAssets(boxesToSpend) match {
           case Success((inAssets, inAssetsNum)) =>
             lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
             val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
@@ -221,7 +199,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       val ctx = new ErgoContext(stateContext, transactionContext, proverExtension, newRemainingCost)
 
       val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
-      costTry.recover { case t => t.printStackTrace() }
+      costTry.recover { case t =>
+        log.debug(s"Tx verification failed: ${t.getMessage}")
+      }
 
       lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
 
@@ -259,6 +239,28 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 }
 
 object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding {
+
+  /**
+    * Extracts a mapping (assets -> total amount) from a set of boxes passed as a parameter.
+    * That is, the method is checking amounts of assets in the boxes(i.e. that a box contains positive
+    * amount for an asset) and then summarize and group their corresponding amounts.
+    *
+    * @param boxes - boxes to check and extract assets from
+    * @return a mapping from asset id to to balance and total assets number
+    */
+  def extractAssets(boxes: IndexedSeq[ErgoBoxCandidate]): Try[(Map[ByteArrayWrapper, Long], Int)] = Try {
+    val map: mutable.Map[ByteArrayWrapper, Long] = mutable.Map[ByteArrayWrapper, Long]()
+    val assetsNum = boxes.foldLeft(0) { case (acc, box) =>
+      require(box.additionalTokens.length <= ErgoTransaction.MaxAssetsPerBox, "too many assets in one box")
+      box.additionalTokens.foreach { case (assetId, amount) =>
+        val aiWrapped = ByteArrayWrapper(assetId)
+        val total = map.getOrElse(aiWrapped, 0L)
+        map.put(aiWrapped, Math.addExact(total, amount))
+      }
+      acc + box.additionalTokens.size
+    }
+    map.toMap -> assetsNum
+  }
 
   def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction = {
     ErgoTransaction(inputs, IndexedSeq(), outputCandidates, None)

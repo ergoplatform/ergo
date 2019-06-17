@@ -64,7 +64,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
       block.blockTransactions.transactions.exists(_.dataInputs.nonEmpty) shouldBe true
 
       val ds = createDigestState(us.version, us.rootHash)
-      ds.applyModifier(block).isSuccess shouldBe true
+      ds.applyModifier(block) shouldBe 'success
     }
   }
 

@@ -202,7 +202,7 @@ object ErgoApp extends ScorexLogging {
   import com.joefkelley.argyle._
 
   val argParser: Arg[Args] = (
-    optional[String]("--conf", "-c") and
+    optional[String]("--config", "-c") and
     optionalOneOf[NetworkId](NetworkId.all.map(x => s"--${x.verboseName}" -> x):_*)
   ).to[Args]
 

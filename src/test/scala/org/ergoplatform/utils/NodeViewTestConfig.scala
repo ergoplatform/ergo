@@ -11,7 +11,7 @@ case class NodeViewTestConfig(stateType: StateType,
                               popowBootstrap: Boolean) {
 
   def toSettings: ErgoSettings = {
-    val defaultSettings = ErgoSettings.read(None)
+    val defaultSettings = ErgoSettings.read()
     defaultSettings.copy(
       chainSettings = defaultSettings.chainSettings.copy(
         powScheme = new DefaultFakePowScheme(defaultSettings.chainSettings.powScheme.k, defaultSettings.chainSettings.powScheme.n)

@@ -38,6 +38,7 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
   "com.typesafe.akka" %% "akka-actor" % "2.5.+",
+  "com.joefkelley" %% "argyle" % "1.0.0",
 
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
@@ -104,43 +105,11 @@ sourceGenerators in Compile += Def.task {
   Seq(versionFile)
 }
 
-resourceGenerators in Compile += Def.task {
-  if (buildEnv.value != BuildEnv.Test) {
-    val confName = buildEnv.value match {
-      case BuildEnv.MainNet => "mainnet.conf"
-      case BuildEnv.TestNet => "testnet.conf"
-      case _ =>                "devnet.conf"
-    }
-    val confFile = (resourceDirectory in Compile).value / confName
-    val targetFile = (resourceManaged in Compile).value / "application.conf"
-    IO.copyFile(confFile, targetFile)
-    Seq(targetFile)
-  } else {
-    Seq.empty
-  }
-}
-
-mappings in Compile := {
-  if (buildEnv.value != BuildEnv.Test) {
-    Seq(((resourceManaged in Compile).value / "application.conf") -> "application.conf")
-  } else {
-    Seq.empty
-  }
-}
-
 mainClass in assembly := Some("org.ergoplatform.ErgoApp")
 
 test in assembly := {}
 
-assemblyJarName in assembly := {
-  val networkType = buildEnv.value match {
-    case BuildEnv.MainNet => "mainnet"
-    case BuildEnv.TestNet => "testnet"
-    case BuildEnv.DevNet =>  "devnet"
-    case BuildEnv.Test =>    "test"
-  }
-  s"ergo-$networkType-${version.value}.jar"
-}
+assemblyJarName in assembly := s"ergo-${version.value}.jar"
 
 assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first

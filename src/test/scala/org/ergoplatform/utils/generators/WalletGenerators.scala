@@ -13,7 +13,7 @@ import scorex.util.{ModifierId, idToBytes}
 
 trait WalletGenerators extends ErgoTransactionGenerators {
 
-  private val ergoSettings = ErgoSettings.read(None)
+  private val ergoSettings = ErgoSettings.read()
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
   def trackedAddressGen: Gen[ErgoAddress] = proveDlogGen.map(P2PKAddress.apply)

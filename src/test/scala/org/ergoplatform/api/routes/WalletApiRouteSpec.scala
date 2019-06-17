@@ -10,7 +10,7 @@ import org.ergoplatform.api.WalletApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.{Args, Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
 import org.scalatest.{FlatSpec, Matchers}
@@ -25,7 +25,8 @@ class WalletApiRouteSpec extends FlatSpec
 
   val prefix = "/wallet"
 
-  val ergoSettings: ErgoSettings = ErgoSettings.read(Some("src/test/resources/application.conf"))
+  val ergoSettings: ErgoSettings = ErgoSettings.read(
+    Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkIdOpt = None))
   val route: Route = WalletApiRoute(readersRef, nodeViewRef, settings).route
 
   implicit val paymentRequestEncoder: PaymentRequestEncoder = new PaymentRequestEncoder(ergoSettings)

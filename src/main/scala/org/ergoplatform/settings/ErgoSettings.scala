@@ -82,20 +82,25 @@ object ErgoSettings extends ScorexLogging
   }
 
   private def readConfigFromPath(args: Args): Config = {
-    val networkId = args.networkIdOpt.getOrElse(NetworkId.TestNet)
-    val networkConfigFile = new File(s"src/main/resources/${networkId.verboseName}.conf")
 
-    log.info(s"Running in ${networkId.verboseName} network mode")
-
-    val maybeConfigFile = for {
-      maybeFilename <- args.userConfigPathOpt
-      file = new File(maybeFilename)
+    val networkConfigFileOpt = for {
+      networkId <- args.networkIdOpt
+      file = new File(s"src/main/resources/${networkId.verboseName}.conf")
       if file.exists
     } yield file
 
-    maybeConfigFile match {
+    val userConfigFileOpt = for {
+      filePathOpt <- args.userConfigPathOpt
+      file = new File(filePathOpt)
+      if file.exists
+    } yield file
+
+    args.networkIdOpt.fold(log.warn("Running without network config"))(
+      x => log.info(s"Running in ${x.verboseName} network mode"))
+
+    (networkConfigFileOpt, userConfigFileOpt) match {
       // if no user config is supplied, the library will handle overrides/application/reference automatically
-      case None =>
+      case (Some(networkConfigFile), None) =>
         log.warn("NO CONFIGURATION FILE WAS PROVIDED. STARTING WITH DEFAULT SETTINGS!")
         ConfigFactory
           .defaultOverrides()
@@ -103,7 +108,7 @@ object ErgoSettings extends ScorexLogging
           .withFallback(ConfigFactory.defaultReference())
           .resolve()
       // application config needs to be resolved wrt both system properties *and* user-supplied config.
-      case Some(file) =>
+      case (Some(networkConfigFile), Some(file)) =>
         val cfg = ConfigFactory.parseFile(file)
         ConfigFactory
           .defaultOverrides()
@@ -111,6 +116,15 @@ object ErgoSettings extends ScorexLogging
           .withFallback(ConfigFactory.parseFile(networkConfigFile))
           .withFallback(ConfigFactory.defaultReference())
           .resolve()
+      case (None, Some(file)) =>
+        val cfg = ConfigFactory.parseFile(file)
+        ConfigFactory
+          .defaultOverrides()
+          .withFallback(cfg)
+          .withFallback(ConfigFactory.defaultReference())
+          .resolve()
+      case _ =>
+        ConfigFactory.load()
     }
   }
 

@@ -9,8 +9,9 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.{Algos, ErgoValidationSettings, ValidationRules}
+import org.ergoplatform.settings.Algos._
 import org.ergoplatform.settings.ValidationRules._
+import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
@@ -18,7 +19,7 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, ValidationSettings, ValidationState}
+import scorex.core.validation.{ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADKey
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -124,16 +125,17 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long)
                       (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
+
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
     // Cost of transaction initialization: we should read and parse all inputs and data inputs,
     // and also iterate through all outputs to check rules
-    val initialCost: Long =
-      boxesToSpend.size * stateContext.currentParameters.inputCost +
-        dataBoxes.size * stateContext.currentParameters.dataInputCost +
-        outputCandidates.size * stateContext.currentParameters.outputCost
-
+    val initialCost: Long = addExact(
+      multiplyExact(boxesToSpend.size, stateContext.currentParameters.inputCost),
+      multiplyExact(dataBoxes.size, stateContext.currentParameters.dataInputCost),
+      multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost)
+    )
     // Maximum transaction cost the validation procedure could tolerate
     val remainingCost = stateContext.currentParameters.maxBlockCost - accumulatedCost
 
@@ -186,7 +188,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                     inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0),
                     s"$id: Amount in = $inAmount, out = $outAmount. Allowed new asset = $newAssetId, out = $outAssetId")
               }
-              .map(_ + totalAssetsAccessCost)
+              .map(c => addExact(c, totalAssetsAccessCost))
           case Failure(e) =>
             // should never be here as far as we've already checked this when we've created the box
             ModifierValidator.fatal(e.getMessage)
@@ -217,7 +219,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
         // Check that cost of the transaction after checking the input becomes too big
         .validate(bsBlockTransactionsCost, scriptCost <= newRemainingCost, s"$id: cost exceeds limit after input #$idx")
-        .map(_ + scriptCost)
+        .map(c => addExact(c, scriptCost))
     }
   }
 

@@ -1,10 +1,14 @@
 package org.ergoplatform.settings
 
-import java.io.File
+import java.io.{File, FileOutputStream}
+import java.nio.channels.Channels
 
+import cats.instances.stream
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
+import org.apache.commons.io.IOUtils
+import org.apache.tools.ant.util.ResourceUtils
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.nodeView.state.StateType.Digest
 import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, P2PKAddress}
@@ -83,11 +87,27 @@ object ErgoSettings extends ScorexLogging
 
   private def readConfigFromPath(args: Args): Config = {
 
-    val networkConfigFileOpt = for {
-      networkId <- args.networkIdOpt
-      file = new File(s"src/main/resources/${networkId.verboseName}.conf")
-      if file.exists
-    } yield file
+    val networkConfigFileOpt = args.networkIdOpt
+      .flatMap { networkId =>
+        val confName = s"${networkId.verboseName}.conf"
+        val classLoader = ClassLoader.getSystemClassLoader
+        val destDir = System.getProperty("java.io.tmpdir") + "/"
+
+        Option(classLoader.getResourceAsStream(confName))
+          .map { stream =>
+            val source = Channels.newChannel(stream)
+            val fileOut = new File(destDir, confName)
+            val dest = new FileOutputStream(fileOut)
+            dest.getChannel.transferFrom(source, 0, Long.MaxValue)
+
+            source.close()
+            dest.close()
+
+            sys.addShutdownHook { new File(destDir, confName).delete }
+
+            fileOut
+          }
+      }
 
     val userConfigFileOpt = for {
       filePathOpt <- args.userConfigPathOpt
@@ -95,7 +115,7 @@ object ErgoSettings extends ScorexLogging
       if file.exists
     } yield file
 
-    args.networkIdOpt.fold(log.warn("Running without network config"))(
+    networkConfigFileOpt.flatMap(_ => args.networkIdOpt).fold(log.warn("Running without network config"))(
       x => log.info(s"Running in ${x.verboseName} network mode"))
 
     (networkConfigFileOpt, userConfigFileOpt) match {
@@ -121,6 +141,7 @@ object ErgoSettings extends ScorexLogging
         ConfigFactory
           .defaultOverrides()
           .withFallback(cfg)
+          .withFallback(ConfigFactory.defaultApplication())
           .withFallback(ConfigFactory.defaultReference())
           .resolve()
       case _ =>

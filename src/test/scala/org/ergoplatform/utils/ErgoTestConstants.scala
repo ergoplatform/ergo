@@ -35,7 +35,7 @@ trait ErgoTestConstants extends ScorexLogging {
 
   val parameters: Parameters = LaunchParameters
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
-  val initSettings: ErgoSettings = ErgoSettings.read(None)
+  val initSettings: ErgoSettings = ErgoSettings.read()
   val settings: ErgoSettings = initSettings
   val emission: EmissionRules = settings.chainSettings.emissionRules
   val coinsTotal: Long = emission.coinsTotal

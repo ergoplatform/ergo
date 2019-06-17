@@ -46,8 +46,8 @@ object ErgoSettings extends ScorexLogging
   val configPath: String = "ergo"
   val scorexConfigPath: String = "scorex"
 
-  def read(userConfigPath: Option[String]): ErgoSettings = {
-    fromConfig(readConfigFromPath(userConfigPath))
+  def read(args: Args = Args.empty): ErgoSettings = {
+    fromConfig(readConfigFromPath(args))
   }
 
   def fromConfig(config: Config): ErgoSettings = {
@@ -81,9 +81,14 @@ object ErgoSettings extends ScorexLogging
     )
   }
 
-  private def readConfigFromPath(userConfigPath: Option[String]): Config = {
+  private def readConfigFromPath(args: Args): Config = {
+    val networkId = args.networkIdOpt.getOrElse(NetworkId.TestNet)
+    val networkConfigFile = new File(s"src/main/resources/${networkId.verboseName}.conf")
+
+    log.info(s"Running in ${networkId.verboseName} network mode")
+
     val maybeConfigFile = for {
-      maybeFilename <- userConfigPath
+      maybeFilename <- args.userConfigPathOpt
       file = new File(maybeFilename)
       if file.exists
     } yield file
@@ -92,7 +97,11 @@ object ErgoSettings extends ScorexLogging
       // if no user config is supplied, the library will handle overrides/application/reference automatically
       case None =>
         log.warn("NO CONFIGURATION FILE WAS PROVIDED. STARTING WITH DEFAULT SETTINGS!")
-        ConfigFactory.load()
+        ConfigFactory
+          .defaultOverrides()
+          .withFallback(ConfigFactory.parseFile(networkConfigFile))
+          .withFallback(ConfigFactory.defaultReference())
+          .resolve()
       // application config needs to be resolved wrt both system properties *and* user-supplied config.
       case Some(file) =>
         val cfg = ConfigFactory.parseFile(file)
@@ -100,7 +109,7 @@ object ErgoSettings extends ScorexLogging
         ConfigFactory
           .defaultOverrides()
           .withFallback(cfg)
-          .withFallback(ConfigFactory.defaultApplication())
+          .withFallback(ConfigFactory.parseFile(networkConfigFile))
           .withFallback(ConfigFactory.defaultReference())
           .resolve()
     }

@@ -28,7 +28,7 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
   }
 
   property("should read user settings from HOCON file") {
-    val settings = ErgoSettings.read(Args(Some("src/test/resources/settings.json"), None))
+    val settings = ErgoSettings.read(Args(Some("src/test/resources/settings.conf"), None))
     settings.nodeSettings shouldBe NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true, 13,
       poPoWBootstrap = false, 10, mining = false, 1.second, useExternalMiner = false, miningPubKeyHex = None,
       offlineGeneration = false, 200, 100000, 100000, 10.seconds, minimalFeeAmount = 0)

@@ -12,7 +12,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Args, ErgoSettings}
 import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
 import scorex.core.app.Application
 import scorex.core.network.PeerFeature
@@ -41,7 +41,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 
-  lazy val ergoSettings: ErgoSettings = ErgoSettings.read(cfgPath)
+  lazy val ergoSettings: ErgoSettings = ErgoSettings.read(Args(cfgPath, None))
 
   lazy val emission = new EmissionRules(ergoSettings.chainSettings.monetary)
 

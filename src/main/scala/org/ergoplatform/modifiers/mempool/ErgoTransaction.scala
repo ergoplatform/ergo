@@ -127,6 +127,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
+    // Cost of transaction initialization: we should read and parse all inputs and data inputs,
+    // and also iterate through all outputs to check rules
     val initialCost: Long =
       boxesToSpend.size * stateContext.currentParameters.inputCost +
         dataBoxes.size * stateContext.currentParameters.dataInputCost +
@@ -163,9 +165,12 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           case Success((inAssets, inAssetsNum)) =>
             lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
             val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
+            val currentTxCost = validation.result.payload.get
+            // Cost of assets preservation rules checks.
+            // We iterate through all assets to create a map (cost: `(outAssetsNum + inAssetsNum) * tokenAccessCost)`)
+            // and after that we iterate through unique asset ids to check preservation rules (cost: `(inAssets.size + outAssets.size) * tokenAccessCost`)
             val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
               (inAssets.size + outAssets.size) * tokenAccessCost
-            val currentTxCost = validation.result.payload.get
             val newRemainingCost = remainingCost - currentTxCost - totalAssetsAccessCost
 
             validation

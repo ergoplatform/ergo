@@ -203,7 +203,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         log.debug(s"Tx verification failed: ${t.getMessage}")
       }
 
-      lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, 0L))
+      lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, newRemainingCost + 1))
 
       validation
         // Just in case, should always be true if client implementation is correct.

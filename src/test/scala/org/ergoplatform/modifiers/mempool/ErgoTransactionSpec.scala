@@ -3,11 +3,10 @@ package org.ergoplatform.modifiers.mempool
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.modifiers.history.PreHeader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext, VotingData}
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
 import org.ergoplatform.settings.ValidationRules.bsBlockTransactionsCost
-import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, LaunchParameters, Parameters, ValidationRules}
+import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}

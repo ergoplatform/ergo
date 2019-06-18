@@ -88,7 +88,6 @@ object ErgoState extends ScorexLogging {
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     import cats.implicits._
     implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
-    val validationSettings: ValidationSettings = currentStateContext.validationSettings
 
     @tailrec
     def execTx(txs: List[ErgoTransaction], accCostTry: ValidationResult[Long]): ValidationResult[Long] = (txs, accCostTry) match {

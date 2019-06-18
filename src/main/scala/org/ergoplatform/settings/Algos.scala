@@ -38,26 +38,4 @@ object Algos extends ScorexEncoding {
   def merkleTreeRoot(elements: Seq[LeafData]): Digest32 =
     if (elements.isEmpty) emptyMerkleTreeRoot else MerkleTree(elements)(hash).rootHash
 
-  /**
-    * Add longs, returning Long.Max value if there was any long overflow
-    */
-  @inline def addExact(a: Long, b: Long): Long = {
-    val sum = a + b
-    if (sum < 0) Long.MaxValue else sum
-  }
-
-  @inline def addExact(a: Long, b: Long, c: Long): Long = addExact(addExact(a, b), c)
-
-
-  /**
-    * Multiply longs, returning Long.Max value if there was any long overflow
-    */
-  @inline def multiplyExact(e1: Long, e2: Long): Long = {
-    try {
-      Math.multiplyExact(e1, e2)
-    } catch {
-      case _: Throwable => Long.MaxValue
-    }
-  }
-
 }

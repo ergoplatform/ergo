@@ -5,7 +5,6 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
 import org.ergoplatform.{ErgoLikeContext, ErgoLikeTransactionTemplate, UnsignedInput}
 import sigmastate.interpreter.ContextExtension
-import org.ergoplatform.validation.{SigmaValidationSettings, ValidationRules}
 
 /**
   * Context to be used during transaction verification

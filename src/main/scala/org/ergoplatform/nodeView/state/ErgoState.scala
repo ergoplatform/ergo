@@ -17,7 +17,7 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.MinimalState
 import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
-import scorex.core.{VersionTag, bytesToVersion, idToVersion}
+import scorex.core.{VersionTag, idToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}

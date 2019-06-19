@@ -14,9 +14,9 @@ COPY ["project", "/ergo/project"]
 RUN sbt update
 COPY . /ergo
 WORKDIR /ergo
-RUN sbt -Denv=testnet assembly
-RUN mv `find . -name ergo-assembly*.jar` /ergo.jar
-CMD ["/usr/bin/java", "-jar", "/ergo.jar"]
+RUN sbt assembly
+RUN mv `find . -name ergo-*.jar` /ergo.jar
+CMD ["java", "-jar", "/ergo.jar"]
 
 FROM openjdk:11-jre-slim
 LABEL maintainer="Andrey Andreev <andyceo@yandex.ru> (@andyceo)"
@@ -27,5 +27,5 @@ USER ergo
 EXPOSE 9020 9052
 WORKDIR /home/ergo
 VOLUME ["/home/ergo/.ergo"]
-ENTRYPOINT ["/usr/bin/java", "-jar", "/home/ergo/ergo.jar"]
+ENTRYPOINT ["java", "-jar", "/home/ergo/ergo.jar"]
 CMD [""]

@@ -30,15 +30,14 @@ You can check our [Wiki](https://github.com/ergoplatform/ergo/wiki/Set-up-a-full
 Also, reference with [Node Configuration File](https://github.com/ergoplatform/ergo/wiki/Node-Configuration-File) wiki page for creating your own configuration file.
 
 
-# Build from sources
+## Build from sources
 
 In order to build the Ergo node from sources you need JDK (>= 1.8) and SBT to be installed on your machine.
-The build system supports different environments which should be specified (through `-Denv=<env_type>``) depending on the network type you want to build for:
- - `testnet`
- - `mainnet`
- - `devnet`
+
+In order to simply get a single jar run: `sbt assembly` - assembly would appear in `target/scala-2.12/` directory.
  
-Depending on the platform you want to create a package for one of the following packager commands could be chosen:
+If you want to create a package for a specific platform with launching scripts the one of the following 
+packager commands could be chosen (depending on desired system type you want to build for):
  - `universal:packageBin` - Generates a universal zip file
  - `universal:packageZipTarball` - Generates a universal tgz file
  - `debian:packageBin` - Generates a deb
@@ -47,9 +46,17 @@ Depending on the platform you want to create a package for one of the following 
  - `universal:packageOsxDmg` - Generates a DMG file with the same contents as the universal zip/tgz.
  - `windows:packageBin` - Generates an MSI
  
- The final build command should look like: `sbt Denv=<env_type> <packager_command>`, example: `sbt -Denv=testnet universal:packageBin`. 
+ The final build command should look like: `sbt <packager_command>`, example: `sbt universal:packageBin`.
  A resulted package could be found in the `target/scala-2.12/<platform_type>` directory.
 
+## Running the node
+
+The node could be started in a few different ways:
+ 
+ - In case you have only a jar: `java -jar /path/to/ergo-<version>.jar --<networkId> -c /path/to/local.conf`
+ - Using start script from sbt-native-packager: `sh /path/to/bin/ergo  --<networkId> -c /path/to/local.conf`
+ 
+Available `networkId` options: `mainnet`, `testnet`, `devnet`. 
 
 ## Docker Quick Start
 
@@ -66,7 +73,7 @@ To run specific Ergo version as a service with custom config:
         -p 9052:9052 \
         -v ergo:/home/ergo/.ergo \
         -v /path/on/host/system/to/myergo.conf:/etc/myergo.conf \
-        ergoplatform/ergo:v2.0.3 /etc/myergo.conf
+        ergoplatform/ergo:v2.0.3 --<networkId> -c /etc/myergo.conf
 
 This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf`. Every default config value would be overwritten with corresponding value in `myergo.conf`. This also would store your data in named Docker volume `ergo` (if you change default data location in your config file, do not forget mount `ergo` volume to new location in container) and open ports `9007` and `9052` on host system. Note that `9052` is used for API, so it is ok not to open it into whole Internet. Also, Ergo node works normally under NAT, so you can keep closed your `9007` port too, hence other nodes could not discover and connect to yours one, only your node could initiate connections.
 

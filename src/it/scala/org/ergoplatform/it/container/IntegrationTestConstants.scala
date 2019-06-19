@@ -64,6 +64,12 @@ trait IntegrationTestConstants extends ErgoTestConstants {
     """.stripMargin
   )
 
+  def keepVersionsConfig(keepVersions: Int): Config = ConfigFactory.parseString(
+    s"""
+       |ergo.node.keepVersions=$keepVersions
+    """.stripMargin
+  )
+
   val nonGeneratingPeerConfig: Config = ConfigFactory.parseString(
     """
       |ergo.node.mining=false

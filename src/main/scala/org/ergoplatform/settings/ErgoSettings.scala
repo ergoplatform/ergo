@@ -1,10 +1,14 @@
 package org.ergoplatform.settings
 
-import java.io.File
+import java.io.{File, FileOutputStream}
+import java.nio.channels.Channels
 
+import cats.instances.stream
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
+import org.apache.commons.io.IOUtils
+import org.apache.tools.ant.util.ResourceUtils
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.nodeView.state.StateType.Digest
 import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, P2PKAddress}
@@ -46,8 +50,8 @@ object ErgoSettings extends ScorexLogging
   val configPath: String = "ergo"
   val scorexConfigPath: String = "scorex"
 
-  def read(userConfigPath: Option[String]): ErgoSettings = {
-    fromConfig(readConfigFromPath(userConfigPath))
+  def read(args: Args = Args.empty): ErgoSettings = {
+    fromConfig(readConfigFromPath(args))
   }
 
   def fromConfig(config: Config): ErgoSettings = {
@@ -81,28 +85,67 @@ object ErgoSettings extends ScorexLogging
     )
   }
 
-  private def readConfigFromPath(userConfigPath: Option[String]): Config = {
-    val maybeConfigFile = for {
-      maybeFilename <- userConfigPath
-      file = new File(maybeFilename)
+  private def readConfigFromPath(args: Args): Config = {
+
+    val networkConfigFileOpt = args.networkIdOpt
+      .flatMap { networkId =>
+        val confName = s"${networkId.verboseName}.conf"
+        val classLoader = ClassLoader.getSystemClassLoader
+        val destDir = System.getProperty("java.io.tmpdir") + "/"
+
+        Option(classLoader.getResourceAsStream(confName))
+          .map { stream =>
+            val source = Channels.newChannel(stream)
+            val fileOut = new File(destDir, confName)
+            val dest = new FileOutputStream(fileOut)
+            dest.getChannel.transferFrom(source, 0, Long.MaxValue)
+
+            source.close()
+            dest.close()
+
+            sys.addShutdownHook { new File(destDir, confName).delete }
+
+            fileOut
+          }
+      }
+
+    val userConfigFileOpt = for {
+      filePathOpt <- args.userConfigPathOpt
+      file = new File(filePathOpt)
       if file.exists
     } yield file
 
-    maybeConfigFile match {
+    networkConfigFileOpt.flatMap(_ => args.networkIdOpt).fold(log.warn("Running without network config"))(
+      x => log.info(s"Running in ${x.verboseName} network mode"))
+
+    (networkConfigFileOpt, userConfigFileOpt) match {
       // if no user config is supplied, the library will handle overrides/application/reference automatically
-      case None =>
+      case (Some(networkConfigFile), None) =>
         log.warn("NO CONFIGURATION FILE WAS PROVIDED. STARTING WITH DEFAULT SETTINGS!")
-        ConfigFactory.load()
+        ConfigFactory
+          .defaultOverrides()
+          .withFallback(ConfigFactory.parseFile(networkConfigFile))
+          .withFallback(ConfigFactory.defaultReference())
+          .resolve()
       // application config needs to be resolved wrt both system properties *and* user-supplied config.
-      case Some(file) =>
+      case (Some(networkConfigFile), Some(file)) =>
         val cfg = ConfigFactory.parseFile(file)
-        if (!cfg.hasPath("ergo")) failWithError("`ergo` path missed")
+        ConfigFactory
+          .defaultOverrides()
+          .withFallback(cfg)
+          .withFallback(ConfigFactory.parseFile(networkConfigFile))
+          .withFallback(ConfigFactory.defaultReference())
+          .resolve()
+      case (None, Some(file)) =>
+        val cfg = ConfigFactory.parseFile(file)
         ConfigFactory
           .defaultOverrides()
           .withFallback(cfg)
           .withFallback(ConfigFactory.defaultApplication())
           .withFallback(ConfigFactory.defaultReference())
           .resolve()
+      case _ =>
+        ConfigFactory.load()
     }
   }
 

@@ -10,7 +10,7 @@ import org.ergoplatform.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Args, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.TrackedBox
@@ -46,7 +46,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   }
 
   property("PaymentRequest should be serialized to json") {
-    val ergoSettings = ErgoSettings.read(None)
+    val ergoSettings = ErgoSettings.read()
     implicit val requestEncoder: Encoder[PaymentRequest] = new PaymentRequestEncoder(ergoSettings)
     implicit val requestDecoder: Decoder[PaymentRequest] = new PaymentRequestDecoder(ergoSettings)
     forAll(paymentRequestGen) { request =>
@@ -66,7 +66,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   }
 
   property("AssetIssueRequest should be serialized to json") {
-    val ergoSettings = ErgoSettings.read(None)
+    val ergoSettings = ErgoSettings.read()
     implicit val requestEncoder: Encoder[AssetIssueRequest] = new AssetIssueRequestEncoder(ergoSettings)
     implicit val requestDecoder: Decoder[AssetIssueRequest] = new AssetIssueRequestDecoder(ergoSettings)
     forAll(assetIssueRequestGen) { request =>

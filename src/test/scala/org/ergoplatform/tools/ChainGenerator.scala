@@ -36,7 +36,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   implicit val ergoAddressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
-  val realNetworkSetting = ErgoSettings.read(Some("src/main/resources/application.conf"))
+  val realNetworkSetting = ErgoSettings.read(Args(Some("src/main/resources/application.conf"), None))
 
   val EmissionTxCost: Long = 20000
   val MinTxAmount: Long = 2000000

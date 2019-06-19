@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.core.bytesToVersion
 
@@ -60,7 +60,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   }
 
   property("generateGenesisUtxoState & generateGenesisDigestState are compliant") {
-    val settings = ErgoSettings.read(None)
+    val settings = ErgoSettings.read(Args.empty)
     val dir = createTempDir
     val rootHash = createUtxoState()._1.rootHash
     val expectedRootHash = ErgoState.generateGenesisDigestState(dir, settings).rootHash

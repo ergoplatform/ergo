@@ -14,7 +14,7 @@ import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Args, ErgoSettings, NetworkId}
 import scorex.core.api.http._
 import scorex.core.app.{Application, ScorexContext}
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
@@ -28,10 +28,11 @@ import scorex.util.ScorexLogging
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 import scala.io.Source
+import scala.util.{Failure, Success}
 
-class ErgoApp(args: Seq[String]) extends ScorexLogging {
+class ErgoApp(args: Args) extends ScorexLogging {
 
-  private var ergoSettings: ErgoSettings = ErgoSettings.read(args.headOption)
+  private var ergoSettings: ErgoSettings = ErgoSettings.read(args)
 
   implicit private def settings: ScorexSettings = ergoSettings.scorexSettings
 
@@ -198,7 +199,17 @@ class ErgoApp(args: Seq[String]) extends ScorexLogging {
 
 object ErgoApp extends ScorexLogging {
 
-  def main(args: Array[String]): Unit = new ErgoApp(args).run()
+  import com.joefkelley.argyle._
+
+  val argParser: Arg[Args] = (
+    optional[String]("--config", "-c") and
+    optionalOneOf[NetworkId](NetworkId.all.map(x => s"--${x.verboseName}" -> x):_*)
+  ).to[Args]
+
+  def main(args: Array[String]): Unit = argParser.parse(args) match {
+    case Success(argsParsed) => new ErgoApp(argsParsed).run()
+    case Failure(e) => throw e
+  }
 
   def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)
 

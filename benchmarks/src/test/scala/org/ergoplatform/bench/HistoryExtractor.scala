@@ -4,10 +4,11 @@ import java.io.FileOutputStream
 
 import org.ergoplatform.bench.misc.ModifierWriter
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Args, ErgoSettings}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
+
 import scala.concurrent.ExecutionContext.Implicits.global
 
 object HistoryExtractor extends ScorexLogging {
@@ -16,7 +17,7 @@ object HistoryExtractor extends ScorexLogging {
 
     lazy val cfgPath: Option[String] = args.headOption
     lazy val outputFile: String = args.lift(1).getOrElse("blocks.dat")
-    lazy val ergoSettings: ErgoSettings = ErgoSettings.read(cfgPath)
+    lazy val ergoSettings: ErgoSettings = ErgoSettings.read(Args(cfgPath, None))
     lazy val settings: ScorexSettings = ergoSettings.scorexSettings
 
     val timeProvider = new NetworkTimeProvider(settings.ntp)

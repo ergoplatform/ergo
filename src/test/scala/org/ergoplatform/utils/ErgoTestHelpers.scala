@@ -71,5 +71,5 @@ object ErgoTestHelpers {
     ExecutionContext.fromExecutor(Executors.newFixedThreadPool(10))
 
   val defaultTimeProvider: NetworkTimeProvider =
-    new NetworkTimeProvider(ErgoSettings.read(None).scorexSettings.ntp)
+    new NetworkTimeProvider(ErgoSettings.read().scorexSettings.ntp)
 }

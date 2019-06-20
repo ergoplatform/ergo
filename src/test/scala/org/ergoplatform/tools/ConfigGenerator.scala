@@ -35,14 +35,14 @@ object ConfigGenerator extends App with ErgoTestHelpers {
   private def template(digestMode: Boolean, mining: Boolean,
                        mnemonic: String, apiKeyHash: String, nodeName: String): String =
     s"""
-             |ergo.node.stateType = "${if (digestMode) "digest" else "utxo"}"
-             |ergo.node.mining = ${if (mining) "true" else "false"}
-             |ergo.node.offlineGeneration = true
-             |ergo.node.useExternalMiner = false
-             |ergo.wallet.testMnemonic = "$mnemonic"
-             |ergo.wallet.testKeysQty = 10
-             |scorex.restApi.apiKeyHash = "$apiKeyHash"
-             |scorex.network.nodeName = "$nodeName"
+       |ergo.node.stateType = "${if (digestMode) "digest" else "utxo"}"
+       |ergo.node.mining = ${if (mining) "true" else "false"}
+       |ergo.node.offlineGeneration = true
+       |ergo.node.useExternalMiner = false
+       |ergo.wallet.testMnemonic = "$mnemonic"
+       |ergo.wallet.testKeysQty = 10
+       |scorex.restApi.apiKeyHash = "$apiKeyHash"
+       |scorex.network.nodeName = "$nodeName"
      """.stripMargin
 
   private def genMnemonic = {

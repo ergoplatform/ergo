@@ -180,14 +180,18 @@ trait ErgoHistoryReader
     loop(heightOf(header.id), Seq(Seq(header)))
   }
 
-
   /**
     * @return Node ErgoSyncInfo
     */
   override def syncInfo: ErgoSyncInfo = if (isEmpty) {
     ErgoSyncInfo(Seq.empty)
   } else {
-    ErgoSyncInfo(lastHeaders(ErgoSyncInfo.MaxBlockIds).headers.map(_.id))
+    val startingPoints = lastHeaders(ErgoSyncInfo.MaxBlockIds).headers
+    if (startingPoints.headOption.exists(_.isGenesis)) {
+      ErgoSyncInfo((PreGenesisHeader +: startingPoints).map(_.id))
+    } else {
+      ErgoSyncInfo(startingPoints.map(_.id))
+    }
   }
 
   /**

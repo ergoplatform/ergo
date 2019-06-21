@@ -13,6 +13,7 @@ import scala.concurrent.duration._
 class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
 
   val keepVersions = 300
+  val mutualChainLength = 10
   val chainLength = 50
   val delta = 50
 
@@ -40,6 +41,20 @@ class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
   "Deep rollback handling" in {
 
     val result: Future[Unit] = Async.async {
+
+      val minerAInit: Node = docker.startNode(minerAConfig,
+        specialVolumeOpt = Some((localVolumeA, remoteVolume))).get
+
+      val minerBInit: Node = docker.startNode(minerAConfigNonGen,
+        specialVolumeOpt = Some((localVolumeB, remoteVolume))).get
+
+      // 0. Let both nodes mine `mutualChainLength` blocks
+      Async.await(minerBInit.waitForHeight(mutualChainLength).flatMap(_ => minerAInit.waitForHeight(mutualChainLength)))
+      docker.stopNode(minerAInit.containerId)
+      docker.stopNode(minerBInit.containerId)
+
+      log.info("Co-Mining phase done")
+
       val minerAIsolated: Node = docker.startNode(minerAConfig, isolatedPeersConfig,
         specialVolumeOpt = Some((localVolumeA, remoteVolume))).get
 

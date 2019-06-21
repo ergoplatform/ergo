@@ -108,7 +108,7 @@ trait ErgoHistoryReader
         //We are on different forks now.
         if (info.lastHeaderIds.view.reverse.exists(m => contains(m) || m == PreGenesisHeader.id)) {
           //Return Younger, because we can send blocks from our fork that other node can download.
-          Younger
+          Fork
         } else {
           //We don't have any of id's from other's node sync info in history.
           //We don't know whether we can sync with it and what blocks to send in Inv message.

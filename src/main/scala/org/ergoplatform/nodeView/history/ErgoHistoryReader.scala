@@ -106,7 +106,7 @@ trait ErgoHistoryReader
         Younger
       case Some(_) =>
         //We are on different forks now.
-        if (info.lastHeaderIds.view.reverse.exists(m => contains(m))) {
+        if (info.lastHeaderIds.view.reverse.exists(m => contains(m) || m == PreGenesisHeader.id)) {
           //Return Younger, because we can send blocks from our fork that other node can download.
           Younger
         } else {
@@ -129,29 +129,33 @@ trait ErgoHistoryReader
     * @param size max return size
     * @return Ids of headerss, that node with info should download and apply to synchronize
     */
-  @SuppressWarnings(Array("OptionGet", "TraversableHead"))
-  override def continuationIds(info: ErgoSyncInfo, size: Int): Option[ModifierIds] = Try {
+  override def continuationIds(info: ErgoSyncInfo, size: Int): ModifierIds =
     if (isEmpty) {
       info.startingPoints
     } else if (info.lastHeaderIds.isEmpty) {
       val heightFrom = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
-      val startId = headerIdsAtHeight(heightFrom).head
-      val startHeader = typedModifierById[Header](startId).get
-      val headers = headerChainBack(size, startHeader, _ => false)
-        .ensuring(_.headers.exists(_.isGenesis), "Should always contain genesis header")
-      headers.headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
+      headerIdsAtHeight(heightFrom).headOption.toSeq.flatMap { startId =>
+        typedModifierById[Header](startId).toSeq.flatMap { startHeader =>
+          val headers = headerChainBack(size, startHeader, _ => false)
+            .ensuring(_.headers.exists(_.isGenesis), "Should always contain genesis header")
+          headers.headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
+        }
+      }
     } else {
       val ids = info.lastHeaderIds
-      val lastHeaderInOurBestChain: ModifierId = ids.view.reverse.find(m => isInBestChain(m)).get
-      val theirHeight = heightOf(lastHeaderInOurBestChain).get
-      val heightFrom = Math.min(headersHeight, theirHeight + size)
-      val startId = headerIdsAtHeight(heightFrom).head
-      val startHeader = typedModifierById[Header](startId).get
-      val headerIds = headerChainBack(size, startHeader, h => h.parentId == lastHeaderInOurBestChain)
-        .headers.map(h => Header.modifierTypeId -> h.id)
-      headerIds
+      val branchingPointOpt: Option[ModifierId] = ids.view.reverse
+        .find(m => isInBestChain(m))
+        .orElse(if (ids.contains(PreGenesisHeader.id)) Some(PreGenesisHeader.id) else None)
+      branchingPointOpt.toSeq.flatMap { branchingPoint =>
+        val otherNodeHeight = heightOf(branchingPoint).getOrElse(PreGenesisHeader.height)
+        val heightFrom = Math.min(headersHeight, otherNodeHeight + size)
+        val startId = headerIdsAtHeight(heightFrom).head
+        val startHeader = typedModifierById[Header](startId).get
+        val headerIds = headerChainBack(size, startHeader, _.parentId == branchingPointOpt)
+          .headers.map(Header.modifierTypeId -> _.id)
+        headerIds
+      }
     }
-  }.toOption
 
   /**
     *

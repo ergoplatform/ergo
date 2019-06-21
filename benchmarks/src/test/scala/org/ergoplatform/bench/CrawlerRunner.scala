@@ -57,7 +57,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
   val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings, timeProvider)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
-    new ErgoUtilsApiRoute(ergoSettings),
+    ErgoUtilsApiRoute(ergoSettings),
     PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
     InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),

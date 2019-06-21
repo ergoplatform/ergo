@@ -34,3 +34,11 @@ class ErgoUtilsApiRoute(ergoSettings: ErgoSettings)(implicit context: ActorRefFa
   }
 
 }
+
+object ErgoUtilsApiRoute {
+
+  def apply(ergoSettings: ErgoSettings)(implicit context: ActorRefFactory): ErgoUtilsApiRoute = {
+    new ErgoUtilsApiRoute(ergoSettings)
+  }
+
+}

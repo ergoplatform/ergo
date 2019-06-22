@@ -2,7 +2,9 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
 
+import io.iohk.iodb.Store.VersionID
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import org.ergoplatform.modifiers.history.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA.RegistryOp
 import org.ergoplatform.settings.{ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.boxes.TrackedBox
@@ -122,10 +124,17 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
 
 object WalletRegistry {
 
+  val PreGenesisStateVersion: VersionID = ByteArrayWrapper(idToBytes(PreGenesisHeader.id))
+
   def readOrCreate(settings: ErgoSettings): WalletRegistry = {
     val dir = new File(s"${settings.directory}/wallet/registry")
     dir.mkdirs()
-    new WalletRegistry(new LSMStore(dir))(settings.walletSettings)
+    val store = new LSMStore(dir)
+
+    // Create pre-genesis state checkpoint
+    if (!store.versionIDExists(PreGenesisStateVersion)) store.update(PreGenesisStateVersion, Seq.empty, Seq.empty)
+
+    new WalletRegistry(store)(settings.walletSettings)
   }
 
 }

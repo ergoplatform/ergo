@@ -80,10 +80,10 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     history = applyHeaderChain(history, fork1.tail)
     history.bestHeaderOpt.get shouldBe fork1.last
 
-    history.compare(getInfo(fork2)) shouldBe Younger
+    history.compare(getInfo(fork2)) shouldBe Fork
     history.compare(getInfo(fork1)) shouldBe Equal
-    history.compare(getInfo(fork1.take(BlocksInChain - 1))) shouldBe Younger
-    history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe Younger
+    history.compare(getInfo(fork1.take(BlocksInChain - 1))) shouldBe Fork
+    history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe Fork
     history.compare(getInfo(fork2.tail)) shouldBe Older
   }
 

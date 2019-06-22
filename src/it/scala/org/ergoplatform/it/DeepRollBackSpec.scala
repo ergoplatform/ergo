@@ -13,9 +13,8 @@ import scala.concurrent.duration._
 class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
 
   val keepVersions = 300
-  val mutualChainLength = 10
-  val chainLength = 50
-  val delta = 50
+  val chainLength = 20
+  val delta = 40
 
   val localVolumeA = s"$localDataDir/node-rollback-spec/nodeA/data"
   val localVolumeB = s"$localDataDir/node-rollback-spec/nodeB/data"
@@ -42,25 +41,11 @@ class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
 
     val result: Future[Unit] = Async.async {
 
-      val minerAInit: Node = docker.startNode(minerAConfig,
-        specialVolumeOpt = Some((localVolumeA, remoteVolume))).get
-
-      val minerBInit: Node = docker.startNode(minerAConfigNonGen,
-        specialVolumeOpt = Some((localVolumeB, remoteVolume))).get
-
-      // 0. Let both nodes mine `mutualChainLength` blocks
-      Async.await(minerBInit.waitForHeight(mutualChainLength).flatMap(_ => minerAInit.waitForHeight(mutualChainLength)))
-      docker.stopNode(minerAInit.containerId)
-      docker.stopNode(minerBInit.containerId)
-
-      log.info("Co-Mining phase done")
-
       val minerAIsolated: Node = docker.startNode(minerAConfig, isolatedPeersConfig,
         specialVolumeOpt = Some((localVolumeA, remoteVolume))).get
 
       // 1. Let the first node mine `chainLength + delta` blocks
       Async.await(minerAIsolated.waitForHeight(chainLength + delta))
-      docker.stopNode(minerAIsolated.containerId)
 
       val minerBIsolated: Node = docker.startNode(minerBConfig, isolatedPeersConfig,
         specialVolumeOpt = Some((localVolumeB, remoteVolume))).get
@@ -71,14 +56,9 @@ class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
 
       log.info("Mining phase done")
 
-      // 3. Restart the first node with disabled mining
-      val minerA: Node = docker.startNode(minerAConfigNonGen,
-        specialVolumeOpt = Some((localVolumeA, remoteVolume))).get
-      Async.await(minerA.waitForHeight(chainLength + delta))
+      val minerABestHeight = Async.await(minerAIsolated.height)
 
-      val minerABestHeight = Async.await(minerA.height)
-
-      // 4. Restart another node with disabled mining (it has shorter chain)
+      // 3. Restart node B with disabled mining (it has shorter chain)
       val minerB: Node = docker.startNode(minerBConfigNonGen,
         specialVolumeOpt = Some((localVolumeB, remoteVolume))).get
 
@@ -87,13 +67,13 @@ class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
 
       log.info("Chain switching done")
 
-      val minerABestBlock = Async.await(minerA.headerIdsByHeight(minerABestHeight)).head
+      val minerABestBlock = Async.await(minerAIsolated.headerIdsByHeight(minerABestHeight)).head
       val minerBBestBlock = Async.await(minerB.headerIdsByHeight(minerABestHeight)).head
 
       minerBBestBlock shouldEqual minerABestBlock
     }
 
-    Await.result(result, 40.minutes)
+    Await.result(result, 10.minutes)
 
   }
 

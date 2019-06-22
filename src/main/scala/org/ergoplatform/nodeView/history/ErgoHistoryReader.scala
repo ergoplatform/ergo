@@ -59,10 +59,11 @@ trait ErgoHistoryReader
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
     if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
       historyStorage.modifierById(id)
+        .ensuring(_.forall(_.id == id), s"Modifier ${Algos.encode(id)} id is incorrect")
     } else {
       None
     }
-  }.ensuring(_.forall(_.id == id), s"Modifier ${Algos.encode(id)} id is incorrect")
+  }
 
   /** Get modifier of expected type by its identifier
     *
@@ -202,8 +203,7 @@ trait ErgoHistoryReader
     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
     */
   def lastHeaders(count: Int, offset: Int = 0): HeaderChain = bestHeaderOpt
-    .map(bestHeader => headerChainBack(count, bestHeader, b => false).drop(offset)).getOrElse(HeaderChain.empty)
-
+    .map(bestHeader => headerChainBack(count, bestHeader, _ => false).drop(offset)).getOrElse(HeaderChain.empty)
 
   /**
     * @return ids of count headers starting from offset

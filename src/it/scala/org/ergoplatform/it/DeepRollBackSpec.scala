@@ -13,8 +13,8 @@ import scala.concurrent.duration._
 class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
 
   val keepVersions = 300
-  val chainLength = 20
-  val delta = 40
+  val chainLength = 200
+  val delta = 100
 
   val localVolumeA = s"$localDataDir/node-rollback-spec/nodeA/data"
   val localVolumeB = s"$localDataDir/node-rollback-spec/nodeB/data"
@@ -73,7 +73,7 @@ class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
       minerBBestBlock shouldEqual minerABestBlock
     }
 
-    Await.result(result, 10.minutes)
+    Await.result(result, 15.minutes)
 
   }
 

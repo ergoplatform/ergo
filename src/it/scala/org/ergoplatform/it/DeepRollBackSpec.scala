@@ -12,7 +12,7 @@ import scala.concurrent.duration._
 
 class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
 
-  val keepVersions = 300
+  val keepVersions = 350
   val chainLength = 200
   val delta = 100
 

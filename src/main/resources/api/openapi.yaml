@@ -185,7 +185,7 @@ components:
     ErgoAddress:
       description: Encoded Ergo Address
       type: string
-      example: '3WyAaMQmWbb3Zx1iQwwcRrM9ioGtsHy6y7XaPVJWjacVHmf3UbLe'
+      example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
 
     AddressHolder:
       description: Holds encoded ErgoAddress
@@ -887,6 +887,21 @@ components:
           items:
             $ref: '#/components/schemas/Asset'
 
+    AddressValidity:
+      description: Validity status of Ergo address
+      type: object
+      required:
+        - address
+        - isValid
+      properties:
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+        isValid:
+          type: boolean
+        error:
+          type: string
+
+
     ApiError:
       type: object
       required:
@@ -1364,6 +1379,33 @@ paths:
               schema:
                 type: string
                 example: '7e1e79dd4936bdc7d09f4ba9212849136b589fba4bcf4263a0961a95b65d08cb16'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utils/address/{address}:
+    get:
+      summary: Check address validity
+      operationId: CheckAddressValidity
+      tags:
+        - utils
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to check
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: Address validity with validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressValidity'
         default:
           description: Error
           content:

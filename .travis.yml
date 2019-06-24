@@ -7,6 +7,7 @@ branches:
     - master
     - /^\d\.\d+$/
     - sigma454-type-check-on-script-deser
+    - v2.2-candidate-update-sigma-faster-costing
 jdk:
 - oraclejdk9
 scala:

@@ -12,7 +12,9 @@ import sigmastate.interpreter.ContextExtension
 class ErgoContext(val stateContext: ErgoStateContext,
                   transactionContext: TransactionContext,
                   override val extension: ContextExtension,
-                  override val costLimit: Long)
+                  override val costLimit: Long,
+                  override val initCost: Long
+                 )
   extends ErgoLikeContext(stateContext.currentHeight,
     ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
     stateContext.lastBlockMinerPk,
@@ -24,15 +26,14 @@ class ErgoContext(val stateContext: ErgoStateContext,
     transactionContext.self,
     extension,
     stateContext.validationSettings.sigmaSettings,
-    costLimit
+    costLimit,
+    initCost
   ) {
 
   override def withExtension(newExtension: ContextExtension): ErgoContext =
-    new ErgoContext(stateContext, transactionContext, newExtension, costLimit)
+    new ErgoContext(stateContext, transactionContext, newExtension, costLimit, initCost)
 
   override def withTransaction(newSpendingTransaction: ErgoLikeTransactionTemplate[_ <: UnsignedInput]): ErgoContext =
     new ErgoContext(stateContext,
-      transactionContext.copy(spendingTransaction = newSpendingTransaction),
-      extension,
-      costLimit)
+      transactionContext.copy(spendingTransaction = newSpendingTransaction), extension, costLimit, initCost)
 }

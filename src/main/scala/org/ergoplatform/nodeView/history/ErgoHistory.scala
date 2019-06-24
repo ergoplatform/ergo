@@ -121,25 +121,26 @@ trait ErgoHistory
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
-            val newBestHeader = loopHeightDown(headersHeight, id => !invalidatedIds.contains(id))
-              .ensuring(_.isDefined, "Where unable to find new best header, can't invalidate genesis block")
-              .get
+            val newBestHeaderOpt = loopHeightDown(headersHeight, id => !invalidatedIds.contains(id))
 
             if (!bestFullIsInvalidated) {
               //Only headers chain involved
-              historyStorage.insert(validityKey(modifier.id),
-                Seq(BestHeaderKey -> Algos.idToBAW(newBestHeader.id)),
-                Seq.empty)
+              historyStorage.insert(
+                validityKey(modifier.id),
+                newBestHeaderOpt.map(h => BestHeaderKey -> Algos.idToBAW(h.id)).toSeq,
+                Seq.empty
+              )
               this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
             } else {
               val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
                 .flatMap(f => headerChainBack(fullBlockHeight + 1, f.header, h => !invalidatedIds.contains(h.id)).headers)
                 .flatMap(h => getFullBlock(h))
-                .ensuring(_.lengthCompare(1) > 0, "invalidatedChain should contain at least bestFullBlock and parent")
+                .ensuring(_.lengthCompare(1) >= 0, "invalidatedChain should contain at least one full block")
 
-              val branchPoint = invalidatedChain.head
+              val branchPointHeader =
+                if (invalidatedChain.lengthCompare(1) == 0) PreGenesisHeader else invalidatedChain.head.header
               val validChain: Seq[ErgoFullBlock] = {
-                continuationHeaderChains(branchPoint.header,
+                continuationHeaderChains(branchPointHeader,
                   h => getFullBlock(h).isDefined && !invalidatedIds.contains(h.id))
                   .maxBy(chain => scoreOf(chain.last.id).getOrElse(BigInt(0)))
                   .flatMap(h => getFullBlock(h))
@@ -150,11 +151,11 @@ trait ErgoHistory
                 invalidatedHeaders.map(h =>
                   FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
 
-              val changedLinks = Seq(BestFullBlockKey -> Algos.idToBAW(validChain.last.id),
-                BestHeaderKey -> Algos.idToBAW(newBestHeader.id))
+              val changedLinks = validChain.lastOption.map(b => BestFullBlockKey -> Algos.idToBAW(b.id)) ++
+                newBestHeaderOpt.map(h => BestHeaderKey -> Algos.idToBAW(h.id)).toSeq
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow
               historyStorage.insert(validityKey(modifier.id), toInsert, Seq.empty)
-              this -> ProgressInfo[ErgoPersistentModifier](Some(branchPoint.id), invalidatedChain.tail,
+              this -> ProgressInfo[ErgoPersistentModifier](Some(branchPointHeader.id), invalidatedChain.tail,
                 validChain.tail, Seq.empty)
             }
         }

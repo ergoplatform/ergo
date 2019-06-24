@@ -56,14 +56,12 @@ trait ErgoHistoryReader
     * @param id - modifier id
     * @return semantically valid ErgoPersistentModifier with the given id it is in history
     */
-  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
+  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
     if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
       historyStorage.modifierById(id)
-        .ensuring(_.forall(_.id == id), s"Modifier ${Algos.encode(id)} id is incorrect")
     } else {
       None
     }
-  }
 
   /** Get modifier of expected type by its identifier
     *

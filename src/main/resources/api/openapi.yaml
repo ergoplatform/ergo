@@ -1222,7 +1222,6 @@ paths:
 
   /transactions/unconfirmed:
     parameters:
-    # useless, varies dynamically
     - in: query
       name: limit
       required: false
@@ -1651,7 +1650,6 @@ paths:
 
   /wallet/boxes/unspent:
     parameters:
-      # useless, varies dynamically
       - in: query
         name: minConfirmations
         required: false

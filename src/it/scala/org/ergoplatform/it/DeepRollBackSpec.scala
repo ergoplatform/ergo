@@ -4,6 +4,7 @@ import java.io.File
 
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.scalatest.FreeSpec
 
 import scala.async.Async
@@ -47,11 +48,18 @@ class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
       // 1. Let the first node mine `chainLength + delta` blocks
       Async.await(minerAIsolated.waitForHeight(chainLength + delta))
 
+      val genesisA = Async.await(minerAIsolated.headerIdsByHeight(ErgoHistory.GenesisHeight)).head
+
       val minerBIsolated: Node = docker.startNode(minerBConfig, isolatedPeersConfig,
         specialVolumeOpt = Some((localVolumeB, remoteVolume))).get
 
       // 2. Let another node mine `chainLength` blocks
       Async.await(minerBIsolated.waitForHeight(chainLength))
+
+      val genesisB = Async.await(minerBIsolated.headerIdsByHeight(ErgoHistory.GenesisHeight)).head
+
+      genesisA should not equal genesisB
+
       docker.stopNode(minerBIsolated.containerId)
 
       log.info("Mining phase done")

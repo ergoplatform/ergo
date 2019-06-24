@@ -88,6 +88,70 @@ components:
         additionalRegisters:
           $ref: '#/components/schemas/Registers'
 
+    WalletBox:
+      type: object
+      required:
+        - box
+        - confirmationsNum
+        - address
+        - creationTransaction
+        - certain
+        - onchain
+        - creationOutIndex
+        - spendingTransaction
+        - spendingHeight
+        - inclusionHeight
+        - spent
+      properties:
+        box:
+          $ref: '#/components/schemas/ErgoTransactionOutput'
+        confirmationsNum:
+          description: Age of box in blocks
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+          nullable: true
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+        creationTransaction:
+          description: Transaction which created the box
+          $ref: '#/components/schemas/ModifierId'
+        spendingTransaction:
+          description: Transaction which created the box
+          nullable: true
+          $ref: '#/components/schemas/ModifierId'
+        spendingHeight:
+          description: The height the box was spent at
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+          nullable: true
+        inclusionHeight:
+          description: The height the transaction containing the box was included in a block at
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+        certain:
+          description: A flag signalling wheatehr the box is certainly resolved (as belonging to a wallet)
+          type: boolean
+          example: true
+        onchain:
+          description: A flag signalling wheatehr the box is created on main chain
+          type: boolean
+          example: true
+        spent:
+          description: A flag signalling wheatehr the box was spent
+          type: boolean
+          example: false
+        creationOutIndex:
+          description: An index of a box in transaction
+          type: integer
+          format: int32
+          example: 2
+
     ErgoTransaction:
       type: object
       description: Transaction without any lockers and unlockers
@@ -1578,6 +1642,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BalancesSnapshot'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/boxes/unspent:
+    parameters:
+      # useless, varies dynamically
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal number of confirmations
+        schema:
+          type: integer
+          format: int32
+          minimum: 10
+          maximum: 100
+          default: 0
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Mininal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          default: 0
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get a list of unspent boxes
+      operationId: walletUnspentBoxes
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: A list of unspent boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBox'
         default:
           description: Error
           content:

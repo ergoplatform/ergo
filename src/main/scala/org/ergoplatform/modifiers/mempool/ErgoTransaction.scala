@@ -4,6 +4,7 @@ import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
+import org.ergoplatform.ErgoConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
@@ -152,6 +153,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       validationState
         .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id: output $out")
         .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s"$id: output $out")
+        .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
+        .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
     }
       // Just to be sure, check that all the input boxes to spend (and to read) are presented.
       // Normally, this check should always pass, if the client is implemented properly

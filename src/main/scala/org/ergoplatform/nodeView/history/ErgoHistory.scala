@@ -139,14 +139,14 @@ trait ErgoHistory
 
               val branchPointHeader =
                 if (invalidatedChain.lengthCompare(1) == 0) PreGenesisHeader else invalidatedChain.head.header
-              val validChain: Seq[ErgoFullBlock] = {
-                continuationHeaderChains(branchPointHeader,
-                  h => getFullBlock(h).isDefined && !invalidatedIds.contains(h.id))
+              val validChain: Seq[ErgoFullBlock] =
+                continuationHeaderChains(
+                  branchPointHeader, h => getFullBlock(h).isDefined && !invalidatedIds.contains(h.id))
                   .maxBy(chain => scoreOf(chain.last.id).getOrElse(BigInt(0)))
-                  .flatMap(h => getFullBlock(h))
-              }
+                  .tail
+                  .flatMap(getFullBlock)
 
-              val chainStatusRow = validChain.tail.map(b =>
+              val chainStatusRow = validChain.map(b =>
                 FullBlockProcessor.chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
                 invalidatedHeaders.map(h =>
                   FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
@@ -156,7 +156,7 @@ trait ErgoHistory
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow
               historyStorage.insert(validityKey(modifier.id), toInsert, Seq.empty)
               this -> ProgressInfo[ErgoPersistentModifier](Some(branchPointHeader.id), invalidatedChain.tail,
-                validChain.tail, Seq.empty)
+                validChain, Seq.empty)
             }
         }
       case None =>

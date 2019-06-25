@@ -442,10 +442,14 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     val invalidBlock = generateInvalidFullBlock(None, wusGenesis)
 
     if (verifyTransactions) {
+
+      val initDigest = getCurrentState.rootHash
+
       applyBlock(invalidBlock) shouldBe 'success
 
       getBestFullBlockOpt shouldBe None
       getBestHeaderOpt shouldBe None
+      getCurrentState.rootHash shouldEqual initDigest
     }
   }
 

@@ -172,7 +172,7 @@ trait ErgoHistoryReader
         .flatMap { id => typedModifierById[Header](id) }
         .filter(withFilter)
       if (nextLevelHeaders.isEmpty) {
-        acc.map(chain => chain.reverse)
+        acc.map(_.reverse)
       } else {
         val updatedChains = nextLevelHeaders.flatMap { h =>
           acc.find(chain => chain.nonEmpty && (h.parentId == chain.head.id)).map(c => h +: c)

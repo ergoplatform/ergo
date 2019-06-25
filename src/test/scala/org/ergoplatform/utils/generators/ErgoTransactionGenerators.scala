@@ -90,11 +90,11 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield v.asInstanceOf[EvaluatedValue[SType]]
 
   def additionalTokensGen: Gen[Seq[(TokenId, Long)]] = for {
-    cnt <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
+    cnt <- Gen.chooseNum[Int](0, 20)
     assets <- additionalTokensGen(cnt)
   } yield assets
 
-  def additionalTokensGen(cnt: Byte): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
+  def additionalTokensGen(cnt: Int): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
 
   def assetGen: Gen[(TokenId, Long)] = for {
     id <- boxIdGen

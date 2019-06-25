@@ -1,5 +1,6 @@
 package org.ergoplatform.settings
 
+import org.ergoplatform.ErgoConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -79,6 +80,12 @@ object ValidationRules {
     txScriptValidation -> RuleStatus(s => fatal(s"Scripts of all transaction inputs should pass verification. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
+    txBoxSize -> RuleStatus(s => fatal(s"Box size should not exceed ${MaxBoxSize.value}. $s"),
+      Seq(classOf[ErgoTransaction]),
+      mayBeDisabled = true),
+    txBoxPropositionSize -> RuleStatus(s => fatal(s"Box proposition size should not exceed ${MaxPropositionBytes.value}. $s"),
+      Seq(classOf[ErgoTransaction]),
+      mayBeDisabled = true),
 
     // header validation
     hdrGenesisParent -> RuleStatus(s => fatal(s"Genesis header should have genesis parent id. $s"),
@@ -227,6 +234,8 @@ object ValidationRules {
   val txAssetsPreservation: Short = 117
   val txBoxToSpend: Short = 118
   val txScriptValidation: Short = 119
+  val txBoxSize: Short = 120
+  val txBoxPropositionSize: Short = 121
 
   // header validation
   val hdrGenesisParent: Short = 200

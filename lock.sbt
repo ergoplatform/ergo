@@ -9,7 +9,8 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.github.kxbmap" % "configs_2.12" % "0.4.4",
   "com.google.code.findbugs" % "jsr305" % "3.0.2",
   "com.google.guava" % "guava" % "21.0",
-  "com.iheart" % "ficus_2.12" % "1.4.6",
+  "com.iheart" % "ficus_2.12" % "1.4.7",
+  "com.joefkelley" % "argyle_2.12" % "1.0.0",
   "com.lihaoyi" % "fastparse-utils_2.12" % "1.0.0",
   "com.lihaoyi" % "fastparse_2.12" % "1.0.0",
   "com.lihaoyi" % "sourcecode_2.12" % "0.1.4",
@@ -50,7 +51,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bitbucket.inkytonik.kiama" % "kiama_2.12" % "2.1.0",
   "org.bitlet" % "weupnp" % "0.1.4",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.62",
-  "org.ergoplatform" % "ergo-wallet_2.12" % "v2.2-candidate-d4b8d8aa-SNAPSHOT",
+  "org.ergoplatform" % "ergo-wallet_2.12" % "distrib-b5919525-SNAPSHOT",
   "org.objenesis" % "objenesis" % "2.4",
   "org.ow2.asm" % "asm" % "5.0.4",
   "org.reactivestreams" % "reactive-streams" % "1.0.2",
@@ -68,10 +69,10 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scorexfoundation" % "scorex-core_2.12" % "b58f225e-SNAPSHOT",
   "org.scorexfoundation" % "scorex-util_2.12" % "0.1.4",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.6",
-  "org.scorexfoundation" % "sigma-api_2.12" % "v2.2-candidate-86e31622-SNAPSHOT",
-  "org.scorexfoundation" % "sigma-impl_2.12" % "v2.2-candidate-86e31622-SNAPSHOT",
-  "org.scorexfoundation" % "sigma-library_2.12" % "v2.2-candidate-86e31622-SNAPSHOT",
-  "org.scorexfoundation" % "sigma-state_2.12" % "v2.2-candidate-86e31622-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-api_2.12" % "distributed-sigs-8172aa1e-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-impl_2.12" % "distributed-sigs-8172aa1e-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-library_2.12" % "distributed-sigs-8172aa1e-SNAPSHOT",
+  "org.scorexfoundation" % "sigma-state_2.12" % "distributed-sigs-8172aa1e-SNAPSHOT",
   "org.slf4j" % "slf4j-api" % "1.7.25",
   "org.spire-math" % "debox_2.12" % "0.8.0",
   "org.spire-math" % "jawn-parser_2.12" % "0.13.0",
@@ -86,4 +87,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 5aca178b57494e555d26928f9a64c0019cb9075e
+// LIBRARY_DEPENDENCIES_HASH ef2cb3cadaa17d317ce906a946a5920080bf27bc

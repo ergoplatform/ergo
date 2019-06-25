@@ -8,7 +8,7 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import sigmastate._
 import sigmastate.Values._
 import sigmastate.lang.Terms._
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.CryptoConstants.dlogGroup
 import sigmastate.lang.{SigmaCompiler, TransformingSigmaBuilder}
@@ -43,7 +43,7 @@ class ScriptsSpec extends ErgoPropertyTest {
 
   property("simple crypto") {
     applyBlockSpendingScript(defaultMinerPk) shouldBe 'success
-    applyBlockSpendingScript(SigmaAnd(defaultProver.secrets.map(s => SigmaPropConstant(s.publicImage)))) shouldBe 'success
+    applyBlockSpendingScript(SigmaAnd(defaultProver.secrets.map(s => SigmaPropConstant(s.asInstanceOf[DLogProverInput].publicImage)))) shouldBe 'success
     applyBlockSpendingScript(SigmaAnd(defaultMinerPk, ProveDlog(dlogGroup.generator))) shouldBe 'failure
     applyBlockSpendingScript(SigmaOr(defaultMinerPk, ProveDlog(dlogGroup.generator))) shouldBe 'success
   }

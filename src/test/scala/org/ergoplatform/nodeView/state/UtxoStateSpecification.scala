@@ -47,8 +47,8 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val minAmount = LaunchParameters.minValuePerByte * 1000
       val newBoxes = IndexedSeq(
         ErgoBox(remaining, foundersBox.ergoTree, height, Seq(), Map(R4 -> ByteArrayConstant(ValueSerializer.serialize(newProp)))),
-        ErgoBox(minAmount, defaultProver.secrets.head.publicImage, height, Seq((tokenId, 49L))),
-        ErgoBox(foundersBox.value - remaining - minAmount, defaultProver.secrets.last.publicImage, height, Seq((tokenId, 49L)))
+        ErgoBox(minAmount, defaultProver.secretDlogs.head.publicImage, height, Seq((tokenId, 49L))),
+        ErgoBox(foundersBox.value - remaining - minAmount, defaultProver.secretDlogs.last.publicImage, height, Seq((tokenId, 49L)))
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get
@@ -65,7 +65,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val inputValue = tx.outputs.map(_.value).sum
       val newBoxes = IndexedSeq(
         ErgoBox(remaining, foundersBox.ergoTree, height, Seq(), foundersBox.additionalRegisters),
-        ErgoBox(inputValue - remaining, defaultProver.secrets.last.publicImage, height, Seq((tokenId, 98L)))
+        ErgoBox(inputValue - remaining, defaultProver.secretDlogs.last.publicImage, height, Seq((tokenId, 98L)))
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       defaultProver.sign(unsignedTx, tx.outputs, emptyDataBoxes, us.stateContext).get

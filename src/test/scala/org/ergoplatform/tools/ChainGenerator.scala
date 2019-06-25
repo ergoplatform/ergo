@@ -44,7 +44,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val MaxTxsPerBlock: Int = 10
 
   val prover = defaultProver
-  val minerPk = prover.pubKeys.head
+  val minerPk = prover.pubKeyDlogs.head
   val selfAddressScript = P2PKAddress(minerPk).script
   val minerProp = ErgoScriptPredef.rewardOutputScript(RewardDelay, minerPk)
 
@@ -96,7 +96,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       val (txs, lastOut) = genTransactions(last.map(_.height).getOrElse(ErgoHistory.GenesisHeight),
         initBox, state.stateContext)
 
-      val candidate = genCandidate(prover.pubKeys.head, last, time, txs, state)
+      val candidate = genCandidate(prover.pubKeyDlogs.head, last, time, txs, state)
       val block = proveCandidate(candidate.get)
 
       history.append(block.header).get
@@ -202,7 +202,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   private def proveCandidate(candidate: CandidateBlock): ErgoFullBlock = {
     log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp ${candidate.timestamp}")
 
-    pow.proveCandidate(candidate, prover.secrets.head.w) match {
+    pow.proveCandidate(candidate, prover.secretDlogs.head.w) match {
       case Some(fb) => fb
       case _ =>
         val interlinks = candidate.parentOpt

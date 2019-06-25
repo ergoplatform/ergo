@@ -25,9 +25,10 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import sigmastate.interpreter.ContextExtension
+import sigmastate.interpreter.{ContextExtension, HintsBag}
 
 import scala.util.{Failure, Random, Success, Try}
 
@@ -71,8 +72,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         val seed = Mnemonic.toSeed(testMnemonic)
         val rootSk = ExtendedSecretKey.deriveMasterKey(seed)
         val childSks = walletSettings.testKeysQty.toIndexedSeq.flatMap(x => (0 until x).map(rootSk.child))
-        proverOpt = Some(ErgoProvingInterpreter(rootSk +: childSks, parameters))
-        storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
+        proverOpt = Some(ErgoProvingInterpreter(rootSk +: childSks, parameters, HintsBag.empty))
+        storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeyDlogs.map(pk => P2PKAddress(pk))))
       case None =>
         log.info("Trying to read wallet in secure mode ..")
         readSecretStorage.fold(
@@ -137,7 +138,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case GetFirstSecret =>
       if (proverOpt.nonEmpty) {
-        proverOpt.foreach(_.secrets.headOption.foreach(s => sender() ! Success(s)))
+        proverOpt.foreach(_.secretDlogs.headOption.foreach(s => sender() ! Success(s)))
       } else {
         sender() ! Failure(new Exception("Wallet is locked"))
       }
@@ -242,7 +243,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         callback ! Failure(new Exception("Wallet is not initialized"))
     }
 
-  private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
+  private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeyDlogs.map(P2PKAddress.apply))
 
   private def trackedAddresses: Seq[ErgoAddress] = storage.readTrackedAddresses
 
@@ -368,7 +369,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                            inputs: Seq[(ModifierId, EncodedBoxId)],
                            outputs: Seq[(ModifierId, ErgoBox)]): Unit = {
     // re-create interpreter in order to avoid IR context bloating.
-    proverOpt = proverOpt.map(oldInterpreter => ErgoProvingInterpreter(oldInterpreter.secretKeys, parameters))
+    proverOpt = proverOpt.map(oldInterpreter =>
+      oldInterpreter.withParameters(parameters)
+    )
     val prevUncertainBoxes = registry.readUncertainBoxes
     val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
       .filterNot { case (_, o) => inputs.map(_._2).contains(encodedBoxId(o.id)) }
@@ -388,8 +391,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def processSecretAddition(secret: ExtendedSecretKey): Unit =
     proverOpt.foreach { prover =>
-      val secrets = proverOpt.toIndexedSeq.flatMap(_.secretKeys) :+ secret
-      proverOpt = Some(new ErgoProvingInterpreter(secrets, parameters)(prover.IR))
+      proverOpt = Some(prover.addSecret(secret))
       storage.addTrackedAddress(P2PKAddress(secret.publicKey.key))
       storage.addPath(secret.path)
     }
@@ -398,8 +400,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     val secrets = secretStorage.secret.toIndexedSeq ++ storage.readPaths.flatMap { path =>
       secretStorage.secret.toSeq.map(_.derive(path).asInstanceOf[ExtendedSecretKey])
     }
-    proverOpt = Some(ErgoProvingInterpreter(secrets, parameters))
-    storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
+    //todo: persistence for hints
+    proverOpt = Some(ErgoProvingInterpreter(secrets, parameters, HintsBag.empty))
+    storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeyDlogs.map(pk => P2PKAddress(pk))))
     // process postponed blocks when prover is available.
     val lastProcessedHeight = registry.readIndex.height
     storage.readLatestPostponedBlockHeight.foreach { lastPostponedHeight =>

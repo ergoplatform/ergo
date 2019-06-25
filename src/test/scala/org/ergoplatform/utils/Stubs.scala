@@ -131,7 +131,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     private implicit val addressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
     private val prover: ErgoProvingInterpreter = defaultProver
-    private val trackedAddresses: Seq[P2PKAddress] = prover.pubKeys.map(P2PKAddress.apply)
+    private val trackedAddresses: Seq[P2PKAddress] = prover.pubKeyDlogs.map(P2PKAddress.apply)
 
     def receive: Receive = {
 

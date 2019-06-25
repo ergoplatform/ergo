@@ -22,7 +22,7 @@ import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.interpreter.{ContextExtension, HintsBag, ProverResult}
 
 import scala.concurrent.duration._
 
@@ -53,9 +53,9 @@ trait ErgoTestConstants extends ScorexLogging {
   val genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(settings.chainSettings)
   val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(settings.chainSettings).head
   val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(
-    defaultRootSecret +: defaultChildSecrets, parameters)
-  val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
-  val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
+    defaultRootSecret +: defaultChildSecrets, parameters, HintsBag.empty)
+  val defaultMinerSecret: DLogProverInput = defaultProver.secretDlogs.head
+  val defaultMinerSecretNumber: BigInt = defaultMinerSecret.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
   val defaultMinerPkPoint: EcPointType = defaultMinerPk.h
 

@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants
 import scorex.core.NodeViewHolder._
 import scorex.core.PersistentNodeViewModifier
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SendLocalSyncInfo}
 import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider

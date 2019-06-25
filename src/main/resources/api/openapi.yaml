@@ -1699,8 +1699,7 @@ paths:
         schema:
           type: integer
           format: int32
-          minimum: 10
-          maximum: 100
+          minimum: 0
           default: 0
       - in: query
         name: minInclusionHeight
@@ -1709,6 +1708,7 @@ paths:
         schema:
           type: integer
           format: int32
+          minimum: 0
           default: 0
     get:
       security:

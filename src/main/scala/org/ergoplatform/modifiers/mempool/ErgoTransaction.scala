@@ -135,14 +135,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val initialCost: Long = addExact(
       multiplyExact(boxesToSpend.size, stateContext.currentParameters.inputCost),
       multiplyExact(dataBoxes.size, stateContext.currentParameters.dataInputCost),
-      multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost)
+      multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost),
     )
-    // Maximum transaction cost the validation procedure could tolerate
-    val remainingCost = stateContext.currentParameters.maxBlockCost - accumulatedCost
+    val maxCost = stateContext.currentParameters.maxBlockCost
+    //    val remainingCost = stateContext.currentParameters.maxBlockCost - accumulatedCost
 
     ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big
-      .validate(bsBlockTransactionsCost, remainingCost >= initialCost, s"$id: initial cost")
+      .validate(bsBlockTransactionsCost, maxCost >= addExact(initialCost, accumulatedCost), s"$id: initial cost")
       // Starting validation
       .payload(initialCost)
       // Perform cheap checks first
@@ -176,11 +176,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             // and after that we iterate through unique asset ids to check preservation rules (cost: `(inAssets.size + outAssets.size) * tokenAccessCost`)
             val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
               (inAssets.size + outAssets.size) * tokenAccessCost
-            val newRemainingCost = remainingCost - currentTxCost - totalAssetsAccessCost
+            val newCost = addExact(currentTxCost, totalAssetsAccessCost)
 
             validation
               // Check that transaction is not too costly considering all the assets
-              .validate(bsBlockTransactionsCost, newRemainingCost >= 0, s"$id: assets cost")
+              .validate(bsBlockTransactionsCost, maxCost >= newCost, s"$id: assets cost")
               .validateSeq(outAssets) {
                 case (validationState, (outAssetId, outAmount)) =>
                   val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
@@ -191,7 +191,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                     inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0),
                     s"$id: Amount in = $inAmount, out = $outAmount. Allowed new asset = $newAssetId, out = $outAssetId")
               }
-              .map(c => addExact(c, totalAssetsAccessCost))
+              .payload(newCost)
           case Failure(e) =>
             // should never be here as far as we've already checked this when we've created the box
             ModifierValidator.fatal(e.getMessage)
@@ -200,20 +200,19 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       // Check inputs, the most expensive check usually, so done last.
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
       val currentTxCost = validation.result.payload.get
-      val newRemainingCost = remainingCost - currentTxCost
 
       val input = inputs(idx)
       val proof = input.spendingProof
       val proverExtension = proof.extension
       val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
-      val ctx = new ErgoContext(stateContext, transactionContext, proverExtension, newRemainingCost)
+      val ctx = new ErgoContext(stateContext, transactionContext, proverExtension, maxCost, addExact(currentTxCost, accumulatedCost))
 
       val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
       costTry.recover { case t =>
         log.debug(s"Tx verification failed: ${t.getMessage}")
       }
 
-      lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, newRemainingCost + 1))
+      lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
 
       validation
         // Just in case, should always be true if client implementation is correct.
@@ -221,7 +220,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         // Check whether input box script interpreter raised exception
         .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
         // Check that cost of the transaction after checking the input becomes too big
-        .validate(bsBlockTransactionsCost, scriptCost <= newRemainingCost, s"$id: cost exceeds limit after input #$idx")
+        .validate(bsBlockTransactionsCost, maxCost >= addExact(currentTxCost, accumulatedCost, scriptCost) , s"$id: cost exceeds limit after input #$idx")
         .map(c => addExact(c, scriptCost))
     }
   }

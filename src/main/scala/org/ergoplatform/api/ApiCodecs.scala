@@ -193,6 +193,7 @@ trait ApiCodecs {
     }
     fieldsWithTx.asJson
   }
+
 }
 
 trait ApiEncoderOption

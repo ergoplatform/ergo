@@ -5,7 +5,7 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext, VotingData}
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
-import org.ergoplatform.settings.ValidationRules.bsBlockTransactionsCost
+import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txBoxSize}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -272,7 +272,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
     val validFailure = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext)
-    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "").take(30))
+    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(txBoxSize, "").take(30))
 
   }
 

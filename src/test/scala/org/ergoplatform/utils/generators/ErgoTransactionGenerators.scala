@@ -19,6 +19,7 @@ import sigmastate._
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
 import org.ergoplatform.settings.Parameters._
+import org.ergoplatform.utils.BoxUtils
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -151,7 +152,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), rnd.nextInt(Int.MaxValue))
     }
 
-    val minValue = LaunchParameters.minValuePerByte * 200 //assuming that output is 200 bytes max
+    val minValue = BoxUtils.sufficientAmount(LaunchParameters)
 
     require(inputSum >= minValue)
     val inputsCount = boxesToSpend.size

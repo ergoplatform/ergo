@@ -151,7 +151,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) =>
       validationState
-        .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id: output $out")
+        .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}")
         .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s"$id: output $out")
         .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
         .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")

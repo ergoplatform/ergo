@@ -101,13 +101,14 @@ trait ValidBlocksGenerators
             }
           } else {
             // take 2 remaining box from state and return transactions set
-            val boxesToSpend = stateBoxes.take(2).toIndexedSeq
+            val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
+            val boxesToSpend = if(stateBoxes.nonEmpty) stateBoxes.take(2) else consumedSelfBoxes
 
-            val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = dataBoxesToUse)
+            val tx = validTransactionFromBoxes(boxesToSpend.toIndexedSeq, rnd, issueNew, dataBoxes = dataBoxesToUse)
             val cost: Long = getTxCost(tx, boxesToSpend, dataBoxesToUse)
             tx.statelessValidity match {
               case Success(_) if cost <= remainingCost =>
-                ((tx +: acc).reverse, selfBoxes ++ tx.outputs ++ createdEmissionBox)
+                ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
               case Failure(e) =>
                 log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
                 loop(remainingCost, stateBoxes, selfBoxes, acc, rnd)

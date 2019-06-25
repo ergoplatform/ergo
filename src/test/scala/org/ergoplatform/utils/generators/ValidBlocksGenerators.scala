@@ -19,7 +19,7 @@ import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Random, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 trait ValidBlocksGenerators
   extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
@@ -56,7 +56,8 @@ trait ValidBlocksGenerators
     var createdEmissionBox: Seq[ErgoBox] = Seq()
 
     @tailrec
-    def loop(stateBoxes: Seq[ErgoBox],
+    def loop(remainingCost: Long,
+             stateBoxes: Seq[ErgoBox],
              selfBoxes: Seq[ErgoBox],
              acc: Seq[ErgoTransaction],
              rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
@@ -80,7 +81,8 @@ trait ValidBlocksGenerators
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
           createdEmissionBox = outs.filter(b => isEmissionBox(b))
           val newSelfBoxes = selfBoxes ++ outs.filter(b => !isEmissionBox(b))
-          loop(remainedBoxes, newSelfBoxes, rewards ++ acc, rnd)
+          val cost = rewards.map(tx => getTxCost(tx, Seq(emissionBox), Seq()).get).sum
+          loop(remainingCost - cost, remainedBoxes, newSelfBoxes, rewards ++ acc, rnd)
 
         case _ =>
           if (currentSize < sizeLimit - 2 * averageSize) {
@@ -88,23 +90,28 @@ trait ValidBlocksGenerators
             val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size) + 1).getOrElse(0))
             // disable tokens generation to avoid situation with too many tokens
             val boxesToSpend = (consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq
-            val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = getDataBoxes)
-            tx.statelessValidity match {
+            val dataBoxesToUse = getDataBoxes
+            val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = dataBoxesToUse)
+            getTxCost(tx, boxesToSpend, dataBoxesToUse) match {
               case Failure(e) =>
                 log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
-                loop(stateBoxes, selfBoxes, acc, rnd)
-              case _ =>
-                loop(remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
+                loop(remainingCost, stateBoxes, selfBoxes, acc, rnd)
+              case Success(cost) =>
+                loop(remainingCost - cost, remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
             }
           } else {
             // take all remaining boxes from state and return transactions set
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
-
-            val tx = validTransactionFromBoxes((consumedSelfBoxes ++ stateBoxes).toIndexedSeq, rnd, issueNew, dataBoxes = getDataBoxes)
-            tx.statelessValidity match {
+            val boxesToSpend = (consumedSelfBoxes ++ stateBoxes).toIndexedSeq
+            val dataBoxesToUse = getDataBoxes
+            val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = dataBoxesToUse)
+            getTxCost(tx, boxesToSpend, dataBoxesToUse) match {
               case Failure(e) =>
                 log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
-                loop(stateBoxes, selfBoxes, acc, rnd)
+                loop(remainingCost, stateBoxes, selfBoxes, acc, rnd)
+              case Success(cost) if cost > remainingCost =>
+                log.debug(s"Cost limit reached at tx $tx")
+                (acc.reverse, selfBoxes ++ createdEmissionBox)
               case _ =>
                 ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
             }
@@ -112,7 +119,16 @@ trait ValidBlocksGenerators
       }
     }
 
-    loop(stateBoxesIn, Seq.empty, Seq.empty, rnd)
+    loop(emptyStateContext.currentParameters.maxBlockCost, stateBoxesIn, Seq.empty, Seq.empty, rnd)
+  }
+
+  protected def getTxCost(tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxesToUse: Seq[ErgoBox]): Try[Long] = {
+    tx.statelessValidity.flatMap { _ =>
+      tx.statefulValidity(
+        tx.inputs.flatMap(i => boxesToSpend.find(_.id == i.boxId)),
+        tx.dataInputs.flatMap(i => dataBoxesToUse.find(_.id == i.boxId)),
+        emptyStateContext)(emptyVerifier)
+    }
   }
 
   /**

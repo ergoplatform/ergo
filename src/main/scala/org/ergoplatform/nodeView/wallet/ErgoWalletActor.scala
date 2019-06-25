@@ -28,6 +28,7 @@ import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ContextExtension
+import sigmastate.utxo.CostTable
 
 import scala.util.{Failure, Random, Success, Try}
 
@@ -258,7 +259,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     )
 
     val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx, selfIndex = 0)
-    val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty, parameters.maxBlockCost, 0)
+    val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty,
+      parameters.maxBlockCost, CostTable.interpreterInitCost)
 
     proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined
   }

@@ -103,7 +103,7 @@ trait ValidBlocksGenerators
             // take 2 remaining box from state and return transactions set
             val boxesToSpend = stateBoxes.take(2).toIndexedSeq
 
-            val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew)
+            val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = dataBoxesToUse)
             val cost: Long = getTxCost(tx, boxesToSpend, dataBoxesToUse)
             tx.statelessValidity match {
               case Success(_) if cost <= remainingCost =>

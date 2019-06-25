@@ -108,46 +108,19 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     */
   private def toInsert(h: Header): (Seq[(ByteArrayWrapper, ByteArrayWrapper)], Seq[ErgoPersistentModifier]) = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
-    if (h.isGenesis) {
-      genesisToInsert(h, requiredDifficulty)
-    } else {
-      nonGenesisToInsert(h, requiredDifficulty)
-    }
-  }
-
-  /**
-    * Data to insert for regular block
-    */
-  private def nonGenesisToInsert(h: Header, requiredDifficulty: Difficulty) = {
-    val score = scoreOf(h.parentId).get + requiredDifficulty
+    val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + requiredDifficulty
     val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] =
       if (score > bestHeadersChainScore) Seq(BestHeaderKey -> Algos.idToBAW(h.id)) else Seq.empty
     val scoreRow = headerScoreKey(h.id) -> ByteArrayWrapper(score.toByteArray)
     val heightRow = headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(h.height))
     val headerIdsRow = if (score > bestHeadersChainScore) {
+      if (h.isGenesis) log.info(s"Processing genesis header ${h.encodedId}")
       bestBlockHeaderIdsRow(h, score)
     } else {
       orphanedBlockHeaderIdsRow(h, score)
     }
+
     (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, Seq(h))
-  }
-
-  /**
-    * Data to insert for genesis block
-    */
-  private def genesisToInsert(h: Header, requiredDifficulty: Difficulty) = {
-    log.info(s"Process genesis header ${h.encodedId}")
-    val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = if (requiredDifficulty > bestHeadersChainScore) {
-      Seq(BestHeaderKey -> Algos.idToBAW(h.id))
-    } else {
-      Seq.empty
-    }
-
-    (bestRow ++ Seq(
-      heightIdsKey(GenesisHeight) -> Algos.idToBAW(h.id),
-      headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
-      headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
-      Seq(h))
   }
 
   /**

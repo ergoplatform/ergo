@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
-import org.ergoplatform.settings.{Constants, LaunchParameters}
+import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -118,10 +118,12 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     boxId <- boxIdGen
   } yield DataInput(boxId)
 
+  lazy val reallySmallInt: Gen[Int] = Gen.choose(0, 3)
+
   lazy val invalidErgoTransactionGen: Gen[ErgoTransaction] = for {
-    from: IndexedSeq[Input] <- smallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
-    dataInputs: IndexedSeq[DataInput] <- smallInt.flatMap(i => Gen.listOfN(i + 1, dataInputGen).map(_.toIndexedSeq))
-    to: IndexedSeq[ErgoBoxCandidate] <- smallInt.flatMap(i => Gen.listOfN(i + 1, ergoBoxCandidateGen).map(_.toIndexedSeq))
+    from: IndexedSeq[Input] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
+    dataInputs: IndexedSeq[DataInput] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, dataInputGen).map(_.toIndexedSeq))
+    to: IndexedSeq[ErgoBoxCandidate] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, ergoBoxCandidateGen).map(_.toIndexedSeq))
   } yield ErgoTransaction(from, dataInputs, to)
 
   /**
@@ -260,7 +262,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
     headerId <- modifierIdGen
     txs <- Gen.nonEmptyListOf(invalidErgoTransactionGen)
-  } yield BlockTransactions(headerId, txs)
+  } yield BlockTransactions(headerId, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
+    if ((acc :+ tx).map(_.size).sum < Parameters.MaxBlockSizeDefault) acc :+ tx else acc))
 
   lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
     index: Short <- Arbitrary.arbitrary[Short]
@@ -290,8 +293,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield {
     blocks match {
       case _ :: _ =>
-        blocks.foldLeft(
-          new ErgoStateContext(Seq(), None, startDigest, parameters, validationSettingsNoIl, VotingData.empty) -> 1) { case ((c, h), b) =>
+        val sc = new ErgoStateContext(Seq(), None, startDigest, parameters, validationSettingsNoIl, VotingData.empty)
+        blocks.foldLeft(sc -> 1) { case ((c, h), b) =>
           val block = b.copy(header = b.header.copy(height = h, votes = votes(h - 1)))
           c.appendFullBlock(block, votingSettings).get -> (h + 1)
         }._1

@@ -19,7 +19,7 @@ import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
-import org.ergoplatform.wallet.boxes.ChainStatus
+import org.ergoplatform.wallet.boxes.{BoxCertainty, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
@@ -132,6 +132,22 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     private implicit val addressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
     private val prover: ErgoProvingInterpreter = defaultProver
     private val trackedAddresses: Seq[P2PKAddress] = prover.pubKeys.map(P2PKAddress.apply)
+    private val walletBox10_10 = WalletBox(
+      TrackedBox(
+        creationTxId = modifierIdGen.sample.get,
+        creationOutIndex = 0,
+        inclusionHeightOpt = Some(10),
+        spendingTxIdOpt = Some(modifierIdGen.sample.get),
+        spendingHeightOpt = None,
+        box = ergoBoxGen.sample.get,
+        certainty = BoxCertainty.Certain
+      ),
+      confirmationsNumOpt = Some(10)
+    )
+    private val walletBox20_30 = walletBox10_10.copy(
+      confirmationsNumOpt = Some(20),
+      trackedBox = walletBox10_10.trackedBox.copy(inclusionHeightOpt = Some(30))
+    )
 
     def receive: Receive = {
 
@@ -142,6 +158,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case _: UnlockWallet => sender() ! Success(())
 
       case LockWallet => ()
+
+      case GetBoxes => sender() ! Seq(walletBox10_10, walletBox20_30)
 
       case DeriveKey(_) => sender() ! Success(WalletActorStub.address)
 

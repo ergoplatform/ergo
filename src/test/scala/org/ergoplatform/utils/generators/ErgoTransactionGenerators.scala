@@ -52,7 +52,15 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     ar <- additionalRegistersGen
     tokens <- tokensGen
     value <- valueGenOpt.getOrElse(validValueGen(prop, tokens, ar, transactionId.toModifierId, boxId))
-  } yield ErgoBox(value, prop, h, tokens, ar, transactionId.toModifierId, boxId)
+  } yield {
+    val box = ErgoBox(value, prop, h, tokens, ar, transactionId.toModifierId, boxId)
+    if (box.bytes.size < ErgoBox.MaxBoxSize) {
+      box
+    } else {
+      // is size limit is reached, generate box without registers and tokens
+      ErgoBox(value, prop, h, Seq(), Map(), transactionId.toModifierId, boxId)
+    }
+  }
 
   lazy val ergoBoxGen: Gen[ErgoBox] = ergoBoxGen()
 

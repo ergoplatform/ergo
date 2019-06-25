@@ -346,8 +346,10 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     val (inAssets, inAssetsNum) = ErgoTransaction.extractAssets(from).get
     val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * LaunchParameters.tokenAccessCost +
       (inAssets.size + outAssets.size) * LaunchParameters.tokenAccessCost
-    val scriptsValidationCosts = tx.inputs.size * 5
+    // todo replace 60 to reference in CostTable
+    val scriptsValidationCosts = tx.inputs.size * 60
     val manualCost: Int = (initialCost + totalAssetsAccessCost + scriptsValidationCosts).toInt
+
 
     // check that validation pass if cost limit equals to manually calculated cost
     val sc = stateContextWithMaxCost(manualCost)

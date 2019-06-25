@@ -142,11 +142,10 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         sender() ! Failure(new Exception("Wallet is locked"))
       }
 
-    case GetBoxes =>
+    case GetBoxes(unspent) =>
       val currentHeight = height
-      sender() ! registry.readCertainUnspentBoxes.map { tb =>
-        WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _))
-      }
+      sender() ! (if (unspent) registry.readCertainUnspentBoxes else registry.readCertainBoxes)
+        .map(tb => WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _)))
 
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))
@@ -498,6 +497,8 @@ object ErgoWalletActor {
 
   final case class DeriveKey(path: String)
 
+  final case class GetBoxes(unspentOnly: Boolean)
+
   case object DeriveNextKey
 
   case object LockWallet
@@ -507,7 +508,5 @@ object ErgoWalletActor {
   case object ReadTrackedAddresses
 
   case object GetFirstSecret
-
-  case object GetBoxes
 
 }

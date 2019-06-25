@@ -9,12 +9,12 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
-import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
+import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.secrets.DerivationPath
-import org.ergoplatform.{ErgoAddress, ErgoBox, P2PKAddress}
-import sigmastate.basics.DLogProtocol.DLogProverInput
+import org.ergoplatform.{ErgoAddress, P2PKAddress}
 import scorex.core.transaction.wallet.VaultReader
+import sigmastate.basics.DLogProtocol.DLogProverInput
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -25,61 +25,47 @@ trait ErgoWalletReader extends VaultReader {
 
   private implicit val timeout: Timeout = Timeout(60, TimeUnit.SECONDS)
 
-  def initWallet(pass: String, mnemonicPassOpt: Option[String]): Future[Try[String]] = {
+  def initWallet(pass: String, mnemonicPassOpt: Option[String]): Future[Try[String]] =
     (walletActor ? InitWallet(pass, mnemonicPassOpt)).mapTo[Try[String]]
-  }
 
   def restoreWallet(encryptionPass: String, mnemonic: String,
-                    mnemonicPassOpt: Option[String] = None): Future[Try[Unit]] = {
+                    mnemonicPassOpt: Option[String] = None): Future[Try[Unit]] =
     (walletActor ? RestoreWallet(mnemonic, mnemonicPassOpt, encryptionPass)).mapTo[Try[Unit]]
-  }
 
-  def unlockWallet(pass: String): Future[Try[Unit]] = {
+  def unlockWallet(pass: String): Future[Try[Unit]] =
     (walletActor ? UnlockWallet(pass)).mapTo[Try[Unit]]
-  }
 
-  def lockWallet(): Unit = {
-    walletActor ! LockWallet
-  }
+  def lockWallet(): Unit = walletActor ! LockWallet
 
-  def deriveKey(path: String): Future[Try[P2PKAddress]] = {
+  def deriveKey(path: String): Future[Try[P2PKAddress]] =
     (walletActor ? DeriveKey(path)).mapTo[Try[P2PKAddress]]
-  }
 
-  def deriveNextKey: Future[Try[(DerivationPath, P2PKAddress)]] = {
+  def deriveNextKey: Future[Try[(DerivationPath, P2PKAddress)]] =
     (walletActor ? DeriveNextKey).mapTo[Try[(DerivationPath, P2PKAddress)]]
-  }
 
-  def balances(chainStatus: ChainStatus): Future[RegistryIndex] = {
+  def balances(chainStatus: ChainStatus): Future[RegistryIndex] =
     (walletActor ? ReadBalances(chainStatus)).mapTo[RegistryIndex]
-  }
 
   def confirmedBalances(): Future[RegistryIndex] = balances(OnChain)
 
   def balancesWithUnconfirmed(): Future[RegistryIndex] = balances(OffChain)
 
-  def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] = {
+  def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] =
     (walletActor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
-  }
 
-  def firstSecret(): Future[Try[DLogProverInput]] = {
+  def firstSecret(): Future[Try[DLogProverInput]] =
     (walletActor ? GetFirstSecret).mapTo[Try[DLogProverInput]]
-  }
 
-  def unspendBoxes(): Future[Iterator[ErgoBox]] = {
-    (walletActor ? GetBoxes).mapTo[Iterator[ErgoBox]]
-  }
+  def unspentBoxes(): Future[Seq[WalletBox]] =
+    (walletActor ? GetBoxes).mapTo[Seq[WalletBox]]
 
-  def randomPublicKey(): Future[P2PKAddress] = {
+  def randomPublicKey(): Future[P2PKAddress] =
     (walletActor ? ReadRandomPublicKey).mapTo[P2PKAddress]
-  }
 
-  def trackedAddresses(): Future[Seq[ErgoAddress]] = {
+  def trackedAddresses(): Future[Seq[ErgoAddress]] =
     (walletActor ? ReadTrackedAddresses).mapTo[Seq[ErgoAddress]]
-  }
 
-  def generateTransaction(requests: Seq[TransactionRequest]): Future[Try[ErgoTransaction]] = {
+  def generateTransaction(requests: Seq[TransactionRequest]): Future[Try[ErgoTransaction]] =
     (walletActor ? GenerateTransaction(requests)).mapTo[Try[ErgoTransaction]]
-  }
 
 }

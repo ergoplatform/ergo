@@ -40,8 +40,8 @@ trait FullBlockProcessor extends HeadersProcessor {
   /** Process full block when we have one.
     *
     * @param fullBlock - block to process
-    * @param newMod    - new modifier we are going to put in history
-    * @return ProgressInfo required for State to process to be consistent with History
+    * @param newMod    - new modifier we are going to put in the history
+    * @return ProgressInfo required for State to process to be consistent with the history
     */
   protected def processFullBlock(fullBlock: ErgoFullBlock,
                                  newMod: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {

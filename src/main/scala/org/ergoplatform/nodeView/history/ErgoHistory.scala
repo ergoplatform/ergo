@@ -21,7 +21,7 @@ import scorex.util.ScorexLogging
 import scala.util.{Failure, Try}
 
 /**
-  * History implementation. It is processing persistent modifiers generated locally or coming from network.
+  * History implementation. It is processing persistent modifiers generated locally or coming from the network.
   * Depending on chosen node settings, it will process modifiers in a different way, different processors define how to
   * process different type of modifiers.
   *

@@ -92,15 +92,20 @@ trait ValidBlocksGenerators
             val boxesToSpend = (consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq
             val dataBoxesToUse = getDataBoxes
             val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = dataBoxesToUse)
-            getTxCost(tx, boxesToSpend, dataBoxesToUse) match {
+            tx.statelessValidity match {
               case Failure(e) =>
-                log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
+                log.warn(s"Failed to generate stateless valid transaction, try again: ${LoggingUtil.getReasonMsg(e)}")
                 loop(remainingCost, stateBoxes, selfBoxes, acc, rnd)
-              case Success(cost) if cost > remainingCost =>
-                log.debug(s"Cost limit reached at last tx ${acc.size}, $cost > $remainingCost")
-                (acc.reverse, selfBoxes ++ createdEmissionBox)
-              case Success(cost) =>
-                loop(remainingCost - cost, remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
+              case _ =>
+                getTxCost(tx, boxesToSpend, dataBoxesToUse) match {
+                  case Success(cost) if cost > remainingCost =>
+                    log.debug(s"Cost limit reached at last tx ${acc.size}, $cost > $remainingCost")
+                    (acc.reverse, selfBoxes ++ createdEmissionBox)
+                  case Success(cost) =>
+                    loop(remainingCost - cost, remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
+                  case _ =>
+                    loop(remainingCost, remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
+                }
             }
           } else {
             // take all remaining boxes from state and return transactions set
@@ -108,15 +113,18 @@ trait ValidBlocksGenerators
             val boxesToSpend = (consumedSelfBoxes ++ stateBoxes).toIndexedSeq
             val dataBoxesToUse = getDataBoxes
             val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = dataBoxesToUse)
-            getTxCost(tx, boxesToSpend, dataBoxesToUse) match {
+            tx.statelessValidity match {
               case Failure(e) =>
-                log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
+                log.warn(s"Failed to generate stateless valid transaction, try again: ${LoggingUtil.getReasonMsg(e)}")
                 loop(remainingCost, stateBoxes, selfBoxes, acc, rnd)
-              case Success(cost) if cost > remainingCost =>
-                log.debug(s"Cost limit reached at last tx ${acc.size}, $cost > $remainingCost")
-                (acc.reverse, selfBoxes ++ createdEmissionBox)
-              case Success(cost) =>
-                ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
+              case _ =>
+                getTxCost(tx, boxesToSpend, dataBoxesToUse) match {
+                  case Success(cost) if cost > remainingCost =>
+                    log.debug(s"Cost limit reached at last tx ${acc.size}, $cost > $remainingCost")
+                    (acc.reverse, selfBoxes ++ createdEmissionBox)
+                  case _ =>
+                    ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
+                }
             }
           }
       }
@@ -126,12 +134,11 @@ trait ValidBlocksGenerators
   }
 
   protected def getTxCost(tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxesToUse: Seq[ErgoBox]): Try[Long] = {
-    tx.statelessValidity.flatMap { _ =>
-      tx.statefulValidity(
-        tx.inputs.flatMap(i => boxesToSpend.find(_.id == i.boxId)),
-        tx.dataInputs.flatMap(i => dataBoxesToUse.find(_.id == i.boxId)),
-        emptyStateContext)(emptyVerifier)
-    }
+    tx.statefulValidity(
+      tx.inputs.flatMap(i => boxesToSpend.find(_.id == i.boxId)),
+      tx.dataInputs.flatMap(i => dataBoxesToUse.find(_.id == i.boxId)),
+      emptyStateContext,
+      -1000000)(emptyVerifier)
   }
 
   /**

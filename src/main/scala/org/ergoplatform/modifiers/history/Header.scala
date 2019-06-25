@@ -87,7 +87,19 @@ case class Header(version: Version,
 /**
   * A fake header that is used to fill the chain that starts from the beginning
   */
-object PreGenesisHeader extends Header(0.toByte, Header.GenesisParentId, null, null, null, 0L, 0L, 0, null, null, null, None) {
+object PreGenesisHeader extends Header(
+  0.toByte,
+  parentId = Header.GenesisParentId,
+  ADProofsRoot = null,
+  stateRoot = null,
+  transactionsRoot = null,
+  timestamp = 0L,
+  nBits = 0L,
+  height = ErgoHistory.EmptyHistoryHeight,
+  extensionRoot = null,
+  powSolution = null,
+  votes = null,
+  sizeOpt = None) {
 
   override def serializedId: Array[Byte] = idToBytes(Header.GenesisParentId)
 

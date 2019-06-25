@@ -20,4 +20,5 @@ trait ErgoBaseApiRoute extends ApiRoute {
       case _ => reject(ValidationRejection("Wrong modifierId format"))
     }
   }
+
 }

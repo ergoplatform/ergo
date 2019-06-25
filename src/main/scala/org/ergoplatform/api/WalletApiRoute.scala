@@ -22,6 +22,7 @@ import sigmastate.lang.SigmaCompiler
 import sigmastate.{SBoolean, SSigmaProp}
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
@@ -36,24 +37,27 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   override val route: Route = (pathPrefix("wallet") & withAuth) {
-    corsHandler {
-      balancesR ~
-        unconfirmedBalanceR ~
-        addressesR ~
-        generateTransactionR ~
-        generatePaymentTransactionR ~
-        generateAssetIssueTransactionR ~
-        sendTransactionR ~
-        sendPaymentTransactionR ~
-        sendAssetIssueTransactionR ~
-        p2shAddressR ~
-        p2sAddressR ~
-        initWalletR ~
-        restoreWalletR ~
-        unlockWalletR ~
-        lockWalletR ~
-        deriveKeyR ~
-        deriveNextKeyR
+    toStrictEntity(10.seconds) {
+      corsHandler {
+        balancesR ~
+          unconfirmedBalanceR ~
+          addressesR ~
+          unspentBoxesR ~
+          generateTransactionR ~
+          generatePaymentTransactionR ~
+          generateAssetIssueTransactionR ~
+          sendTransactionR ~
+          sendPaymentTransactionR ~
+          sendAssetIssueTransactionR ~
+          p2shAddressR ~
+          p2sAddressR ~
+          initWalletR ~
+          restoreWalletR ~
+          unlockWalletR ~
+          lockWalletR ~
+          deriveKeyR ~
+          deriveNextKeyR
+      }
     }
   }
 
@@ -201,6 +205,19 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def addressesR: Route = (path("addresses") & get) {
     withWallet(_.trackedAddresses())
+  }
+
+  def unspentBoxesR: Route = (path("boxes" / "unspent") & get & parameters(
+    "minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)) { (minConfNum, minHeight) =>
+    withWallet {
+      _.unspentBoxes()
+        .map {
+          _.filter { bx =>
+            bx.confirmationsNumOpt.getOrElse(0) >= minConfNum &&
+              bx.trackedBox.inclusionHeightOpt.getOrElse(-1) >= minHeight
+          }
+        }
+    }
   }
 
   def initWalletR: Route = (path("init") & post & initRequest) {

@@ -96,6 +96,9 @@ trait ValidBlocksGenerators
               case Failure(e) =>
                 log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
                 loop(remainingCost, stateBoxes, selfBoxes, acc, rnd)
+              case Success(cost) if cost > remainingCost =>
+                log.debug(s"Cost limit reached at last tx ${acc.size}, $cost > $remainingCost")
+                (acc.reverse, selfBoxes ++ createdEmissionBox)
               case Success(cost) =>
                 loop(remainingCost - cost, remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
             }
@@ -110,9 +113,9 @@ trait ValidBlocksGenerators
                 log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
                 loop(remainingCost, stateBoxes, selfBoxes, acc, rnd)
               case Success(cost) if cost > remainingCost =>
-                log.debug(s"Cost limit reached at tx $tx")
+                log.debug(s"Cost limit reached at last tx ${acc.size}, $cost > $remainingCost")
                 (acc.reverse, selfBoxes ++ createdEmissionBox)
-              case _ =>
+              case Success(cost) =>
                 ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
             }
           }

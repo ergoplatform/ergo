@@ -56,8 +56,8 @@ trait ErgoWalletReader extends VaultReader {
   def firstSecret(): Future[Try[DLogProverInput]] =
     (walletActor ? GetFirstSecret).mapTo[Try[DLogProverInput]]
 
-  def unspentBoxes(): Future[Seq[WalletBox]] =
-    (walletActor ? GetBoxes).mapTo[Seq[WalletBox]]
+  def unspentBoxes(unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
+    (walletActor ? GetBoxes(unspentOnly)).mapTo[Seq[WalletBox]]
 
   def randomPublicKey(): Future[P2PKAddress] =
     (walletActor ? ReadRandomPublicKey).mapTo[P2PKAddress]

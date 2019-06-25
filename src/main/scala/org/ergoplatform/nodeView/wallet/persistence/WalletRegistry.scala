@@ -39,6 +39,17 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
     query.transact(store)
   }
 
+  def readCertainBoxes: Seq[TrackedBox] = {
+    val query = for {
+      allBoxes <- getAllBoxes
+      index <- getIndex
+    } yield {
+      val uncertainIds = index.uncertainBoxes
+      allBoxes.filterNot(b => uncertainIds.contains(encodedBoxId(b.box.id)))
+    }
+    query.transact(store)
+  }
+
   def readUncertainBoxes: Seq[TrackedBox] = {
     val query = for {
       index <- getIndex

@@ -1,7 +1,7 @@
 package org.ergoplatform.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.{Directive1, Route}
+import akka.http.scaladsl.server.{Directive, Directive1, Route}
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
@@ -43,6 +43,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           unconfirmedBalanceR ~
           addressesR ~
           unspentBoxesR ~
+          boxesR ~
           generateTransactionR ~
           generatePaymentTransactionR ~
           generateAssetIssueTransactionR ~
@@ -102,6 +103,9 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       )
       .fold(_ => reject, s => provide(s))
   }
+
+  private val boxFilters: Directive[(Int, Int)] =
+    parameters("minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)
 
   private def addressResponse(address: ErgoAddress): Json = Json.obj("address" -> addressJsonEncoder(address))
 
@@ -207,8 +211,19 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet(_.trackedAddresses())
   }
 
-  def unspentBoxesR: Route = (path("boxes" / "unspent") & get & parameters(
-    "minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)) { (minConfNum, minHeight) =>
+  def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxFilters) { (minConfNum, minHeight) =>
+    withWallet {
+      _.unspentBoxes(unspentOnly = true)
+        .map {
+          _.filter { bx =>
+            bx.confirmationsNumOpt.getOrElse(0) >= minConfNum &&
+              bx.trackedBox.inclusionHeightOpt.getOrElse(-1) >= minHeight
+          }
+        }
+    }
+  }
+
+  def boxesR: Route = (path("boxes") & get & boxFilters) { (minConfNum, minHeight) =>
     withWallet {
       _.unspentBoxes()
         .map {

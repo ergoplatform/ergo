@@ -24,6 +24,8 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain
 
+  def isInBestChain(id: ModifierId): Boolean
+
   /** Returns true if we estimate that our chain is synced with the network. Start downloading full blocks after that
     */
   def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
@@ -50,9 +52,9 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     bestFullBlockOpt match {
       case _ if !isHeadersChainSynced || !config.verifyTransactions =>
         Seq.empty
-      case Some(fb) =>
+      case Some(fb) if isInBestChain(fb.id) =>
         continuation(fb.header.height + 1, Seq.empty)
-      case None =>
+      case _ =>
         continuation(pruningProcessor.minimalFullBlockHeight, Seq.empty)
     }
   }

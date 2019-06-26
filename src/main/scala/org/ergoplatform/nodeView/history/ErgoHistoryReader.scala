@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentMo
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
-import org.ergoplatform.settings.{Algos, ChainSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.ScorexEncoding
@@ -56,13 +56,12 @@ trait ErgoHistoryReader
     * @param id - modifier id
     * @return semantically valid ErgoPersistentModifier with the given id it is in history
     */
-  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
+  override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
     if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
       historyStorage.modifierById(id)
     } else {
       None
     }
-  }.ensuring(_.forall(_.id == id), s"Modifier ${Algos.encode(id)} id is incorrect")
 
   /** Get modifier of expected type by its identifier
     *
@@ -106,9 +105,9 @@ trait ErgoHistoryReader
         Younger
       case Some(_) =>
         //We are on different forks now.
-        if (info.lastHeaderIds.view.reverse.exists(m => contains(m))) {
+        if (info.lastHeaderIds.view.reverse.exists(m => contains(m) || m == PreGenesisHeader.id)) {
           //Return Younger, because we can send blocks from our fork that other node can download.
-          Younger
+          Fork
         } else {
           //We don't have any of id's from other's node sync info in history.
           //We don't know whether we can sync with it and what blocks to send in Inv message.
@@ -157,7 +156,6 @@ trait ErgoHistoryReader
       }
     }
 
-
   /**
     *
     * @param header     - header to start
@@ -185,22 +183,25 @@ trait ErgoHistoryReader
     loop(heightOf(header.id), Seq(Seq(header)))
   }
 
-
   /**
     * @return Node ErgoSyncInfo
     */
   override def syncInfo: ErgoSyncInfo = if (isEmpty) {
     ErgoSyncInfo(Seq.empty)
   } else {
-    ErgoSyncInfo(lastHeaders(ErgoSyncInfo.MaxBlockIds).headers.map(_.id))
+    val startingPoints = lastHeaders(ErgoSyncInfo.MaxBlockIds).headers
+    if (startingPoints.headOption.exists(_.isGenesis)) {
+      ErgoSyncInfo((PreGenesisHeader +: startingPoints).map(_.id))
+    } else {
+      ErgoSyncInfo(startingPoints.map(_.id))
+    }
   }
 
   /**
     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
     */
   def lastHeaders(count: Int, offset: Int = 0): HeaderChain = bestHeaderOpt
-    .map(bestHeader => headerChainBack(count, bestHeader, b => false).drop(offset)).getOrElse(HeaderChain.empty)
-
+    .map(bestHeader => headerChainBack(count, bestHeader, _ => false).drop(offset)).getOrElse(HeaderChain.empty)
 
   /**
     * @return ids of count headers starting from offset

@@ -28,15 +28,12 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
 
   /** Start height to download full blocks from
     */
-  def minimalFullBlockHeight: Int = {
-    minimalFullBlockHeightVar
-  }
+  def minimalFullBlockHeight: Int = minimalFullBlockHeightVar
 
   /** Check if headers chain is synchronized with the network and modifier is not too old
     */
-  def shouldDownloadBlockAtHeight(height: Int): Boolean = {
+  def shouldDownloadBlockAtHeight(height: Int): Boolean =
     isHeadersChainSynced && minimalFullBlockHeight <= height
-  }
 
   /** Update minimal full block height and header chain synced flag
     *
@@ -62,4 +59,5 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
     if (!isHeadersChainSynced) isHeadersChainSyncedVar = true
     minimalFullBlockHeightVar
   }
+
 }

@@ -19,6 +19,7 @@ import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArra
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
+import sigmastate.utxo.CostTable
 
 import scala.util.{Random, Try}
 
@@ -341,7 +342,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     val initialCost: Long =
       tx.inputs.size * LaunchParameters.inputCost +
         tx.dataInputs.size * LaunchParameters.dataInputCost +
-        tx.outputs.size * LaunchParameters.outputCost
+        tx.outputs.size * LaunchParameters.outputCost +
+        CostTable.interpreterInitCost
     val (outAssets, outAssetsNum) = tx.outAssetsTry.get
     val (inAssets, inAssetsNum) = ErgoTransaction.extractAssets(from).get
     val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * LaunchParameters.tokenAccessCost +

@@ -184,7 +184,26 @@ class WalletApiRouteSpec extends FlatSpec
     }
   }
 
-  it should "return wallet boxes" in {
+  it should "return all wallet boxes" in {
+    val minConfirmations = 15
+    val minInclusionHeight = 20
+    val postfix = s"/boxes?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
+    Get(prefix + postfix) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[Json]]
+      response.size shouldBe 2
+      response.head.hcursor.downField("confirmationsNum").as[Int].forall(_ >= minConfirmations) shouldBe true
+      response.head.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
+    }
+    Get(prefix + "/boxes") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[Json]]
+      response.size shouldBe 3
+    }
+  }
+
+
+  it should "return unspent wallet boxes" in {
     val minConfirmations = 15
     val minInclusionHeight = 20
     val postfix = s"/boxes/unspent?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"

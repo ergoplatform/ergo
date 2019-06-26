@@ -1690,6 +1690,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/boxes:
+    parameters:
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal number of confirmations
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Mininal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get a list of all wallet-related boxes
+      operationId: walletUnspentBoxes
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: A list of all wallet-related boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBox'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/boxes/unspent:
     parameters:
       - in: query

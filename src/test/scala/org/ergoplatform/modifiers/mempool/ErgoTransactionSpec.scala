@@ -346,8 +346,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     val (inAssets, inAssetsNum) = ErgoTransaction.extractAssets(from).get
     val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * LaunchParameters.tokenAccessCost +
       (inAssets.size + outAssets.size) * LaunchParameters.tokenAccessCost
-    // todo replace 60 to reference in CostTable
-    val scriptsValidationCosts = tx.inputs.size * 60
+    // todo replace 229 to references from CostTable
+    val scriptsValidationCosts = tx.inputs.size * 229
     val manualCost: Int = (initialCost + totalAssetsAccessCost + scriptsValidationCosts).toInt
 
 

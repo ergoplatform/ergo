@@ -47,20 +47,20 @@ class RegistryOpsSpec
   }
 
   property("putTx/getAllTx/removeTxs") {
-    forAll(invalidErgoTransactionGen) { tx =>
+    forAll(walletTransactionGen) { wtx =>
       val store = createStore
-      putTx(tx).transact(store)
-      getAllTxs.transact(store) shouldEqual Seq(tx)
-      removeTxs(Seq(tx.id)).transact(store)
-      getAllTxs.transact(store) should not contain tx
+      putTx(wtx).transact(store)
+      getAllTxs.transact(store) shouldEqual Seq(wtx)
+      removeTxs(Seq(wtx.id)).transact(store)
+      getAllTxs.transact(store) should not contain wtx
     }
   }
 
   property("putTxs/getAllTxs") {
-    forAll(Gen.listOf(invalidErgoTransactionGen)) { txs =>
+    forAll(Gen.listOf(walletTransactionGen)) { wtxs =>
       val store = createStore
-      putTxs(txs).transact(store)
-      getAllTxs.transact(store) should contain theSameElementsAs txs
+      putTxs(wtxs).transact(store)
+      getAllTxs.transact(store) should contain theSameElementsAs wtxs
     }
   }
 

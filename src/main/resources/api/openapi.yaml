@@ -182,6 +182,42 @@ components:
           type: integer
           format: int32
 
+    WalletTransaction:
+      type: object
+      description: Transaction without any lockers and unlockers
+      required:
+        - inputs
+        - dataInputs
+        - outputs
+        - inclusionHeight
+      properties:
+        id:
+          $ref: '#/components/schemas/TransactionId'
+        inputs:
+          description: Many transaction inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionInput'
+        dataInputs:
+          description: Many transaction data inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
+        outputs:
+          description: Many transaction outputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+        inclusionHeight:
+          description: Height of a block the transaction was included in
+          type: integer
+          format: int32
+          example: 20998
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
+
     ErgoAddress:
       description: Encoded Ergo Address
       type: string
@@ -1695,7 +1731,7 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Get a list of all wallet-related transactions
-      operationId: walletUnspentBoxes
+      operationId: walletTransactions
       tags:
         - wallet
       responses:
@@ -1706,7 +1742,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ErgoTransaction'
+                  $ref: '#/components/schemas/WalletTransaction'
         default:
           description: Error
           content:
@@ -1738,7 +1774,7 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Get a list of all wallet-related boxes
-      operationId: walletUnspentBoxes
+      operationId: walletBoxes
       tags:
         - wallet
       responses:

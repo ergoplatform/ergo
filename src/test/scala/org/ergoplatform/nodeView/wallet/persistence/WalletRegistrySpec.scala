@@ -45,12 +45,12 @@ class WalletRegistrySpec
   }
 
   it should "read transactions" in {
-    forAll(invalidErgoTransactionGen) { tx =>
+    forAll(walletTransactionGen) { wtx =>
       val store = createStore
-      putTx(tx).transact(store)
+      putTx(wtx).transact(store)
       val registry = new WalletRegistry(store)(settings.walletSettings)
 
-      registry.readTransactions shouldBe Seq(tx)
+      registry.readTransactions shouldBe Seq(wtx)
     }
   }
 

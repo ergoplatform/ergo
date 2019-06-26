@@ -7,6 +7,7 @@ import cats.~>
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
+import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA._
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import scorex.crypto.hash.Blake2b256
@@ -85,16 +86,16 @@ object RegistryOps {
       }
     }
 
-  def putTx(tx: ErgoTransaction): RegistryOp[Unit] =
+  def putTx(tx: WalletTransaction): RegistryOp[Unit] =
     liftF[RegistryOpA, Unit](PutTx(tx))
 
-  def putTxs(txs: Seq[ErgoTransaction]): RegistryOp[Unit] =
+  def putTxs(txs: Seq[WalletTransaction]): RegistryOp[Unit] =
     txs.foldLeft(Free.pure[RegistryOpA, Unit](())) { case (acc, tx) =>
       acc.flatMap(_ => putTx(tx))
     }
 
-  def getAllTxs: RegistryOp[Seq[ErgoTransaction]] =
-    liftF[RegistryOpA, Seq[ErgoTransaction]](GetAllTxs)
+  def getAllTxs: RegistryOp[Seq[WalletTransaction]] =
+    liftF[RegistryOpA, Seq[WalletTransaction]](GetAllTxs)
 
   def removeTxs(ids: Seq[ModifierId]): RegistryOp[Unit] =
     liftF[RegistryOpA, Unit](RemoveTxs(ids))
@@ -146,17 +147,17 @@ object RegistryOps {
           State.modify { case (toInsert, toRemove) =>
             (toInsert, toRemove ++ ids.map(key))
           }
-        case PutTx(tx) =>
+        case PutTx(wtx) =>
           State.modify { case (toInsert, toRemove) =>
-            val txBytes = ErgoTransactionSerializer.toBytes(tx)
-            (toInsert :+ (key(tx.id), TxPrefix +: txBytes), toRemove)
+            val txBytes = WalletTransactionSerializer.toBytes(wtx)
+            (toInsert :+ (key(wtx.id), TxPrefix +: txBytes), toRemove)
           }
         case GetAllTxs =>
           State.inspect { _ =>
             store.getAll()
               .filterNot(x => x._1 == ByteArrayWrapper(RegistryIndexKey) || x._2.data.head == BoxPrefix)
               .flatMap { case (_, txBytes) =>
-                ErgoTransactionSerializer.parseBytesTry(txBytes.data.tail).toOption
+                WalletTransactionSerializer.parseBytesTry(txBytes.data.tail).toOption
               }
               .toSeq
               .asInstanceOf[A]

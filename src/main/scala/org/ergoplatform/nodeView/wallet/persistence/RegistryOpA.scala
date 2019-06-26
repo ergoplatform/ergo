@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import cats.free.Free
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.wallet.WalletTransaction
 import org.ergoplatform.wallet.boxes.TrackedBox
 import scorex.util.ModifierId
 
@@ -25,9 +25,9 @@ object RegistryOpA {
 
   final case class RemoveBoxes(ids: Seq[BoxId]) extends RegistryOpA[Unit]
 
-  final case class PutTx(tx: ErgoTransaction) extends RegistryOpA[Unit]
+  final case class PutTx(tx: WalletTransaction) extends RegistryOpA[Unit]
 
-  case object GetAllTxs extends RegistryOpA[Seq[ErgoTransaction]]
+  case object GetAllTxs extends RegistryOpA[Seq[WalletTransaction]]
 
   final case class RemoveTxs(ids: Seq[ModifierId]) extends RegistryOpA[Unit]
 

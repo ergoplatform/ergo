@@ -153,7 +153,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case GetTransactions =>
       sender() ! registry.readTransactions
-        .sortBy(-_.outputs.head.creationHeight)
+        .sortBy(-_.inclusionHeight)
 
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))
@@ -391,7 +391,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
     }
 
-    registry.updateOnBlock(resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs, txs)(id, height)
+    val walletTxs = txs.map(WalletTransaction(_, height))
+
+    registry.updateOnBlock(resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs, walletTxs)(id, height)
 
     val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedBoxId(x.box.id))
     offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)

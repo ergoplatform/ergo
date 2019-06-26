@@ -5,7 +5,7 @@ import java.io.File
 import io.iohk.iodb.Store.VersionID
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history.PreGenesisHeader
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.wallet.WalletTransaction
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA.RegistryOp
 import org.ergoplatform.settings.{ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.boxes.TrackedBox
@@ -29,7 +29,7 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
   def readIndex: RegistryIndex =
     getIndex.transact(store)
 
-  def readTransactions: Seq[ErgoTransaction] =
+  def readTransactions: Seq[WalletTransaction] =
     getAllTxs.transact(store)
 
   def readCertainUnspentBoxes: Seq[TrackedBox] = {
@@ -72,7 +72,7 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
     * Updates indexes according to a data extracted from a block and performs versioned update.
     */
   def updateOnBlock(certainBxs: Seq[TrackedBox], uncertainBxs: Seq[TrackedBox],
-                    inputs: Seq[(ModifierId, EncodedBoxId)], txs: Seq[ErgoTransaction])
+                    inputs: Seq[(ModifierId, EncodedBoxId)], txs: Seq[WalletTransaction])
                    (blockId: ModifierId, blockHeight: Int): Unit = {
     val update = for {
       _ <- putBoxes(certainBxs ++ uncertainBxs)

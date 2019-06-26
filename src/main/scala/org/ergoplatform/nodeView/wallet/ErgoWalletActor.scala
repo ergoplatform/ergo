@@ -151,6 +151,10 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         .map(tb => WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _)))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
+    case GetTransactions =>
+      sender() ! registry.readTransactions
+        .sortBy(-_.outputs.head.creationHeight)
+
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))
 
@@ -514,6 +518,8 @@ object ErgoWalletActor {
   final case class DeriveKey(path: String)
 
   final case class GetBoxes(unspentOnly: Boolean)
+
+  case object GetTransactions
 
   case object DeriveNextKey
 

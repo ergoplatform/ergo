@@ -221,4 +221,13 @@ class WalletApiRouteSpec extends FlatSpec
     }
   }
 
+  it should "return wallet transactions" in {
+    Get(prefix + "/transactions") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[Json]]
+      response.size shouldBe 2
+      responseAs[Seq[ErgoTransaction]] shouldEqual WalletActorStub.walletTxs
+    }
+  }
+
 }

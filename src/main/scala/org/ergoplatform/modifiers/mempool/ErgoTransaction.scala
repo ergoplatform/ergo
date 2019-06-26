@@ -31,6 +31,7 @@ import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
+import sigmastate.utxo.CostTable
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
@@ -133,6 +134,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     // Cost of transaction initialization: we should read and parse all inputs and data inputs,
     // and also iterate through all outputs to check rules
     val initialCost: Long = addExact(
+      CostTable.interpreterInitCost,
       multiplyExact(boxesToSpend.size, stateContext.currentParameters.inputCost),
       multiplyExact(dataBoxes.size, stateContext.currentParameters.dataInputCost),
       multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost),
@@ -220,7 +222,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         // Check whether input box script interpreter raised exception
         .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
         // Check that cost of the transaction after checking the input becomes too big
-        .validate(bsBlockTransactionsCost, maxCost >= addExact(currentTxCost, accumulatedCost, scriptCost) , s"$id: cost exceeds limit after input #$idx")
+        .validate(bsBlockTransactionsCost, maxCost >= addExact(currentTxCost, accumulatedCost, scriptCost), s"$id: cost exceeds limit after input #$idx")
         .map(c => addExact(c, scriptCost))
     }
   }

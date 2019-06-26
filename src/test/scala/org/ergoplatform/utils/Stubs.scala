@@ -148,6 +148,14 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       confirmationsNumOpt = Some(20),
       trackedBox = walletBox10_10.trackedBox.copy(inclusionHeightOpt = Some(30))
     )
+    private val walletBoxSpent21_31 = walletBox10_10.copy(
+      confirmationsNumOpt = Some(21),
+      trackedBox = walletBox10_10.trackedBox.copy(
+        inclusionHeightOpt = Some(31),
+        spendingHeightOpt = Some(32),
+        spendingTxIdOpt = Some(modifierIdGen.sample.get)
+      )
+    )
 
     def receive: Receive = {
 
@@ -159,7 +167,13 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case LockWallet => ()
 
-      case GetBoxes => sender() ! Seq(walletBox10_10, walletBox20_30)
+      case GetBoxes(unspentOnly) =>
+        val boxes = if (unspentOnly) {
+          Seq(walletBox10_10, walletBox20_30)
+        } else {
+          Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
+        }
+        sender() ! boxes.sortBy(_.trackedBox.inclusionHeightOpt)
 
       case DeriveKey(_) => sender() ! Success(WalletActorStub.address)
 

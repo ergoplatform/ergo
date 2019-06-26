@@ -146,6 +146,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val currentHeight = height
       sender() ! (if (unspent) registry.readCertainUnspentBoxes else registry.readCertainBoxes)
         .map(tb => WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _)))
+        .sortBy(_.trackedBox.inclusionHeightOpt)
 
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))

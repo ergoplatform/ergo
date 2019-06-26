@@ -107,6 +107,11 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private val boxFilters: Directive[(Int, Int)] =
     parameters("minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)
 
+  private val boxPredicate = { (bx: WalletBox, minConfNum: Int, minHeight: Int) =>
+    bx.confirmationsNumOpt.getOrElse(0) >= minConfNum &&
+      bx.trackedBox.inclusionHeightOpt.getOrElse(-1) >= minHeight
+  }
+
   private def addressResponse(address: ErgoAddress): Json = Json.obj("address" -> addressJsonEncoder(address))
 
   private def keysToEnv(keys: Seq[ProveDlog]): Map[String, Any] = {
@@ -215,10 +220,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet {
       _.unspentBoxes(unspentOnly = true)
         .map {
-          _.filter { bx =>
-            bx.confirmationsNumOpt.getOrElse(0) >= minConfNum &&
-              bx.trackedBox.inclusionHeightOpt.getOrElse(-1) >= minHeight
-          }
+          _.filter(boxPredicate(_, minConfNum, minHeight))
         }
     }
   }
@@ -227,10 +229,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet {
       _.unspentBoxes()
         .map {
-          _.filter { bx =>
-            bx.confirmationsNumOpt.getOrElse(0) >= minConfNum &&
-              bx.trackedBox.inclusionHeightOpt.getOrElse(-1) >= minHeight
-          }
+          _.filter(boxPredicate(_, minConfNum, minHeight))
         }
     }
   }

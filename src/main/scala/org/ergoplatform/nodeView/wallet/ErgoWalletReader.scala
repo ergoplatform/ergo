@@ -46,23 +46,26 @@ trait ErgoWalletReader extends VaultReader {
   def balances(chainStatus: ChainStatus): Future[RegistryIndex] =
     (walletActor ? ReadBalances(chainStatus)).mapTo[RegistryIndex]
 
-  def confirmedBalances(): Future[RegistryIndex] = balances(OnChain)
+  def confirmedBalances: Future[RegistryIndex] = balances(OnChain)
 
-  def balancesWithUnconfirmed(): Future[RegistryIndex] = balances(OffChain)
+  def balancesWithUnconfirmed: Future[RegistryIndex] = balances(OffChain)
 
   def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] =
     (walletActor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
 
-  def firstSecret(): Future[Try[DLogProverInput]] =
+  def firstSecret: Future[Try[DLogProverInput]] =
     (walletActor ? GetFirstSecret).mapTo[Try[DLogProverInput]]
 
-  def unspentBoxes(unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
+  def boxes(unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
     (walletActor ? GetBoxes(unspentOnly)).mapTo[Seq[WalletBox]]
 
-  def randomPublicKey(): Future[P2PKAddress] =
+  def transactions: Future[Seq[ErgoTransaction]] =
+    (walletActor ? GetTransactions).mapTo[Seq[ErgoTransaction]]
+
+  def randomPublicKey: Future[P2PKAddress] =
     (walletActor ? ReadRandomPublicKey).mapTo[P2PKAddress]
 
-  def trackedAddresses(): Future[Seq[ErgoAddress]] =
+  def trackedAddresses: Future[Seq[ErgoAddress]] =
     (walletActor ? ReadTrackedAddresses).mapTo[Seq[ErgoAddress]]
 
   def generateTransaction(requests: Seq[TransactionRequest]): Future[Try[ErgoTransaction]] =

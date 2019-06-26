@@ -42,6 +42,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         balancesR ~
           unconfirmedBalanceR ~
           addressesR ~
+          transactionR ~
           unspentBoxesR ~
           boxesR ~
           generateTransactionR ~
@@ -187,11 +188,11 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
 
   def balancesR: Route = (path("balances") & get) {
-    withWallet(_.confirmedBalances())
+    withWallet(_.confirmedBalances)
   }
 
   def unconfirmedBalanceR: Route = (path("balances" / "with_unconfirmed") & get) {
-    withWallet(_.balancesWithUnconfirmed())
+    withWallet(_.balancesWithUnconfirmed)
   }
 
   def p2sAddressR: Route = (path("p2s_address") & post & source) { source =>
@@ -213,12 +214,12 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def addressesR: Route = (path("addresses") & get) {
-    withWallet(_.trackedAddresses())
+    withWallet(_.trackedAddresses)
   }
 
   def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxFilters) { (minConfNum, minHeight) =>
     withWallet {
-      _.unspentBoxes(unspentOnly = true)
+      _.boxes(unspentOnly = true)
         .map {
           _.filter(boxPredicate(_, minConfNum, minHeight))
         }
@@ -227,11 +228,15 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def boxesR: Route = (path("boxes") & get & boxFilters) { (minConfNum, minHeight) =>
     withWallet {
-      _.unspentBoxes()
+      _.boxes()
         .map {
           _.filter(boxPredicate(_, minConfNum, minHeight))
         }
     }
+  }
+
+  def transactionR: Route = (path("transactions") & get) {
+    withWallet(_.transactions)
   }
 
   def initWalletR: Route = (path("init") & post & initRequest) {

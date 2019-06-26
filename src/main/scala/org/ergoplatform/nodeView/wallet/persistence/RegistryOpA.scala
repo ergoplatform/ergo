@@ -27,10 +27,6 @@ object RegistryOpA {
 
   final case class PutTx(tx: ErgoTransaction) extends RegistryOpA[Unit]
 
-  final case class GetTx(id: ModifierId) extends RegistryOpA[Option[ErgoTransaction]]
-
-  final case class GetTxs(ids: Seq[ModifierId]) extends RegistryOpA[Seq[Option[ErgoTransaction]]]
-
   case object GetAllTxs extends RegistryOpA[Seq[ErgoTransaction]]
 
   final case class RemoveTxs(ids: Seq[ModifierId]) extends RegistryOpA[Unit]

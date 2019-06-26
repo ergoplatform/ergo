@@ -129,33 +129,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class WalletActorStub extends Actor {
 
+    import WalletActorStub.{walletBox10_10, walletBox20_30, walletBoxSpent21_31, walletTxs}
+
     private implicit val addressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
     private val prover: ErgoProvingInterpreter = defaultProver
     private val trackedAddresses: Seq[P2PKAddress] = prover.pubKeys.map(P2PKAddress.apply)
-    private val walletBox10_10 = WalletBox(
-      TrackedBox(
-        creationTxId = modifierIdGen.sample.get,
-        creationOutIndex = 0,
-        inclusionHeightOpt = Some(10),
-        spendingTxIdOpt = Some(modifierIdGen.sample.get),
-        spendingHeightOpt = None,
-        box = ergoBoxGen.sample.get,
-        certainty = BoxCertainty.Certain
-      ),
-      confirmationsNumOpt = Some(10)
-    )
-    private val walletBox20_30 = walletBox10_10.copy(
-      confirmationsNumOpt = Some(20),
-      trackedBox = walletBox10_10.trackedBox.copy(inclusionHeightOpt = Some(30))
-    )
-    private val walletBoxSpent21_31 = walletBox10_10.copy(
-      confirmationsNumOpt = Some(21),
-      trackedBox = walletBox10_10.trackedBox.copy(
-        inclusionHeightOpt = Some(31),
-        spendingHeightOpt = Some(32),
-        spendingTxIdOpt = Some(modifierIdGen.sample.get)
-      )
-    )
 
     def receive: Receive = {
 
@@ -174,6 +152,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
           Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
         }
         sender() ! boxes.sortBy(_.trackedBox.inclusionHeightOpt)
+
+      case GetTransactions =>
+        sender() ! walletTxs
 
       case DeriveKey(_) => sender() ! Success(WalletActorStub.address)
 
@@ -204,6 +185,32 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val mnemonic: String = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
     val path = DerivationPath(List(0, 1, 2), publicBranch = false)
     val address = P2PKAddress(proveDlogGen.sample.get)
+
+    val walletBox10_10: WalletBox = WalletBox(
+      TrackedBox(
+        creationTxId = modifierIdGen.sample.get,
+        creationOutIndex = 0,
+        inclusionHeightOpt = Some(10),
+        spendingTxIdOpt = Some(modifierIdGen.sample.get),
+        spendingHeightOpt = None,
+        box = ergoBoxGen.sample.get,
+        certainty = BoxCertainty.Certain
+      ),
+      confirmationsNumOpt = Some(10)
+    )
+    val walletBox20_30: WalletBox = walletBox10_10.copy(
+      confirmationsNumOpt = Some(20),
+      trackedBox = walletBox10_10.trackedBox.copy(inclusionHeightOpt = Some(30))
+    )
+    val walletBoxSpent21_31: WalletBox = walletBox10_10.copy(
+      confirmationsNumOpt = Some(21),
+      trackedBox = walletBox10_10.trackedBox.copy(
+        inclusionHeightOpt = Some(31),
+        spendingHeightOpt = Some(32),
+        spendingTxIdOpt = Some(modifierIdGen.sample.get)
+      )
+    )
+    val walletTxs: Seq[ErgoTransaction] = Seq(invalidErgoTransactionGen.sample.get, invalidErgoTransactionGen.sample.get)
 
     def props(): Props = Props(new WalletActorStub)
     def balance(chainStatus: ChainStatus): Long = if (chainStatus.onChain) confirmedBalance else unconfirmedBalance

@@ -1690,6 +1690,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/transactions:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get a list of all wallet-related transactions
+      operationId: walletUnspentBoxes
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: A list of all wallet-related transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ErgoTransaction'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/boxes:
     parameters:
       - in: query

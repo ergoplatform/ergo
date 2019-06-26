@@ -93,12 +93,6 @@ object RegistryOps {
       acc.flatMap(_ => putTx(tx))
     }
 
-  def getTx(id: ModifierId): RegistryOp[Option[ErgoTransaction]] =
-    liftF[RegistryOpA, Option[ErgoTransaction]](GetTx(id))
-
-  def getTxs(ids: Seq[ModifierId]): RegistryOp[Seq[Option[ErgoTransaction]]] =
-    liftF[RegistryOpA, Seq[Option[ErgoTransaction]]](GetTxs(ids))
-
   def getAllTxs: RegistryOp[Seq[ErgoTransaction]] =
     liftF[RegistryOpA, Seq[ErgoTransaction]](GetAllTxs)
 
@@ -156,22 +150,6 @@ object RegistryOps {
           State.modify { case (toInsert, toRemove) =>
             val txBytes = ErgoTransactionSerializer.toBytes(tx)
             (toInsert :+ (key(tx.id), TxPrefix +: txBytes), toRemove)
-          }
-        case GetTx(id) =>
-          State.inspect { _ =>
-            store.get(ByteArrayWrapper(idToBytes(id)))
-              .flatMap(r => ErgoTransactionSerializer.parseBytesTry(r.data.tail).toOption)
-              .asInstanceOf[A]
-          }
-        case GetTxs(ids) =>
-          State.inspect { _ =>
-            ids
-              .map { id => store.get(ByteArrayWrapper(idToBytes(id)))
-                .flatMap { x =>
-                  ErgoTransactionSerializer.parseBytesTry(x.data.tail).toOption
-                }
-              }
-              .asInstanceOf[A]
           }
         case GetAllTxs =>
           State.inspect { _ =>

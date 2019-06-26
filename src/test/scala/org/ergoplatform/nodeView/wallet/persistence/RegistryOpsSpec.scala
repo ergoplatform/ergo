@@ -46,6 +46,24 @@ class RegistryOpsSpec
     }
   }
 
+  property("putTx/getTx/removeTxs") {
+    forAll(invalidErgoTransactionGen) { tx =>
+      val store = createStore
+      putTx(tx).transact(store)
+      getTx(tx.id).transact(store) shouldBe Some(tx)
+      removeTxs(Seq(tx.id)).transact(store)
+      getTx(tx.id).transact(store) shouldBe None
+    }
+  }
+
+  property("putTxs/getTxs") {
+    forAll(Gen.listOf(invalidErgoTransactionGen)) { txs =>
+      val store = createStore
+      putTxs(txs).transact(store)
+      getTxs(txs.map(_.id)).transact(store) should contain theSameElementsAs txs.map(Some.apply)
+    }
+  }
+
   property("putIndex/getIndex/updateIndex") {
     forAll(registryIndexGen) { index =>
       val store = createStore

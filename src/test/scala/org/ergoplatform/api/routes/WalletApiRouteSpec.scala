@@ -8,7 +8,7 @@ import io.circe.syntax._
 import io.circe.{Decoder, Json}
 import org.ergoplatform.api.WalletApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
+import org.ergoplatform.nodeView.wallet.{ErgoAddressJsonEncoder, WalletTransaction}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
 import org.ergoplatform.settings.{Args, Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
@@ -202,7 +202,6 @@ class WalletApiRouteSpec extends FlatSpec
     }
   }
 
-
   it should "return unspent wallet boxes" in {
     val minConfirmations = 15
     val minInclusionHeight = 20
@@ -226,7 +225,7 @@ class WalletApiRouteSpec extends FlatSpec
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
       response.size shouldBe 2
-      responseAs[Seq[ErgoTransaction]] shouldEqual WalletActorStub.walletTxs
+      responseAs[Seq[WalletTransaction]] shouldEqual WalletActorStub.walletTxs
     }
   }
 

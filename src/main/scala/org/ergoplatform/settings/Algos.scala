@@ -37,5 +37,4 @@ object Algos extends ScorexEncoding {
 
   def merkleTreeRoot(elements: Seq[LeafData]): Digest32 =
     if (elements.isEmpty) emptyMerkleTreeRoot else MerkleTree(elements)(hash).rootHash
-
 }

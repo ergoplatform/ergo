@@ -17,7 +17,7 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.MinimalState
 import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
-import scorex.core.{VersionTag, bytesToVersion, idToVersion}
+import scorex.core.{VersionTag, idToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -26,6 +26,7 @@ import sigmastate.Values.{ByteArrayConstant, IntConstant, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.serialization.ValueSerializer
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.Try
 
@@ -42,45 +43,6 @@ trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
 
   self: IState =>
 
-  /**
-    * Tries to validate and execute transactions.
-    *
-    * @return Result of transactions execution with total cost inside
-    */
-  protected def execTransactions(transactions: Seq[ErgoTransaction],
-                                 currentStateContext: ErgoStateContext)
-                                (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
-    import cats.implicits._
-    implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
-    val validationSettings: ValidationSettings = stateContext.validationSettings
-
-    def execTx(txs: List[ErgoTransaction], accCostTry: ValidationResult[Long]): ValidationResult[Long] = (txs, accCostTry) match {
-      case (tx :: tail, r: Valid[Long]) =>
-        val boxesToSpendTry: Try[List[ErgoBox]] = tx.inputs.toList
-          .map(in => checkBoxExistence(in.boxId))
-          .sequence
-
-        lazy val dataBoxesTry: Try[List[ErgoBox]] = tx.dataInputs.toList
-          .map(in => checkBoxExistence(in.boxId))
-          .sequence
-
-        lazy val boxes: Try[(List[ErgoBox], List[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
-
-        val vs = tx.validateStateless
-          .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
-          .validateNoFailure(txDataBoxes, dataBoxesTry)
-          .payload[Long](r.value)
-          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, (dataBoxes, toSpend)) =>
-            tx.validateStateful(toSpend.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value)(verifier, validationSettings).result
-          }
-
-        execTx(tail, vs)
-      case _ =>
-        accCostTry
-    }
-
-    execTx(transactions.toList, Valid[Long](0L))
-  }
 
   def closeStorage(): Unit = {
     log.warn("Closing state's store.")
@@ -114,6 +76,46 @@ object ErgoState extends ScorexLogging {
     val toInsertChanges = toInsert.map(b => Insertion(b))
     val toLookup = txs.flatMap(_.dataInputs).map(b => Lookup(b.boxId))
     StateChanges(toRemoveChanges, toInsertChanges, toLookup)
+  }
+
+  /**
+    * Tries to validate and execute transactions.
+    *
+    * @return Result of transactions execution with total cost inside
+    */
+  def execTransactions(transactions: Seq[ErgoTransaction],
+                       currentStateContext: ErgoStateContext)
+                      (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
+    import cats.implicits._
+    implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
+
+    @tailrec
+    def execTx(txs: List[ErgoTransaction], accCostTry: ValidationResult[Long]): ValidationResult[Long] = (txs, accCostTry) match {
+      case (tx :: tail, r: Valid[Long]) =>
+        val boxesToSpendTry: Try[List[ErgoBox]] = tx.inputs.toList
+          .map(in => checkBoxExistence(in.boxId))
+          .sequence
+
+        lazy val dataBoxesTry: Try[List[ErgoBox]] = tx.dataInputs.toList
+          .map(in => checkBoxExistence(in.boxId))
+          .sequence
+
+        lazy val boxes: Try[(List[ErgoBox], List[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
+
+        val vs = tx.validateStateless
+          .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
+          .validateNoFailure(txDataBoxes, dataBoxesTry)
+          .payload[Long](r.value)
+          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, (dataBoxes, toSpend)) =>
+            tx.validateStateful(toSpend.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value)(verifier).result
+          }
+
+        execTx(tail, vs)
+      case _ =>
+        accCostTry
+    }
+
+    execTx(transactions.toList, Valid[Long](0L))
   }
 
   /**

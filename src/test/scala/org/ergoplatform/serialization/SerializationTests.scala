@@ -42,12 +42,11 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
 
   property("ErgoStateContext serialization") {
     val serializer = ErgoStateContextSerializer(votingSettings)
-    forAll(ergoStateContextGen) { b: ErgoStateContext =>
-      val recovered = serializer.parseBytes(serializer.toBytes(b))
-      serializer.toBytes(b) shouldEqual serializer.toBytes(recovered)
-      b.lastHeaders.length shouldBe recovered.lastHeaders.length
-      b.lastHeaders shouldBe recovered.lastHeaders
-    }
+    val b = ergoStateContextGen.sample.get
+    val recovered = serializer.parseBytes(serializer.toBytes(b))
+    serializer.toBytes(b) shouldEqual serializer.toBytes(recovered)
+    b.lastHeaders.length shouldBe recovered.lastHeaders.length
+    b.lastHeaders shouldBe recovered.lastHeaders
   }
 
   property("Extension serialization") {

@@ -2,9 +2,11 @@ package org.ergoplatform.modifiers.mempool
 
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.{R4, R5, R6, R7, R8, TokenId}
-import org.ergoplatform.settings.ValidationRules.bsBlockTransactionsCost
-import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters, ValidationRules}
+import org.ergoplatform.ErgoBox._
+import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext, VotingData}
+import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
+import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txBoxSize}
+import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
@@ -17,40 +19,11 @@ import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArra
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
+import sigmastate.utxo.CostTable
 
 import scala.util.{Random, Try}
 
 class ErgoTransactionSpec extends ErgoPropertyTest {
-
-  private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Long): ErgoBoxCandidate = {
-    new ErgoBoxCandidate(
-      boxCandidate.value + delta,
-      boxCandidate.ergoTree,
-      boxCandidate.creationHeight,
-      boxCandidate.additionalTokens,
-      boxCandidate.additionalRegisters)
-  }
-
-  private def modifyAsset(boxCandidate: ErgoBoxCandidate,
-                          deltaFn: Long => Long,
-                          idToskip: TokenId): ErgoBoxCandidate = {
-    val assetId = boxCandidate.additionalTokens.find(t => !java.util.Arrays.equals(t._1, idToskip)).get._1
-
-    val tokens = boxCandidate.additionalTokens.map { case (id, amount) =>
-      if (java.util.Arrays.equals(id, assetId)) assetId -> deltaFn(amount) else assetId -> amount
-    }
-
-    new ErgoBoxCandidate(
-      boxCandidate.value,
-      boxCandidate.ergoTree,
-      boxCandidate.creationHeight,
-      tokens,
-      boxCandidate.additionalRegisters)
-  }
-
-  private def checkTx(from: IndexedSeq[ErgoBox], wrongTx: ErgoTransaction): Try[Long] = {
-    wrongTx.statelessValidity.flatMap(_ => wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext))
-  }
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
@@ -300,7 +273,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
     val validFailure = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext)
-    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "").take(30))
+    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(txBoxSize, "").take(30))
 
   }
 
@@ -321,7 +294,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       t - t0
     }
 
-    val gen = validErgoTransactionGenTemplate(0, 0, 600, 1000, trueLeafGen)
+    val gen = validErgoTransactionGenTemplate(0, 0, 1000, 1000, trueLeafGen)
     val (from, tx) = gen.sample.get
     tx.statelessValidity.isSuccess shouldBe true
 
@@ -335,11 +308,93 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     cause should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "").take(30))
 
     //check that spam transaction validation with no cost limit is indeed taking too much time
-    val relaxedParams = LaunchParameters.parametersTable.updated(Parameters.MaxBlockCostIncrease, Int.MaxValue)
-    val relaxedVerifier = ErgoInterpreter(Parameters(0, relaxedParams, emptyVSUpdate))
-    val (_, time) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(relaxedVerifier, validationSettingsNoIl))
+    import Parameters._
+    val ps = Parameters(0, DefaultParameters.updated(MaxBlockCostIncrease, Int.MaxValue), emptyVSUpdate)
+    val sc = new ErgoStateContext(Seq.empty, None, genesisStateDigest, ps, ErgoValidationSettings.initial,
+      VotingData.empty)(settings.chainSettings.voting)
+      .upcoming(org.ergoplatform.mining.group.generator,
+        0L,
+        settings.chainSettings.initialNBits,
+        Array.fill(3)(0.toByte),
+        ErgoValidationSettingsUpdate.empty,
+        0.toByte)
+    val (_, time) = BenchmarkUtil.measureTime(
+      tx.statefulValidity(from, IndexedSeq(), sc)(verifier)
+    )
 
     assert(time > Timeout)
+  }
+
+  property("transaction cost") {
+    def stateContextWithMaxCost(manualCost: Int): UpcomingStateContext = {
+      val table2: Map[Byte, Int] = Parameters.DefaultParameters + (MaxBlockCostIncrease -> (manualCost))
+      val params2 = new Parameters(height = 0,
+        parametersTable = table2,
+        proposedUpdate = ErgoValidationSettingsUpdate.empty)
+      emptyStateContext.copy(currentParameters = params2)
+    }
+
+    val gen = validErgoTransactionGenTemplate(0, 0, 10, 10, trueLeafGen)
+    val (from, tx) = gen.sample.get
+    tx.statelessValidity.isSuccess shouldBe true
+
+    // calculate costs manually
+    val initialCost: Long =
+      tx.inputs.size * LaunchParameters.inputCost +
+        tx.dataInputs.size * LaunchParameters.dataInputCost +
+        tx.outputs.size * LaunchParameters.outputCost +
+        CostTable.interpreterInitCost
+    val (outAssets, outAssetsNum) = tx.outAssetsTry.get
+    val (inAssets, inAssetsNum) = ErgoTransaction.extractAssets(from).get
+    val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * LaunchParameters.tokenAccessCost +
+      (inAssets.size + outAssets.size) * LaunchParameters.tokenAccessCost
+    val scriptsValidationCosts = tx.inputs.size * (CostTable.constCost + CostTable.logicCost + CostTable.logicCost + from.head.ergoTree.complexity)
+    val manualCost: Int = (initialCost + totalAssetsAccessCost + scriptsValidationCosts).toInt
+
+
+    // check that validation pass if cost limit equals to manually calculated cost
+    val sc = stateContextWithMaxCost(manualCost)
+    sc.currentParameters.maxBlockCost shouldBe manualCost
+    val calculatedCost = tx.statefulValidity(from, IndexedSeq(), sc)(ErgoInterpreter(sc.currentParameters)).get
+    manualCost shouldBe calculatedCost
+
+    // transaction exceeds computations limit
+    val sc2 = stateContextWithMaxCost(manualCost - 1)
+    tx.statefulValidity(from, IndexedSeq(), sc2)(ErgoInterpreter(sc2.currentParameters)) shouldBe 'failure
+
+    // transaction exceeds computations limit due to non-zero accumulated cost
+    tx.statefulValidity(from, IndexedSeq(), sc, 1)(ErgoInterpreter(sc.currentParameters)) shouldBe 'failure
+
+  }
+
+  private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Long): ErgoBoxCandidate = {
+    new ErgoBoxCandidate(
+      boxCandidate.value + delta,
+      boxCandidate.ergoTree,
+      boxCandidate.creationHeight,
+      boxCandidate.additionalTokens,
+      boxCandidate.additionalRegisters)
+  }
+
+  private def modifyAsset(boxCandidate: ErgoBoxCandidate,
+                          deltaFn: Long => Long,
+                          idToskip: TokenId): ErgoBoxCandidate = {
+    val assetId = boxCandidate.additionalTokens.find(t => !java.util.Arrays.equals(t._1, idToskip)).get._1
+
+    val tokens = boxCandidate.additionalTokens.map { case (id, amount) =>
+      if (java.util.Arrays.equals(id, assetId)) assetId -> deltaFn(amount) else assetId -> amount
+    }
+
+    new ErgoBoxCandidate(
+      boxCandidate.value,
+      boxCandidate.ergoTree,
+      boxCandidate.creationHeight,
+      tokens,
+      boxCandidate.additionalRegisters)
+  }
+
+  private def checkTx(from: IndexedSeq[ErgoBox], wrongTx: ErgoTransaction): Try[Long] = {
+    wrongTx.statelessValidity.flatMap(_ => wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext))
   }
 
 }

@@ -5,7 +5,7 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext, VotingData}
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
-import org.ergoplatform.settings.ValidationRules.bsBlockTransactionsCost
+import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txBoxSize}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -19,6 +19,7 @@ import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArra
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
+import sigmastate.utxo.CostTable
 
 import scala.util.{Random, Try}
 
@@ -272,7 +273,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
     val validFailure = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext)
-    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "").take(30))
+    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(txBoxSize, "").take(30))
 
   }
 
@@ -341,13 +342,15 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     val initialCost: Long =
       tx.inputs.size * LaunchParameters.inputCost +
         tx.dataInputs.size * LaunchParameters.dataInputCost +
-        tx.outputs.size * LaunchParameters.outputCost
+        tx.outputs.size * LaunchParameters.outputCost +
+        CostTable.interpreterInitCost
     val (outAssets, outAssetsNum) = tx.outAssetsTry.get
     val (inAssets, inAssetsNum) = ErgoTransaction.extractAssets(from).get
     val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * LaunchParameters.tokenAccessCost +
       (inAssets.size + outAssets.size) * LaunchParameters.tokenAccessCost
-    val scriptsValidationCosts = tx.inputs.size * 5
+    val scriptsValidationCosts = tx.inputs.size * (CostTable.constCost + CostTable.logicCost + CostTable.logicCost + from.head.ergoTree.complexity)
     val manualCost: Int = (initialCost + totalAssetsAccessCost + scriptsValidationCosts).toInt
+
 
     // check that validation pass if cost limit equals to manually calculated cost
     val sc = stateContextWithMaxCost(manualCost)

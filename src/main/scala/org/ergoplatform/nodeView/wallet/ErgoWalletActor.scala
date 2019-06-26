@@ -28,6 +28,7 @@ import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ContextExtension
+import sigmastate.utxo.CostTable
 
 import scala.util.{Failure, Random, Success, Try}
 
@@ -104,17 +105,20 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
 
     case ScanOnChain(block) =>
-      val (outputs, inputs) = block.transactions
-        .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, EncodedBoxId)]) {
-          case ((outAcc, inAcc), tx) =>
-            (outAcc ++ extractOutputs(tx).map(tx.id -> _), inAcc ++ extractInputs(tx).map(tx.id -> _))
+      val (outputs, inputs, txs) = block.transactions
+        .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, EncodedBoxId)],
+          Seq.empty[ErgoTransaction]) { case ((outAcc, inAcc, txsAcc), tx) =>
+          val outputs = extractOutputs(tx)
+          val inputs = extractInputs(tx)
+          val txs = if (outputs.size + inputs.size > 0) txsAcc :+ tx else txsAcc
+          (outAcc ++ outputs.map(tx.id -> _), inAcc ++ inputs.map(tx.id -> _), txs)
         }
-      if (outputs.nonEmpty || inputs.nonEmpty) {
+      if (txs.nonEmpty) {
         if (proverOpt.isDefined) {
-          processBlock(block.id, block.height, inputs, outputs)
+          processBlock(block.id, block.height, inputs, outputs, txs)
         } else if (walletSettings.postponedScanning) {
           // save wallet-critical data from block to process it later.
-          val postponedBlock = PostponedBlock(block.id, block.height, inputs, outputs)
+          val postponedBlock = PostponedBlock(block.id, block.height, txs)
           storage.putBlock(postponedBlock)
         }
       }
@@ -142,11 +146,15 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         sender() ! Failure(new Exception("Wallet is locked"))
       }
 
-    case GetBoxes =>
+    case GetBoxes(unspent) =>
       val currentHeight = height
-      sender() ! registry.readCertainUnspentBoxes.map { tb =>
-        WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _))
-      }
+      sender() ! (if (unspent) registry.readCertainUnspentBoxes else registry.readCertainBoxes)
+        .map(tb => WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _)))
+        .sortBy(_.trackedBox.inclusionHeightOpt)
+
+    case GetTransactions =>
+      sender() ! registry.readTransactions
+        .sortBy(-_.inclusionHeight)
 
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))
@@ -261,7 +269,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     )
 
     val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx, selfIndex = 0)
-    val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty, parameters.maxBlockCost)
+    val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty,
+      parameters.maxBlockCost, CostTable.interpreterInitCost)
 
     proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined
   }
@@ -369,7 +378,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def processBlock(id: ModifierId,
                            height: Int,
                            inputs: Seq[(ModifierId, EncodedBoxId)],
-                           outputs: Seq[(ModifierId, ErgoBox)]): Unit = {
+                           outputs: Seq[(ModifierId, ErgoBox)],
+                           txs: Seq[ErgoTransaction]): Unit = {
     // re-create interpreter in order to avoid IR context bloating.
     proverOpt = proverOpt.map(oldInterpreter => ErgoProvingInterpreter(oldInterpreter.secretKeys, parameters))
     val prevUncertainBoxes = registry.readUncertainBoxes
@@ -383,10 +393,23 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
     }
 
-    registry.updateOnBlock(resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs)(id, height)
+    val walletTxs = txs.map(WalletTransaction(_, height))
+
+    registry.updateOnBlock(resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs, walletTxs)(id, height)
 
     val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedBoxId(x.box.id))
     offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)
+  }
+
+  private def processBlock(id: ModifierId,
+                           height: Int,
+                           txs: Seq[ErgoTransaction]): Unit = {
+    val (outputs, inputs) = txs
+      .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, EncodedBoxId)]) {
+        case ((outAcc, inAcc), tx) =>
+          (outAcc ++ extractOutputs(tx).map(tx.id -> _), inAcc ++ extractInputs(tx).map(tx.id -> _))
+      }
+    processBlock(id, height, inputs, outputs, txs)
   }
 
   private def processSecretAddition(secret: ExtendedSecretKey): Unit =
@@ -407,10 +430,10 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     val lastProcessedHeight = registry.readIndex.height
     storage.readLatestPostponedBlockHeight.foreach { lastPostponedHeight =>
       val blocks = storage.readBlocks(lastProcessedHeight, lastPostponedHeight)
-      blocks.sortBy(_.height).foreach { case PostponedBlock(id, height, inputs, outputs) =>
-        processBlock(id, height, inputs, outputs)
+      blocks.sortBy(_.height).foreach { case PostponedBlock(id, height, txs) =>
+        processBlock(id, height, txs)
       }
-      // remove processed blocks from storage.
+      // remove processed blocks from the storage.
       storage.removeBlocks(lastProcessedHeight, lastPostponedHeight)
     }
   }
@@ -499,6 +522,10 @@ object ErgoWalletActor {
 
   final case class DeriveKey(path: String)
 
+  final case class GetBoxes(unspentOnly: Boolean)
+
+  case object GetTransactions
+
   case object DeriveNextKey
 
   case object LockWallet
@@ -508,7 +535,5 @@ object ErgoWalletActor {
   case object ReadTrackedAddresses
 
   case object GetFirstSecret
-
-  case object GetBoxes
 
 }

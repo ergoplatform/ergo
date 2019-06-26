@@ -5,6 +5,7 @@ import java.io.File
 import io.iohk.iodb.Store.VersionID
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.modifiers.history.PreGenesisHeader
+import org.ergoplatform.nodeView.wallet.WalletTransaction
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA.RegistryOp
 import org.ergoplatform.settings.{ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.boxes.TrackedBox
@@ -28,6 +29,9 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
   def readIndex: RegistryIndex =
     getIndex.transact(store)
 
+  def readTransactions: Seq[WalletTransaction] =
+    getAllTxs.transact(store)
+
   def readCertainUnspentBoxes: Seq[TrackedBox] = {
     val query = for {
       allBoxes <- getAllBoxes
@@ -37,6 +41,17 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
       allBoxes.filterNot(b =>
         uncertainIds.contains(encodedBoxId(b.box.id)) || b.spendingHeightOpt.isDefined
       )
+    }
+    query.transact(store)
+  }
+
+  def readCertainBoxes: Seq[TrackedBox] = {
+    val query = for {
+      allBoxes <- getAllBoxes
+      index <- getIndex
+    } yield {
+      val uncertainIds = index.uncertainBoxes
+      allBoxes.filterNot(b => uncertainIds.contains(encodedBoxId(b.box.id)))
     }
     query.transact(store)
   }
@@ -57,10 +72,11 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
     * Updates indexes according to a data extracted from a block and performs versioned update.
     */
   def updateOnBlock(certainBxs: Seq[TrackedBox], uncertainBxs: Seq[TrackedBox],
-                    inputs: Seq[(ModifierId, EncodedBoxId)])
+                    inputs: Seq[(ModifierId, EncodedBoxId)], txs: Seq[WalletTransaction])
                    (blockId: ModifierId, blockHeight: Int): Unit = {
     val update = for {
       _ <- putBoxes(certainBxs ++ uncertainBxs)
+      _ <- putTxs(txs)
       spentBoxesWithTx <- getAllBoxes.map(_.flatMap(bx =>
         inputs.find(_._2 == encodedBoxId(bx.box.id)).map { case (txId, _) => txId -> bx })
       )

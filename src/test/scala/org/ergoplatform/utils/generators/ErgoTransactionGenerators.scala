@@ -5,10 +5,13 @@ import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
+import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
+import org.ergoplatform.nodeView.wallet.WalletTransaction
+import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
+import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -16,15 +19,12 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate._
-import sigmastate.eval._
 import sigmastate.eval.Extensions._
-import org.ergoplatform.settings.Parameters._
-import org.ergoplatform.utils.BoxUtils
+import sigmastate.eval._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
-
 
 trait ErgoTransactionGenerators extends ErgoGenerators {
 
@@ -126,6 +126,11 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     dataInputs: IndexedSeq[DataInput] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, dataInputGen).map(_.toIndexedSeq))
     to: IndexedSeq[ErgoBoxCandidate] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, ergoBoxCandidateGen).map(_.toIndexedSeq))
   } yield ErgoTransaction(from, dataInputs, to)
+
+  lazy val walletTransactionGen: Gen[WalletTransaction] = for {
+    tx <- invalidErgoTransactionGen
+    inclusionHeight <- Gen.posNum[Int]
+  } yield WalletTransaction(tx, inclusionHeight)
 
   /**
     * Generates a transaction that is valid if correct boxes were provided.

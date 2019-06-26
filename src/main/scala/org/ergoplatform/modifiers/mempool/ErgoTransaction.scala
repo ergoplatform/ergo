@@ -282,13 +282,13 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
 
   val MaxAssetsPerBox = 255
 
-  implicit private val extensionEncoder: Encoder[ContextExtension] = { extension =>
+  implicit val extensionEncoder: Encoder[ContextExtension] = { extension =>
     extension.values.map { case (key, value) =>
       key -> evaluatedValueEncoder(value)
     }.asJson
   }
 
-  implicit private val inputEncoder: Encoder[Input] = { input =>
+  implicit val inputEncoder: Encoder[Input] = { input =>
     Json.obj(
       "boxId" -> input.boxId.asJson,
       "spendingProof" -> Json.obj(
@@ -298,7 +298,7 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
     )
   }
 
-  implicit private val dataInputEncoder: Encoder[DataInput] = { input =>
+  implicit val dataInputEncoder: Encoder[DataInput] = { input =>
     Json.obj(
       "boxId" -> input.boxId.asJson,
     )
@@ -311,14 +311,14 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
     } yield ProverResult(proofBytes, ContextExtension(extMap))
   }
 
-  implicit private val inputDecoder: Decoder[Input] = { cursor =>
+  implicit val inputDecoder: Decoder[Input] = { cursor =>
     for {
       boxId <- cursor.downField("boxId").as[ADKey]
       proof <- cursor.downField("spendingProof").as[ProverResult]
     } yield Input(boxId, proof)
   }
 
-  implicit private val dataInputDecoder: Decoder[DataInput] = { cursor =>
+  implicit val dataInputDecoder: Decoder[DataInput] = { cursor =>
     for {
       boxId <- cursor.downField("boxId").as[ADKey]
     } yield DataInput(boxId)
@@ -331,7 +331,7 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
     } yield (tokenId, amount)
   }
 
-  implicit private val outputDecoder: Decoder[(ErgoBoxCandidate, Option[BoxId])] = { cursor =>
+  implicit val outputDecoder: Decoder[(ErgoBoxCandidate, Option[BoxId])] = { cursor =>
     for {
       maybeId <- cursor.downField("boxId").as[Option[BoxId]]
       value <- cursor.downField("value").as[Long]

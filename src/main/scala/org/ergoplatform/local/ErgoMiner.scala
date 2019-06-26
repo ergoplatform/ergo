@@ -105,7 +105,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case QueryWallet =>
       val callback = self
       viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        v.vault.firstSecret().onComplete(
+        v.vault.firstSecret.onComplete(
           _.foreach {
             _.fold(
               _ => {

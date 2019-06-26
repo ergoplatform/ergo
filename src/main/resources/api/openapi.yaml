@@ -182,6 +182,42 @@ components:
           type: integer
           format: int32
 
+    WalletTransaction:
+      type: object
+      description: Transaction without any lockers and unlockers
+      required:
+        - inputs
+        - dataInputs
+        - outputs
+        - inclusionHeight
+      properties:
+        id:
+          $ref: '#/components/schemas/TransactionId'
+        inputs:
+          description: Many transaction inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionInput'
+        dataInputs:
+          description: Many transaction data inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
+        outputs:
+          description: Many transaction outputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+        inclusionHeight:
+          description: Height of a block the transaction was included in
+          type: integer
+          format: int32
+          example: 20998
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
+
     ErgoAddress:
       description: Encoded Ergo Address
       type: string
@@ -1683,6 +1719,90 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BalancesSnapshot'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/transactions:
+    parameters:
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Mininal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get a list of all wallet-related transactions
+      operationId: walletTransactions
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: A list of all wallet-related transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletTransaction'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/boxes:
+    parameters:
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal number of confirmations
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Mininal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get a list of all wallet-related boxes
+      operationId: walletBoxes
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: A list of all wallet-related boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBox'
         default:
           description: Error
           content:

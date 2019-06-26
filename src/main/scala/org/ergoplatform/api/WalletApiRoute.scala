@@ -105,7 +105,10 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       .fold(_ => reject, s => provide(s))
   }
 
-  private val boxFilters: Directive[(Int, Int)] =
+  private val txParams: Directive[(Int, Int)] =
+    parameters("minInclusionHeight".as[Int] ? 0, "maxInclusionHeight".as[Int] ? Int.MaxValue)
+
+  private val boxParams: Directive[(Int, Int)] =
     parameters("minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)
 
   private val boxPredicate = { (bx: WalletBox, minConfNum: Int, minHeight: Int) =>
@@ -217,7 +220,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet(_.trackedAddresses)
   }
 
-  def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxFilters) { (minConfNum, minHeight) =>
+  def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) { (minConfNum, minHeight) =>
     withWallet {
       _.boxes(unspentOnly = true)
         .map {
@@ -226,7 +229,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
-  def boxesR: Route = (path("boxes") & get & boxFilters) { (minConfNum, minHeight) =>
+  def boxesR: Route = (path("boxes") & get & boxParams) { (minConfNum, minHeight) =>
     withWallet {
       _.boxes()
         .map {
@@ -235,8 +238,13 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
-  def transactionR: Route = (path("transactions") & get) {
-    withWallet(_.transactions)
+  def transactionR: Route = (path("transactions") & get & txParams) { case (minHeight, maxHeight) =>
+    withWallet {
+      _.transactions
+        .map {
+          _.filter(tx => tx.inclusionHeight >= minHeight && tx.inclusionHeight <= maxHeight)
+        }
+    }
   }
 
   def initWalletR: Route = (path("init") & post & initRequest) {

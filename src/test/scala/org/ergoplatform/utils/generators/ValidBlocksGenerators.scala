@@ -19,7 +19,7 @@ import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Random, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 trait ValidBlocksGenerators
   extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
@@ -56,12 +56,13 @@ trait ValidBlocksGenerators
     var createdEmissionBox: Seq[ErgoBox] = Seq()
 
     @tailrec
-    def loop(stateBoxes: Seq[ErgoBox],
+    def loop(remainingCost: Long,
+             stateBoxes: Seq[ErgoBox],
              selfBoxes: Seq[ErgoBox],
              acc: Seq[ErgoTransaction],
              rnd: Random): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
 
-      def getDataBoxes(): IndexedSeq[ErgoBox] = {
+      lazy val dataBoxesToUse: IndexedSeq[ErgoBox] = {
         rnd.shuffle(dataBoxesIn ++ stateBoxesIn ++ selfBoxes).take(rnd.nextInt(10)).toIndexedSeq
       }
 
@@ -80,39 +81,51 @@ trait ValidBlocksGenerators
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
           createdEmissionBox = outs.filter(b => isEmissionBox(b))
           val newSelfBoxes = selfBoxes ++ outs.filter(b => !isEmissionBox(b))
-          loop(remainedBoxes, newSelfBoxes, rewards ++ acc, rnd)
+          val cost: Long = getTxCost(rewards.head, Seq(emissionBox), Seq())
+          loop(remainingCost - cost, remainedBoxes, newSelfBoxes, rewards ++ acc, rnd)
 
         case _ =>
-          if (currentSize < sizeLimit - 2 * averageSize) {
-            val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(selfBoxes.size) + 1).getOrElse(0))
-            val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(stateBoxes.size) + 1).getOrElse(0))
+          if (currentSize < sizeLimit - 2 * averageSize && remainingCost > 100000) {
+            val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(Try(rnd.nextInt(2) + 1).getOrElse(0))
+            val (consumedBoxesFromState, remainedBoxes) = stateBoxes.splitAt(Try(rnd.nextInt(2) + 1).getOrElse(0))
             // disable tokens generation to avoid situation with too many tokens
             val boxesToSpend = (consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq
-            val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = getDataBoxes)
+            val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = dataBoxesToUse)
             tx.statelessValidity match {
               case Failure(e) =>
                 log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
-                loop(stateBoxes, selfBoxes, acc, rnd)
+                loop(remainingCost, stateBoxes, selfBoxes, acc, rnd)
               case _ =>
-                loop(remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
+                val cost: Long = getTxCost(tx, boxesToSpend, dataBoxesToUse)
+                loop(remainingCost - cost, remainedBoxes, remainedSelfBoxes ++ tx.outputs, tx +: acc, rnd)
             }
           } else {
-            // take all remaining boxes from state and return transactions set
+            // take 2 remaining box from state and return transactions set
             val (consumedSelfBoxes, remainedSelfBoxes) = selfBoxes.splitAt(1)
+            val boxesToSpend = if(stateBoxes.nonEmpty) stateBoxes.take(2) else consumedSelfBoxes
 
-            val tx = validTransactionFromBoxes((consumedSelfBoxes ++ stateBoxes).toIndexedSeq, rnd, issueNew, dataBoxes = getDataBoxes)
+            val tx = validTransactionFromBoxes(boxesToSpend.toIndexedSeq, rnd, issueNew, dataBoxes = dataBoxesToUse)
+            val cost: Long = getTxCost(tx, boxesToSpend, dataBoxesToUse)
             tx.statelessValidity match {
+              case Success(_) if cost <= remainingCost =>
+                ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
               case Failure(e) =>
                 log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
-                loop(stateBoxes, selfBoxes, acc, rnd)
-              case _ =>
-                ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
+                loop(remainingCost, stateBoxes, selfBoxes, acc, rnd)
             }
           }
       }
     }
 
-    loop(stateBoxesIn, Seq.empty, Seq.empty, rnd)
+    loop(emptyStateContext.currentParameters.maxBlockCost, stateBoxesIn, Seq.empty, Seq.empty, rnd)
+  }
+
+  protected def getTxCost(tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxesToUse: Seq[ErgoBox]): Long = {
+    tx.statefulValidity(
+      tx.inputs.flatMap(i => boxesToSpend.find(_.id == i.boxId)),
+      tx.dataInputs.flatMap(i => dataBoxesToUse.find(_.id == i.boxId)),
+      emptyStateContext,
+      -20000000)(emptyVerifier).getOrElse(0L)
   }
 
   /**
@@ -139,7 +152,7 @@ trait ValidBlocksGenerators
 
 
   def validTransactionsFromUtxoState(wus: WrappedUtxoState, rnd: Random = new Random): Seq[ErgoTransaction] = {
-    val num = 1 + rnd.nextInt(10)
+    val num = 1 + rnd.nextInt(3)
 
     val allBoxes = wus.takeBoxes(num + rnd.nextInt(100))
     val anyoneCanSpendBoxes = allBoxes.filter(_.ergoTree == Constants.TrueLeaf)

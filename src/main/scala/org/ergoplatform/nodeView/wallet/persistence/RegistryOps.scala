@@ -6,9 +6,12 @@ import cats.free.Free.liftF
 import cats.~>
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox.BoxId
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
+import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA._
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import scorex.crypto.hash.Blake2b256
+import scorex.util.{ModifierId, idToBytes}
 
 import scala.language.implicitConversions
 
@@ -83,6 +86,20 @@ object RegistryOps {
       }
     }
 
+  def putTx(tx: WalletTransaction): RegistryOp[Unit] =
+    liftF[RegistryOpA, Unit](PutTx(tx))
+
+  def putTxs(txs: Seq[WalletTransaction]): RegistryOp[Unit] =
+    txs.foldLeft(Free.pure[RegistryOpA, Unit](())) { case (acc, tx) =>
+      acc.flatMap(_ => putTx(tx))
+    }
+
+  def getAllTxs: RegistryOp[Seq[WalletTransaction]] =
+    liftF[RegistryOpA, Seq[WalletTransaction]](GetAllTxs)
+
+  def removeTxs(ids: Seq[ModifierId]): RegistryOp[Unit] =
+    liftF[RegistryOpA, Unit](RemoveTxs(ids))
+
   def putIndex(index: RegistryIndex): RegistryOp[Unit] =
     liftF[RegistryOpA, Unit](PutIndex(index))
 
@@ -98,12 +115,12 @@ object RegistryOps {
         case PutBox(box) =>
           State.modify { case (toInsert, toRemove) =>
             val boxBytes = TrackedBoxSerializer.toBytes(box)
-            (toInsert :+ (key(box), boxBytes), toRemove)
+            (toInsert :+ (key(box), BoxPrefix +: boxBytes), toRemove)
           }
         case GetBox(id) =>
           State.inspect { _ =>
             store.get(ByteArrayWrapper(id))
-              .flatMap(r => TrackedBoxSerializer.parseBytesTry(r.data).toOption)
+              .flatMap(r => TrackedBoxSerializer.parseBytesTry(r.data.tail).toOption)
               .asInstanceOf[A]
           }
         case GetBoxes(ids) =>
@@ -111,7 +128,7 @@ object RegistryOps {
             ids
               .map { id => store.get(ByteArrayWrapper(id))
                 .flatMap { x =>
-                  TrackedBoxSerializer.parseBytesTry(x.data).toOption
+                  TrackedBoxSerializer.parseBytesTry(x.data.tail).toOption
                 }
               }
               .asInstanceOf[A]
@@ -119,14 +136,33 @@ object RegistryOps {
         case GetAllBoxes =>
           State.inspect { _ =>
             store.getAll()
-              .filterNot(_._1 == ByteArrayWrapper(RegistryIndexKey))
+              .filterNot(x => x._1 == ByteArrayWrapper(RegistryIndexKey) || x._2.data.head == TxPrefix)
               .flatMap { case (_, boxBytes) =>
-                TrackedBoxSerializer.parseBytesTry(boxBytes.data).toOption
+                TrackedBoxSerializer.parseBytesTry(boxBytes.data.tail).toOption
               }
               .toSeq
               .asInstanceOf[A]
           }
         case RemoveBoxes(ids) =>
+          State.modify { case (toInsert, toRemove) =>
+            (toInsert, toRemove ++ ids.map(key))
+          }
+        case PutTx(wtx) =>
+          State.modify { case (toInsert, toRemove) =>
+            val txBytes = WalletTransactionSerializer.toBytes(wtx)
+            (toInsert :+ (key(wtx.id), TxPrefix +: txBytes), toRemove)
+          }
+        case GetAllTxs =>
+          State.inspect { _ =>
+            store.getAll()
+              .filterNot(x => x._1 == ByteArrayWrapper(RegistryIndexKey) || x._2.data.head == BoxPrefix)
+              .flatMap { case (_, txBytes) =>
+                WalletTransactionSerializer.parseBytesTry(txBytes.data.tail).toOption
+              }
+              .toSeq
+              .asInstanceOf[A]
+          }
+        case RemoveTxs(ids) =>
           State.modify { case (toInsert, toRemove) =>
             (toInsert, toRemove ++ ids.map(key))
           }
@@ -147,8 +183,14 @@ object RegistryOps {
 
   private val RegistryIndexKey: Array[Byte] = Blake2b256.hash("reg_index")
 
+  private val BoxPrefix: Byte = 0x00
+
+  private val TxPrefix: Byte = 0x01
+
   private def key(trackedBox: TrackedBox): Array[Byte] = trackedBox.box.id
 
   private def key(id: BoxId): Array[Byte] = id
+
+  private def key(id: ModifierId): Array[Byte] = idToBytes(id)
 
 }

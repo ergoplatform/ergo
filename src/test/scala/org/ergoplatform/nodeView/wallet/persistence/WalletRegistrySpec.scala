@@ -44,6 +44,16 @@ class WalletRegistrySpec
     }
   }
 
+  it should "read transactions" in {
+    forAll(walletTransactionGen) { wtx =>
+      val store = createStore
+      putTx(wtx).transact(store)
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+
+      registry.readTransactions shouldBe Seq(wtx)
+    }
+  }
+
   it should "update historical boxes when `keepSpentBoxes = true`" in {
     val ws = settings.walletSettings.copy(keepSpentBoxes = true)
     val spendingHeight = 0

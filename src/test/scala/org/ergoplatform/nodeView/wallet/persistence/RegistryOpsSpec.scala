@@ -46,6 +46,24 @@ class RegistryOpsSpec
     }
   }
 
+  property("putTx/getAllTx/removeTxs") {
+    forAll(walletTransactionGen) { wtx =>
+      val store = createStore
+      putTx(wtx).transact(store)
+      getAllTxs.transact(store) shouldEqual Seq(wtx)
+      removeTxs(Seq(wtx.id)).transact(store)
+      getAllTxs.transact(store) should not contain wtx
+    }
+  }
+
+  property("putTxs/getAllTxs") {
+    forAll(Gen.listOf(walletTransactionGen)) { wtxs =>
+      val store = createStore
+      putTxs(wtxs).transact(store)
+      getAllTxs.transact(store) should contain theSameElementsAs wtxs
+    }
+  }
+
   property("putIndex/getIndex/updateIndex") {
     forAll(registryIndexGen) { index =>
       val store = createStore

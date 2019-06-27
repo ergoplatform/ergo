@@ -89,7 +89,7 @@ class TransactionGenerator(viewHolder: ActorRef,
     val feeAmount = Math.max(minimalErgoAmount, settings.nodeSettings.minimalFeeAmount)
     val feeReq = PaymentRequest(Pay2SAddress(feeProp), feeAmount, None, None)
 
-    val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances().map { balances =>
+    val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances.map { balances =>
       Random.nextInt(100) match {
         case i if i < 70 =>
           Some(PaymentRequest(randProposition, math.min(randAmount, balances.balance - feeReq.value), None, None))

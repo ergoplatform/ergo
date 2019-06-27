@@ -5,10 +5,13 @@ import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.modifiers.state.{Insertion, StateChanges, UTXOSnapshotChunk}
+import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
-import org.ergoplatform.settings.{Constants, LaunchParameters}
+import org.ergoplatform.nodeView.wallet.WalletTransaction
+import org.ergoplatform.settings.Parameters._
+import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
+import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -16,14 +19,12 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate._
-import sigmastate.eval._
 import sigmastate.eval.Extensions._
-import org.ergoplatform.settings.Parameters._
+import sigmastate.eval._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
-
 
 trait ErgoTransactionGenerators extends ErgoGenerators {
 
@@ -52,7 +53,15 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     ar <- additionalRegistersGen
     tokens <- tokensGen
     value <- valueGenOpt.getOrElse(validValueGen(prop, tokens, ar, transactionId.toModifierId, boxId))
-  } yield ErgoBox(value, prop, h, tokens, ar, transactionId.toModifierId, boxId)
+  } yield {
+    val box = ErgoBox(value, prop, h, tokens, ar, transactionId.toModifierId, boxId)
+    if (box.bytes.size < ErgoBox.MaxBoxSize) {
+      box
+    } else {
+      // is size limit is reached, generate box without registers and tokens
+      ErgoBox(value, prop, h, Seq(), Map(), transactionId.toModifierId, boxId)
+    }
+  }
 
   lazy val ergoBoxGen: Gen[ErgoBox] = ergoBoxGen()
 
@@ -90,11 +99,11 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield v.asInstanceOf[EvaluatedValue[SType]]
 
   def additionalTokensGen: Gen[Seq[(TokenId, Long)]] = for {
-    cnt <- Gen.chooseNum[Byte](0, ErgoBox.MaxTokens)
+    cnt <- Gen.chooseNum[Int](0, 10)
     assets <- additionalTokensGen(cnt)
   } yield assets
 
-  def additionalTokensGen(cnt: Byte): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
+  def additionalTokensGen(cnt: Int): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
 
   def assetGen: Gen[(TokenId, Long)] = for {
     id <- boxIdGen
@@ -110,11 +119,18 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     boxId <- boxIdGen
   } yield DataInput(boxId)
 
+  lazy val reallySmallInt: Gen[Int] = Gen.choose(0, 3)
+
   lazy val invalidErgoTransactionGen: Gen[ErgoTransaction] = for {
-    from: IndexedSeq[Input] <- smallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
-    dataInputs: IndexedSeq[DataInput] <- smallInt.flatMap(i => Gen.listOfN(i + 1, dataInputGen).map(_.toIndexedSeq))
-    to: IndexedSeq[ErgoBoxCandidate] <- smallInt.flatMap(i => Gen.listOfN(i + 1, ergoBoxCandidateGen).map(_.toIndexedSeq))
+    from: IndexedSeq[Input] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
+    dataInputs: IndexedSeq[DataInput] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, dataInputGen).map(_.toIndexedSeq))
+    to: IndexedSeq[ErgoBoxCandidate] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, ergoBoxCandidateGen).map(_.toIndexedSeq))
   } yield ErgoTransaction(from, dataInputs, to)
+
+  lazy val walletTransactionGen: Gen[WalletTransaction] = for {
+    tx <- invalidErgoTransactionGen
+    inclusionHeight <- Gen.posNum[Int]
+  } yield WalletTransaction(tx, inclusionHeight)
 
   /**
     * Generates a transaction that is valid if correct boxes were provided.
@@ -141,7 +157,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
       assetsMap.put(ByteArrayWrapper(boxesToSpend.head.id), rnd.nextInt(Int.MaxValue))
     }
 
-    val minValue = LaunchParameters.minValuePerByte * 200 //assuming that output is 200 bytes max
+    val minValue = BoxUtils.sufficientAmount(LaunchParameters)
 
     require(inputSum >= minValue)
     val inputsCount = boxesToSpend.size
@@ -252,7 +268,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
     headerId <- modifierIdGen
     txs <- Gen.nonEmptyListOf(invalidErgoTransactionGen)
-  } yield BlockTransactions(headerId, txs)
+  } yield BlockTransactions(headerId, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
+    if ((acc :+ tx).map(_.size).sum < (Parameters.MaxBlockSizeDefault - 150)) acc :+ tx else acc))
 
   lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
     index: Short <- Arbitrary.arbitrary[Short]
@@ -282,8 +299,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield {
     blocks match {
       case _ :: _ =>
-        blocks.foldLeft(
-          new ErgoStateContext(Seq(), None, startDigest, parameters, validationSettingsNoIl, VotingData.empty) -> 1) { case ((c, h), b) =>
+        val sc = new ErgoStateContext(Seq(), None, startDigest, parameters, validationSettingsNoIl, VotingData.empty)
+        blocks.foldLeft(sc -> 1) { case ((c, h), b) =>
           val block = b.copy(header = b.header.copy(height = h, votes = votes(h - 1)))
           c.appendFullBlock(block, votingSettings).get -> (h + 1)
         }._1

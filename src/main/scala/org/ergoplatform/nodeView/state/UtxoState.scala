@@ -80,7 +80,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       .orElse(boxById(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
 
-    val txProcessing = execTransactions(transactions, currentStateContext)(checkBoxExistence)
+    val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
       persistentProver.synchronized {
         val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
@@ -194,7 +194,9 @@ object UtxoState {
                     dir: File,
                     constants: StateConstants): UtxoState = {
     val p = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
-    bh.sortedBoxes.foreach(b => p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess))
+    bh.sortedBoxes.foreach { b =>
+      p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess)
+    }
 
     val store = new LSMStore(dir, keepVersions = constants.keepVersions)
 
@@ -211,6 +213,7 @@ object UtxoState {
     ).get
 
     new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
+
   }
 
 }

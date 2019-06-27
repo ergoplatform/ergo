@@ -39,6 +39,7 @@ object ConfigGenerator extends App with ErgoTestHelpers {
        |ergo.node.mining = ${if (mining) "true" else "false"}
        |ergo.node.offlineGeneration = true
        |ergo.node.useExternalMiner = false
+       |ergo.testing.transactionGeneration = true
        |ergo.wallet.testMnemonic = "$mnemonic"
        |ergo.wallet.testKeysQty = 10
        |scorex.restApi.apiKeyHash = "$apiKeyHash"

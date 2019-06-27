@@ -13,7 +13,7 @@ object WalletBox extends ApiCodecs {
 
   implicit val detalization: Detalization = ShowDetails
 
-  implicit def decoder(implicit ae: ErgoAddressEncoder): Encoder[WalletBox] = { obj =>
+  implicit def encoder(implicit ae: ErgoAddressEncoder): Encoder[WalletBox] = { obj =>
     obj.trackedBox.asJson.deepMerge(
       Json.obj(
         "confirmationsNum" -> obj.confirmationsNumOpt.asJson,

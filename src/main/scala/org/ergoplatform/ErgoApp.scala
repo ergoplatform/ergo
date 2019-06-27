@@ -54,10 +54,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
           genesisStateDigestHex = genesisDigest
         )
       )
-    case Some(_) =>
-      log.warn("State is already initialized. Aborting ..")
-      sys.exit()
-    case None =>
+    case _ =>
       ergoSettings
   }
 
@@ -221,4 +218,5 @@ object ErgoApp extends ScorexLogging {
     Await.result(termination, 60.seconds)
     log.warn("Application has been terminated.")
   }
+
 }

@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentMo
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
-import org.ergoplatform.settings.{Algos, ChainSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.ScorexEncoding
@@ -170,7 +170,7 @@ trait ErgoHistoryReader
         .flatMap { id => typedModifierById[Header](id) }
         .filter(withFilter)
       if (nextLevelHeaders.isEmpty) {
-        acc.map(chain => chain.reverse)
+        acc.map(_.reverse)
       } else {
         val updatedChains = nextLevelHeaders.flatMap { h =>
           acc.find(chain => chain.nonEmpty && (h.parentId == chain.head.id)).map(c => h +: c)

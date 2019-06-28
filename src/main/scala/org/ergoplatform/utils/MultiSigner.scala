@@ -90,6 +90,10 @@ object MultiSigner extends App {
 
     println(tx.validateStateful(IndexedSeq(boxToSpend), IndexedSeq(), stateContext, 0).result.isValid)
 
+    println(tx.outputs.head.id)
+
     tx
   }
+
+
 }

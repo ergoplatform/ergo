@@ -68,7 +68,7 @@ object MultiSigner extends App {
   val stateContext = new ErgoStateContext(Seq(h), None, genesisStateDigest, LaunchParameters, ErgoValidationSettings.initial, VotingData.empty)
 
   val parameters = LaunchParameters
-  val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty, parameters.maxBlockCost)
+  val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty, parameters.maxBlockCost, 0)
 
   val msgToSign = undersignedTx.messageToSign
 

@@ -36,10 +36,10 @@ trait WalletTestOps extends NodeViewBaseOps {
     await(w.wallet.publicKeys(0, Int.MaxValue))
 
   def getConfirmedBalances(implicit w: WalletFixture): RegistryIndex =
-    await(w.wallet.confirmedBalances())
+    await(w.wallet.confirmedBalances)
 
   def getBalancesWithUnconfirmed(implicit w: WalletFixture): RegistryIndex =
-    await(w.wallet.balancesWithUnconfirmed())
+    await(w.wallet.balancesWithUnconfirmed)
 
   def scanningInterval(implicit ctx: Ctx): Long = ctx.settings.walletSettings.scanningInterval.toMillis
 

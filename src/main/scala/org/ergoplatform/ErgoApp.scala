@@ -54,10 +54,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
           genesisStateDigestHex = genesisDigest
         )
       )
-    case Some(_) =>
-      log.warn("State is already initialized. Aborting ..")
-      sys.exit()
-    case None =>
+    case _ =>
       ergoSettings
   }
 
@@ -119,7 +116,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
-    UtilsApiRoute(settings.restApi),
+    ErgoUtilsApiRoute(ergoSettings),
     PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
     InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
@@ -221,4 +218,5 @@ object ErgoApp extends ScorexLogging {
     Await.result(termination, 60.seconds)
     log.warn("Application has been terminated.")
   }
+
 }

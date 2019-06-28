@@ -10,8 +10,7 @@ object ArithUtils {
     if (((a ^ sum) & (b ^ sum)) < 0) Long.MaxValue else sum
   }
 
-  @inline def addExact(a: Long, b: Long, c: Long): Long = addExact(addExact(a, b), c)
-
+  def addExact(a: Long, b: Long, c: Long*): Long = c.foldLeft(addExact(a,b))((x, y) => addExact(x, y))
 
   /**
     * Multiply longs, returning Long.Max value if there was any long overflow

@@ -8,7 +8,7 @@ import io.circe.syntax._
 import io.circe.{Decoder, Json}
 import org.ergoplatform.api.WalletApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
+import org.ergoplatform.nodeView.wallet.{ErgoAddressJsonEncoder, WalletTransaction}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
 import org.ergoplatform.settings.{Args, Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
@@ -181,6 +181,51 @@ class WalletApiRouteSpec extends FlatSpec
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("derivationPath").as[String] shouldEqual Right(WalletActorStub.path.encoded)
       responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(WalletActorStub.address.toString)
+    }
+  }
+
+  it should "return all wallet boxes" in {
+    val minConfirmations = 15
+    val minInclusionHeight = 20
+    val postfix = s"/boxes?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
+    Get(prefix + postfix) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[Json]]
+      response.size shouldBe 2
+      response.head.hcursor.downField("confirmationsNum").as[Int].forall(_ >= minConfirmations) shouldBe true
+      response.head.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
+    }
+    Get(prefix + "/boxes") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[Json]]
+      response.size shouldBe 3
+    }
+  }
+
+  it should "return unspent wallet boxes" in {
+    val minConfirmations = 15
+    val minInclusionHeight = 20
+    val postfix = s"/boxes/unspent?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
+    Get(prefix + postfix) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[Json]]
+      response.size shouldBe 1
+      response.head.hcursor.downField("confirmationsNum").as[Int].forall(_ >= minConfirmations) shouldBe true
+      response.head.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
+    }
+    Get(prefix + "/boxes/unspent") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[Json]]
+      response.size shouldBe 2
+    }
+  }
+
+  it should "return wallet transactions" in {
+    Get(prefix + "/transactions") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[List[Json]]
+      response.size shouldBe 2
+      responseAs[Seq[WalletTransaction]] shouldEqual WalletActorStub.walletTxs
     }
   }
 

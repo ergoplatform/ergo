@@ -12,6 +12,10 @@ import special.collection.Coll
 
 object BoxUtils {
 
+  /** Minimal amount for transaction for a box of maximum size*/
+  @inline
+  def sufficientAmount(parameters: Parameters): Long = ErgoBox.MaxBoxSize * parameters.minValuePerByte
+
   /** Used when complete instance of ErgoBox is unavailable. */
   @inline
   def minimalErgoAmountSimulated(script: ErgoTree,

@@ -27,7 +27,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
   /**
-    * Validate transaction provided state context if specified
+    * Validate transaction against provided state context, if specified,
     * or state context from the previous block if not
     */
   def validateWithCost(tx: ErgoTransaction, stateContextOpt: Option[ErgoStateContext]): Try[Long] = {

@@ -31,6 +31,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   protected val config: NodeConfigurationSettings
 
+  protected val chainSettings: ChainSettings
+
   val powScheme: AutolykosPowScheme
 
   //Maximum time in future block header may contain
@@ -266,8 +268,11 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateEqualIds(hdrGenesisParent, header.parentId, Header.GenesisParentId)
         .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, (id: ModifierId) => id.equals(header.id))
         .validate(hdrGenesisHeight, header.height == GenesisHeight, header.toString)
+        .validateNoFailure(hdrPoW, powScheme.validate(header))
+        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, chainSettings.initialDifficulty)
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
         .validate(hdrTooOld, fullBlockHeight < config.keepVersions, heightOf(header.parentId).toString)
+        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .result
     }
 

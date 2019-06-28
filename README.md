@@ -79,7 +79,7 @@ Available versions can be found on [Ergo Docker image page](https://hub.docker.c
 
 This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf` and network flag `--<networkId>`. Every default config value would be overwritten with corresponding value in `myergo.conf`.
 
-This command also would store your data in `/path/on/host/to/ergo/data` on host system, and open ports `9030` (node communication) and `9053` (REST API) on host system. The `/path/on/host/to/ergo/data` directory must has `777` permissions or has owner/group numeric id equal to `9052` to be writable by container, as `ergo` user inside Docker image (reference with [Dockerfile](Dockerfile)).
+This command also would store your data in `/path/on/host/to/ergo/data` on host system, and open ports `9030` (node communication) and `9053` (REST API) on host system. The `/path/on/host/to/ergo/data` directory must has `777` permissions or has owner/group numeric id equal to `9052` to be writable by container, as `ergo` user inside Docker image (please refer with [Dockerfile](Dockerfile)).
 
 Ergo node works normally behind NAT, so you can keep closed your `9030` port, hence other nodes could not discover and connect to yours one, only your node could initiate connections.
 

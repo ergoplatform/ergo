@@ -46,11 +46,11 @@ scorex {
     # knownPeers = []
 
     # Network address
-    # bindAddress = "0.0.0.0:9020"
+    # bindAddress = "0.0.0.0:9030"
   }
   restApi {
     # Network address to bind to
-    # bindAddress = "0.0.0.0:9052"
+    # bindAddress = "0.0.0.0:9053"
 
     # Hex-encoded Blake2b256 hash of an API key. Should be 64-chars long Base16 string.
     # apiKeyHash = "1111"

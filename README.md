@@ -60,22 +60,30 @@ Available `networkId` options: `mainnet`, `testnet`, `devnet`.
 
 ## Docker Quick Start
 
-Ergo has officially supported Docker package. To run Ergo as a console application with logs in console:
+Ergo has officially supported Docker package. To run last Ergo version in mainnet as a console application with logs printed to console:
 
-    sudo docker run --rm -p 9020:9020 -p 9052:9052 -v ergo-testnet:/home/ergo/.ergo ergoplatform/ergo
+    sudo docker run --rm -p 9030:9030 -p 9053:9053 -v /path/on/host/to/ergo/data:/home/ergo/.ergo ergoplatform/ergo --mainnet
 
-This will connect to Ergo testnet with default config and open ports `9020` and `9052` on host system. All data will be stored in your named Docker volume `ergo-testnet`.
+This will connect to Ergo mainnet with default config and open ports `9030` and `9053` on host system. All data will be stored in your host directory `/path/on/host/to/ergo/data`.
 
-To run specific Ergo version as a service with custom config:
+To run specific Ergo version `<VERSION>` as a service with custom config `/path/on/host/system/to/myergo.conf`:
 
     sudo docker run -d \
-        -p 9020:9020 \
-        -p 9052:9052 \
-        -v ergo:/home/ergo/.ergo \
+        -p 9030:9030 \
+        -p 9053:9053 \
+        -v /path/on/host/to/ergo/data:/home/ergo/.ergo \
         -v /path/on/host/system/to/myergo.conf:/etc/myergo.conf \
-        ergoplatform/ergo:v2.0.3 --<networkId> -c /etc/myergo.conf
+        ergoplatform/ergo:<VERSION> --<networkId> -c /etc/myergo.conf
 
-This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf`. Every default config value would be overwritten with corresponding value in `myergo.conf`. This also would store your data in named Docker volume `ergo` (if you change default data location in your config file, do not forget mount `ergo` volume to new location in container) and open ports `9007` and `9052` on host system. Note that `9052` is used for API, so it is ok not to open it into whole Internet. Also, Ergo node works normally under NAT, so you can keep closed your `9007` port too, hence other nodes could not discover and connect to yours one, only your node could initiate connections.
+Available versions can be found on [Ergo Docker image page](https://hub.docker.com/r/ergoplatform/ergo/tags), for example, `v2.2.0`.
+
+This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf` and network flag `--<networkId>`. Every default config value would be overwritten with corresponding value in `myergo.conf`.
+
+This command also would store your data in `/path/on/host/to/ergo/data` on host system, and open ports `9030` (node communication) and `9053` (REST API) on host system. The `/path/on/host/to/ergo/data` directory must has `777` permissions or has owner/group numeric id equal to `9052` to be writable by container, as `ergo` user inside Docker image (please refer with [Dockerfile](Dockerfile)).
+
+Ergo node works normally behind NAT, so you can keep closed your `9030` port, hence other nodes could not discover and connect to yours one, only your node could initiate connections.
+
+It is also a good practice to keep closed REST API port `9053`, and connect to your node from inside another container in the same Docker network (this case not covered by this short quick start manual).
 
 ## Acknowledgements
 

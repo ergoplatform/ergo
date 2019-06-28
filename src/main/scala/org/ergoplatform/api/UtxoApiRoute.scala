@@ -31,4 +31,10 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     )
   }
 
+  def genesis: Route = (get & path("genesis")) {
+    ApiResponse(
+      getState.map(_.genesisboxes)
+    )
+  }
+
 }

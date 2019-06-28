@@ -18,7 +18,7 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
   private def getState: Future[ErgoStateReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.s)
 
   override val route: Route = pathPrefix("utxo") {
-    byId
+    byId ~ genesis
   }
 
   def byId: Route = (get & path("byId" / Segment)) { id =>

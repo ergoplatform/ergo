@@ -1731,7 +1731,7 @@ paths:
       - in: query
         name: minInclusionHeight
         required: false
-        description: Mininal box inclusion height
+        description: Minimal box inclusion height
         schema:
           type: integer
           format: int32
@@ -1781,7 +1781,7 @@ paths:
       - in: query
         name: minInclusionHeight
         required: false
-        description: Mininal box inclusion height
+        description: Minimal box inclusion height
         schema:
           type: integer
           format: int32
@@ -1824,7 +1824,7 @@ paths:
       - in: query
         name: minInclusionHeight
         required: false
-        description: Mininal box inclusion height
+        description: Minimal box inclusion height
         schema:
           type: integer
           format: int32

@@ -21,7 +21,7 @@ import sigmastate.lang.Terms._
 import sigmastate.interpreter._
 import scorex.util.bytesToId
 
-object MultiSigner extends App {
+object FoundationBoxSigner extends App {
   implicit lazy val ircontext: IRContext = new RuntimeIRContext
 
   implicit val vs = VotingSettings(64, 32, 128)

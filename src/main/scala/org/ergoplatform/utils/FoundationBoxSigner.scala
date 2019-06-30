@@ -4,8 +4,9 @@ import java.math.BigInteger
 
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.AutolykosSolution
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.{ErgoBox, Input, UnsignedInput}
+import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
@@ -108,8 +109,16 @@ object FoundationBoxSigner extends App {
   val boxToSpend: ErgoBox = gfBox
   val input = new UnsignedInput(boxToSpend.id, ContextExtension.empty)
 
-  ////
-  val undersignedTx = UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(boxToSpend.toCandidate))
+  //outputs
+  val fee = EmissionRules.CoinsInOneErgo / 10 //0.1 Erg
+  val feeBox = ErgoBox(fee, ErgoScriptPredef.feeProposition(), 0)
+
+  val foundationOutput = new ErgoBoxCandidate(gfBox.value - fee, gfBox.ergoTree, height + 1,
+                                              gfBox.additionalTokens, gfBox.additionalRegisters)
+
+
+  val outputCandidates = IndexedSeq(foundationOutput, feeBox.toCandidate)
+  val undersignedTx = UnsignedErgoTransaction(IndexedSeq(input), outputCandidates)
   val transactionContext = TransactionContext(IndexedSeq(boxToSpend), IndexedSeq(), undersignedTx, selfIndex = 0)
   val msgToSign = undersignedTx.messageToSign
 

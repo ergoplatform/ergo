@@ -146,7 +146,7 @@ object ErgoState extends ScorexLogging {
     * Box is protected by the script that allows to take part of them every block
     * and proposition from R4
     */
-  private def genesisFoundersBox(settings: ChainSettings): ErgoBox = {
+  def genesisFoundersBox(settings: ChainSettings): ErgoBox = {
     val emission = settings.emissionRules
     val pks = settings.foundersPubkeys
       .map(str => groupElemFromBytes(Base16.decode(str).get))

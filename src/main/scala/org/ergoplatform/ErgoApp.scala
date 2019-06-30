@@ -24,6 +24,7 @@ import scorex.core.network.{NetworkControllerRef, PeerFeature, UPnP, UPnPGateway
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
+import scorex.util.encode.Base16
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
@@ -41,6 +42,10 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   implicit private val actorSystem: ActorSystem = ActorSystem(settings.network.agentName)
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
+
+  println("Starting Ergo node")
+  println("Founder keys: " + ergoSettings.chainSettings.foundersPubkeys)
+  println("Founder box: " + Base16.encode(ErgoState.genesisFoundersBox(ergoSettings.chainSettings).bytes))
 
   ergoSettings = ergoSettings.bootstrapSettingsOpt match {
     case Some(bs) if isEmptyState =>

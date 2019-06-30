@@ -95,8 +95,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def scanLogic: Receive = {
     case ScanOffChain(tx) =>
-      val outputs = extractOutputs(tx)
-      val inputs = extractInputs(tx)
+      val outputs = extractWalletOutputs(tx)
+      val inputs = extractAllInputs(tx)
       val resolved = outputs.filter(resolve)
       val resolvedTrackedBoxes = resolved.map { bx =>
         TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain)
@@ -105,20 +105,25 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
 
     case ScanOnChain(block) =>
-      val (outputs, inputs, txs) = block.transactions
-        .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, EncodedBoxId)],
-          Seq.empty[ErgoTransaction]) { case ((outAcc, inAcc, txsAcc), tx) =>
-          val outputs = extractOutputs(tx)
-          val inputs = extractInputs(tx)
-          val txs = if (outputs.size + inputs.size > 0) txsAcc :+ tx else txsAcc
-          (outAcc ++ outputs.map(tx.id -> _), inAcc ++ inputs.map(tx.id -> _), txs)
+      val (walletOutputs, inputs) = block.transactions
+        .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, EncodedBoxId)]) {
+          case ((outAcc, inAcc), tx) =>
+            val outputs = extractWalletOutputs(tx)
+            val inputs = extractAllInputs(tx)
+            (outAcc ++ outputs.map(tx.id -> _), inAcc ++ inputs.map(tx.id -> _))
         }
-      if (txs.nonEmpty) {
+      val outIds = registry.readAllBoxes.map(x => encodedBoxId(x.box.id))
+      val walletInputs = inputs.filter(x => (outIds ++ walletOutputs.map(x => encodedBoxId(x._2.id))).contains(x._2))
+      val walletTxIds = walletInputs.map(_._1) ++ walletOutputs.map(_._1)
+      val walletTxs = block.transactions.filter(tx => walletTxIds.contains(tx.id))
+      if (walletTxs.nonEmpty) {
         if (proverOpt.isDefined) {
-          processBlock(block.id, block.height, inputs, outputs, txs)
+          log.info(s"Precessing block at height ${block.height} with ${walletTxs.size} wallet transactions")
+          processBlock(block.id, block.height, walletInputs, walletOutputs, walletTxs)
         } else if (walletSettings.postponedScanning) {
+          log.info(s"Postponing block at height ${block.height} with ${walletTxs.size} wallet transactions")
           // save wallet-critical data from block to process it later.
-          val postponedBlock = PostponedBlock(block.id, block.height, txs)
+          val postponedBlock = PostponedBlock(block.id, block.height, walletTxs)
           storage.putBlock(postponedBlock)
         }
       }
@@ -278,7 +283,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   /**
     * Extracts all outputs which contain tracked bytes from the given transaction.
     */
-  private def extractOutputs(tx: ErgoTransaction): Seq[ErgoBox] = {
+  private def extractWalletOutputs(tx: ErgoTransaction): Seq[ErgoBox] = {
     val trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.contentBytes)
     tx.outputs.filter(bx => trackedBytes.exists(t => bx.propositionBytes.containsSlice(t)))
   }
@@ -286,7 +291,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   /**
     * Extracts all inputs from the given transaction.
     */
-  private def extractInputs(tx: ErgoTransaction): Seq[EncodedBoxId] = tx.inputs.map(x => encodedBoxId(x.boxId))
+  private def extractAllInputs(tx: ErgoTransaction): Seq[EncodedBoxId] = tx.inputs.map(x => encodedBoxId(x.boxId))
 
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] = Try {
     requests.map {
@@ -407,7 +412,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     val (outputs, inputs) = txs
       .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, EncodedBoxId)]) {
         case ((outAcc, inAcc), tx) =>
-          (outAcc ++ extractOutputs(tx).map(tx.id -> _), inAcc ++ extractInputs(tx).map(tx.id -> _))
+          (outAcc ++ extractWalletOutputs(tx).map(tx.id -> _), inAcc ++ extractAllInputs(tx).map(tx.id -> _))
       }
     processBlock(id, height, inputs, outputs, txs)
   }

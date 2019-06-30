@@ -45,6 +45,8 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
     query.transact(store)
   }
 
+  def readAllBoxes: Seq[TrackedBox] = getAllBoxes.transact(store)
+
   def readCertainBoxes: Seq[TrackedBox] = {
     val query = for {
       allBoxes <- getAllBoxes
@@ -77,7 +79,7 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
     val update = for {
       _ <- putBoxes(certainBxs ++ uncertainBxs)
       _ <- putTxs(txs)
-      spentBoxesWithTx <- getAllBoxes.map(_.flatMap(bx =>
+      spentBoxesWithTx <- getBoxes(inputs.map(x => decodedBoxId(x._2))).map(_.flatten.flatMap(bx =>
         inputs.find(_._2 == encodedBoxId(bx.box.id)).map { case (txId, _) => txId -> bx })
       )
       _ <- processHistoricalBoxes(spentBoxesWithTx, blockHeight)

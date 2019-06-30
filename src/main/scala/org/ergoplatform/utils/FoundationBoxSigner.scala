@@ -55,13 +55,16 @@ object FoundationBoxSigner extends App {
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
   val action: ACTION = generateCommitment
-
-  val signerIndex = 1 //0, 1, 2
-  val cosignerIndex = 0
+  
   // hints provided by a cosigner
   val commitmentStringOpt: Option[String] = None
   val ownRandomnessStringOpt: Option[String] = None
   val partialSignarureStringOpt: Option[String] = None
+
+  //signer is generating commitment and final valid sig
+  //cosigner is generating partial sig
+  val signerIndex = 1 //0, 1, 2
+  val cosignerIndex = 0
 
 
   val cmtOpt = commitmentStringOpt.map(Base16.decode).map(_.get).map(SigmaSerializer.startReader(_))

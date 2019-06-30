@@ -55,7 +55,8 @@ object FoundationBoxSigner extends App {
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
   val action: ACTION = generateCommitment
-  val myIndex = 1 //0, 1, 2
+
+  val signerIndex = 1 //0, 1, 2
   val cosignerIndex = 0
   // hints provided by a cosigner
   val commitmentStringOpt: Option[String] = None
@@ -68,8 +69,8 @@ object FoundationBoxSigner extends App {
   val ownRandomnessOpt = ownRandomnessStringOpt.map(new BigInteger(_))
   val partialSingatureOpt = partialSignarureStringOpt.map(Base16.decode).map(_.get)
 
-  val inactiveIndex = (0 to 2).filter(i => i != myIndex && i != cosignerIndex).head
-  val p = new OldProvingInterpreter(seed, LaunchParameters, HintsBag.empty)
+  val inactiveIndex = (0 to 2).filter(i => i != signerIndex && i != cosignerIndex).head
+  val prover = new OldProvingInterpreter(seed, LaunchParameters, HintsBag.empty)
   implicit val verifier = new ErgoInterpreter(LaunchParameters)
 
   val pubKeys = IndexedSeq(
@@ -115,25 +116,25 @@ object FoundationBoxSigner extends App {
   // doing a requested action
   action match {
     case i: Int if i == generateCommitment =>
-      val (r, c) = DLogInteractiveProver.firstMessage(pubKeys(myIndex))
+      val (r, c) = DLogInteractiveProver.firstMessage(pubKeys(signerIndex))
       println("randomness(store it in secret!): " + r)
       println("commitment: " + Base16.encode(GroupElementSerializer.toBytes(c.ecData)))
 
     case i: Int if i == preSign =>
-      val cosignerPubKey = pubKeys(cosignerIndex)
-      val hint = OtherCommitment(cosignerPubKey, cmtOpt.get)
+      val signerPubKey = pubKeys(signerIndex)
+      val hint = OtherCommitment(signerPubKey, cmtOpt.get)
       val bag = HintsBag(IndexedSeq(hint))
-      val partialProof = p.prove(prop, context, msgToSign, bag).get
+      val partialProof = prover.prove(prop, context, msgToSign, bag).get
       println("Partial proof: " + Base16.encode(partialProof.proof))
 
     case i: Int if i == sign =>
       val ownRandomness = ownRandomnessOpt.get
       val partialSig = partialSingatureOpt.get
 
-      val bag = p.bagForMultisig(context, prop, partialSig, Seq(pubKeys(cosignerIndex), pubKeys(inactiveIndex)))
-        .addHint(OwnCommitment(pubKeys(myIndex), ownRandomness, cmtOpt.get))
+      val bag = prover.bagForMultisig(context, prop, partialSig, Seq(pubKeys(cosignerIndex), pubKeys(inactiveIndex)))
+        .addHint(OwnCommitment(pubKeys(signerIndex), ownRandomness, cmtOpt.get))
 
-      val proof = p.prove(prop, context, msgToSign, bag).get
+      val proof = prover.prove(prop, context, msgToSign, bag).get
 
       val check = verifier.verify(prop, context, proof, msgToSign)
       println("proof is correct: " + check)

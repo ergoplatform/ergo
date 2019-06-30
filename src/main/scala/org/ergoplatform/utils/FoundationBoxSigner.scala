@@ -63,17 +63,15 @@ object FoundationBoxSigner extends App {
   val partialSignarureStringOpt: Option[String] = None
 
   //signer is generating commitment and final valid sig
-  //cosigner is generating partial sig
   val signerIndex = 1 //0, 1, 2
-  val cosignerIndex = 0
-
 
   val cmtOpt = commitmentStringOpt.map(Base16.decode).map(_.get).map(SigmaSerializer.startReader(_))
                   .map(GroupElementSerializer.parse).map(FirstDLogProverMessage.apply)
   val ownRandomnessOpt = ownRandomnessStringOpt.map(new BigInteger(_))
   val partialSingatureOpt = partialSignarureStringOpt.map(Base16.decode).map(_.get)
 
-  val inactiveIndex = (0 to 2).filter(i => i != signerIndex && i != cosignerIndex).head
+  val inactiveIndexes = (0 to 2).filter(i => i != signerIndex)
+
   val prover = new OldProvingInterpreter(seed, LaunchParameters, HintsBag.empty)
   implicit val verifier = new ErgoInterpreter(LaunchParameters)
 
@@ -146,7 +144,7 @@ object FoundationBoxSigner extends App {
       val ownRandomness = ownRandomnessOpt.get
       val partialSig = partialSingatureOpt.get
 
-      val bag = prover.bagForMultisig(context, prop, partialSig, Seq(pubKeys(cosignerIndex), pubKeys(inactiveIndex)))
+      val bag = prover.bagForMultisig(context, prop, partialSig, inactiveIndexes.map(pubKeys.apply))
         .addHint(OwnCommitment(pubKeys(signerIndex), ownRandomness, cmtOpt.get))
 
       val proof = prover.prove(prop, context, msgToSign, bag).get

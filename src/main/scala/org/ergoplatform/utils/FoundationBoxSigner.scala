@@ -58,8 +58,8 @@ object FoundationBoxSigner extends App {
   val action: ACTION = generateCommitment
 
   // hints provided by a cosigner
-  val commitmentStringOpt: Option[String] = Some("02f97a68bda9b492b1a60f99ff5c069d757646af4082ffea5fe62d41831fb782a7")
-  val ownRandomnessStringOpt: Option[String] = Some("20118969312206171700335203924406632053632260708451738246222124003526884139708")
+  val commitmentStringOpt: Option[String] = None
+  val ownRandomnessStringOpt: Option[String] = None
   val partialSignarureStringOpt: Option[String] = None
 
   //signer is generating commitment and final valid sig
@@ -166,6 +166,6 @@ object FoundationBoxSigner extends App {
 
       println(ErgoTransaction.transactionEncoder.apply(tx))
 
-      println(Base16.encode(ErgoBoxSerializer.toBytes(tx.outputs.head)))
+      println("new out bytes: " + Base16.encode(ErgoBoxSerializer.toBytes(tx.outputs.head)))
   }
 }

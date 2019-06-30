@@ -51,14 +51,14 @@ object FoundationBoxSigner extends App {
   val preSign: ACTION = 1
   val sign: ACTION = 2
 
-  val height = 1
+  val height = 10
 
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
-  val action: ACTION = generateCommitment
+  val action: ACTION = sign
 
   // hints provided by a cosigner
-  val commitmentStringOpt: Option[String] = None
+  val commitmentStringOpt: Option[String] = Some("020f13bf647536c88275eb16fa0a5a89f211f2a840e322a348c7026482b4563b55")
   val ownRandomnessStringOpt: Option[String] = None
   val partialSignarureStringOpt: Option[String] = None
 
@@ -111,12 +111,12 @@ object FoundationBoxSigner extends App {
 
   //outputs
   val fee = EmissionRules.CoinsInOneErgo / 10 //0.1 Erg
-  val feeBox = ErgoBox(fee, ErgoScriptPredef.feeProposition(), 0)
+  val feeBox = ErgoBox(fee, ErgoScriptPredef.feeProposition(), height)
 
   val withdrawalAmount = EmissionRules.CoinsInOneErgo
-  val withdrawalOutput = new ErgoBoxCandidate(withdrawalAmount, Constants.TrueLeaf, height + 1)
+  val withdrawalOutput = new ErgoBoxCandidate(withdrawalAmount, Constants.TrueLeaf, height)
 
-  val foundationOutput = new ErgoBoxCandidate(gfBox.value - withdrawalAmount - fee, gfBox.ergoTree, height + 1,
+  val foundationOutput = new ErgoBoxCandidate(gfBox.value - withdrawalAmount - fee, gfBox.ergoTree, height,
                                               gfBox.additionalTokens, gfBox.additionalRegisters)
 
 
@@ -160,9 +160,10 @@ object FoundationBoxSigner extends App {
       val out = tx.outputs.head
       val outId = Base16.encode(out.id)
 
-      println("tx is valid: " +tx.validateStateful(IndexedSeq(boxToSpend), IndexedSeq(), stateContext, 0).result.isValid)
+      println("tx is valid: " +tx.validateStateful(IndexedSeq(boxToSpend), IndexedSeq(), stateContext, 0).result)
 
       println("New foundation box id: " + outId)
-      println(tx)
+
+      println(ErgoTransaction.transactionEncoder.apply(tx))
   }
 }

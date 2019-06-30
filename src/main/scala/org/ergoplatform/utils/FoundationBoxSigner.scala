@@ -55,7 +55,7 @@ object FoundationBoxSigner extends App {
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
   val action: ACTION = generateCommitment
-  
+
   // hints provided by a cosigner
   val commitmentStringOpt: Option[String] = None
   val ownRandomnessStringOpt: Option[String] = None
@@ -143,9 +143,14 @@ object FoundationBoxSigner extends App {
       println("proof is correct: " + check)
 
       val input = Input(boxToSpend.id, proof)
-      val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(boxToSpend.toCandidate))
+      val tx = ErgoTransaction(IndexedSeq(input), undersignedTx.outputCandidates)
+
+      val out = tx.outputs.head
+      val outId = Base16.encode(out.id)
 
       println("tx is valid: " +tx.validateStateful(IndexedSeq(boxToSpend), IndexedSeq(), stateContext, 0).result.isValid)
+
+      println("New foundation box id: " + outId)
       println(tx)
   }
 }

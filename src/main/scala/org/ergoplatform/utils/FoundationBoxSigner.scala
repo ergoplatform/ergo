@@ -10,7 +10,7 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
-import org.ergoplatform.settings.{ErgoValidationSettings, LaunchParameters, VotingSettings}
+import org.ergoplatform.settings.{Constants, ErgoValidationSettings, LaunchParameters, VotingSettings}
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, TransactionContext}
 import scorex.crypto.authds.ADDigest
@@ -113,11 +113,14 @@ object FoundationBoxSigner extends App {
   val fee = EmissionRules.CoinsInOneErgo / 10 //0.1 Erg
   val feeBox = ErgoBox(fee, ErgoScriptPredef.feeProposition(), 0)
 
-  val foundationOutput = new ErgoBoxCandidate(gfBox.value - fee, gfBox.ergoTree, height + 1,
+  val withdrawalAmount = EmissionRules.CoinsInOneErgo
+  val withdrawalOutput = new ErgoBoxCandidate(withdrawalAmount, Constants.TrueLeaf, height + 1)
+
+  val foundationOutput = new ErgoBoxCandidate(gfBox.value - withdrawalAmount - fee, gfBox.ergoTree, height + 1,
                                               gfBox.additionalTokens, gfBox.additionalRegisters)
 
 
-  val outputCandidates = IndexedSeq(foundationOutput, feeBox.toCandidate)
+  val outputCandidates = IndexedSeq(foundationOutput, withdrawalOutput, feeBox.toCandidate)
   val undersignedTx = UnsignedErgoTransaction(IndexedSeq(input), outputCandidates)
   val transactionContext = TransactionContext(IndexedSeq(boxToSpend), IndexedSeq(), undersignedTx, selfIndex = 0)
   val msgToSign = undersignedTx.messageToSign

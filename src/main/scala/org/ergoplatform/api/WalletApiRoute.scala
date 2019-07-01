@@ -33,6 +33,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   implicit val requestsHolderDecoder: RequestsHolderDecoder = new RequestsHolderDecoder(ergoSettings)
   implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
   implicit val addressJsonEncoder: Encoder[ErgoAddress] = paymentRequestDecoder.addressEncoders.encoder
+  implicit val walletTxEncoder: Encoder[WalletTransaction] = WalletTransaction.jsonEncoder
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 

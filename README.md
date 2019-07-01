@@ -14,14 +14,12 @@ Ergo Platform website: [https://ergoplatform.org/](https://ergoplatform.org/)
 [light-SPV](http://fc16.ifca.ai/bitcoin/papers/KLS16.pdf), hybrid modes
 * [Alternative transactional language](https://github.com/ScorexFoundation/sigmastate-interpreter), which is more powerful that Bitcoin Script but also safe against
 heavy validation attacks
-* Alternative fee model with [mandatory storage-rent component](https://eprint.iacr.org/2017/644.pdf)
+* Alternative fee model with [mandatory storage-rent component](https://fc18.ifca.ai/bitcoin/papers/bitcoin18-final18.pdf )
 
 ## Specifications
 
-It will be a White Paper with a brief description, and also a Yellow Paper with detailed specification.
-At the moment, there is only [Yellow Paper drafts](https://github.com/ergoplatform/ergo/tree/master/papers/yellow/main.pdf),
-and currently the reference implementation code should be considered as a specification.
-
+A [White Paper](https://ergoplatform.org/docs/whitepaper.pdf) with a brief description is available. A Yellow Paper with detailed specification is underway and will be available shortly. At the moment, there are [drafts of the Yellow Paper](https://github.com/ergoplatform/ergo/tree/master/papers/yellow) available,
+and currently the reference implementation code should be considered as the specification.
 
 ## Installation
 
@@ -79,7 +77,7 @@ Available versions can be found on [Ergo Docker image page](https://hub.docker.c
 
 This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf` and network flag `--<networkId>`. Every default config value would be overwritten with corresponding value in `myergo.conf`.
 
-This command also would store your data in `/path/on/host/to/ergo/data` on host system, and open ports `9030` (node communication) and `9053` (REST API) on host system. The `/path/on/host/to/ergo/data` directory must has `777` permissions or has owner/group numeric id equal to `9052` to be writable by container, as `ergo` user inside Docker image (please refer with [Dockerfile](Dockerfile)).
+This command also would store your data in `/path/on/host/to/ergo/data` on host system, and open ports `9030` (node communication) and `9053` (REST API) on host system. The `/path/on/host/to/ergo/data` directory must has `777` permissions or has owner/group numeric id equal to `9052` to be writable by container, as `ergo` user inside Docker image (please refer to [Dockerfile](Dockerfile)).
 
 Ergo node works normally behind NAT, so you can keep closed your `9030` port, hence other nodes could not discover and connect to yours one, only your node could initiate connections.
 

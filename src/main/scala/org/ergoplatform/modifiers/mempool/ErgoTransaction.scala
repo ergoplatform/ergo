@@ -273,9 +273,8 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
     map.toMap -> assetsNum
   }
 
-  def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction = {
+  def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction =
     ErgoTransaction(inputs, IndexedSeq(), outputCandidates, None)
-  }
 
   def apply(tx: ErgoLikeTransaction): ErgoTransaction =
     ErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)

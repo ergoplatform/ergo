@@ -13,7 +13,7 @@ import scorex.util.{ModifierId, idToBytes}
 
 trait WalletGenerators extends ErgoTransactionGenerators {
 
-  private val ergoSettings = ErgoSettings.read(None)
+  private val ergoSettings = ErgoSettings.read()
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
   def trackedAddressGen: Gen[ErgoAddress] = proveDlogGen.map(P2PKAddress.apply)
@@ -112,19 +112,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
   def postponedBlockGen: Gen[PostponedBlock] = for {
     height <- Gen.posNum[Int]
     id <- modifierIdGen
-    inputs <- Gen.listOf(inputsWithTxGen)
-    outputs <- Gen.listOf(outputsWithTxGen)
-  } yield PostponedBlock(id, height, inputs, outputs)
-
-  private def inputsWithTxGen: Gen[(ModifierId, EncodedBoxId)] = for {
-    txId <- modifierIdGen
-    id <- modifierIdGen
-  } yield txId -> encodedBoxId(ADKey @@ idToBytes(id))
-
-  private def outputsWithTxGen: Gen[(ModifierId, ErgoBox)] = for {
-    txId <- modifierIdGen
-    box <- ergoBoxGen
-  } yield txId -> box
+    txs <- Gen.listOf(invalidErgoTransactionGen)
+  } yield PostponedBlock(id, height, txs)
 
   private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)
 

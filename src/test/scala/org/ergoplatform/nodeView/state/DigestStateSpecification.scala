@@ -24,7 +24,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
       val fb = validFullBlock(parentOpt = None, us, bh)
       val dir2 = createTempDir
       val ds = DigestState.create(Some(us.version), Some(us.rootHash), dir2, stateConstants)
-      ds.applyModifier(fb).isSuccess shouldBe true
+      ds.applyModifier(fb) shouldBe 'success
       ds.close()
 
       val state = DigestState.create(None, None, dir2, stateConstants)
@@ -64,7 +64,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
       block.blockTransactions.transactions.exists(_.dataInputs.nonEmpty) shouldBe true
 
       val ds = createDigestState(us.version, us.rootHash)
-      ds.applyModifier(block).isSuccess shouldBe true
+      ds.applyModifier(block) shouldBe 'success
     }
   }
 

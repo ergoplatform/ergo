@@ -85,7 +85,7 @@ object DifficultyControlSimulator extends App with ErgoGenerators {
 
   def printTestnetData(): Unit = {
     val baseHeader = defaultHeaderGen.sample.get
-    val chainSettings = ErgoSettings.read(None).chainSettings.copy(epochLength = 1)
+    val chainSettings = ErgoSettings.read().chainSettings.copy(epochLength = 1)
     val difficultyControl = new LinearDifficultyControl(chainSettings)
 
     val headers = Source.fromResource("difficulty.csv").getLines().toSeq.tail.map { line =>

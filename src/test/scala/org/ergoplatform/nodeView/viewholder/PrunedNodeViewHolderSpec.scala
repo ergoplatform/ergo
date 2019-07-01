@@ -4,7 +4,7 @@ import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
-import org.ergoplatform.settings.{ErgoSettings, VotingSettings}
+import org.ergoplatform.settings.{Args, ErgoSettings, VotingSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestOps}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
@@ -19,7 +19,7 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
   private val BlockInterval = 2.minutes
 
   def prunedSettings(blocksToKeep: Int): ErgoSettings = {
-    val defaultSettings = ErgoSettings.read(None)
+    val defaultSettings = ErgoSettings.read()
     defaultSettings.copy(
       chainSettings = defaultSettings.chainSettings.copy(
         powScheme = new DefaultFakePowScheme(defaultSettings.chainSettings.powScheme.k, defaultSettings.chainSettings.powScheme.n),

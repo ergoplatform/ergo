@@ -41,7 +41,7 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
     val validTx = validTransactionFromBoxes(boxes.toIndexedSeq)
     val doubleSpendTx = validTransactionFromBoxes(boxes.toIndexedSeq, outputsProposition = proveDlogGen.sample.get)
 
-    subscribeEvents(classOf[FailedTransaction[_]])
+    subscribeEvents(classOf[FailedTransaction])
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](validTx)
     testProbe.expectMsgClass(cleanupDuration, newTx)
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](doubleSpendTx)

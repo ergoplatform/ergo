@@ -40,8 +40,8 @@ trait FullBlockProcessor extends HeadersProcessor {
   /** Process full block when we have one.
     *
     * @param fullBlock - block to process
-    * @param newMod    - new modifier we are going to put in history
-    * @return ProgressInfo required for State to process to be consistent with History
+    * @param newMod    - new modifier we are going to put in the history
+    * @return ProgressInfo required for State to process to be consistent with the history
     */
   protected def processFullBlock(fullBlock: ErgoFullBlock,
                                  newMod: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
@@ -64,7 +64,6 @@ trait FullBlockProcessor extends HeadersProcessor {
   private def processValidFirstBlock: BlockProcessing = {
     case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), _, newBestChain)
       if isValidFirstFullBlock(fullBlock.header) =>
-
       val headers = headerChainBack(10, fullBlock.header, h => h.height == 1)
       val toApply = fullBlock +: newBestChain.tail
         .map(id => typedModifierById[Header](id).flatMap(getFullBlock))
@@ -79,7 +78,6 @@ trait FullBlockProcessor extends HeadersProcessor {
   private def processBetterChain: BlockProcessing = {
     case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), blocksToKeep, _)
       if bestFullBlockOpt.nonEmpty && isBetterChain(newBestBlockHeader.id) && isLinkable(fullBlock.header) =>
-
       val prevBest = bestFullBlockOpt.get
       val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, newBestBlockHeader)
       val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
@@ -134,9 +132,11 @@ trait FullBlockProcessor extends HeadersProcessor {
   }
 
   /**
-    * Tells whether a given `header` is linkable to some existing full chain or not.
+    * @return `true` if a given `header` is linkable to some existing full chain or
+    *         contains original genesis block, `false` otherwise
     */
   private def isLinkable(header: Header): Boolean = {
+    // todo check loop for possible inefficient chains (e.g. limit the loop depth)
     @tailrec
     def loop(id: ModifierId, height: Int, acc: Seq[ModifierId]): Seq[ModifierId] = {
       nonBestChainsCache.getParentId(id, height).orElse { // lookup block in the cache
@@ -148,14 +148,16 @@ trait FullBlockProcessor extends HeadersProcessor {
         case None => acc
       }
     }
+
     if (bestFullBlockIdOpt.exists(_ == header.parentId)) {
       true
     } else {
-      loop(header.parentId, header.height - 1, Seq.empty) // follow links back until main chain or absent section is reached
-        .headOption
-        .orElse(Some(header.parentId))
-        .flatMap(id => typedModifierById[Header](id).flatMap(getFullBlock)) // check whether first block actually exists
-        .isDefined
+      // follow links back until main chain or absent section is reached
+      val headOpt = loop(header.parentId, header.height - 1, Seq.empty).headOption
+      headOpt.exists(_ == Header.GenesisParentId) ||
+        headOpt.orElse(Some(header.parentId))
+          .flatMap(id => typedModifierById[Header](id).flatMap(getFullBlock)) // check whether first block actually exists
+          .isDefined
     }
   }
 

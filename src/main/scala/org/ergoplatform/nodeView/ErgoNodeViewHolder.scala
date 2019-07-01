@@ -59,7 +59,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (newPool, ProcessingOutcome.Invalidated(e)) =>
         log.debug(s"Transaction $tx invalidated. Cause: ${e.getMessage}")
         updateNodeView(updatedMempool = Some(newPool))
-        context.system.eventStream.publish(FailedTransaction[ErgoTransaction](tx, e))
+        context.system.eventStream.publish(FailedTransaction(tx.id, e, immediateFailure = true))
       case (_, ProcessingOutcome.Declined(e)) => // do nothing
         log.debug(s"Transaction $tx declined, reason: ${e.getMessage}")
     }
@@ -77,7 +77,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val rolledBackTxs = blocksRemoved.flatMap(extractTransactions)
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
 
-    memPool.putWithoutCheck(rolledBackTxs).filter(tx => !appliedTxs.exists(t => t.id == tx.id))
+    memPool.putWithoutCheck(rolledBackTxs).filter(tx => !appliedTxs.exists(_.id == tx.id))
   }
 
   /**

@@ -10,10 +10,10 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
-import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
+import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTransaction] {
 
@@ -37,7 +37,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       tx.statefulValidity(
         tx.inputs.flatMap(i => boxById(i.boxId)),
         tx.dataInputs.flatMap(i => boxById(i.boxId)),
-        context)(verifier, context.validationSettings)
+        context)(verifier)
     }
   }
 
@@ -77,10 +77,15 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   def emissionBoxOpt: Option[ErgoBox] = emissionBoxIdOpt.flatMap(boxById)
 
   def boxById(id: ADKey): Option[ErgoBox] = persistentProver.synchronized {
-    persistentProver
-      .unauthenticatedLookup(id)
-      .map(ErgoBoxSerializer.parseBytesTry)
-      .flatMap(_.toOption)
+    persistentProver.unauthenticatedLookup(id) flatMap { adValue =>
+      ErgoBoxSerializer.parseBytesTry(adValue) match {
+        case Failure(e) =>
+          log.error(s"Failed to parse box from state, ${e}")
+          None
+        case Success(box) =>
+          Some(box)
+      }
+    }
   }
 
   def randomBox(): Option[ErgoBox] = persistentProver.synchronized {

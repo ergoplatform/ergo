@@ -88,6 +88,70 @@ components:
         additionalRegisters:
           $ref: '#/components/schemas/Registers'
 
+    WalletBox:
+      type: object
+      required:
+        - box
+        - confirmationsNum
+        - address
+        - creationTransaction
+        - certain
+        - onchain
+        - creationOutIndex
+        - spendingTransaction
+        - spendingHeight
+        - inclusionHeight
+        - spent
+      properties:
+        box:
+          $ref: '#/components/schemas/ErgoTransactionOutput'
+        confirmationsNum:
+          description: Age of box in blocks
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+          nullable: true
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+        creationTransaction:
+          description: Transaction which created the box
+          $ref: '#/components/schemas/ModifierId'
+        spendingTransaction:
+          description: Transaction which created the box
+          nullable: true
+          $ref: '#/components/schemas/ModifierId'
+        spendingHeight:
+          description: The height the box was spent at
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+          nullable: true
+        inclusionHeight:
+          description: The height the transaction containing the box was included in a block at
+          type: integer
+          format: int32
+          minimum: 0
+          example: 147
+        certain:
+          description: A flag signalling wheatehr the box is certainly resolved (as belonging to a wallet)
+          type: boolean
+          example: true
+        onchain:
+          description: A flag signalling wheatehr the box is created on main chain
+          type: boolean
+          example: true
+        spent:
+          description: A flag signalling wheatehr the box was spent
+          type: boolean
+          example: false
+        creationOutIndex:
+          description: An index of a box in transaction
+          type: integer
+          format: int32
+          example: 2
+
     ErgoTransaction:
       type: object
       description: Transaction without any lockers and unlockers
@@ -118,10 +182,46 @@ components:
           type: integer
           format: int32
 
+    WalletTransaction:
+      type: object
+      description: Transaction without any lockers and unlockers
+      required:
+        - inputs
+        - dataInputs
+        - outputs
+        - inclusionHeight
+      properties:
+        id:
+          $ref: '#/components/schemas/TransactionId'
+        inputs:
+          description: Many transaction inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionInput'
+        dataInputs:
+          description: Many transaction data inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
+        outputs:
+          description: Many transaction outputs
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+        inclusionHeight:
+          description: Height of a block the transaction was included in
+          type: integer
+          format: int32
+          example: 20998
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
+
     ErgoAddress:
       description: Encoded Ergo Address
       type: string
-      example: '3WyAaMQmWbb3Zx1iQwwcRrM9ioGtsHy6y7XaPVJWjacVHmf3UbLe'
+      example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
 
     AddressHolder:
       description: Holds encoded ErgoAddress
@@ -823,6 +923,21 @@ components:
           items:
             $ref: '#/components/schemas/Asset'
 
+    AddressValidity:
+      description: Validity status of Ergo address
+      type: object
+      required:
+        - address
+        - isValid
+      properties:
+        address:
+          $ref: '#/components/schemas/ErgoAddress'
+        isValid:
+          type: boolean
+        error:
+          type: string
+
+
     ApiError:
       type: object
       required:
@@ -1158,7 +1273,6 @@ paths:
 
   /transactions/unconfirmed:
     parameters:
-    # useless, varies dynamically
     - in: query
       name: limit
       required: false
@@ -1300,6 +1414,33 @@ paths:
               schema:
                 type: string
                 example: '7e1e79dd4936bdc7d09f4ba9212849136b589fba4bcf4263a0961a95b65d08cb16'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utils/address/{address}:
+    get:
+      summary: Check address validity
+      operationId: CheckAddressValidity
+      tags:
+        - utils
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to check
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: Address validity with validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressValidity'
         default:
           description: Error
           content:
@@ -1495,7 +1636,7 @@ paths:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Derive new key according to a provied path
+      summary: Derive new key according to a provided path
       operationId: walletDeriveKey
       tags:
         - wallet
@@ -1578,6 +1719,133 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BalancesSnapshot'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/transactions:
+    parameters:
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Minimal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get a list of all wallet-related transactions
+      operationId: walletTransactions
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: A list of all wallet-related transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletTransaction'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/boxes:
+    parameters:
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal number of confirmations
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Minimal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get a list of all wallet-related boxes
+      operationId: walletBoxes
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: A list of all wallet-related boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBox'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/boxes/unspent:
+    parameters:
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal number of confirmations
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Minimal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get a list of unspent boxes
+      operationId: walletUnspentBoxes
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: A list of unspent boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBox'
         default:
           description: Error
           content:
@@ -1926,6 +2194,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ExternalCandidateBlock'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /mining/rewardAddress:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Read miner reward address
+      operationId: miningReadMinerRewardAddress
+      tags:
+        - mining
+      responses:
+        '200':
+          description: External candidate
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - rewardAddress
+                properties:
+                  rewardAddress:
+                    $ref: '#/components/schemas/ErgoAddress'
         default:
           description: Error
           content:

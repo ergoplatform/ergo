@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{ErgoState, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, NVBenchmark}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Args, ErgoSettings}
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import scorex.core.utils.{NetworkTimeProvider, NetworkTimeProviderSettings}
@@ -35,7 +35,7 @@ object BenchRunner extends ScorexLogging with NVBenchmark {
     log.info(s"User dir is $userDir")
     log.info("Starting benchmark.")
 
-    val realNetworkSettings = ErgoSettings.read(Some("src/main/resources/application.conf"))
+    val realNetworkSettings = ErgoSettings.read(Args(Some("src/main/resources/application.conf"), None))
     val nodeSettings = realNetworkSettings.nodeSettings.copy(stateType = state)
 
     lazy val ergoSettings: ErgoSettings = realNetworkSettings

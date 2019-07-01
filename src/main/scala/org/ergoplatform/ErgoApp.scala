@@ -43,10 +43,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
   implicit private val actorSystem: ActorSystem = ActorSystem(settings.network.agentName)
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
 
-  println("Starting Ergo node")
-  println("Founder keys: " + ergoSettings.chainSettings.foundersPubkeys)
-  println("Founder box: " + Base16.encode(ErgoState.genesisFoundersBox(ergoSettings.chainSettings).bytes))
-
   ergoSettings = ergoSettings.bootstrapSettingsOpt match {
     case Some(bs) if isEmptyState =>
       log.info("Entering coordinated network bootstrap procedure ..")

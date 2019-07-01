@@ -287,7 +287,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val nBits: Long = bestHeaderOpt
       .map(parent => history.requiredDifficultyAfter(parent))
       .map(d => RequiredDifficulty.encodeCompactBits(d))
-      .getOrElse(ergoSettings.chainSettings.initialNBits)
+      .getOrElse(RequiredDifficulty.encodeCompactBits(RequiredDifficulty.decodeCompactBits(ergoSettings.chainSettings.initialNBits)))
     val interlinksExtension = PoPowAlgos.interlinksToExtension(updateInterlinks(bestHeaderOpt, bestExtensionOpt))
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt.map { header =>

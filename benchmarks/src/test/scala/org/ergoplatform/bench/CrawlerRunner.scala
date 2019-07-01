@@ -3,7 +3,7 @@ package org.ergoplatform.bench
 import java.io.File
 
 import akka.actor.ActorRef
-import org.ergoplatform.api.{BlocksApiRoute, InfoRoute, TransactionsApiRoute}
+import org.ergoplatform.api.{BlocksApiRoute, ErgoUtilsApiRoute, InfoRoute, TransactionsApiRoute}
 import org.ergoplatform.bench.misc.CrawlerConfig
 import org.ergoplatform.local.{ErgoMinerRef, ErgoStatsCollectorRef}
 import org.ergoplatform.mining.emission.EmissionRules
@@ -12,8 +12,8 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.ErgoSettings
-import scorex.core.api.http.{ApiRoute, PeersApiRoute, UtilsApiRoute}
+import org.ergoplatform.settings.{Args, ErgoSettings}
+import scorex.core.api.http.{ApiRoute, PeersApiRoute}
 import scorex.core.app.Application
 import scorex.core.network.PeerFeature
 import scorex.core.network.message.MessageSpec
@@ -41,7 +41,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 
-  lazy val ergoSettings: ErgoSettings = ErgoSettings.read(cfgPath)
+  lazy val ergoSettings: ErgoSettings = ErgoSettings.read(Args(cfgPath, None))
 
   lazy val emission = new EmissionRules(ergoSettings.chainSettings.monetary)
 
@@ -57,7 +57,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
   val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings, timeProvider)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
-    UtilsApiRoute(settings.restApi),
+    ErgoUtilsApiRoute(ergoSettings),
     PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
     InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),

@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
@@ -42,7 +42,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
   val newBlockDuration: FiniteDuration = 30 seconds
 
   val defaultSettings: ErgoSettings = {
-    val empty = ErgoSettings.read(None)
+    val empty = ErgoSettings.read()
 
     val nodeSettings = empty.nodeSettings.copy(mining = true,
       stateType = StateType.Utxo,
@@ -82,7 +82,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     @tailrec
     def loop(toSend: Int): Unit = {
-      val toSpend: Seq[ErgoBox] = await(wallet.unspendBoxes()).toList
+      val toSpend: Seq[ErgoBox] = await(wallet.boxes()).map(_.trackedBox.box).toList
       log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains," +
         s"pool size: ${requestReaders.m.size}")
       val txs: Seq[ErgoTransaction] = toSpend.take(toSend) map { boxToSend =>

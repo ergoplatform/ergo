@@ -14,14 +14,12 @@ Ergo Platform website: [https://ergoplatform.org/](https://ergoplatform.org/)
 [light-SPV](http://fc16.ifca.ai/bitcoin/papers/KLS16.pdf), hybrid modes
 * [Alternative transactional language](https://github.com/ScorexFoundation/sigmastate-interpreter), which is more powerful that Bitcoin Script but also safe against
 heavy validation attacks
-* Alternative fee model with [mandatory storage-rent component](https://eprint.iacr.org/2017/644.pdf)
+* Alternative fee model with [mandatory storage-rent component](https://fc18.ifca.ai/bitcoin/papers/bitcoin18-final18.pdf )
 
 ## Specifications
 
-It will be a White Paper with a brief description, and also a Yellow Paper with detailed specification.
-At the moment, there is only [Yellow Paper drafts](https://github.com/ergoplatform/ergo/tree/master/papers/yellow/main.pdf),
-and currently the reference implementation code should be considered as a specification.
-
+A [White Paper](https://ergoplatform.org/docs/whitepaper.pdf) with a brief description is available. A Yellow Paper with detailed specification is underway and will be available shortly. At the moment, there are [drafts of the Yellow Paper](https://github.com/ergoplatform/ergo/tree/master/papers/yellow) available,
+and currently the reference implementation code should be considered as the specification.
 
 ## Installation
 
@@ -30,15 +28,14 @@ You can check our [Wiki](https://github.com/ergoplatform/ergo/wiki/Set-up-a-full
 Also, reference with [Node Configuration File](https://github.com/ergoplatform/ergo/wiki/Node-Configuration-File) wiki page for creating your own configuration file.
 
 
-# Build from sources
+## Build from sources
 
 In order to build the Ergo node from sources you need JDK (>= 1.8) and SBT to be installed on your machine.
-The build system supports different environments which should be specified (through `-Denv=<env_type>``) depending on the network type you want to build for:
- - `testnet`
- - `mainnet`
- - `devnet`
+
+In order to simply get a single jar run: `sbt assembly` - assembly would appear in `target/scala-2.12/` directory.
  
-Depending on the platform you want to create a package for one of the following packager commands could be chosen:
+If you want to create a package for a specific platform with launching scripts the one of the following 
+packager commands could be chosen (depending on desired system type you want to build for):
  - `universal:packageBin` - Generates a universal zip file
  - `universal:packageZipTarball` - Generates a universal tgz file
  - `debian:packageBin` - Generates a deb
@@ -47,28 +44,44 @@ Depending on the platform you want to create a package for one of the following 
  - `universal:packageOsxDmg` - Generates a DMG file with the same contents as the universal zip/tgz.
  - `windows:packageBin` - Generates an MSI
  
- The final build command should look like: `sbt Denv=<env_type> <packager_command>`, example: `sbt -Denv=testnet universal:packageBin`. 
+ The final build command should look like: `sbt <packager_command>`, example: `sbt universal:packageBin`.
  A resulted package could be found in the `target/scala-2.12/<platform_type>` directory.
 
+## Running the node
+
+The node could be started in a few different ways:
+ 
+ - In case you have only a jar: `java -jar /path/to/ergo-<version>.jar --<networkId> -c /path/to/local.conf`
+ - Using start script from sbt-native-packager: `sh /path/to/bin/ergo  --<networkId> -c /path/to/local.conf`
+ 
+Available `networkId` options: `mainnet`, `testnet`, `devnet`. 
 
 ## Docker Quick Start
 
-Ergo has officially supported Docker package. To run Ergo as a console application with logs in console:
+Ergo has officially supported Docker package. To run last Ergo version in mainnet as a console application with logs printed to console:
 
-    sudo docker run --rm -p 9020:9020 -p 9052:9052 -v ergo-testnet:/home/ergo/.ergo ergoplatform/ergo
+    sudo docker run --rm -p 9030:9030 -p 9053:9053 -v /path/on/host/to/ergo/data:/home/ergo/.ergo ergoplatform/ergo --mainnet
 
-This will connect to Ergo testnet with default config and open ports `9020` and `9052` on host system. All data will be stored in your named Docker volume `ergo-testnet`.
+This will connect to Ergo mainnet with default config and open ports `9030` and `9053` on host system. All data will be stored in your host directory `/path/on/host/to/ergo/data`.
 
-To run specific Ergo version as a service with custom config:
+To run specific Ergo version `<VERSION>` as a service with custom config `/path/on/host/system/to/myergo.conf`:
 
     sudo docker run -d \
-        -p 9020:9020 \
-        -p 9052:9052 \
-        -v ergo:/home/ergo/.ergo \
+        -p 9030:9030 \
+        -p 9053:9053 \
+        -v /path/on/host/to/ergo/data:/home/ergo/.ergo \
         -v /path/on/host/system/to/myergo.conf:/etc/myergo.conf \
-        ergoplatform/ergo:v2.0.3 /etc/myergo.conf
+        ergoplatform/ergo:<VERSION> --<networkId> -c /etc/myergo.conf
 
-This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf`. Every default config value would be overwritten with corresponding value in `myergo.conf`. This also would store your data in named Docker volume `ergo` (if you change default data location in your config file, do not forget mount `ergo` volume to new location in container) and open ports `9007` and `9052` on host system. Note that `9052` is used for API, so it is ok not to open it into whole Internet. Also, Ergo node works normally under NAT, so you can keep closed your `9007` port too, hence other nodes could not discover and connect to yours one, only your node could initiate connections.
+Available versions can be found on [Ergo Docker image page](https://hub.docker.com/r/ergoplatform/ergo/tags), for example, `v2.2.0`.
+
+This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf` and network flag `--<networkId>`. Every default config value would be overwritten with corresponding value in `myergo.conf`.
+
+This command also would store your data in `/path/on/host/to/ergo/data` on host system, and open ports `9030` (node communication) and `9053` (REST API) on host system. The `/path/on/host/to/ergo/data` directory must has `777` permissions or has owner/group numeric id equal to `9052` to be writable by container, as `ergo` user inside Docker image (please refer to [Dockerfile](Dockerfile)).
+
+Ergo node works normally behind NAT, so you can keep closed your `9030` port, hence other nodes could not discover and connect to yours one, only your node could initiate connections.
+
+It is also a good practice to keep closed REST API port `9053`, and connect to your node from inside another container in the same Docker network (this case not covered by this short quick start manual).
 
 ## Acknowledgements
 

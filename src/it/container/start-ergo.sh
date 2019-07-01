@@ -1,4 +1,4 @@
 #!/bin/bash
 
 echo Options: $OPTS
-java $OPTS -jar /opt/ergo/ergo.jar /opt/ergo/template.conf
+java $OPTS -jar /opt/ergo/ergo.jar -c /opt/ergo/template.conf

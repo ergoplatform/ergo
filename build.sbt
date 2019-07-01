@@ -4,7 +4,7 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "2.1.1",
+  version := "3.0.0",
   scalaVersion := "2.12.8",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
@@ -14,9 +14,9 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "61389071-SNAPSHOT"
-val sigmaStateVersion = "master-6baf579a-SNAPSHOT"
-val ergoWalletVersion = "master-1e09a19c-SNAPSHOT"
+val scorexVersion = "6ffeafc8-SNAPSHOT"
+val sigmaStateVersion = "master-0e75c9b0-SNAPSHOT"
+val ergoWalletVersion = "master-351dd620-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -38,6 +38,7 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
   "com.typesafe.akka" %% "akka-actor" % "2.5.+",
+  "com.joefkelley" %% "argyle" % "1.0.0",
 
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
@@ -104,39 +105,11 @@ sourceGenerators in Compile += Def.task {
   Seq(versionFile)
 }
 
-resourceGenerators in Compile += Def.task {
-  if (buildEnv.value != BuildEnv.Test) {
-    val confName = buildEnv.value match {
-      case BuildEnv.MainNet => "mainnet.conf"
-      case BuildEnv.TestNet => "testnet.conf"
-      case _ =>                "devnet.conf"
-    }
-    val confFile = (resourceDirectory in Compile).value / confName
-    val targetFile = (resourceManaged in Compile).value / "application.conf"
-    IO.copyFile(confFile, targetFile)
-    Seq(targetFile)
-  } else {
-    Seq.empty
-  }
-}
-
-mappings in Compile := Seq(
-  ((resourceManaged in Compile).value / "application.conf") -> "application.conf"
-)
-
 mainClass in assembly := Some("org.ergoplatform.ErgoApp")
 
 test in assembly := {}
 
-assemblyJarName in assembly := {
-  val networkType = buildEnv.value match {
-    case BuildEnv.MainNet => "mainnet"
-    case BuildEnv.TestNet => "testnet"
-    case BuildEnv.DevNet =>  "devnet"
-    case BuildEnv.Test =>    "test"
-  }
-  s"ergo-$networkType-${version.value}.jar"
-}
+assemblyJarName in assembly := s"ergo-${version.value}.jar"
 
 assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first

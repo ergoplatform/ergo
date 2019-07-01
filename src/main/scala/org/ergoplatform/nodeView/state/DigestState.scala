@@ -53,7 +53,7 @@ class DigestState protected(override val version: VersionTag,
       .get(ByteArrayWrapper(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
 
-    execTransactions(transactions, currentStateContext)(checkBoxExistence)
+    ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
       .toTry
       .map(_ => ())
   }

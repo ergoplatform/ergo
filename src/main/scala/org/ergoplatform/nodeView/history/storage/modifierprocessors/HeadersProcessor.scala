@@ -31,6 +31,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   protected val config: NodeConfigurationSettings
 
+  protected val chainSettings: ChainSettings
+
   val powScheme: AutolykosPowScheme
 
   //Maximum time in future block header may contain
@@ -108,41 +110,19 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     */
   private def toInsert(h: Header): (Seq[(ByteArrayWrapper, ByteArrayWrapper)], Seq[ErgoPersistentModifier]) = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
-    if (h.isGenesis) {
-      genesisToInsert(h, requiredDifficulty)
-    } else {
-      nonGenesisToInsert(h, requiredDifficulty)
-    }
-  }
-
-  /**
-    * Data to insert for regular block
-    */
-  private def nonGenesisToInsert(h: Header, requiredDifficulty: Difficulty) = {
-    val score = scoreOf(h.parentId).get + requiredDifficulty
+    val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + requiredDifficulty
     val bestRow: Seq[(ByteArrayWrapper, ByteArrayWrapper)] =
       if (score > bestHeadersChainScore) Seq(BestHeaderKey -> Algos.idToBAW(h.id)) else Seq.empty
     val scoreRow = headerScoreKey(h.id) -> ByteArrayWrapper(score.toByteArray)
     val heightRow = headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(h.height))
     val headerIdsRow = if (score > bestHeadersChainScore) {
+      if (h.isGenesis) log.info(s"Processing genesis header ${h.encodedId}")
       bestBlockHeaderIdsRow(h, score)
     } else {
       orphanedBlockHeaderIdsRow(h, score)
     }
-    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, Seq(h))
-  }
 
-  /**
-    * Data to insert for genesis block
-    */
-  private def genesisToInsert(h: Header, requiredDifficulty: Difficulty) = {
-    log.info(s"Initialize header chain with genesis header ${h.encodedId}")
-    (Seq(
-      BestHeaderKey -> Algos.idToBAW(h.id),
-      heightIdsKey(GenesisHeight) -> Algos.idToBAW(h.id),
-      headerHeightKey(h.id) -> ByteArrayWrapper(Ints.toByteArray(GenesisHeight)),
-      headerScoreKey(h.id) -> ByteArrayWrapper(requiredDifficulty.toByteArray)),
-      Seq(h))
+    (Seq(scoreRow, heightRow) ++ bestRow ++ headerIdsRow, Seq(h))
   }
 
   /**
@@ -288,7 +268,11 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateEqualIds(hdrGenesisParent, header.parentId, Header.GenesisParentId)
         .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, (id: ModifierId) => id.equals(header.id))
         .validate(hdrGenesisHeight, header.height == GenesisHeight, header.toString)
+        .validateNoFailure(hdrPoW, powScheme.validate(header))
+        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, chainSettings.initialDifficulty)
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
+        .validate(hdrTooOld, fullBlockHeight < config.keepVersions, heightOf(header.parentId).toString)
+        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .result
     }
 

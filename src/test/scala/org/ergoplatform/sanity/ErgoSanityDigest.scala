@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.scalacheck.Gen
 import scorex.core.idToBytes
 import scorex.core.network.peer.PeerInfo
@@ -57,7 +57,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val h = historyGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = stateGen.sample.get
-    val settings = ErgoSettings.read(None)
+    val settings = ErgoSettings.read()
     val pool = ErgoMemPool.empty(settings)
     val v = h.openSurfaceIds().last
     s.store.update(ByteArrayWrapper(idToBytes(v)), Seq(), Seq())
@@ -86,7 +86,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
 
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val p: ConnectedPeer = ConnectedPeer(
-      inetSocketAddressGen.sample.get,
+      connectionIdGen.sample.get,
       pchProbe.ref,
       Some(peerInfo)
     )

@@ -11,6 +11,7 @@ import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.utils.generators.ErgoGenerators
+import org.ergoplatform.{ErgoScriptPredef, Pay2SAddress}
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.util.Try
@@ -40,6 +41,15 @@ class MiningApiRouteSpec
   it should "process external solution" in {
     Post(prefix + "/solution", solution.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "display miner pk" in {
+    Get(prefix + "/rewardAddress") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val script = ErgoScriptPredef.rewardOutputScript(settings.chainSettings.monetary.minerRewardDelay, pk)
+      val addressStr = Pay2SAddress(script)(settings.addressEncoder).toString()
+      responseAs[Json].hcursor.downField("rewardAddress").as[String] shouldEqual Right(addressStr)
     }
   }
 

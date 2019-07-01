@@ -16,7 +16,7 @@ import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.testkit.utils.NoShrink
-import scorex.util.ModifierId
+import scorex.util.{ModifierId, bytesToId}
 
 class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with NoShrink {
 
@@ -100,7 +100,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
       boxes.nonEmpty shouldBe true
 
       val tx = validTransactionFromBoxes(boxes.toIndexedSeq)
-      subscribeEvents(classOf[FailedTransaction[_]])
+      subscribeEvents(classOf[FailedTransaction])
       nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       expectNoMsg()
       getPoolSize shouldBe 1
@@ -126,10 +126,10 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
       }
       getBestHeaderOpt shouldBe Some(block.header)
 
-      val brokenBlock = generateInvalidFullBlock(block, wusAfterBlock)
+      val brokenBlock = generateInvalidFullBlock(Some(block), wusAfterBlock)
       applyBlock(brokenBlock) shouldBe 'success
 
-      val brokenBlock2 = generateInvalidFullBlock(block, wusAfterBlock)
+      val brokenBlock2 = generateInvalidFullBlock(Some(block), wusAfterBlock)
       brokenBlock2.header should not be brokenBlock.header
       applyBlock(brokenBlock2) shouldBe 'success
 
@@ -142,11 +142,10 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
   /**
     * Generates statefuly invalid full block (contains invalid transactions).
     */
-  private def generateInvalidFullBlock(parentBlock: ErgoFullBlock, parentState: WrappedUtxoState) = {
-    val validInterlinks = PoPowAlgos.updateInterlinks(
-      parentBlock.header, PoPowAlgos.unpackInterlinks(parentBlock.extension.fields).get)
-    val extensionIn =  PoPowAlgos.interlinksToExtension(validInterlinks).toExtension(modifierIdGen.sample.get)
-    val brokenBlockIn = validFullBlock(Some(parentBlock), parentState)
+  private def generateInvalidFullBlock(parentBlockOpt: Option[ErgoFullBlock], parentState: WrappedUtxoState) = {
+    val validInterlinks = PoPowAlgos.updateInterlinks(parentBlockOpt.map(_.header), parentBlockOpt.map(_.extension))
+    val extensionIn = PoPowAlgos.interlinksToExtension(validInterlinks).toExtension(modifierIdGen.sample.get)
+    val brokenBlockIn = validFullBlock(parentBlockOpt, parentState)
     val headTx = brokenBlockIn.blockTransactions.txs.head
     val wrongBoxId: ADKey = ADKey !@@ Algos.hash("wrong input")
     val newInput = headTx.inputs.head.copy(boxId = wrongBoxId)
@@ -359,7 +358,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val block = validFullBlock(None, us, bh)
-    updateConfig(genesisIdConfig(Some(ModifierId @@ Algos.encode(block.header.id))))
+    updateConfig(genesisIdConfig(Some(block.header.id)))
 
     getBestHeaderOpt shouldBe None
     getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
@@ -371,6 +370,87 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     expectMsgType[SyntacticallySuccessfulModifier[Header]]
     getHistoryHeight shouldBe ErgoHistory.GenesisHeight
     getHeightOf(block.header.id) shouldBe Some(ErgoHistory.GenesisHeight)
+  }
+
+  private val t16 = TestCase("apply forks that include genesis block") { fixture =>
+    import fixture._
+
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
+    val wusGenesis = WrappedUtxoState(us, bh, stateConstants)
+
+
+    val chain1block1 = validFullBlock(parentOpt = None, us, bh)
+    val expectedBestFullBlockOpt = if (verifyTransactions) Some(chain1block1) else None
+    applyBlock(chain1block1) shouldBe 'success
+    getBestFullBlockOpt shouldBe expectedBestFullBlockOpt
+    getBestHeaderOpt shouldBe Some(chain1block1.header)
+
+    val chain2block1 = validFullBlock(parentOpt = None, us, bh)
+    applyBlock(chain2block1) shouldBe 'success
+    getBestFullBlockOpt shouldBe expectedBestFullBlockOpt
+    getBestHeaderOpt shouldBe Some(chain1block1.header)
+
+    val wusChain2Block1 = wusGenesis.applyModifier(chain2block1).get
+    val chain2block2 = validFullBlock(Some(chain2block1), wusChain2Block1)
+    chain2block1.header.stateRoot shouldEqual wusChain2Block1.rootHash
+
+    applyBlock(chain2block2) shouldBe 'success
+    if (verifyTransactions) {
+      getBestFullBlockEncodedId shouldBe Some(chain2block2.header.encodedId)
+    }
+
+    getBestHeaderOpt shouldBe Some(chain2block2.header)
+    getRootHash shouldBe Algos.encode(chain2block2.header.stateRoot)
+  }
+
+  private val t17 = TestCase("apply invalid genesis header") { fixture =>
+    import fixture._
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
+    val header = validFullBlock(None, us, bh).header.copy(parentId = bytesToId(Array.fill(32)(9: Byte)))
+
+    getBestHeaderOpt shouldBe None
+    getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
+
+    subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
+    subscribeEvents(classOf[SyntacticallyFailedModification[_]])
+
+    nodeViewHolderRef ! LocallyGeneratedModifier[Header](header)
+    expectMsgType[SyntacticallyFailedModification[Header]]
+    getHistoryHeight shouldBe ErgoHistory.EmptyHistoryHeight
+    getHeightOf(header.id) shouldBe None
+  }
+
+  private val t18 = TestCase("apply syntactically invalid genesis block") { fixture =>
+    import fixture._
+
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
+
+    val validBlock = validFullBlock(parentOpt = None, us, bh)
+    val invalidBlock = validBlock.copy(header = validBlock.header.copy(parentId = bytesToId(Array.fill(32)(9: Byte))))
+
+    applyBlock(invalidBlock) shouldBe 'failure
+    getBestFullBlockOpt shouldBe None
+    getBestHeaderOpt shouldBe None
+  }
+
+  private val t19 = TestCase("apply semantically invalid genesis block") { fixture =>
+    import fixture._
+
+    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
+    val wusGenesis = WrappedUtxoState(us, bh, stateConstants)
+
+    val invalidBlock = generateInvalidFullBlock(None, wusGenesis)
+
+    if (verifyTransactions) {
+
+      val initDigest = getCurrentState.rootHash
+
+      applyBlock(invalidBlock) shouldBe 'success
+
+      getBestFullBlockOpt shouldBe None
+      getBestHeaderOpt shouldBe None
+      getCurrentState.rootHash shouldEqual initDigest
+    }
   }
 
   val cases: List[TestCase] = List(t1, t2, t3, t4, t5, t6, t7, t8, t9)
@@ -393,7 +473,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
   }
 
-  val genesisIdTestCases = List(t14, t15)
+  val genesisIdTestCases = List(t14, t15, t16, t17, t18, t19)
 
   def genesisIdConfig(expectedGenesisIdOpt: Option[ModifierId])(protoSettings: ErgoSettings): ErgoSettings = {
     protoSettings.copy(chainSettings = protoSettings.chainSettings.copy(genesisId = expectedGenesisIdOpt))

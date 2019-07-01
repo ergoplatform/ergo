@@ -3,8 +3,10 @@ package org.ergoplatform.nodeView.mempool
 import org.ergoplatform.ErgoAddressEncoder.TestnetNetworkPrefix
 import org.ergoplatform.ErgoScriptPredef.boxCreationHeight
 import org.ergoplatform.{ErgoBox, ErgoScriptPredef, Height, Self}
-import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState}
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoPropertyTest
+import scorex.crypto.authds.ADKey
 import sigmastate._
 import sigmastate.Values._
 import sigmastate.lang.Terms._
@@ -53,7 +55,7 @@ class ScriptsSpec extends ErgoPropertyTest {
 
     applyBlockSpendingScript(GE(Height, Plus(boxCreationHeight(Self), IntConstant(delta))).toSigmaProp) shouldBe 'success
     applyBlockSpendingScript(ErgoScriptPredef.rewardOutputScript(delta, defaultMinerPk)) shouldBe 'success
-    //    applyBlockSpendingScript(ErgoScriptPredef.feeProposition(delta)) shouldBe 'success
+//        applyBlockSpendingScript(ErgoScriptPredef.feeProposition(delta)) shouldBe 'success
   }
 
 
@@ -65,9 +67,13 @@ class ScriptsSpec extends ErgoPropertyTest {
     val scriptBox = ergoBoxGen(script, heightGen = 0).sample.get
     val bh = BoxHolder(Seq(fixedBox, scriptBox))
     val us = UtxoState.fromBoxHolder(bh, None, createTempDir, stateConstants)
+    bh.boxes.map(b => us.boxById(b._2.id) shouldBe Some(b._2))
     val tx = validTransactionsFromBoxHolder(bh, new Random(1), 201)._1
     tx.size shouldBe 1
     tx.head.inputs.size shouldBe 2
+    ErgoState.boxChanges(tx)._1.foreach { boxId: ADKey =>
+      assert(us.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
+    }
     val block = validFullBlock(None, us, tx, Some(1234L))
     us.applyModifier(block)
   }

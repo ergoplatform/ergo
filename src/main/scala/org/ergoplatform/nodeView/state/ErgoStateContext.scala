@@ -22,13 +22,13 @@ import scala.util.{Failure, Try}
   * State context with predicted header.
   * The predicted header only contains fields that can be predicted.
   */
-class UpcomingStateContext(lastHeaders: Seq[Header],
-                           lastExtensionOpt: Option[Extension],
-                           val predictedHeader: PreHeader,
-                           genesisStateDigest: ADDigest,
-                           currentParameters: Parameters,
-                           validationSettings: ErgoValidationSettings,
-                           votingData: VotingData)(implicit votingSettings: VotingSettings)
+case class UpcomingStateContext(override val lastHeaders: Seq[Header],
+                                override val lastExtensionOpt: Option[Extension],
+                                predictedHeader: PreHeader,
+                                override val genesisStateDigest: ADDigest,
+                                override val currentParameters: Parameters,
+                                override val validationSettings: ErgoValidationSettings,
+                                override val votingData: VotingData)(implicit votingSettings: VotingSettings)
   extends ErgoStateContext(lastHeaders, lastExtensionOpt, genesisStateDigest, currentParameters, validationSettings, votingData)(votingSettings) {
 
   override def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(predictedHeader)
@@ -92,7 +92,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                nBits: Long,
                votes: Array[Byte],
                proposedUpdate: ErgoValidationSettingsUpdate,
-               version: Byte): ErgoStateContext = {
+               version: Byte): UpcomingStateContext = {
     val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
     val forkVote = votes.contains(Parameters.SoftFork)
     val height = ErgoHistory.heightOf(lastHeaderOpt) + 1

@@ -1,7 +1,7 @@
 package org.ergoplatform.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.{Directive1, Route}
+import akka.http.scaladsl.server.{Directive, Directive1, Route}
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
@@ -22,6 +22,7 @@ import sigmastate.lang.SigmaCompiler
 import sigmastate.{SBoolean, SSigmaProp}
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
@@ -36,24 +37,29 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   override val route: Route = (pathPrefix("wallet") & withAuth) {
-    corsHandler {
-      balancesR ~
-        unconfirmedBalanceR ~
-        addressesR ~
-        generateTransactionR ~
-        generatePaymentTransactionR ~
-        generateAssetIssueTransactionR ~
-        sendTransactionR ~
-        sendPaymentTransactionR ~
-        sendAssetIssueTransactionR ~
-        p2shAddressR ~
-        p2sAddressR ~
-        initWalletR ~
-        restoreWalletR ~
-        unlockWalletR ~
-        lockWalletR ~
-        deriveKeyR ~
-        deriveNextKeyR
+    toStrictEntity(10.seconds) {
+      corsHandler {
+        balancesR ~
+          unconfirmedBalanceR ~
+          addressesR ~
+          transactionR ~
+          unspentBoxesR ~
+          boxesR ~
+          generateTransactionR ~
+          generatePaymentTransactionR ~
+          generateAssetIssueTransactionR ~
+          sendTransactionR ~
+          sendPaymentTransactionR ~
+          sendAssetIssueTransactionR ~
+          p2shAddressR ~
+          p2sAddressR ~
+          initWalletR ~
+          restoreWalletR ~
+          unlockWalletR ~
+          lockWalletR ~
+          deriveKeyR ~
+          deriveNextKeyR
+      }
     }
   }
 
@@ -97,6 +103,17 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         .map(mnemoPassOpt => (pass, mnemoPassOpt))
       )
       .fold(_ => reject, s => provide(s))
+  }
+
+  private val txParams: Directive[(Int, Int)] =
+    parameters("minInclusionHeight".as[Int] ? 0, "maxInclusionHeight".as[Int] ? Int.MaxValue)
+
+  private val boxParams: Directive[(Int, Int)] =
+    parameters("minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)
+
+  private val boxPredicate = { (bx: WalletBox, minConfNum: Int, minHeight: Int) =>
+    bx.confirmationsNumOpt.getOrElse(0) >= minConfNum &&
+      bx.trackedBox.inclusionHeightOpt.getOrElse(-1) >= minHeight
   }
 
   private def addressResponse(address: ErgoAddress): Json = Json.obj("address" -> addressJsonEncoder(address))
@@ -174,11 +191,11 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
 
   def balancesR: Route = (path("balances") & get) {
-    withWallet(_.confirmedBalances())
+    withWallet(_.confirmedBalances)
   }
 
   def unconfirmedBalanceR: Route = (path("balances" / "with_unconfirmed") & get) {
-    withWallet(_.balancesWithUnconfirmed())
+    withWallet(_.balancesWithUnconfirmed)
   }
 
   def p2sAddressR: Route = (path("p2s_address") & post & source) { source =>
@@ -200,7 +217,34 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def addressesR: Route = (path("addresses") & get) {
-    withWallet(_.trackedAddresses())
+    withWallet(_.trackedAddresses)
+  }
+
+  def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) { (minConfNum, minHeight) =>
+    withWallet {
+      _.boxes(unspentOnly = true)
+        .map {
+          _.filter(boxPredicate(_, minConfNum, minHeight))
+        }
+    }
+  }
+
+  def boxesR: Route = (path("boxes") & get & boxParams) { (minConfNum, minHeight) =>
+    withWallet {
+      _.boxes()
+        .map {
+          _.filter(boxPredicate(_, minConfNum, minHeight))
+        }
+    }
+  }
+
+  def transactionR: Route = (path("transactions") & get & txParams) { case (minHeight, maxHeight) =>
+    withWallet {
+      _.transactions
+        .map {
+          _.filter(tx => tx.inclusionHeight >= minHeight && tx.inclusionHeight <= maxHeight)
+        }
+    }
   }
 
   def initWalletR: Route = (path("init") & post & initRequest) {

@@ -210,7 +210,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         spendingTxIdOpt = Some(modifierIdGen.sample.get)
       )
     )
-    val walletTxs: Seq[WalletTransaction] = Seq(walletTransactionGen.sample.get, walletTransactionGen.sample.get)
+    val walletTxs: Seq[AugWalletTransaction] = Seq(augWalletTransactionGen.sample.get, augWalletTransactionGen.sample.get)
 
     def props(): Props = Props(new WalletActorStub)
     def balance(chainStatus: ChainStatus): Long = if (chainStatus.onChain) confirmedBalance else unconfirmedBalance

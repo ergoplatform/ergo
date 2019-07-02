@@ -190,6 +190,7 @@ components:
         - dataInputs
         - outputs
         - inclusionHeight
+        - numConfirmations
       properties:
         id:
           $ref: '#/components/schemas/TransactionId'
@@ -210,6 +211,11 @@ components:
             $ref: '#/components/schemas/ErgoTransactionOutput'
         inclusionHeight:
           description: Height of a block the transaction was included in
+          type: integer
+          format: int32
+          example: 20998
+        numConfirmations:
+          description: Number of transaction confirmations
           type: integer
           format: int32
           example: 20998
@@ -1632,6 +1638,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/updateChangeAddress:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Update address to be used to send change to
+      operationId: walletUpdateChangeAddress
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - address
+              properties:
+                address:
+                  type: string
+                  description: Pay2PubKey address
+                  example: '3WzCFq7mkykKqi4Ykdk8BK814tkh6EsPmA42pQZxU2NRwSDgd6yB'
+      responses:
+        '200':
+          description: Change address updated successfully
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/deriveKey:
     post:
       security:
@@ -1731,7 +1768,7 @@ paths:
       - in: query
         name: minInclusionHeight
         required: false
-        description: Minimal box inclusion height
+        description: Minimal tx inclusion height
         schema:
           type: integer
           format: int32
@@ -1739,7 +1776,23 @@ paths:
       - in: query
         name: maxInclusionHeight
         required: false
-        description: Maximal box inclusion height
+        description: Maximal tx inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal confirmations number
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximal confirmations number
         schema:
           type: integer
           format: int32
@@ -1760,6 +1813,43 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/WalletTransaction'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/transactionById:
+    parameters:
+      - in: query
+        name: id
+        required: true
+        description: Transaction id
+        schema:
+          type: string
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get wallet-related transaction by id
+      operationId: walletGetTransaction
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Wallet-related transaction
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletTransaction'
+        '404':
+          description: Transaction with specified id not found in wallet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:

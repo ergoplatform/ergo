@@ -160,6 +160,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case GetTransactions =>
       sender() ! registry.readTransactions
         .sortBy(-_.inclusionHeight)
+        .map(tx => AugWalletTransaction(tx, height - tx.inclusionHeight))
+
+    case GetTransaction(id) =>
+      sender() ! registry.getTransactionById(id)
+        .map(tx => AugWalletTransaction(tx, height - tx.inclusionHeight))
 
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))
@@ -352,7 +357,12 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
             registry.readCertainUnspentBoxes.toIterator, onChainFilter, targetBalance, targetAssets).map { r =>
             val inputs = r.boxes.toIndexedSeq
 
-            val changeAddress = prover.pubKeys(Random.nextInt(prover.pubKeys.size))
+            val changeAddress = storage.readChangeAddress
+              .map(_.pubkey)
+              .getOrElse {
+                log.warn("Change address not specified. Using random address from wallet.")
+                prover.pubKeys(Random.nextInt(prover.pubKeys.size))
+              }
 
             val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>
               val assets = tokensChange.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
@@ -528,6 +538,10 @@ object ErgoWalletActor {
   final case class DeriveKey(path: String)
 
   final case class GetBoxes(unspentOnly: Boolean)
+
+  final case class UpdateChangeAddress(address: P2PKAddress)
+
+  final case class GetTransaction(id: ModifierId)
 
   case object GetTransactions
 

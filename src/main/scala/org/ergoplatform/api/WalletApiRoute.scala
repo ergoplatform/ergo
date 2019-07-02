@@ -10,11 +10,12 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import scorex.core.api.http.ApiError.BadRequest
+import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
+import scorex.util.bytesToId
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.RuntimeIRContext
@@ -33,7 +34,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   implicit val requestsHolderDecoder: RequestsHolderDecoder = new RequestsHolderDecoder(ergoSettings)
   implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
   implicit val addressJsonEncoder: Encoder[ErgoAddress] = paymentRequestDecoder.addressEncoders.encoder
-  implicit val walletTxEncoder: Encoder[WalletTransaction] = WalletTransaction.jsonEncoder
+  implicit val walletTxEncoder: Encoder[AugWalletTransaction] = AugWalletTransaction.jsonEncoder
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
@@ -43,7 +44,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         balancesR ~
           unconfirmedBalanceR ~
           addressesR ~
-          transactionR ~
+          getTransactionR ~
+          transactionsR ~
           unspentBoxesR ~
           boxesR ~
           generateTransactionR ~
@@ -59,7 +61,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           unlockWalletR ~
           lockWalletR ~
           deriveKeyR ~
-          deriveNextKeyR
+          deriveNextKeyR ~
+          updateChangeAddressR
       }
     }
   }
@@ -106,8 +109,12 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       .fold(_ => reject, s => provide(s))
   }
 
-  private val txParams: Directive[(Int, Int)] =
-    parameters("minInclusionHeight".as[Int] ? 0, "maxInclusionHeight".as[Int] ? Int.MaxValue)
+  private val txParams: Directive[(Int, Int, Int, Int)] = parameters(
+    "minInclusionHeight".as[Int] ? 0,
+    "maxInclusionHeight".as[Int] ? Int.MaxValue,
+    "minConfirmations".as[Int] ? 0,
+    "maxConfirmations".as[Int] ? Int.MaxValue
+  )
 
   private val boxParams: Directive[(Int, Int)] =
     parameters("minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)
@@ -116,6 +123,17 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     bx.confirmationsNumOpt.getOrElse(0) >= minConfNum &&
       bx.trackedBox.inclusionHeightOpt.getOrElse(-1) >= minHeight
   }
+
+  private val p2pkAddress: Directive1[P2PKAddress] = entity(as[Json])
+    .flatMap {
+      _.hcursor.downField("address").as[String]
+        .flatMap { address =>
+          addressEncoder.fromString(address).toEither
+        } match {
+          case Right(value: P2PKAddress) => provide(value)
+          case _ => reject
+        }
+    }
 
   private def addressResponse(address: ErgoAddress): Json = Json.obj("address" -> addressJsonEncoder(address))
 
@@ -239,12 +257,22 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
-  def transactionR: Route = (path("transactions") & get & txParams) { case (minHeight, maxHeight) =>
-    withWallet {
-      _.transactions
-        .map {
-          _.filter(tx => tx.inclusionHeight >= minHeight && tx.inclusionHeight <= maxHeight)
-        }
+  def transactionsR: Route = (path("transactions") & get & txParams) {
+    case (minHeight, maxHeight, minConfNum, maxConfNum) =>
+      withWallet {
+        _.transactions
+          .map {
+            _.filter(tx =>
+              tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
+              tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
+            )
+          }
+      }
+  }
+
+  def getTransactionR: Route = (path("transactionById") & modifierIdGet & get) { id =>
+    withWalletOp(_.transactionById(id)) {
+      _.fold[Route](NotExists)(tx => ApiResponse(tx.asJson))
     }
   }
 
@@ -304,6 +332,13 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           )
         )
       )
+    }
+  }
+
+  def updateChangeAddressR: Route = (path("updateChangeAddress") & post & p2pkAddress) { p2pk =>
+    withWallet { w =>
+      w.updateChangeAddress(p2pk)
+      Future.successful(())
     }
   }
 

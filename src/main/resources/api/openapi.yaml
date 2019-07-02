@@ -1402,7 +1402,7 @@ paths:
 
   /utils/seed:
     get:
-      summary: Get random seed with 32 bytes size
+      summary: Get random seed of 32 bytes
       operationId: getRandomSeed
       tags:
       - utils
@@ -1447,6 +1447,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
+  /utils/addressToRaw/{address}:
+    get:
+      summary: Convert Pay-To-Public-Key Address to raw representation (hex-encoded serialized curve point)
+      operationId: AddressToRaw
+      tags:
+        - utils
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to extract public key from
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: hex-encoded public key (serialized secp256k1 element)
+          content:
+            application/json:
+              schema:
+                type: string
+                example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utils/rawToAddress/{pubkeyHex}:
+   get:
+    summary: Generate Pay-To-Public-Key address from hex-encoded raw pubkey (secp256k1 serialized point)
+    operationId: RawToAddress
+    tags:
+      - utils
+    parameters:
+      - in: path
+        name: pubkeyHex
+        required: true
+        description: public key to get address from
+        schema:
+          type: string
+          example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+    responses:
+      '200':
+        description: Pay-to-public-key (P2PK) address
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErgoAddress'
+      default:
+        description: Error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiError'
 
   /utils/seed/{length}:
     get:

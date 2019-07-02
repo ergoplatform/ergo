@@ -250,6 +250,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           }
         }
       }
+
+    case UpdateChangeAddress(address) =>
+      storage.updateChangeAddress(address)
   }
 
   private def withWalletLockHandler(callback: ActorRef)

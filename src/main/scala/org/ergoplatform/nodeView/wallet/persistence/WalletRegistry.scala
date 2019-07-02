@@ -32,6 +32,9 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
   def readTransactions: Seq[WalletTransaction] =
     getAllTxs.transact(store)
 
+  def getTransactionById(id: ModifierId): Option[WalletTransaction] =
+    getTx(id).transact(store)
+
   def readCertainUnspentBoxes: Seq[TrackedBox] = {
     val query = for {
       allBoxes <- getAllBoxes

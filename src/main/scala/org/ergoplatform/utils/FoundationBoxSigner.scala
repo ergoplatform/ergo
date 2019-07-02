@@ -68,7 +68,7 @@ object FoundationBoxSigner extends App {
   val cmtOpt = commitmentStringOpt.map(Base16.decode).map(_.get).map(SigmaSerializer.startReader(_))
                   .map(GroupElementSerializer.parse).map(FirstDLogProverMessage.apply)
   val ownRandomnessOpt = ownRandomnessStringOpt.map(new BigInteger(_))
-  val partialSingatureOpt = partialSignarureStringOpt.map(Base16.decode).map(_.get)
+  val partialSignatureOpt = partialSignarureStringOpt.map(Base16.decode).map(_.get)
 
   val inactiveIndexes = (0 to 2).filter(i => i != signerIndex)
 
@@ -82,8 +82,6 @@ object FoundationBoxSigner extends App {
   ).map(Base16.decode).map(_.get).map(SigmaSerializer.startReader(_))
     .map(GroupElementSerializer.parse)
       .map(ProveDlog.apply)
-
-  val inputIndex = 0
 
   //forming a context. Only height matters for the foundation box.
   implicit val vs = VotingSettings(64, 32, 128)
@@ -141,7 +139,7 @@ object FoundationBoxSigner extends App {
 
     case i: Int if i == sign =>
       val ownRandomness = ownRandomnessOpt.get
-      val partialSig = partialSingatureOpt.get
+      val partialSig = partialSignatureOpt.get
 
       val bag = prover.bagForMultisig(context, prop, partialSig, inactiveIndexes.map(pubKeys.apply))
         .addHint(OwnCommitment(pubKeys(signerIndex), ownRandomness, cmtOpt.get))

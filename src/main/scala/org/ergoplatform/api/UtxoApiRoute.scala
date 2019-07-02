@@ -27,7 +27,7 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
   def byId: Route = (get & path("byId" / Segment)) { id =>
       ApiResponse(getState.map {
         case usr: UtxoStateReader =>
-          ApiResponse(usr.boxById(ADKey @@ Base16.decode(id).get))
+          usr.boxById(ADKey @@ Base16.decode(id).get)
         case _ => ???
       })
   }

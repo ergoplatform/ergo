@@ -111,14 +111,13 @@ object FoundationBoxSigner extends App {
   val fee = EmissionRules.CoinsInOneErgo / 10 //0.1 Erg
   val feeBox = ErgoBox(fee, ErgoScriptPredef.feeProposition(), height)
 
-  val withdrawalAmount = 100 * EmissionRules.CoinsInOneErgo
-  val withdrawalOutput = new ErgoBoxCandidate(withdrawalAmount, Constants.TrueLeaf, height)
+  val withdrawalAmount = 5 * EmissionRules.CoinsInOneErgo * pubKeys.length
+  val withdrawalOutputs = pubKeys.map(pubKey => new ErgoBoxCandidate(withdrawalAmount / pubKeys.length, pubKey, height))
 
   val foundationOutput = new ErgoBoxCandidate(gfBox.value - withdrawalAmount - fee, gfBox.ergoTree, height,
                                               gfBox.additionalTokens, gfBox.additionalRegisters)
 
-
-  val outputCandidates = IndexedSeq(foundationOutput, withdrawalOutput, feeBox.toCandidate)
+  val outputCandidates = IndexedSeq(foundationOutput) ++ withdrawalOutputs ++ IndexedSeq(feeBox.toCandidate)
   val undersignedTx = UnsignedErgoTransaction(IndexedSeq(input), outputCandidates)
   val transactionContext = TransactionContext(IndexedSeq(boxToSpend), IndexedSeq(), undersignedTx, selfIndex = 0)
   val msgToSign = undersignedTx.messageToSign

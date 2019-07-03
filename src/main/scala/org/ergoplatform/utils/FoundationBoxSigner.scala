@@ -110,7 +110,7 @@ object FoundationBoxSigner extends App {
   val feeBox = ErgoBox(fee, ErgoScriptPredef.feeProposition(), height)
 
   val withdrawalAmount = 1051 * EmissionRules.CoinsInOneErgo
-  val withdrawalOutputs = new ErgoBoxCandidate(withdrawalAmount, pubKeys(signerIndex), height)
+  val withdrawalOutputs = IndexedSeq(new ErgoBoxCandidate(withdrawalAmount, pubKeys(signerIndex), height))
 
   val foundationOutput = new ErgoBoxCandidate(gfBox.value - withdrawalAmount - fee, gfBox.ergoTree, height,
                                               gfBox.additionalTokens, gfBox.additionalRegisters)

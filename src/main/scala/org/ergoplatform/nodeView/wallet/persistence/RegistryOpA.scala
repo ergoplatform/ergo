@@ -29,6 +29,8 @@ object RegistryOpA {
 
   case object GetAllTxs extends RegistryOpA[Seq[WalletTransaction]]
 
+  final case class GetTx(id: ModifierId) extends RegistryOpA[Option[WalletTransaction]]
+
   final case class RemoveTxs(ids: Seq[ModifierId]) extends RegistryOpA[Unit]
 
   final case class PutIndex(index: RegistryIndex) extends RegistryOpA[Unit]

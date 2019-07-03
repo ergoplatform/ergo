@@ -38,7 +38,7 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
 
   def genFullChain(genesisState: WrappedUtxoState, howMany: Int): Seq[ErgoFullBlock] = {
     (1 to howMany).foldLeft((Seq[ErgoFullBlock](), genesisState, None: Option[ErgoFullBlock])) { case ((chain, wus, parentOpt), h) =>
-      val time = System.currentTimeMillis() - (howMany - h) * BlockInterval.toMillis
+      val time = System.currentTimeMillis() - (howMany - h) * (BlockInterval.toMillis * 20)
       val block = validFullBlock(parentOpt, wus, time)
       val newState = wus.applyModifier(block).get
       (chain :+ block, newState, Some(block))

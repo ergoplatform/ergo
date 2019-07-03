@@ -7,11 +7,11 @@ import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
 
-import scala.util.Random
+import scala.util.{Random, Success}
 
 /**
   * Persists version-agnostic wallet actor's mutable state.
@@ -98,6 +98,19 @@ final class WalletStorage(store: Store, settings: ErgoSettings)
     .get(LatestPostponedBlockHeightKey)
     .map(r => Ints.fromByteArray(r.data))
 
+  def updateChangeAddress(address: P2PKAddress): Unit = {
+    val bytes = addressEncoder.toString(address).getBytes(Constants.StringEncoding)
+    store.update(randomVersion, Seq.empty, Seq(ChangeAddressKey -> ByteArrayWrapper(bytes)))
+  }
+
+  def readChangeAddress: Option[P2PKAddress] =
+    store.get(ChangeAddressKey).flatMap { x =>
+      addressEncoder.fromString(new String(x.data, Constants.StringEncoding)) match {
+        case Success(p2pk: P2PKAddress) => Some(p2pk)
+        case _ => None
+      }
+    }
+
   private def randomVersion = Random.nextInt()
 
 }
@@ -115,6 +128,9 @@ object WalletStorage {
 
   val LatestPostponedBlockHeightKey: ByteArrayWrapper =
     ByteArrayWrapper(Blake2b256.hash("latest_block"))
+
+  val ChangeAddressKey: ByteArrayWrapper =
+    ByteArrayWrapper(Blake2b256.hash("change_address"))
 
   def key(height: Int): ByteArrayWrapper =
     ByteArrayWrapper(Blake2b256.hash(Ints.toByteArray(height)))

@@ -16,7 +16,14 @@ trait ErgoBaseApiRoute extends ApiRoute {
 
   val modifierId: Directive1[ModifierId] = pathPrefix(Segment).flatMap { h =>
     Algos.decode(h) match {
-      case Success(header) => provide(bytesToId(header))
+      case Success(bytes) => provide(bytesToId(bytes))
+      case _ => reject(ValidationRejection("Wrong modifierId format"))
+    }
+  }
+
+  val modifierIdGet: Directive1[ModifierId] = parameters("id".as[String]).flatMap { h =>
+    Algos.decode(h) match {
+      case Success(bytes) => provide(bytesToId(bytes))
       case _ => reject(ValidationRejection("Wrong modifierId format"))
     }
   }

@@ -118,7 +118,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val walletTxs = block.transactions.filter(tx => walletTxIds.contains(tx.id))
       if (walletTxs.nonEmpty) {
         if (proverOpt.isDefined) {
-          log.info(s"Precessing block at height ${block.height} with ${walletTxs.size} wallet transactions")
+          log.info(s"Processing block at height ${block.height} with ${walletTxs.size} wallet transactions")
           processBlock(block.id, block.height, walletInputs, walletOutputs, walletTxs)
         } else if (walletSettings.postponedScanning) {
           log.info(s"Postponing block at height ${block.height} with ${walletTxs.size} wallet transactions")

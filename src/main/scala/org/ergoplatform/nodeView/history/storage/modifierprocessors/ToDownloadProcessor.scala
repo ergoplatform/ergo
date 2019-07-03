@@ -13,6 +13,8 @@ import scala.annotation.tailrec
   */
 trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
+  private val maxTimeDiffFactor = 100
+
   protected val config: NodeConfigurationSettings
 
   protected val chainSettings: ChainSettings
@@ -69,7 +71,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     } else if (pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)
-    } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * 5)) {
+    } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * maxTimeDiffFactor)) {
       // Headers chain is synced after this header. Start downloading full blocks
       pruningProcessor.updateBestFullBlock(header)
       log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
@@ -88,4 +90,5 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
       h.sectionIds.tail
     }
   }
+
 }

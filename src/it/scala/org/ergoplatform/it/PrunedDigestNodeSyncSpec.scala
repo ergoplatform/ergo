@@ -29,7 +29,7 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
   val nodeForSyncingConfig: Config = minerConfig
     .withFallback(nonGeneratingPeerConfig)
   val digestConfig: Config = digestStatePeerConfig
-    .withFallback(blockIntervalConfig(10000))
+    .withFallback(blockIntervalConfig(500))
     .withFallback(prunedHistoryConfig(blocksToKeep))
     .withFallback(nonGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs(1))

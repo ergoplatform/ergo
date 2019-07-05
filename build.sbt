@@ -28,6 +28,7 @@ libraryDependencies ++= Seq(
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   ("org.scorexfoundation" %% "avl-iodb" % "0.2.15").exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "iodb" % "0.3.2",
+  "org.iq80.leveldb" % "leveldb" % "0.12",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
   "org.ergoplatform" %% "ergo-wallet" % ergoWalletVersion,

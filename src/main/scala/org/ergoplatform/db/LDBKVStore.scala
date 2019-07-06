@@ -20,6 +20,6 @@ final class LDBKVStore(protected val db: DB) extends KVStore {
 
   def put(values: (K, V)*): Unit = update(values, Seq.empty)
 
-  def delete(keys: K*): Unit = update(Seq.empty, keys)
+  def remove(keys: K*): Unit = update(Seq.empty, keys)
 
 }

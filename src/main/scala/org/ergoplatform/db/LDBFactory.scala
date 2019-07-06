@@ -23,7 +23,7 @@ object LDBFactory extends ScorexLogging {
     if (name == javaFactory) {
       log.warn("Using the pure java LevelDB implementation which is still experimental")
     } else {
-      log.trace(s"Loaded $name with $factory")
+      log.info(s"Loaded $name with $factory")
     }
 
     factory

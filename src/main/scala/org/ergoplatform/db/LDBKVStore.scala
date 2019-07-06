@@ -1,6 +1,5 @@
 package org.ergoplatform.db
 
-import akka.util.ByteString
 import org.iq80.leveldb.DB
 
 /**
@@ -8,7 +7,7 @@ import org.iq80.leveldb.DB
   */
 final class LDBKVStore(protected val db: DB) extends KVStore {
 
-  def update(toInsert: Seq[(ByteString, ByteString)], toRemove: Seq[ByteString]): Unit = {
+  def update(toInsert: Seq[(K, V)], toRemove: Seq[K]): Unit = {
     val batch = db.createWriteBatch()
     try {
       toInsert.foreach { case (k, v) => batch.put(k.toArray, v.toArray) }
@@ -19,8 +18,8 @@ final class LDBKVStore(protected val db: DB) extends KVStore {
     }
   }
 
-  def put(values: (ByteString, ByteString)*): Unit = update(values, Seq.empty)
+  def put(values: (K, V)*): Unit = update(values, Seq.empty)
 
-  def delete(keys: ByteString*): Unit = update(Seq.empty, keys)
+  def delete(keys: K*): Unit = update(Seq.empty, keys)
 
 }

@@ -49,6 +49,10 @@ final class VersionedLDBKVStore(protected val db: DB) extends KVStore {
     }
   }
 
+  def insert(toInsert: Seq[(K, V)])(version: VersionId): Unit = update(toInsert, Seq.empty)(version)
+
+  def remove(toRemove: Seq[K])(version: VersionId): Unit = update(Seq.empty, toRemove)(version)
+
   def rollbackTo(versionId: VersionId): Try[Unit] = {
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
@@ -62,7 +66,7 @@ final class VersionedLDBKVStore(protected val db: DB) extends KVStore {
               val changeSetOpt = Option(db.get(verId, ro)).flatMap { changeSetBytes =>
                 ChangeSetSerializer.parseBytesTry(changeSetBytes).toOption
               }
-              require(changeSetOpt.isDefined, "Inconsistent versioned storage state")
+              require(changeSetOpt.isDefined, s"Inconsistent versioned storage state")
               acc ++ changeSetOpt.toSeq.map(verId -> _) // prepend newer version
             }
             .foreach { case (verId, changeSet) => // revert all changes (from newest version to the targeted one)

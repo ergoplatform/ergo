@@ -1,8 +1,6 @@
 package org.ergoplatform.db
 
-import akka.util.ByteString
 import org.iq80.leveldb.DB
-import org.iq80.leveldb.impl.Iq80DBFactory._
 
 class LDBKVStoreSpec extends DBSpec {
 

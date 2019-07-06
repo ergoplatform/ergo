@@ -1,12 +1,37 @@
 package org.ergoplatform.db
 
+import akka.util.ByteString
+import org.iq80.leveldb.{DB, ReadOptions}
+
 import scala.collection.mutable
 
-trait KVStore[K, V] extends AutoCloseable {
+trait KVStore extends AutoCloseable {
 
-  def get(key: K): Option[V]
+  type K = ByteString
+  type V = ByteString
 
-  def getAll: Iterable[(K, V)]
+  protected val db: DB
+
+  def get(key: ByteString): Option[ByteString] =
+    Option(db.get(key.toArray)).map(ByteString.apply)
+
+  def getAll: Seq[(ByteString, ByteString)] = {
+    val ro = new ReadOptions()
+    ro.snapshot(db.getSnapshot)
+    val iter = db.iterator(ro)
+    try {
+      iter.seekToFirst()
+      val bf = mutable.ArrayBuffer.empty[(ByteString, ByteString)]
+      while (iter.hasNext) {
+        val next = iter.next()
+        bf += (ByteString(next.getKey) -> ByteString(next.getValue))
+      }
+      bf
+    } finally {
+      iter.close()
+      ro.snapshot().close()
+    }
+  }
 
   def getOrElse(key: K, default: => V): V =
     get(key).getOrElse(default)
@@ -16,5 +41,7 @@ trait KVStore[K, V] extends AutoCloseable {
     keys.foreach(k => bf += (k -> get(k)))
     bf
   }
+
+  override def close(): Unit = db.close()
 
 }

@@ -43,6 +43,31 @@ object ChangeSetSerializer extends ScorexSerializer[ChangeSet] {
     }
   }
 
-  override def parse(r: Reader): ChangeSet = ???
+  override def parse(r: Reader): ChangeSet = {
+    val insertedQty = r.getInt()
+    val insertedKeys = (0 to insertedQty).foldLeft(Seq.empty[ByteString]) { case (acc, _) =>
+      val len = r.getUByte()
+      acc :+ ByteString(r.getBytes(len))
+    }
+    val removedQty = r.getInt()
+    val removed = (0 to removedQty).foldLeft(Seq.empty[(ByteString, ByteString)]) { case (acc, _) =>
+      val kLen = r.getUByte()
+      val k = ByteString(r.getBytes(kLen))
+      val vLen = r.getInt()
+      val v = ByteString(r.getBytes(vLen))
+      acc :+ (k -> v)
+    }
+    val alteredQty = r.getInt()
+    val altered = (0 to alteredQty).foldLeft(Seq.empty[(ByteString, (ByteString, ByteString))]) { case (acc, _) =>
+      val kLen = r.getUByte()
+      val k = ByteString(r.getBytes(kLen))
+      val oldVLen = r.getInt()
+      val oldV = ByteString(r.getBytes(oldVLen))
+      val newVLen = r.getInt()
+      val newV = ByteString(r.getBytes(newVLen))
+      acc :+ (k -> (oldV -> newV))
+    }
+    ChangeSet(insertedKeys, removed, altered)
+  }
 
 }

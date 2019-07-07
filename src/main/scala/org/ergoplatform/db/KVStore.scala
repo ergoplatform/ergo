@@ -12,16 +12,16 @@ trait KVStore extends AutoCloseable {
 
   protected val db: DB
 
-  def get(key: ByteString): Option[ByteString] =
+  def get(key: K): Option[V] =
     Option(db.get(key.toArray)).map(ByteString.apply)
 
-  def getAll: Seq[(ByteString, ByteString)] = {
+  def getAll: Seq[(K, V)] = {
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
     val iter = db.iterator(ro)
     try {
       iter.seekToFirst()
-      val bf = mutable.ArrayBuffer.empty[(ByteString, ByteString)]
+      val bf = mutable.ArrayBuffer.empty[(K, V)]
       while (iter.hasNext) {
         val next = iter.next()
         bf += (ByteString(next.getKey) -> ByteString(next.getValue))

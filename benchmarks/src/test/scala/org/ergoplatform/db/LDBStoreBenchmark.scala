@@ -1,6 +1,7 @@
 package org.ergoplatform.db
 
 import akka.util.ByteString
+import com.google.common.primitives.Longs
 import io.iohk.iodb.Store.{K, V}
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.ergoplatform.db.LDBFactory.factory
@@ -23,12 +24,14 @@ object LDBStoreBenchmark
 
   private val options = new Options()
   options.createIfMissing(true)
-  private val db = factory.open(createTempDir, options)
+  private val db0 = factory.open(createTempDir, options)
+  private val db1 = factory.open(createTempDir, options)
 
-  private val storeLDB = new VersionedLDBKVStore(db)
+  private val storeVLDB = new VersionedLDBKVStore(db0)
+  private val storeLDB = new LDBKVStore(db1)
   private val storeLSM = new LSMStore(createTempDir)
 
-  private val modsNumGen = Gen.enumeration("modifiers number")(100, 400)
+  private val modsNumGen = Gen.enumeration("modifiers number")(10, 100)
 
   val txsGen: Gen[Seq[BlockTransactions]] = modsNumGen.map { num =>
     (0 to num).flatMap { _ =>
@@ -43,18 +46,25 @@ object LDBStoreBenchmark
     exec.requireGC -> true
   )
 
+  private def randomVersion = ByteString(Algos.hash(Longs.toByteArray(Random.nextLong())))
+
   private def benchWriteLDB(bts: Seq[BlockTransactions]): Unit = {
     val toInsert = bts.map(bt => ByteString(idToBytes(bt.headerId)) -> ByteString(bt.bytes))
-    storeLDB.insert(toInsert)(ByteString(Algos.hash(idToBytes(bts.head.headerId))))
+    storeLDB.insert(toInsert)
   }
 
-  private def benchWriteReadLDB(bts: Seq[BlockTransactions]): Unit = {
+  private def benchWriteVLDB(bts: Seq[BlockTransactions]): Unit = {
     val toInsert = bts.map(bt => ByteString(idToBytes(bt.headerId)) -> ByteString(bt.bytes))
-    storeLDB.insert(toInsert)(ByteString(Algos.hash(idToBytes(bts.head.headerId))))
-    bts.foreach { bt => storeLDB.get(ByteString(idToBytes(bt.headerId))) }
+    storeVLDB.insert(toInsert)(randomVersion)
   }
 
-  private def benchGetAllLDB: Seq[(ByteString, ByteString)] = storeLDB.getAll
+  private def benchWriteReadVLDB(bts: Seq[BlockTransactions]): Unit = {
+    val toInsert = bts.map(bt => ByteString(idToBytes(bt.headerId)) -> ByteString(bt.bytes))
+    storeVLDB.insert(toInsert)(randomVersion)
+    bts.foreach { bt => storeVLDB.get(ByteString(idToBytes(bt.headerId))) }
+  }
+
+  private def benchGetAllVLDB: Seq[(ByteString, ByteString)] = storeVLDB.getAll
 
   private def benchWriteLSM(bts: Seq[BlockTransactions]): Unit = {
     val toInsert = bts.map(bt => ByteArrayWrapper(idToBytes(bt.headerId)) -> ByteArrayWrapper(bt.bytes))
@@ -73,12 +83,17 @@ object LDBStoreBenchmark
     performance of "LDBStore write" in {
       using(txsGen) config (config: _*) in (bts => benchWriteLDB(bts))
     }
-    performance of "LDBStore write/read" in {
-      using(txsGen) config (config: _*) in (bts => benchWriteReadLDB(bts))
+
+    performance of "VLDBStore write" in {
+      using(txsGen) config (config: _*) in (bts => benchWriteVLDB(bts))
     }
-    performance of "LDBStore getAll" in {
-      using(txsGen) config (config: _*) in (_ => benchGetAllLDB)
+    performance of "VLDBStore write/read" in {
+      using(txsGen) config (config: _*) in (bts => benchWriteReadVLDB(bts))
     }
+    performance of "VLDBStore getAll" in {
+      using(txsGen) config (config: _*) in (_ => benchGetAllVLDB)
+    }
+
     performance of "LSMStore write" in {
       using(txsGen) config (config: _*) in (bts => benchWriteLSM(bts))
     }

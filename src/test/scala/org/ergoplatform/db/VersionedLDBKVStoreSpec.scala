@@ -45,6 +45,8 @@ class VersionedLDBKVStoreSpec extends DBSpec {
       store.update(toInsert = Seq(keyB -> byteString("7"), keyE -> valE), toRemove = Seq(keyA))(v4)
 
       store.getAll should contain allElementsOf Seq(keyB -> byteString("7"), keyE -> valE, keyD -> valD)
+      store.get(keyC) shouldBe None
+      store.get(keyA) shouldBe None
 
       store.rollbackTo(v2) shouldBe 'success
 

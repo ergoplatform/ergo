@@ -19,12 +19,12 @@ final class VersionedLDBKVStore(protected val db: DB) extends KVStore {
     require(version.size == Constants.HashLength, "Illegal version id size")
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
-    require(Option(db.get(version.toArray, ro)).isEmpty, "VersionId is already used")
-    val (insertedKeys, altered) = toInsert.foldLeft(Seq.empty[K], Seq.empty[(K, (V, V))]) {
-      case ((insertedAcc, alteredAcc), (k, v)) =>
+    require(Option(db.get(version.toArray, ro)).isEmpty, "Version id is already used")
+    val (insertedKeys, altered) = toInsert.foldLeft(Seq.empty[K], Seq.empty[(K, V)]) {
+      case ((insertedAcc, alteredAcc), (k, _)) =>
         Option(db.get(k.toArray, ro))
           .map { oldValue =>
-            insertedAcc -> ((k -> (ByteString(oldValue) -> v)) +: alteredAcc)
+            insertedAcc -> ((k -> ByteString(oldValue)) +: alteredAcc)
           }
           .getOrElse {
             (k +: insertedAcc) -> alteredAcc
@@ -75,7 +75,7 @@ final class VersionedLDBKVStore(protected val db: DB) extends KVStore {
               changeSet.removed.foreach { case (k, v) =>
                 batch.put(k.toArray, v.toArray)
               }
-              changeSet.altered.foreach { case (k, (oldV, _)) =>
+              changeSet.altered.foreach { case (k, oldV) =>
                 batch.put(k.toArray, oldV.toArray)
               }
               batch.delete(verId)

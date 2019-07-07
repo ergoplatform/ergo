@@ -8,11 +8,11 @@ import scorex.util.serialization.{Reader, Writer}
   * Describes a set of changes which could be reverted later.
   * @param insertedKeys - inserted keys
   * @param removed - removed entries (key, value)
-  * @param altered - altered keys (key, (oldValue, newValue))
+  * @param altered - altered keys (key, oldValue)
   */
 final case class ChangeSet(insertedKeys: Seq[ByteString],
                            removed: Seq[(ByteString, ByteString)],
-                           altered: Seq[(ByteString, (ByteString, ByteString))])
+                           altered: Seq[(ByteString, ByteString)])
 
 object ChangeSetSerializer extends ScorexSerializer[ChangeSet] {
 
@@ -32,14 +32,12 @@ object ChangeSetSerializer extends ScorexSerializer[ChangeSet] {
       w.putBytes(v.toArray)
     }
     w.putInt(obj.altered.size)
-    obj.altered.foreach { case (k, (oldV, newV)) =>
+    obj.altered.foreach { case (k, oldV) =>
       require(k.size <= 255, "Illegal key size")
       w.putUByte(k.size)
       w.putBytes(k.toArray)
       w.putInt(oldV.size)
       w.putBytes(oldV.toArray)
-      w.putInt(newV.size)
-      w.putBytes(newV.toArray)
     }
   }
 
@@ -58,14 +56,12 @@ object ChangeSetSerializer extends ScorexSerializer[ChangeSet] {
       acc :+ (k -> v)
     }
     val alteredQty = r.getInt()
-    val altered = (0 until alteredQty).foldLeft(Seq.empty[(ByteString, (ByteString, ByteString))]) { case (acc, _) =>
+    val altered = (0 until alteredQty).foldLeft(Seq.empty[(ByteString, ByteString)]) { case (acc, _) =>
       val kLen = r.getUByte()
       val k = ByteString(r.getBytes(kLen))
       val oldVLen = r.getInt()
       val oldV = ByteString(r.getBytes(oldVLen))
-      val newVLen = r.getInt()
-      val newV = ByteString(r.getBytes(newVLen))
-      acc :+ (k -> (oldV -> newV))
+      acc :+ (k -> oldV)
     }
     ChangeSet(insertedKeys, removed, altered)
   }

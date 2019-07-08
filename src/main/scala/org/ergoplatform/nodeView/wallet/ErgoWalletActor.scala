@@ -139,6 +139,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def readers: Receive = {
     case ReadBalances(chainStatus) =>
+      println(s"Got ReadBalances from ${sender()}")
       sender() ! (if (chainStatus.onChain) registry.readIndex else offChainRegistry.readIndex)
 
     case ReadPublicKeys(from, until) =>

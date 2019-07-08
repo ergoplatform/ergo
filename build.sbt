@@ -28,7 +28,7 @@ libraryDependencies ++= Seq(
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
   ("org.scorexfoundation" %% "avl-iodb" % "0.2.15").exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "iodb" % "0.3.2",
-  "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8",
+  ("org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8").exclude("org.iq80.leveldb", "leveldb"),
   "org.iq80.leveldb" % "leveldb" % "0.12",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
@@ -41,7 +41,7 @@ libraryDependencies ++= Seq(
   "com.google.guava" % "guava" % "21.0",
   "com.typesafe.akka" %% "akka-actor" % "2.5.+",
   "com.joefkelley" %% "argyle" % "1.0.0",
-  
+
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
@@ -117,6 +117,7 @@ assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first
   case "module-info.class" => MergeStrategy.discard
   case "reference.conf" => CustomMergeStrategy.concatReversed
+  case PathList("org", "iq80", "leveldb", xs @ _*) => MergeStrategy.first
   case other => (assemblyMergeStrategy in assembly).value(other)
 }
 

@@ -25,6 +25,7 @@ object WalletBench
     with AutoCloseable {
 
   val WarmupRuns = 2
+  val BenchRuns = 10
 
   private val system = ActorSystem()
 
@@ -45,12 +46,15 @@ object WalletBench
     Await.result(balancesF, 4.minutes)
   }
 
-  (0 to WarmupRuns).foreach(_ => bench(blocks))
+  (0 until WarmupRuns).foreach(_ => bench(blocks))
 
-  val benchBlockSet = blocks
-  val et = time(bench(benchBlockSet))
+  val accEt = (0 until BenchRuns).foldLeft(0D) { (acc, _) =>
+    val benchBlockSet = blocks
+    acc + time(bench(benchBlockSet))
+  }
+  val avgEt = accEt / BenchRuns
 
-  println(s"Elapsed time: ($numBlocks blocks x $numTxs txs) - $et ms")
+  println(s"Elapsed time: ($numBlocks blocks x $numTxs txs) - $avgEt ms")
 
   system.terminate()
   sys.exit()

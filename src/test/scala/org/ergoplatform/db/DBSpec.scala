@@ -25,6 +25,6 @@ trait DBSpec extends FileUtils {
     withDb { db: DB => body(new LDBKVStore(db)) }
 
   protected def withVersionedStore(body: VersionedLDBKVStore => Unit): Unit =
-    withDb { db: DB => body(new VersionedLDBKVStore(db)) }
+    withDb { db: DB => body(new VersionedLDBKVStore(db, 100)) }
 
 }

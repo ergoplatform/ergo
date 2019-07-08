@@ -9,7 +9,7 @@ import scala.util.{Failure, Success, Try}
 /**
   * A LevelDB wrapper providing additional versioning layer along with a convenient db interface.
   */
-final class VersionedLDBKVStore(protected val db: DB) extends KVStore {
+final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends KVStore {
 
   import VersionedLDBKVStore.VersionId
 
@@ -37,6 +37,7 @@ final class VersionedLDBKVStore(protected val db: DB) extends KVStore {
     val updatedVersions = Option(db.get(versionsKey.toArray, ro))
       .map(version.toArray ++ _) // newer version first
       .getOrElse(version.toArray)
+      .take(Constants.HashLength * keepVersions) // shrink old versions
     val batch = db.createWriteBatch()
     try {
       batch.put(versionsKey.toArray, updatedVersions)

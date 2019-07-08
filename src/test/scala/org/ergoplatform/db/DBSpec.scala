@@ -1,12 +1,12 @@
 package org.ergoplatform.db
 
 import akka.util.ByteString
+import org.ergoplatform.settings.Algos
 import org.iq80.leveldb.impl.Iq80DBFactory.bytes
 import org.iq80.leveldb.{DB, Options}
-import org.scalatest.{Matchers, PropSpec}
 import scorex.testkit.utils.FileUtils
 
-trait DBSpec extends PropSpec with Matchers with FileUtils {
+trait DBSpec extends FileUtils {
 
   import LDBFactory.factory
 
@@ -18,5 +18,13 @@ trait DBSpec extends PropSpec with Matchers with FileUtils {
     val db = factory.open(createTempDir, options)
     try body(db) finally db.close()
   }
+
+  protected def versionId(s: String) = ByteString(Algos.hash(bytes(s)))
+
+  protected def withStore(body: LDBKVStore => Unit): Unit =
+    withDb { db: DB => body(new LDBKVStore(db)) }
+
+  protected def withVersionedStore(body: VersionedLDBKVStore => Unit): Unit =
+    withDb { db: DB => body(new VersionedLDBKVStore(db)) }
 
 }

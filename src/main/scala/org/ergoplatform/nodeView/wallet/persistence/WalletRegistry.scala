@@ -157,7 +157,7 @@ object WalletRegistry {
     val options = new Options()
     options.createIfMissing(true)
     val db = factory.open(dir, options)
-    val store = new VersionedLDBKVStore(db)
+    val store = new VersionedLDBKVStore(db, settings.nodeSettings.keepVersions)
 
     // Create pre-genesis state checkpoint
     if (!store.versions.contains(PreGenesisStateVersion)) store.update(Seq.empty, Seq.empty)(PreGenesisStateVersion)

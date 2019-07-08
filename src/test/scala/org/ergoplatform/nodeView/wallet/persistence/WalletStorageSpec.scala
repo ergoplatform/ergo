@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import io.iohk.iodb.{LSMStore, Store}
 import org.ergoplatform.ErgoAddressEncoder
+import org.ergoplatform.db.DBSpec
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
@@ -12,6 +13,7 @@ class WalletStorageSpec
     with Matchers
     with WalletGenerators
     with GeneratorDrivenPropertyChecks
+    with DBSpec
     with FileUtils {
 
   private implicit val addressEncoder: ErgoAddressEncoder =
@@ -21,20 +23,24 @@ class WalletStorageSpec
 
   it should "add and read tracked addresses" in {
     forAll(trackedAddressGen) { address =>
-      val store = new WalletStorage(createStore, settings)
-      store.addTrackedAddress(address)
-      store.readTrackedAddresses shouldBe Seq(address)
+      withStore { store =>
+        val storage = new WalletStorage(store, settings)
+        storage.addTrackedAddress(address)
+        storage.readTrackedAddresses shouldBe Seq(address)
+      }
     }
   }
 
   it should "process postponed block correctly" in {
     forAll(postponedBlockGen) { block =>
-      val store = new WalletStorage(createStore, settings)
-      store.putBlock(block)
-      store.readBlocks(block.height, block.height) shouldBe Seq(block)
-      store.readLatestPostponedBlockHeight shouldBe Some(block.height)
-      store.removeBlock(block.height)
-      store.readBlocks(block.height, block.height) shouldBe Seq.empty
+      withStore { store =>
+        val storage = new WalletStorage(store, settings)
+        storage.putBlock(block)
+        storage.readBlocks(block.height, block.height) shouldBe Seq(block)
+        storage.readLatestPostponedBlockHeight shouldBe Some(block.height)
+        storage.removeBlock(block.height)
+        storage.readBlocks(block.height, block.height) shouldBe Seq.empty
+      }
     }
   }
 

@@ -100,6 +100,11 @@ final class VersionedLDBKVStore(protected val db: DB) extends KVStore {
     }
   }
 
+  def versions: Seq[VersionId] = Option(db.get(versionsKey.toArray))
+    .toSeq
+    .flatMap(_.grouped(Constants.HashLength))
+    .map(ByteString.apply)
+
 }
 
 object VersionedLDBKVStore {

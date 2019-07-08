@@ -1,8 +1,8 @@
 package org.ergoplatform.db
 
-import org.iq80.leveldb.DB
+import org.scalatest.{Matchers, PropSpec}
 
-class LDBKVStoreSpec extends DBSpec {
+class LDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
 
   property("put/get/getAll/delete") {
     withStore { store =>
@@ -20,8 +20,5 @@ class LDBKVStoreSpec extends DBSpec {
       store.get(valueA._1) shouldBe None
     }
   }
-
-  private def withStore(body: LDBKVStore => Unit): Unit =
-    withDb { db: DB => body(new LDBKVStore(db)) }
 
 }

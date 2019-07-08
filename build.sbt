@@ -41,7 +41,7 @@ libraryDependencies ++= Seq(
   "com.google.guava" % "guava" % "21.0",
   "com.typesafe.akka" %% "akka-actor" % "2.5.+",
   "com.joefkelley" %% "argyle" % "1.0.0",
-
+  
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",

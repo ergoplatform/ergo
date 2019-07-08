@@ -1,11 +1,8 @@
 package org.ergoplatform.db
 
-import akka.util.ByteString
-import org.ergoplatform.settings.Algos
-import org.iq80.leveldb.impl.Iq80DBFactory.bytes
-import org.iq80.leveldb.DB
+import org.scalatest.{Matchers, PropSpec}
 
-class VersionedLDBKVStoreSpec extends DBSpec {
+class VersionedLDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
 
   private val (keyA, valA) = (byteString("A"), byteString("1"))
   private val (keyB, valB) = (byteString("B"), byteString("2"))
@@ -19,7 +16,7 @@ class VersionedLDBKVStoreSpec extends DBSpec {
   private val v4 = versionId("v4")
 
   property("rollback (1 version back)") {
-    withStore { store =>
+    withVersionedStore { store =>
       store.insert(Seq(keyA -> valA))(v1)
       store.insert(Seq(keyB -> valB, keyC -> valC))(v2)
       store.update(toInsert = Seq(keyA -> byteString("6"), keyD -> valD), toRemove = Seq(keyC))(v3)
@@ -38,7 +35,7 @@ class VersionedLDBKVStoreSpec extends DBSpec {
   }
 
   property("rollback (2 versions back)") {
-    withStore { store =>
+    withVersionedStore { store =>
       store.insert(Seq(keyA -> valA))(v1)
       store.insert(Seq(keyB -> valB, keyC -> valC))(v2)
       store.update(toInsert = Seq(keyA -> byteString("6"), keyD -> valD), toRemove = Seq(keyC))(v3)
@@ -55,10 +52,5 @@ class VersionedLDBKVStoreSpec extends DBSpec {
       store.get(keyD) shouldBe None
     }
   }
-
-  private def versionId(s: String) = ByteString(Algos.hash(bytes(s)))
-
-  private def withStore(body: VersionedLDBKVStore => Unit): Unit =
-    withDb { db: DB => body(new VersionedLDBKVStore(db)) }
 
 }

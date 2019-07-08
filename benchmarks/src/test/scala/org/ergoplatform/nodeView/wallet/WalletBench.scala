@@ -35,20 +35,20 @@ object WalletBench
   private val numBlocks = 20
   private val numTxs = 20
 
-  private val blocks = (0 to numBlocks).flatMap { _ =>
+  private def blocks: Seq[ErgoFullBlock] = (0 to numBlocks).flatMap { _ =>
     invalidErgoFullBlockGen(defaultMinerPk, numTxs).sample
   }
 
   private def bench(blocks: Seq[ErgoFullBlock]): Unit = {
     blocks.foreach(walletRef ! ScanOnChain(_))
     val balancesF: Future[RegistryIndex] = (walletRef ? ReadBalances(ChainStatus.OnChain)).mapTo[RegistryIndex]
-    val balances: RegistryIndex = Await.result(balancesF, 4.minutes)
-    println(balances)
+    Await.result(balancesF, 4.minutes)
   }
 
   (0 to WarmupRuns).foreach(_ => bench(blocks))
 
-  val et = time(bench(blocks))
+  val benchBlockSet = blocks
+  val et = time(bench(benchBlockSet))
 
   println(s"Elapsed time: ($numBlocks blocks x $numTxs txs) - $et ms")
 

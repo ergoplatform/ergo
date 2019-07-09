@@ -31,10 +31,10 @@ object WalletBench
 
   val walletRef: ActorRef = system.actorOf(Props(classOf[ErgoWalletActor], settings, DefaultBoxSelector))
 
-  private implicit val timeout: Timeout = Timeout(60, TimeUnit.SECONDS)
+  private implicit val timeout: Timeout = 10.minutes
 
-  private val numBlocks = 20
-  private val numTxs = 20
+  private val numBlocks = 40
+  private val numTxs = 40
 
   private def blocks: Seq[ErgoFullBlock] = (0 to numBlocks).flatMap { _ =>
     invalidErgoFullBlockGen(defaultMinerPk, numTxs).sample
@@ -43,7 +43,7 @@ object WalletBench
   private def bench(blocks: Seq[ErgoFullBlock]): Unit = {
     blocks.foreach(walletRef ! ScanOnChain(_))
     val balancesF: Future[RegistryIndex] = (walletRef ? ReadBalances(ChainStatus.OnChain)).mapTo[RegistryIndex]
-    Await.result(balancesF, 4.minutes)
+    Await.result(balancesF, 10.minutes)
   }
 
   (0 until WarmupRuns).foreach(_ => bench(blocks))

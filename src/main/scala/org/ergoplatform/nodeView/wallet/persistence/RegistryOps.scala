@@ -136,8 +136,7 @@ object RegistryOps {
           }
         case GetAllBoxes =>
           State.inspect { _ =>
-            store.getAll
-              .filterNot(x => x._1 == ByteString(RegistryIndexKey) || x._2.head == TxPrefix)
+            store.getAll((k, v) => k != RegistryIndexKey && v.head != TxPrefix)
               .flatMap { case (_, boxBytes) =>
                 TrackedBoxSerializer.parseBytesTry(boxBytes.tail.toArray).toOption
               }
@@ -160,8 +159,7 @@ object RegistryOps {
           }
         case GetAllTxs =>
           State.inspect { _ =>
-            store.getAll
-              .filterNot(x => x._1 == ByteString(RegistryIndexKey) || x._2.head == BoxPrefix)
+            store.getAll((k, v) => k != RegistryIndexKey && v.head != BoxPrefix)
               .flatMap { case (_, txBytes) =>
                 WalletTransactionSerializer.parseBytesTry(txBytes.tail.toArray).toOption
               }
@@ -174,11 +172,11 @@ object RegistryOps {
         case PutIndex(index) =>
           State.modify { case (toInsert, toRemove) =>
             val registryBytes = RegistryIndexSerializer.toBytes(index)
-            (toInsert :+ (RegistryIndexKey, registryBytes), toRemove)
+            (toInsert :+ (RegistryIndexKey.toArray, registryBytes), toRemove)
           }
         case GetIndex =>
           State.inspect { _ =>
-            store.get(ByteString(RegistryIndexKey))
+            store.get(RegistryIndexKey)
               .flatMap(r => RegistryIndexSerializer.parseBytesTry(r.toArray).toOption)
               .getOrElse(RegistryIndex.empty)
               .asInstanceOf[A]
@@ -186,7 +184,7 @@ object RegistryOps {
       }
     }
 
-  private val RegistryIndexKey: Array[Byte] = Blake2b256.hash("reg_index")
+  private val RegistryIndexKey = ByteString(Blake2b256.hash("reg_index"))
 
   private val BoxPrefix: Byte = 0x00
 

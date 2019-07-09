@@ -15,7 +15,7 @@ trait KVStore extends AutoCloseable {
   def get(key: K): Option[V] =
     Option(db.get(key.toArray)).map(ByteString.apply)
 
-  def getAll: Seq[(K, V)] = {
+  def getAll(cond: (K, V) => Boolean): Seq[(K, V)] = {
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
     val iter = db.iterator(ro)
@@ -24,7 +24,9 @@ trait KVStore extends AutoCloseable {
       val bf = mutable.ArrayBuffer.empty[(K, V)]
       while (iter.hasNext) {
         val next = iter.next()
-        bf += (ByteString(next.getKey) -> ByteString(next.getValue))
+        val key = ByteString(next.getKey)
+        val value = ByteString(next.getValue)
+        if (cond(key, value)) bf += (ByteString(next.getKey) -> ByteString(next.getValue))
       }
       bf
     } finally {
@@ -32,6 +34,8 @@ trait KVStore extends AutoCloseable {
       ro.snapshot().close()
     }
   }
+
+  def getAll: Seq[(K, V)] = getAll((_, _) => true)
 
   def getOrElse(key: K, default: => V): V =
     get(key).getOrElse(default)

@@ -37,6 +37,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   implicit private def settings: ScorexSettings = ergoSettings.scorexSettings
 
   implicit def exceptionHandler: ExceptionHandler = ApiErrorHandler.exceptionHandler
+
   implicit def rejectionHandler: RejectionHandler = ApiRejectionHandler.rejectionHandler
 
   implicit private val actorSystem: ActorSystem = ActorSystem(settings.network.agentName)
@@ -114,6 +115,12 @@ class ErgoApp(args: Args) extends ScorexLogging {
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
       settings.network, timeProvider)
 
+  private val modeSpecificApiRoutes: Seq[ApiRoute] = if (ergoSettings.nodeSettings.stateType.allUtxos) {
+    Seq(UtxoApiRoute(readersHolderRef, settings.restApi))
+  } else {
+    Seq()
+  }
+
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
@@ -123,7 +130,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
     MiningApiRoute(minerRef, ergoSettings)
-  )
+  ) ++ modeSpecificApiRoutes
 
   private val combinedRoute: Route =
     CompositeHttpService(actorSystem, apiRoutes, settings.restApi, swaggerConfig).compositeRoute
@@ -200,8 +207,8 @@ object ErgoApp extends ScorexLogging {
 
   val argParser: Arg[Args] = (
     optional[String]("--config", "-c") and
-    optionalOneOf[NetworkId](NetworkId.all.map(x => s"--${x.verboseName}" -> x):_*)
-  ).to[Args]
+      optionalOneOf[NetworkId](NetworkId.all.map(x => s"--${x.verboseName}" -> x): _*)
+    ).to[Args]
 
   def main(args: Array[String]): Unit = argParser.parse(args) match {
     case Success(argsParsed) => new ErgoApp(argsParsed).run()

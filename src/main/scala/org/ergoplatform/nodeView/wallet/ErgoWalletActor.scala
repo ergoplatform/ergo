@@ -379,7 +379,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
             )
 
             prover.sign(unsignedTx, inputs, IndexedSeq(), stateContext)
-              .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
+              .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs, reason is ${e.getMessage}", e)),
+                tx => Success(tx))
           } match {
             case Some(txTry) => txTry.map(ErgoTransaction.apply)
             case None => Failure(new Exception(s"No enough boxes to assemble a transaction for $payTo"))

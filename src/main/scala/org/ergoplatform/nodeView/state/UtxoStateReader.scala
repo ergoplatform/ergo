@@ -10,7 +10,7 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
-import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
+import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
@@ -27,7 +27,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
   /**
-    * Validate transaction provided state context if specified
+    * Validate transaction against provided state context, if specified,
     * or state context from the previous block if not
     */
   def validateWithCost(tx: ErgoTransaction, stateContextOpt: Option[ErgoStateContext]): Try[Long] = {
@@ -80,7 +80,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     persistentProver.unauthenticatedLookup(id) flatMap { adValue =>
       ErgoBoxSerializer.parseBytesTry(adValue) match {
         case Failure(e) =>
-          log.error(s"Failed to parse box from state, ${e}")
+          log.error(s"Failed to parse box from state, $e")
           None
         case Success(box) =>
           Some(box)

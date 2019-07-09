@@ -21,4 +21,22 @@ class LDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
     }
   }
 
+  property("record rewriting") {
+    withStore { store =>
+      val key = byteString("A")
+      val valA = byteString("1")
+      val valB = byteString("2")
+
+      store.insert(Seq(key -> valA))
+
+      store.get(key) shouldBe Some(valA)
+
+      store.insert(Seq(key -> valB))
+
+      store.get(key) shouldBe Some(valB)
+
+      store.getAll.size shouldBe 1
+    }
+  }
+
 }

@@ -13,7 +13,9 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
 
   import VersionedLDBKVStore.VersionId
 
-  private val versionsKey = ByteString("versions")
+  val VersionsKey = ByteString("versions")
+
+  val ChangeSetPrefix: Byte = 0x16
 
   def update(toInsert: Seq[(K, V)], toRemove: Seq[K])(version: VersionId): Unit = {
     require(version.size == Constants.HashLength, "Illegal version id size")
@@ -34,14 +36,16 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
       Option(db.get(k.toArray, ro)).map(k -> ByteString(_))
     }
     val changeSet = ChangeSet(insertedKeys, removed, altered)
-    val updatedVersions = Option(db.get(versionsKey.toArray, ro))
+    val (updatedVersions, versionsToShrink) = Option(db.get(VersionsKey.toArray, ro))
       .map(version.toArray ++ _) // newer version first
       .getOrElse(version.toArray)
-      .take(Constants.HashLength * keepVersions) // shrink old versions
+      .splitAt(Constants.HashLength * keepVersions) // shrink old versions
+    val versionIdsToShrink = versionsToShrink.grouped(Constants.HashLength)
     val batch = db.createWriteBatch()
     try {
-      batch.put(versionsKey.toArray, updatedVersions)
-      batch.put(version.toArray, ChangeSetSerializer.toBytes(changeSet))
+      batch.put(VersionsKey.toArray, updatedVersions)
+      versionIdsToShrink.foreach(batch.delete)
+      batch.put(version.toArray, ChangeSetPrefix +: ChangeSetSerializer.toBytes(changeSet))
       toInsert.foreach { case (k, v) => batch.put(k.toArray, v.toArray) }
       toRemove.foreach(x => batch.delete(x.toArray))
       db.write(batch)
@@ -58,15 +62,18 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
   def rollbackTo(versionId: VersionId): Try[Unit] = {
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
-    Option(db.get(versionsKey.toArray)) match {
+    Option(db.get(VersionsKey.toArray)) match {
       case Some(bytes) =>
         val batch = db.createWriteBatch()
         try {
-          bytes.grouped(Constants.HashLength)
-            .takeWhile(ByteString(_) != versionId) // select all versions above targeted one
+          val versionsToRollBack = bytes
+            .grouped(Constants.HashLength)
+            .takeWhile(ByteString(_) != versionId)
+
+          versionsToRollBack
             .foldLeft(Seq.empty[(Array[Byte], ChangeSet)]) { case (acc, verId) =>
               val changeSetOpt = Option(db.get(verId, ro)).flatMap { changeSetBytes =>
-                ChangeSetSerializer.parseBytesTry(changeSetBytes).toOption
+                ChangeSetSerializer.parseBytesTry(changeSetBytes.tail).toOption
               }
               require(changeSetOpt.isDefined, s"Inconsistent versioned storage state")
               acc ++ changeSetOpt.toSeq.map(verId -> _)
@@ -88,7 +95,8 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
             .dropWhile(_ != versionId)
             .reduce(_ ++ _)
 
-          batch.put(versionsKey.toArray, updatedVersions.toArray)
+          versionsToRollBack.foreach(batch.delete) // eliminate rolled back versions
+          batch.put(VersionsKey.toArray, updatedVersions.toArray)
 
           db.write(batch)
           Success(())
@@ -101,7 +109,7 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
     }
   }
 
-  def versions: Seq[VersionId] = Option(db.get(versionsKey.toArray))
+  def versions: Seq[VersionId] = Option(db.get(VersionsKey.toArray))
     .toSeq
     .flatMap(_.grouped(Constants.HashLength))
     .map(ByteString.apply)

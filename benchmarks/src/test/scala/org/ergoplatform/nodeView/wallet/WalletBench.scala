@@ -34,7 +34,7 @@ object WalletBench
   private implicit val timeout: Timeout = 10.minutes
 
   private val numBlocks = 40
-  private val numTxs = 40
+  private val numTxs = 100
 
   private def blocks: Seq[ErgoFullBlock] = (0 to numBlocks).flatMap { _ =>
     invalidErgoFullBlockGen(defaultMinerPk, numTxs).sample

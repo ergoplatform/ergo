@@ -8,6 +8,7 @@ import scala.reflect.ClassTag
 sealed trait StateType {
   def stateTypeCode: StateTypeCode
 
+  def allUtxos: Boolean
   def stateTypeName: String
   def requireProofs: Boolean
   override def toString: String = stateTypeName
@@ -17,12 +18,14 @@ object StateType {
   type StateTypeCode = Byte
 
   case object Utxo extends StateType {
+    override val allUtxos: Boolean = true
     override val stateTypeCode: StateTypeCode = 0: Byte
     override val stateTypeName: String = "utxo"
     override val requireProofs: Boolean = false
   }
 
   case object Digest extends StateType {
+    override val allUtxos: Boolean = false
     override val stateTypeCode: StateTypeCode = 1: Byte
     override val stateTypeName: String = "digest"
     override val requireProofs: Boolean = true

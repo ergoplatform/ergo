@@ -26,9 +26,9 @@ trait KVStore extends AutoCloseable {
         val next = iter.next()
         val key = ByteString(next.getKey)
         val value = ByteString(next.getValue)
-        if (cond(key, value)) bf += (ByteString(next.getKey) -> ByteString(next.getValue))
+        if (cond(key, value)) bf += (key -> value)
       }
-      bf
+      bf.toList
     } finally {
       iter.close()
       ro.snapshot().close()

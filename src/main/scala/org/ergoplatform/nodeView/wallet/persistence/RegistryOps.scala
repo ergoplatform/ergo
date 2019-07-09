@@ -136,7 +136,7 @@ object RegistryOps {
           }
         case GetAllBoxes =>
           State.inspect { _ =>
-            store.getAll((k, v) => k != RegistryIndexKey && v.head != TxPrefix)
+            store.getAll((_, v) => v.head == BoxPrefix)
               .flatMap { case (_, boxBytes) =>
                 TrackedBoxSerializer.parseBytesTry(boxBytes.tail.toArray).toOption
               }
@@ -159,7 +159,7 @@ object RegistryOps {
           }
         case GetAllTxs =>
           State.inspect { _ =>
-            store.getAll((k, v) => k != RegistryIndexKey && v.head != BoxPrefix)
+            store.getAll((_, v) => v.head == TxPrefix)
               .flatMap { case (_, txBytes) =>
                 WalletTransactionSerializer.parseBytesTry(txBytes.tail.toArray).toOption
               }

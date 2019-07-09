@@ -46,10 +46,11 @@ class RegistryOpsSpec
     }
   }
 
-  property("putTx/getAllTx/removeTxs") {
+  property("putTx/getTx/getAllTxs/removeTxs") {
     forAll(walletTransactionGen) { wtx =>
       val store = createStore
       putTx(wtx).transact(store)
+      getTx(wtx.id).transact(store) shouldEqual Some(wtx)
       getAllTxs.transact(store) shouldEqual Seq(wtx)
       removeTxs(Seq(wtx.id)).transact(store)
       getAllTxs.transact(store) should not contain wtx

@@ -28,6 +28,24 @@ class UtilsApiRouteSpec extends FlatSpec
   implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
   val p2pkaddress = P2PKAddress(defaultMinerPk)
 
+  it should "do correct raw/address roundtrip" in {
+    var raw: String = null
+
+    Get(s"$prefix/addressToRaw/$p2pkaddress") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val json = responseAs[Json]
+      val c = json.hcursor
+      raw = c.downField("raw").as[String].toOption.get
+    }
+
+    Get(s"$prefix/rawToAddress/$raw") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val json = responseAs[Json]
+      val c = json.hcursor
+      c.downField("address").as[String] shouldEqual Right(p2pkaddress.toString())
+    }
+  }
+
   it should "validate correct p2pk address" in {
     Get(s"$prefix/address/$p2pkaddress") ~> route ~> check {
       status shouldBe StatusCodes.OK

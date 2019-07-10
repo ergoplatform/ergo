@@ -11,6 +11,7 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.Stubs
 import org.scalatest.{FlatSpec, Matchers}
+import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 
 class UtxoApiRouteSpec extends FlatSpec
@@ -51,9 +52,9 @@ class UtxoApiRouteSpec extends FlatSpec
   }
 
   it should "not found utxo box with /byId" in {
-    val boxId = Base16.encode((0:Byte) +: utxoState.takeBoxes(1).head.id.tail)
+    val boxId = Base16.encode(Blake2b256(utxoState.takeBoxes(1).head.id))
     Get(prefix + s"/byId/$boxId") ~> route ~> check {
-      status shouldBe StatusCodes.OK
+      status shouldBe StatusCodes.NotFound
     }
   }
 

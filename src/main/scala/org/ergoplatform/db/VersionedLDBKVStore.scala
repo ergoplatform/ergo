@@ -17,6 +17,11 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
 
   val ChangeSetPrefix: Byte = 0x16
 
+  /**
+    * Performs versioned update.
+    * @param toInsert - key, value pairs to be inserted/updated
+    * @param toRemove - keys to be removed
+    */
   def update(toInsert: Seq[(K, V)], toRemove: Seq[K])(version: VersionId): Unit = {
     require(version.length == Constants.HashLength, "Illegal version id size")
     val ro = new ReadOptions()
@@ -59,6 +64,10 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
 
   def remove(toRemove: Seq[K])(version: VersionId): Unit = update(Seq.empty, toRemove)(version)
 
+  /**
+    * Rolls storage state back to the specified checkpoint.
+    * @param versionId - version id to roll back to
+    */
   def rollbackTo(versionId: VersionId): Try[Unit] = {
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
@@ -112,6 +121,9 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
   def versions: Seq[VersionId] = Option(db.get(VersionsKey))
     .toSeq
     .flatMap(_.grouped(Constants.HashLength))
+
+  def versionIdExists(versionId: VersionId): Boolean =
+    versions.exists(v => ByteString(v) == ByteString(versionId))
 
 }
 

@@ -123,7 +123,7 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
     .flatMap(_.grouped(Constants.HashLength))
 
   def versionIdExists(versionId: VersionId): Boolean =
-    versions.exists(v => ByteString(v) == ByteString(versionId))
+    versions.exists(ByteString(_) == ByteString(versionId))
 
 }
 

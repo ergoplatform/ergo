@@ -31,13 +31,13 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
         val bytes = addressEncoder.toString(address).getBytes(Constants.StringEncoding)
         acc ++ Ints.toByteArray(bytes.length) ++ bytes
       }
-    store.insert(Seq(TrackedAddressesKey.toArray -> toInsert))
+    store.insert(Seq(TrackedAddressesKey -> toInsert))
   }
 
   def addTrackedAddress(address: ErgoAddress): Unit = addTrackedAddresses(Seq(address))
 
   def readTrackedAddresses: Seq[ErgoAddress] = store
-    .get(TrackedAddressesKey.toArray)
+    .get(TrackedAddressesKey)
     .toSeq
     .flatMap { r =>
       val qty = Ints.fromByteArray(r.take(4))
@@ -55,11 +55,11 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
         val bytes = DerivationPathSerializer.toBytes(path)
         acc ++ Ints.toByteArray(bytes.length) ++ bytes
       }
-    store.insert(Seq(SecretPathsKey.toArray -> toInsert))
+    store.insert(Seq(SecretPathsKey -> toInsert))
   }
 
   def readPaths: Seq[DerivationPath] = store
-    .get(SecretPathsKey.toArray)
+    .get(SecretPathsKey)
     .toSeq
     .flatMap { r =>
       val qty = Ints.fromByteArray(r.take(4))
@@ -71,17 +71,17 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     }
 
   def updateStateContext(ctx: ErgoStateContext): Unit = store
-    .insert(Seq(StateContextKey.toArray -> ctx.bytes))
+    .insert(Seq(StateContextKey -> ctx.bytes))
 
   def readStateContext: ErgoStateContext = store
-    .get(StateContextKey.toArray)
+    .get(StateContextKey)
     .flatMap(r => ErgoStateContextSerializer(settings.chainSettings.voting).parseBytesTry(r).toOption)
     .getOrElse(ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte), settings))
 
   def putBlock(block: PostponedBlock): Unit = {
     val toInsert = Seq(
       key(block.height) -> PostponedBlockSerializer.toBytes(block),
-      LatestPostponedBlockHeightKey.toArray -> Ints.toByteArray(block.height)
+      LatestPostponedBlockHeightKey -> Ints.toByteArray(block.height)
     )
     store.insert(toInsert)
   }
@@ -98,16 +98,16 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     store.remove((fromHeight to toHeight).map(key))
 
   def readLatestPostponedBlockHeight: Option[Int] = store
-    .get(LatestPostponedBlockHeightKey.toArray)
+    .get(LatestPostponedBlockHeightKey)
     .map(r => Ints.fromByteArray(r))
 
   def updateChangeAddress(address: P2PKAddress): Unit = {
     val bytes = addressEncoder.toString(address).getBytes(Constants.StringEncoding)
-    store.insert(Seq(ChangeAddressKey.toArray -> bytes))
+    store.insert(Seq(ChangeAddressKey -> bytes))
   }
 
   def readChangeAddress: Option[P2PKAddress] =
-    store.get(ChangeAddressKey.toArray).flatMap { x =>
+    store.get(ChangeAddressKey).flatMap { x =>
       addressEncoder.fromString(new String(x, Constants.StringEncoding)) match {
         case Success(p2pk: P2PKAddress) => Some(p2pk)
         case _ => None
@@ -118,20 +118,20 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
 
 object WalletStorage {
 
-  val StateContextKey: ByteString =
-    ByteString(Blake2b256.hash("state_ctx"))
+  val StateContextKey: Array[Byte] =
+    Blake2b256.hash("state_ctx")
 
-  val TrackedAddressesKey: ByteString =
-    ByteString(Blake2b256.hash("tracked_pks"))
+  val TrackedAddressesKey: Array[Byte] =
+    Blake2b256.hash("tracked_pks")
 
-  val SecretPathsKey: ByteString =
-    ByteString(Blake2b256.hash("secret_paths"))
+  val SecretPathsKey: Array[Byte] =
+    Blake2b256.hash("secret_paths")
 
-  val LatestPostponedBlockHeightKey: ByteString =
-    ByteString(Blake2b256.hash("latest_block"))
+  val LatestPostponedBlockHeightKey: Array[Byte] =
+    Blake2b256.hash("latest_block")
 
-  val ChangeAddressKey: ByteString =
-    ByteString(Blake2b256.hash("change_address"))
+  val ChangeAddressKey: Array[Byte] =
+    Blake2b256.hash("change_address")
 
   def key(height: Int): Digest32 =
     Blake2b256.hash(Ints.toByteArray(height))

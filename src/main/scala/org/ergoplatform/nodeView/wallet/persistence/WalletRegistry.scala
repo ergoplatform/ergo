@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
 
-import akka.util.ByteString
 import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.db.VersionedLDBKVStore
 import org.ergoplatform.db.VersionedLDBKVStore.VersionId
@@ -125,7 +124,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
   }
 
   def rollback(version: VersionTag): Try[Unit] =
-    store.rollbackTo(ByteString(Base16.decode(version).get))
+    store.rollbackTo(Base16.decode(version).get)
 
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.
@@ -148,7 +147,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
 
 object WalletRegistry {
 
-  val PreGenesisStateVersion: VersionId = ByteString(idToBytes(PreGenesisHeader.id))
+  val PreGenesisStateVersion: VersionId = idToBytes(PreGenesisHeader.id)
 
   def readOrCreate(settings: ErgoSettings): WalletRegistry = {
     val dir = new File(s"${settings.directory}/wallet/registry")

@@ -49,22 +49,22 @@ object LDBStoreBenchmark
   private def randomVersion = ByteString(Algos.hash(Longs.toByteArray(Random.nextLong())))
 
   private def benchWriteLDB(bts: Seq[BlockTransactions]): Unit = {
-    val toInsert = bts.map(bt => ByteString(idToBytes(bt.headerId)) -> ByteString(bt.bytes))
+    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     storeLDB.insert(toInsert)
   }
 
   private def benchWriteVLDB(bts: Seq[BlockTransactions]): Unit = {
-    val toInsert = bts.map(bt => ByteString(idToBytes(bt.headerId)) -> ByteString(bt.bytes))
+    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     storeVLDB.insert(toInsert)(randomVersion)
   }
 
   private def benchWriteReadVLDB(bts: Seq[BlockTransactions]): Unit = {
-    val toInsert = bts.map(bt => ByteString(idToBytes(bt.headerId)) -> ByteString(bt.bytes))
+    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     storeVLDB.insert(toInsert)(randomVersion)
-    bts.foreach { bt => storeVLDB.get(ByteString(idToBytes(bt.headerId))) }
+    bts.foreach { bt => storeVLDB.get(idToBytes(bt.headerId)) }
   }
 
-  private def benchGetAllVLDB: Seq[(ByteString, ByteString)] = storeVLDB.getAll
+  private def benchGetAllVLDB: Seq[(storeVLDB.K, storeVLDB.V)] = storeVLDB.getAll
 
   private def benchWriteLSM(bts: Seq[BlockTransactions]): Unit = {
     val toInsert = bts.map(bt => ByteArrayWrapper(idToBytes(bt.headerId)) -> ByteArrayWrapper(bt.bytes))

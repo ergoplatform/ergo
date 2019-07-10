@@ -4,13 +4,22 @@ import akka.util.ByteString
 import org.ergoplatform.settings.Algos
 import org.iq80.leveldb.impl.Iq80DBFactory.bytes
 import org.iq80.leveldb.{DB, Options}
+import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
 
 trait DBSpec extends FileUtils {
 
   import LDBFactory.factory
 
-  protected def byteString(s: String) = ByteString(bytes(s))
+  implicit class ValueOps(x: Option[Array[Byte]]) {
+    def toBs: Option[ByteString] = x.map(ByteString.apply)
+  }
+
+  implicit class KeyValueOps(xs: Seq[(Array[Byte], Array[Byte])]) {
+    def toBs: Seq[(ByteString, ByteString)] = xs.map(x => ByteString(x._1) -> ByteString(x._2))
+  }
+
+  protected def byteString(s: String): Array[Byte] = bytes(s)
 
   protected def withDb(body: DB => Unit): Unit = {
     val options = new Options()
@@ -19,7 +28,7 @@ trait DBSpec extends FileUtils {
     try body(db) finally db.close()
   }
 
-  protected def versionId(s: String) = ByteString(Algos.hash(bytes(s)))
+  protected def versionId(s: String): Digest32 = Algos.hash(bytes(s))
 
   protected def withStore(body: LDBKVStore => Unit): Unit =
     withDb { db: DB => body(new LDBKVStore(db)) }

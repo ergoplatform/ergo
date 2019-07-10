@@ -22,15 +22,15 @@ class VersionedLDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
       store.insert(Seq(keyB -> valB, keyC -> valC))(v2)
       store.update(toInsert = Seq(keyA -> byteString("6"), keyD -> valD), toRemove = Seq(keyC))(v3)
 
-      store.getAll should contain allElementsOf Seq(
+      store.getAll.toBs should contain allElementsOf Seq(
         keyA -> byteString("6"),
         keyB -> valB,
         keyD -> valD
-      )
+      ).toBs
 
       store.rollbackTo(v2) shouldBe 'success
 
-      store.getAll should contain allElementsOf Seq(keyA -> valA, keyB -> valB, keyC -> valC)
+      store.getAll.toBs should contain allElementsOf Seq(keyA -> valA, keyB -> valB, keyC -> valC).toBs
       store.get(keyD) shouldBe None
     }
   }
@@ -42,13 +42,13 @@ class VersionedLDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
       store.update(toInsert = Seq(keyA -> byteString("6"), keyD -> valD), toRemove = Seq(keyC))(v3)
       store.update(toInsert = Seq(keyB -> byteString("7"), keyE -> valE), toRemove = Seq(keyA))(v4)
 
-      store.getAll should contain allElementsOf Seq(keyB -> byteString("7"), keyE -> valE, keyD -> valD)
+      store.getAll.toBs should contain allElementsOf Seq(keyB -> byteString("7"), keyE -> valE, keyD -> valD).toBs
       store.get(keyC) shouldBe None
       store.get(keyA) shouldBe None
 
       store.rollbackTo(v2) shouldBe 'success
 
-      store.getAll should contain allElementsOf Seq(keyA -> valA, keyB -> valB, keyC -> valC)
+      store.getAll.toBs should contain allElementsOf Seq(keyA -> valA, keyB -> valB, keyC -> valC).toBs
       store.get(keyE) shouldBe None
       store.get(keyD) shouldBe None
     }

@@ -1,19 +1,18 @@
 package org.ergoplatform.db
 
-import akka.util.ByteString
 import org.iq80.leveldb.{DB, ReadOptions}
 
 import scala.collection.mutable
 
 trait KVStore extends AutoCloseable {
 
-  type K = ByteString
-  type V = ByteString
+  type K = Array[Byte]
+  type V = Array[Byte]
 
   protected val db: DB
 
   def get(key: K): Option[V] =
-    Option(db.get(key.toArray)).map(ByteString.apply)
+    Option(db.get(key))
 
   def getAll(cond: (K, V) => Boolean): Seq[(K, V)] = {
     val ro = new ReadOptions()
@@ -24,8 +23,8 @@ trait KVStore extends AutoCloseable {
       val bf = mutable.ArrayBuffer.empty[(K, V)]
       while (iter.hasNext) {
         val next = iter.next()
-        val key = ByteString(next.getKey)
-        val value = ByteString(next.getValue)
+        val key = next.getKey
+        val value = next.getValue
         if (cond(key, value)) bf += (key -> value)
       }
       bf.toList

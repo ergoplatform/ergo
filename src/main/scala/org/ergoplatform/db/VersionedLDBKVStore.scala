@@ -13,41 +13,41 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
 
   import VersionedLDBKVStore.VersionId
 
-  val VersionsKey = ByteString("versions")
+  val VersionsKey: Array[Byte] = Algos.hash("versions")
 
   val ChangeSetPrefix: Byte = 0x16
 
   def update(toInsert: Seq[(K, V)], toRemove: Seq[K])(version: VersionId): Unit = {
-    require(version.size == Constants.HashLength, "Illegal version id size")
+    require(version.length == Constants.HashLength, "Illegal version id size")
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
-    require(Option(db.get(version.toArray, ro)).isEmpty, "Version id is already used")
+    require(Option(db.get(version, ro)).isEmpty, "Version id is already used")
     val (insertedKeys, altered) = toInsert.foldLeft(Seq.empty[K], Seq.empty[(K, V)]) {
       case ((insertedAcc, alteredAcc), (k, _)) =>
-        Option(db.get(k.toArray, ro))
+        Option(db.get(k, ro))
           .map { oldValue =>
-            insertedAcc -> ((k -> ByteString(oldValue)) +: alteredAcc)
+            insertedAcc -> ((k -> oldValue) +: alteredAcc)
           }
           .getOrElse {
             (k +: insertedAcc) -> alteredAcc
           }
     }
     val removed = toRemove.flatMap { k =>
-      Option(db.get(k.toArray, ro)).map(k -> ByteString(_))
+      Option(db.get(k, ro)).map(k -> _)
     }
     val changeSet = ChangeSet(insertedKeys, removed, altered)
-    val (updatedVersions, versionsToShrink) = Option(db.get(VersionsKey.toArray, ro))
-      .map(version.toArray ++ _) // newer version first
-      .getOrElse(version.toArray)
+    val (updatedVersions, versionsToShrink) = Option(db.get(VersionsKey, ro))
+      .map(version ++ _) // newer version first
+      .getOrElse(version)
       .splitAt(Constants.HashLength * keepVersions) // shrink old versions
     val versionIdsToShrink = versionsToShrink.grouped(Constants.HashLength)
     val batch = db.createWriteBatch()
     try {
-      batch.put(VersionsKey.toArray, updatedVersions)
+      batch.put(VersionsKey, updatedVersions)
       versionIdsToShrink.foreach(batch.delete)
-      batch.put(version.toArray, ChangeSetPrefix +: ChangeSetSerializer.toBytes(changeSet))
-      toInsert.foreach { case (k, v) => batch.put(k.toArray, v.toArray) }
-      toRemove.foreach(x => batch.delete(x.toArray))
+      batch.put(version, ChangeSetPrefix +: ChangeSetSerializer.toBytes(changeSet))
+      toInsert.foreach { case (k, v) => batch.put(k, v) }
+      toRemove.foreach(x => batch.delete(x))
       db.write(batch)
     } finally {
       batch.close()
@@ -62,13 +62,13 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
   def rollbackTo(versionId: VersionId): Try[Unit] = {
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
-    Option(db.get(VersionsKey.toArray)) match {
+    Option(db.get(VersionsKey)) match {
       case Some(bytes) =>
         val batch = db.createWriteBatch()
         try {
           val versionsToRollBack = bytes
             .grouped(Constants.HashLength)
-            .takeWhile(ByteString(_) != versionId)
+            .takeWhile(ByteString(_) != ByteString(versionId))
 
           versionsToRollBack
             .foldLeft(Seq.empty[(Array[Byte], ChangeSet)]) { case (acc, verId) =>
@@ -79,12 +79,12 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
               acc ++ changeSetOpt.toSeq.map(verId -> _)
             }
             .foreach { case (verId, changeSet) => // revert all changes (from newest version to the targeted one)
-              changeSet.insertedKeys.foreach(k => batch.delete(k.toArray))
+              changeSet.insertedKeys.foreach(k => batch.delete(k))
               changeSet.removed.foreach { case (k, v) =>
-                batch.put(k.toArray, v.toArray)
+                batch.put(k, v)
               }
               changeSet.altered.foreach { case (k, oldV) =>
-                batch.put(k.toArray, oldV.toArray)
+                batch.put(k, oldV)
               }
               batch.delete(verId)
             }
@@ -92,11 +92,11 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
           val updatedVersions = bytes
             .grouped(Constants.HashLength)
             .map(ByteString.apply)
-            .dropWhile(_ != versionId)
+            .dropWhile(_ != ByteString(versionId))
             .reduce(_ ++ _)
 
           versionsToRollBack.foreach(batch.delete) // eliminate rolled back versions
-          batch.put(VersionsKey.toArray, updatedVersions.toArray)
+          batch.put(VersionsKey, updatedVersions.toArray)
 
           db.write(batch)
           Success(())
@@ -105,17 +105,16 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
           ro.snapshot().close()
         }
       case None =>
-        Failure(new Exception(s"Version ${Algos.encode(versionId.toArray)} not found"))
+        Failure(new Exception(s"Version ${Algos.encode(versionId)} not found"))
     }
   }
 
-  def versions: Seq[VersionId] = Option(db.get(VersionsKey.toArray))
+  def versions: Seq[VersionId] = Option(db.get(VersionsKey))
     .toSeq
     .flatMap(_.grouped(Constants.HashLength))
-    .map(ByteString.apply)
 
 }
 
 object VersionedLDBKVStore {
-  type VersionId = ByteString
+  type VersionId = Array[Byte]
 }

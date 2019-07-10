@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import akka.util.ByteString
 import cats.data.State
 import cats.free.Free
 import cats.free.Free.liftF
@@ -9,8 +8,8 @@ import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.VersionedLDBKVStore
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA._
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
-import scorex.crypto.hash.Blake2b256
 import scorex.util.{ModifierId, idToBytes}
 
 import scala.language.implicitConversions
@@ -38,9 +37,9 @@ object RegistryOps {
         case ((toInsert, toRemove), out: A @unchecked)
           if toInsert.nonEmpty || toRemove.nonEmpty =>
           store.update(
-            toInsert.map(x => ByteString(x._1) -> ByteString(x._2)),
-            toRemove.map(ByteString.apply)
-          )(ByteString(versionOpt.getOrElse(scorex.utils.Random.randomBytes())))
+            toInsert,
+            toRemove
+          )(versionOpt.getOrElse(scorex.utils.Random.randomBytes()))
           out
         case (_, out: A @unchecked) =>
           out
@@ -120,16 +119,16 @@ object RegistryOps {
           }
         case GetBox(id) =>
           State.inspect { _ =>
-            store.get(ByteString(id))
-              .flatMap(r => TrackedBoxSerializer.parseBytesTry(r.tail.toArray).toOption)
+            store.get(id)
+              .flatMap(r => TrackedBoxSerializer.parseBytesTry(r.tail).toOption)
               .asInstanceOf[A]
           }
         case GetBoxes(ids) =>
           State.inspect { _ =>
             ids
-              .map { id => store.get(ByteString(id))
+              .map { id => store.get(id)
                 .flatMap { x =>
-                  TrackedBoxSerializer.parseBytesTry(x.tail.toArray).toOption
+                  TrackedBoxSerializer.parseBytesTry(x.tail).toOption
                 }
               }
               .asInstanceOf[A]
@@ -138,7 +137,7 @@ object RegistryOps {
           State.inspect { _ =>
             store.getAll((_, v) => v.head == BoxPrefix)
               .flatMap { case (_, boxBytes) =>
-                TrackedBoxSerializer.parseBytesTry(boxBytes.tail.toArray).toOption
+                TrackedBoxSerializer.parseBytesTry(boxBytes.tail).toOption
               }
               .asInstanceOf[A]
           }
@@ -153,15 +152,15 @@ object RegistryOps {
           }
         case GetTx(id) =>
           State.inspect { _ =>
-            store.get(ByteString(key(id)))
-              .flatMap(r => WalletTransactionSerializer.parseBytesTry(r.tail.toArray).toOption)
+            store.get(key(id))
+              .flatMap(r => WalletTransactionSerializer.parseBytesTry(r.tail).toOption)
               .asInstanceOf[A]
           }
         case GetAllTxs =>
           State.inspect { _ =>
             store.getAll((_, v) => v.head == TxPrefix)
               .flatMap { case (_, txBytes) =>
-                WalletTransactionSerializer.parseBytesTry(txBytes.tail.toArray).toOption
+                WalletTransactionSerializer.parseBytesTry(txBytes.tail).toOption
               }
               .asInstanceOf[A]
           }
@@ -172,19 +171,19 @@ object RegistryOps {
         case PutIndex(index) =>
           State.modify { case (toInsert, toRemove) =>
             val registryBytes = RegistryIndexSerializer.toBytes(index)
-            (toInsert :+ (RegistryIndexKey.toArray, registryBytes), toRemove)
+            (toInsert :+ (RegistryIndexKey, registryBytes), toRemove)
           }
         case GetIndex =>
           State.inspect { _ =>
             store.get(RegistryIndexKey)
-              .flatMap(r => RegistryIndexSerializer.parseBytesTry(r.toArray).toOption)
+              .flatMap(r => RegistryIndexSerializer.parseBytesTry(r).toOption)
               .getOrElse(RegistryIndex.empty)
               .asInstanceOf[A]
           }
       }
     }
 
-  private val RegistryIndexKey = ByteString(Blake2b256.hash("reg_index"))
+  private val RegistryIndexKey = Algos.hash("reg_index")
 
   private val BoxPrefix: Byte = 0x00
 

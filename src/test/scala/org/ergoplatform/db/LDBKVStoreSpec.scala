@@ -11,10 +11,10 @@ class LDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
 
       store.update(toInsert = Seq(valueA, valueB), toRemove = Seq.empty)
 
-      store.get(valueA._1) shouldBe Some(valueA._2)
-      store.get(valueB._1) shouldBe Some(valueB._2)
+      store.get(valueA._1).toBs shouldBe Some(valueA._2).toBs
+      store.get(valueB._1).toBs shouldBe Some(valueB._2).toBs
 
-      store.getAll shouldBe Seq(valueA, valueB)
+      store.getAll.toBs shouldBe Seq(valueA, valueB).toBs
 
       store.update(toInsert = Seq.empty, toRemove = Seq(valueA._1))
       store.get(valueA._1) shouldBe None
@@ -29,11 +29,11 @@ class LDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
 
       store.insert(Seq(key -> valA))
 
-      store.get(key) shouldBe Some(valA)
+      store.get(key).toBs shouldBe Some(valA).toBs
 
       store.insert(Seq(key -> valB))
 
-      store.get(key) shouldBe Some(valB)
+      store.get(key).toBs shouldBe Some(valB).toBs
 
       store.getAll.size shouldBe 1
     }

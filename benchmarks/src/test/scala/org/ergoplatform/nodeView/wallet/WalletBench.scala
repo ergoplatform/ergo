@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.pattern.ask
@@ -21,8 +20,7 @@ object WalletBench
   extends App
     with NVBenchmark
     with ErgoTransactionGenerators
-    with FileUtils
-    with AutoCloseable {
+    with FileUtils {
 
   val WarmupRuns = 2
   val BenchRuns = 10
@@ -33,8 +31,8 @@ object WalletBench
 
   private implicit val timeout: Timeout = 10.minutes
 
-  private val numBlocks = 40
-  private val numTxs = 100
+  private val numBlocks = 20
+  private val numTxs = 20
 
   private def blocks: Seq[ErgoFullBlock] = (0 to numBlocks).flatMap { _ =>
     invalidErgoFullBlockGen(defaultMinerPk, numTxs).sample
@@ -56,12 +54,10 @@ object WalletBench
 
   println(s"Elapsed time: ($numBlocks blocks x $numTxs txs) - $avgEt ms")
 
+  val testDataDir = new File(settings.directory)
+  org.apache.commons.io.FileUtils.deleteDirectory(testDataDir)
+
   system.terminate()
   sys.exit()
-
-  override def close(): Unit = {
-    val testDataDir = new File(settings.directory)
-    org.apache.commons.io.FileUtils.deleteDirectory(testDataDir)
-  }
 
 }

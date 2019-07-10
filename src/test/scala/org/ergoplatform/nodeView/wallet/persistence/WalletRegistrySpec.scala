@@ -25,7 +25,7 @@ class WalletRegistrySpec
 
   it should "read certain boxes" in {
     forAll(trackedBoxGen) { box =>
-      withVersionedStore { store =>
+      withVersionedStore(10) { store =>
         val certainBox = box.copy(certainty = Certain, spendingHeightOpt = None, spendingTxIdOpt = None)
         putBox(certainBox).transact(store)
         val registry = new WalletRegistry(store)(settings.walletSettings)
@@ -37,7 +37,7 @@ class WalletRegistrySpec
 
   it should "read uncertain boxes" in {
     forAll(trackedBoxGen) { box =>
-      withVersionedStore { store =>
+      withVersionedStore(10) { store =>
         val uncertainBox = box.copy(certainty = Uncertain)
         val index = RegistryIndex(0, 0, Map.empty, Seq(encodedBoxId(uncertainBox.box.id)))
         putBox(uncertainBox).flatMap(_ => putIndex(index)).transact(store)
@@ -50,7 +50,7 @@ class WalletRegistrySpec
 
   it should "read transactions" in {
     forAll(walletTransactionGen) { wtx =>
-      withVersionedStore { store =>
+      withVersionedStore(10) { store =>
         putTx(wtx).transact(store)
         val registry = new WalletRegistry(store)(settings.walletSettings)
 
@@ -63,7 +63,7 @@ class WalletRegistrySpec
     val ws = settings.walletSettings.copy(keepSpentBoxes = true)
     val spendingHeight = 0
     forAll(Gen.nonEmptyListOf(trackedBoxGen), modifierIdGen) { (boxes, txId) =>
-      withVersionedStore { store =>
+      withVersionedStore(10) { store =>
         val unspentBoxes = boxes.map(
           _.copy(spendingHeightOpt = None, spendingTxIdOpt = None, certainty = BoxCertainty.Certain))
         val transitedBoxes = unspentBoxes.map(

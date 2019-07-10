@@ -1,6 +1,5 @@
 package org.ergoplatform.db
 
-import akka.util.ByteString
 import com.google.common.primitives.Longs
 import io.iohk.iodb.Store.{K, V}
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
@@ -12,6 +11,7 @@ import org.iq80.leveldb.Options
 import org.scalameter.KeyValue
 import org.scalameter.api.{Bench, Gen, _}
 import org.scalameter.picklers.Implicits._
+import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
 import scorex.util.idToBytes
 
@@ -46,7 +46,7 @@ object LDBStoreBenchmark
     exec.requireGC -> true
   )
 
-  private def randomVersion = ByteString(Algos.hash(Longs.toByteArray(Random.nextLong())))
+  private def randomVersion: Digest32 = Algos.hash(Longs.toByteArray(Random.nextLong()))
 
   private def benchWriteLDB(bts: Seq[BlockTransactions]): Unit = {
     val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)

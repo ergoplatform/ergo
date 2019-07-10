@@ -4,7 +4,6 @@ import java.io.File
 
 import akka.util.ByteString
 import com.google.common.primitives.Ints
-import io.iohk.iodb.LSMStore
 import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.db.LDBKVStore
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}

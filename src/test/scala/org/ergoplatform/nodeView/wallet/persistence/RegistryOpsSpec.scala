@@ -23,7 +23,7 @@ class RegistryOpsSpec
 
   property("putBox/getBox/updateBox/removeBox") {
     forAll(trackedBoxGen) { tb =>
-      withVersionedStore { store =>
+      withVersionedStore(10) { store =>
         putBox(tb).transact(store)
         getBox(tb.box.id).transact(store) shouldBe Some(tb)
         val updatedBox = tb.copy(certainty = BoxCertainty.Certain, spendingHeightOpt = Some(0))
@@ -37,7 +37,7 @@ class RegistryOpsSpec
 
   property("putBoxes/getBoxes/updateBoxes/removeBoxes") {
     forAll(Gen.listOf(trackedBoxGen)) { tbs =>
-      withVersionedStore { store =>
+      withVersionedStore(10) { store =>
         putBoxes(tbs).transact(store)
         getBoxes(tbs.map(_.box.id)).transact(store) should contain theSameElementsAs tbs.map(Some.apply)
         val updateFn = (tb: TrackedBox) => tb.copy(certainty = BoxCertainty.Certain, spendingHeightOpt = Some(0))
@@ -52,7 +52,7 @@ class RegistryOpsSpec
 
   property("putTx/getTx/getAllTxs/removeTxs") {
     forAll(walletTransactionGen) { wtx =>
-      withVersionedStore { store =>
+      withVersionedStore(10) { store =>
         putTx(wtx).transact(store)
         getTx(wtx.id).transact(store) shouldEqual Some(wtx)
         getAllTxs.transact(store) shouldEqual Seq(wtx)
@@ -64,7 +64,7 @@ class RegistryOpsSpec
 
   property("putTxs/getAllTxs") {
     forAll(Gen.listOf(walletTransactionGen)) { wtxs =>
-      withVersionedStore { store =>
+      withVersionedStore(10) { store =>
         putTxs(wtxs).transact(store)
         getAllTxs.transact(store) should contain theSameElementsAs wtxs
       }
@@ -73,7 +73,7 @@ class RegistryOpsSpec
 
   property("putIndex/getIndex/updateIndex") {
     forAll(registryIndexGen) { index =>
-      withVersionedStore { store =>
+      withVersionedStore(10) { store =>
         putIndex(index).transact(store)
         getIndex.transact(store) shouldBe index
         val updatedIndex = index.copy(height = 0, balance = 0)

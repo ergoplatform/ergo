@@ -13,7 +13,7 @@ trait ErgoStateReader extends StateReader with ScorexLogging {
   val store: Store
   val constants: StateConstants
 
-  private val chainSettings = constants.settings.chainSettings
+  private lazy val chainSettings = constants.settings.chainSettings
 
   protected lazy val votingSettings: VotingSettings = chainSettings.voting
 

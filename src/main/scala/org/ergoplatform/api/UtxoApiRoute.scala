@@ -13,7 +13,6 @@ import scorex.util.encode.Base16
 
 import scala.concurrent.Future
 
-//todo: error handling
 case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiSettings)
                        (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 

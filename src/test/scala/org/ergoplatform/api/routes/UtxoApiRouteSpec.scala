@@ -44,7 +44,7 @@ class UtxoApiRouteSpec extends FlatSpec
   lazy val utxoReadersRef: ActorRef = system.actorOf(UtxoReadersStub.props())
 
   val route: Route = UtxoApiRoute(utxoReadersRef, utxoSettings.scorexSettings.restApi).route
-  
+
   it should "get utxo box with /byId" in {
     val box = utxoState.takeBoxes(1).head
     val boxId = Base16.encode(box.id)

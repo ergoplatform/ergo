@@ -27,7 +27,7 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     ApiResponse(getState.map {
       case usr: UtxoStateReader =>
         usr.boxById(ADKey @@ Base16.decode(id).get)
-      case _ => ???
+      case _ => None
     })
   }
 
@@ -37,9 +37,10 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
         case usr: UtxoStateReader =>
           usr.boxById(ADKey @@ Base16.decode(id).get).map { box =>
             val bytes = ErgoBoxSerializer.toBytes(box)
-            Base16.encode(bytes)
+            val boxBytes = Base16.encode(bytes)
+            Map("boxId" -> id, "bytes" -> boxBytes)
           }
-        case _ => ???
+        case _ => None
       }
     )
   }

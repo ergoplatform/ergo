@@ -115,12 +115,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
       settings.network, timeProvider)
 
-  private val modeSpecificApiRoutes: Seq[ApiRoute] = if (ergoSettings.nodeSettings.stateType.allUtxos) {
-    Seq(UtxoApiRoute(readersHolderRef, settings.restApi))
-  } else {
-    Seq()
-  }
-
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
@@ -129,8 +123,9 @@ class ErgoApp(args: Args) extends ScorexLogging {
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
-    MiningApiRoute(minerRef, ergoSettings)
-  ) ++ modeSpecificApiRoutes
+    MiningApiRoute(minerRef, ergoSettings),
+    UtxoApiRoute(readersHolderRef, settings.restApi)
+  )
 
   private val combinedRoute: Route =
     CompositeHttpService(actorSystem, apiRoutes, settings.restApi, swaggerConfig).compositeRoute

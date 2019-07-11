@@ -10,8 +10,8 @@ final class LDBKVStore(protected val db: DB) extends KVStore {
   def update(toInsert: Seq[(K, V)], toRemove: Seq[K]): Unit = {
     val batch = db.createWriteBatch()
     try {
-      toInsert.foreach { case (k, v) => batch.put(k.toArray, v.toArray) }
-      toRemove.foreach(x => batch.delete(x.toArray))
+      toInsert.foreach { case (k, v) => batch.put(k, v) }
+      toRemove.foreach(batch.delete)
       db.write(batch)
     } finally {
       batch.close()

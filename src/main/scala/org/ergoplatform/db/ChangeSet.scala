@@ -16,49 +16,49 @@ final case class ChangeSet(insertedKeys: Seq[Array[Byte]],
 object ChangeSetSerializer extends ScorexSerializer[ChangeSet] {
 
   override def serialize(obj: ChangeSet, w: Writer): Unit = {
-    w.putInt(obj.insertedKeys.size)
+    w.putUInt(obj.insertedKeys.size)
     obj.insertedKeys.foreach { k =>
       require(k.length <= 255, "Illegal key size")
       w.putUByte(k.length)
       w.putBytes(k)
     }
-    w.putInt(x = obj.removed.size)
+    w.putUInt(x = obj.removed.size)
     obj.removed.foreach { case (k, v) =>
       require(k.length <= 255, "Illegal key size")
       w.putUByte(k.length)
       w.putBytes(k)
-      w.putInt(v.length)
+      w.putUInt(v.length)
       w.putBytes(v)
     }
-    w.putInt(obj.altered.size)
+    w.putUInt(obj.altered.size)
     obj.altered.foreach { case (k, oldV) =>
       require(k.length <= 255, "Illegal key size")
       w.putUByte(k.length)
       w.putBytes(k)
-      w.putInt(oldV.length)
+      w.putUInt(oldV.length)
       w.putBytes(oldV)
     }
   }
 
   override def parse(r: Reader): ChangeSet = {
-    val insertedQty = r.getInt()
+    val insertedQty = r.getUInt().toInt
     val insertedKeys = (0 until insertedQty).foldLeft(Seq.empty[Array[Byte]]) { case (acc, _) =>
       val len = r.getUByte()
       acc :+ r.getBytes(len)
     }
-    val removedQty = r.getInt()
+    val removedQty = r.getUInt().toInt
     val removed = (0 until removedQty).foldLeft(Seq.empty[(Array[Byte], Array[Byte])]) { case (acc, _) =>
       val kLen = r.getUByte()
       val k = r.getBytes(kLen)
-      val vLen = r.getInt()
+      val vLen = r.getUInt().toInt
       val v = r.getBytes(vLen)
       acc :+ (k -> v)
     }
-    val alteredQty = r.getInt()
+    val alteredQty = r.getUInt().toInt
     val altered = (0 until alteredQty).foldLeft(Seq.empty[(Array[Byte], Array[Byte])]) { case (acc, _) =>
       val kLen = r.getUByte()
       val k = r.getBytes(kLen)
-      val oldVLen = r.getInt()
+      val oldVLen = r.getUInt().toInt
       val oldV = r.getBytes(oldVLen)
       acc :+ (k -> oldV)
     }

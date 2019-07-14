@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.BoxUtils
-import org.ergoplatform.{DataInput, ErgoAddress, ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
@@ -29,6 +29,9 @@ import scala.util.Random
 
 trait ErgoTransactionGenerators extends ErgoGenerators {
 
+  protected implicit val ergoAddressEncoder: ErgoAddressEncoder =
+    ErgoAddressEncoder(settings.chainSettings.addressPrefix)
+
   val creationHeightGen: Gen[Int] = Gen.choose(0, Int.MaxValue / 2)
 
   val boxIndexGen: Gen[Short] = for {
@@ -42,6 +45,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     tokens <- additionalTokensGen
     value <- validValueGen(prop, tokens, ar)
   } yield new ErgoBoxCandidate(value, prop, h, tokens.toColl, ar)
+
+  def ergoAddressGen: Gen[ErgoAddress] = proveDlogGen.map(P2PKAddress.apply)
 
   def ergoBoxCandidateGen(prop: ProveDlog): Gen[ErgoBoxCandidate] = for {
     h <- creationHeightGen

@@ -33,9 +33,6 @@ import scala.util.Try
   */
 object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpers {
 
-  implicit val ergoAddressEncoder: ErgoAddressEncoder =
-    ErgoAddressEncoder(settings.chainSettings.addressPrefix)
-
   val realNetworkSetting = ErgoSettings.read(Args(Some("src/main/resources/application.conf"), None))
 
   val EmissionTxCost: Long = 20000

@@ -25,7 +25,6 @@ class UtilsApiRouteSpec extends FlatSpec
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
   val route: Route = ErgoUtilsApiRoute(settings).route
-  implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
   val p2pkaddress = P2PKAddress(defaultMinerPk)
 
   it should "do correct raw/address roundtrip" in {

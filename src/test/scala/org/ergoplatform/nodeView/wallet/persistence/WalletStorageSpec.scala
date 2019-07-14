@@ -22,7 +22,7 @@ class WalletStorageSpec
   def createStore: Store = new LSMStore(createTempDir)
 
   it should "add and read tracked addresses" in {
-    forAll(trackedAddressGen) { address =>
+    forAll(ergoAddressGen) { address =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
         storage.addTrackedAddress(address)

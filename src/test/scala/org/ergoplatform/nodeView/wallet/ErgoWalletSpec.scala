@@ -23,8 +23,6 @@ import scala.util.Random
 class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
-  private implicit val ergoAddressEncoder: ErgoAddressEncoder =
-    new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   property("Generate asset issuing transaction") {
     withFixture { implicit w =>
@@ -43,7 +41,13 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val req = AssetIssueRequest(address, emissionAmount, tokenName, tokenDescription, tokenDecimals)
       val tx = await(wallet.generateTransaction(Seq(feeReq, req))).get
       log.info(s"Generated transaction $tx")
-      val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
+      val context = new ErgoStateContext(
+        Seq(genesisBlock.header),
+        Some(genesisBlock.extension),
+        startDigest,
+        parameters,
+        validationSettingsNoIl,
+        VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
     }
@@ -71,7 +75,14 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Payment request $req")
       val tx = await(wallet.generateTransaction(req)).get
       log.info(s"Generated transaction $tx")
-      val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension),startDigest, parameters, validationSettingsNoIl, VotingData.empty)
+      val context = new ErgoStateContext(
+        Seq(genesisBlock.header),
+        Some(genesisBlock.extension),
+        startDigest,
+        parameters,
+        validationSettingsNoIl,
+        VotingData.empty
+      )
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
 
@@ -269,7 +280,39 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     }
   }
 
-  property("on-chain box spending") {
+  property("on-chain box spending (without return)") {
+    withFixture { implicit w =>
+      val address = getPublicKeys.head
+      val genesisBlock = makeGenesisBlock(address.pubkey, randomNewAsset)
+      applyBlock(genesisBlock) shouldBe 'success
+      waitForScanning(genesisBlock)
+
+      val confirmedBalance = getConfirmedBalances.balance
+      val boxesToSpend = boxesAvailable(genesisBlock, address.pubkey)
+      val balanceToSpend = balanceAmount(boxesToSpend)
+      log.info(s"Confirmed balance $confirmedBalance")
+      log.info(s"Sum balance: $balanceToSpend")
+      confirmedBalance should be > 0L
+      confirmedBalance shouldBe balanceToSpend
+
+      val spendingTx = makeSpendingTx(boxesToSpend, address, 0, assetsWithRandom(boxesToSpend))
+
+      val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
+      applyBlock(spendingBlock) shouldBe 'success
+      wallet.scanPersistent(spendingBlock)
+      waitForScanning(spendingBlock)
+
+      val balanceAfterSpending = getConfirmedBalances
+      log.info(s"Boxes to spend: $boxesToSpend")
+      log.info(s"Total with unconfirmed balance: $confirmedBalance")
+      log.info(s"Balance to spent: $balanceToSpend")
+      log.info(s"Balance after spend: ${balanceAfterSpending.balance}")
+      balanceAfterSpending.balance shouldEqual 0
+      getBalancesWithUnconfirmed shouldEqual balanceAfterSpending
+    }
+  }
+
+  property("on-chain box spending (with return)") {
     withFixture { implicit w =>
       val address = getPublicKeys.head
       val genesisBlock = makeGenesisBlock(address.pubkey, randomNewAsset)

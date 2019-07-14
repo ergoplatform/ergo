@@ -4,6 +4,9 @@ import akka.util.ByteString
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.scalatest.{Matchers, PropSpec}
 
+/**
+  * LSMStore and VersionedLDBKVStore ops equality checks
+  */
 class LegacyDbEqualitySpec extends PropSpec with DBSpec with Matchers {
 
   private val (keyA, valA) = (byteString32("A"), byteString("1"))

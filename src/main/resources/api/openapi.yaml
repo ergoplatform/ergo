@@ -1083,9 +1083,6 @@ paths:
           schema:
             type: integer
             format: int32
-            minimum: 10
-            maximum: 100
-            default: 50
         - in: query
           name: toHeight
           required: false
@@ -1093,7 +1090,7 @@ paths:
           schema:
             type: integer
             format: int32
-            default: 0
+            default: -1
       responses:
         '200':
           description: Array of headers

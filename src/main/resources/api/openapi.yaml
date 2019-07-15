@@ -1078,15 +1078,16 @@ paths:
       parameters:
         - in: query
           name: fromHeight
-          required: true
+          required: false
           description: Min header height
           schema:
             type: integer
             format: int32
+            default: 0
         - in: query
           name: toHeight
           required: false
-          description: Max header height
+          description: Max header height (best header height by default)
           schema:
             type: integer
             format: int32

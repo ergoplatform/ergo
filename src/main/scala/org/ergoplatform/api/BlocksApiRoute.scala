@@ -42,28 +42,32 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   private def getHistory: Future[ErgoHistoryReader] =
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
 
-  private def getHeaderIdsAtHeight(h: Int): Future[Json] = getHistory.map { history =>
-    history.headerIdsAtHeight(h).map(Algos.encode).asJson
-  }
+  private def getHeaderIdsAtHeight(h: Int): Future[Json] =
+    getHistory.map { history =>
+      history.headerIdsAtHeight(h).map(Algos.encode).asJson
+    }
 
-  private def getLastHeaders(n: Int): Future[Json] = getHistory.map { history =>
-    history.lastHeaders(n).headers.map(_.asJson).asJson
-  }
+  private def getLastHeaders(n: Int): Future[Json] =
+    getHistory.map { history =>
+      history.lastHeaders(n).headers.map(_.asJson).asJson
+    }
 
-  private def getHeaderIds(offset: Int, limit: Int): Future[Json] = getHistory.map { history =>
-    history.headerIdsAt(offset, limit).toList.asJson
-  }
+  private def getHeaderIds(offset: Int, limit: Int): Future[Json] =
+    getHistory.map { history =>
+      history.headerIdsAt(offset, limit).toList.asJson
+    }
 
-  private def getFullBlockByHeaderId(headerId: ModifierId): Future[Option[ErgoFullBlock]] = getHistory.map { history =>
-    history.typedModifierById[Header](headerId).flatMap(history.getFullBlock)
-  }
+  private def getFullBlockByHeaderId(headerId: ModifierId): Future[Option[ErgoFullBlock]] =
+    getHistory.map { history =>
+      history.typedModifierById[Header](headerId).flatMap(history.getFullBlock)
+    }
 
-  private def getModifierById(modifierId: ModifierId): Future[Option[ErgoPersistentModifier]] = getHistory
-    .map { _.modifierById(modifierId) }
+  private def getModifierById(modifierId: ModifierId): Future[Option[ErgoPersistentModifier]] =
+    getHistory.map(_.modifierById(modifierId))
 
   private def getChainSlice(fromHeight: Int, toHeight: Int): Future[Json] =
     getHistory.map { history =>
-      val maxHeaderOpt = if (toHeight > 0) {
+      val maxHeaderOpt = if (toHeight >= 0) {
         history.headerIdsAtHeight(toHeight)
           .headOption
           .flatMap(history.typedModifierById[Header](_))
@@ -74,7 +78,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       val headers = maxHeaderOpt
         .toIndexedSeq
         .flatMap { maxHeader =>
-          history.headerChainBack(maxHeadersInOneQuery, maxHeader, _.height < fromHeight).headers
+          history.headerChainBack(maxHeadersInOneQuery, maxHeader, _.height <= fromHeight + 1).headers
         }
       headers.toList.asJson
     }

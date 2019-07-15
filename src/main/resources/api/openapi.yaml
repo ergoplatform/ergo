@@ -1069,6 +1069,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /blocks/chainSlice:
+    get:
+      summary: Get the slice of the headers chain
+      operationId: getChainSlice
+      tags:
+        - blocks
+      parameters:
+        - in: query
+          name: fromHeight
+          required: true
+          description: Min header height
+          schema:
+            type: integer
+            format: int32
+            minimum: 10
+            maximum: 100
+            default: 50
+        - in: query
+          name: toHeight
+          required: false
+          description: Max header height
+          schema:
+            type: integer
+            format: int32
+            default: 0
+      responses:
+        '200':
+          description: Array of headers
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of headers
+                items:
+                  $ref: '#/components/schemas/BlockHeader'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /blocks/{headerId}:
     get:
       summary: Get the full block info by a given signature

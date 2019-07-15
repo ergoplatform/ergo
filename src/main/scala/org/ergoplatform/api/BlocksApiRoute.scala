@@ -1,7 +1,7 @@
 package org.ergoplatform.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.{Directive, Route}
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
@@ -28,6 +28,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       getBlocksR ~
         postBlocksR ~
         getLastHeadersR ~
+        getChainSliceR ~
         getBlockIdsAtHeightR ~
         getBlockHeaderByHeaderIdR ~
         getBlockTransactionsByHeaderIdR ~
@@ -35,6 +36,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
         getModifierByIdR
     }
   }
+
+  private val maxHeadersInOneQuery = ergoSettings.chainSettings.epochLength * 2
 
   private def getHistory: Future[ErgoHistoryReader] =
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
@@ -58,6 +61,27 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   private def getModifierById(modifierId: ModifierId): Future[Option[ErgoPersistentModifier]] = getHistory
     .map { _.modifierById(modifierId) }
 
+  private def getChainSlice(fromHeight: Int, toHeight: Int): Future[Json] =
+    getHistory.map { history =>
+      val maxHeaderOpt = if (toHeight > 0) {
+        history.headerIdsAtHeight(toHeight)
+          .headOption
+          .flatMap(history.typedModifierById[Header](_))
+          .orElse(history.bestHeaderOpt)
+      } else {
+        history.bestHeaderOpt
+      }
+      val headers = maxHeaderOpt
+        .toIndexedSeq
+        .flatMap { maxHeader =>
+          history.headerChainBack(maxHeadersInOneQuery, maxHeader, _.height < fromHeight).headers
+        }
+      headers.toList.asJson
+    }
+
+  private val chainPagination: Directive[(Int, Int)] =
+    parameters("fromHeight".as[Int], "toHeight".as[Int] ? -1)
+
   def getBlocksR: Route = (pathEndOrSingleSlash & get & paging) { (offset, limit) =>
     ApiResponse(getHeaderIds(offset, limit))
   }
@@ -73,6 +97,10 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     } else {
       BadRequest("Block is invalid")
     }
+  }
+
+  def getChainSliceR: Route = (pathPrefix("chainSlice") & chainPagination) { (fromHeight, toHeight) =>
+    ApiResponse(getChainSlice(fromHeight, toHeight))
   }
 
   def getModifierByIdR: Route = (pathPrefix("modifier") & modifierId & get) { id =>

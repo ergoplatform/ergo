@@ -306,7 +306,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       case PaymentRequest(address, value, assets, registers) =>
         new ErgoBoxCandidate(value, address.script, height, assets.getOrElse(Seq.empty).toColl, registers.getOrElse(Map.empty))
       case AssetIssueRequest(addressOpt, amount, name, description, decimals, registers) =>
-        if (!registers.exists(_.forall(_._1.number >= 7))) {
+        // Check that auxiliary registers do not try to rewrite registers R0...R6
+        if (registers.exists(_.forall(_._1.number < 7))) {
           throw new Exception("Additional registers contain R0...R6")
         }
         val firstInput = inputsFor(

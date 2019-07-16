@@ -305,7 +305,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     requests.map {
       case PaymentRequest(address, value, assets, registers) =>
         new ErgoBoxCandidate(value, address.script, height, assets.getOrElse(Seq.empty).toColl, registers.getOrElse(Map.empty))
-      case AssetIssueRequest(addressOpt, amount, name, description, decimals) =>
+      case AssetIssueRequest(addressOpt, amount, name, description, decimals, registers) =>
         val firstInput = inputsFor(
           requests
             .collect { case pr: PaymentRequest => pr.value }

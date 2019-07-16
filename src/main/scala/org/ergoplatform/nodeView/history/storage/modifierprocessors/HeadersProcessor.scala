@@ -93,7 +93,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
     historyStorage.insert(Algos.idToBAW(h.id), dataToInsert._1, dataToInsert._2)
 
-    bestHeaderIdOpt match {
+    bestHeaderIdOpt match {.
       case Some(bestHeaderId) =>
         // If we verify transactions, we don't need to send this header to state.
         // If we don't and this is the best header, we should send this header to state to update state root hash

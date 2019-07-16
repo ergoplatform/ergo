@@ -306,6 +306,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       case PaymentRequest(address, value, assets, registers) =>
         new ErgoBoxCandidate(value, address.script, height, assets.getOrElse(Seq.empty).toColl, registers.getOrElse(Map.empty))
       case AssetIssueRequest(addressOpt, amount, name, description, decimals, registers) =>
+        if (!registers.exists(_.forall(_._1.number >= 7))) {
+          throw new Exception("Additional registers contain R0...R6")
+        }
         val firstInput = inputsFor(
           requests
             .collect { case pr: PaymentRequest => pr.value }
@@ -316,7 +319,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           R4 -> ByteArrayConstant(name.getBytes("UTF-8")),
           R5 -> ByteArrayConstant(description.getBytes("UTF-8")),
           R6 -> IntConstant(decimals)
-        )
+        ) ++ registers.getOrElse(Map())
         val lockWithAddress = (addressOpt orElse publicKeys.headOption)
           .getOrElse(throw new Exception("No address available for box locking"))
         val minimalErgoAmount =

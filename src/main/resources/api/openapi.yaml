@@ -1080,6 +1080,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /blocks/chainSlice:
+    get:
+      summary: Get headers in a specified range
+      operationId: getChainSlice
+      tags:
+        - blocks
+      parameters:
+        - in: query
+          name: fromHeight
+          required: false
+          description: Min header height
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: toHeight
+          required: false
+          description: Max header height (best header height by default)
+          schema:
+            type: integer
+            format: int32
+            default: -1
+      responses:
+        '200':
+          description: Array of headers
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of headers
+                items:
+                  $ref: '#/components/schemas/BlockHeader'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /blocks/{headerId}:
     get:
       summary: Get the full block info by a given signature

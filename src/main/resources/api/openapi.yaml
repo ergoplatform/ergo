@@ -340,6 +340,9 @@ components:
           type: integer
           format: int64
           example: 1000000
+        registers:
+          description: Optional, possible values for registers R7...R9
+          $ref: '#/components/schemas/Registers'
 
     FullBlock:
       description: Block with header and transactions

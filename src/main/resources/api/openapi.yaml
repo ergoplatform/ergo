@@ -1071,7 +1071,7 @@ paths:
 
   /blocks/chainSlice:
     get:
-      summary: Get the slice of the headers chain
+      summary: Get headers in a specified range
       operationId: getChainSlice
       tags:
         - blocks

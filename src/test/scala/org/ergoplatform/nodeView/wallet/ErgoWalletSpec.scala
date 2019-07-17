@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
@@ -12,6 +12,7 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
+import scorex.util.encode.Base16
 import sigmastate.Values.ByteArrayConstant
 import sigmastate._
 import sigmastate.eval._
@@ -46,6 +47,46 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
+    }
+  }
+
+  property("Generate transaction with user-defined input") {
+    withFixture { implicit w =>
+      val pubKey = getPublicKeys.head.pubkey
+      val genesisBlock = makeGenesisBlock(pubKey, randomNewAsset)
+      val genesisTx = genesisBlock.transactions.head
+      val initialBoxes = boxesAvailable(genesisBlock, pubKey)
+
+      val boxesToUseEncoded = initialBoxes.map { box =>
+        Base16.encode(ErgoBoxSerializer.toBytes(box))
+      }
+
+      applyBlock(genesisBlock) shouldBe 'success
+      waitForScanning(genesisBlock)
+
+      val confirmedBalance = getConfirmedBalances.balance
+
+      //pay out all the wallet balance:
+      val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+      assetToSpend should not be empty
+      val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance, assetToSpend, Map.empty)
+
+      val tx1 = await(wallet.generateTransaction(Seq(req1), boxesToUseEncoded)).get
+      tx1.outputs.size shouldBe 1
+      tx1.outputs.head.value shouldBe confirmedBalance
+      toAssetMap(tx1.outputs.head.additionalTokens.toArray) shouldBe toAssetMap(assetToSpend)
+
+      //change == 1:
+      val assetToSpend2 = assetToSpend.map { case (tokenId, tokenValue) => (tokenId, tokenValue - 1) }
+      val assetToReturn = assetToSpend.map { case (tokenId, _) => (tokenId, 1L) }
+      val req2 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance - 1, assetToSpend2, Map.empty)
+
+      val tx2 = await(wallet.generateTransaction(Seq(req2))).get
+      tx2.outputs.size shouldBe 2
+      tx2.outputs.head.value shouldBe confirmedBalance - 1
+      toAssetMap(tx2.outputs.head.additionalTokens.toArray) shouldBe toAssetMap(assetToSpend2)
+      tx2.outputs(1).value shouldBe 1
+      toAssetMap(tx2.outputs(1).additionalTokens.toArray) shouldBe toAssetMap(assetToReturn)
     }
   }
 

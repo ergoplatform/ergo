@@ -400,7 +400,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
               val selectionOpt = boxSelector.select(inputBoxes, onChainFilter, targetBalance, targetAssets)
 
-              val makeTx = prepareTransaction(prover, payTo)
+              val makeTx = prepareTransaction(prover, payTo) _
 
               selectionOpt.map(makeTx) match {
                 case Some(txTry) => txTry.map(ErgoTransaction.apply)

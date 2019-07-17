@@ -311,7 +311,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         .map {
           case PaymentRequest(address, value, assets, registers) =>
             Success(new ErgoBoxCandidate(value, address.script, height, assets.toColl, registers))
-          case AssetIssueRequest(addressOpt, amount, name, description, decimals) =>
+          case AssetIssueRequest(addressOpt, amount, name, description, decimals, registers) =>
+            // Check that auxiliary registers do not try to rewrite registers R0...R6
+            if (registers.exists(_.forall(_._1.number < 7))) {
+              throw new Exception("Additional registers contain R0...R6")
+            }
             val firstInputOpt = inputsFor(
               requests
                 .collect { case pr: PaymentRequest => pr.value }
@@ -325,7 +329,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                   R4 -> ByteArrayConstant(name.getBytes("UTF-8")),
                   R5 -> ByteArrayConstant(description.getBytes("UTF-8")),
                   R6 -> IntConstant(decimals)
-                )
+                ) ++ registers.getOrElse(Map())
                 (addressOpt orElse publicKeys.headOption)
                   .fold[Try[ErgoAddress]](Failure(new Exception("No address available for box locking")))(Success(_))
                   .map { lockWithAddress =>

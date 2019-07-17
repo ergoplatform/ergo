@@ -313,42 +313,46 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
             Success(new ErgoBoxCandidate(value, address.script, height, assets.toColl, registers))
           case AssetIssueRequest(addressOpt, amount, name, description, decimals, registers) =>
             // Check that auxiliary registers do not try to rewrite registers R0...R6
-            if (registers.exists(_.forall(_._1.number < 7))) {
-              throw new Exception("Additional registers contain R0...R6")
+            val registersCheck = if (registers.exists(_.forall(_._1.number < 7))) {
+              Failure(new Exception("Additional registers contain R0...R6"))
+            } else {
+              Success(())
             }
-            val firstInputOpt = inputsFor(
-              requests
-                .collect { case pr: PaymentRequest => pr.value }
-                .sum
-            ).headOption
-            firstInputOpt
-              .fold[Try[ErgoBox]](Failure(new Exception("Can't issue asset with no inputs")))(Success(_))
-              .flatMap { firstInput =>
-                val assetId = Digest32 !@@ firstInput.id
-                val nonMandatoryRegisters = scala.Predef.Map(
-                  R4 -> ByteArrayConstant(name.getBytes("UTF-8")),
-                  R5 -> ByteArrayConstant(description.getBytes("UTF-8")),
-                  R6 -> IntConstant(decimals)
-                ) ++ registers.getOrElse(Map())
-                (addressOpt orElse publicKeys.headOption)
-                  .fold[Try[ErgoAddress]](Failure(new Exception("No address available for box locking")))(Success(_))
-                  .map { lockWithAddress =>
-                    val minimalErgoAmount =
-                      BoxUtils.minimalErgoAmountSimulated(
+            registersCheck.flatMap { _ =>
+              val firstInputOpt = inputsFor(
+                requests
+                  .collect { case pr: PaymentRequest => pr.value }
+                  .sum
+              ).headOption
+              firstInputOpt
+                .fold[Try[ErgoBox]](Failure(new Exception("Can't issue asset with no inputs")))(Success(_))
+                .flatMap { firstInput =>
+                  val assetId = Digest32 !@@ firstInput.id
+                  val nonMandatoryRegisters = scala.Predef.Map(
+                    R4 -> ByteArrayConstant(name.getBytes("UTF-8")),
+                    R5 -> ByteArrayConstant(description.getBytes("UTF-8")),
+                    R6 -> IntConstant(decimals)
+                  ) ++ registers.getOrElse(Map())
+                  (addressOpt orElse publicKeys.headOption)
+                    .fold[Try[ErgoAddress]](Failure(new Exception("No address available for box locking")))(Success(_))
+                    .map { lockWithAddress =>
+                      val minimalErgoAmount =
+                        BoxUtils.minimalErgoAmountSimulated(
+                          lockWithAddress.script,
+                          Colls.fromItems(assetId -> amount),
+                          nonMandatoryRegisters,
+                          parameters
+                        )
+                      new ErgoBoxCandidate(
+                        minimalErgoAmount,
                         lockWithAddress.script,
+                        height,
                         Colls.fromItems(assetId -> amount),
-                        nonMandatoryRegisters,
-                        parameters
+                        nonMandatoryRegisters
                       )
-                    new ErgoBoxCandidate(
-                      minimalErgoAmount,
-                      lockWithAddress.script,
-                      height,
-                      Colls.fromItems(assetId -> amount),
-                      nonMandatoryRegisters
-                    )
-                  }
-              }
+                    }
+                }
+            }
           case other =>
             Failure(new Exception(s"Unknown TransactionRequest type: $other"))
         }

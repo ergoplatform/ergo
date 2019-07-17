@@ -3,10 +3,13 @@ package org.ergoplatform.nodeView.wallet.requests
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.ErgoAddress
+import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.box.Box.Amount
+import sigmastate.SType
+import sigmastate.Values.EvaluatedValue
 
 /**
   * Request for new asset issuing.
@@ -16,12 +19,15 @@ import scorex.core.transaction.box.Box.Amount
   * R4 - verbose name
   * R5 - description
   * R6 - number of decimal places
+  *
+  * additional registers (R7, R8, R9) could be used for asset-specific information
   */
 case class AssetIssueRequest(addressOpt: Option[ErgoAddress],
                              amount: Amount,
                              name: String,
                              description: String,
-                             decimals: Int) extends TransactionRequest
+                             decimals: Int,
+                             registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]]) extends TransactionRequest
 
 object AssetIssueRequest {
 
@@ -29,8 +35,9 @@ object AssetIssueRequest {
             amount: Amount,
             name: String,
             description: String,
-            decimals: Int): AssetIssueRequest =
-    new AssetIssueRequest(Some(address), amount, name, description, decimals)
+            decimals: Int,
+            registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = None): AssetIssueRequest =
+    new AssetIssueRequest(Some(address), amount, name, description, decimals, registers)
 }
 
 class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssueRequest] with ApiCodecs {
@@ -43,7 +50,8 @@ class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssu
       "amount" -> request.amount.asJson,
       "name" -> request.name.asJson,
       "description" -> request.description.asJson,
-      "decimals" -> request.decimals.asJson
+      "decimals" -> request.decimals.asJson,
+      "registers" -> request.registers.asJson
     )
   }
 
@@ -62,7 +70,8 @@ class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssu
       name <- cursor.downField("name").as[String]
       description <- cursor.downField("description").as[String]
       decimals <- cursor.downField("decimals").as[Int]
-    } yield AssetIssueRequest(address, amount, name, description, decimals)
+      registers <- cursor.downField("registers").as[Option[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]]
+    } yield AssetIssueRequest(address, amount, name, description, decimals, registers)
   }
 
 }

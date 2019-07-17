@@ -8,8 +8,8 @@ import io.circe.syntax._
 import io.circe.{Decoder, Json}
 import org.ergoplatform.api.WalletApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.{ErgoAddressJsonEncoder, WalletTransaction}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
+import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
 import org.ergoplatform.settings.{Args, Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
@@ -225,7 +225,7 @@ class WalletApiRouteSpec extends FlatSpec
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
       response.size shouldBe 2
-      responseAs[Seq[WalletTransaction]] shouldEqual WalletActorStub.walletTxs
+      responseAs[Seq[AugWalletTransaction]] shouldEqual WalletActorStub.walletTxs
     }
   }
 

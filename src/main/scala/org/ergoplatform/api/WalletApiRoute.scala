@@ -48,11 +48,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           unspentBoxesR ~
           boxesR ~
           generateTransactionR ~
-          generatePaymentTransactionR ~
-          generateAssetIssueTransactionR ~
           sendTransactionR ~
-          sendPaymentTransactionR ~
-          sendAssetIssueTransactionR ~
           p2shAddressR ~
           p2sAddressR ~
           initWalletR ~
@@ -187,26 +183,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def generateTransactionR: Route = (path("transaction" / "generate") & post
     & entity(as[RequestsHolder]))(holder => generateTransaction(holder.withFee, holder.inputsRaw))
-
-  def generatePaymentTransactionR: Route = (path( "payment" / "generate") & post
-    & entity(as[RequestsHolder])) { holder =>
-      generateTransaction(holder.withFee, holder.inputsRaw)
-    }
-
-  def sendPaymentTransactionR: Route = (path("payment" / "send") & post
-    & entity(as[RequestsHolder])) { holder =>
-      sendTransaction(holder.withFee, holder.inputsRaw)
-    }
-
-  def generateAssetIssueTransactionR: Route = (path("assets" / "generate") & post
-    & entity(as[RequestsHolder])) { holder =>
-      generateTransaction(holder.withFee, holder.inputsRaw)
-    }
-
-  def sendAssetIssueTransactionR: Route = (path("assets" / "issue") & post
-    & entity(as[RequestsHolder])) { holder =>
-      sendTransaction(holder.withFee, holder.inputsRaw)
-    }
 
   def balancesR: Route = (path("balances") & get) {
     withWallet(_.confirmedBalances)

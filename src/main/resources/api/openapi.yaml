@@ -254,7 +254,6 @@ components:
       type: object
       required:
       - requests
-      - fee
       properties:
         requests:
           description: Sequence of transaction requests
@@ -268,6 +267,11 @@ components:
           type: integer
           format: int64
           example: 1000000
+        inputsRaw:
+          description: List of inputs to be used in serialized form
+          type: array
+          items:
+            - $ref: '#/components/schemas/SerializedBox'
 
     SourceHolder:
       type: object
@@ -2224,150 +2228,6 @@ paths:
                 $ref: '#/components/schemas/TransactionId'
         '400':
           description: Bad transaction request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-  /wallet/payment/generate:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Generate payment transaction
-      operationId: walletPaymentTransactionGenerate
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/PaymentRequest'
-      responses:
-        '200':
-          description: Generated Ergo transaction
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErgoTransaction'
-        '400':
-          description: Bad payment request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-  /wallet/payment/send:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Generate and send payment transaction
-      operationId: walletPaymentTransactionGenerateAndSend
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/PaymentRequest'
-      responses:
-        '200':
-          description: Identifier of an Ergo transaction generated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransactionId'
-        '400':
-          description: Bad payment request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-  /wallet/assets/generate:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Generate asset issue transaction
-      operationId: walletAssetIssueTransactionGenerate
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/AssetIssueRequest'
-      responses:
-        '200':
-          description: Generated Ergo transaction
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErgoTransaction'
-        '400':
-          description: Bad asset issue request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-  /wallet/assets/issue:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Generate and send asset issue transaction
-      operationId: walletAssetIssueTransactionGenerateAndSend
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/AssetIssueRequest'
-      responses:
-        '200':
-          description: Identifier of an Ergo transaction generated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransactionId'
-        '400':
-          description: Bad asset issue request
           content:
             application/json:
               schema:

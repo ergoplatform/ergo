@@ -80,36 +80,8 @@ class WalletApiRouteSpec extends FlatSpec
     }
   }
 
-  it should "generate payment transaction" in {
-    Post(prefix + "/payment/generate", RequestsHolder(Seq(paymentRequest)).asJson) ~> route ~> check {
-      status shouldBe StatusCodes.OK
-      Try(responseAs[ErgoTransaction]) shouldBe 'success
-    }
-  }
-
-  it should "generate asset issue transaction" in {
-    Post(prefix + "/assets/generate", RequestsHolder(Seq(assetIssueRequest)).asJson) ~> route ~> check {
-      status shouldBe StatusCodes.OK
-      Try(responseAs[ErgoTransaction]) shouldBe 'success
-    }
-  }
-
   it should "generate & send arbitrary transaction" in {
     Post(prefix + "/transaction/send", requestsHolder.asJson) ~> route ~> check {
-      status shouldBe StatusCodes.OK
-      responseAs[String] should not be empty
-    }
-  }
-
-  it should "generate & send payment transaction" in {
-    Post(prefix + "/payment/send", RequestsHolder(Seq(paymentRequest)).asJson) ~> route ~> check {
-      status shouldBe StatusCodes.OK
-      responseAs[String] should not be empty
-    }
-  }
-
-  it should "generate & send asset issue transaction" in {
-    Post(prefix + "/assets/issue", RequestsHolder(Seq(assetIssueRequest)).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
     }

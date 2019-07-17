@@ -10,10 +10,11 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
-import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
+import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.{ErgoAddress, P2PKAddress}
 import scorex.core.transaction.wallet.VaultReader
+import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.DLogProverInput
 
 import scala.concurrent.Future
@@ -59,8 +60,14 @@ trait ErgoWalletReader extends VaultReader {
   def boxes(unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
     (walletActor ? GetBoxes(unspentOnly)).mapTo[Seq[WalletBox]]
 
-  def transactions: Future[Seq[WalletTransaction]] =
-    (walletActor ? GetTransactions).mapTo[Seq[WalletTransaction]]
+  def updateChangeAddress(address: P2PKAddress): Unit =
+    walletActor ! UpdateChangeAddress(address)
+
+  def transactions: Future[Seq[AugWalletTransaction]] =
+    (walletActor ? GetTransactions).mapTo[Seq[AugWalletTransaction]]
+
+  def transactionById(id: ModifierId): Future[Option[AugWalletTransaction]] =
+    (walletActor ? GetTransaction(id)).mapTo[Option[AugWalletTransaction]]
 
   def randomPublicKey: Future[P2PKAddress] =
     (walletActor ? ReadRandomPublicKey).mapTo[P2PKAddress]

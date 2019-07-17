@@ -57,6 +57,17 @@ components:
           example:
             '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
+    SerializedBox:
+      type: object
+      required:
+        - boxId
+        - bytes
+      properties:
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
+        bytes:
+          $ref: '#/components/schemas/HexString'
+
     ErgoTransactionOutput:
       type: object
       required:
@@ -190,6 +201,7 @@ components:
         - dataInputs
         - outputs
         - inclusionHeight
+        - numConfirmations
       properties:
         id:
           $ref: '#/components/schemas/TransactionId'
@@ -210,6 +222,11 @@ components:
             $ref: '#/components/schemas/ErgoTransactionOutput'
         inclusionHeight:
           description: Height of a block the transaction was included in
+          type: integer
+          format: int32
+          example: 20998
+        numConfirmations:
+          description: Number of transaction confirmations
           type: integer
           format: int32
           example: 20998
@@ -323,6 +340,9 @@ components:
           type: integer
           format: int64
           example: 1000000
+        registers:
+          description: Optional, possible values for registers R7...R9
+          $ref: '#/components/schemas/Registers'
 
     FullBlock:
       description: Block with header and transactions
@@ -1063,6 +1083,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /blocks/chainSlice:
+    get:
+      summary: Get headers in a specified range
+      operationId: getChainSlice
+      tags:
+        - blocks
+      parameters:
+        - in: query
+          name: fromHeight
+          required: false
+          description: Min header height
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: toHeight
+          required: false
+          description: Max header height (best header height by default)
+          schema:
+            type: integer
+            format: int32
+            default: -1
+      responses:
+        '200':
+          description: Array of headers
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of headers
+                items:
+                  $ref: '#/components/schemas/BlockHeader'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /blocks/{headerId}:
     get:
       summary: Get the full block info by a given signature
@@ -1402,7 +1462,7 @@ paths:
 
   /utils/seed:
     get:
-      summary: Get random seed with 32 bytes size
+      summary: Get random seed of 32 bytes
       operationId: getRandomSeed
       tags:
       - utils
@@ -1447,6 +1507,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
+  /utils/addressToRaw/{address}:
+    get:
+      summary: Convert Pay-To-Public-Key Address to raw representation (hex-encoded serialized curve point)
+      operationId: AddressToRaw
+      tags:
+        - utils
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to extract public key from
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: hex-encoded public key (serialized secp256k1 element)
+          content:
+            application/json:
+              schema:
+                type: string
+                example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utils/rawToAddress/{pubkeyHex}:
+   get:
+    summary: Generate Pay-To-Public-Key address from hex-encoded raw pubkey (secp256k1 serialized point)
+    operationId: RawToAddress
+    tags:
+      - utils
+    parameters:
+      - in: path
+        name: pubkeyHex
+        required: true
+        description: public key to get address from
+        schema:
+          type: string
+          example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+    responses:
+      '200':
+        description: Pay-to-public-key (P2PK) address
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErgoAddress'
+      default:
+        description: Error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiError'
 
   /utils/seed/{length}:
     get:
@@ -1632,6 +1748,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/updateChangeAddress:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Update address to be used to send change to
+      operationId: walletUpdateChangeAddress
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - address
+              properties:
+                address:
+                  type: string
+                  description: Pay2PubKey address
+                  example: '3WzCFq7mkykKqi4Ykdk8BK814tkh6EsPmA42pQZxU2NRwSDgd6yB'
+      responses:
+        '200':
+          description: Change address updated successfully
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/deriveKey:
     post:
       security:
@@ -1731,7 +1878,7 @@ paths:
       - in: query
         name: minInclusionHeight
         required: false
-        description: Minimal box inclusion height
+        description: Minimal tx inclusion height
         schema:
           type: integer
           format: int32
@@ -1739,7 +1886,23 @@ paths:
       - in: query
         name: maxInclusionHeight
         required: false
-        description: Maximal box inclusion height
+        description: Maximal tx inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal confirmations number
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximal confirmations number
         schema:
           type: integer
           format: int32
@@ -1760,6 +1923,43 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/WalletTransaction'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/transactionById:
+    parameters:
+      - in: query
+        name: id
+        required: true
+        description: Transaction id
+        schema:
+          type: string
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get wallet-related transaction by id
+      operationId: walletGetTransaction
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Wallet-related transaction
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletTransaction'
+        '404':
+          description: Transaction with specified id not found in wallet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:
@@ -2258,3 +2458,96 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /utxo/byId/{boxId}:
+    get:
+      summary: Get box contents for a box by a unique identifier.
+      operationId: getBoxById
+      tags:
+        - utxo
+      parameters:
+        - in: path
+          name: boxId
+          required: true
+          description: ID of a wanted box
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Box object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransactionOutput'
+        '404':
+          description: Box with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utxo/byIdBinary/{boxId}:
+    get:
+      summary: Get serialized box in Base16 encoding for a box with given unique identifier.
+      operationId: getBoxByIdBinary
+      tags:
+        - utxo
+      parameters:
+        - in: path
+          name: boxId
+          required: true
+          description: ID of a wanted box
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Json containing box identifier and hex-encoded box bytes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SerializedBox'
+        '404':
+          description: Box with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utxo/genesis:
+    get:
+      summary: Get genesis boxes (boxes existed before the very first block)
+      operationId: genesisBoxes
+      tags:
+        - utxo
+      responses:
+        '200':
+          description: A list of all the genesis boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ErgoTransactionOutput'
+        '404':
+          description: Box with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'

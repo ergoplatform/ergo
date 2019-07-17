@@ -6,7 +6,6 @@ import cats.free.Free.liftF
 import cats.~>
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA._
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
@@ -94,6 +93,9 @@ object RegistryOps {
       acc.flatMap(_ => putTx(tx))
     }
 
+  def getTx(id: ModifierId): RegistryOp[Option[WalletTransaction]] =
+    liftF[RegistryOpA, Option[WalletTransaction]](GetTx(id))
+
   def getAllTxs: RegistryOp[Seq[WalletTransaction]] =
     liftF[RegistryOpA, Seq[WalletTransaction]](GetAllTxs)
 
@@ -151,6 +153,12 @@ object RegistryOps {
           State.modify { case (toInsert, toRemove) =>
             val txBytes = WalletTransactionSerializer.toBytes(wtx)
             (toInsert :+ (key(wtx.id), TxPrefix +: txBytes), toRemove)
+          }
+        case GetTx(id) =>
+          State.inspect { _ =>
+            store.get(ByteArrayWrapper(key(id)))
+              .flatMap(r => WalletTransactionSerializer.parseBytesTry(r.data.tail).toOption)
+              .asInstanceOf[A]
           }
         case GetAllTxs =>
           State.inspect { _ =>

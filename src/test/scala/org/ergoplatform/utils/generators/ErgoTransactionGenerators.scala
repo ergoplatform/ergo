@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
-import org.ergoplatform.nodeView.wallet.WalletTransaction
+import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction}
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.BoxUtils
@@ -131,6 +131,11 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     tx <- invalidErgoTransactionGen
     inclusionHeight <- Gen.posNum[Int]
   } yield WalletTransaction(tx, inclusionHeight)
+
+  lazy val augWalletTransactionGen: Gen[AugWalletTransaction] = for {
+    tx <- walletTransactionGen
+    numConfirmation <- Gen.posNum[Int]
+  } yield AugWalletTransaction(tx, numConfirmation)
 
   /**
     * Generates a transaction that is valid if correct boxes were provided.

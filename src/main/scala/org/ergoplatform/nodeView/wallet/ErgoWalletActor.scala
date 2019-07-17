@@ -388,31 +388,21 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                   AssetUtils.mergeAssets(boxTokens, acc)
                 }
 
-              boxSelector.select(
-                registry.readCertainUnspentBoxes.toIterator, onChainFilter, targetBalance, targetAssets).map { r =>
-                val inputs = r.boxes.toIndexedSeq
-
-                val changeAddress = storage.readChangeAddress
-                  .map(_.pubkey)
-                  .getOrElse {
-                    log.warn("Change address not specified. Using random address from wallet.")
-                    prover.pubKeys(Random.nextInt(prover.pubKeys.size))
+              val inputBoxes = if (inputs.nonEmpty) {
+                inputs
+                  .map { box =>
+                    TrackedBox(box.transactionId, box.index, None, None, None, box, BoxCertainty.Certain)
                   }
+                  .toIterator
+              } else {
+                registry.readCertainUnspentBoxes.toIterator
+              }
 
-                val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>
-                  val assets = tokensChange.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
-                  new ErgoBoxCandidate(ergChange, changeAddress, height, assets.toColl)
-                }
+              val selectionOpt = boxSelector.select(inputBoxes, onChainFilter, targetBalance, targetAssets)
 
-                val unsignedTx = new UnsignedErgoTransaction(
-                  inputs.map(_.id).map(id => new UnsignedInput(id)),
-                  IndexedSeq(),
-                  (payTo ++ changeBoxCandidates).toIndexedSeq
-                )
+              val makeTx = prepareTransaction(prover, payTo)
 
-                prover.sign(unsignedTx, inputs, IndexedSeq(), stateContext)
-                  .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
-              } match {
+              selectionOpt.map(makeTx) match {
                 case Some(txTry) => txTry.map(ErgoTransaction.apply)
                 case None => Failure(new Exception(s"No enough boxes to assemble a transaction for $payTo"))
               }
@@ -422,6 +412,32 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       case None =>
         Failure(new Exception("Wallet is locked"))
     }
+
+  private def prepareTransaction(prover: ErgoProvingInterpreter, payTo: Seq[ErgoBoxCandidate])
+                                (r: BoxSelector.BoxSelectionResult): Try[ErgoLikeTransaction] = {
+    val inputs = r.boxes.toIndexedSeq
+
+    val changeAddress = storage.readChangeAddress
+      .map(_.pubkey)
+      .getOrElse {
+        log.warn("Change address not specified. Using random address from wallet.")
+        prover.pubKeys(Random.nextInt(prover.pubKeys.size))
+      }
+
+    val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>
+      val assets = tokensChange.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
+      new ErgoBoxCandidate(ergChange, changeAddress, height, assets.toColl)
+    }
+
+    val unsignedTx = new UnsignedErgoTransaction(
+      inputs.map(_.id).map(id => new UnsignedInput(id)),
+      IndexedSeq(),
+      (payTo ++ changeBoxCandidates).toIndexedSeq
+    )
+
+    prover.sign(unsignedTx, inputs, IndexedSeq(), stateContext)
+      .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
+  }
 
   /**
     * Updates indexes according to a given wallet-critical data.

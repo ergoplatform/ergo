@@ -398,8 +398,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
               val inputBoxes = if (inputs.nonEmpty) {
                 inputs
-                  .map { box =>
-                    TrackedBox(box.transactionId, box.index, None, None, None, box, BoxCertainty.Certain)
+                  .map { box => // declare fake inclusion height in order to confirm the box is onchain
+                    TrackedBox(box.transactionId, box.index, Some(1), None, None, box, BoxCertainty.Certain)
                   }
                   .toIterator
               } else {

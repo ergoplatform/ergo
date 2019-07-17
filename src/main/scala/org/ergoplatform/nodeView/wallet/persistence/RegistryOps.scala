@@ -6,7 +6,6 @@ import cats.free.Free.liftF
 import cats.~>
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA._
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}

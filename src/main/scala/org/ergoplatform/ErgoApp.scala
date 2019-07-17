@@ -37,6 +37,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   implicit private def settings: ScorexSettings = ergoSettings.scorexSettings
 
   implicit def exceptionHandler: ExceptionHandler = ApiErrorHandler.exceptionHandler
+
   implicit def rejectionHandler: RejectionHandler = ApiRejectionHandler.rejectionHandler
 
   implicit private val actorSystem: ActorSystem = ActorSystem(settings.network.agentName)
@@ -122,7 +123,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
-    MiningApiRoute(minerRef, ergoSettings)
+    MiningApiRoute(minerRef, ergoSettings),
+    UtxoApiRoute(readersHolderRef, settings.restApi)
   )
 
   private val combinedRoute: Route =
@@ -200,8 +202,8 @@ object ErgoApp extends ScorexLogging {
 
   val argParser: Arg[Args] = (
     optional[String]("--config", "-c") and
-    optionalOneOf[NetworkId](NetworkId.all.map(x => s"--${x.verboseName}" -> x):_*)
-  ).to[Args]
+      optionalOneOf[NetworkId](NetworkId.all.map(x => s"--${x.verboseName}" -> x): _*)
+    ).to[Args]
 
   def main(args: Array[String]): Unit = argParser.parse(args) match {
     case Success(argsParsed) => new ErgoApp(argsParsed).run()

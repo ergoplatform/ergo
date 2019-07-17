@@ -57,6 +57,17 @@ components:
           example:
             '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
+    SerializedBox:
+      type: object
+      required:
+        - boxId
+        - bytes
+      properties:
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
+        bytes:
+          $ref: '#/components/schemas/HexString'
+
     ErgoTransactionOutput:
       type: object
       required:
@@ -329,6 +340,9 @@ components:
           type: integer
           format: int64
           example: 1000000
+        registers:
+          description: Optional, possible values for registers R7...R9
+          $ref: '#/components/schemas/Registers'
 
     FullBlock:
       description: Block with header and transactions
@@ -2444,3 +2458,96 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /utxo/byId/{boxId}:
+    get:
+      summary: Get box contents for a box by a unique identifier.
+      operationId: getBoxById
+      tags:
+        - utxo
+      parameters:
+        - in: path
+          name: boxId
+          required: true
+          description: ID of a wanted box
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Box object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransactionOutput'
+        '404':
+          description: Box with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utxo/byIdBinary/{boxId}:
+    get:
+      summary: Get serialized box in Base16 encoding for a box with given unique identifier.
+      operationId: getBoxByIdBinary
+      tags:
+        - utxo
+      parameters:
+        - in: path
+          name: boxId
+          required: true
+          description: ID of a wanted box
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Json containing box identifier and hex-encoded box bytes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SerializedBox'
+        '404':
+          description: Box with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utxo/genesis:
+    get:
+      summary: Get genesis boxes (boxes existed before the very first block)
+      operationId: genesisBoxes
+      tags:
+        - utxo
+      responses:
+        '200':
+          description: A list of all the genesis boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ErgoTransactionOutput'
+        '404':
+          description: Box with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'

@@ -48,6 +48,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           unspentBoxesR ~
           boxesR ~
           generateTransactionR ~
+          sendPaymentTransactionR ~
           sendTransactionR ~
           p2shAddressR ~
           p2sAddressR ~
@@ -63,13 +64,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   private val loadMaxKeys: Int = 100
-
-  private val fee: Directive1[Option[Long]] = entity(as[Json]).flatMap { p =>
-    Try(p.hcursor.downField("fee").as[Long]) match {
-      case Success(Right(value)) => provide(Some(value))
-      case _ => provide(None)
-    }
-  }
 
   private val source: Directive1[String] = entity(as[Json]).flatMap { p =>
     p.hcursor.downField("source").as[String]
@@ -149,9 +143,9 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
-  private def withFee(requests: Seq[TransactionRequest], feeOpt: Option[Long]): Seq[TransactionRequest] = {
+  private def withFee(requests: Seq[TransactionRequest]): Seq[TransactionRequest] = {
     requests :+ PaymentRequest(Pay2SAddress(ergoSettings.chainSettings.monetary.feeProposition),
-      feeOpt.getOrElse(ergoSettings.walletSettings.defaultTransactionFee), Seq.empty, Map.empty)
+      ergoSettings.walletSettings.defaultTransactionFee, Seq.empty, Map.empty)
   }
 
   private def withWalletOp[T](op: ErgoWalletReader => Future[T])(toRoute: T => Route): Route = {
@@ -184,6 +178,10 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   def generateTransactionR: Route = (path("transaction" / "generate") & post
     & entity(as[RequestsHolder]))(holder => generateTransaction(holder.withFee, holder.inputsRaw))
 
+  def sendPaymentTransactionR: Route = (path("payment" / "send") & post
+    & entity(as[Seq[PaymentRequest]])) { requests =>
+    sendTransaction(withFee(requests), Seq.empty)
+  }
   def balancesR: Route = (path("balances") & get) {
     withWallet(_.confirmedBalances)
   }

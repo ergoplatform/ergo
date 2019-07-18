@@ -2239,6 +2239,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/payment/send:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Generate and send payment transaction (default fee is used)
+      operationId: walletPaymentTransactionGenerateAndSend
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '200':
+          description: Identifier of an Ergo transaction generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionId'
+        '400':
+          description: Bad payment request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /mining/candidate:
     get:
       security:

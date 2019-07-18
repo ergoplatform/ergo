@@ -87,6 +87,13 @@ class WalletApiRouteSpec extends FlatSpec
     }
   }
 
+  it should "generate & send payment transaction" in {
+    Post(prefix + "/payment/send", Seq(paymentRequest).asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[String] should not be empty
+    }
+  }
+
   it should "generate valid P2SAddress form source" in {
     val suffix = "/p2s_address"
     val assertion = (json: Json) => {

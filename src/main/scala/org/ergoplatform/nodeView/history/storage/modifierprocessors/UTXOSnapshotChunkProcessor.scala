@@ -20,7 +20,7 @@ trait UTXOSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
   def process(m: UTXOSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
     //TODO
     val toInsert = ???
-    historyStorage.insert(Algos.idToBAW(m.id), Seq.empty, toInsert)
+    historyStorage.insert(Seq.empty, toInsert)
     ProgressInfo(None, Seq.empty, Seq(m), Seq.empty)
   }
 

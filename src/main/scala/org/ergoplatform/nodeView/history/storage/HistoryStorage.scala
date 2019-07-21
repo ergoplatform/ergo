@@ -1,13 +1,14 @@
 package org.ergoplatform.nodeView.history.storage
 
 import com.google.common.cache.CacheBuilder
-import io.iohk.iodb.{ByteArrayWrapper, Store}
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoApp
+import org.ergoplatform.db.LDBKVStore
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.utils.ScorexEncoding
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}
 
@@ -19,7 +20,7 @@ import scala.util.{Failure, Success, Try}
   * @param objectsStore - key-value store, where key is id of ErgoPersistentModifier and value is it's bytes
   * @param config       - cache configs
   */
-class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: CacheSettings) extends ScorexLogging
+class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: CacheSettings) extends ScorexLogging
   with AutoCloseable with ScorexEncoding {
 
   private val modifiersCache = CacheBuilder.newBuilder()
@@ -28,7 +29,7 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
 
   private val indexCache = CacheBuilder.newBuilder()
     .maximumSize(config.indexesCacheSize)
-    .build[ByteArrayWrapper, ByteArrayWrapper]
+    .build[ByteArrayWrapper, Array[Byte]]
 
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
     Option(modifiersCache.getIfPresent(id)) match {
@@ -36,7 +37,7 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
         log.trace(s"Got modifier $id from cache")
         Some(e)
       case None =>
-        objectsStore.get(id).flatMap { bBytes =>
+        objectsStore.get(idToBytes(id)).flatMap { bBytes =>
           HistoryModifierSerializer.parseBytesTry(bBytes) match {
             case Success(pm) =>
               log.trace(s"Cache miss for existing modifier $id")
@@ -50,40 +51,36 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
     }
   }
 
-  def getIndex(id: ByteArrayWrapper): Option[ByteArrayWrapper] = Option(indexCache.getIfPresent(id)).orElse {
-    indexStore.get(id).map { value =>
-      indexCache.put(id, value)
-      value
+  def getIndex(id: ByteArrayWrapper): Option[Array[Byte]] =
+    Option(indexCache.getIfPresent(id)).orElse {
+      indexStore.get(id.data).map { value =>
+        indexCache.put(id, value)
+        value
+      }
     }
-  }
 
-  def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(id)
+  def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(idToBytes(id))
 
-  def contains(id: ModifierId): Boolean = objectsStore.contains(id)
+  def contains(id: ModifierId): Boolean = objectsStore.get(idToBytes(id)).isDefined
 
-  def insert(id: ByteArrayWrapper,
-             indexesToInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)],
+  def insert(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
              objectsToInsert: Seq[ErgoPersistentModifier]): Unit = Try {
-    objectsToInsert.foreach { o =>
-      modifiersCache.put(o.id, o)
-      // TODO saving object to disc may be async here for performance reasons
-      objectsStore.put(o).get
-    }
+    objectsToInsert.foreach(o => modifiersCache.put(o.id, o))
+    objectsStore.insert(objectsToInsert.map(m => idToBytes(m.id) -> HistoryModifierSerializer.toBytes(m)))
     if (indexesToInsert.nonEmpty) {
       indexesToInsert.foreach(kv => indexCache.put(kv._1, kv._2))
-      indexStore.update(
-        id,
-        Seq.empty,
-        indexesToInsert)
+      indexStore.insert(indexesToInsert.map { case (k, v) => k.data -> v })
     }
   }.recoverWith { case e =>
     log.error("Unable to perform insert", e)
     ErgoApp.forceStopApplication()
   }
 
-  def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach { id =>
-    modifiersCache.invalidate(id)
-    objectsStore.delete(id)
+  def remove(idsToRemove: Seq[ModifierId]): Unit = {
+    idsToRemove.foreach { id =>
+      modifiersCache.invalidate(id)
+    }
+    objectsStore.remove(idsToRemove.map(idToBytes))
   }
 
   override def close(): Unit = {

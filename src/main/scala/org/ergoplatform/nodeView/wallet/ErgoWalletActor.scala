@@ -304,7 +304,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     requests.map {
       case PaymentRequest(address, value, assets, registers) =>
         new ErgoBoxCandidate(value, address.script, height, assets.getOrElse(Seq.empty).toColl, registers.getOrElse(Map.empty))
-      case AssetIssueRequest(addressOpt, amount, name, description, decimals) =>
+      case AssetIssueRequest(addressOpt, amount, name, description, decimals, registers) =>
+        // Check that auxiliary registers do not try to rewrite registers R0...R6
+        if (registers.exists(_.forall(_._1.number < 7))) {
+          throw new Exception("Additional registers contain R0...R6")
+        }
         val firstInput = inputsFor(
           requests
             .collect { case pr: PaymentRequest => pr.value }
@@ -315,7 +319,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           R4 -> ByteArrayConstant(name.getBytes("UTF-8")),
           R5 -> ByteArrayConstant(description.getBytes("UTF-8")),
           R6 -> IntConstant(decimals)
-        )
+        ) ++ registers.getOrElse(Map())
         val lockWithAddress = (addressOpt orElse publicKeys.headOption)
           .getOrElse(throw new Exception("No address available for box locking"))
         val minimalErgoAmount =
@@ -378,7 +382,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
             )
 
             prover.sign(unsignedTx, inputs, IndexedSeq(), stateContext)
-              .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
+              .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs, reason is ${e.getMessage}", e)),
+                tx => Success(tx))
           } match {
             case Some(txTry) => txTry.map(ErgoTransaction.apply)
             case None => Failure(new Exception(s"No enough boxes to assemble a transaction for $payTo"))

@@ -282,7 +282,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
     val bestExtensionOpt: Option[Extension] = bestHeaderOpt
       .flatMap(h => history.typedModifierById[Extension](h.extensionId))
-    val timestamp = timeProvider.time()
+    val timestamp = Math.max(timeProvider.time(), bestHeaderOpt.map(_.timestamp + 1).getOrElse(0L))
     val stateContext = state.stateContext
     val nBits: Long = bestHeaderOpt
       .map(parent => history.requiredDifficultyAfter(parent))

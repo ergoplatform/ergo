@@ -42,7 +42,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   implicit val system: ActorSystem
 
-  lazy val chain: Seq[ErgoFullBlock] = genChain(4)
+  lazy val chain: Seq[ErgoFullBlock] = genChain(6)
 
   lazy val history: HT = applyChain(generateHistory(), chain)
 

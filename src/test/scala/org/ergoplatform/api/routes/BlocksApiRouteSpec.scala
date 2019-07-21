@@ -3,6 +3,7 @@ package org.ergoplatform.api.routes
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, UniversalEntity}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.api.BlocksApiRoute
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -51,6 +52,17 @@ class BlocksApiRouteSpec extends FlatSpec
     Get(prefix + "/at/0") ~> route ~> check {
       status shouldBe StatusCodes.OK
       history.headerIdsAtHeight(0).map(Algos.encode).asJson.toString() shouldEqual responseAs[String]
+    }
+  }
+
+  it should "get chain slice" in {
+    Get(prefix + "/chainSlice?fromHeight=0") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      chain.map(_.header).asJson.toString() shouldEqual responseAs[String]
+    }
+    Get(prefix + "/chainSlice?fromHeight=2&toHeight=4") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      chain.slice(2, 4).map(_.header).asJson.toString() shouldEqual responseAs[String]
     }
   }
 

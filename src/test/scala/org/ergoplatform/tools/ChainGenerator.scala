@@ -31,7 +31,7 @@ import scala.util.Try
   * Generate blocks starting from start timestamp and until current time with expected block interval
   * between them, to ensure that difficulty does not change.
   */
-object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpers {
+object ChainGenerator extends App with ErgoTestHelpers {
 
   val realNetworkSetting = ErgoSettings.read(Args(Some("src/main/resources/application.conf"), None))
 

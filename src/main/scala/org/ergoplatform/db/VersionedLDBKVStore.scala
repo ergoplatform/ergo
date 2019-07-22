@@ -1,6 +1,6 @@
 package org.ergoplatform.db
 
-import akka.util.ByteString
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.settings.{Algos, Constants}
 import org.iq80.leveldb.{DB, ReadOptions}
 
@@ -78,7 +78,7 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
         try {
           val versionsToRollBack = bytes
             .grouped(Constants.HashLength)
-            .takeWhile(ByteString(_) != ByteString(versionId))
+            .takeWhile(ByteArrayWrapper(_) != ByteArrayWrapper(versionId))
 
           versionsToRollBack
             .foldLeft(Seq.empty[(Array[Byte], ChangeSet)]) { case (acc, verId) =>
@@ -99,15 +99,17 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
               batch.delete(verId)
             }
 
-          val wrappedVersionId = ByteString(versionId)
+          val wrappedVersionId = ByteArrayWrapper(versionId)
           val updatedVersions = bytes
             .grouped(Constants.HashLength)
-            .map(ByteString.apply)
+            .map(ByteArrayWrapper.apply)
             .dropWhile(_ != wrappedVersionId)
-            .reduce(_ ++ _)
+            .foldLeft(Array.empty[Byte]) { case (acc, arr) =>
+              acc ++ arr.data
+            }
 
           versionsToRollBack.foreach(batch.delete) // eliminate rolled back versions
-          batch.put(VersionsKey, updatedVersions.toArray)
+          batch.put(VersionsKey, updatedVersions)
 
           db.write(batch)
           Success(())
@@ -125,7 +127,7 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
     .flatMap(_.grouped(Constants.HashLength))
 
   def versionIdExists(versionId: VersionId): Boolean =
-    versions.exists(ByteString(_) == ByteString(versionId))
+    versions.exists(ByteArrayWrapper(_) == ByteArrayWrapper(versionId))
 
 }
 

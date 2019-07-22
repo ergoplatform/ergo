@@ -24,8 +24,8 @@ trait FullBlockProcessor extends HeadersProcessor {
   private var nonBestChainsCache = FullBlockProcessor.emptyCache
 
   def isInBestFullChain(id: ModifierId): Boolean = historyStorage.getIndex(chainStatusKey(id))
-    .map(ByteString.apply)
-    .contains(ByteString(FullBlockProcessor.BestChainMarker))
+    .map(ByteArrayWrapper.apply)
+    .contains(ByteArrayWrapper(FullBlockProcessor.BestChainMarker))
 
   /**
     * Id of header that contains transactions and proofs

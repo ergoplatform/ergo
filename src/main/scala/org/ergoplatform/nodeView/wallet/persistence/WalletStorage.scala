@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
 
-import akka.util.ByteString
 import com.google.common.primitives.Ints
 import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.db.LDBKVStore

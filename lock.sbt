@@ -52,9 +52,6 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bitlet" % "weupnp" % "0.1.4",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.62",
   "org.ergoplatform" % "ergo-wallet_2.12" % "master-351dd620-SNAPSHOT",
-  "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8",
-  "org.iq80.leveldb" % "leveldb" % "0.12",
-  "org.iq80.leveldb" % "leveldb-api" % "0.12",
   "org.objenesis" % "objenesis" % "2.4",
   "org.ow2.asm" % "asm" % "5.0.4",
   "org.reactivestreams" % "reactive-streams" % "1.0.2",
@@ -91,4 +88,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 053946744ff8dd78948a2e02355dcb7d0f15770b
+// LIBRARY_DEPENDENCIES_HASH 94110cd4eb6e45fc7649763a2eea0d1765d9623b

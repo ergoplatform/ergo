@@ -2,7 +2,6 @@ package org.ergoplatform.db
 
 import akka.util.ByteString
 import org.ergoplatform.settings.Algos
-import org.iq80.leveldb.impl.Iq80DBFactory.bytes
 import org.rocksdb.{Options, RocksDB}
 import scorex.testkit.utils.FileUtils
 
@@ -18,9 +17,9 @@ trait DBSpec extends FileUtils {
     def toBs: Seq[(ByteString, ByteString)] = xs.map(x => ByteString(x._1) -> ByteString(x._2))
   }
 
-  protected def byteString(s: String): Array[Byte] = bytes(s)
+  protected def byteString(s: String): Array[Byte] = s.getBytes()
 
-  protected def byteString32(s: String): Array[Byte] = Algos.hash(bytes(s))
+  protected def byteString32(s: String): Array[Byte] = Algos.hash(s.getBytes())
 
   protected def withDb(body: RocksDB => Unit): Unit = {
     val options = new Options().setCreateIfMissing(true)
@@ -28,7 +27,7 @@ trait DBSpec extends FileUtils {
     try body(db) finally db.close()
   }
 
-  protected def versionId(s: String): Array[Byte] = Algos.hash(bytes(s))
+  protected def versionId(s: String): Array[Byte] = Algos.hash(s.getBytes())
 
   protected def withStore(body: LDBKVStore => Unit): Unit =
     withDb { db: RocksDB => body(new LDBKVStore(db)) }

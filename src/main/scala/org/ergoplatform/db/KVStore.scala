@@ -23,9 +23,8 @@ trait KVStore extends AutoCloseable {
       val bf = mutable.ArrayBuffer.empty[(K, V)]
       while (iter.isValid) {
         iter.next()
-        iter.status()
         val key = iter.key()
-        val value = iter.value()
+        val value = db.get(ro, key)
         if (cond(key, value)) bf += (key -> value)
       }
       bf.toList

@@ -17,9 +17,9 @@ trait DBSpec extends FileUtils {
     def toBs: Seq[(ByteString, ByteString)] = xs.map(x => ByteString(x._1) -> ByteString(x._2))
   }
 
-  protected def byteString(s: String): Array[Byte] = s.getBytes()
+  protected def byteString(s: String): Array[Byte] = s.getBytes("UTF-8")
 
-  protected def byteString32(s: String): Array[Byte] = Algos.hash(s.getBytes())
+  protected def byteString32(s: String): Array[Byte] = Algos.hash(s.getBytes("UTF-8"))
 
   protected def withDb(body: RocksDB => Unit): Unit = {
     val options = new Options().setCreateIfMissing(true)
@@ -27,7 +27,7 @@ trait DBSpec extends FileUtils {
     try body(db) finally db.close()
   }
 
-  protected def versionId(s: String): Array[Byte] = Algos.hash(s.getBytes())
+  protected def versionId(s: String): Array[Byte] = Algos.hash(s.getBytes("UTF-8"))
 
   protected def withStore(body: LDBKVStore => Unit): Unit =
     withDb { db: RocksDB => body(new LDBKVStore(db)) }

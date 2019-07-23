@@ -86,6 +86,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
   override def close(): Unit = {
     log.warn("Closing history storage...")
     indexStore.close()
+    objectsStore.close()
   }
 
 }

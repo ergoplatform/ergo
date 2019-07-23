@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{Empty
 import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStorage}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
-import org.iq80.leveldb.Options
+import org.iq80.leveldb.{DB, Options}
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
@@ -205,23 +205,18 @@ object ErgoHistory extends ScorexLogging {
     dir
   }
 
+  def createDb(path: String): LDBKVStore = {
+    val dir = new File(path)
+    dir.mkdirs()
+    val options = new Options()
+    options.createIfMissing(true)
+    val db = factory.open(dir, options)
+    new LDBKVStore(db)
+  }
+
   def readOrGenerate(settings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
-    val indexStore = {
-      val dir = new File(s"${settings.directory}/history/index")
-      dir.mkdirs()
-      val options = new Options()
-      options.createIfMissing(true)
-      val db = factory.open(dir, options)
-      new LDBKVStore(db)
-    }
-    val objectsStore = {
-      val dir = new File(s"${settings.directory}/history/objects")
-      dir.mkdirs()
-      val options = new Options()
-      options.createIfMissing(true)
-      val db = factory.open(dir, options)
-      new LDBKVStore(db)
-    }
+    val indexStore = createDb(s"${settings.directory}/history/index")
+    val objectsStore = createDb(s"${settings.directory}/history/objects")
     val db = new HistoryStorage(indexStore, objectsStore, settings.cacheSettings)
     val nodeSettings = settings.nodeSettings
 

@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
 
-import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.db.VersionedLDBKVStore
 import org.ergoplatform.db.VersionedLDBKVStore.VersionId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
@@ -10,7 +9,7 @@ import org.ergoplatform.nodeView.wallet.WalletTransaction
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA.RegistryOp
 import org.ergoplatform.settings.{ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.iq80.leveldb.Options
+import org.rocksdb.{Options, RocksDB}
 import scorex.core.VersionTag
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
@@ -153,9 +152,8 @@ object WalletRegistry {
     val dir = new File(s"${settings.directory}/wallet/registry")
     dir.mkdirs()
 
-    val options = new Options()
-    options.createIfMissing(true)
-    val db = factory.open(dir, options)
+    val options = new Options().setCreateIfMissing(true)
+    val db = RocksDB.open(options, dir.getAbsolutePath)
     val store = new VersionedLDBKVStore(db, settings.nodeSettings.keepVersions)
 
     // Create pre-genesis state checkpoint

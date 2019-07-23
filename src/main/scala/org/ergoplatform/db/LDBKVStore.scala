@@ -1,18 +1,19 @@
 package org.ergoplatform.db
 
-import org.iq80.leveldb.DB
+import org.rocksdb.{RocksDB, WriteBatch, WriteOptions}
 
 /**
   * A LevelDB wrapper providing a convenient db interface.
   */
-final class LDBKVStore(protected val db: DB) extends KVStore {
+final class LDBKVStore(protected val db: RocksDB) extends KVStore {
 
   def update(toInsert: Seq[(K, V)], toRemove: Seq[K]): Unit = {
-    val batch = db.createWriteBatch()
+    val wo = new WriteOptions()
+    val batch = new WriteBatch()
     try {
       toInsert.foreach { case (k, v) => batch.put(k, v) }
       toRemove.foreach(batch.delete)
-      db.write(batch)
+      db.write(wo, batch)
     } finally {
       batch.close()
     }

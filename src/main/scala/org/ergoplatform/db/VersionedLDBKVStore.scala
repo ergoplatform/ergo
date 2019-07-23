@@ -2,7 +2,7 @@ package org.ergoplatform.db
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.settings.{Algos, Constants}
-import org.iq80.leveldb.{DB, ReadOptions}
+import org.rocksdb.{ReadOptions, RocksDB, WriteBatch, WriteOptions}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
@@ -10,7 +10,7 @@ import scala.util.{Failure, Success, Try}
 /**
   * A LevelDB wrapper providing additional versioning layer along with a convenient db interface.
   */
-final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends KVStore {
+final class VersionedLDBKVStore(protected val db: RocksDB, keepVersions: Int) extends KVStore {
 
   import VersionedLDBKVStore.VersionId
 
@@ -26,27 +26,28 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
   def update(toInsert: Seq[(K, V)], toRemove: Seq[K])(version: VersionId): Unit = {
     require(version.length == Constants.HashLength, "Illegal version id size")
     val ro = new ReadOptions()
-    ro.snapshot(db.getSnapshot)
+    val wo = new WriteOptions()
+    ro.setSnapshot(db.getSnapshot)
 
-    require(Option(db.get(version, ro)).isEmpty, "Version id is already used")
+    require(Option(db.get(ro, version)).isEmpty, "Version id is already used")
 
     val insertedKeys = mutable.ArrayBuffer.empty[K]
     val altered = mutable.ArrayBuffer.empty[(K, V)]
-    for ((k, _) <- toInsert) Option(db.get(k, ro))
+    for ((k, _) <- toInsert) Option(db.get(ro, k))
       .fold[Unit](insertedKeys += k)(oldValue => altered += (k -> oldValue))
 
     val removed = toRemove.flatMap { k =>
-      Option(db.get(k, ro)).map(k -> _)
+      Option(db.get(ro, k)).map(k -> _)
     }
 
     val changeSet = ChangeSet(insertedKeys, removed, altered)
-    val (updatedVersions, versionsToShrink) = Option(db.get(VersionsKey, ro))
+    val (updatedVersions, versionsToShrink) = Option(db.get(ro, VersionsKey))
       .map(version ++ _) // newer version first
       .getOrElse(version)
       .splitAt(Constants.HashLength * keepVersions) // shrink old versions
 
     val versionIdsToShrink = versionsToShrink.grouped(Constants.HashLength)
-    val batch = db.createWriteBatch()
+    val batch = new WriteBatch()
 
     try {
       batch.put(VersionsKey, updatedVersions)
@@ -54,7 +55,7 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
       batch.put(version, ChangeSetPrefix +: ChangeSetSerializer.toBytes(changeSet))
       toInsert.foreach { case (k, v) => batch.put(k, v) }
       toRemove.foreach(batch.delete)
-      db.write(batch)
+      db.write(wo, batch)
     } finally {
       batch.close()
       ro.snapshot().close()
@@ -71,10 +72,11 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
     */
   def rollbackTo(versionId: VersionId): Try[Unit] = {
     val ro = new ReadOptions()
-    ro.snapshot(db.getSnapshot)
+    val wo = new WriteOptions()
+    ro.setSnapshot(db.getSnapshot)
     Option(db.get(VersionsKey)) match {
       case Some(bytes) =>
-        val batch = db.createWriteBatch()
+        val batch = new WriteBatch()
         try {
           val versionsToRollBack = bytes
             .grouped(Constants.HashLength)
@@ -82,7 +84,7 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
 
           versionsToRollBack
             .foldLeft(Seq.empty[(Array[Byte], ChangeSet)]) { case (acc, verId) =>
-              val changeSetOpt = Option(db.get(verId, ro)).flatMap { changeSetBytes =>
+              val changeSetOpt = Option(db.get(ro, verId)).flatMap { changeSetBytes =>
                 ChangeSetSerializer.parseBytesTry(changeSetBytes.tail).toOption
               }
               require(changeSetOpt.isDefined, s"Inconsistent versioned storage state")
@@ -111,7 +113,7 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
           versionsToRollBack.foreach(batch.delete) // eliminate rolled back versions
           batch.put(VersionsKey, updatedVersions)
 
-          db.write(batch)
+          db.write(wo, batch)
           Success(())
         } finally {
           batch.close()

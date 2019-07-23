@@ -58,6 +58,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.objenesis" % "objenesis" % "2.4",
   "org.ow2.asm" % "asm" % "5.0.4",
   "org.reactivestreams" % "reactive-streams" % "1.0.2",
+  "org.rocksdb" % "rocksdbjni" % "6.0.1",
   "org.rogach" % "scallop_2.12" % "2.1.1",
   "org.rudogma" % "supertagged_2.12" % "1.4",
   "org.scala-lang.modules" % "scala-async_2.12" % "0.9.7",
@@ -90,4 +91,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH fd8f927f8424022f3b031b55707696145d8c4aa1
+// LIBRARY_DEPENDENCIES_HASH 053946744ff8dd78948a2e02355dcb7d0f15770b

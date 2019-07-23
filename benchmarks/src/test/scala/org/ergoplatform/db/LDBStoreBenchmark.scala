@@ -1,11 +1,10 @@
 package org.ergoplatform.db
 
 import com.google.common.primitives.Longs
-import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
-import org.iq80.leveldb.Options
+import org.rocksdb.{Options, RocksDB}
 import org.scalameter.KeyValue
 import org.scalameter.api.{Bench, Gen, _}
 import org.scalameter.picklers.Implicits._
@@ -20,10 +19,9 @@ object LDBStoreBenchmark
     with ErgoTransactionGenerators
     with FileUtils {
 
-  private val options = new Options()
-  options.createIfMissing(true)
-  private val db0 = factory.open(createTempDir, options)
-  private val db1 = factory.open(createTempDir, options)
+  private val options = new Options().setCreateIfMissing(true)
+  private val db0 = RocksDB.open(options, createTempDir.getAbsolutePath)
+  private val db1 = RocksDB.open(options, createTempDir.getAbsolutePath)
 
   private def storeVLDB() = new VersionedLDBKVStore(db0, keepVersions = 400)
   private def storeLDB() = new LDBKVStore(db1)

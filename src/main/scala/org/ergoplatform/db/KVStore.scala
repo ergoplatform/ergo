@@ -1,6 +1,6 @@
 package org.ergoplatform.db
 
-import org.iq80.leveldb.{DB, ReadOptions}
+import org.rocksdb.{ReadOptions, RocksDB}
 
 import scala.collection.mutable
 
@@ -9,22 +9,23 @@ trait KVStore extends AutoCloseable {
   type K = Array[Byte]
   type V = Array[Byte]
 
-  protected val db: DB
+  protected val db: RocksDB
 
   def get(key: K): Option[V] =
     Option(db.get(key))
 
   def getAll(cond: (K, V) => Boolean): Seq[(K, V)] = {
     val ro = new ReadOptions()
-    ro.snapshot(db.getSnapshot)
-    val iter = db.iterator(ro)
+    ro.setSnapshot(db.getSnapshot)
+    val iter = db.newIterator(ro)
     try {
       iter.seekToFirst()
       val bf = mutable.ArrayBuffer.empty[(K, V)]
-      while (iter.hasNext) {
-        val next = iter.next()
-        val key = next.getKey
-        val value = next.getValue
+      while (iter.isValid) {
+        iter.next()
+        iter.status()
+        val key = iter.key()
+        val value = iter.value()
         if (cond(key, value)) bf += (key -> value)
       }
       bf.toList

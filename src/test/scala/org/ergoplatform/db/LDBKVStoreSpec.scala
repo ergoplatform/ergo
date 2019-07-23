@@ -1,5 +1,6 @@
 package org.ergoplatform.db
 
+import org.rocksdb.RocksDB
 import org.scalatest.{Matchers, PropSpec}
 
 class LDBKVStoreSpec extends PropSpec with Matchers with DBSpec {

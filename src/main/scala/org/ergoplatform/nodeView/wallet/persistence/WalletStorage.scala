@@ -3,13 +3,12 @@ package org.ergoplatform.nodeView.wallet.persistence
 import java.io.File
 
 import com.google.common.primitives.Ints
-import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.db.LDBKVStore
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress}
-import org.iq80.leveldb.Options
+import org.rocksdb.{Options, RocksDB}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 
@@ -140,9 +139,8 @@ object WalletStorage {
     val dir = new File(s"${settings.directory}/wallet/storage")
     dir.mkdirs()
 
-    val options = new Options()
-    options.createIfMissing(true)
-    val db = factory.open(dir, options)
+    val options = new Options().setCreateIfMissing(true)
+    val db = RocksDB.open(options, dir.getAbsolutePath)
 
     new WalletStorage(new LDBKVStore(db), settings)
   }

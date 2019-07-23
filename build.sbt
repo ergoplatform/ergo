@@ -4,7 +4,7 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "3.0.4",
+  version := "3.0.5-SNAPSHOT",
   scalaVersion := "2.12.8",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
@@ -14,7 +14,7 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "fa8cf3dc-SNAPSHOT"
+val scorexVersion = "3696cb2b-SNAPSHOT"
 val sigmaStateVersion = "master-0e75c9b0-SNAPSHOT"
 val ergoWalletVersion = "master-351dd620-SNAPSHOT"
 

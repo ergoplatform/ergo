@@ -20,8 +20,10 @@ import scala.util.{Failure, Success, Try}
   * @param objectsStore - key-value store, where key is id of ErgoPersistentModifier and value is it's bytes
   * @param config       - cache configs
   */
-class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: CacheSettings) extends ScorexLogging
-  with AutoCloseable with ScorexEncoding {
+class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: CacheSettings)
+  extends ScorexLogging
+    with AutoCloseable
+    with ScorexEncoding {
 
   private val modifiersCache = CacheBuilder.newBuilder()
     .maximumSize(config.modifiersCacheSize)

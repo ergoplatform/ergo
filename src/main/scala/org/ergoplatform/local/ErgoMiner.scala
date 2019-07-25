@@ -60,7 +60,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val protocolVersion = ergoSettings.chainSettings.protocolVersion
   private val powScheme = ergoSettings.chainSettings.powScheme
   private val externalMinerMode = ergoSettings.nodeSettings.useExternalMiner
-  private val maxScriptComplexity: Int = ergoSettings.nodeSettings.maxScriptComplexity
+  private val maxTransactionComplexity: Int = ergoSettings.nodeSettings.maxTransactionComplexity
 
   // shared mutable state
   private var isMining = false
@@ -325,7 +325,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     val (txs, toEliminate) = ErgoMiner.collectTxs(minerPk,
       state.stateContext.currentParameters.maxBlockCost,
       state.stateContext.currentParameters.maxBlockSize,
-      maxScriptComplexity,
+      maxTransactionComplexity,
       state,
       upcomingContext,
       pool.getAllPrioritized,
@@ -424,7 +424,7 @@ object ErgoMiner extends ScorexLogging {
   def collectTxs(minerPk: ProveDlog,
                  maxBlockCost: Long,
                  maxBlockSize: Long,
-                 maxScriptComplexity: Int,
+                 maxTransactionComplexity: Int,
                  us: UtxoStateReader,
                  upcomingContext: ErgoStateContext,
                  mempoolTxsIn: Iterable[ErgoTransaction],
@@ -447,7 +447,7 @@ object ErgoMiner extends ScorexLogging {
         case Some(tx) =>
           implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)
           // check validity and calculate transaction cost
-          us.validateWithCost(tx, Some(upcomingContext), maxScriptComplexity) match {
+          us.validateWithCost(tx, Some(upcomingContext), maxTransactionComplexity) match {
             case Success(costConsumed) =>
               val newTxs = fixTxsConflicts((tx, costConsumed) +: acc)
               val newBoxes = newTxs.flatMap(_._1.outputs)

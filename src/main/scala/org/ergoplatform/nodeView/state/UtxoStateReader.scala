@@ -37,10 +37,9 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     val context = stateContextOpt.getOrElse(stateContext)
     tx.statelessValidity.flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
-      boxesToSpend.foreach { b =>
-        if (b.ergoTree.complexity > complexityLimit) {
-          throw new Exception(s"Box ${Algos.encode(b.id)} have too complex script: ${b.ergoTree.complexity}")
-        }
+      val txComplexity = boxesToSpend.map(_.ergoTree.complexity).sum
+      if (txComplexity > complexityLimit) {
+        throw new Exception(s"Transaction $tx have too high complexity $txComplexity")
       }
       tx.statefulValidity(
         boxesToSpend,

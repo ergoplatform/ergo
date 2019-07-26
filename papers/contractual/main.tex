@@ -123,6 +123,28 @@ The paper is organized as follows. Section~\ref{sec-txmodel} describes transacti
 \section{Key Contractual Aspects of Bitcoin and Ergo }
 \label{sec-txmodel}
 
+Ergo shares a lot of features with Bitcoin. This section describes the similarities and differences. 
+Bitcoin uses the so called {\em UTXO-based} approach, where data is stored in short-lived immutable objects called {\em Unspent Transaction Outputs} (UTXOs). A transaction creates can spend (destroy) several UXTOs and create new ones. The spent UTXOs are called {\em inputs} and the created ones are called {\em outputs}. A UTXO contains only two pieces of data. The first is an integer known as {\em amount} and the second is a code snippet (which we call the {\em contract}) written in Bitcoin's scripting language. The contract is a statement identifying the condition under which the UTXO can be spent. For instance, it can require the spender to provide a signature on the transaction for some given public key. 
+There is no restriction on the outputs other than that the sum of amounts in outputs must be less than or equal to sum of amounts in inputs (a reward transaction generates new coins by spending an imaginary input with the reward amount).
+
+For spending each input, the spender also provides another code snippet called the {\em proof} that satisfies its contract. For instance, this can contain a signature on the transaction. An input is valid if a method called {\em verify} accepts the proof for the contract, i.e., {\em verify(contract, proof)} returns {\em true}. Once a UTXO is spent, all information about it is permanently deleted from the usable state (i.e., the set of unspent UTXOs). 
+
+Bitcoin's language allows few advanced types of contracts such as multi-signatures~\cite{multisig}. A contract can also contain references to the context (the state of the blockchain at the time of transaction verification). Currently, the only context object we can access is the height of the blockchain. 
+
+Ergo is also based on the UTXO model but differs from Bitcoin in several aspects. Firstly, a UTXO, (called a {\em box} in Ergo) has several {\em registers} to store arbitrary data in addition to the value and the contract. Secondly, in addition to height, the context in Ergo contains among other things, the entire spending transaction (a contract can refer to other inputs and outputs) and the block solution (specific to Ergo's proof of work called {\em Autolykos}).
+Thirdly, the contract is written in a language called ErgoScript, which is more expressive than Bitcoin's script. In particular, ErgoScript provides advanced features such as functional programming using a Scala-like syntax and sophisticated spending conditions that can refer to other inputs and outputs of the transaction. For instance, we can require that certain inputs or outputs must have some structure, such as being protected by a given script.
+This allows creating even Turing-complete contracts~\cite{chepurnoy2018self}.
+
+%Please see section 3
+%some general description is expected for
+%1) Bitcoin tx (multiple inputs and outputs)
+%2) Bitcoin script validation (to true or false, very general description)
+%Execution context in bitcoin and Ergo
+%How Ergo context allows for complex scenarios (even Turing-complete contracts)
+
+
+
+
 \knote{picture of }
 
 \knote{Bitcoin script evaluates to true or false}

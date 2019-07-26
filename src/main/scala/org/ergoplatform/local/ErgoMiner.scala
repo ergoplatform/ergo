@@ -478,7 +478,7 @@ object ErgoMiner extends ScorexLogging {
                   }
               }
             case Failure(e) =>
-              log.debug(s"Do not incude transaction ${tx.id} due to ${e.getMessage}")
+              log.debug(s"Do not include transaction ${tx.id} due to ${e.getMessage}")
               loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
           }
         case _ => // mempool is empty

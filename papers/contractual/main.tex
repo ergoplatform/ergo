@@ -257,22 +257,36 @@ trusted managers maintaining the members list and the ledger. However, with the 
 we can have two blockchain-based solutions for a LETS. First solution is using a trusted committee to manage new participants. Another 
 solution is trustless, so anyone can join the system at any moment after set-up procedure being done; however, collateral made in cryptocurrency is required in this case. The trustless solution is novel to the best of our knowledge.
 
-The main difference
+The main difference is about a mechanism for adding new members. To describe the distinction, we remind a basic idea behind LETS. Assume that Alice and Bob have joined the system, which is using some fiat currency, for example, Euro, as unit of account. Initially
+balances of both Alice and Bob are equal to 0 EUR. Now Alice wants to buy a liter of milk from Bob for 1 EUR. She creates debt on the fly, and after the deal is done her balance becomes -1 EUR while Bob's balance becomes 1 EUR. Then Bob can spend his 1 EUR on buying lettuce from Carol. Thus LETS is about community currency emitted as IOU notes issued personally by community members (and notes are indistinguishable).
+
+One them most critical problems for LET systems is free-riding, so Alice can increase her debt as much as possible without any desire to repay it. In case of blockchain, where it is easy to create new pseudonyms, Alice can get even more by creating many identities in order to create as much debt as possible through the identities.
+
+There are two possibilities to avoid free-riding then. In the first option, which is more suitable for local communities, a trusted committee is checking new members for possible duplicates, and also trying to convince Alice give back to the community. Often, such systems also introduce maximum debt amount for a user. Another solution is about Alice to make collateral in cryptocurrency. Then Alice
+can increase her debt while the collateral covers it. However. as cryptocurrencies with their high volatility are not working good as units of account, Alice probably would like to use some more stable fiat currencies. Then a pricing oracle is needed. Details are provided below.
 
 \subsection{LETS With a Trusted Committee}
+\label{sec-trusted}
+
+A LETS implementation with a trusted committee could be seen as an interaction of two contracts. The first contract, which we
+call a {\em management contract}, specifies rules for adding new members. A digital coin with this contract is storing system members list~(more precisely, it is storing a short cryptographic digest of the list, and then a member is providing a proof that he is in the list with the specified digest when such a proof is needed).
+
+Second contract is an {\em exchange contract}. An exchange is possible only between two parties. In order to be allowed to trade, a party's balance should be no less than some minimum value.
+
+Details and code are provided at~\cite{lets-trusted}.
 
 
 \subsection{Trustless LET System}
+\label{sec-trustless}
+
+Details and code are provided at~\cite{lets-trustless}.
 
 
 \section{Concluding remarks}
 \label{sec-conslusion}
 
-Unlike issuance of paper of digital money with a contract defined explicitly, less hassle is needed in case of contractual money: demurrage can be paid automatically, no checks (sometimes expensive) are needed whether money were spent as prescribed 
-by its contract, and so on. 
-
-We hope that the paper clearly shows power of money bounded by an explicitly stated and self-enforced contract. However, with this power new possibilities for abusing are also coming. In particular, corporations and governments can do even more intrusive surveillance than simple digital monies allow.  Also, monies with limited medium-of-exchange function could be used for monopolization of the market. For example, a borrowing financial corporation can provide a loan in easier way if it can be spent for buying tools from a manufacturer only, where the corporation has a stake in the manufacturer.
-
+Unlike paper or digital money with an external contract defined explicitly, less hassle is needed in case of contractual money: demurrage can be paid automatically, no checks (sometimes expensive) are needed whether money were spent as prescribed
+by its contract, and so on. Thus monies can be created and maintained in easier way. We hope that the paper clearly shows power of money bounded by an explicitly stated and self-enforced contract. However, with this power new possibilities for abusing are also coming. In particular, corporations and governments can do even more intrusive surveillance than simple digital monies allow.  Also, monies with limited medium-of-exchange function could be used for monopolization of markets. For example, a borrowing financial corporation can provide a loan which could be spent for buying tools from a manufacturer only, where the corporation has a stake in the manufacturer. Such double-edged nature is typical for new technologies. Each new technology can empower the good intentions or bad ones. Thus good intentions are necessary for contractual money practitioners~(and the same is true for any new technology).
 
 \bibliographystyle{alpha}
 \bibliography{sources.bib}

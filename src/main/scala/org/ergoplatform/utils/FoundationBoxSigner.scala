@@ -142,6 +142,7 @@ object FoundationBoxSigner extends App {
       val hint = OtherCommitment(signerPubKey, cmtOpt.get)
       val bag = HintsBag(IndexedSeq(hint))
       val partialProof = prover.prove(prop, context, msgToSign, bag).get
+      println("Commitment: " + commitmentStringOpt)
       println("Partial proof: " + Base16.encode(partialProof.proof))
 
     case i: Int if i == sign =>

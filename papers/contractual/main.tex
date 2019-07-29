@@ -171,16 +171,9 @@ Each transaction can create arbitrary quantity of exactly one secondary token, w
  0.97 Rupees per 1 IMTIR. Still, the businesses would probably like to participate in this scheme to get an increased money flow coming through~(even with less profit). Thus the lender may get profit from businesses soon, and then it is enough to get loan paid out with no interest by the borrower. However, this could be the case only if currency of the loan has no inflation. This is not the case for most of fiat currencies. What the lender and the borrower can do in this case is to use a trusted provider of statistical
  information, namely, inflation indicators. Then the lender and the borrower may fix loan in prices on approval date.
 
-  Then a contract~\footnote{Please note that we omit demurrage component from
+  Then a contract~\footnote{Please note that we omit a demurrage component from
  the contract.} behind IMTIR money, with the underlying interest-free loan approved on Jan, 1st, 2020,
- could be as follows:
-
- %in prices of Jan, 1st, 2020 (IMTIRs) 
- \begin{enumerate}
-        \item{} The borrower is paying out the debt without the interest by buying IMTIR tokens with digitalized Indian 
-    Rupees, using inflation data from trusted oracle.
- \end{enumerate}
-
+ could be as follows: ``the borrower is paying out the debt without the interest by buying IMTIR tokens with digitalized Indian Rupees, using inflation data from trusted oracle''.
  
  In the example IMTIR is acting as contractual money currency bounded by the loan contract, with intentionally limited by a
  program medium-of-exchange functionality. A contract code which is similar to basic IMTIR case is described in~\cite{scpeople}.
@@ -193,8 +186,8 @@ Each transaction can create arbitrary quantity of exactly one secondary token, w
 
  MTIR-01-2020 tokens could also be made freely tradeable~(on exchanges). That is, the lender must repay the loan in
  digitalized Rupees, and the borrower is always selling enough MTIR-01-2020 tokens for Rupees, with exchange rate equals
- to (e.g.) official inflation since issuance of the tokens. However, if another agent is experiencing lower inflation
- than the borrower, he can buy at the lower price.
+ to, for example, official inflation since issuance of the tokens. However, if another agent is experiencing lower inflation
+ than the borrower, he can buy at the lower price and then make profits from arbitrage.
 
 \section{Combination of time and local currencies}
 \label{sec-combination}
@@ -212,10 +205,10 @@ For example, a local government in Russia may issue certificates, where each cer
 In rural areas, the system could be run even without a digital contracts. However, in a digital form there could be
 additional properties achieved, for example,
     \begin{itemize}
-        \item{} a demurrage component may be added to increase velocity.However, demurrage can be implemented over paper 
-        certificates as well, as it was done in the famous Woergl experiment, however, when a coin exists in digital form,
+        \item{} a demurrage component may be added to increase money velocity. However, demurrage can be implemented over paper 
+        certificates as well, as it was done in the W\"{o}rgl experiment, but when a coin exists in digital form 
          demurrage fee can be charged with no need to visit an office every month.
-        \item{} as digital money could be trackable on the way from employers to local producers, an additional
+        \item{} as digital money could be traceable on the way from employers to local producers, an additional
         requirements could be made against the money flow. For example, it could be required for money to get through
         white-listed shops (from a designated list) to get to a producer. Also, it could be required for a shop, and also for a
         producer to send 1 percent of LCJC volume (each) to local charity organizations.
@@ -227,7 +220,9 @@ additional properties achieved, for example,
 The W\"{o}rgl Experiment covered in~\cite{muralt1934woergl} is well-known successful example of a local currency. In
 contrary to most of the writings suggest that the currency was able to revive the local economy because of demurrage, we
  note that the experiment was a successful scheme to convert local tax debts into building community projects, with
- local businesses being fueled with money on the way.
+ local businesses being fueled with money on the way. % Partly our conclusions 
+
+
 
 The experiment contract could be trivially digitalized.
 

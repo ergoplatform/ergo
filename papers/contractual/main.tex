@@ -120,14 +120,22 @@ The paper is organized as follows. Section~\ref{sec-txmodel} describes transacti
 ~\ref{sec-conslusion} we conclude.
 
 
-\section{Key Contractual Aspects of Bitcoin and Ergo }
+\section{Key Contractual Aspects of Bitcoin and Ergo}
 \label{sec-txmodel}
 
-Ergo shares a lot of features with Bitcoin. This section describes the similarities and differences. 
-Bitcoin uses the so called {\em UTXO-based} approach, where data is stored in short-lived immutable objects called {\em Unspent Transaction Outputs} (UTXOs). A transaction creates can spend (destroy) several UXTOs and create new ones. The spent UTXOs are called {\em inputs} and the created ones are called {\em outputs}. A UTXO contains only two pieces of data. The first is an integer known as {\em amount} and the second is a code snippet, the {\em contract}, written in Bitcoin's scripting language. The contract (also referred to as  an {\em encumbrance}~\cite{Antonopoulos:2014:MBU:2695500}) encodes a statement identifying the condition under which the UTXO can be spent. For instance, it can require the spender to provide a signature on the transaction for some given public key. 
-There is no restriction on the outputs other than that the sum of amounts in outputs must be less than or equal to sum of amounts in inputs (a reward transaction generates new coins by spending an imaginary input with the reward amount).
+%Ergo shares a lot of features with Bitcoin. This section describes the similarities and differences. 
+In Bitcoin, a `coin' contains some quantity of tokens known as {\em satoshis}. All coins are stored in short-lived immutable objects called {\em Unspent Transaction Outputs} (UTXOs). 
+%A UTXO can only be spent (i.e., destroyed) but can never be modified. 
+A UTXO contains an {\em amount} representing the quantity of tokens locked in it and an {\em locking script} representing the requirements under which the tokens may be spent (for instance, it can require a signature on the trancaction). Thus, a UTXO can be thought of as a locked box with some tokens inside and the act of spending the UTXO can be thought of as unlocking the box.  
+%In fact, Ergo uses the term {\em box} to refer to such immutable objects.
+%If persistent data is to be emulated, then we have to store the data in one of the newly created UTXOs. 
+The state of Bitcoin is the entire UTXO set. 
+%For a practical financial system, this state must be kept the smallest possible. 
 
-For spending each input, the spender also provides another code snippet called the {\em proof} (also referred to as the {\em unlocking script}~\cite{Antonopoulos:2014:MBU:2695500}) that satisfies its contract. For instance, this can contain a signature on the transaction. An input is valid if a method called {\em verify} accepts the proof for the contract, i.e., {\em verify(contract, proof)} returns {\em true}. Once a UTXO is spent, all information about it is permanently deleted from the usable state (i.e., the set of unspent UTXOs). 
+A transaction modifies this state by spending existing UTXOs as {\em inputs} and creating new ones as {\em outputs}. 
+Bitcoin transactions adhere to a weak conservation law: the total number of tokens in the outputs may be less than or equal to that in the inputs (the exception is a reward transaction that generates new tokens).
+
+Each input UTXO must be accompanied by an {\em unlocking script} that convinces everyone that the condition specified by the locking script is satisfied. For instance, this can be a signature on the transaction. Both scripts executed together determine determine the transaction's validity.
 Figure~\ref{fig1} shows how a Bitcoin transaction works.
 \begin{figure}
 	\includegraphics[scale=0.24]{bitcoin}
@@ -135,20 +143,10 @@ Figure~\ref{fig1} shows how a Bitcoin transaction works.
 	\label{fig1}
 \end{figure}
 
-Bitcoin's language allows few advanced types of contracts such as multi-signatures which require signatures from multiple parties. A contract can also contain references to the context (the state of the blockchain at the time of transaction verification). Currently, the only context object we can access is the height of the blockchain. 
+Bitcoin's locking script can require signatures from multiple parties and also refer to context variables (the state of the blockchain). Currently, the only context variables allowed in Bitcoin are the height and time. 
 
-Ergo is also based on the UTXO model but differs from Bitcoin in several aspects. Firstly, a UTXO, (called a {\em box} in Ergo) has several {\em registers} to store arbitrary data in addition to the value and the contract. Secondly, in addition to height, the context in Ergo contains among other things, the entire spending transaction (a contract can refer to other inputs and outputs) and the block solution (specific to Ergo's proof of work called {\em Autolykos}).
-Thirdly, the contract is written in a language called ErgoScript, which is more expressive than Bitcoin's script. In particular, ErgoScript provides advanced features such as functional programming using a Scala-like syntax and sophisticated spending conditions that can refer to other inputs and outputs of the transaction. For instance, we can require that certain inputs or outputs must have some structure, such as being protected by a given script.
-This allows creating even Turing-complete contracts~\cite{chepurnoy2018self}.
-
-%Please see section 3
-%some general description is expected for
-%1) Bitcoin tx (multiple inputs and outputs)
-%2) Bitcoin script validation (to true or false, very general description)
-%Execution context in bitcoin and Ergo
-%How Ergo context allows for complex scenarios (even Turing-complete contracts)
-
-
+Ergo is also based on the same model and a UTXO is called a {\em box} in Ergo. In addition to the amount and locking script, a box can also store additional data in {\em registers}. Ergo context has the entire spending transaction and the block solution. Thus, an Ergo contract can refer to other inputs and outputs of the transaction. For instance, we can require that certain inputs or outputs must have some structure, such as being protected by a given script. This allows creating even Turing-complete contracts~\cite{chepurnoy2018self}. In addition to the primary token, a box can contain some secondary tokens.
+Each transaction can create arbitrary quantity of exactly one secondary token, whose id is given by the box id of the first input. Ergo follows the strong conservation rule (exactly equal) for the primary token and the weak rule (less than or equal) for secondary tokens. 
 
 
 \knote{picture of }

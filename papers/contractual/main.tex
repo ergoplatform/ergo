@@ -236,14 +236,14 @@ The experiment contract could be trivially digitalized.
 \label{sec-lets}
 
 A local exchange trading system (LETS)\cite{williams1996local} is a local mutual credit association which members are allowed to create common credit money individually, with all the deals in the system written into a common ledger. Usually the system is run by a committee of 
-trusted managers maintaining the members list and the ledger. However, with the blockchain global ledger is coming for free. Then 
+trusted managers maintaining the members list and the ledger. However, with the help of the blockchain technology global ledger functionality is coming for free. Then 
 we can have two blockchain-based solutions for a LETS. First solution is using a trusted committee to manage new participants. Another 
 solution is trustless, so anyone can join the system at any moment after set-up procedure being done; however, collateral made in cryptocurrency is required in this case. The trustless solution is novel to the best of our knowledge.
 
 The main difference is about a mechanism for adding new members. To describe the distinction, we remind a basic idea behind LETS. Assume that Alice and Bob have joined the system, which is using some fiat currency, for example, Euro, as unit of account. Initially
 balances of both Alice and Bob are equal to 0 EUR. Now Alice wants to buy a liter of milk from Bob for 1 EUR. She creates debt on the fly, and after the deal is done her balance becomes -1 EUR while Bob's balance becomes 1 EUR. Then Bob can spend his 1 EUR on buying lettuce from Carol. Thus LETS is about community currency emitted as IOU notes issued personally by community members (and notes are indistinguishable).
 
-One them most critical problems for LET systems is free-riding, so Alice can increase her debt as much as possible without any desire to repay it. In case of blockchain, where it is easy to create new pseudonyms, Alice can get even more by creating many identities in order to create as much debt as possible through the identities.
+One them most critical problems for LET systems is free-riding, so Alice can increase her debt as much as possible without any desire to repay it. In case of blockchain, where it is easy to create new pseudonyms, Alice can get even more by creating many identities in order to create as much debt as possible through the different identities.
 
 There are two possibilities to avoid free-riding then. In the first option, which is more suitable for local communities, a trusted committee is checking new members for possible duplicates, and also trying to convince Alice give back to the community. Often, such systems also introduce maximum debt amount for a user. Another solution is about Alice to make collateral in cryptocurrency. Then Alice
 can increase her debt while the collateral covers it. However. as cryptocurrencies with their high volatility are not working good as units of account, Alice probably would like to use some more stable fiat currencies. Then a pricing oracle is needed. Details are provided below.
@@ -258,13 +258,16 @@ refer to such a token as to a singleton token.
 
 Second contract is an {\em exchange contract}. An exchange is possible only between two members of the system. For that, the exchange 
 contract requires first two inputs of the spending transaction to be protected by the exchange contract. The exchange contract is also 
-requiring a spending input input to provide a proof of membership for its coin~(which contains a singleton member token). This is possible because Ergo supports read-only inputs, and so the spending transaction needs to have management contract coin as a read-only input. In order to be allowed to trade, a party's balance should be no less than some minimum value.
+requiring a spending input input to provide a proof of membership for its coin~(which contains a singleton member token). This is possible because Ergo supports read-only inputs, and so the spending transaction needs to have management contract coin as a read-only input. In order to be allowed to trade, a party's balance should be no less than some minimum value. The exchange also requires from both the spendable inputs to be replicated into outputs. An output should have the same contents as a corresponding input with but the balance being changed in a proper way, do difference value for the balance between the output and the input for one singleton member token should be equal to negative difference for another.
 
-Details and code are provided at~\cite{lets-trusted}.
+Details and code for both the management and exchange contracts are provided at~\cite{lets-trusted}.
 
 
 \subsection{Trustless LET System}
 \label{sec-trustless}
+
+\knote{Amitabh, please complete this section}
+
 
 Details and code are provided at~\cite{lets-trustless}.
 

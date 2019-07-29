@@ -252,9 +252,10 @@ can increase her debt while the collateral covers it. However. as cryptocurrenci
 \label{sec-trusted}
 
 A LETS implementation with a trusted committee could be seen as an interaction of two contracts. The first contract, which we
-call a {\em management contract}, specifies rules for adding new members. A digital coin with this contract is storing system members list~(more precisely, it is storing a short cryptographic digest of the list, and then a member is providing a proof that he is in the list with the specified digest when such a proof is needed).
+call a {\em management contract}, specifies rules for adding new members. A digital coin with this contract is storing system members list~(more precisely, it is storing a short cryptographic digest of the list, and then a member is providing a proof that he is in the list with the specified digest when such a proof is needed). The coin is also storing a committee script, for example, a threshold (k-out-of-n) signature spending condition. The coin is then protected by the combination of the committee script and requirement for a 
+spending transaction to create a coin which is the same, except of a new record added to the members list, and maybe a new committee script~(thus a committee may update itself, for example, by switching from 3-out-of-4 threshold signature to 4-out-of-5 in case of new committee member). With such a spending condition for the coin, the committee can only add new members. The coin is also 
 
-Second contract is an {\em exchange contract}. An exchange is possible only between two parties. In order to be allowed to trade, a party's balance should be no less than some minimum value.
+Second contract is an {\em exchange contract}. An exchange is possible only between two parties. In order to be allowed to trade, a party's balance should be no less than some minimum value. 
 
 Details and code are provided at~\cite{lets-trusted}.
 

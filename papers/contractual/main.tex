@@ -75,46 +75,45 @@ Bitcoin~\cite{Nakamoto2008} was introduced in 2008 by Satoshi Nakamoto as a peer
 written into blockchain, a database which is fully replicated across the network peers and making progress without a trusted
 party or expensive coordination while majority of peers solving proof-of-work puzzles are honest.
 
-Originally, digital coins~(of arbitrary nominal) in the Bitcoin ledger were associated with public keys. That is, in order
-to spend a coin, owner of a private key corresponding to the public key of the coin should provide a signature for a
+Originally, digital coins~(of arbitrary denomination) in the Bitcoin ledger were associated with public keys. That is, in order
+to spend a coin, owner of a private key corresponding to the public key of the coin had to provide a signature on the 
 spending transaction, and validity of the signature could be checked by Bitcoin peers by using the public key~(and the spending transaction).
-Soon after the launch, Bitcoin adopted somewhat programmability, thus a coin is bound to a contract, which combines
+Soon after launch, Bitcoin adopted some programmability, so that a coin was bound to a contract that combined
 statements about secret data~(such as ``valid proof of private key knowledge associated with the public key $pk$
-against spending transaction bytes is needed to be provided'') with predicates on blockchain
-data~(to be validated in peer-to-peer network without trusted authority, transaction validation could not involve
-data external to the blockchain, as the only data peers are agreed on when verifying a block with the transaction
-is the blockchain before this block and the block itself).
+against spending transaction bytes must be provided'') with predicates on blockchain
+data~(to be validated in a peer-to-peer network without trusted authority, a transaction could not involve
+data external to the blockchain because the only data that peers agree on when verifying a block with the transaction
+is the blockchain snapshot before this block and the block itself).
 
-A popular trend of cryptocurrencies which was started with Bitcoin launched in 2009 brought two new exciting features.
-In the first place, a cryptocurrency is decentralized, which mean that, at least, its minting process is permissionless.
-In the second place, cryptocurrencies allow to programmability to some extent; unlike a coin or a note in the physical
+A popular trend of cryptocurrencies which was started with Bitcoin in 2009 brought two new exciting features.
+In the first place, a cryptocurrency is decentralized, which mean that, at the very least, its minting process is permissionless.
+In the second place, cryptocurrencies allow programmability to some extent; unlike a coin or a note in the physical
 world, or digital representation of fiat money in bank accounts, a digital coin~(of arbitrary denomination) in Bitcoin
 is protected by a guarding script.
 
 It is common to consider such functions of money as medium of exchange, store of value, unit of account, and so on.
 In this work we highlight another function of money. That is, money can act as units of contract execution.
 
-This function is implicitly exists since the very early days of money history. A very clear historical example of paper money associated with a contract is Hundis~\cite{martin2009hundi}. A modern example could be found in
-maternity capital in Russia: the government is giving a certificate associated with some amount of national fiat currency~(rubles)
-to mothers of two and more children. Unlike fiat currency, the maternity capital money could be spent on particular
-topics only, like children's education or housing improvement.
+This function implicitly exists since the very early days in the history of money. A very clear historical example of paper money associated with a contract is Hundis~\cite{martin2009hundi}. A modern example could be found in
+maternity capital in Russia: the government gives a certificate associated with some amount of national fiat currency~(rubles)
+to mothers of two and more children. Unlike fiat currency, the maternity capital money could be spent for particular
+expenses only, such as children's education or housing improvement.
 
-However, with cryptocurrencies it becomes easy to make a digital coin~(of arbitrary nominal) which use cases are
+However, with cryptocurrencies it becomes easy to make a digital coin for which use cases are
 explicitly bounded by a contract in form of executable code stored in the coin itself.
 
 Bitcoin first made that move with a simple
 scripting language named Bitcoin Script which allows some programmability: a coin could be spent if its protecting script,
 given arguments provided by spending transaction, and also height and timestamp of the block which contains the
 transaction~\footnote{Height and timestamp were added in Bitcoin 0.11},
-is being evaluated to $true$ value. A newer cryptocurrency Ergo~\cite{ergowp} is going further with spending transaction~(along with other additional
-fields) fully projected into the execution context. This enhancement allows to execute even any Turing-complete
-contract~\cite{chepurnoy2018self}. In financial applications, it allows to create a coin which could be spent only by
-a transaction which creates a coin with specific properties. In the same fashion, a coin may require a chain of
+is being evaluated to $true$ value. A newer cryptocurrency Ergo~\cite{ergowp} goes further with the spending transaction~(along with other additional
+fields) fully projected into the execution context. This enhancement allows to execute even Turing-complete
+contracts~\cite{chepurnoy2018self}. In financial applications, it allows creating a coin which could be spent only in
+a transaction that creates a coin with specific properties. In the same fashion, a coin may require a chain of
 transactions, or a coin may create a family of coins with specific properties. Thus it is possible to create money~(in
-form of contractually bound Ergs or auxiliary tokens as it is possible to explicitly create a token in Ergo) bounded by a contract 
-, which possibly has many states. 
+form of contractually bound Ergs or auxiliary tokens as it is possible to explicitly create a token in Ergo) bounded by a contract, which possibly has many states. 
 
-The main distinguishing point of contractual money is embedding of its contract, which existed externally (in form of laws, corporate terms, informal and often implicit person-to-person agreements), directly into the unit of money. Thus money being created with a specific contract are enforcing its users to follow the contract precisely. Other functions of money (medium-of-exchange, store-of-value, unit-of-account) could be precisely shaped by the contract and thus become secondary.
+The main distinguishing point of contractual money is embedding of its contract, which existed externally (in form of laws, corporate terms, informal and often implicit person-to-person agreements), directly into the unit of money. Thus money being created with a specific contract enforces its users to follow the contract precisely. Other functions of money (medium-of-exchange, store-of-value, unit-of-account) could be precisely shaped by the contract and thus become secondary.
 
 The paper is organized as follows. Section~\ref{sec-txmodel} describes transactional model of Bitcoin and Ergo. Then the paper provides few motivating examples for contractual money: Section~\ref{sec-microcredit} provides an example of one-time microcredit money, Section~\ref{sec-combination} describes . With Section
 ~\ref{sec-conslusion} we conclude.

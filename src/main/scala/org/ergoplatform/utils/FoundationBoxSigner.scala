@@ -58,7 +58,7 @@ object FoundationBoxSigner extends App {
   val action: ACTION = generateCommitment
 
   // hints provided by a cosigner
-  val commitmentStringOpt: Option[String] = Some("03629f6cb245ee894e698b246aaccf82fc750f808cf0b3b4e146ed5281d5c278ee")
+  val commitmentStringOpt: Option[String] = Some("02ecefdf79247c47283a7529fd3803e94fad6339fd00763dea68a45f53b3cab1c0")
   val ownRandomnessStringOpt: Option[String] = None
   val partialSignarureStringOpt: Option[String] = None
 

@@ -94,7 +94,7 @@ is protected by a guarding script.
 It is common to consider such functions of money as medium of exchange, store of value, unit of account, and so on.
 In this work we highlight another function of money. That is, money can act as units of contract execution.
 
-This function is implicitly exists since the very early days of money history. A very clear historical example of paper money associated with a contract is Hundis~\cite{???}. A modern example could be found in
+This function is implicitly exists since the very early days of money history. A very clear historical example of paper money associated with a contract is Hundis~\cite{martin2009hundi}. A modern example could be found in
 maternity capital in Russia: the government is giving a certificate associated with some amount of national fiat currency~(rubles)
 to mothers of two and more children. Unlike fiat currency, the maternity capital money could be spent on particular
 topics only, like children's education or housing improvement.
@@ -123,14 +123,9 @@ The paper is organized as follows. Section~\ref{sec-txmodel} describes transacti
 \section{Key Contractual Aspects of Bitcoin and Ergo}
 \label{sec-txmodel}
 
-%Ergo shares a lot of features with Bitcoin. This section describes the similarities and differences. 
 In Bitcoin, a `coin' contains some quantity of tokens known as {\em satoshis}. All coins are stored in short-lived immutable objects called {\em Unspent Transaction Outputs} (UTXOs). 
-%A UTXO can only be spent (i.e., destroyed) but can never be modified. 
 A UTXO contains an {\em amount} representing the quantity of tokens locked in it and an {\em locking script} representing the requirements under which the tokens may be spent (for instance, it can require a signature on the trancaction). Thus, a UTXO can be thought of as a locked box with some tokens inside and the act of spending the UTXO can be thought of as unlocking the box.  
-%In fact, Ergo uses the term {\em box} to refer to such immutable objects.
-%If persistent data is to be emulated, then we have to store the data in one of the newly created UTXOs. 
 The state of Bitcoin is the entire UTXO set. 
-%For a practical financial system, this state must be kept the smallest possible. 
 
 A transaction modifies this state by spending existing UTXOs as {\em inputs} and creating new ones as {\em outputs}. 
 Bitcoin transactions adhere to a weak conservation law: the total number of tokens in the outputs may be less than or equal to that in the inputs (the exception is a reward transaction that generates new tokens).
@@ -147,16 +142,6 @@ Bitcoin's locking script can require signatures from multiple parties and also r
 
 Ergo is also based on the same model and a UTXO is called a {\em box} in Ergo. In addition to the amount and locking script, a box can also store additional data in {\em registers}. Ergo context has the entire spending transaction and the block solution. Thus, an Ergo contract can refer to other inputs and outputs of the transaction. For instance, we can require that certain inputs or outputs must have some structure, such as being protected by a given script. This allows creating even Turing-complete contracts~\cite{chepurnoy2018self}. In addition to the primary token, a box can contain some secondary tokens.
 Each transaction can create arbitrary quantity of exactly one secondary token, whose id is given by the box id of the first input. Ergo follows the strong conservation rule (exactly equal) for the primary token and the weak rule (less than or equal) for secondary tokens. 
-
-
-\knote{picture of }
-
-\knote{Bitcoin script evaluates to true or false}
-
-\knote{Context in Bitcoin and Ergo}
-
-\knote{Support of complex signature schemes in Ergo}
-
 
 \section{One-Time Microcredit Money}
 \label{sec-microcredit}
@@ -215,7 +200,7 @@ Each transaction can create arbitrary quantity of exactly one secondary token, w
 \section{Combination of time and local currencies}
 \label{sec-combination}
 
-Local and regional currencies, such as Chiemgauer~\cite{???} and Berkshares~\cite{???}, are developed to increase money velocity within the local economy.
+Local and regional currencies, such as Chiemgauer~\cite{thiel2011complementary} and Berkshares~\cite{swann1995local}, are developed to increase money velocity within the local economy.
 
 A complementary currency for local job guarantee has been proposed by Forstarter in~\cite{forstater2018complementary} as a mean
 of job creation by using the complementary currency to pay for community service employment.
@@ -250,27 +235,41 @@ The experiment contract could be trivially digitalized.
 \section{Local Exchange Trading System}
 \label{sec-lets}
 
-A local exchange trading system (LETS)\cite{???} is a local mutual credit association which members are allowed to create common credit money individually, with all the deals in the system written into a common ledger. Usually the system is run by a committee of 
+A local exchange trading system (LETS)\cite{williams1996local} is a local mutual credit association which members are allowed to create common credit money individually, with all the deals in the system written into a common ledger. Usually the system is run by a committee of 
 trusted managers maintaining the members list and the ledger. However, with the blockchain global ledger is coming for free. Then 
 we can have two blockchain-based solutions for a LETS. First solution is using a trusted committee to manage new participants. Another 
 solution is trustless, so anyone can join the system at any moment after set-up procedure being done; however, collateral made in cryptocurrency is required in this case. The trustless solution is novel to the best of our knowledge.
 
-The main difference
+The main difference is about a mechanism for adding new members. To describe the distinction, we remind a basic idea behind LETS. Assume that Alice and Bob have joined the system, which is using some fiat currency, for example, Euro, as unit of account. Initially
+balances of both Alice and Bob are equal to 0 EUR. Now Alice wants to buy a liter of milk from Bob for 1 EUR. She creates debt on the fly, and after the deal is done her balance becomes -1 EUR while Bob's balance becomes 1 EUR. Then Bob can spend his 1 EUR on buying lettuce from Carol. Thus LETS is about community currency emitted as IOU notes issued personally by community members (and notes are indistinguishable).
+
+One them most critical problems for LET systems is free-riding, so Alice can increase her debt as much as possible without any desire to repay it. In case of blockchain, where it is easy to create new pseudonyms, Alice can get even more by creating many identities in order to create as much debt as possible through the identities.
+
+There are two possibilities to avoid free-riding then. In the first option, which is more suitable for local communities, a trusted committee is checking new members for possible duplicates, and also trying to convince Alice give back to the community. Often, such systems also introduce maximum debt amount for a user. Another solution is about Alice to make collateral in cryptocurrency. Then Alice
+can increase her debt while the collateral covers it. However. as cryptocurrencies with their high volatility are not working good as units of account, Alice probably would like to use some more stable fiat currencies. Then a pricing oracle is needed. Details are provided below.
 
 \subsection{LETS With a Trusted Committee}
+\label{sec-trusted}
+
+A LETS implementation with a trusted committee could be seen as an interaction of two contracts. The first contract, which we
+call a {\em management contract}, specifies rules for adding new members. A digital coin with this contract is storing system members list~(more precisely, it is storing a short cryptographic digest of the list, and then a member is providing a proof that he is in the list with the specified digest when such a proof is needed).
+
+Second contract is an {\em exchange contract}. An exchange is possible only between two parties. In order to be allowed to trade, a party's balance should be no less than some minimum value.
+
+Details and code are provided at~\cite{lets-trusted}.
 
 
 \subsection{Trustless LET System}
+\label{sec-trustless}
+
+Details and code are provided at~\cite{lets-trustless}.
 
 
 \section{Concluding remarks}
 \label{sec-conslusion}
 
-Unlike issuance of paper of digital money with a contract defined explicitly, less hassle is needed in case of contractual money: demurrage can be paid automatically, no checks (sometimes expensive) are needed whether money were spent as prescribed 
-by its contract, and so on. 
-
-We hope that the paper clearly shows power of money bounded by an explicitly stated and self-enforced contract. However, with this power new possibilities for abusing are also coming. In particular, corporations and governments can do even more intrusive surveillance than simple digital monies allow.  Also, monies with limited medium-of-exchange function could be used for monopolization of the market. For example, a borrowing financial corporation can provide a loan in easier way if it can be spent for buying tools from a manufacturer only, where the corporation has a stake in the manufacturer.
-
+Unlike paper or digital money with an external contract defined explicitly, less hassle is needed in case of contractual money: demurrage can be paid automatically, no checks (sometimes expensive) are needed whether money were spent as prescribed
+by its contract, and so on. Thus monies can be created and maintained in easier way. We hope that the paper clearly shows power of money bounded by an explicitly stated and self-enforced contract. However, with this power new possibilities for abusing are also coming. In particular, corporations and governments can do even more intrusive surveillance than simple digital monies allow.  Also, monies with limited medium-of-exchange function could be used for monopolization of markets. For example, a borrowing financial corporation can provide a loan which could be spent for buying tools from a manufacturer only, where the corporation has a stake in the manufacturer. Such double-edged nature is typical for new technologies. Each new technology can empower the good intentions or bad ones. Thus good intentions are necessary for contractual money practitioners~(and the same is true for any new technology).
 
 \bibliographystyle{alpha}
 \bibliography{sources.bib}

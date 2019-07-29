@@ -123,8 +123,8 @@ The paper is organized as follows. Section~\ref{sec-txmodel} describes transacti
 \label{sec-txmodel}
 
 In Bitcoin, a `coin' contains some quantity of tokens known as {\em satoshis}. All coins are stored in short-lived immutable objects called {\em Unspent Transaction Outputs} (UTXOs). 
-A UTXO contains an {\em amount} representing the quantity of tokens locked in it and an {\em locking script} representing the requirements under which the tokens may be spent (for instance, it can require a signature on the trancaction). Thus, a UTXO can be thought of as a locked box with some tokens inside and the act of spending the UTXO can be thought of as unlocking the box.  
-The state of Bitcoin is the entire UTXO set. 
+A UTXO contains an {\em amount} representing the quantity of tokens locked in it and an {\em locking script} representing the requirements under which the tokens may be spent (for instance, it can require a signature on the transaction). Thus, a UTXO can be thought of as a locked box with some tokens inside and the act of spending the UTXO can be thought of as unlocking the box.
+The actual state of Bitcoin then is the entire UTXO set. 
 
 A transaction modifies this state by spending existing UTXOs as {\em inputs} and creating new ones as {\em outputs}. 
 Bitcoin transactions adhere to a weak conservation law: the total number of tokens in the outputs may be less than or equal to that in the inputs (the exception is a reward transaction that generates new tokens).

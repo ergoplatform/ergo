@@ -116,8 +116,7 @@ form of contractually bound Ergs or auxiliary tokens as it is possible to explic
 
 The main distinguishing point of contractual money is embedding of its contract, which existed externally (in form of laws, corporate terms, informal and often implicit person-to-person agreements), directly into the unit of money. Thus money being created with a specific contract are enforcing its users to follow the contract precisely. Other functions of money (medium-of-exchange, store-of-value, unit-of-account) could be precisely shaped by the contract and thus become secondary.
 
-The paper is organized as follows. Section~\ref{sec-txmodel} describes transactional model of Bitcoin and Ergo. Then the paper provides few motivating examples for contractual money: Section~\ref{sec-microcredit} provides an example of one-time microcredit money, Section~\ref{sec-combination} describes . With Section
-~\ref{sec-conslusion} we conclude.
+The paper is organized as follows. Section~\ref{sec-txmodel} describes transactional model of Bitcoin and Ergo. Then the paper provides few motivating examples for contractual money: Section~\ref{sec-microcredit} provides an example of one-time microcredit money, Section~\ref{sec-combination} describes . With Section~\ref{sec-conslusion} we conclude.
 
 
 \section{Key Contractual Aspects of Bitcoin and Ergo}
@@ -257,8 +256,8 @@ spending transaction to create a coin which is the same, except of a new record 
 refer to such a token as to a singleton token.
 
 Second contract is an {\em exchange contract}. An exchange is possible only between two members of the system. For that, the exchange 
-contract requires first two inputs of the spending transaction to be protected by the exchange contract. The exchange contract is also 
-requiring a spending input input to provide a proof of membership for its coin~(which contains a singleton member token). This is possible because Ergo supports read-only inputs, and so the spending transaction needs to have management contract coin as a read-only input. In order to be allowed to trade, a party's balance should be no less than some minimum value. The exchange also requires from both the spendable inputs to be replicated into outputs. An output should have the same contents as a corresponding input with but the balance being changed in a proper way, do difference value for the balance between the output and the input for one singleton member token should be equal to negative difference for another.
+contract requires first two inputs of the spending transaction to be protected by the exchange contract script. The exchange contract is also 
+requiring a spending input to provide a proof of membership for its coin~(which contains a singleton member token). This is possible because Ergo supports read-only inputs, and so the spending transaction needs to have management contract coin as a read-only input. In order to be allowed to trade, a party's balance should be no less than some minimum value. The exchange also requires from both the spendable inputs to be replicated into outputs. An output should have the same contents as a corresponding input with but the balance being changed in a proper way, so difference value for the balance between the output and the input for one singleton member token should be equal to negative difference for another.
 
 Details and code for both the management and exchange contracts are provided at~\cite{lets-trusted}.
 

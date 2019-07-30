@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
-import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector}
+import org.ergoplatform.wallet.boxes.{BoxSelector, ReplaceCompactCollectBoxSelector}
 import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.ProveDlog
 
@@ -51,7 +51,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
-  val boxSelector: BoxSelector = DefaultBoxSelector
+  val boxSelector: BoxSelector = new ReplaceCompactCollectBoxSelector(30, 2)
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
   val dir = if (args.length < 2) new File("/tmp/ergo/data") else new File(args(1))

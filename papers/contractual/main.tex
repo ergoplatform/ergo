@@ -267,10 +267,16 @@ Details and code for both the management and exchange contracts are provided at~
 \subsection{Trustless LET System}
 \label{sec-trustless}
 
-\knote{Amitabh, please complete this section}
+The LET system uses a trusted committee for enrolling members. Here we consider a variant of the system without 
+such a trusted committee. The main reason for having a trusted committee is to prevent the same person using duplicate identities trying to accumulate a large negative balance, thereby misusing the system. What the trusted committee does is to ensure that each real-world party can have only one LETS identity (whose negative balance can then be capped). 
+ 
+ 
+Since we desire a trustless LETS, we cannot depend on any trusted group of people to admit users. We therefore allow users to accumulate a large negative balance as long as they have a certain amount of some tokens locked up as collateral. The locked amount will be adjusted automatically when the negative balance changes. Although we won't depend on a trusted committee for admitting members, we would still need a trusted oracle whose only job is to periodically emit and publish on the blockchain the exchange rate of the token with the LETS currency. 
+We will also have a management committee whose job is to define the system parameters such as the pricing oracle's id, etc.
 
-
-Details and code are provided at~\cite{lets-trustless}.
+The system is designed using two contracts. The first is a {\em management contract} of which only one instance exists (i.e., it is a singleton contract). This contract is responsible for enrolling new users into the LETS. A user may enrol multiple times because this is allowed in our system. Each enrolled user is represented by an instance of a {\em membership contract}. This contract is used to perform LETS transaction and requires that any negative balance is backed by appropriate number of crypto tokens determined using the most recently emitted rate by the oracle. In order to prevent spam attacks, the system requires a joining fee which may be refunded in the form of positive LETS balance or could be collected by a management committee. 
+We can envision more advanced contracts where members may buy LETS balance in exchange for crypto tokens. 
+ Details and code are provided at~\cite{lets-trustless}.
 
 
 \section{Concluding remarks}

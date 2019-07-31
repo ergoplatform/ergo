@@ -63,23 +63,20 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   override type M = ErgoStateContext
 
-  def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(lastHeaders.head)
+  override def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(lastHeaders.head)
 
-  def sigmaLastHeaders: Coll[special.sigma.Header] = new CollOverArray(lastHeaders.tail.map(h => Header.toSigma(h)).toArray)
-
-  // todo remove from ErgoLikeContext and from ErgoStateContext
-  def lastBlockMinerPk: Array[Byte] = sigmaPreHeader.minerPk.getEncoded.toArray
+  override def sigmaLastHeaders: Coll[special.sigma.Header] = new CollOverArray(lastHeaders.tail.map(h => Header.toSigma(h)).toArray)
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block
-  def previousStateDigest: ADDigest = if (sigmaLastHeaders.toArray.nonEmpty) {
+  override def previousStateDigest: ADDigest = if (sigmaLastHeaders.toArray.nonEmpty) {
     ADDigest @@ sigmaLastHeaders.toArray.head.stateRoot.digest.toArray
   } else {
     genesisStateDigest
   }
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
-  def currentHeight: Int = Try(sigmaPreHeader.height).getOrElse(ErgoHistory.EmptyHistoryHeight)
+  val currentHeight: Int = lastHeaders.headOption.map(_.height).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   private def votingEpochLength: Int = votingSettings.votingLength
 
@@ -220,7 +217,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }.flatten
 
   override def toString: String =
-    s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
+    s"ErgoStateContext(${sigmaPreHeader.height}, ${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
 
 
   /**

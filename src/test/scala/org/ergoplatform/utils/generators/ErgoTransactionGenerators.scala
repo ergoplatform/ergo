@@ -22,6 +22,7 @@ import sigmastate._
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
+import special.sigma._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable

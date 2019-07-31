@@ -9,6 +9,7 @@ import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.{ProverResult, ContextExtension}
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
+import special.sigma._
 
 object FeeSimulator extends App {
 

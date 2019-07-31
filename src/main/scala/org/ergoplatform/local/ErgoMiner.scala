@@ -34,6 +34,7 @@ import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import special.collection.Coll
+import special.sigma._
 
 import scala.annotation.tailrec
 import scala.collection.mutable

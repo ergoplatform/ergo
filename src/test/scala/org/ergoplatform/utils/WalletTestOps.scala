@@ -19,6 +19,7 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ProverResult
+import special.sigma._
 
 import scala.concurrent.blocking
 

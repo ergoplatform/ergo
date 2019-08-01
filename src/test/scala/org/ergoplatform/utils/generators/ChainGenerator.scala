@@ -113,7 +113,7 @@ trait ChainGenerator extends ErgoTestConstants {
                             extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
-    val minimalAmount = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, parameters)
+    val minimalAmount = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, Colls.emptyColl, Map(), parameters)
     val outputs = IndexedSeq(ErgoBox(minimalAmount, Constants.TrueLeaf, creationHeight = startHeight))
 
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))

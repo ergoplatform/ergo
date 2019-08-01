@@ -26,7 +26,7 @@ import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement, CHeader}
 import sigmastate.eval.Extensions._
 import special.collection.{Coll, CollOverArray}
 import special.sigma
-import special.sigma.{AvlTree, Digest32Coll, GroupElement, MinerVotes, ModifierIdBytes, NonceBytes}
+import special.sigma.{AvlTree,GroupElement}
 
 case class Header(version: Version,
                   override val parentId: ModifierId,
@@ -108,23 +108,24 @@ object PreGenesisHeader extends Header(
 
 object Header extends ApiCodecs {
 
-  def toSigma(header: Header): special.sigma.Header = CHeader(
-    id = ModifierIdBytes @@ header.id.toBytes.toColl,
-    version = header.version,
-    parentId = ModifierIdBytes @@ header.parentId.toBytes.toColl,
-    ADProofsRoot = Digest32Coll @@ header.ADProofsRoot.asInstanceOf[Array[Byte]].toColl,
-    stateRoot = CAvlTree(ErgoInterpreter.avlTreeFromDigest(header.stateRoot)),
-    transactionsRoot = Digest32Coll @@ header.transactionsRoot.asInstanceOf[Array[Byte]].toColl,
-    timestamp = header.timestamp,
-    nBits = header.nBits,
-    height = header.height,
-    extensionRoot = Digest32Coll @@ header.extensionRoot.asInstanceOf[Array[Byte]].toColl,
-    minerPk = CGroupElement(header.powSolution.pk),
-    powOnetimePk = CGroupElement(header.powSolution.w),
-    powNonce = NonceBytes @@ header.powSolution.n.toColl,
-    powDistance = CBigInt(header.powSolution.d.bigInteger),
-    votes = MinerVotes @@ header.votes.toColl
-  )
+  def toSigma(header: Header): special.sigma.Header =
+    CHeader(
+      id = header.id.toBytes.toColl,
+      version = header.version,
+      parentId = header.parentId.toBytes.toColl,
+      ADProofsRoot = header.ADProofsRoot.asInstanceOf[Array[Byte]].toColl,
+      stateRoot = CAvlTree(ErgoInterpreter.avlTreeFromDigest(header.stateRoot)),
+      transactionsRoot = header.transactionsRoot.asInstanceOf[Array[Byte]].toColl,
+      timestamp = header.timestamp,
+      nBits = header.nBits,
+      height = header.height,
+      extensionRoot = header.extensionRoot.asInstanceOf[Array[Byte]].toColl,
+      minerPk = CGroupElement(header.powSolution.pk),
+      powOnetimePk = CGroupElement(header.powSolution.w),
+      powNonce = header.powSolution.n.toColl,
+      powDistance = CBigInt(header.powSolution.d.bigInteger),
+      votes = header.votes.toColl
+    )
 
   val CurrentVersion: Byte = 1
 

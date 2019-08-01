@@ -9,7 +9,6 @@ import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
 import special.collection.Coll
-import special.sigma._
 
 object BoxUtils {
 

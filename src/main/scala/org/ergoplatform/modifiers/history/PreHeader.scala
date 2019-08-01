@@ -8,7 +8,7 @@ import sigmastate.eval.{CGroupElement, CPreHeader}
 import sigmastate.eval.Extensions._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import special.collection.{Coll, CollOverArray}
-import special.sigma.{GroupElement, MinerVotes, ModifierIdBytes}
+import special.sigma.GroupElement
 
 /**
   * Only header fields that can be predicted by a miner
@@ -28,15 +28,16 @@ trait PreHeader {
 
 object PreHeader {
 
-  def toSigma(preHeader: PreHeader): special.sigma.PreHeader = CPreHeader(
-    version = preHeader.version,
-    parentId = ModifierIdBytes @@ preHeader.parentId.toBytes.toColl,
-    timestamp = preHeader.timestamp,
-    nBits = preHeader.nBits,
-    height = preHeader.height,
-    minerPk = CGroupElement(preHeader.minerPk),
-    votes = MinerVotes @@ preHeader.votes.toColl
-  )
+  def toSigma(preHeader: PreHeader): special.sigma.PreHeader =
+    CPreHeader(
+      version = preHeader.version,
+      parentId = preHeader.parentId.toBytes.toColl,
+      timestamp = preHeader.timestamp,
+      nBits = preHeader.nBits,
+      height = preHeader.height,
+      minerPk = CGroupElement(preHeader.minerPk),
+      votes = preHeader.votes.toColl
+    )
 
   def apply(lastHeaderOpt: Option[Header],
             blockVersion: Version,

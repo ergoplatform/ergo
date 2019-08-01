@@ -281,82 +281,17 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
 
   val MaxAssetsPerBox = 255
 
-  implicit val extensionEncoder: Encoder[ContextExtension] = { extension =>
-    extension.values.map { case (key, value) =>
-      key -> evaluatedValueEncoder(value)
-    }.asJson
-  }
-
-  implicit val inputEncoder: Encoder[Input] = { input =>
-    Json.obj(
-      "boxId" -> input.boxId.asJson,
-      "spendingProof" -> Json.obj(
-        "proofBytes" -> byteSeqEncoder(input.spendingProof.proof),
-        "extension" -> extensionEncoder(input.spendingProof.extension)
-      )
-    )
-  }
-
-  implicit val dataInputEncoder: Encoder[DataInput] = { input =>
-    Json.obj(
-      "boxId" -> input.boxId.asJson,
-    )
-  }
-
-  implicit val proofDecoder: Decoder[ProverResult] = { cursor =>
-    for {
-      proofBytes <- cursor.downField("proofBytes").as[Array[Byte]]
-      extMap <- cursor.downField("extension").as[Map[Byte, EvaluatedValue[SType]]]
-    } yield ProverResult(proofBytes, ContextExtension(extMap))
-  }
-
-  implicit val inputDecoder: Decoder[Input] = { cursor =>
-    for {
-      boxId <- cursor.downField("boxId").as[ADKey]
-      proof <- cursor.downField("spendingProof").as[ProverResult]
-    } yield Input(boxId, proof)
-  }
-
-  implicit val dataInputDecoder: Decoder[DataInput] = { cursor =>
-    for {
-      boxId <- cursor.downField("boxId").as[ADKey]
-    } yield DataInput(boxId)
-  }
-
-  implicit val assetDecoder: Decoder[(ErgoBox.TokenId, Long)] = { cursor =>
-    for {
-      tokenId <- cursor.downField("tokenId").as[ErgoBox.TokenId]
-      amount <- cursor.downField("amount").as[Long]
-    } yield (tokenId, amount)
-  }
-
-  implicit val outputDecoder: Decoder[(ErgoBoxCandidate, Option[BoxId])] = { cursor =>
-    for {
-      maybeId <- cursor.downField("boxId").as[Option[BoxId]]
-      value <- cursor.downField("value").as[Long]
-      creationHeight <- cursor.downField("creationHeight").as[Int]
-      ergoTree <- cursor.downField("ergoTree").as[ErgoTree]
-      assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]] // TODO optimize: encode directly into Coll avoiding allocation of Tuple2 for each element
-      registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
-    } yield (new ErgoBoxCandidate(value, ergoTree, creationHeight, assets.toColl, registers), maybeId)
-  }
+  import ErgoLikeTransaction._
 
   implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>
-    Json.obj(
-      "id" -> tx.id.asJson,
-      "inputs" -> tx.inputs.asJson,
-      "dataInputs" -> tx.dataInputs.asJson,
-      "outputs" -> tx.outputs.asJson,
-      "size" -> tx.size.asJson
-    )
+    val txj = tx.asInstanceOf[ErgoLikeTransaction].asJson(ErgoLikeTransaction.jsonEncoder)
+    txj.mapObject(_.add("size", tx.size.asJson))
   }
 
-  implicit val transactionDecoder: Decoder[ErgoTransaction] = { implicit cursor =>
+  implicit val transactionDecoder: Decoder[ErgoTransaction] = { cursor =>
     for {
-      inputs <- cursor.downField("inputs").as[IndexedSeq[Input]]
-      dataInputs <- cursor.downField("dataInputs").as[IndexedSeq[DataInput]]
-      outputsWithIndex <- cursor.downField("outputs").as[IndexedSeq[(ErgoBoxCandidate, Option[BoxId])]]
-    } yield new ErgoTransaction(inputs, dataInputs, outputsWithIndex.map(_._1))
+      ergoLikeTx <- cursor.as[ErgoLikeTransaction]
+    } yield ErgoTransaction(ergoLikeTx)
   }
 
 }

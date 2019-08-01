@@ -13,6 +13,7 @@ import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADDigest
 import scorex.util.serialization.{Reader, Writer}
+import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import special.collection.{Coll, CollOverArray}
 
@@ -76,7 +77,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
-  val currentHeight: Int = lastHeaders.headOption.map(_.height).getOrElse(ErgoHistory.EmptyHistoryHeight)
+  def currentHeight: Int = Try(sigmaPreHeader.height).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   private def votingEpochLength: Int = votingSettings.votingLength
 
@@ -217,7 +218,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }.flatten
 
   override def toString: String =
-    s"ErgoStateContext(${sigmaPreHeader.height}, ${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
+    s"ErgoStateContext($currentHeight, ${encoder.encode(previousStateDigest)}, $lastHeaders, $currentParameters)"
 
 
   /**

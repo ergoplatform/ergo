@@ -41,10 +41,9 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       assetsToSpend should not be empty
 
       // prepare a lot of inputs
-      val sumToSpend = snap.balance / (addresses.length + 1)
-      val req =
-        PaymentRequest(addresses.head, sumToSpend, Some(assetsToSpend), None) +:
-          addresses.tail.map(a => PaymentRequest(a, sumToSpend, None, None))
+      val inputsToCreate = 100
+      val sumToSpend = snap.balance / (inputsToCreate + 1)
+      val req = (0 until inputsToCreate).map(a => PaymentRequest(addresses.head, sumToSpend, None, None))
       log.info(s"Confirmed balance $snap")
       log.info(s"Payment request $req")
       val tx = await(wallet.generateTransaction(req)).get
@@ -64,6 +63,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Generated transaction $tx2")
       wallet.scanOffchain(tx2)
       blocking(Thread.sleep(1000))
+      tx2.inputs.size should be < tx.outputs.size
 
       // trying to create a new transaction
       val tx3 = await(wallet.generateTransaction(req2)).get

@@ -20,7 +20,6 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
 import sigmastate.utxo.CostTable
-import special.sigma._
 
 import scala.util.{Random, Try}
 

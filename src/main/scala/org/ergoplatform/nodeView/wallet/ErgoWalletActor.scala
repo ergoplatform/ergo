@@ -31,7 +31,6 @@ import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
-import special.sigma._
 
 import scala.util.{Failure, Random, Success, Try}
 

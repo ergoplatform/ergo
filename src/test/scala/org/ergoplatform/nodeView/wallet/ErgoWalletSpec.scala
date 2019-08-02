@@ -33,15 +33,12 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       addresses.length should be > 0
       val genesisBlock = makeGenesisBlock(pubkey, randomNewAsset)
       val genesisTx = genesisBlock.transactions.head
-      val initialBoxes = boxesAvailable(genesisTx, pubkey)
       applyBlock(genesisBlock) shouldBe 'success //scan by wallet happens during apply
       waitForScanning(genesisBlock)
       val snap = getConfirmedBalances
-      val assetsToSpend = assetsByTokenId(initialBoxes).toSeq
-      assetsToSpend should not be empty
 
       // prepare a lot of inputs
-      val inputsToCreate = 100
+      val inputsToCreate = 50
       val sumToSpend = snap.balance / (inputsToCreate + 1)
       val req = (0 until inputsToCreate).map(a => PaymentRequest(addresses.head, sumToSpend, None, None))
       log.info(s"Confirmed balance $snap")

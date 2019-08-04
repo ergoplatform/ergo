@@ -34,7 +34,7 @@ object AugWalletTransaction extends ApiCodecs {
       "id" -> obj.wtx.tx.id.asJson,
       "inputs" -> obj.wtx.tx.inputs.asJson,
       "dataInputs" -> obj.wtx.tx.dataInputs.asJson,
-      "outputs" -> obj.wtx.tx.outputs.asJson,
+      "outputs" -> obj.wtx.tx.outputs.toSeq.asJson(Encoder.encodeSeq(enc)),
       "size" -> obj.wtx.tx.size.asJson,
       "inclusionHeight" -> obj.wtx.inclusionHeight.asJson,
       "applicationId" -> obj.wtx.applicationId.asJson,

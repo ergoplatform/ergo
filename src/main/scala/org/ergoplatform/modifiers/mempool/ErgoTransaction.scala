@@ -281,11 +281,9 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
 
   val MaxAssetsPerBox = 255
 
-  import ErgoLikeTransaction._
-
   implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>
-    val txj = tx.asInstanceOf[ErgoLikeTransaction].asJson(ErgoLikeTransaction.jsonEncoder)
-    txj.mapObject(_.add("size", tx.size.asJson))
+    tx.asInstanceOf[ErgoLikeTransaction].asJson
+      .mapObject(_.add("size", tx.size.asJson))
   }
 
   implicit val transactionDecoder: Decoder[ErgoTransaction] = { cursor =>

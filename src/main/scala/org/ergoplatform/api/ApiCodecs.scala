@@ -2,7 +2,8 @@ package org.ergoplatform.api
 
 import io.circe._
 import io.circe.syntax._
-import org.ergoplatform.JsonCodecs
+import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
+import org.ergoplatform.{ErgoBox, JsonCodecs}
 import org.ergoplatform.api.ApiEncoderOption.Detalization
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
@@ -11,6 +12,8 @@ import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.boxes.TrackedBox
 import scorex.core.validation.ValidationResult
+import sigmastate.SType
+import sigmastate.Values.EvaluatedValue
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
@@ -74,6 +77,26 @@ trait ApiCodecs extends JsonCodecs {
     fieldsWithTx.asJson
   }
 
+  implicit val registersEncoder: Encoder[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]] = {
+    _.map { case (key, value) =>
+      registerIdEncoder(key) -> evaluatedValueEncoder(value)
+    }.asJson
+  }
+
+  // TODO: make json result test to not rely on registers order
+  override implicit val ergoBoxEncoder: Encoder[ErgoBox] = { box =>
+    Json.obj(
+      "boxId" -> box.id.asJson,
+      "value" -> box.value.asJson,
+      "ergoTree" -> ergoTreeEncoder(box.ergoTree),
+      "assets" -> box.additionalTokens.toArray.toSeq.asJson,
+      "creationHeight" -> box.creationHeight.asJson,
+      "additionalRegisters" -> registersEncoder(box.additionalRegisters),
+
+      "transactionId" -> box.transactionId.asJson,
+      "index" -> box.index.asJson
+    )
+  }
 }
 
 trait ApiEncoderOption

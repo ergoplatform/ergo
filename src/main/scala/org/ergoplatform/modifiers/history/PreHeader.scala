@@ -1,6 +1,8 @@
 package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.mining.AutolykosPowScheme
+import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.settings.Constants
 import scorex.core.block.Block._
 import scorex.util._
 import scorex.core.idToBytes
@@ -55,6 +57,16 @@ object PreHeader {
       override val votes: Array[Byte] = v
       override val minerPk: EcPointType = pk
     }
+  }
+
+  val fake: PreHeader =  new PreHeader {
+    override val version: Version = 0.toByte
+    override val parentId: ModifierId = Header.GenesisParentId
+    override val timestamp: Timestamp = 0
+    override val nBits: Timestamp = Constants.InitialNBits
+    override val height: Int = ErgoHistory.EmptyHistoryHeight
+    override val votes: Array[Byte] = Array.fill(3)(0.toByte)
+    override val minerPk: EcPointType = org.ergoplatform.mining.group.generator
   }
 
 }

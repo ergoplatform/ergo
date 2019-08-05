@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.wallet.boxes.DefaultBoxSelector
+import org.ergoplatform.wallet.boxes.ReplaceCompactCollectBoxSelector
 import scorex.core.VersionTag
 import scorex.core.transaction.wallet.Vault
 import scorex.util.ScorexLogging
@@ -21,10 +21,19 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
     with ErgoWalletReader
     with ScorexLogging {
 
+  // A replace-compact-collect selector is parameterized with max number of inputs a transaction could has,
+  // and also optimal number of inputs(a selector is collecting dust if transaction has less inputs than optimal).
+  // Now these settings are hard-coded, however, they should be parameterized
+  // https://github.com/ergoplatform/ergo/issues/856
+  val maxInputs = 32
+  val optimalInputs = 12
+
+  val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs)
+
   override type NVCT = this.type
 
   override val walletActor: ActorRef =
-    actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings, DefaultBoxSelector))
+    actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings, boxSelector))
 
   def watchFor(address: ErgoAddress): ErgoWallet = {
     walletActor ! WatchFor(address)

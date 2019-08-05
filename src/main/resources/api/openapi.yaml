@@ -2175,11 +2175,14 @@ paths:
     post:
       security:
       - ApiKeyAuth: [api_key]
-      summary: Generate arbitrary transaction
+      summary: Generate arbitrary transaction from array of requests.
       operationId: walletTransactionGenerate
       tags:
       - wallet
       requestBody:
+        description: This API method receives a sequence of requests as an input. Each request will produce an output
+          of the resulting transaction (with fee output created automatically). Currently supported types of requests are
+          payment and asset issuance requests.
         required: true
         content:
           application/json:

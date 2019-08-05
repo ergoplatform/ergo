@@ -1,6 +1,8 @@
 package org.ergoplatform.modifiers.mempool
 
 import io.circe.syntax._
+import io.circe._
+import io.circe.parser._
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext, VotingData}
@@ -34,7 +36,12 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     def check(bytesStr: String, bytesToSign: String, jsonStr: String): Unit = {
       val bytes = Base16.decode(bytesStr).get
       val tx = ErgoTransactionSerializer.parseBytes(bytes)
-      tx.asJson.noSpaces shouldBe jsonStr
+
+      // due to non-deterministic order of registers in the json
+      // let's parse expected json string and compare Json objects
+      val parsedJson = parse(jsonStr).getOrElse(Json.Null)
+      parsedJson shouldEqual tx.asJson
+
       bytesToSign shouldBe Base16.encode(tx.messageToSign)
     }
 

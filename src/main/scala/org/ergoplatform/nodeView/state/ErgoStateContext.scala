@@ -64,9 +64,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   override type M = ErgoStateContext
 
-  override def sigmaPreHeader: special.sigma.PreHeader = PreHeader.toSigma(lastHeaders.head)
+  override def sigmaPreHeader: special.sigma.PreHeader =
+    PreHeader.toSigma(lastHeaders.headOption.getOrElse(PreHeader.fake))
 
-  override def sigmaLastHeaders: Coll[special.sigma.Header] = new CollOverArray(lastHeaders.tail.map(h => Header.toSigma(h)).toArray)
+  override def sigmaLastHeaders: Coll[special.sigma.Header] = new CollOverArray(lastHeaders.drop(1).map(h => Header.toSigma(h)).toArray)
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
   // State root hash before the last block
@@ -77,7 +78,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   // todo remove from ErgoLikeContext and from ErgoStateContext
-  def currentHeight: Int = Try(sigmaPreHeader.height).getOrElse(ErgoHistory.EmptyHistoryHeight)
+  def currentHeight: Int = sigmaPreHeader.height
 
   private def votingEpochLength: Int = votingSettings.votingLength
 
@@ -252,12 +253,11 @@ object ErgoStateContext {
   }
 
   /**
-    * Initialize empty state context with fake PreHeader
+    * Initialize empty state context
     */
   def empty(genesisStateDigest: ADDigest, settings: ErgoSettings): ErgoStateContext = {
-    new ErgoStateContext(Seq.empty, None, genesisStateDigest, LaunchParameters, ErgoValidationSettings.initial, VotingData.empty)(settings.chainSettings.voting)
-      .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte),
-        ErgoValidationSettingsUpdate.empty, 0.toByte)
+    new ErgoStateContext(Seq.empty, None, genesisStateDigest, LaunchParameters, ErgoValidationSettings.initial,
+      VotingData.empty)(settings.chainSettings.voting)
   }
 
   /**
@@ -284,6 +284,7 @@ object ErgoStateContext {
 case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends ScorexSerializer[ErgoStateContext] {
 
   override def serialize(obj: ErgoStateContext, w: Writer): Unit = {
+    assert(!obj.isInstanceOf[UpcomingStateContext], "UpcomingStateContext serialization is not supported")
     w.putBytes(obj.genesisStateDigest)
     w.putUByte(obj.lastHeaders.size)
     obj.lastHeaders.foreach(h => HeaderSerializer.serialize(h, w))

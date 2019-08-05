@@ -98,6 +98,12 @@ components:
             $ref: '#/components/schemas/Asset'
         additionalRegisters:
           $ref: '#/components/schemas/Registers'
+        transactionId:
+          $ref: '#/components/schemas/TransactionId'
+        index:
+          description: Index in the transaction outputs
+          type: integer
+          format: int32
 
     WalletBox:
       type: object

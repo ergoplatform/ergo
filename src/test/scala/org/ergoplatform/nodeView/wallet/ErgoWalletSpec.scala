@@ -26,6 +26,52 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
   private implicit val ergoAddressEncoder: ErgoAddressEncoder =
     new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
+  property("do not use inputs spent in off-chain transaction") {
+    withFixture { implicit w =>
+      val addresses = getPublicKeys
+      val pubkey = addresses.head.pubkey
+      addresses.length should be > 0
+      val genesisBlock = makeGenesisBlock(pubkey, randomNewAsset)
+      val genesisTx = genesisBlock.transactions.head
+      applyBlock(genesisBlock) shouldBe 'success //scan by wallet happens during apply
+      waitForScanning(genesisBlock)
+      val snap = getConfirmedBalances
+
+      // prepare a lot of inputs
+      val inputsToCreate = 50
+      val sumToSpend = snap.balance / (inputsToCreate + 1)
+      val req = (0 until inputsToCreate).map(a => PaymentRequest(addresses.head, sumToSpend, None, None))
+      log.info(s"Confirmed balance $snap")
+      log.info(s"Payment request $req")
+      val tx = await(wallet.generateTransaction(req)).get
+      log.info(s"Generated transaction $tx")
+      val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
+      val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
+      tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
+      val block = makeNextBlock(getUtxoState, Seq(tx))
+      applyBlock(block) shouldBe 'success //scan by wallet happens during apply
+      waitForScanning(block)
+
+      // generate transaction spending part of inputs
+      val newSumToSpend = tx.outputs.head.value
+      val req2 = Seq(PaymentRequest(addresses.head, newSumToSpend, None, None))
+      log.info(s"Payment requests 2 $req2")
+      val tx2 = await(wallet.generateTransaction(req2)).get
+      log.info(s"Generated transaction $tx2")
+      wallet.scanOffchain(tx2)
+      blocking(Thread.sleep(1000))
+      tx2.inputs.size should be < tx.outputs.size
+
+      // trying to create a new transaction
+      val tx3 = await(wallet.generateTransaction(req2)).get
+      // check that tx3 have inputs, different from tx2
+      tx3.inputs.foreach { in =>
+        tx2.inputs.exists(tx2In => tx2In.boxId sameElements in.boxId) shouldBe false
+      }
+    }
+  }
+
+
   property("Generate asset issuing transaction") {
     withFixture { implicit w =>
       val address = getPublicKeys.head
@@ -71,7 +117,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Payment request $req")
       val tx = await(wallet.generateTransaction(req)).get
       log.info(s"Generated transaction $tx")
-      val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension),startDigest, parameters, validationSettingsNoIl, VotingData.empty)
+      val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
       tx.statefulValidity(boxesToSpend, emptyDataBoxes, context) shouldBe 'success
 

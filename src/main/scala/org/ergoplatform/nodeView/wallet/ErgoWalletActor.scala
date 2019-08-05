@@ -269,7 +269,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def trackedAddresses: Seq[ErgoAddress] = storage.readTrackedAddresses
 
-  private def onChainFilter(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onChain
+  private def onChainFilter(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onChain &&
+    offChainRegistry.onChainBalances.exists(_.id == encodedBoxId(trackedBox.box.id))
 
   /**
     * Tries to prove given box in order to define whether it could be spent by this wallet.

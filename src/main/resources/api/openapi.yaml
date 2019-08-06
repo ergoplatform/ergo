@@ -2182,7 +2182,9 @@ paths:
       requestBody:
         description: This API method receives a sequence of requests as an input. Each request will produce an output
           of the resulting transaction (with fee output created automatically). Currently supported types of requests are
-          payment and asset issuance requests.
+          payment and asset issuance requests. An example for such a transaction with two requests is provided below.
+          Please note that for the payment request "assets" and "registers" fields are not needed, and if "fee" is missed, fee
+          will be set to 1000000 (0.001 Erg). For asset issuance request, "registers" field is not needed.
         required: true
         content:
           application/json:

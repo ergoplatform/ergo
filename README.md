@@ -73,7 +73,7 @@ To run specific Ergo version `<VERSION>` as a service with custom config `/path/
         -v /path/on/host/system/to/myergo.conf:/etc/myergo.conf \
         ergoplatform/ergo:<VERSION> --<networkId> -c /etc/myergo.conf
 
-Available versions can be found on [Ergo Docker image page](https://hub.docker.com/r/ergoplatform/ergo/tags), for example, `v2.2.0`.
+Available versions can be found on [Ergo Docker image page](https://hub.docker.com/r/ergoplatform/ergo/tags), for example, `v3.0.5`.
 
 This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf` and network flag `--<networkId>`. Every default config value would be overwritten with corresponding value in `myergo.conf`.
 

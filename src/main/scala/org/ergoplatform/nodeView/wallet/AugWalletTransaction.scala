@@ -44,16 +44,10 @@ object AugWalletTransaction extends ApiCodecs {
 
   implicit val jsonDecoder: Decoder[AugWalletTransaction] = { c =>
     for {
-      ergoLikeTx <- c.as[ErgoLikeTransaction]
+      ergoTx <- c.as[ErgoTransaction]
       inclusionHeight <- c.downField("inclusionHeight").as[Int]
       numConfirmations <- c.downField("numConfirmations").as[Int]
-      appId <- c.downField("applicationId").as[Short]} yield AugWalletTransaction(
-      WalletTransaction(
-        new ErgoTransaction(ergoLikeTx.inputs, ergoLikeTx.dataInputs, ergoLikeTx.outputCandidates),
-        inclusionHeight
-      , appId),
-        numConfirmations
-      )
+      appId <- c.downField("applicationId").as[Short]} yield AugWalletTransaction(WalletTransaction(ergoTx, inclusionHeight, appId), numConfirmations)
   }
 
 }

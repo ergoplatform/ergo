@@ -303,11 +303,6 @@ components:
             $ref: '#/components/schemas/Asset'
         registers:
           $ref: '#/components/schemas/Registers'
-        fee:
-          description: Optional, default transaction fee from settings will be used if not defined
-          type: integer
-          format: int64
-          example: 1000000
 
     AssetIssueRequest:
       description: Request for generation of asset issue transaction
@@ -2248,7 +2243,7 @@ paths:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Generate and send payment transaction (default fee is used)
+      summary: Generate and send payment transaction (default fee of 0.001 Erg is used)
       operationId: walletPaymentTransactionGenerateAndSend
       tags:
         - wallet

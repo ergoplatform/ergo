@@ -24,6 +24,11 @@ class ScriptsSpec extends ErgoPropertyTest {
   val fixedBox: ErgoBox = ergoBoxGen(fromString("1 == 1"), heightGen = 0).sample.get
   implicit lazy val context: IRContext = new RuntimeIRContext
 
+  property("scripts complexity") {
+    val maxComplexity = settings.nodeSettings.maxTransactionComplexity
+    defaultMinerPk.toSigmaProp.treeWithSegregation.complexity should be <= maxComplexity
+    ErgoScriptPredef.rewardOutputScript(delta, defaultMinerPk).complexity should be <= maxComplexity
+  }
 
   property("simple operations without cryptography") {
     // true/false

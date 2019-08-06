@@ -169,7 +169,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case ReadTrackedAddresses =>
         sender ! trackedAddresses
 
-      case GenerateTransaction(_) =>
+      case GenerateTransaction(_, _) =>
         val input = ErgoTransactionGenerators.inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
         sender ! Success(tx)
@@ -251,7 +251,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
+      PoPoWBootstrap, minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
       offlineGeneration = false, 200, 100000, 100000, 1.minute, 1000000)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null

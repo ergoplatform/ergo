@@ -60,6 +60,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val protocolVersion = ergoSettings.chainSettings.protocolVersion
   private val powScheme = ergoSettings.chainSettings.powScheme
   private val externalMinerMode = ergoSettings.nodeSettings.useExternalMiner
+  private val maxTransactionComplexity: Int = ergoSettings.nodeSettings.maxTransactionComplexity
 
   // shared mutable state
   private var isMining = false
@@ -317,13 +318,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     //only transactions valid from against the current utxo state we take from the mem pool
     val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules).map { tx =>
       implicit val verifier: ErgoInterpreter = ErgoInterpreter(state.stateContext.currentParameters)
-      val cost = state.validateWithCost(tx, Some(upcomingContext)).get
+      val cost = state.validateWithCost(tx, Some(upcomingContext), Int.MaxValue).get
       tx -> cost
     }
 
     val (txs, toEliminate) = ErgoMiner.collectTxs(minerPk,
       state.stateContext.currentParameters.maxBlockCost,
       state.stateContext.currentParameters.maxBlockSize,
+      maxTransactionComplexity,
       state,
       upcomingContext,
       pool.getAllPrioritized,
@@ -422,6 +424,7 @@ object ErgoMiner extends ScorexLogging {
   def collectTxs(minerPk: ProveDlog,
                  maxBlockCost: Long,
                  maxBlockSize: Long,
+                 maxTransactionComplexity: Int,
                  us: UtxoStateReader,
                  upcomingContext: ErgoStateContext,
                  mempoolTxsIn: Iterable[ErgoTransaction],
@@ -444,7 +447,7 @@ object ErgoMiner extends ScorexLogging {
         case Some(tx) =>
           implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)
           // check validity and calculate transaction cost
-          us.validateWithCost(tx, Some(upcomingContext)) match {
+          us.validateWithCost(tx, Some(upcomingContext), maxTransactionComplexity) match {
             case Success(costConsumed) =>
               val newTxs = fixTxsConflicts((tx, costConsumed) +: acc)
               val newBoxes = newTxs.flatMap(_._1.outputs)
@@ -474,7 +477,8 @@ object ErgoMiner extends ScorexLogging {
                     current -> invalidTxs
                   }
               }
-            case _ =>
+            case Failure(e) =>
+              log.debug(s"Do not include transaction ${tx.id} due to ${e.getMessage}")
               loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
           }
         case _ => // mempool is empty

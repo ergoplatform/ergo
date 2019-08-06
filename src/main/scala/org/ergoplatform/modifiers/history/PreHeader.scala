@@ -5,12 +5,9 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import scorex.core.block.Block._
 import scorex.util._
-import scorex.core.idToBytes
-import sigmastate.eval.{CGroupElement, CPreHeader}
+import sigmastate.eval.CGroupElement
 import sigmastate.eval.Extensions._
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import special.collection.{Coll, CollOverArray}
-import special.sigma.GroupElement
 
 /**
   * Only header fields that can be predicted by a miner
@@ -28,10 +25,18 @@ trait PreHeader {
 
 }
 
+case class CPreHeader(version: Version,
+                      parentId: ModifierId,
+                      timestamp: Timestamp,
+                      nBits: Long,
+                      height: Int,
+                      votes: Array[Byte],
+                      minerPk: EcPointType) extends PreHeader
+
 object PreHeader {
 
   def toSigma(preHeader: PreHeader): special.sigma.PreHeader =
-    CPreHeader(
+    sigmastate.eval.CPreHeader(
       version = preHeader.version,
       parentId = preHeader.parentId.toBytes.toColl,
       timestamp = preHeader.timestamp,
@@ -48,25 +53,22 @@ object PreHeader {
             nb: Long,
             v: Array[Byte]): PreHeader = {
     val (pId, h) = AutolykosPowScheme.derivedHeaderFields(lastHeaderOpt)
-    new PreHeader {
-      override val version: Version = blockVersion
-      override val parentId: ModifierId = pId
-      override val timestamp: Timestamp = ts
-      override val nBits: Timestamp = nb
-      override val height: Int = h
-      override val votes: Array[Byte] = v
-      override val minerPk: EcPointType = pk
-    }
+    CPreHeader(version = blockVersion,
+      parentId = pId,
+      timestamp = ts,
+      nBits = nb,
+      height = h,
+      votes = v,
+      minerPk = pk)
   }
 
-  val fake: PreHeader =  new PreHeader {
-    override val version: Version = 0.toByte
-    override val parentId: ModifierId = Header.GenesisParentId
-    override val timestamp: Timestamp = 0
-    override val nBits: Timestamp = Constants.InitialNBits
-    override val height: Int = ErgoHistory.EmptyHistoryHeight
-    override val votes: Array[Byte] = Array.fill(3)(0.toByte)
-    override val minerPk: EcPointType = org.ergoplatform.mining.group.generator
-  }
-
+  val fake: PreHeader = CPreHeader(
+    version = 0.toByte,
+    parentId = Header.GenesisParentId,
+    timestamp = 0,
+    nBits = Constants.InitialNBits,
+    height = ErgoHistory.EmptyHistoryHeight,
+    votes = Array.fill(3)(0.toByte),
+    minerPk = org.ergoplatform.mining.group.generator
+  )
 }

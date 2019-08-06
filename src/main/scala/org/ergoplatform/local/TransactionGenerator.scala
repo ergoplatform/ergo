@@ -87,24 +87,24 @@ class TransactionGenerator(viewHolder: ActorRef,
     val approximateBoxSize = 200
     val minimalErgoAmount = approximateBoxSize * (parameters.minValuePerByte + Parameters.MinValueStep)
     val feeAmount = Math.max(minimalErgoAmount, settings.nodeSettings.minimalFeeAmount)
-    val feeReq = PaymentRequest(Pay2SAddress(feeProp), feeAmount, None, None)
+    val feeReq = PaymentRequest(Pay2SAddress(feeProp), feeAmount, Seq.empty, Map.empty)
 
     val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances.map { balances =>
       Random.nextInt(100) match {
         case i if i < 70 =>
-          Some(PaymentRequest(randProposition, math.min(randAmount, balances.balance - feeReq.value), None, None))
+          Some(PaymentRequest(randProposition, math.min(randAmount, balances.balance - feeReq.value), Seq.empty, Map.empty))
         case i if i < 95 && balances.assetBalances.nonEmpty =>
           val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
           val tokenAmountToSpend = tokenToSpend._2 / 4
           val assets = Seq(IdUtils.decodedTokenId(tokenToSpend._1) -> tokenAmountToSpend)
-          Some(PaymentRequest(randProposition, minimalErgoAmount, Some(assets), None))
+          Some(PaymentRequest(randProposition, minimalErgoAmount, assets, Map.empty))
         case _ =>
           val assetInfo = genNewAssetInfo
           Some(AssetIssueRequest(randProposition, assetInfo._1, assetInfo._2, assetInfo._3, assetInfo._4))
       }
     }
     payloadReq.flatMap { payloadReqOpt =>
-      wallet.generateTransaction(payloadReqOpt.toSeq :+ feeReq)
+      wallet.generateTransaction(payloadReqOpt.toSeq :+ feeReq, Seq.empty)
     }
   }
 

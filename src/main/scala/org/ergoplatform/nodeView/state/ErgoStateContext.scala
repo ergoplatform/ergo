@@ -284,6 +284,11 @@ object ErgoStateContext {
 case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends ScorexSerializer[ErgoStateContext] {
 
   override def serialize(obj: ErgoStateContext, w: Writer): Unit = {
+    /* NOHF PROOF:
+    Changed: added assert to not let `UpcomingStateContext` get serialized.
+    Motivation: only `ErgoStateContext` is supported in `parse`.
+    Safety: used only in `ErgoMiner.createCandidate` and does get serialized.
+  */
     assert(!obj.isInstanceOf[UpcomingStateContext], "UpcomingStateContext serialization is not supported")
     w.putBytes(obj.genesisStateDigest)
     w.putUByte(obj.lastHeaders.size)

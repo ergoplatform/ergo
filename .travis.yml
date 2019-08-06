@@ -9,7 +9,7 @@ branches:
     - v2.2-candidate
     - sigma454-type-check-on-script-deser
 jdk:
-- oraclejdk9
+- openjdk9
 scala:
 - 2.12.8
 script:

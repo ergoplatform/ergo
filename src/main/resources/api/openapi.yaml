@@ -254,7 +254,6 @@ components:
       type: object
       required:
       - requests
-      - fee
       properties:
         requests:
           description: Sequence of transaction requests
@@ -268,6 +267,11 @@ components:
           type: integer
           format: int64
           example: 1000000
+        inputsRaw:
+          description: List of inputs to be used in serialized form
+          type: array
+          items:
+            $ref: '#/components/schemas/SerializedBox'
 
     SourceHolder:
       type: object
@@ -299,11 +303,6 @@ components:
             $ref: '#/components/schemas/Asset'
         registers:
           $ref: '#/components/schemas/Registers'
-        fee:
-          description: Optional, default transaction fee from settings will be used if not defined
-          type: integer
-          format: int64
-          example: 1000000
 
     AssetIssueRequest:
       description: Request for generation of asset issue transaction
@@ -2171,11 +2170,20 @@ paths:
     post:
       security:
       - ApiKeyAuth: [api_key]
-      summary: Generate arbitrary transaction
+      summary: Generate arbitrary transaction from array of requests.
       operationId: walletTransactionGenerate
       tags:
       - wallet
       requestBody:
+        description: This API method receives a sequence of requests as an input. Each request will produce an output
+          of the resulting transaction (with fee output created automatically). Currently supported types of requests are
+          payment and asset issuance requests. An example for a transaction with requests of both kinds is provided below.
+          Please note that for the payment request "assets" and "registers" fields are not needed.
+          For asset issuance request, "registers" field is not needed.
+
+          You may specify boxes to spend by providing them in "inputsRaw". Please note you need to have strict equality between
+          input and output total amounts of Ergs in this case. If you want wallet to pick up the boxes,
+          leave "inputsRaw" empty.
         required: true
         content:
           application/json:
@@ -2210,6 +2218,7 @@ paths:
       tags:
       - wallet
       requestBody:
+        description: See description of /wallet/transaction/generate
         required: true
         content:
           application/json:
@@ -2235,50 +2244,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /wallet/payment/generate:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Generate payment transaction
-      operationId: walletPaymentTransactionGenerate
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/PaymentRequest'
-      responses:
-        '200':
-          description: Generated Ergo transaction
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErgoTransaction'
-        '400':
-          description: Bad payment request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
   /wallet/payment/send:
     post:
       security:
-      - ApiKeyAuth: [api_key]
-      summary: Generate and send payment transaction
+        - ApiKeyAuth: [api_key]
+      summary: Generate and send payment transaction (default fee of 0.001 Erg is used)
       operationId: walletPaymentTransactionGenerateAndSend
       tags:
-      - wallet
+        - wallet
       requestBody:
         required: true
         content:
@@ -2296,78 +2269,6 @@ paths:
                 $ref: '#/components/schemas/TransactionId'
         '400':
           description: Bad payment request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-  /wallet/assets/generate:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Generate asset issue transaction
-      operationId: walletAssetIssueTransactionGenerate
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/AssetIssueRequest'
-      responses:
-        '200':
-          description: Generated Ergo transaction
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErgoTransaction'
-        '400':
-          description: Bad asset issue request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-  /wallet/assets/issue:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Generate and send asset issue transaction
-      operationId: walletAssetIssueTransactionGenerateAndSend
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/AssetIssueRequest'
-      responses:
-        '200':
-          description: Identifier of an Ergo transaction generated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransactionId'
-        '400':
-          description: Bad asset issue request
           content:
             application/json:
               schema:

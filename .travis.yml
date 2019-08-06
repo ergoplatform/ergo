@@ -1,6 +1,6 @@
 language: scala
 # Use container-based infrastructure
-sudo: false
+sudo: required
 branches:
   only:
     - v2.1

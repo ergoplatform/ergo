@@ -36,12 +36,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     def check(bytesStr: String, bytesToSign: String, jsonStr: String): Unit = {
       val bytes = Base16.decode(bytesStr).get
       val tx = ErgoTransactionSerializer.parseBytes(bytes)
-
-      // due to non-deterministic order of registers in the json
-      // let's parse expected json string and compare Json objects
-      val parsedJson = parse(jsonStr).getOrElse(Json.Null)
-      parsedJson shouldEqual tx.asJson
-
+      tx.asJson.noSpaces shouldBe jsonStr
       bytesToSign shouldBe Base16.encode(tx.messageToSign)
     }
 
@@ -76,9 +71,9 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     val outputCandidates2: IndexedSeq[ErgoBoxCandidate] = IndexedSeq(
       new ErgoBoxCandidate(1000000000L, minerPk, height, Colls.emptyColl,
         Map(
+          R6 -> IntConstant(10),
           R4 -> ByteConstant(1),
           R5 -> SigmaPropConstant(minerPk),
-          R6 -> IntConstant(10),
           R7 -> LongArrayConstant(Array(1L, 2L, 1234123L)),
           R8 -> ByteArrayConstant(Base16.decode("123456123456123456123456123456123456123456123456123456123456123456").get),
         )),
@@ -88,7 +83,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
     Base16.encode(tx2.bytes) shouldBe "02c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f774238b4a04b4201da0578be3dac11067b567a73831f35b024a2e623c1f8da230407f63bab62c62ed9b93808b106b5a7e8b1751fa656f4c5de467400ca796a4fc9c0d746a69702a77bd78b1a80a5ef5bf5713bbd95d93a4f23b27ead385aea4d78a234c35accacdf8996b0af5b51e26fee29ea5c05468f23707d31c0df39400127391cd57a70eb856710db48bb9833606e0bf90340000000028094ebdc030008cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942e8070005020108cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b94204141103020496d396010e211234561234561234561234561234561234561234561234561234561234561234568094ebdc030008cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942e8070000"
     check(Base16.encode(tx2.bytes), "02c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f77420000ca796a4fc9c0d746a69702a77bd78b1a80a5ef5bf5713bbd95d93a4f23b27ead00000000028094ebdc030008cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942e8070005020108cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b94204141103020496d396010e211234561234561234561234561234561234561234561234561234561234561234568094ebdc030008cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942e8070000",
-      "{\"id\":\"bd04a93f67fda77d89afc38cd8237f142ad5a349405929fd1f7b7f24c4ea2e80\",\"inputs\":[{\"boxId\":\"c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742\",\"spendingProof\":{\"proofBytes\":\"b4a04b4201da0578be3dac11067b567a73831f35b024a2e623c1f8da230407f63bab62c62ed9b93808b106b5a7e8b1751fa656f4c5de4674\",\"extension\":{}}},{\"boxId\":\"ca796a4fc9c0d746a69702a77bd78b1a80a5ef5bf5713bbd95d93a4f23b27ead\",\"spendingProof\":{\"proofBytes\":\"5aea4d78a234c35accacdf8996b0af5b51e26fee29ea5c05468f23707d31c0df39400127391cd57a70eb856710db48bb9833606e0bf90340\",\"extension\":{}}}],\"dataInputs\":[],\"outputs\":[{\"boxId\":\"1baffa8e5ffce634a8e70530023c16a5c177d2b5ab756ae89a8dce2a23ba433c\",\"value\":1000000000,\"ergoTree\":\"0008cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942\",\"assets\":[],\"creationHeight\":1000,\"additionalRegisters\":{\"R5\":\"08cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942\",\"R6\":\"0414\",\"R8\":\"0e21123456123456123456123456123456123456123456123456123456123456123456\",\"R7\":\"1103020496d39601\",\"R4\":\"0201\"},\"transactionId\":\"bd04a93f67fda77d89afc38cd8237f142ad5a349405929fd1f7b7f24c4ea2e80\",\"index\":0},{\"boxId\":\"33eff46f94067b32073d5f81984607be559108f58bc3f53906a1e8db7cf0f708\",\"value\":1000000000,\"ergoTree\":\"0008cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942\",\"assets\":[],\"creationHeight\":1000,\"additionalRegisters\":{},\"transactionId\":\"bd04a93f67fda77d89afc38cd8237f142ad5a349405929fd1f7b7f24c4ea2e80\",\"index\":1}],\"size\":356}")
+      "{\"id\":\"bd04a93f67fda77d89afc38cd8237f142ad5a349405929fd1f7b7f24c4ea2e80\",\"inputs\":[{\"boxId\":\"c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742\",\"spendingProof\":{\"proofBytes\":\"b4a04b4201da0578be3dac11067b567a73831f35b024a2e623c1f8da230407f63bab62c62ed9b93808b106b5a7e8b1751fa656f4c5de4674\",\"extension\":{}}},{\"boxId\":\"ca796a4fc9c0d746a69702a77bd78b1a80a5ef5bf5713bbd95d93a4f23b27ead\",\"spendingProof\":{\"proofBytes\":\"5aea4d78a234c35accacdf8996b0af5b51e26fee29ea5c05468f23707d31c0df39400127391cd57a70eb856710db48bb9833606e0bf90340\",\"extension\":{}}}],\"dataInputs\":[],\"outputs\":[{\"boxId\":\"1baffa8e5ffce634a8e70530023c16a5c177d2b5ab756ae89a8dce2a23ba433c\",\"value\":1000000000,\"ergoTree\":\"0008cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942\",\"assets\":[],\"creationHeight\":1000,\"additionalRegisters\":{\"R4\":\"0201\",\"R5\":\"08cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942\",\"R6\":\"0414\",\"R7\":\"1103020496d39601\",\"R8\":\"0e21123456123456123456123456123456123456123456123456123456123456123456\"},\"transactionId\":\"bd04a93f67fda77d89afc38cd8237f142ad5a349405929fd1f7b7f24c4ea2e80\",\"index\":0},{\"boxId\":\"33eff46f94067b32073d5f81984607be559108f58bc3f53906a1e8db7cf0f708\",\"value\":1000000000,\"ergoTree\":\"0008cd0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942\",\"assets\":[],\"creationHeight\":1000,\"additionalRegisters\":{},\"transactionId\":\"bd04a93f67fda77d89afc38cd8237f142ad5a349405929fd1f7b7f24c4ea2e80\",\"index\":1}],\"size\":356}")
 //
     // tx with 2 inputs, 1 data input, 3 outputs with tokens 0326df75ea615c18acc6bb4b517ac82795872f388d5d180aac90eaa84de750b942
     check("02e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c6400002e9798d7eb0cd867f6dc29872f80de64c04cef10a99a58d007ef7855f0acbdb9000001f97d1dc4626de22db836270fe1aa004b99970791e4557de8f486f6d433b81195026df03fffc9042bf0edb0d0d36d7a675239b83a9080d39716b9aa0a64cccb9963e76bf387ab2e63ba8f4e23267bc88265b5fee4950030199e2e2c214334251c6403da92a8b8e3ad770008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176000200daa4eb6b01aec8d1ff0100da92a8b8e3ad770008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176000200daa4eb6b01aec8d1ff0100fa979af8988ce7010008cd02db0ce4d301d6dc0b7a5fbe749588ef4ef68f2c94435020a3c31764ffd36a2176000000",

@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
-import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector}
+import org.ergoplatform.wallet.boxes.{BoxSelector, ReplaceCompactCollectBoxSelector}
 import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.ProveDlog
 
@@ -48,7 +48,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
   val blockInterval = 2.minute
 
-  val boxSelector: BoxSelector = DefaultBoxSelector
+  val boxSelector: BoxSelector = new ReplaceCompactCollectBoxSelector(30, 2)
 
   val startTime = args.headOption.map(_.toLong).getOrElse(timeProvider.time - (blockInterval * 10).toMillis)
   val dir = if (args.length < 2) new File("/tmp/ergo/data") else new File(args(1))
@@ -57,7 +57,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val miningDelay = 1.second
   val minimalSuffix = 2
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
-    -1, poPoWBootstrap = false, minimalSuffix, mining = false, miningDelay, useExternalMiner = false,
+    -1, poPoWBootstrap = false, minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false,
     miningPubKeyHex = None, offlineGeneration = false, 200, 100000, 100000, 1.minute, 1000000)
   val ms = settings.chainSettings.monetary.copy(
     minerRewardDelay = RewardDelay

@@ -34,9 +34,9 @@ class WalletApiRouteSpec extends FlatSpec
   implicit val requestsHolderEncoder: RequestsHolderEncoder = new RequestsHolderEncoder(ergoSettings)
   implicit val addressJsonDecoder: Decoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).decoder
 
-  val paymentRequest = PaymentRequest(Pay2SAddress(Constants.FalseLeaf), 100L, None, None)
+  val paymentRequest = PaymentRequest(Pay2SAddress(Constants.FalseLeaf), 100L, Seq.empty, Map.empty)
   val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), 100L, "TEST", "Test", 8)
-  val requestsHolder = RequestsHolder((0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)), 10000L)
+  val requestsHolder = RequestsHolder((0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)), Some(10000L))
   val scriptSource: String =
     """
       |{
@@ -79,20 +79,6 @@ class WalletApiRouteSpec extends FlatSpec
     }
   }
 
-  it should "generate payment transaction" in {
-    Post(prefix + "/payment/generate", Seq(paymentRequest).asJson) ~> route ~> check {
-      status shouldBe StatusCodes.OK
-      Try(responseAs[ErgoTransaction]) shouldBe 'success
-    }
-  }
-
-  it should "generate asset issue transaction" in {
-    Post(prefix + "/assets/generate", Seq(assetIssueRequest).asJson) ~> route ~> check {
-      status shouldBe StatusCodes.OK
-      Try(responseAs[ErgoTransaction]) shouldBe 'success
-    }
-  }
-
   it should "generate & send arbitrary transaction" in {
     Post(prefix + "/transaction/send", requestsHolder.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
@@ -102,13 +88,6 @@ class WalletApiRouteSpec extends FlatSpec
 
   it should "generate & send payment transaction" in {
     Post(prefix + "/payment/send", Seq(paymentRequest).asJson) ~> route ~> check {
-      status shouldBe StatusCodes.OK
-      responseAs[String] should not be empty
-    }
-  }
-
-  it should "generate & send asset issue transaction" in {
-    Post(prefix + "/assets/issue", Seq(assetIssueRequest).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
     }

@@ -14,13 +14,6 @@ trait NVBenchmark {
   def readBlocks: Seq[ErgoFullBlock] = readHeaders.zip(readPayloads).zip(readExtensions)
     .map { case ((h, txs), ext) => ErgoFullBlock(h, txs, ext, None) }
 
-  def time[R](block: => R): Double = {
-    val t0 = System.nanoTime()
-    block // call-by-name
-    val t1 = System.nanoTime()
-    (t1.toDouble - t0) / 1000000
-  }
-
   def readModifiers[M <: ErgoPersistentModifier](path: String): Seq[M] = {
     val is = Utils.getUrlInputStream(path)
     Stream

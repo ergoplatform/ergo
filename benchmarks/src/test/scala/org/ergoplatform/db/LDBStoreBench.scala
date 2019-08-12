@@ -15,7 +15,7 @@ import scorex.util.idToBytes
 
 import scala.util.Random
 
-object LDBStoreBenchmark
+object LDBStoreBench
   extends Bench.ForkedTime
     with ErgoTransactionGenerators
     with FileUtils {
@@ -77,17 +77,17 @@ object LDBStoreBenchmark
 
   performance of "LDBStore vs LSMStore" in {
     performance of "LDBStore write" in {
-      using(txsGen) config (config: _*) in (bts => benchWriteLDB(bts))
+      using(txsGen) config(config: _*) in (bts => benchWriteLDB(bts))
     }
     performance of "LDBStore read" in {
-      using(txsWithDbGen) config (config: _*) in { case (bts, db) => benchReadLDB(bts, db) }
+      using(txsWithDbGen) config(config: _*) in { case (bts, db) => benchReadLDB(bts, db) }
     }
 
     performance of "VLDBStore write" in {
-      using(txsGen) config (config: _*) in (bts => benchWriteVLDB(bts))
+      using(txsGen) config(config: _*) in (bts => benchWriteVLDB(bts))
     }
     performance of "VLDBStore write/read" in {
-      using(txsGen) config (config: _*) in (bts => benchWriteReadVLDB(bts))
+      using(txsGen) config(config: _*) in (bts => benchWriteReadVLDB(bts))
     }
   }
 

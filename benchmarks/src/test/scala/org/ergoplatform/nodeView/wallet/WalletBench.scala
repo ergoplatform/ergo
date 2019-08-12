@@ -5,6 +5,7 @@ import java.io.File
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.pattern.ask
 import akka.util.Timeout
+import org.ergoplatform.Utils
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.NVBenchmark
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{ReadBalances, ScanOnChain}
@@ -48,7 +49,7 @@ object WalletBench
 
   val accEt = (0 until BenchRuns).foldLeft(0D) { (acc, _) =>
     val benchBlockSet = blocks
-    acc + time(bench(benchBlockSet))
+    acc + Utils.time(bench(benchBlockSet))
   }
   val avgEt = accEt / BenchRuns
 

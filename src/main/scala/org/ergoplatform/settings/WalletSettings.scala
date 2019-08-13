@@ -11,5 +11,6 @@ case class WalletSettings(secretStorage: SecretStorageSettings,
                           postponedScanning: Boolean = true,
                           keepSpentBoxes: Boolean = false,
                           defaultTransactionFee: Long = 1000000L,
+                          withdrawDistribution: Map[String, Double] = Map(),
                           testMnemonic: Option[String] = None,
                           testKeysQty: Option[Int] = None)

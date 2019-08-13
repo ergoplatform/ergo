@@ -11,6 +11,7 @@ import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local._
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
+import org.ergoplatform.nodeView.ErgoReadersHolder.GetReaders
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
@@ -132,6 +133,10 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     minerRef ! StartMining
+  }
+  if (ergoSettings.walletSettings.withdrawDistribution.nonEmpty) {
+    val sender = TxSenderRef(readersHolderRef, nodeViewHolderRef, ergoSettings)
+    sender ! GetReaders
   }
 
   private val actorsToStop: Seq[ActorRef] = Seq(

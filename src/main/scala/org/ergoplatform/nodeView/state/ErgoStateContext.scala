@@ -287,7 +287,7 @@ case class ErgoStateContextSerializer(votingSettings: VotingSettings) extends Sc
     /* NOHF PROOF:
     Changed: added assert to not let `UpcomingStateContext` get serialized.
     Motivation: only `ErgoStateContext` is supported in `parse`.
-    Safety: used only in `ErgoMiner.createCandidate` and does get serialized.
+    Safety: `UpcomingStateContext` is used only in `ErgoMiner.createCandidate` and does not get serialized.
   */
     assert(!obj.isInstanceOf[UpcomingStateContext], "UpcomingStateContext serialization is not supported")
     w.putBytes(obj.genesisStateDigest)

@@ -135,8 +135,12 @@ class ErgoApp(args: Args) extends ScorexLogging {
     minerRef ! StartMining
   }
   if (ergoSettings.walletSettings.withdrawDistribution.nonEmpty) {
-    val sender = TxSenderRef(readersHolderRef, nodeViewHolderRef, ergoSettings)
-    sender ! GetReaders
+    if (ergoSettings.walletSettings.withdrawDistribution.values.sum != 1) {
+      log.warn(s"Sum of distribution values should equals to 1, ${ergoSettings.walletSettings.withdrawDistribution} given")
+    } else {
+      val sender = TxSenderRef(readersHolderRef, nodeViewHolderRef, ergoSettings)
+      sender ! GetReaders
+    }
   }
 
   private val actorsToStop: Seq[ActorRef] = Seq(

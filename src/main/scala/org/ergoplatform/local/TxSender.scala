@@ -39,7 +39,7 @@ class TxSender(readersHolderRef: ActorRef, nodeViewHolderRef: ActorRef, ergoSett
 
   override def receive: Receive = {
     case GetReaders =>
-      log.debug("Initialize TxSender")
+      log.debug(s"Initialize TxSender with distribution ${withdrawDistribution.map(d => s"${d._1.toString()} -> ${d._2}")}")
       readersHolderRef ! GetReaders
 
     case Readers(h: ErgoHistoryReader, _, _, w: ErgoWalletReader) =>

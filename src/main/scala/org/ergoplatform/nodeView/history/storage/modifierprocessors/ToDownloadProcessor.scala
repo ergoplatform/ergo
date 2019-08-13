@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import scorex.core.ModifierTypeId
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.{ModifierId, ScorexLogging}
@@ -15,14 +15,16 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
   private val maxTimeDiffFactor = 100
 
-  protected val config: NodeConfigurationSettings
-
-  protected val chainSettings: ChainSettings
-
   protected val timeProvider: NetworkTimeProvider
 
+  protected val settings: ErgoSettings
+
+  protected val nodeSettings: NodeConfigurationSettings = settings.nodeSettings
+
+  protected val chainSettings: ChainSettings = settings.chainSettings
+
   protected[history] lazy val pruningProcessor: FullBlockPruningProcessor =
-    new FullBlockPruningProcessor(config, chainSettings)
+    new FullBlockPruningProcessor(nodeSettings, chainSettings)
 
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain
 
@@ -52,7 +54,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     }
 
     bestFullBlockOpt match {
-      case _ if !isHeadersChainSynced || !config.verifyTransactions =>
+      case _ if !isHeadersChainSynced || !nodeSettings.verifyTransactions =>
         Seq.empty
       case Some(fb) if isInBestChain(fb.id) =>
         continuation(fb.header.height + 1, Seq.empty)
@@ -65,7 +67,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     * Checks whether it's time to download full chain, and returns toDownload modifiers
     */
   protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
-    if (!config.verifyTransactions) {
+    if (!nodeSettings.verifyTransactions) {
       // A regime that do not download and verify transaction
       Seq.empty
     } else if (pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
@@ -82,9 +84,9 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
   }
 
   private def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
-    if (!config.verifyTransactions) {
+    if (!nodeSettings.verifyTransactions) {
       Seq.empty
-    } else if (config.stateType.requireProofs) {
+    } else if (nodeSettings.stateType.requireProofs) {
       h.sectionIds
     } else {
       h.sectionIds.tail

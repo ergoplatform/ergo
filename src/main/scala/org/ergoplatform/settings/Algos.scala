@@ -9,7 +9,8 @@ import scorex.util._
 
 object Algos extends ErgoAlgos with scorex.core.utils.ScorexEncoding {
 
-  // due to ErgoAlgos from sigma extends scorex.util.ScorexEncoding where encoder is BytesEncoder
+  // ErgoAlgos in sigmastate extends scorex.util.ScorexEncoding where encoder is BytesEncoder
+  // but here we use scorex.core.utils.ScorexEncoding where encoder is ScorexEncoder
   override implicit val encoder: scorex.core.utils.ScorexEncoder = scorex.core.utils.ScorexEncoder.default
 
   lazy val emptyMerkleTreeRoot: Digest32 = Algos.hash(LeafData @@ Array[Byte]())

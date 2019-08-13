@@ -19,12 +19,12 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
   protected val settings: ErgoSettings
 
-  protected val nodeSettings: NodeConfigurationSettings = settings.nodeSettings
-
-  protected val chainSettings: ChainSettings = settings.chainSettings
-
   protected[history] lazy val pruningProcessor: FullBlockPruningProcessor =
     new FullBlockPruningProcessor(nodeSettings, chainSettings)
+
+  protected def nodeSettings: NodeConfigurationSettings = settings.nodeSettings
+
+  protected def chainSettings: ChainSettings = settings.chainSettings
 
   protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain
 

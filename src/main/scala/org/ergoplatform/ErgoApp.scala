@@ -105,7 +105,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
-  private val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
+  private val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef, "ErgoReadersHolder")
 
   private val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 

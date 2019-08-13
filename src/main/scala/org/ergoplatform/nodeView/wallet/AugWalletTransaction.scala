@@ -24,7 +24,7 @@ object AugWalletTransaction extends ApiCodecs {
       "address" -> e.fromProposition(box.ergoTree).toOption.map(_.toString).asJson,
       "assets" -> box.additionalTokens.toArray.toSeq.asJson,
       "creationHeight" -> box.creationHeight.asJson,
-      "additionalRegisters" -> box.additionalRegisters.asInstanceOf[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]].asJson
+      "additionalRegisters" -> box.additionalRegisters.asJson
     )
   }
 

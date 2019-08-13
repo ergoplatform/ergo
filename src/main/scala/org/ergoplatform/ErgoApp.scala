@@ -14,7 +14,7 @@ import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Args, ErgoSettings, NetworkId}
+import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
 import scorex.core.app.{Application, ScorexContext}
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
@@ -202,7 +202,7 @@ object ErgoApp extends ScorexLogging {
 
   val argParser: Arg[Args] = (
     optional[String]("--config", "-c") and
-      optionalOneOf[NetworkId](NetworkId.all.map(x => s"--${x.verboseName}" -> x): _*)
+      optionalOneOf[NetworkType](NetworkType.all.map(x => s"--${x.verboseName}" -> x): _*)
     ).to[Args]
 
   def main(args: Array[String]): Unit = argParser.parse(args) match {

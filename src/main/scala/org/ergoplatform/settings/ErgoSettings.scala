@@ -16,6 +16,7 @@ import scala.util.Try
 
 
 case class ErgoSettings(directory: String,
+                        networkType: NetworkType,
                         chainSettings: ChainSettings,
                         testingSettings: TestingSettings,
                         nodeSettings: NodeConfigurationSettings,
@@ -30,7 +31,7 @@ case class ErgoSettings(directory: String,
   val miningPubKey: Option[ProveDlog] = nodeSettings.miningPubKeyHex
     .flatMap { str =>
       val keyBytes = Base16.decode(str)
-        .fold(_ => throw new Error(s"Failed to parse miningPubKeyHex = $nodeSettings.miningPubKeyHex"), x => x)
+        .getOrElse(throw new Error(s"Failed to parse `miningPubKeyHex = ${nodeSettings.miningPubKeyHex}`"))
       Try(ProveDlog(groupElemFromBytes(keyBytes)))
         .orElse(addressEncoder.fromString(str).collect { case p2pk: P2PKAddress => p2pk.pubkey })
         .toOption
@@ -52,7 +53,9 @@ object ErgoSettings extends ScorexLogging
 
   def fromConfig(config: Config): ErgoSettings = {
     val directory = config.as[String](s"$configPath.directory")
-
+    val networkTypeName = config.as[String](s"$configPath.networkType")
+    val networkType = NetworkType.fromString(networkTypeName)
+      .getOrElse(throw new Error(s"Unknown `networkType = $networkTypeName`"))
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
     val bootstrappingSettingsOpt = config.as[Option[BootstrapSettings]](s"$configPath.bootstrap")
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
@@ -69,6 +72,7 @@ object ErgoSettings extends ScorexLogging
     consistentSettings(
       ErgoSettings(
         directory,
+        networkType,
         chainSettings,
         testingSettings,
         nodeSettings,

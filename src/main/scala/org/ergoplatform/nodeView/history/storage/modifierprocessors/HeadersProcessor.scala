@@ -7,11 +7,11 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
+import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
@@ -29,9 +29,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   protected val historyStorage: HistoryStorage
 
-  protected val config: NodeConfigurationSettings
-
-  protected val chainSettings: ChainSettings
+  protected val settings: ErgoSettings
 
   val powScheme: AutolykosPowScheme
 
@@ -234,15 +232,21 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
   def requiredDifficultyAfter(parent: Header): Difficulty = {
-    val parentHeight = parent.height
-    val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
-      .ensuring(_.last == parentHeight)
-    if (heights.lengthCompare(1) == 0) {
-      difficultyCalculator.calculate(Seq(parent))
+    val fallbackRequired = timeProvider.time() - parent.timestamp >= Constants.DiffFallbackDuration.toMillis &&
+      !settings.networkType.isMainNet
+    if (fallbackRequired) {
+      Constants.FallbackDiff
     } else {
-      val chain = headerChainBack(heights.max - heights.min + 1, parent, (_: Header) => false)
-      val headers = chain.headers.filter(p => heights.contains(p.height))
-      difficultyCalculator.calculate(headers)
+      val parentHeight = parent.height
+      val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
+        .ensuring(_.last == parentHeight)
+      if (heights.lengthCompare(1) == 0) {
+        difficultyCalculator.calculate(Seq(parent))
+      } else {
+        val chain = headerChainBack(heights.max - heights.min + 1, parent, (_: Header) => false)
+        val headers = chain.headers.filter(p => heights.contains(p.height))
+        difficultyCalculator.calculate(headers)
+      }
     }
   }
 

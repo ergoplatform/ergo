@@ -116,34 +116,6 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
         val newBalance = balance - spentAmt + receivedAmt
         val uncertain = uncertainBxs.map(x => encodedBoxId(x.box.id))
 
-        val report =
-          s"""
-             |** <blockID: $blockId, blockHeight: $blockHeight>
-             |**
-             |** TokensSpent:
-             |** $spentTokensAmt
-             |**
-             |** TokensReceived:
-             |** $receivedTokensAmt
-             |**
-             |** CurrentTokensBalance:
-             |** $tokensBalance
-             |**
-             |** DecreasedTokensBalance:
-             |** $decreasedTokensBalance
-             |**
-             |** NewTokensBalance:
-             |** $newTokensBalance
-             |**
-             |** NewBalance($newBalance) = CurBalance($balance) - Spent($spentAmt) + Received($receivedAmt)
-             |**
-             |** //////////////////////////////////////////////////////
-             |**
-             |**
-          """.stripMargin
-
-        println(report)
-
         require(
           (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
           s"Balance could not be negative. Balance: $newBalance, Tokens: $newTokensBalance")

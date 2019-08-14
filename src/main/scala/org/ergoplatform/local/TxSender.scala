@@ -75,7 +75,7 @@ class TxSender(readersHolderRef: ActorRef, nodeViewHolderRef: ActorRef, ergoSett
       // self-check assertion to catch https://github.com/ergoplatform/ergo/issues/853 bug. Remove after bug fix.
       if (balance != registry.balance) {
         val allBoxes = Await.result(wr.boxes(false), timeout.duration)
-        throw new Exception(s"Balance from registry ${registry} does not match balance from boxes ${unspentBoxes}. All boxes are ${allBoxes}")
+        log.warn(s"Balance from registry ${registry} does not match balance from boxes ${unspentBoxes}. All boxes are ${allBoxes}")
       }
       // If there is at least 1 ERG - send all coins (at most 10 boxes) to withdrawDistribution
       if (balance > Constants.CoinsInOneErgo) {

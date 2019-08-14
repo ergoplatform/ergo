@@ -48,10 +48,10 @@ object ErgoSettings extends ScorexLogging
   val scorexConfigPath: String = "scorex"
 
   def read(args: Args = Args.empty): ErgoSettings = {
-    fromConfig(readConfigFromPath(args))
+    fromConfig(readConfig(args), args.networkTypeOpt)
   }
 
-  def fromConfig(config: Config): ErgoSettings = {
+  def fromConfig(config: Config, desiredNetworkTypeOpt: Option[NetworkType] = None): ErgoSettings = {
     val directory = config.as[String](s"$configPath.directory")
     val networkTypeName = config.as[String](s"$configPath.networkType")
     val networkType = NetworkType.fromString(networkTypeName)
@@ -81,15 +81,16 @@ object ErgoSettings extends ScorexLogging
         cacheSettings,
         bootstrappingSettingsOpt,
         votingTargets
-      )
+      ),
+      desiredNetworkTypeOpt
     )
   }
 
-  private def readConfigFromPath(args: Args): Config = {
+  private def readConfig(args: Args): Config = {
 
-    val networkConfigFileOpt = args.networkIdOpt
-      .flatMap { networkId =>
-        val confName = s"${networkId.verboseName}.conf"
+    val networkConfigFileOpt = args.networkTypeOpt
+      .flatMap { networkType =>
+        val confName = s"${networkType.verboseName}.conf"
         val classLoader = ClassLoader.getSystemClassLoader
         val destDir = System.getProperty("java.io.tmpdir") + "/"
 
@@ -115,7 +116,7 @@ object ErgoSettings extends ScorexLogging
       if file.exists
     } yield file
 
-    networkConfigFileOpt.flatMap(_ => args.networkIdOpt).fold(log.warn("Running without network config"))(
+    networkConfigFileOpt.flatMap(_ => args.networkTypeOpt).fold(log.warn("Running without network config"))(
       x => log.info(s"Running in ${x.verboseName} network mode"))
 
     (networkConfigFileOpt, userConfigFileOpt) match {
@@ -149,11 +150,15 @@ object ErgoSettings extends ScorexLogging
     }
   }
 
-  private def consistentSettings(settings: ErgoSettings): ErgoSettings = {
+  private def consistentSettings(settings: ErgoSettings,
+                                 desiredNetworkTypeOpt: Option[NetworkType]): ErgoSettings = {
     if (settings.nodeSettings.keepVersions < 0) {
       failWithError("nodeSettings.keepVersions should not be negative")
     } else if (!settings.nodeSettings.verifyTransactions && !settings.nodeSettings.stateType.requireProofs) {
       failWithError("Can not use UTXO state when nodeSettings.verifyTransactions is false")
+    } else if (desiredNetworkTypeOpt.exists(_ != settings.networkType)) {
+      failWithError(s"Malformed network config. Desired networkType is `${desiredNetworkTypeOpt.get}`, " +
+        s"but one declared in config is `${settings.networkType}`")
     } else {
       settings
     }

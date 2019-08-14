@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import java.io.{File, PrintWriter}
+import java.io.File
 
 import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.db.VersionedLDBKVStore
@@ -21,13 +21,10 @@ import scala.util.Try
   * Provides an access to version-sensitive wallet-specific indexes.
   * (Such as on-chain UTXO's or balances)
   */
-final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) extends ScorexLogging with AutoCloseable {
+final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
 
   import RegistryOps._
   import org.ergoplatform.nodeView.wallet.IdUtils._
-
-  new File(s"target/wallet/").mkdirs()
-  val outWriter = new PrintWriter(new File(s"target/bench/wallet-journal.txt"))
 
   private val keepHistory = ws.keepSpentBoxes
 
@@ -119,31 +116,31 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
 
         val report =
           s"""
-            |<blockID: $blockId, blockHeight: $blockHeight>
-            |
-            |TokensSpent:
-            |$spentTokensAmt
-            |
-            |TokensReceived:
-            |$receivedTokensAmt
-            |
-            |CurrentTokensBalance:
-            |$tokensBalance
-            |
-            |DecreasedTokensBalance:
-            |$decreasedTokensBalance
-            |
-            |NewTokensBalance:
-            |$newTokensBalance
-            |
-            |NewBalance($newBalance) = CurBalance($balance) - Spent($spentAmt) + Received($receivedAmt)
-            |
-            |//////////////////////////////////////////////////////
-            |
-            |
+             |** <blockID: $blockId, blockHeight: $blockHeight>
+             |**
+             |** TokensSpent:
+             |** $spentTokensAmt
+             |**
+             |** TokensReceived:
+             |** $receivedTokensAmt
+             |**
+             |** CurrentTokensBalance:
+             |** $tokensBalance
+             |**
+             |** DecreasedTokensBalance:
+             |** $decreasedTokensBalance
+             |**
+             |** NewTokensBalance:
+             |** $newTokensBalance
+             |**
+             |** NewBalance($newBalance) = CurBalance($balance) - Spent($spentAmt) + Received($receivedAmt)
+             |**
+             |** //////////////////////////////////////////////////////
+             |**
+             |**
           """.stripMargin
 
-        outWriter.write(report)
+        println(report)
 
         require(
           (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
@@ -154,8 +151,6 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
 
     update.transact(store, idToBytes(blockId))
   }
-
-  override def close(): Unit = outWriter.close()
 
   def rollback(version: VersionTag): Try[Unit] =
     store.rollbackTo(Base16.decode(version).get)

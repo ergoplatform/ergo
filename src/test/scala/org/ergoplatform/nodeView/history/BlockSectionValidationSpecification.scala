@@ -48,10 +48,10 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
 
     // should not be able to apply if corresponding header is marked as invalid
     history.applicableTry(section) shouldBe 'success
-    history.historyStorage.insert(randomKey, Seq(history.validityKey(header.id) -> ByteArrayWrapper(Array(0.toByte))), Seq.empty)
+    history.historyStorage.insert(Seq(history.validityKey(header.id) -> Array(0.toByte)), Seq.empty)
     history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Invalid
     history.applicableTry(section) shouldBe 'failure
-    history.historyStorage.insert(randomKey, Seq(history.validityKey(header.id) -> ByteArrayWrapper(Array(1.toByte))), Seq.empty)
+    history.historyStorage.insert(Seq(history.validityKey(header.id) -> Array(1.toByte)), Seq.empty)
 
     // should not be able to apply if already in history
     history.applicableTry(section) shouldBe 'success

@@ -18,7 +18,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "com.trueaccord.lenses" % "lenses_2.12" % "0.4.12",
   "com.typesafe" % "config" % "1.3.4",
   "com.typesafe" % "ssl-config-core_2.12" % "0.3.6",
-  "com.typesafe.akka" % "akka-actor_2.12" % "2.5.23",
+  "com.typesafe.akka" % "akka-actor_2.12" % "2.5.24",
   "com.typesafe.akka" % "akka-http-core_2.12" % "10.1.6",
   "com.typesafe.akka" % "akka-http_2.12" % "10.1.6",
   "com.typesafe.akka" % "akka-parsing_2.12" % "10.1.6",
@@ -52,6 +52,9 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bitlet" % "weupnp" % "0.1.4",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.62",
   "org.ergoplatform" % "ergo-wallet_2.12" % "master-d4cf1f7f-SNAPSHOT",
+  "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8",
+  "org.iq80.leveldb" % "leveldb" % "0.12",
+  "org.iq80.leveldb" % "leveldb-api" % "0.12",
   "org.objenesis" % "objenesis" % "2.4",
   "org.ow2.asm" % "asm" % "5.0.4",
   "org.reactivestreams" % "reactive-streams" % "1.0.2",
@@ -87,4 +90,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH b2e823bd88511546c94de8f006cfb7653dde4e01
+// LIBRARY_DEPENDENCIES_HASH 377a2706565d80d73efe42d3c52984ce9702e3b5

@@ -1,14 +1,16 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import java.io.File
+import java.io.{File, PrintWriter}
 
-import io.iohk.iodb.Store.VersionID
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import org.ergoplatform.db.LDBFactory.factory
+import org.ergoplatform.db.VersionedLDBKVStore
+import org.ergoplatform.db.VersionedLDBKVStore.VersionId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.WalletTransaction
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA.RegistryOp
 import org.ergoplatform.settings.{ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.boxes.TrackedBox
+import org.iq80.leveldb.Options
 import scorex.core.VersionTag
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
@@ -19,10 +21,13 @@ import scala.util.Try
   * Provides an access to version-sensitive wallet-specific indexes.
   * (Such as on-chain UTXO's or balances)
   */
-final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLogging {
+final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) extends ScorexLogging with AutoCloseable {
 
   import RegistryOps._
   import org.ergoplatform.nodeView.wallet.IdUtils._
+
+  new File(s"target/wallet/").mkdirs()
+  val outWriter = new PrintWriter(new File(s"target/bench/wallet-journal.txt"))
 
   private val keepHistory = ws.keepSpentBoxes
 
@@ -111,9 +116,38 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
         val receivedAmt = certainBxs.map(_.box.value).sum
         val newBalance = balance - spentAmt + receivedAmt
         val uncertain = uncertainBxs.map(x => encodedBoxId(x.box.id))
+
+        val report =
+          s"""
+            |<blockID: $blockId, blockHeight: $blockHeight>
+            |
+            |TokensSpent:
+            |$spentTokensAmt
+            |
+            |TokensReceived:
+            |$receivedTokensAmt
+            |
+            |CurrentTokensBalance:
+            |$tokensBalance
+            |
+            |DecreasedTokensBalance:
+            |$decreasedTokensBalance
+            |
+            |NewTokensBalance:
+            |$newTokensBalance
+            |
+            |NewBalance($newBalance) = CurBalance($balance) - Spent($spentAmt) + Received($receivedAmt)
+            |
+            |//////////////////////////////////////////////////////
+            |
+            |
+          """.stripMargin
+
+        outWriter.write(report)
+
         require(
           (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
-          "Balance could not be negative")
+          s"Balance could not be negative. Balance: $newBalance, Tokens: $newTokensBalance")
         RegistryIndex(blockHeight, newBalance, newTokensBalance, uncertain)
       }
     } yield ()
@@ -121,8 +155,10 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
     update.transact(store, idToBytes(blockId))
   }
 
+  override def close(): Unit = outWriter.close()
+
   def rollback(version: VersionTag): Try[Unit] =
-    Try(store.rollback(ByteArrayWrapper(Base16.decode(version).get)))
+    store.rollbackTo(Base16.decode(version).get)
 
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.
@@ -145,15 +181,19 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
 
 object WalletRegistry {
 
-  val PreGenesisStateVersion: VersionID = ByteArrayWrapper(idToBytes(PreGenesisHeader.id))
+  val PreGenesisStateVersion: VersionId = idToBytes(PreGenesisHeader.id)
 
   def readOrCreate(settings: ErgoSettings): WalletRegistry = {
     val dir = new File(s"${settings.directory}/wallet/registry")
     dir.mkdirs()
-    val store = new LSMStore(dir)
+
+    val options = new Options()
+    options.createIfMissing(true)
+    val db = factory.open(dir, options)
+    val store = new VersionedLDBKVStore(db, settings.nodeSettings.keepVersions)
 
     // Create pre-genesis state checkpoint
-    if (!store.versionIDExists(PreGenesisStateVersion)) store.update(PreGenesisStateVersion, Seq.empty, Seq.empty)
+    if (!store.versionIdExists(PreGenesisStateVersion)) store.update(Seq.empty, Seq.empty)(PreGenesisStateVersion)
 
     new WalletRegistry(store)(settings.walletSettings)
   }

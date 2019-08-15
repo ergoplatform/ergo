@@ -95,7 +95,7 @@ class WalletApiRouteSpec extends FlatSpec
   }
 
   it should "generate valid P2SAddress form source" in {
-    val suffix = "/p2s_address"
+    val suffix = "/p2sAddress"
     val assertion = (json: Json) => {
       status shouldBe StatusCodes.OK
       val addressStr = json.hcursor.downField("address").as[String].right.get
@@ -107,7 +107,7 @@ class WalletApiRouteSpec extends FlatSpec
   }
 
   it should "generate valid P2SHAddress form source" in {
-    val suffix = "/p2sh_address"
+    val suffix = "/p2shAddress"
     val assertion = (json: Json) => {
       status shouldBe StatusCodes.OK
       val addressStr = json.hcursor.downField("address").as[String].right.get

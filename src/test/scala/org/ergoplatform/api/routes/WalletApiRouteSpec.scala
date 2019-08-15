@@ -71,7 +71,7 @@ class WalletApiRouteSpec extends FlatSpec
   }
 
   it should "get unconfirmed balances" in {
-    Get(prefix + "/balances/with_unconfirmed") ~> route ~> check {
+    Get(prefix + "/balances/withUnconfirmed") ~> route ~> check {
       status shouldBe StatusCodes.OK
       val json = responseAs[Json]
       log.info(s"Received total confirmed with unconfirmed balances: $json")

@@ -4,7 +4,7 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "3.0.6",
+  version := "3.0.7",
   scalaVersion := "2.12.8",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
@@ -37,7 +37,6 @@ libraryDependencies ++= Seq(
   "com.iheart" %% "ficus" % "1.4.+",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
-  "com.typesafe.akka" %% "akka-actor" % "2.5.+",
   "com.joefkelley" %% "argyle" % "1.0.0",
 
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
@@ -46,12 +45,14 @@ libraryDependencies ++= Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
   
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
-  "com.typesafe.akka" %% "akka-testkit" % "2.5.+" % "test",
-  "com.typesafe.akka" %% "akka-http-testkit" % "10.1.+" % "test",
+  "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",
+  "com.typesafe.akka" %% "akka-http-testkit" % "10.1.9" % "test",
   "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test",
   "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded"
 )
+
+updateOptions := updateOptions.value.withLatestSnapshots(false)
 
 coverageExcludedPackages := ".*ErgoApp.*;.*routes.*;.*ErgoPersistentModifier"
 

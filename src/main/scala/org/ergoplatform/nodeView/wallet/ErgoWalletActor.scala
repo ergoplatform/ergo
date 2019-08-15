@@ -145,8 +145,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       if (chainStatus.onChain) {
         val indexBal = registry.readIndex.balance
         val boxesBal = registry.readCertainUnspentBoxes.map(_.value).sum
-        require(indexBal == boxesBal,
-          s"IndexBalance($indexBal) does not equal BoxesBalance($boxesBal)")
+        if (indexBal != boxesBal) {
+          log.error(s"IndexBalance($indexBal) does not equal BoxesBalance($boxesBal)")
+        }
       }
       sender() ! (if (chainStatus.onChain) registry.readIndex else offChainRegistry.readIndex)
 

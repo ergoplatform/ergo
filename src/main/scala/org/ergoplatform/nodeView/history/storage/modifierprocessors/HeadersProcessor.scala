@@ -232,8 +232,11 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
   def requiredDifficultyAfter(parent: Header): Difficulty = {
-    val fallbackRequired = timeProvider.time() - parent.timestamp >= Constants.DiffFallbackDuration.toMillis &&
-      !settings.networkType.isMainNet
+    // if testing or dev network, difficulty is set to a minimum value if there is no block for
+    // Constants.DiffFallbackDuration (5 minutes)
+    val fallbackRequired = !settings.networkType.isMainNet &&
+      timeProvider.time() - parent.timestamp >= Constants.DiffFallbackDuration.toMillis
+
     if (fallbackRequired) {
       Constants.FallbackDiff
     } else {

@@ -23,7 +23,7 @@ import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import scorex.core.settings.RESTApiSettings
 
 case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
-                    (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
+                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
   implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)

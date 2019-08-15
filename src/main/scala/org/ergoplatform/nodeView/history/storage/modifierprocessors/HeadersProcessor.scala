@@ -231,11 +231,11 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-  def requiredDifficultyAfter(parent: Header): Difficulty = {
+  def requiredDifficultyAfter(parent: Header, nextBlockTsOpt: Option[Long] = None): Difficulty = {
     // if testing or dev network, difficulty is set to a minimum value if there is no block for
     // Constants.DiffFallbackDuration (5 minutes)
     val fallbackRequired = !settings.networkType.isMainNet &&
-      timeProvider.time() - parent.timestamp >= Constants.DiffFallbackDuration.toMillis
+      nextBlockTsOpt.getOrElse(timeProvider.time()) - parent.timestamp >= Constants.DiffFallbackDuration.toMillis
 
     if (fallbackRequired) {
       Constants.FallbackDiff
@@ -288,7 +288,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, s"${header.timestamp} > ${parent.timestamp}")
         .validate(hdrHeight, header.height == parent.height + 1, s"${header.height} vs ${parent.height}")
         .validateNoFailure(hdrPoW, powScheme.validate(header))
-        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent))
+        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent, Some(header.timestamp)))
         .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), heightOf(header.parentId).toString)
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")

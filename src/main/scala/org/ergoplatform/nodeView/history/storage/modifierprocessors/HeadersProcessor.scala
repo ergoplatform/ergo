@@ -233,7 +233,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   def requiredDifficultyAfter(parent: Header, nextBlockTsOpt: Option[Long] = None): Difficulty = {
     // if testing or dev network, difficulty is set to a minimum value if there is no block for
-    // Constants.DiffFallbackDuration (5 minutes)
+    // `Constants.DiffFallbackDuration` (5 minutes)
     val fallbackRequired = !settings.networkType.isMainNet &&
       nextBlockTsOpt.getOrElse(timeProvider.time()) - parent.timestamp >= Constants.DiffFallbackDuration.toMillis
 
@@ -246,7 +246,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       if (heights.lengthCompare(1) == 0) {
         difficultyCalculator.calculate(Seq(parent))
       } else {
-        val chain = headerChainBack(heights.max - heights.min + 1, parent, (_: Header) => false)
+        val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
         val headers = chain.headers.filter(p => heights.contains(p.height))
         difficultyCalculator.calculate(headers)
       }

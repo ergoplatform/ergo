@@ -23,13 +23,23 @@ trait ChainGenerator extends ErgoTestConstants {
 
   /** Generates a [[HeaderChain]] of given height starting from a History last block
     */
-  def genHeaderChain(height: Int, history: ErgoHistory): HeaderChain = {
+  def genHeaderChain(height: Int,
+                     history: ErgoHistory,
+                     diffBitsOpt: Option[Long],
+                     useRealTs: Boolean): HeaderChain = {
     val bestHeaderOpt = history.bestHeaderOpt
     val bestHeaderInterlinksOpt = bestHeaderOpt
       .flatMap(h => history.typedModifierById[Extension](h.extensionId))
       .map(ext => PoPowAlgos.unpackInterlinks(ext.fields).get)
       .getOrElse(Seq.empty)
-    genHeaderChain(height, bestHeaderOpt, bestHeaderInterlinksOpt, history.difficultyCalculator)
+    genHeaderChain(
+      height,
+      bestHeaderOpt,
+      bestHeaderInterlinksOpt,
+      history.difficultyCalculator,
+      diffBitsOpt = diffBitsOpt,
+      useRealTs = useRealTs
+    )
   }
 
   /** Generates a [[HeaderChain]] of given height starting from a given header
@@ -38,36 +48,49 @@ trait ChainGenerator extends ErgoTestConstants {
                            prefixOpt: Option[Header] = None,
                            prefixInterlinksOpt: Seq[ModifierId] = Seq.empty,
                            control: LinearDifficultyControl = defaultDifficultyControl,
-                           extensionHash: Digest32 = EmptyDigest32): HeaderChain =
-    HeaderChain(headerStream(prefixOpt, control, extensionHash).take(height + prefixOpt.size))
+                           extensionHash: Digest32 = EmptyDigest32,
+                           diffBitsOpt: Option[Long],
+                           useRealTs: Boolean): HeaderChain =
+    HeaderChain(headerStream(prefixOpt, control, extensionHash, diffBitsOpt, useRealTs).take(height + prefixOpt.size))
 
   /** Generates a minimal [[HeaderChain]] that satisfies the given condition
     */
   final def genHeaderChain(until: Seq[Header] => Boolean,
                            prefix: Option[Header],
-                           control: LinearDifficultyControl): HeaderChain = {
-    val headers = headerStream(prefix, control)
+                           control: LinearDifficultyControl,
+                           diffBitsOpt: Option[Long],
+                           useRealTs: Boolean): HeaderChain = {
+    val headers = headerStream(prefix, control, diffBitsOpt = diffBitsOpt, useRealTs = useRealTs)
     val chain = Iterator.from(prefix.size).map(size => headers.take(size)).find(until).get
     HeaderChain(chain)
   }
 
-  private def headerStream(prefix: Option[Header], control: LinearDifficultyControl,
-                           extensionHash: Digest32 = EmptyDigest32): Stream[Header] = {
-    val firstHeader = nextHeader(prefix, control, extensionHash)
-    lazy val headers: Stream[Header] = firstHeader #:: headers.map(cur => nextHeader(Option(cur), control, extensionHash))
+  private def headerStream(prefix: Option[Header],
+                           control: LinearDifficultyControl,
+                           extensionHash: Digest32 = EmptyDigest32,
+                           diffBitsOpt: Option[Long] = None,
+                           useRealTs: Boolean = false): Stream[Header] = {
+    val firstHeader = nextHeader(prefix, control, extensionHash, diffBitsOpt = diffBitsOpt, useRealTs = useRealTs)
+    lazy val headers: Stream[Header] = firstHeader #:: headers.map(cur =>
+      nextHeader(Option(cur), control, extensionHash, diffBitsOpt = diffBitsOpt, useRealTs = useRealTs))
     prefix.toSeq ++: headers
   }
 
-  def nextHeader(prev: Option[Header], control: LinearDifficultyControl,
-                 extensionHash: Digest32 = EmptyDigest32): Header =
+  def nextHeader(prev: Option[Header],
+                 control: LinearDifficultyControl,
+                 extensionHash: Digest32 = EmptyDigest32,
+                 tsOpt: Option[Long] = None,
+                 diffBitsOpt: Option[Long] = None,
+                 useRealTs: Boolean = false): Header =
     powScheme.prove(
       prev,
       Header.CurrentVersion,
-      settings.chainSettings.initialNBits,
+      diffBitsOpt.getOrElse(settings.chainSettings.initialNBits),
       EmptyStateRoot,
       EmptyDigest32,
       EmptyDigest32,
-      prev.map(_.timestamp + control.desiredInterval.toMillis).getOrElse(0),
+      tsOpt.getOrElse(prev.map(_.timestamp + control.desiredInterval.toMillis)
+        .getOrElse(if (useRealTs) timeProvider.time() else 0)),
       extensionHash,
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber

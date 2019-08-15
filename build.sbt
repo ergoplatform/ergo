@@ -14,7 +14,7 @@ lazy val commonSettings = Seq(
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
 )
 
-val scorexVersion = "3696cb2b-SNAPSHOT"
+val scorexVersion = "1a523b9d-SNAPSHOT"
 val sigmaStateVersion = "master-bd486374-SNAPSHOT"
 val ergoWalletVersion = "master-d4cf1f7f-SNAPSHOT"
 
@@ -37,7 +37,6 @@ libraryDependencies ++= Seq(
   "com.iheart" %% "ficus" % "1.4.+",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
-  "com.typesafe.akka" %% "akka-actor" % "2.5.+",
   "com.joefkelley" %% "argyle" % "1.0.0",
 
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
@@ -46,12 +45,14 @@ libraryDependencies ++= Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
   
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
-  "com.typesafe.akka" %% "akka-testkit" % "2.5.+" % "test",
-  "com.typesafe.akka" %% "akka-http-testkit" % "10.1.+" % "test",
+  "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",
+  "com.typesafe.akka" %% "akka-http-testkit" % "10.1.9" % "test",
   "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test",
   "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded"
 )
+
+updateOptions := updateOptions.value.withLatestSnapshots(false)
 
 coverageExcludedPackages := ".*ErgoApp.*;.*routes.*;.*ErgoPersistentModifier"
 

@@ -1,22 +1,24 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils._
-import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoUnsafeProver}
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import sigmastate.Values.ByteArrayConstant
 import sigmastate._
+import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
+import sigmastate.Values._
 
 import scala.concurrent.blocking
 import scala.util.Random
@@ -26,6 +28,53 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
   private implicit val ergoAddressEncoder: ErgoAddressEncoder =
     new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
+
+  property("uncertain boxes spending") {
+    withFixture { implicit w =>
+      val walletPk = getPublicKeys.head.pubkey
+
+      val foreignSecret = DLogProverInput.random()
+      val foreignPk = foreignSecret.publicImage
+      val uncertainProp = SigmaOr(SigmaAnd(walletPk, GE(IntConstant(0), IntConstant(10))), foreignPk)
+
+      val genesisBlock = makeGenesisBlock(walletPk, randomNewAsset)
+
+      applyBlock(genesisBlock) shouldBe 'success
+      waitForScanning(genesisBlock)
+
+      val confirmedBalance = getConfirmedBalances.balance
+      val balanceToMakeUncertain = confirmedBalance - 1000000
+      val balanceAfterSpending = confirmedBalance - balanceToMakeUncertain
+
+      val req = PaymentRequest(Pay2SAddress(uncertainProp), balanceToMakeUncertain, Seq.empty, Map.empty)
+      val tx = await(wallet.generateTransaction(Seq(req))).get
+
+      val block = makeNextBlock(getUtxoState, Seq(tx))
+      applyBlock(block) shouldBe 'success
+      waitForScanning(block)
+
+      val index = await(wallet.confirmedBalances)
+
+      index.uncertainBoxes.size shouldBe 1
+      index.balance shouldBe balanceAfterSpending
+
+      val uncertainTxUnsigned = new UnsignedErgoTransaction(
+        index.uncertainBoxes.map(id => new UnsignedInput(decodedBoxId(id))).toIndexedSeq,
+        IndexedSeq(),
+        IndexedSeq(new ErgoBoxCandidate(balanceToMakeUncertain, Constants.TrueLeaf, block.height + 1))
+      )
+      val uncertainTx = ErgoUnsafeProver.prove(uncertainTxUnsigned, foreignSecret)
+
+      val finalBlock = makeNextBlock(getUtxoState, Seq(ErgoTransaction(uncertainTx)))
+      applyBlock(finalBlock) shouldBe 'success
+      waitForScanning(finalBlock)
+
+      val finalIndex = await(wallet.confirmedBalances)
+
+      finalIndex.uncertainBoxes shouldBe empty
+      finalIndex.balance shouldBe balanceAfterSpending
+    }
+  }
 
   property("do not use inputs spent in off-chain transaction") {
     withFixture { implicit w =>
@@ -41,7 +90,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       // prepare a lot of inputs
       val inputsToCreate = 50
       val sumToSpend = snap.balance / (inputsToCreate + 1)
-      val req = (0 until inputsToCreate).map(a => PaymentRequest(addresses.head, sumToSpend, Seq.empty, Map.empty))
+      val req = (0 until inputsToCreate).map(_ => PaymentRequest(addresses.head, sumToSpend, Seq.empty, Map.empty))
       log.info(s"Confirmed balance $snap")
       log.info(s"Payment request $req")
       val tx = await(wallet.generateTransaction(req)).get
@@ -99,7 +148,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     withFixture { implicit w =>
       val pubKey = getPublicKeys.head.pubkey
       val genesisBlock = makeGenesisBlock(pubKey, randomNewAsset)
-      val genesisTx = genesisBlock.transactions.head
       val initialBoxes = boxesAvailable(genesisBlock, pubKey)
 
       val boxesToUseEncoded = initialBoxes.map { box =>

@@ -83,15 +83,13 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
       _ <- putBoxes(certainBxs ++ uncertainBxs)
       _ <- putTxs(txs)
       spentBoxesWithTx <- getBoxes(inputs.map(x => decodedBoxId(x._2))).map(
-        _.flatten.filter(_.certainty.certain).flatMap(bx =>
-          inputs.find(_._2 == encodedBoxId(bx.box.id)).map { case (txId, _) => txId -> bx })
+        _.flatten.flatMap(bx => inputs.find(_._2 == encodedBoxId(bx.box.id)).map { case (txId, _) => txId -> bx })
       )
       _ <- processHistoricalBoxes(spentBoxesWithTx, blockHeight)
       _ <- updateIndex { case RegistryIndex(_, balance, tokensBalance, _) =>
-        log.info(s"SpentBoxes at (h: $blockHeight) *> $spentBoxesWithTx")
-        val spentBoxes = spentBoxesWithTx.map(_._2)
-        val spentAmt = spentBoxes.map(_.box.value).sum
-        val spentTokensAmt = spentBoxes
+        val spentCertainBoxes = spentBoxesWithTx.map(_._2).filter(_.certainty.certain)
+        val spentAmt = spentCertainBoxes.map(_.box.value).sum
+        val spentTokensAmt = spentCertainBoxes
           .flatMap(_.box.additionalTokens.toArray)
           .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
             acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)

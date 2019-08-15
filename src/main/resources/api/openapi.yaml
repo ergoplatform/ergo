@@ -2052,7 +2052,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /wallet/balances/with_unconfirmed:
+  /wallet/balances/withUnconfirmed:
     get:
       security:
       - ApiKeyAuth: [api_key]
@@ -2091,74 +2091,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ErgoAddress'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-  /wallet/p2s_address:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Create P2SAddress from Sigma source
-      operationId: walletP2SAddress
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SourceHolder'
-      responses:
-        '200':
-          description: Ergo address derived from source
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AddressHolder'
-        '400':
-          description: Bad source
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-  /wallet/p2sh_address:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Create P2SHAddress from Sigma source
-      operationId: walletP2SAddress
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SourceHolder'
-      responses:
-        '200':
-          description: Ergo address derived from source
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AddressHolder'
-        '400':
-          description: Bad source
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:
@@ -2442,6 +2374,75 @@ paths:
                   $ref: '#/components/schemas/ErgoTransactionOutput'
         '404':
           description: Box with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+
+  /script/p2sAddress:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Create P2SAddress from Sigma source
+      operationId: scriptP2SAddress
+      tags:
+        - script
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceHolder'
+      responses:
+        '200':
+          description: Ergo address derived from source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressHolder'
+        '400':
+          description: Bad source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /script/p2shAddress:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Create P2SHAddress from Sigma source
+      operationId: scriptP2SAddress
+      tags:
+        - script
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceHolder'
+      responses:
+        '200':
+          description: Ergo address derived from source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressHolder'
+        '400':
+          description: Bad source
           content:
             application/json:
               schema:

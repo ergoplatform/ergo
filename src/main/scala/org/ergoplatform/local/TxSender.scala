@@ -7,7 +7,7 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.wallet.ErgoWalletReader
+import org.ergoplatform.nodeView.wallet.{ErgoWallet, ErgoWalletReader}
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
@@ -79,7 +79,7 @@ class TxSender(readersHolderRef: ActorRef, nodeViewHolderRef: ActorRef, ergoSett
       }
       // If there is at least 1 ERG - send all coins (at most 10 boxes) to withdrawDistribution
       if (balance > Constants.CoinsInOneErgo) {
-        val toSend = Math.min(balance - fee.value, balances.take(10).sum - fee.value)
+        val toSend = Math.min(balance - fee.value, balances.take(ErgoWallet.optimalInputs).sum - fee.value)
         val payments = withdrawDistribution.map { a =>
           PaymentRequest(a._1, (toSend * a._2).toLong, Seq(), Map())
         }.toSeq

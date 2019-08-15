@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueR
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
 import org.ergoplatform.settings.{Args, Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress}
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.util.Try
@@ -38,20 +38,7 @@ class WalletApiRouteSpec extends FlatSpec
   val paymentRequest = PaymentRequest(Pay2SAddress(Constants.FalseLeaf), 100L, Seq.empty, Map.empty)
   val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), 100L, "TEST", "Test", 8)
   val requestsHolder = RequestsHolder((0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)), Some(10000L))
-  val scriptSource: String =
-    """
-      |{
-      |    val myPk = PK("3WwUerNahQR1YXyq8AKi5UkKsYeJ99zxrqNqt3BCG4xSGeTERHiQ")
-      |    HEIGHT < 9197 && myPk.isProven
-      |}
-      |""".stripMargin
 
-  val scriptSourceSigProp: String =
-    """
-      |{
-      |    PK("3WwUerNahQR1YXyq8AKi5UkKsYeJ99zxrqNqt3BCG4xSGeTERHiQ")
-      |}
-      |""".stripMargin
 
   it should "generate arbitrary transaction" in {
     Post(prefix + "/transaction/generate", requestsHolder.asJson) ~> route ~> check {
@@ -92,30 +79,6 @@ class WalletApiRouteSpec extends FlatSpec
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
     }
-  }
-
-  it should "generate valid P2SAddress form source" in {
-    val suffix = "/p2sAddress"
-    val assertion = (json: Json) => {
-      status shouldBe StatusCodes.OK
-      val addressStr = json.hcursor.downField("address").as[String].right.get
-      ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
-    }
-    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
-    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
-      check(assertion(responseAs[Json]))
-  }
-
-  it should "generate valid P2SHAddress form source" in {
-    val suffix = "/p2shAddress"
-    val assertion = (json: Json) => {
-      status shouldBe StatusCodes.OK
-      val addressStr = json.hcursor.downField("address").as[String].right.get
-      ergoAddressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SHAddress.addressTypePrefix
-    }
-    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
-    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
-      check(assertion(responseAs[Json]))
   }
 
   it should "return addresses" in {

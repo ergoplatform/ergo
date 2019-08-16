@@ -231,15 +231,26 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-  def requiredDifficultyAfter(parent: Header, nextBlockTsOpt: Option[Long] = None): Difficulty = {
+  /**
+    * Calculate difficulty for the next block
+    *
+    * @param parent - latest block
+    * @param nextBlockTimestampOpt - timestamp of the next block, used in testnets only, see acomment withing the method
+    * @return - difficulty for the next block
+    */
+  def requiredDifficultyAfter(parent: Header,
+                              nextBlockTimestampOpt: Option[Long] = None): Difficulty = {
     // if testing or dev network, difficulty is set to a minimum value if there is no block for
     // `Constants.DiffFallbackDuration` (5 minutes)
-    val fallbackRequired = !settings.networkType.isMainNet &&
-      nextBlockTsOpt.getOrElse(timeProvider.time()) - parent.timestamp >= Constants.DiffFallbackDuration.toMillis
+    lazy val timeDifference = nextBlockTimestampOpt.getOrElse(timeProvider.time()) - parent.timestamp
+    val fallbackRequired = !settings.networkType.isMainNet && timeDifference >= Constants.DiffFallbackDuration.toMillis
 
     if (fallbackRequired) {
       Constants.FallbackDiff
     } else {
+      //todo: it is slow to read thousands headers from database for each header
+      //todo; consider caching here
+      //todo: https://github.com/ergoplatform/ergo/issues/872
       val parentHeight = parent.height
       val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
         .ensuring(_.last == parentHeight)

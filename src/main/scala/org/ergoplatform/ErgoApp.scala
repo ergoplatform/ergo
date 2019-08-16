@@ -125,7 +125,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
     MiningApiRoute(minerRef, ergoSettings),
-    UtxoApiRoute(readersHolderRef, settings.restApi)
+    UtxoApiRoute(readersHolderRef, settings.restApi),
+    ScriptApiRoute(readersHolderRef, ergoSettings)
   )
 
   private val combinedRoute: Route =

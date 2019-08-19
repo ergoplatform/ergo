@@ -273,8 +273,17 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def trackedAddresses: Seq[ErgoAddress] = storage.readTrackedAddresses
 
+  /**
+    * This filter is selecting boxes which are onchain and not spent offchain yet.
+    * This filter is used when wallet is looking through its boxes to assemble a transaction.
+    */
   private def onChainFilter(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onChain &&
     offChainRegistry.onChainBalances.exists(_.id == encodedBoxId(trackedBox.box.id))
+
+  /**
+    * This filter is not filtering out anything, used when the wallet works with externally provided boxes.
+    */
+  private def noFilter(trackedBox: TrackedBox): Boolean = true
 
   /**
     * Tries to prove given box in order to define whether it could be spent by this wallet.
@@ -396,17 +405,19 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                   AssetUtils.mergeAssets(boxTokens, acc)
                 }
 
-              val inputBoxes = if (inputs.nonEmpty) {
-                inputs
+              val (inputBoxes, filter) = if (inputs.nonEmpty) {
+                //inputs are to be selected by the wallet
+                (inputs
                   .map { box => // declare fake inclusion height in order to confirm the box is onchain
                     TrackedBox(box.transactionId, box.index, Some(1), None, None, box, BoxCertainty.Certain)
                   }
-                  .toIterator
+                  .toIterator, onChainFilter: TrackedBox => Boolean)
               } else {
-                registry.readCertainUnspentBoxes.toIterator
+                //inputs are provided externally, no need for filtering
+                (registry.readCertainUnspentBoxes.toIterator, noFilter: TrackedBox => Boolean)
               }
 
-              val selectionOpt = boxSelector.select(inputBoxes, onChainFilter, targetBalance, targetAssets)
+              val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
 
               val makeTx = prepareTransaction(prover, payTo) _
 

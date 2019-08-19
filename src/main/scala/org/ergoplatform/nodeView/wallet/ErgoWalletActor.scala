@@ -406,15 +406,15 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                 }
 
               val (inputBoxes, filter) = if (inputs.nonEmpty) {
-                //inputs are to be selected by the wallet
+                //inputs are provided externally, no need for filtering
                 (inputs
                   .map { box => // declare fake inclusion height in order to confirm the box is onchain
                     TrackedBox(box.transactionId, box.index, Some(1), None, None, box, BoxCertainty.Certain)
                   }
-                  .toIterator, onChainFilter: TrackedBox => Boolean)
+                  .toIterator, noFilter: TrackedBox => Boolean)
               } else {
-                //inputs are provided externally, no need for filtering
-                (registry.readCertainUnspentBoxes.toIterator, noFilter: TrackedBox => Boolean)
+                //inputs are to be selected by the wallet
+                (registry.readCertainUnspentBoxes.toIterator, onChainFilter: TrackedBox => Boolean)
               }
 
               val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)

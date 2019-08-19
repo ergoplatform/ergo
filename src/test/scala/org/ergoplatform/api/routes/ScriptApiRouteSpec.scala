@@ -6,11 +6,14 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
-import org.ergoplatform.api.{ScriptApiRoute, WalletApiRoute}
+import org.ergoplatform.api.ScriptApiRoute
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.utils.Stubs
 import org.scalatest.{FlatSpec, Matchers}
 import io.circe.syntax._
+import scorex.util.encode.Base16
+import sigmastate.Values.{ErgoTree, TrueLeaf}
+import sigmastate.serialization.ErgoTreeSerializer
 
 class ScriptApiRouteSpec  extends FlatSpec
   with Matchers
@@ -66,4 +69,31 @@ class ScriptApiRouteSpec  extends FlatSpec
       check(assertion(responseAs[Json]))
   }
 
+
+  it should "get through address <-> ergoTree round-trip" in {
+    val suffix = "addressToTree"
+
+    val assertion = (json: Json, address: String) => {
+      status shouldBe StatusCodes.OK
+      val treeStr = json.hcursor.downField("tree").as[String].right.get
+
+      val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(treeStr).get)
+
+      val addr = ergoAddressEncoder.fromProposition(tree).get
+
+      ergoAddressEncoder.toString(addr) shouldBe address
+    }
+
+    val p2pk = "3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN"
+    Get(s"$prefix/$suffix/$p2pk") ~> route ~> check(assertion(responseAs[Json], p2pk))
+
+    val p2sh = "8UmyuJuQ3FS9ts7j72fn3fKChXSGzbL9WC"
+    Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
+
+    val script = TrueLeaf
+    val tree = ErgoTree.fromProposition(script)
+    val p2s = ergoAddressEncoder.toString(ergoAddressEncoder.fromProposition(tree).get)
+    p2s shouldBe "Ms7smJwLGbUAjuWQ"
+    Get(s"$prefix/$suffix/$p2s") ~> route ~> check(assertion(responseAs[Json], p2s))
+  }
 }

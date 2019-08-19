@@ -157,7 +157,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet(_.balancesWithUnconfirmed)
   }
 
-
   def addressesR: Route = (path("addresses") & get) {
     withWallet(_.trackedAddresses)
   }

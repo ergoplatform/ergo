@@ -405,13 +405,18 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                   AssetUtils.mergeAssets(boxTokens, acc)
                 }
 
-              val (inputBoxes, filter) = if (inputs.nonEmpty) {
-                //inputs are provided externally, no need for filtering
-                (inputs
+              // make TrackedBox sequence out of boxes provided
+              def boxesToFakeTracked(inputs: Seq[ErgoBox]): Iterator[TrackedBox] = {
+                inputs
                   .map { box => // declare fake inclusion height in order to confirm the box is onchain
                     TrackedBox(box.transactionId, box.index, Some(1), None, None, box, BoxCertainty.Certain)
                   }
-                  .toIterator, noFilter: TrackedBox => Boolean)
+                  .toIterator
+              }
+
+              val (inputBoxes, filter) = if (inputs.nonEmpty) {
+                //inputs are provided externally, no need for filtering
+                (boxesToFakeTracked(inputBoxes), noFilter: TrackedBox => Boolean)
               } else {
                 //inputs are to be selected by the wallet
                 (registry.readCertainUnspentBoxes.toIterator, onChainFilter: TrackedBox => Boolean)

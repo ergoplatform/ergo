@@ -6,7 +6,7 @@ import scorex.util.ModifierId
 
 class HeadersSpec extends ErgoPropertyTest {
 
-  val chain: HeaderChain = genHeaderChain(50)
+  val chain: HeaderChain = genHeaderChain(50, diffBitsOpt = None, useRealTs = false)
   val genesisId: ModifierId = chain.head.id
 
   property("Any field change should lead to different id") {

@@ -67,7 +67,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   )
   val cs = realNetworkSetting.chainSettings
 
-  val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, cs, settings.testingSettings,
+  val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, cs, settings.testingSettings,
     nodeSettings, settings.scorexSettings, settings.walletSettings, CacheSettings.default)
   val stateDir = ErgoState.stateDir(fullHistorySettings)
   stateDir.mkdirs()

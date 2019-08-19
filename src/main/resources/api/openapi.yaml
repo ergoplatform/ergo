@@ -2454,3 +2454,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
+
+  /script/addressToTree/{address}:
+    get:
+      summary: Convert an address to hex-encoded serialized ErgoTree (script)
+      operationId: addressToTree
+      tags:
+        - script
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to get a script from
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: Base16-encoded ErgoTree (script)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tree:
+                    type: string
+                    description: serialized Ergo tree
+                    example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'

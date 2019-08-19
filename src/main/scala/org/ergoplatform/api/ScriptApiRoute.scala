@@ -21,6 +21,8 @@ import scala.util.{Failure, Success, Try}
 import akka.pattern.ask
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import scorex.core.settings.RESTApiSettings
+import scorex.util.encode.Base16
+import io.circe.syntax._
 
 case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
@@ -35,7 +37,8 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     toStrictEntity(10.seconds) {
       corsHandler {
         p2shAddressR ~
-          p2sAddressR
+          p2sAddressR ~
+          addressToTree
       }
     }
   }
@@ -86,6 +89,16 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         address => ApiResponse(addressResponse(address))
       )
     }
+  }
+
+  def addressToTree: Route = (get & path("addressToTree" / Segment)) { addressStr =>
+    addressEncoder.fromString(addressStr)
+      .map(address => address.script.bytes)
+      .map(Base16.encode)
+      .fold(
+        e => BadRequest(e.getMessage),
+        tree => ApiResponse(Map("tree" -> tree).asJson)
+      )
   }
 
 }

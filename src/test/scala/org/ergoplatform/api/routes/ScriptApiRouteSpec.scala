@@ -24,7 +24,7 @@ class ScriptApiRouteSpec  extends FlatSpec
   val prefix = "/script"
 
   val ergoSettings: ErgoSettings = ErgoSettings.read(
-    Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkIdOpt = None))
+    Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = ScriptApiRoute(readersRef, settings).route
 
   implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)

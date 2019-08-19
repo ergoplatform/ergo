@@ -47,7 +47,7 @@ trait FullBlockProcessor extends HeadersProcessor {
                                  newMod: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
     val bestFullChainAfter = calculateBestChain(fullBlock.header)
     val newBestBlockHeader = typedModifierById[Header](bestFullChainAfter.last).ensuring(_.isDefined)
-    processing(ToProcess(fullBlock, newMod, newBestBlockHeader, config.blocksToKeep, bestFullChainAfter))
+    processing(ToProcess(fullBlock, newMod, newBestBlockHeader, nodeSettings.blocksToKeep, bestFullChainAfter))
   }
 
   private def processing: BlockProcessing =
@@ -89,7 +89,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       logStatus(toRemove, toApply, fullBlock, Some(prevBest))
       val branchPoint = toRemove.headOption.map(_ => prevChain.head.id)
 
-      val minForkRootHeight = newBestBlockHeader.height - config.blocksToKeep
+      val minForkRootHeight = newBestBlockHeader.height - nodeSettings.blocksToKeep
       // remove block ids which have no chance to be applied
       if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
 
@@ -122,7 +122,7 @@ trait FullBlockProcessor extends HeadersProcessor {
   private def nonBestBlock: BlockProcessing = {
     case params =>
       val block = params.fullBlock
-      if (block.header.height > fullBlockHeight - config.keepVersions) {
+      if (block.header.height > fullBlockHeight - nodeSettings.keepVersions) {
         nonBestChainsCache = nonBestChainsCache.add(block.id, block.parentId, block.header.height)
       }
       //Orphaned block or full chain is not initialized yet

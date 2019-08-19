@@ -7,11 +7,11 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
+import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
@@ -29,9 +29,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   protected val historyStorage: HistoryStorage
 
-  protected val config: NodeConfigurationSettings
-
-  protected val chainSettings: ChainSettings
+  protected val settings: ErgoSettings
 
   val powScheme: AutolykosPowScheme
 
@@ -97,7 +95,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       case Some(bestHeaderId) =>
         // If we verify transactions, we don't need to send this header to state.
         // If we don't and this is the best header, we should send this header to state to update state root hash
-        val toProcess = if (config.verifyTransactions || !(bestHeaderId == h.id)) Seq.empty else Seq(h)
+        val toProcess = if (nodeSettings.verifyTransactions || !(bestHeaderId == h.id)) Seq.empty else Seq(h)
         ProgressInfo(None, Seq.empty, toProcess, toDownload(h))
       case None =>
         log.error("Should always have best header after header application")
@@ -233,16 +231,36 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   private def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 
-  def requiredDifficultyAfter(parent: Header): Difficulty = {
-    val parentHeight = parent.height
-    val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
-      .ensuring(_.last == parentHeight)
-    if (heights.lengthCompare(1) == 0) {
-      difficultyCalculator.calculate(Seq(parent))
+  /**
+    * Calculate difficulty for the next block
+    *
+    * @param parent - latest block
+    * @param nextBlockTimestampOpt - timestamp of the next block, used in testnets only, see acomment withing the method
+    * @return - difficulty for the next block
+    */
+  def requiredDifficultyAfter(parent: Header,
+                              nextBlockTimestampOpt: Option[Long] = None): Difficulty = {
+    // if testing or dev network, difficulty is set to a minimum value if there is no block for
+    // `Constants.DiffFallbackDuration` (5 minutes)
+    lazy val timeDifference = nextBlockTimestampOpt.getOrElse(timeProvider.time()) - parent.timestamp
+    val fallbackRequired = !settings.networkType.isMainNet && timeDifference >= Constants.DiffFallbackDuration.toMillis
+
+    if (fallbackRequired) {
+      Constants.FallbackDiff
     } else {
-      val chain = headerChainBack(heights.max - heights.min + 1, parent, (_: Header) => false)
-      val headers = chain.headers.filter(p => heights.contains(p.height))
-      difficultyCalculator.calculate(headers)
+      //todo: it is slow to read thousands headers from database for each header
+      //todo; consider caching here
+      //todo: https://github.com/ergoplatform/ergo/issues/872
+      val parentHeight = parent.height
+      val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
+        .ensuring(_.last == parentHeight)
+      if (heights.lengthCompare(1) == 0) {
+        difficultyCalculator.calculate(Seq(parent))
+      } else {
+        val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
+        val headers = chain.headers.filter(p => heights.contains(p.height))
+        difficultyCalculator.calculate(headers)
+      }
     }
   }
 
@@ -271,7 +289,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateNoFailure(hdrPoW, powScheme.validate(header))
         .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, chainSettings.initialDifficulty)
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
-        .validate(hdrTooOld, fullBlockHeight < config.keepVersions, heightOf(header.parentId).toString)
+        .validate(hdrTooOld, fullBlockHeight < nodeSettings.keepVersions, heightOf(header.parentId).toString)
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .result
     }
@@ -281,8 +299,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, s"${header.timestamp} > ${parent.timestamp}")
         .validate(hdrHeight, header.height == parent.height + 1, s"${header.height} vs ${parent.height}")
         .validateNoFailure(hdrPoW, powScheme.validate(header))
-        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent))
-        .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < config.keepVersions), heightOf(header.parentId).toString)
+        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent, Some(header.timestamp)))
+        .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), heightOf(header.parentId).toString)
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)

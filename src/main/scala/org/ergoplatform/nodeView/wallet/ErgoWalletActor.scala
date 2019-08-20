@@ -284,7 +284,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   /**
     * This filter is not filtering out anything, used when the wallet works with externally provided boxes.
     */
-  private val noFilter: FilterFn = (trackedBox: TrackedBox) => true
+  private val noFilter: FilterFn = (_: TrackedBox) => true
 
   /**
     * Tries to prove given box in order to define whether it could be spent by this wallet.

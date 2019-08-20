@@ -273,8 +273,18 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def trackedAddresses: Seq[ErgoAddress] = storage.readTrackedAddresses
 
-  private def onChainFilter(trackedBox: TrackedBox): Boolean = trackedBox.chainStatus.onChain &&
+  private type FilterFn = TrackedBox => Boolean
+  /**
+    * This filter is selecting boxes which are onchain and not spent offchain yet.
+    * This filter is used when wallet is looking through its boxes to assemble a transaction.
+    */
+  private val onChainFilter: FilterFn = (trackedBox: TrackedBox) => trackedBox.chainStatus.onChain &&
     offChainRegistry.onChainBalances.exists(_.id == encodedBoxId(trackedBox.box.id))
+
+  /**
+    * This filter is not filtering out anything, used when the wallet works with externally provided boxes.
+    */
+  private val noFilter: FilterFn = (_: TrackedBox) => true
 
   /**
     * Tries to prove given box in order to define whether it could be spent by this wallet.
@@ -359,6 +369,17 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     }
 
   /**
+    * A helper method which makes TrackedBox sequence out of boxes provided
+    */
+  private def boxesToFakeTracked(inputs: Seq[ErgoBox]): Iterator[TrackedBox] = {
+    inputs
+      .map { box => // declare fake inclusion height in order to confirm the box is onchain
+        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, BoxCertainty.Certain)
+      }
+      .toIterator
+  }
+
+  /**
     * Generates new transaction according to a given requests using available boxes.
     */
   private def generateTransactionWithOutputs(requests: Seq[TransactionRequest],
@@ -396,17 +417,15 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                   AssetUtils.mergeAssets(boxTokens, acc)
                 }
 
-              val inputBoxes = if (inputs.nonEmpty) {
-                inputs
-                  .map { box => // declare fake inclusion height in order to confirm the box is onchain
-                    TrackedBox(box.transactionId, box.index, Some(1), None, None, box, BoxCertainty.Certain)
-                  }
-                  .toIterator
+              val (inputBoxes, filter) = if (inputs.nonEmpty) {
+                //inputs are provided externally, no need for filtering
+                (boxesToFakeTracked(inputs), noFilter)
               } else {
-                registry.readCertainUnspentBoxes.toIterator
+                //inputs are to be selected by the wallet
+                (registry.readCertainUnspentBoxes.toIterator, onChainFilter)
               }
 
-              val selectionOpt = boxSelector.select(inputBoxes, onChainFilter, targetBalance, targetAssets)
+              val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
 
               val makeTx = prepareTransaction(prover, payTo) _
 

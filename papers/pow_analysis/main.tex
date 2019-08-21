@@ -380,11 +380,11 @@ $$g^a = \prod_{j\in J}{b_j}^{\prod_{i\in J, i\neq j}\frac{-i}{j-i}}$$
 
 Assume that somehow the parties have obtained sharing of private keys $[s]$ and $[x]$. They can compute the corresponding public keys $p, w$ using the public bulletin board as explained above, from which they can compute $r$. 
 
-Each party $i$ can then locally compute the Shamir sharing $[d]$ of $d = rx+s$ using the relation $d_i = rx_i+s_i$.
-The parties then post the shares $d_i$ on the public bulletin board so that everyone can compute $d$ in the clear.
+The parties can than locally compute the Shamir sharing $[d]$ of $d = rx+s$ using the relation $d_i = rx_i+s_i$ for party $i$.
+The parties then post the shares $d_i$ on the public bulletin board so that everyone can compute $d$ in the clear. This is the step that requires a large public broadcast. 
 
 
-It remains to show how the parties can generate the initial sharings $[s]$ and $[x]$ without a dealer so that none of them know the secrets. This can be done using Replicated Secret Sharing (RSS) as described in~\cite[Section 3.2.3]{SSCMD92}, which allows each party to non-interactively generate a large number of such shares after some small pre-computation.
+It remains to show how the parties can generate the initial sharings $[s]$ and $[x]$ without a dealer so that none of them know the secrets. This can be done using Replicated Secret Sharing (RSS) as described in~\cite[Section 3.2.3]{SSCMD92}, which allows each party to non-interactively generate an arbitrary number such shares after some small pre-computation.
 
 
 \end{document}

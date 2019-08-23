@@ -86,7 +86,7 @@
 
 
 \title{An Overview of \powname, the Ergo PoW}
-\author{Developers}
+\author{Ergo Developers}
 %\institute{Ergo Platform}
 \maketitle
 
@@ -155,7 +155,7 @@ A correct solution can be checked using one signature verification operation, wh
 %Before going on to discuss the features of the above scheme, we first describe how to find a solution. 
 Because of the nature of the signature scheme used, the value of $d$ is almost uniformly distributed in $[0..2^{256}-1]$ (see Appendix~\ref{generating} for details). The only known approach to find such a $d$ is to try different values of $n$ (and possibly $w$), and then check if the resulting $d$ is less than $b$.
 Thus, as in Bitcoin, the probability of $d$ being in the correct range is approximately $b/2^{256}$, which is the probability of finding the right solution in one try.
-In \powname, special care is taken to ensure that finding the right solution is {\em memory hard}, i.e., it requires either too much time or too much memory. 
+In \powname, special care is taken to ensure that finding the right solution is {\em memory hard}, i.e., it requires either too much time or too much memory. However, verifying a correct solution is very fast.
 %It is done by constructing the hash function underlying the signature scheme in a specific way. The primary purpose of this is to make \powname ASIC resistant~\cite{autolykos}. 
 \section{Emission Box}
 
@@ -190,7 +190,7 @@ We describe a simple approach to create a mining pool in Ergo.
 A valid share is a solution to a block with the above structure. A pool operator collects such shares and any funds thus received are distributed among the miners based on the number of shares they submitted. One drawback of this is that each miner must have an equivalent amount of ergs to cover the reward amount at any time, even though the reward become spendable only after 720 blocks. 
 This means that in order to continue mining after a block is found, each miner must keep the reserved amount of at least 2 rewards (possibly more depending on the expected time to find a block).
 
- To overcome this, a pool may provide incentives such as allowing the miner to keep a small fraction of the reward (example for the current reward of 67.5 ergs, the pool may require only 65 ergs to be sent to it). A pool transaction can pay to any pool defined address. For instance, it could be a P2SH address of \texttt{poolPubKey}. 
+ To overcome this drawback, a pool may provide incentives such as allowing the miner to keep a small fraction of the reward (example for the current reward of 67.5 ergs, the pool may require only 65 ergs to be sent to it). A pool transaction can pay to any pool defined address. For instance, it could be a P2SH address of \texttt{poolPubKey}. 
 
 
 \textbf{The broadcast attack:} Let Alice be a miner with public key $alice$. If such a system is used in, say Bitcoin, then the system becomes insecure. Once the pool-paying transaction is publicized, anyone (not necessarily Alice) may broadcast it (possibly by using it as their own pool transaction). 
@@ -346,29 +346,29 @@ In this case, the work to compute the unfinalized hashes would be done only once
 \label{impl}
 %\textbf{Discussion:} 
 The above solution is equivalent to the original Schnorr signature of Section~\ref{schnorr} with a change of variable names. 
-Note that the sizes of nonce $n$ and message $m$ is fixed, so $I(m\|n)$ is equivalent to another hash function ${I}'(m, n)$.
-Let ${m'} = (m, n)$. The signature is computed on ${m'}$ with 
-$r = F({m'},w,{p}) = \sum^{k}_{j=1}H(a_j\|M\|{p}\|m\|w)$, where $a_j$ is the $j^{\tiny\mbox{th}}$ element of ${I'}(m,n)$.
-
-Using Equation~\ref{verif} and replacing ${m'}$ by $m, n$, we can rewrite this as 
+%Note that the sizes of nonce $n$ and message $m$ is fixed, so $I(m\|n)$ is equivalent to another hash function ${I}'(m, n)$.
+%Let ${m'} = (m, n)$. 
+The signature is computed on ${m\|n}$ with 
+$r = F({m\|n},w,{p}) = \sum^{k}_{j=1}H(a_j\|M\|{p}\|m\|w)$, where $a_j$ is the $j^{\tiny\mbox{th}}$ element of ${I}(m\|n)$.
+Using Equation~\ref{verif} 
+%and replacing ${m'}$ by $m, n$, 
+we can rewrite this as 
 \begin{equation}\label{eqn2}
-r = F(m, n,w,w^rg^{-d})
+r = F(m\|n,w,w^rg^{-d})
 \end{equation}
 Solving the puzzle requires trying different nonces $n$ and group elements $w$ till we get a signature satisfying $-b\leq d \leq b$. 
 Security follows if we assume that Schnorr signatures are unforgeable. Outsourcing the puzzle is equivalent to outsourcing the signature creating algorithm. The only difference from conventional Schnorr signature scheme of Section~\ref{schnorr} is in the design of function $F$. In particular, it is constructed in a way that efficient massive evaluation with different nonces requires allocating a large amount of memory, while a single evaluation by the verifier can be done quickly.
 
-\subsubsection{Security} 
+\subsection{Security} 
 The same $w$ (and thus, $x$) should never be reused, otherwise this will leak the secret ${s}$ as follows. Let $d = xr-{s}$ and $d' = xr'-{s}$ be two solutions. Then $x = (d-d')/(r-r')$, using which we can compute $s$. One way to ensure that $x$ is never reused for two different messages is to keep $x = f(s, m)$, where $f$ is a collision resistant hash function.
 
-\subsection{Distributed Mining}
+\subsubsection{Computing $d$ Without Knowing $(s, x)$}
 
-Note that for any solution $(m, p, w, n, d)$ generated using secrets $(s, x)$, anyone knowing one of the secrets can compute the other due to the relation $d = rx+s$ with public $r$. Thus, someone either knows both the secrets $(x, s)$ or none of them, and we cannot construct pooled mining schemes where the participant knows $x$ but not $s$ (needed for spending). The only possible alternative is to compute $rx+s$ knowing only $r$. 
+Note that for any solution $(m, p, w, n, d)$ generated using secrets $(s, x)$, anyone knowing one of the secrets can compute the other due to the relation $d = rx+s$ with public $r$. Thus, someone either knows both the secrets $(x, s)$ or none of them, and we cannot have a method where the party knows $x$ but not $s$ (needed for spending). The only possible alternative is to compute $rx+s$ knowing only $r$. 
+We show that it is indeed possible for several parties to know $rx+s$ for some given $r$ without knowing $(s, x)$. 
+%The method we describe below requires the parties to make one public broadcast of several GBs per block. While not very useful currently due to the data transfer overhead, this may become practical in the future when this can be achieved. 
 
-
-We show that it is indeed possible for several parties to know $rx+s$ for some given $r$ without knowing $(r, s)$. 
-The method we describe below requires the parties to make one public broadcast of several GBs per block. While not very useful currently due to the data transfer overhead, this may become practical in the future when this can be achieved. 
-
-First we give some notation. For any $a\in \mathbb{Z}_q$, we denote $[a]$ as the Shamir sharing of $a$ over $\alpha$ people with threshold $\beta$. Recall that for $[a]$ having shares $a_1, a_2\ldots, a_\alpha$, we can compute $a$ if at least $\beta+1$ parties reveal their shares as follows~\cite{shamir1979share}. Let $J\subset [1\ldots\alpha]$ be such that  $|J| = \beta + 1$. Then: 
+First we give some notation. For any $a\in \mathbb{Z}_q$, we denote $[a]$ as the Shamir sharing of $a$ over $\alpha$ people with threshold $\beta$. The sharing $[a]$ is represented using shares $a_1, a_2\ldots, a_\alpha$ distributed among $\alpha$ members, where share $a_i$ is held by member $i$. We can compute $a$ if at least $\beta+1$ parties reveal their shares as follows~\cite{shamir1979share}. Let $J\subset [1\ldots\alpha]$ be such that  $|J| = \beta + 1$. Then: 
 
 
 $$a = \sum_{j\in J}\left(a_j\prod_{i\in J, i\neq j}\frac{-i}{j-i}\right)$$
@@ -378,10 +378,9 @@ Since the discrete log problem in $G$ is hard, each party $i$ can safely reveal 
 
 $$g^a = \prod_{j\in J}{b_j}^{\prod_{i\in J, i\neq j}\frac{-i}{j-i}}$$
 
-Assume that somehow the parties have obtained sharing of private keys $[s]$ and $[x]$. They can compute the corresponding public keys $p, w$ using the public bulletin board as explained above, from which they can compute $r$. 
+Assume that somehow the parties have obtained sharing of private keys $[s]$ and $[x]$. They can compute the corresponding public keys $p, w$ using the public bulletin board as explained above, from which they can compute $r$ for any chosen $m, n$. The computation of $[s]$ and $[x]$ can be done in advance even when $m, n$ is not known. Thus, the parties could precompute a large set $S$ of such pairs of sharings, possibly reusing $[x]$ (but ensuring that $[s]$ is never reused).
 
-The parties can than locally compute the Shamir sharing $[d]$ of $d = rx+s$ using the relation $d_i = rx_i+s_i$ for party $i$.
-The parties then post the shares $d_i$ on the public bulletin board so that everyone can compute $d$ in the clear. This is the step that requires a large public broadcast. 
+For any given pair $(m, n)$, the parties deterministically pick and remove a pair $([s], [x])$ from $S$. Then they compute the Shamir sharing $[d]$ of $d = rx+s$ using the relation $d_i = rx_i+s_i$ for party $i$ and post the shares $(d_1, d_2, \ldots d_\alpha)$ on the public bulletin board so that everyone can compute $d$ in the clear. %This is the step that requires a large public broadcast. 
 
 
 It remains to show how the parties can generate the initial sharings $[s]$ and $[x]$ without a dealer so that none of them know the secrets. This can be done using Replicated Secret Sharing (RSS) as described in~\cite[Section 3.2.3]{SSCMD92}, which allows each party to non-interactively generate an arbitrary number such shares after some small pre-computation.

@@ -177,11 +177,21 @@ We note that there are other approaches to create a pool in Ergo that do not req
 
 %Note that a miner may not spend the emission box and could send the fee portion of the rewards to any address of choice. 
 
+\section{Comparing with Non-Outsourceable Puzzles}
+
+A non-outsourceable puzzle is one with the following properties~\cite{miller2015nonoutsourceable}. If any party is able to generate a solution $d$ for some block header $m$ that sends rewards too a pool address, then the same party can then efficiently generate another solution $d'$ for an $m'$ that sends rewards to any other chosen address, and that too without revealing the identity. This results in a race condition where the party can steal the rewards if the solution to $m'$ gets accepted, thereby making it non-outsourceable. 
+
+We note that non-outsourceability of~\cite{miller2015nonoutsourceable} is preserved if the ability to steal the rewards is present in the spending stage rather than in the mining stage. That is, any party that generates a valid solution for $m$ then has the ability to spend the reward transaction of $m$ in an untraceable manner. 
+In this view, Ergo is a special instance of a non-outsourceable puzzle of~\cite{miller2015nonoutsourceable}, where the contention is not to generate a new message $m'$, that sends the reward to a different address (which is not possible in Ergo). Instead the goal is to steal the reward 720 blocks later, when it becomes spendable. 
+
 \section{Creating an Ergo Mining Pool}
 
-We describe a simple approach to create a mining pool in Ergo. 
+Despite Ergo being a special instance of a non-outsourceable puzzle, there is a way to create a pool in Ergo that does not generalize to other instances of such puzzles. Thus, Ergo serves as a counterexample  
+that all instances of non-outsourceable puzzles are pool resistant. This sections describes a way to create an Ergo mining pool. 
 
-\textbf{Basic variant:} We first describe a protocol that is insecure. We then extend the basic version to get the full version. The key observation is that in a valid share, the reward need not necessarily be sent directly to the pool's address. What is actually necessary is that an amount equivalent to the reward is sent to the pool's address. This simple observation allows us to create a pool with the following rules:
+\textbf{Basic variant:} We first describe a basic version that is insecure, and thereby does not work for general non-outsourceable puzzles. However, Ergo has certain features (or bugs) that enable us to patch this vulnerability, thereby breaking its non-outsourceability. We demonstrate this in the full version by extending the basic one. 
+
+The key observation is that in a valid share, the reward need not necessarily be sent directly to the pool's address. What is actually necessary is that an amount equivalent to the reward is sent to the pool's address. This simple observation allows us to create a pool with the following rules:
 \begin{enumerate}
 	\item Each miner can send the reward to his own public key $p$, whose secret key only he knows ({\em reward transaction}).
 	\item The block must also have another transaction sending the same amount as the reward to the pool address ({\em pool transaction}).
@@ -202,6 +212,7 @@ This means that in order to continue mining after a block is found, each miner m
 The first part ensures that when used to fund the pool output, the miner must be Alice. The second ensures that the coins are not stuck till Alice finds a block (if ever). Here \texttt{bob} is another public key owned by Alice.
 
 Note that the above attack mitigation strategy is unique to Ergo and will not work in generic pool-resistant protocols described in~\cite{miller2015nonoutsourceable}. One may envisage a hiding strategy, where the pool transaction is not revealed in a share (only a commitment is revealed). The actual transaction is revealed only for claiming shares or if a block is found. However, this is also insecure as discussed below. First note that there are two types of broadcast attacks. The first is the ``extract from share'' attack discussed above. The second is the ``extract from orphaned block'' attack, where the transaction is extracted from a mined block that ends up getting orphaned. While the hiding strategy works for the first attack, it does not mitigate the second. 
+
 
 \bibliographystyle{unsrt}
 \bibliography{main}
@@ -302,7 +313,7 @@ The part that makes \powname memory-hard is the way $F$ is implemented.
 The goal is to find a nonce $n\in \{0,1\}^*$ and a solution $d$ such that $-b \leq d\leq b$, where $d$ is computed using the following algorithm:
 
 \begin{enumerate}
-	\item Generate random $n\in \{0,1\}^*$.
+	\item Generate random $n\in \{0,1\}^{64}$.
 	\item Compute $(a_1, a_2, \ldots a_k) = I(m\|n)$,  
 	a list of $k$ elements from $\mathbb{Z}_N$.
 	\item Compute $r = \sum^{k}_{j=1} H(a_j\|M\|{p}\|m\|w)$, where the addition is in $\mathbb{Z}_q$.
@@ -365,25 +376,27 @@ The same $w$ (and thus, $x$) should never be reused, otherwise this will leak th
 \subsubsection{Computing $d$ Without Knowing $(s, x)$}
 
 Note that for any solution $(m, p, w, n, d)$ generated using secrets $(s, x)$, anyone knowing one of the secrets can compute the other due to the relation $d = rx+s$ with public $r$. Thus, someone either knows both the secrets $(x, s)$ or none of them, and we cannot have a method where the party knows $x$ but not $s$ (needed for spending). The only possible alternative is to compute $rx+s$ knowing only $r$. 
-We show that it is indeed possible for several parties to know $rx+s$ for some given $r$ without knowing $(s, x)$. 
+We show that it is indeed possible for several parties to compute $rx+s$ for some given $r$ without knowing $(s, x)$. 
 %The method we describe below requires the parties to make one public broadcast of several GBs per block. While not very useful currently due to the data transfer overhead, this may become practical in the future when this can be achieved. 
 
-First we give some notation. For any $a\in \mathbb{Z}_q$, we denote $[a]$ as the Shamir sharing of $a$ over $\alpha$ people with threshold $\beta$. The sharing $[a]$ is represented using shares $a_1, a_2\ldots, a_\alpha$ distributed among $\alpha$ members, where share $a_i$ is held by member $i$. We can compute $a$ if at least $\beta+1$ parties reveal their shares as follows~\cite{shamir1979share}. Let $J\subset [1\ldots\alpha]$ be such that  $|J| = \beta + 1$. Then: 
+First we give some notation. For any $a\in \mathbb{Z}_q$, we denote $[a]$ as the Shamir sharing of $a$ over $\alpha$ people with threshold $\beta$. The sharing $[a]$ is represented using shares $a_1, a_2\ldots, a_\alpha$ distributed among $\alpha$ members, where share $a_i$ is held by member $i$. We can compute $a$ if at least $\beta$ parties reveal their shares as follows~\cite{shamir1979share}. Let $J\subset [1\ldots\alpha]$ be such that  $|J| = \beta$. Then: 
 
 
 $$a = \sum_{j\in J}\left(a_j\prod_{i\in J, i\neq j}\frac{-i}{j-i}\right)$$
 
 
-Since the discrete log problem in $G$ is hard, each party $i$ can safely reveal $b_i = g^{a_i}$ for $i \in [1..\alpha]$ to the entire world via a public bulletin board. While $b_i$ does not leak anything useful about $a_i$, it allows everyone to compute $g^a$ using the relation:
+Assuming that the discrete log problem in $G$ is hard, each party $i$ can safely reveal $b_i = g^{a_i}$ for $i \in [1..\alpha]$ to the entire world 
+%via a public bulletin board 
+without revealing anything useful about $a_i$ other than giving everyone the ability to compute $g^a$ using the relation:
 
 $$g^a = \prod_{j\in J}{b_j}^{\prod_{i\in J, i\neq j}\frac{-i}{j-i}}$$
 
-Assume that somehow the parties have obtained sharing of private keys $[s]$ and $[x]$. They can compute the corresponding public keys $p, w$ using the public bulletin board as explained above, from which they can compute $r$ for any chosen $m, n$. The computation of $[s]$ and $[x]$ can be done in advance even when $m, n$ is not known. Thus, the parties could precompute a large set $S$ of such pairs of sharings, possibly reusing $[x]$ (but ensuring that $[s]$ is never reused).
+Assume that somehow the parties have obtained sharing of private keys $[s]$ and $[x]$. They can compute the corresponding public keys $p, w$ using the above approach, from which they can compute $r$ for any chosen $m, n$. The computation of $[s]$ and $[x]$ can be done in advance even when $m, n$ are not known. Thus, the parties could precompute a large set $S$ of such pairs of sharings, possibly reusing $[s]$ (but ensuring that $[x]$ is never reused).
 
-For any given pair $(m, n)$, the parties deterministically pick and remove a pair $([s], [x])$ from $S$. Then they compute the Shamir sharing $[d]$ of $d = rx+s$ using the relation $d_i = rx_i+s_i$ for party $i$ and post the shares $(d_1, d_2, \ldots d_\alpha)$ on the public bulletin board so that everyone can compute $d$ in the clear. %This is the step that requires a large public broadcast. 
-
-
-It remains to show how the parties can generate the initial sharings $[s]$ and $[x]$ without a dealer so that none of them know the secrets. This can be done using Replicated Secret Sharing (RSS) as described in~\cite[Section 3.2.3]{SSCMD92}, which allows each party to non-interactively generate an arbitrary number such shares after some small pre-computation.
+For any given pair $(m, n)$, the parties deterministically pick and remove a pair $([s], [x])$ from $S$. Then they compute the Shamir sharing $[d]$ of $d = rx+s$ using the relation $d_i = rx_i+s_i$ for party $i$ (see~\cite[Section 2.4.2]{SSCMD92}) and post the shares $(d_1, d_2, \ldots d_\alpha)$ on the public bulletin board so that everyone can compute $d$ in the clear. %This is the step that requires a large public broadcast. 
 
 
+It remains to show how the parties can generate the initial sharings $[s]$ and $[x]$ without a dealer so that none of them know the secrets. This can be done using Replicated Secret Sharing (RSS) as described in~\cite[Section 3.2.3]{SSCMD92}, which allows each party to non-interactively generate an arbitrary number of such shares after some small pre-computation.
+
+Note that while this approach allows multiple parties to compute $d$ in a distributed manner such that no one knows the secrets, this is only useful for mining if the number of parties are small, such as 2 or 3. In particular, the following strategy may be used for two parties (i.e., $\alpha = \beta = 2$). Each party $i\in\{0,1\}$ computes several tuples $(n_1, r_1, d_{i_1}), (n_2, r_2, d_{i_2}), (n_3, r_3, d_{i_3}) \ldots$ corresponding to nonces $n_1, n_2, n_3\ldots$ and sends them to party $j = 1-i$ along with the block candidate. On receiving the tuples, party $j$ computes $(d_{j_1}, d_{j_2}, d_{j_3}\ldots)$ and then finally $(d_1, d_2, d_3\ldots)$. Any $d$ that has the right amount of leading zeros will be the solution and can be broadcast. 
 \end{document}

@@ -32,8 +32,8 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
 
     val insertedKeys = mutable.ArrayBuffer.empty[K]
     val altered = mutable.ArrayBuffer.empty[(K, V)]
-    for ((k, _) <- toInsert) Option(db.get(k, ro))
-      .fold[Unit](insertedKeys += k)(oldValue => altered += (k -> oldValue))
+    toInsert.foreach(x => Option(db.get(x._1, ro))
+      .fold[Unit](insertedKeys += x._1)(oldValue => altered += (x._1 -> oldValue)))
 
     val removed = toRemove.flatMap { k =>
       Option(db.get(k, ro)).map(k -> _)

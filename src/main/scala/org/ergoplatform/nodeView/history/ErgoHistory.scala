@@ -213,11 +213,11 @@ object ErgoHistory extends ScorexLogging {
     new LDBKVStore(db)
   }
 
-  def readOrGenerate(settings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
-    val indexStore = createDb(s"${settings.directory}/history/index")
-    val objectsStore = createDb(s"${settings.directory}/history/objects")
-    val db = new HistoryStorage(indexStore, objectsStore, settings.cacheSettings)
-    val nodeSettings = settings.nodeSettings
+  def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
+    val indexStore = createDb(s"${ergoSettings.directory}/history/index")
+    val objectsStore = createDb(s"${ergoSettings.directory}/history/objects")
+    val db = new HistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
+    val nodeSettings = ergoSettings.nodeSettings
 
     val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.poPoWBootstrap) match {
       case (true, true) =>

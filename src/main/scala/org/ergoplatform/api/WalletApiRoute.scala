@@ -15,15 +15,10 @@ import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
-import sigmastate.Values.ErgoTree
-import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.eval.RuntimeIRContext
-import sigmastate.lang.SigmaCompiler
-import sigmastate.{SBoolean, SSigmaProp}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
@@ -50,8 +45,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           generateTransactionR ~
           sendPaymentTransactionR ~
           sendTransactionR ~
-          p2shAddressR ~
-          p2sAddressR ~
           initWalletR ~
           restoreWalletR ~
           unlockWalletR ~
@@ -61,13 +54,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           updateChangeAddressR
       }
     }
-  }
-
-  private val loadMaxKeys: Int = 100
-
-  private val source: Directive1[String] = entity(as[Json]).flatMap { p =>
-    p.hcursor.downField("source").as[String]
-      .fold(_ => reject, s => provide(s))
   }
 
   private val password: Directive1[String] = entity(as[Json]).flatMap { p =>
@@ -124,25 +110,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         }
     }
 
-  private def addressResponse(address: ErgoAddress): Json = Json.obj("address" -> addressJsonEncoder(address))
-
-  private def keysToEnv(keys: Seq[ProveDlog]): Map[String, Any] = {
-    keys.zipWithIndex.map { case (pk, i) => s"myPubKey_$i" -> pk }.toMap
-  }
-
-  private def compileSource(source: String, env: Map[String, Any]): Try[ErgoTree] = {
-    import sigmastate.Values._
-    val compiler = SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
-    Try(compiler.compile(env, source)(new RuntimeIRContext)).flatMap {
-      case script: Value[SSigmaProp.type@unchecked] if script.tpe == SSigmaProp =>
-        Success(script)
-      case script: Value[SBoolean.type@unchecked] if script.tpe == SBoolean =>
-        Success(script.toSigmaProp)
-      case other =>
-        Failure(new Exception(s"Source compilation result is of type ${other.tpe}, but `SBoolean` expected"))
-    }
-  }
-
   private def withFee(requests: Seq[TransactionRequest]): Seq[TransactionRequest] = {
     requests :+ PaymentRequest(Pay2SAddress(ergoSettings.chainSettings.monetary.feeProposition),
       ergoSettings.walletSettings.defaultTransactionFee, Seq.empty, Map.empty)
@@ -186,26 +153,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet(_.confirmedBalances)
   }
 
-  def unconfirmedBalanceR: Route = (path("balances" / "with_unconfirmed") & get) {
+  def unconfirmedBalanceR: Route = (path("balances" / "withUnconfirmed") & get) {
     withWallet(_.balancesWithUnconfirmed)
-  }
-
-  def p2sAddressR: Route = (path("p2s_address") & post & source) { source =>
-    withWalletOp(_.publicKeys(0, loadMaxKeys)) { addrs =>
-      compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SAddress.apply).fold(
-        e => BadRequest(e.getMessage),
-        address => ApiResponse(addressResponse(address))
-      )
-    }
-  }
-
-  def p2shAddressR: Route = (path("p2sh_address") & post & source) { source =>
-    withWalletOp(_.publicKeys(0, loadMaxKeys)) { addrs =>
-      compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SHAddress.apply).fold(
-        e => BadRequest(e.getMessage),
-        address => ApiResponse(addressResponse(address))
-      )
-    }
   }
 
   def addressesR: Route = (path("addresses") & get) {

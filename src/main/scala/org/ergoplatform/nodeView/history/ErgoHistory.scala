@@ -44,7 +44,7 @@ trait ErgoHistory
     with ErgoHistoryReader {
 
   override type NVCT = ErgoHistory
-  override protected lazy val requireProofs: Boolean = config.stateType.requireProofs
+  override protected lazy val requireProofs: Boolean = nodeSettings.stateType.requireProofs
 
   def closeStorage(): Unit = historyStorage.close()
 
@@ -223,8 +223,7 @@ object ErgoHistory extends ScorexLogging {
       case (true, true) =>
         new ErgoHistory with FullBlockSectionProcessor
           with FullPoPoWProofsProcessor {
-          override protected val chainSettings: ChainSettings = settings.chainSettings
-          override protected val config: NodeConfigurationSettings = nodeSettings
+          override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
@@ -233,8 +232,7 @@ object ErgoHistory extends ScorexLogging {
       case (false, true) =>
         new ErgoHistory with EmptyBlockSectionProcessor
           with FullPoPoWProofsProcessor {
-          override protected val chainSettings: ChainSettings = settings.chainSettings
-          override protected val config: NodeConfigurationSettings = nodeSettings
+          override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
@@ -243,8 +241,7 @@ object ErgoHistory extends ScorexLogging {
       case (true, false) =>
         new ErgoHistory with FullBlockSectionProcessor
           with EmptyPoPoWProofsProcessor {
-          override protected val chainSettings: ChainSettings = settings.chainSettings
-          override protected val config: NodeConfigurationSettings = nodeSettings
+          override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
@@ -253,8 +250,7 @@ object ErgoHistory extends ScorexLogging {
       case (false, false) =>
         new ErgoHistory with EmptyBlockSectionProcessor
           with EmptyPoPoWProofsProcessor {
-          override protected val chainSettings: ChainSettings = settings.chainSettings
-          override protected val config: NodeConfigurationSettings = nodeSettings
+          override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp

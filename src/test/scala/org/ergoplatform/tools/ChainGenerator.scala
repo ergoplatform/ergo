@@ -36,7 +36,10 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
   implicit val ergoAddressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
-  val realNetworkSetting = ErgoSettings.read(Args(Some("src/main/resources/application.conf"), None))
+  val realNetworkSetting = {
+    val initSettings = ErgoSettings.read(Args(None, Some(NetworkType.TestNet)))
+    initSettings.copy(chainSettings = initSettings.chainSettings.copy(genesisId = None))
+  }
 
   val EmissionTxCost: Long = 20000
   val MinTxAmount: Long = 2000000
@@ -103,7 +106,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
       block.blockSections.foreach(s => if (!history.contains(s)) history.append(s).get)
 
       val outToPassNext = if (last.isEmpty) {
-        block.transactions.flatMap(_.outputs).find(_.proposition.toSigmaProp == minerProp)
+        block.transactions.flatMap(_.outputs).find(_.ergoTree == minerProp)
       } else {
         lastOut
       }
@@ -124,7 +127,7 @@ object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpe
                               ctx: ErgoStateContext): (Seq[ErgoTransaction], Option[ErgoBox]) = {
     inOpt
       .find { bx =>
-        val canUnlock = (bx.creationHeight + RewardDelay <= height) || (bx.proposition.toSigmaProp != minerProp)
+        val canUnlock = (bx.creationHeight + RewardDelay <= height) || (bx.ergoTree != minerProp)
         canUnlock && bx.ergoTree != cs.monetary.emissionBoxProposition && bx.value >= MinTxAmount
       }
       .map { input =>

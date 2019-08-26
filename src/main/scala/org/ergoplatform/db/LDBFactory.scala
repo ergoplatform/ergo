@@ -11,11 +11,14 @@ object LDBFactory extends ScorexLogging {
   private val javaFactory   = "org.iq80.leveldb.impl.Iq80DBFactory"
 
   lazy val factory: DBFactory = {
-    val pairs = for {
-      loader <- List(ClassLoader.getSystemClassLoader, this.getClass.getClassLoader).view
-      factoryName <- List(nativeFactory, javaFactory)
-      factory <- Try(loader.loadClass(factoryName).getConstructor().newInstance().asInstanceOf[DBFactory]).toOption
-    } yield (factoryName, factory)
+    val loaders = List(ClassLoader.getSystemClassLoader, this.getClass.getClassLoader)
+    val factories = List(nativeFactory, javaFactory)
+    val pairs = loaders.view
+      .zip(factories)
+      .flatMap { case (loader, factoryName) =>
+        Try(loader.loadClass(factoryName).getConstructor().newInstance().asInstanceOf[DBFactory]).toOption
+          .map(factoryName -> _)
+      }
 
     val (name, factory) = pairs.headOption.getOrElse(
       throw new RuntimeException(s"Could not load any of the factory classes: $nativeFactory, $javaFactory"))

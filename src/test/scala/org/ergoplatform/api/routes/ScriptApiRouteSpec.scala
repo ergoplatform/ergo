@@ -5,7 +5,7 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
-import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
+import org.ergoplatform.{Pay2SAddress, Pay2SHAddress}
 import org.ergoplatform.api.ScriptApiRoute
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.utils.Stubs

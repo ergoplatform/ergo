@@ -38,6 +38,7 @@ class NodeViewFixture(protoSettings: ErgoSettings) extends NodeViewTestContext {
 
   def stopNodeViewHolder(): Unit = {
     actorSystem.stop(nodeViewHolderRef)
+    Thread.sleep(2000)
   }
 
   /** Restarts nodeViewHolder and applies config override */

@@ -23,7 +23,7 @@ object UtxoStateBenchmark extends HistoryTestHelpers with NVBenchmark with App {
 
     def bench(mods: Seq[ErgoPersistentModifier]): Long = {
       val state = ErgoState.generateGenesisUtxoState(createTempDir, StateConstants(None, realNetworkSetting))._1
-      time {
+      Utils.time {
         mods.foldLeft(state) { case (st, mod) =>
           st.applyModifier(mod).get
         }

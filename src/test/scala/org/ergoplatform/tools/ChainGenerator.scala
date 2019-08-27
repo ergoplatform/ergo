@@ -1,9 +1,6 @@
 package org.ergoplatform.tools
 
 import java.io.File
-
-import akka.actor.ActorSystem
-import akka.testkit.TestKit
 import org.ergoplatform._
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty

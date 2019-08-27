@@ -49,4 +49,11 @@ object Utils {
     outWriter.close()
   }
 
+  def time[R](block: => R): Double = {
+    val t0 = System.nanoTime()
+    block // call-by-name
+    val t1 = System.nanoTime()
+    (t1.toDouble - t0) / 1000000
+  }
+
 }

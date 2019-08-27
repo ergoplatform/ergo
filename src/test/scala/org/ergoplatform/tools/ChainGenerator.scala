@@ -1,9 +1,6 @@
 package org.ergoplatform.tools
 
 import java.io.File
-
-import akka.actor.ActorSystem
-import akka.testkit.TestKit
 import org.ergoplatform._
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -31,10 +28,7 @@ import scala.util.Try
   * Generate blocks starting from start timestamp and until current time with expected block interval
   * between them, to ensure that difficulty does not change.
   */
-object ChainGenerator extends TestKit(ActorSystem()) with App with ErgoTestHelpers {
-
-  implicit val ergoAddressEncoder: ErgoAddressEncoder =
-    ErgoAddressEncoder(settings.chainSettings.addressPrefix)
+object ChainGenerator extends App with ErgoTestHelpers {
 
   val realNetworkSetting = {
     val initSettings = ErgoSettings.read(Args(None, Some(NetworkType.TestNet)))

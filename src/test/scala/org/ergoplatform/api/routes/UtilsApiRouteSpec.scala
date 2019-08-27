@@ -9,7 +9,7 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import org.ergoplatform.api.ErgoUtilsApiRoute
 import org.ergoplatform.utils.Stubs
-import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
+import org.ergoplatform.P2PKAddress
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
 
@@ -25,7 +25,6 @@ class UtilsApiRouteSpec extends FlatSpec
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
   val route: Route = ErgoUtilsApiRoute(settings).route
-  implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
   val p2pkaddress = P2PKAddress(defaultMinerPk)
 
   it should "do correct raw/address roundtrip" in {

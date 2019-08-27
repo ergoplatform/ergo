@@ -113,6 +113,7 @@ components:
         - spendingHeight
         - inclusionHeight
         - spent
+        - applicationId
       properties:
         box:
           $ref: '#/components/schemas/ErgoTransactionOutput'
@@ -162,10 +163,16 @@ components:
           type: integer
           format: int32
           example: 2
+        applicationId:
+          description: Application identifier a box relates to
+          type: integer
+          format: int16
+          example: 1
+          default: 1
 
     ErgoTransaction:
       type: object
-      description: Transaction without any lockers and unlockers
+      description: Ergo transaction
       required:
       - inputs
       - dataInputs
@@ -195,13 +202,14 @@ components:
 
     WalletTransaction:
       type: object
-      description: Transaction without any lockers and unlockers
+      description: Transaction augmented with some useful information
       required:
         - inputs
         - dataInputs
         - outputs
         - inclusionHeight
         - numConfirmations
+        - applicationId
       properties:
         id:
           $ref: '#/components/schemas/TransactionId'
@@ -230,6 +238,12 @@ components:
           type: integer
           format: int32
           example: 20998
+        applicationId:
+          description: Application identifier a transaction relates to
+          type: integer
+          format: int16
+          example: 1
+          default: 1
         size:
           description: Size in bytes
           type: integer

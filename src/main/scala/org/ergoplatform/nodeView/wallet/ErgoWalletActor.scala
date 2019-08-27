@@ -487,7 +487,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain, Constants.DefaultAppId)
     }
 
-    val walletTxs = txs.map(WalletTransaction(_, height))
+    val walletTxs = txs.map(WalletTransaction(_, height, Constants.DefaultAppId))
 
     registry.updateOnBlock(resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs, walletTxs)(id, height)
 

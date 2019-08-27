@@ -5,7 +5,7 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
-import org.ergoplatform.{ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
+import org.ergoplatform.{Pay2SAddress, Pay2SHAddress}
 import org.ergoplatform.api.ScriptApiRoute
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.utils.Stubs
@@ -26,8 +26,6 @@ class ScriptApiRouteSpec  extends FlatSpec
   val ergoSettings: ErgoSettings = ErgoSettings.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = ScriptApiRoute(readersRef, settings).route
-
-  implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 
   val scriptSource: String =
     """

@@ -1,15 +1,15 @@
 package org.ergoplatform.nodeView.history.storage
 
 import com.google.common.cache.CacheBuilder
-import io.iohk.iodb.{ByteArrayWrapper, Store}
-import org.ergoplatform.ErgoApp
+import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.db.LDBKVStore
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.utils.ScorexEncoding
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 /**
   * Storage for Ergo history
@@ -19,8 +19,10 @@ import scala.util.{Failure, Success, Try}
   * @param objectsStore - key-value store, where key is id of ErgoPersistentModifier and value is it's bytes
   * @param config       - cache configs
   */
-class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: CacheSettings) extends ScorexLogging
-  with AutoCloseable with ScorexEncoding {
+class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: CacheSettings)
+  extends ScorexLogging
+    with AutoCloseable
+    with ScorexEncoding {
 
   private val modifiersCache = CacheBuilder.newBuilder()
     .maximumSize(config.modifiersCacheSize)
@@ -28,67 +30,57 @@ class HistoryStorage(indexStore: Store, objectsStore: ObjectsStore, config: Cach
 
   private val indexCache = CacheBuilder.newBuilder()
     .maximumSize(config.indexesCacheSize)
-    .build[ByteArrayWrapper, ByteArrayWrapper]
+    .build[ByteArrayWrapper, Array[Byte]]
 
-  def modifierById(id: ModifierId): Option[ErgoPersistentModifier] = {
-    Option(modifiersCache.getIfPresent(id)) match {
-      case Some(e) =>
-        log.trace(s"Got modifier $id from cache")
-        Some(e)
-      case None =>
-        objectsStore.get(id).flatMap { bBytes =>
-          HistoryModifierSerializer.parseBytesTry(bBytes) match {
-            case Success(pm) =>
-              log.trace(s"Cache miss for existing modifier $id")
-              modifiersCache.put(id, pm)
-              Some(pm)
-            case Failure(_) =>
-              log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bBytes)})")
-              None
-          }
+  def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
+    Option(modifiersCache.getIfPresent(id)) orElse
+      objectsStore.get(idToBytes(id)).flatMap { bytes =>
+        HistoryModifierSerializer.parseBytesTry(bytes) match {
+          case Success(pm) =>
+            log.trace(s"Cache miss for existing modifier $id")
+            modifiersCache.put(id, pm)
+            Some(pm)
+          case Failure(_) =>
+            log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
+            None
         }
+      }
+
+  def getIndex(id: ByteArrayWrapper): Option[Array[Byte]] =
+    Option(indexCache.getIfPresent(id)).orElse {
+      indexStore.get(id.data).map { value =>
+        indexCache.put(id, value)
+        value
+      }
     }
-  }
 
-  def getIndex(id: ByteArrayWrapper): Option[ByteArrayWrapper] = Option(indexCache.getIfPresent(id)).orElse {
-    indexStore.get(id).map { value =>
-      indexCache.put(id, value)
-      value
-    }
-  }
+  def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(idToBytes(id))
 
-  def get(id: ModifierId): Option[Array[Byte]] = objectsStore.get(id)
+  def contains(id: ModifierId): Boolean = objectsStore.get(idToBytes(id)).isDefined
 
-  def contains(id: ModifierId): Boolean = objectsStore.contains(id)
-
-  def insert(id: ByteArrayWrapper,
-             indexesToInsert: Seq[(ByteArrayWrapper, ByteArrayWrapper)],
-             objectsToInsert: Seq[ErgoPersistentModifier]): Unit = Try {
-    objectsToInsert.foreach { o =>
-      modifiersCache.put(o.id, o)
-      // TODO saving object to disc may be async here for performance reasons
-      objectsStore.put(o).get
-    }
+  def insert(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
+             objectsToInsert: Seq[ErgoPersistentModifier]): Unit = {
+    objectsToInsert.foreach(o => modifiersCache.put(o.id, o))
+    objectsStore.insert(
+      objectsToInsert.map(m => idToBytes(m.id) -> HistoryModifierSerializer.toBytes(m))
+    )
     if (indexesToInsert.nonEmpty) {
       indexesToInsert.foreach(kv => indexCache.put(kv._1, kv._2))
-      indexStore.update(
-        id,
-        Seq.empty,
-        indexesToInsert)
+      indexStore.insert(indexesToInsert.map { case (k, v) => k.data -> v })
     }
-  }.recoverWith { case e =>
-    log.error("Unable to perform insert", e)
-    ErgoApp.forceStopApplication()
   }
 
-  def remove(idsToRemove: Seq[ModifierId]): Unit = idsToRemove.foreach { id =>
-    modifiersCache.invalidate(id)
-    objectsStore.delete(id)
+  def remove(idsToRemove: Seq[ModifierId]): Unit = {
+    idsToRemove.foreach { id =>
+      modifiersCache.invalidate(id)
+    }
+    objectsStore.remove(idsToRemove.map(idToBytes))
   }
 
   override def close(): Unit = {
     log.warn("Closing history storage...")
     indexStore.close()
+    objectsStore.close()
   }
 
 }

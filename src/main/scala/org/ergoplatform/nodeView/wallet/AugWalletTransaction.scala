@@ -36,6 +36,7 @@ object AugWalletTransaction {
       "outputs" -> obj.wtx.tx.outputs.asJson,
       "size" -> obj.wtx.tx.size.asJson,
       "inclusionHeight" -> obj.wtx.inclusionHeight.asJson,
+      "applicationId" -> obj.wtx.applicationId.asJson,
       "numConfirmations" -> obj.numConfirmations.asJson
     )
   }
@@ -47,10 +48,12 @@ object AugWalletTransaction {
       outputsWithIndex <- c.downField("outputs").as[IndexedSeq[(ErgoBoxCandidate, Option[BoxId])]]
       inclusionHeight <- c.downField("inclusionHeight").as[Int]
       numConfirmations <- c.downField("numConfirmations").as[Int]
-    } yield AugWalletTransaction(
-      WalletTransaction(new ErgoTransaction(inputs, dataInputs, outputsWithIndex.map(_._1)), inclusionHeight),
-      numConfirmations
-    )
+      appId <- c.downField("applicationId").as[Short]
+    } yield
+      AugWalletTransaction(
+        WalletTransaction(new ErgoTransaction(inputs, dataInputs, outputsWithIndex.map(_._1)), inclusionHeight, appId),
+        numConfirmations
+      )
   }
 
 }

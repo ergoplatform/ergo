@@ -292,8 +292,8 @@ trait ErgoHistoryReader
 
   override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
     historyStorage.getIndex(validityKey(modifierId)) match {
-      case Some(b) if b.data.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
-      case Some(b) if b.data.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
+      case Some(b) if b.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
+      case Some(b) if b.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
       case None if contains(modifierId) => ModifierSemanticValidity.Unknown
       case None => ModifierSemanticValidity.Absent
       case m =>

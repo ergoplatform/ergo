@@ -123,10 +123,10 @@ trait WalletTestOps extends NodeViewBaseOps {
   }
 
   def makeSpendingTx(boxesToSpend: Seq[ErgoBox],
-                     addressToSpend: ErgoAddress,
+                     addressToReturn: ErgoAddress,
                      balanceToReturn: Long = 0,
                      assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
-    makeTx(boxesToSpend, emptyProverResult, balanceToReturn, addressToSpend.script, assets)
+    makeTx(boxesToSpend, emptyProverResult, balanceToReturn, addressToReturn.script, assets)
   }
 
   def makeTx(boxesToSpend: Seq[ErgoBox],

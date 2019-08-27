@@ -68,4 +68,7 @@ object Constants {
 
   val FallbackDiff = BigInt(1)
 
+  // SimplePayments application identifier
+  val DefaultAppId: Short = 1
+
 }

@@ -190,7 +190,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         spendingTxIdOpt = Some(modifierIdGen.sample.get),
         spendingHeightOpt = None,
         box = ergoBoxGen.sample.get,
-        certainty = BoxCertainty.Certain
+        certainty = BoxCertainty.Certain,
+        applicationId = Constants.DefaultAppId
       ),
       confirmationsNumOpt = Some(10)
     )

@@ -12,13 +12,14 @@ import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.BoxUtils
-import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate._
+import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 
@@ -27,6 +28,9 @@ import scala.collection.mutable
 import scala.util.Random
 
 trait ErgoTransactionGenerators extends ErgoGenerators {
+
+  protected implicit val ergoAddressEncoder: ErgoAddressEncoder =
+    ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   val creationHeightGen: Gen[Int] = Gen.choose(0, Int.MaxValue / 2)
 
@@ -37,6 +41,15 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
     h <- creationHeightGen
     prop <- trueLeafGen
+    ar <- additionalRegistersGen
+    tokens <- additionalTokensGen
+    value <- validValueGen(prop, tokens, ar)
+  } yield new ErgoBoxCandidate(value, prop, h, tokens.toColl, ar)
+
+  def ergoAddressGen: Gen[ErgoAddress] = proveDlogGen.map(P2PKAddress.apply)
+
+  def ergoBoxCandidateGen(prop: ProveDlog): Gen[ErgoBoxCandidate] = for {
+    h <- creationHeightGen
     ar <- additionalRegistersGen
     tokens <- additionalTokensGen
     value <- validValueGen(prop, tokens, ar)
@@ -125,6 +138,12 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     from: IndexedSeq[Input] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
     dataInputs: IndexedSeq[DataInput] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, dataInputGen).map(_.toIndexedSeq))
     to: IndexedSeq[ErgoBoxCandidate] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, ergoBoxCandidateGen).map(_.toIndexedSeq))
+  } yield ErgoTransaction(from, dataInputs, to)
+
+  def invalidErgoTransactionGen(prop: ProveDlog): Gen[ErgoTransaction] = for {
+    from: IndexedSeq[Input] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
+    dataInputs: IndexedSeq[DataInput] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, dataInputGen).map(_.toIndexedSeq))
+    to: IndexedSeq[ErgoBoxCandidate] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, ergoBoxCandidateGen(prop)).map(_.toIndexedSeq))
   } yield ErgoTransaction(from, dataInputs, to)
 
   lazy val walletTransactionGen: Gen[WalletTransaction] = for {
@@ -276,6 +295,12 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   } yield BlockTransactions(headerId, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
     if ((acc :+ tx).map(_.size).sum < (Parameters.MaxBlockSizeDefault - 150)) acc :+ tx else acc))
 
+  def invalidBlockTransactionsGen(prop: ProveDlog, txQty: Int): Gen[BlockTransactions] = for {
+    headerId <- modifierIdGen
+    txs <- Gen.listOfN(txQty, invalidErgoTransactionGen(prop))
+  } yield BlockTransactions(headerId, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
+    if ((acc :+ tx).map(_.size).sum < (Parameters.MaxBlockSizeDefault - 150)) acc :+ tx else acc))
+
   lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
     index: Short <- Arbitrary.arbitrary[Short]
     stateElements: Seq[ErgoBox] <- Gen.listOf(ergoBoxGenNoProp)
@@ -284,6 +309,13 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
     header <- defaultHeaderGen
     txs <- invalidBlockTransactionsGen
+    extension <- extensionGen
+    proof <- randomADProofsGen
+  } yield ErgoFullBlock(header, txs, extension, Some(proof))
+
+  def invalidErgoFullBlockGen(prop: ProveDlog, txQty: Int): Gen[ErgoFullBlock] = for {
+    header <- defaultHeaderGen
+    txs <- invalidBlockTransactionsGen(prop, txQty)
     extension <- extensionGen
     proof <- randomADProofsGen
   } yield ErgoFullBlock(header, txs, extension, Some(proof))

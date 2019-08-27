@@ -2,13 +2,15 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
 
-import io.iohk.iodb.Store.VersionID
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import org.ergoplatform.db.LDBFactory.factory
+import org.ergoplatform.db.VersionedLDBKVStore
+import org.ergoplatform.db.VersionedLDBKVStore.VersionId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.WalletTransaction
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA.RegistryOp
 import org.ergoplatform.settings.{ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.boxes.TrackedBox
+import org.iq80.leveldb.Options
 import scorex.core.VersionTag
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
@@ -19,7 +21,7 @@ import scala.util.Try
   * Provides an access to version-sensitive wallet-specific indexes.
   * (Such as on-chain UTXO's or balances)
   */
-final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLogging {
+final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
 
   import RegistryOps._
   import org.ergoplatform.nodeView.wallet.IdUtils._
@@ -122,7 +124,7 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
   }
 
   def rollback(version: VersionTag): Try[Unit] =
-    Try(store.rollback(ByteArrayWrapper(Base16.decode(version).get)))
+    store.rollbackTo(Base16.decode(version).get)
 
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.
@@ -145,15 +147,19 @@ final class WalletRegistry(store: Store)(ws: WalletSettings) extends ScorexLoggi
 
 object WalletRegistry {
 
-  val PreGenesisStateVersion: VersionID = ByteArrayWrapper(idToBytes(PreGenesisHeader.id))
+  val PreGenesisStateVersion: VersionId = idToBytes(PreGenesisHeader.id)
 
   def readOrCreate(settings: ErgoSettings): WalletRegistry = {
     val dir = new File(s"${settings.directory}/wallet/registry")
     dir.mkdirs()
-    val store = new LSMStore(dir)
+
+    val options = new Options()
+    options.createIfMissing(true)
+    val db = factory.open(dir, options)
+    val store = new VersionedLDBKVStore(db, settings.nodeSettings.keepVersions)
 
     // Create pre-genesis state checkpoint
-    if (!store.versionIDExists(PreGenesisStateVersion)) store.update(PreGenesisStateVersion, Seq.empty, Seq.empty)
+    if (!store.versionIdExists(PreGenesisStateVersion)) store.update(Seq.empty, Seq.empty)(PreGenesisStateVersion)
 
     new WalletRegistry(store)(settings.walletSettings)
   }

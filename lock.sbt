@@ -51,7 +51,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bitbucket.inkytonik.kiama" % "kiama_2.12" % "2.1.0",
   "org.bitlet" % "weupnp" % "0.1.4",
   "org.bouncycastle" % "bcprov-jdk15on" % "1.62",
-  "org.ergoplatform" % "ergo-wallet_2.12" % "master-d4cf1f7f-SNAPSHOT",
+  "org.ergoplatform" % "ergo-wallet_2.12" % "master-d2135dca-SNAPSHOT",
   "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8",
   "org.iq80.leveldb" % "leveldb" % "0.12",
   "org.iq80.leveldb" % "leveldb-api" % "0.12",
@@ -90,4 +90,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 04470fe23b2b17677900824c59ad4c6a8d25f2cc
+// LIBRARY_DEPENDENCIES_HASH a3662b706ff077fb2de34c2ce649dd4c6ade4f76

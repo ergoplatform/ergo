@@ -172,24 +172,25 @@ trait ApiCodecs {
     )
   }
 
-  implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = { b =>
+  implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = { box =>
     val plainFields = Map(
-      "spent" -> b.spendingStatus.spent.asJson,
-      "onchain" -> b.chainStatus.onChain.asJson,
-      "certain" -> b.certainty.certain.asJson,
-      "creationOutIndex" -> b.creationOutIndex.asJson,
-      "inclusionHeight" -> b.inclusionHeightOpt.asJson,
-      "spendingHeight" -> b.spendingHeightOpt.asJson,
-      "box" -> b.box.asJson
+      "spent" -> box.spendingStatus.spent.asJson,
+      "onchain" -> box.chainStatus.onChain.asJson,
+      "certain" -> box.certainty.certain.asJson,
+      "creationOutIndex" -> box.creationOutIndex.asJson,
+      "inclusionHeight" -> box.inclusionHeightOpt.asJson,
+      "spendingHeight" -> box.spendingHeightOpt.asJson,
+      "applicationId" -> box.applicationId.asJson,
+      "box" -> box.box.asJson
     )
     val fieldsWithTx = if (opts.showDetails) {
       plainFields +
-        ("creationTransaction" -> b.creationTxId.asJson) +
-        ("spendingTransaction" -> b.spendingTxIdOpt.asJson)
+        ("creationTransaction" -> box.creationTxId.asJson) +
+        ("spendingTransaction" -> box.spendingTxIdOpt.asJson)
     } else {
       plainFields +
-        ("creationTransactionId" -> b.creationTxId.asJson) +
-        ("spendingTransactionId" -> b.spendingTxIdOpt.asJson)
+        ("creationTransactionId" -> box.creationTxId.asJson) +
+        ("spendingTransactionId" -> box.spendingTxIdOpt.asJson)
     }
     fieldsWithTx.asJson
   }

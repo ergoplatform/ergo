@@ -103,7 +103,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val inputs = extractAllInputs(tx)
       val resolved = outputs.filter(resolve)
       val resolvedTrackedBoxes = resolved.map { bx =>
-        TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain)
+        TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain, Constants.DefaultAppId)
       }
 
       offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
@@ -374,7 +374,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def boxesToFakeTracked(inputs: Seq[ErgoBox]): Iterator[TrackedBox] = {
     inputs
       .map { box => // declare fake inclusion height in order to confirm the box is onchain
-        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, BoxCertainty.Certain)
+        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, BoxCertainty.Certain, Constants.DefaultAppId)
       }
       .toIterator
   }
@@ -481,10 +481,10 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       .filterNot { case (_, o) => inputs.map(_._2).contains(encodedBoxId(o.id)) }
       .partition { case (_, o) => resolve(o) }
     val resolvedTrackedBoxes = resolved.map { case (txId, bx) =>
-      TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Certain)
+      TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Certain, Constants.DefaultAppId)
     }
     val unresolvedTrackedBoxes = unresolved.map { case (txId, bx) =>
-      TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain)
+      TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain, Constants.DefaultAppId)
     }
 
     val walletTxs = txs.map(WalletTransaction(_, height))

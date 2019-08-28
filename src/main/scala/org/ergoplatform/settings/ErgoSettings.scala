@@ -14,7 +14,6 @@ import scorex.util.encode.Base16
 import sigmastate.basics.DLogProtocol.ProveDlog
 import scala.util.Try
 
-
 case class ErgoSettings(directory: String,
                         networkType: NetworkType,
                         chainSettings: ChainSettings,

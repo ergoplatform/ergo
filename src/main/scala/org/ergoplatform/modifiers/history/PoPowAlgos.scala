@@ -16,7 +16,7 @@ class PoPowAlgos(settings: PoPowSettings) {
   private val k1 = settings.k1
   private val d = settings.d
 
-  def prove(chain: Seq[Header], maxLevel: Int): PoPoWProof = {
+  def prove(chain: Seq[Header], maxLevel: Int): PoPowProof = {
     require(chain.lengthCompare(k) >= 0, s"Can not prove chain of size < $k")
     require(chain.head.isGenesis, "Can not prove not anchored chain")
     @scala.annotation.tailrec
@@ -35,7 +35,7 @@ class PoPowAlgos(settings: PoPowSettings) {
     }
     val suffix = chain.takeRight(k)
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height) // todo: `maxLevel: suffix.head.interlinks.size - 1`
-    PoPoWProof(m, k, prefix, suffix)
+    PoPowProof(m, k, prefix, suffix)
   }
 
   def goodSuperChain(chain: Seq[Header], superChain: Seq[Header], level: Int): Boolean = {

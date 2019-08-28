@@ -6,12 +6,12 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
 
-final case class PoPoWProof(prefix: PoPowProofPrefix, suffix: PoPowProofSuffix)
+final case class PoPowProof(prefix: PoPowProofPrefix, suffix: PoPowProofSuffix)
   extends ErgoPersistentModifier {
 
-  override type M = PoPoWProof
+  override type M = PoPowProof
 
-  override val modifierTypeId: ModifierTypeId = PoPoWProof.TypeId
+  override val modifierTypeId: ModifierTypeId = PoPowProof.TypeId
 
   override val sizeOpt: Option[Int] = None
 
@@ -27,21 +27,21 @@ final case class PoPoWProof(prefix: PoPowProofPrefix, suffix: PoPowProofSuffix)
 
 }
 
-object PoPoWProof {
+object PoPowProof {
 
   val TypeId: ModifierTypeId = ModifierTypeId @@ (110: Byte)
 
-  def apply(m: Int, k: Int, prefixChain: Seq[Header], suffixChain: Seq[Header]): PoPoWProof = {
+  def apply(m: Int, k: Int, prefixChain: Seq[Header], suffixChain: Seq[Header]): PoPowProof = {
     val suffix = PoPowProofSuffix(k, suffixChain)
     val prefix = PoPowProofPrefix(m, prefixChain, suffix.id)
-    new PoPoWProof(prefix, suffix)
+    new PoPowProof(prefix, suffix)
   }
 
 }
 
-object NiPoPowProofSerializer extends ScorexSerializer[PoPoWProof] {
+object NiPoPowProofSerializer extends ScorexSerializer[PoPowProof] {
 
-  override def serialize(obj: PoPoWProof, w: Writer): Unit = {
+  override def serialize(obj: PoPowProof, w: Writer): Unit = {
     val prefixBytes = obj.prefix.bytes
     val suffixBytes = obj.suffix.bytes
     w.putInt(prefixBytes.length)
@@ -50,12 +50,12 @@ object NiPoPowProofSerializer extends ScorexSerializer[PoPoWProof] {
     w.putBytes(suffixBytes)
   }
 
-  override def parse(r: Reader): PoPoWProof = {
+  override def parse(r: Reader): PoPowProof = {
     val prefixSize = r.getInt()
     val prefix = NiPoPowProofPrefixSerializer.parseBytes(r.getBytes(prefixSize))
     val suffixSize = r.getInt()
     val suffix = NiPoPowProofSuffixSerializer.parseBytes(r.getBytes(suffixSize))
-    PoPoWProof(prefix, suffix)
+    PoPowProof(prefix, suffix)
   }
 
 }

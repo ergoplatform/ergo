@@ -1,12 +1,11 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{Header, HeaderChain, PoPoWProof}
+import org.ergoplatform.modifiers.history.{HeaderChain, PoPoWProof}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
 import scorex.core.consensus.History.ProgressInfo
 import scorex.util.ScorexLogging
 
-import scala.annotation.tailrec
 import scala.util.Try
 
 /**

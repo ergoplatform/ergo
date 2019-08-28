@@ -1,40 +1,61 @@
 package org.ergoplatform.modifiers.history
 
-import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
-import scorex.core.validation.ModifierValidator
-import scorex.core.utils.ScorexEncoding
+import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, bytesToId}
 
-case class PoPoWProof(m: Byte,
-                      k: Byte,
-                      i: Byte,
-                      innerchain: Seq[Header],
-                      suffix: Seq[Header],
-                      override val sizeOpt: Option[Int] = None)
-                     (implicit powScheme: AutolykosPowScheme) extends Comparable[PoPoWProof] with Ordered[PoPoWProof]
-  with ErgoPersistentModifier {
-
-  override val modifierTypeId: ModifierTypeId = PoPoWProof.modifierTypeId
-
-  override def parentId: ModifierId = ???
-
-  override def serializedId: Array[Byte] = Algos.hash(bytes)
-
-  override lazy val id: ModifierId = bytesToId(serializedId)
+final case class PoPoWProof(prefix: PoPowProofPrefix, suffix: PoPowProofSuffix)
+  extends ErgoPersistentModifier {
 
   override type M = PoPoWProof
 
-  override lazy val serializer: ScorexSerializer[PoPoWProof] = throw new Error("PoPow proofs serialization not supported")
+  override val modifierTypeId: ModifierTypeId = PoPoWProof.TypeId
 
-  override def compare(that: PoPoWProof): Int = ???
+  override val sizeOpt: Option[Int] = None
+
+  override def serializedId: Array[Byte] = prefix.serializedId
+
+  override def serializer: ScorexSerializer[M] = NiPoPowProofSerializer
+
+  override def parentId: ModifierId = prefix.parentId
+
+  def chain: Seq[Header] = prefix.chain ++ suffix.chain
+
+  //  def validate: Try[Unit] = prefix.validate.flatMap(_ => suffix.validate)
 
 }
 
 object PoPoWProof {
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (105: Byte)
+
+  val TypeId: ModifierTypeId = ModifierTypeId @@ (110: Byte)
+
+  def apply(m: Int, k: Int, prefixChain: Seq[Header], suffixChain: Seq[Header]): PoPoWProof = {
+    val suffix = PoPowProofSuffix(k, suffixChain)
+    val prefix = PoPowProofPrefix(m, prefixChain, suffix.id)
+    new PoPoWProof(prefix, suffix)
+  }
+
+}
+
+object NiPoPowProofSerializer extends ScorexSerializer[PoPoWProof] {
+
+  override def serialize(obj: PoPoWProof, w: Writer): Unit = {
+    val prefixBytes = obj.prefix.bytes
+    val suffixBytes = obj.suffix.bytes
+    w.putInt(prefixBytes.length)
+    w.putBytes(prefixBytes)
+    w.putInt(suffixBytes.length)
+    w.putBytes(suffixBytes)
+  }
+
+  override def parse(r: Reader): PoPoWProof = {
+    val prefixSize = r.getInt()
+    val prefix = NiPoPowProofPrefixSerializer.parseBytes(r.getBytes(prefixSize))
+    val suffixSize = r.getInt()
+    val suffix = NiPoPowProofSuffixSerializer.parseBytes(r.getBytes(suffixSize))
+    PoPoWProof(prefix, suffix)
+  }
+
 }

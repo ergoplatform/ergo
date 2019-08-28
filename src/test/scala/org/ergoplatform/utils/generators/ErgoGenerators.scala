@@ -3,15 +3,14 @@ package org.ergoplatform.utils.generators
 import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
-import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
 import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
-import org.ergoplatform.utils.ErgoTestConstants
 import org.ergoplatform.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -28,7 +27,7 @@ import sigmastate.interpreter.ProverResult
 
 import scala.util.Random
 
-trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants {
+trait ErgoGenerators extends CoreGenerators with Matchers with ChainGenerator {
 
   lazy val trueLeafGen: Gen[ErgoTree] = Gen.const(Constants.TrueLeaf)
   lazy val falseLeafGen: Gen[ErgoTree] = Gen.const(Constants.FalseLeaf)

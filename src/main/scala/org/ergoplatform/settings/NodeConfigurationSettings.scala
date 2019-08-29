@@ -1,6 +1,7 @@
 package org.ergoplatform.settings
 
 import net.ceedubs.ficus.Ficus._
+import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import net.ceedubs.ficus.readers.ValueReader
 import org.ergoplatform.nodeView.state.StateType
 
@@ -26,7 +27,8 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      mempoolCapacity: Int,
                                      blacklistCapacity: Int,
                                      mempoolCleanupDuration: FiniteDuration,
-                                     minimalFeeAmount: Long)
+                                     minimalFeeAmount: Long,
+                                     poPowSettings: PoPowSettings)
 
 trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
 
@@ -49,7 +51,8 @@ trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
       cfg.as[Int](s"$path.mempoolCapacity"),
       cfg.as[Int](s"$path.blacklistCapacity"),
       cfg.as[FiniteDuration](s"$path.mempoolCleanupDuration"),
-      cfg.as[Long](s"$path.minimalFeeAmount")
+      cfg.as[Long](s"$path.minimalFeeAmount"),
+      cfg.as[PoPowSettings](s"$path.poPow")
     )
   }
 

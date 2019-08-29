@@ -106,7 +106,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   /**
     * Data to add to and remove from the storage to process this modifier
     */
-  private def toInsert(h: Header): (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = {
+  protected def toInsert(h: Header): (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + requiredDifficulty
     val bestRow: Seq[(ByteArrayWrapper, Array[Byte])] =

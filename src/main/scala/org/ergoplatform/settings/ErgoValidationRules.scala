@@ -4,7 +4,7 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
 import org.ergoplatform.validation.SigmaValidationSettings
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
-import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
+import scorex.core.validation.{ModifierValidator, TaggedValidationRules, ValidationResult}
 import scorex.util.serialization.{Reader, Writer}
 
 import scala.util.Try
@@ -20,14 +20,12 @@ import scala.util.Try
   * @param sigmaSettings     - validation settings of sigma script
   * @param updateFromInitial - update from initial ErgoValidationSettings
   */
-case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
-                                  sigmaSettings: SigmaValidationSettings,
-                                  updateFromInitial: ErgoValidationSettingsUpdate)
-  extends ValidationSettings with BytesSerializable {
+case class ErgoValidationRules(rules: Map[Short, RuleStatus],
+                               sigmaSettings: SigmaValidationSettings,
+                               updateFromInitial: ErgoValidationSettingsUpdate)
+  extends TaggedValidationRules with BytesSerializable {
 
-  override type M = ErgoValidationSettings
-
-  override val isFailFast: Boolean = true
+  override type M = ErgoValidationRules
 
   override def getError(id: Short, details: String): ValidationResult.Invalid = {
     rules.get(id).map(_.error(details)).getOrElse(ModifierValidator.fatal("Unknown message"))
@@ -37,12 +35,12 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
     rules.get(id).forall(_.isActive)
   }
 
-  def updated(u: ErgoValidationSettingsUpdate): ErgoValidationSettings = {
+  def updated(u: ErgoValidationSettingsUpdate): ErgoValidationRules = {
     val newSigmaSettings = u.statusUpdates.foldLeft(sigmaSettings)((s, u) => s.updated(u._1, u._2))
     val newRules = updateRules(rules, u.rulesToDisable)
     val totalUpdate = updateFromInitial ++ u
 
-    ErgoValidationSettings(newRules, newSigmaSettings, totalUpdate)
+    ErgoValidationRules(newRules, newSigmaSettings, totalUpdate)
   }
 
   /**
@@ -75,43 +73,43 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
     }
   }
 
-  def isInitial: Boolean = this == ErgoValidationSettings.initial
+  def isInitial: Boolean = this == ErgoValidationRules.initial
 
-  override def serializer: ScorexSerializer[ErgoValidationSettings] = ErgoValidationSettingsSerializer
+  override def serializer: ScorexSerializer[ErgoValidationRules] = ErgoValidationSettingsSerializer
 
   /**
     * We only cares about `updateFromInitial`, as far as `rules` and `sigmaSettings` may be
     * deterministically computed from it and initial validation settings.
     */
   override def equals(obj: Any): Boolean = obj match {
-    case p: ErgoValidationSettings => p.updateFromInitial == updateFromInitial
+    case p: ErgoValidationRules => p.updateFromInitial == updateFromInitial
     case _ => false
   }
 
   override def hashCode(): Int = java.util.Objects.hash(updateFromInitial)
 }
 
-object ErgoValidationSettings {
+object ErgoValidationRules {
 
   /**
     * Initial validation settings.
     * To be used during genesis state creation or to perform static checks that are not allowed
     * to be deactivated via soft-forks.
     */
-  val initial: ErgoValidationSettings = new ErgoValidationSettings(ValidationRules.rulesSpec,
+  val initial: ErgoValidationRules = new ErgoValidationRules(ValidationRules.rulesSpec,
     org.ergoplatform.validation.ValidationRules.currentSettings,
     ErgoValidationSettingsUpdate.empty)
 
   /**
     * Extracts ErgoValidationSettings from extension section of the block
     */
-  def parseExtension(extension: ExtensionCandidate): Try[ErgoValidationSettings] = Try {
+  def parseExtension(extension: ExtensionCandidate): Try[ErgoValidationRules] = Try {
     val values = extension.fields
       .filter(_._1(0) == Extension.ValidationRulesPrefix)
       .sortBy(_._1(1))
       .map(_._2)
     if (values.isEmpty) {
-      ErgoValidationSettings.initial
+      ErgoValidationRules.initial
     } else {
       val bytes = scorex.core.utils.concatBytes(values)
       ErgoValidationSettingsSerializer.parseBytes(bytes)
@@ -120,14 +118,14 @@ object ErgoValidationSettings {
 
 }
 
-object ErgoValidationSettingsSerializer extends ScorexSerializer[ErgoValidationSettings] with ApiCodecs {
-  override def serialize(obj: ErgoValidationSettings, w: Writer): Unit = {
+object ErgoValidationSettingsSerializer extends ScorexSerializer[ErgoValidationRules] with ApiCodecs {
+  override def serialize(obj: ErgoValidationRules, w: Writer): Unit = {
     ErgoValidationSettingsUpdateSerializer.serialize(obj.updateFromInitial, w)
   }
 
-  override def parse(r: Reader): ErgoValidationSettings = {
+  override def parse(r: Reader): ErgoValidationRules = {
     val updateFromInitial = ErgoValidationSettingsUpdateSerializer.parse(r)
-    ErgoValidationSettings.initial.updated(updateFromInitial)
+    ErgoValidationRules.initial.updated(updateFromInitial)
   }
 
 }

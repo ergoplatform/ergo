@@ -29,7 +29,7 @@ class VotingSpecification extends ErgoPropertyTest {
     new ErgoStateContext(Seq.empty, None, genesisStateDigest, LaunchParameters, validationSettingsNoIl, VotingData.empty)(votingSettings)
       .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), emptyVSUpdate, 0.toByte)
   }
-  val initialVs: ErgoValidationSettings = ctx.validationSettings
+  val initialVs: ErgoValidationRules = ctx.validationSettings
   val extensionWithAllParams: ExtensionCandidate = {
     LaunchParameters.toExtensionCandidate ++ initialVs.toExtensionCandidate
   }
@@ -42,14 +42,14 @@ class VotingSpecification extends ErgoPropertyTest {
 
   property("ErgoValidationSettings toExtension/fromExtension roundtrip") {
     // initial settings should not be written into Extension at all
-    val initial = ErgoValidationSettings.initial
+    val initial = ErgoValidationRules.initial
     val extension = initial.toExtensionCandidate
     extension.fields.size shouldBe 0
-    initial shouldBe ErgoValidationSettings.parseExtension(extension).get
+    initial shouldBe ErgoValidationRules.parseExtension(extension).get
 
     forAll(ergoValidationSettingsGen) { vs =>
       val extension = vs.toExtensionCandidate
-      vs shouldBe ErgoValidationSettings.parseExtension(extension).get
+      vs shouldBe ErgoValidationRules.parseExtension(extension).get
     }
   }
 
@@ -343,7 +343,7 @@ class VotingSpecification extends ErgoPropertyTest {
     process(esc7, wrongParameters8, h8e).isFailure shouldBe true
   }
 
-  private def checkValidationSettings(vs: ErgoValidationSettings, updated: ErgoValidationSettingsUpdate): Unit = {
+  private def checkValidationSettings(vs: ErgoValidationRules, updated: ErgoValidationSettingsUpdate): Unit = {
     vs.rules.foreach { r =>
       vs.isActive(r._1) shouldBe !updated.rulesToDisable.contains(r._1)
     }

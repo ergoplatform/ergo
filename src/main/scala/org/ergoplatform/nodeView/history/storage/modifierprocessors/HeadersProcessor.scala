@@ -16,7 +16,7 @@ import org.ergoplatform.settings._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationState}
+import scorex.core.validation.{ModifierValidator, TaggedValidationState, ValidationResult, ValidationState}
 import scorex.util._
 
 import scala.annotation.tailrec
@@ -266,7 +266,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   class HeaderValidator extends ScorexEncoding {
 
-    private def validationState: ValidationState[Unit] = ModifierValidator(ErgoValidationSettings.initial)
+    private def validationState: TaggedValidationState[Unit] =
+      ModifierValidator.failFastTagged(ErgoValidationRules.initial)
 
     def validate(header: Header): ValidationResult[Unit] = {
       if (header.isGenesis) {

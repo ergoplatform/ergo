@@ -85,7 +85,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       persistentProver.synchronized {
         val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
         val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
-        ModifierValidator(stateContext.validationSettings)
+        ModifierValidator.failFastTagged(stateContext.validationSettings)
           .validateNoFailure(fbOperationFailed, resultTry)
           .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
           .result
@@ -213,7 +213,6 @@ object UtxoState {
     ).get
 
     new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
-
   }
 
 }

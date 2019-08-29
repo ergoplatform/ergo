@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
+import org.ergoplatform.settings.{Algos, ErgoValidationRules}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, _}
@@ -18,7 +18,8 @@ import scala.util.Try
   */
 trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProcessor {
 
-  private def initialValidationState: ValidationState[Unit] = ModifierValidator(ErgoValidationSettings.initial)
+  private def initialValidationState: TaggedValidationState[Unit] =
+    ModifierValidator.failFastTagged(ErgoValidationRules.initial)
 
   /**
     * Process block section.
@@ -89,17 +90,16 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
   /**
     * Validator for BlockTransactions, ADProofs and Extension
     */
-  class PayloadValidator(validator: ValidationState[Unit]) extends ScorexEncoding {
+  class PayloadValidator(validator: TaggedValidationState[Unit]) extends ScorexEncoding {
 
-    def validate(m: BlockSection, header: Header): ValidationResult[Unit] = {
-      initialValidationState
+    def validate(m: BlockSection, header: Header): ValidationResult[Unit] =
+      validator
         .validate(alreadyApplied, !historyStorage.contains(m.id), s"${m.encodedId}")
         .validate(bsCorrespondsToHeader, header.isCorrespondingModifier(m), s"header=${header.encodedId}, id=${m.encodedId}")
         .validateSemantics(bsHeaderValid, isSemanticallyValid(header.id), s"header=${header.encodedId}, id=${m.encodedId}")
         .validate(bsHeadersChainSynced, isHeadersChainSynced)
         .validate(bsTooOld, isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height), s"header=${header.encodedId}, id=${m.encodedId}")
         .result
-    }
 
     private def isHistoryADProof(m: BlockSection, header: Header): Boolean = m match {
       // ADProofs for block transactions that are already in history. Do not validate whether ADProofs are too old

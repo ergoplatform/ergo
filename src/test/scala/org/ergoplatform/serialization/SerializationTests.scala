@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransactionSer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlockSerializer, RegistryIndexSerializer}
-import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsSerializer, ErgoValidationSettingsUpdateSerializer}
+import org.ergoplatform.settings.{Constants, ErgoValidationRules, ErgoValidationSettingsSerializer, ErgoValidationSettingsUpdateSerializer}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
@@ -89,7 +89,7 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
       // to bytes / from bytes
       serializer.parseBytes(serializer.toBytes(vs)) shouldEqual vs
       // to extension / from extension
-      ErgoValidationSettings.parseExtension(vs.toExtensionCandidate).get shouldEqual vs
+      ErgoValidationRules.parseExtension(vs.toExtensionCandidate).get shouldEqual vs
     }
   }
 

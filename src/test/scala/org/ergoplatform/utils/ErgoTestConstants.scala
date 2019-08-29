@@ -29,8 +29,8 @@ import scala.concurrent.duration._
 trait ErgoTestConstants extends ScorexLogging {
 
   implicit val votingSettings: VotingSettings = VotingSettings(1024, 32, 128)
-  val validationSettings: ErgoValidationSettings = ErgoValidationSettings.initial
-  implicit val validationSettingsNoIl: ErgoValidationSettings = validationSettings
+  val validationSettings: ErgoValidationRules = ErgoValidationRules.initial
+  implicit val validationSettingsNoIl: ErgoValidationRules = validationSettings
     .updated(ErgoValidationSettingsUpdate(Seq(exIlUnableToValidate, exIlEncoding, exIlStructure, exEmpty), Seq()))
 
   val parameters: Parameters = LaunchParameters

@@ -2,21 +2,20 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
-import org.ergoplatform.settings.ErgoValidationSettings
 import org.ergoplatform.settings.ValidationRules._
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, ValidationState}
+import scorex.core.validation.TaggedValidationState
 import scorex.util.bytesToId
 
 /**
   * Class that implements extension validation based on current to ErgoValidationSettings
   */
-class ExtensionValidator[T](validationState: ValidationState[T]) extends ScorexEncoding {
+class ExtensionValidator[T](validationState: TaggedValidationState[T]) extends ScorexEncoding {
 
   def validateExtension(extension: Extension,
                         header: Header,
                         prevExtensionOpt: Option[ExtensionCandidate],
-                        prevHeaderOpt: Option[Header]): ValidationState[T] = {
+                        prevHeaderOpt: Option[Header]): TaggedValidationState[T] = {
     validateInterlinks(extension, header, prevExtensionOpt, prevHeaderOpt)
       .validate(exKeyLength, extension.fields.forall(_._1.lengthCompare(Extension.FieldKeySize) == 0), extension.encodedId)
       .validate(exValueLength, extension.fields.forall(_._2.lengthCompare(Extension.FieldValueMaxSize) <= 0), extension.encodedId)
@@ -27,7 +26,7 @@ class ExtensionValidator[T](validationState: ValidationState[T]) extends ScorexE
   private def validateInterlinks(extension: Extension,
                                  header: Header,
                                  prevExtensionOpt: Option[ExtensionCandidate],
-                                 prevHeaderOpt: Option[Header]): ValidationState[T] = {
+                                 prevHeaderOpt: Option[Header]): TaggedValidationState[T] = {
     (prevHeaderOpt, prevExtensionOpt) match {
       case (Some(parent), Some(parentExt)) =>
         val parentLinksTry = unpackInterlinks(parentExt.fields)

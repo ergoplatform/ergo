@@ -10,7 +10,7 @@ import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
+import org.ergoplatform.settings.{Constants, ErgoValidationRules, ErgoValidationSettingsUpdate, ValidationRules}
 import org.ergoplatform.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -176,8 +176,8 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ChainGenerator {
     statusUpdates = org.ergoplatform.validation.ValidationRules.ruleSpecs.take(statuses.size).map(_.id).zip(statuses)
   } yield ErgoValidationSettingsUpdate(disabledRules, statusUpdates)
 
-  lazy val ergoValidationSettingsGen: Gen[ErgoValidationSettings] = ergoValidationSettingsUpdateGen
-    .map(u => ErgoValidationSettings.initial.updated(u))
+  lazy val ergoValidationSettingsGen: Gen[ErgoValidationRules] = ergoValidationSettingsUpdateGen
+    .map(u => ErgoValidationRules.initial.updated(u))
 
   /** Random long from 1 to maximum - 1
     *

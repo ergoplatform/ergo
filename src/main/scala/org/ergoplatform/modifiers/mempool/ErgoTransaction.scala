@@ -10,9 +10,9 @@ import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
+import org.ergoplatform.settings.{Algos, ErgoValidationRules}
+import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
@@ -20,7 +20,7 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, ValidationState}
+import scorex.core.validation.{ModifierValidator, TaggedValidationState}
 import scorex.crypto.authds.ADKey
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -94,8 +94,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     *
     * @note Consensus-critical!
     */
-  def validateStateless: ValidationState[Unit] = {
-    ModifierValidator(ErgoValidationSettings.initial)
+  def validateStateless: TaggedValidationState[Unit] = {
+    ModifierValidator.failFastTagged(ErgoValidationRules.initial)
       .validate(txNoInputs, inputs.nonEmpty, s"$id")
       .validate(txNoOutputs, outputCandidates.nonEmpty, s"$id")
       .validate(txManyInputs, inputs.size <= Short.MaxValue, s"$id: ${inputs.size}")
@@ -126,7 +126,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long)
-                      (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
+                      (implicit verifier: ErgoInterpreter): TaggedValidationState[Long] = {
 
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
@@ -142,7 +142,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val maxCost = stateContext.currentParameters.maxBlockCost
     //    val remainingCost = stateContext.currentParameters.maxBlockCost - accumulatedCost
 
-    ModifierValidator(stateContext.validationSettings)
+    ModifierValidator.failFastTagged(stateContext.validationSettings)
       // Check that the transaction is not too big
       .validate(bsBlockTransactionsCost, maxCost >= addExact(initialCost, accumulatedCost), s"$id: initial cost")
       // Starting validation

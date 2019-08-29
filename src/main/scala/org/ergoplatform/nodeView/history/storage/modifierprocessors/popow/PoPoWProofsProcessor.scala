@@ -16,7 +16,7 @@ trait PoPoWProofsProcessor { self: HeadersProcessor with ScorexLogging =>
 
   protected val settings: ErgoSettings
 
-  protected val algos: PoPowAlgos = new PoPowAlgos(settings.nodeSettings.poPowSettings)
+  protected lazy val algos: PoPowAlgos = new PoPowAlgos(settings.nodeSettings.poPowSettings)
 
   def poPowSettings: PoPowSettings = settings.nodeSettings.poPowSettings
 

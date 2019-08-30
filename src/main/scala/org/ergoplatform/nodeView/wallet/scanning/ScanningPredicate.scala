@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet.scanning
 import org.ergoplatform.ErgoBox
 import sigmastate.Values
 
-trait ScanningPredicate {
+sealed trait ScanningPredicate {
   def filter(box: ErgoBox): Boolean
 }
 

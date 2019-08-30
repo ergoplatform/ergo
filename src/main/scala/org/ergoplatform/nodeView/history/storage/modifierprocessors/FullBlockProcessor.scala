@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import akka.util.ByteString
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -23,15 +22,17 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   private var nonBestChainsCache = FullBlockProcessor.emptyCache
 
-  def isInBestFullChain(id: ModifierId): Boolean = historyStorage.getIndex(chainStatusKey(id))
-    .map(ByteArrayWrapper.apply)
-    .contains(ByteArrayWrapper(FullBlockProcessor.BestChainMarker))
+  def isInBestFullChain(id: ModifierId): Boolean =
+    historyStorage.getIndex(chainStatusKey(id))
+      .map(ByteArrayWrapper.apply)
+      .contains(ByteArrayWrapper(FullBlockProcessor.BestChainMarker))
 
   /**
     * Id of header that contains transactions and proofs
     */
-  override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.getIndex(BestFullBlockKey)
-    .map(bytesToId)
+  override def bestFullBlockIdOpt: Option[ModifierId] =
+    historyStorage.getIndex(BestFullBlockKey)
+      .map(bytesToId)
 
   // todo: `getFullBlock` is frequently used to define whether some`header` have enough
   // todo: related sections - it would be far more efficient to keep such information in the indexes.
@@ -57,11 +58,10 @@ trait FullBlockProcessor extends HeadersProcessor {
       processBetterChain orElse
       nonBestBlock
 
-  private def isValidFirstFullBlock(header: Header): Boolean = {
+  private def isValidFirstFullBlock(header: Header): Boolean =
     pruningProcessor.isHeadersChainSynced &&
       header.height == pruningProcessor.minimalFullBlockHeight &&
       bestFullBlockIdOpt.isEmpty
-  }
 
   private def processValidFirstBlock: BlockProcessing = {
     case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), _, newBestChain)
@@ -114,12 +114,11 @@ trait FullBlockProcessor extends HeadersProcessor {
     * @param id - id of a header to compare
     * @return `true`, if block with id `id` is better, than current best block, `false` otherwise.
     */
-  private def isBetterChain(id: ModifierId): Boolean = {
+  private def isBetterChain(id: ModifierId): Boolean =
     (bestFullBlockIdOpt.flatMap(bfi => scoreOf(bfi)), scoreOf(id)) match {
       case (Some(prevBestScore), Some(score)) if score > prevBestScore => true
       case _ => false
     }
-  }
 
   private def nonBestBlock: BlockProcessing = {
     case params =>
@@ -200,12 +199,11 @@ trait FullBlockProcessor extends HeadersProcessor {
   /**
     * Finds best chain following a given `header`.
     */
-  private def calculateBestChain(header: Header): Seq[ModifierId] = {
+  private def calculateBestChain(header: Header): Seq[ModifierId] =
     continuationChains(header)
       .map(_.tail)
       .map(header.id +: _)
       .maxBy(c => scoreOf(c.last))
-  }
 
   private def logStatus(toRemove: Seq[ErgoFullBlock],
                         toApply: Seq[ErgoFullBlock],
@@ -237,8 +235,6 @@ trait FullBlockProcessor extends HeadersProcessor {
       .ensuring(headersHeight >= fullBlockHeight, s"Headers height $headersHeight should be >= " +
         s"full height $fullBlockHeight")
   }
-
-  private def storageVersion(newModRow: ErgoPersistentModifier) = Algos.idToBAW(newModRow.id)
 
 }
 

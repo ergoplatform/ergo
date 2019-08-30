@@ -155,7 +155,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     *
     * @return Success() if header is valid, Failure(error) otherwise
     */
-  protected def validate(header: Header): Try[Unit] = new HeaderValidator().validate(header).toTry
+  protected def validate(header: Header): Try[Unit] = HeadersValidator.validate(header).toTry
 
   protected val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
 
@@ -264,12 +264,12 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     }
   }
 
-  class HeaderValidator extends ScorexEncoding {
+  object HeadersValidator {
 
     private def validationState: TaggedValidationState[Unit] =
       ModifierValidator.failFastTagged(ErgoValidationRules.initial)
 
-    def validate(header: Header): ValidationResult[Unit] = {
+    def validate(header: Header): ValidationResult[Unit] =
       if (header.isGenesis) {
         validateGenesisBlockHeader(header)
       } else {
@@ -280,9 +280,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
           validationState.validate(hdrParent, condition = false, Algos.encode(header.parentId))
         }
       }
-    }
 
-    private def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] = {
+    private def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] =
       validationState
         .validateEqualIds(hdrGenesisParent, header.parentId, Header.GenesisParentId)
         .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, (id: ModifierId) => id.equals(header.id))
@@ -293,9 +292,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(hdrTooOld, fullBlockHeight < nodeSettings.keepVersions, heightOf(header.parentId).toString)
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .result
-    }
 
-    private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] = {
+    private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] =
       validationState
         .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, s"${header.timestamp} > ${parent.timestamp}")
         .validate(hdrHeight, header.height == parent.height + 1, s"${header.height} vs ${parent.height}")
@@ -306,8 +304,16 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
         .result
-    }
 
+    private def validateOrphanedBlockHeader(header: Header): ValidationResult[Unit] =
+      validationState
+        .validateNoFailure(hdrPoW, powScheme.validate(header))
+        //.validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent, Some(header.timestamp)))
+        .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), heightOf(header.parentId).toString)
+        .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
+        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
+        .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
+        .result
   }
 
 }

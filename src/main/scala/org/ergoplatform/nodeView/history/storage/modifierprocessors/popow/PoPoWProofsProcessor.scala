@@ -12,20 +12,10 @@ import scala.util.Try
 /**
   * Contains all functions required by History to process PoPoWProofs and generate them.
   */
-trait PoPoWProofsProcessor { self: HeadersProcessor with ScorexLogging =>
-
-  protected val settings: ErgoSettings
-
-  protected lazy val algos: PoPowAlgos = new PoPowAlgos(settings.nodeSettings.poPowSettings)
-
-  def poPowSettings: PoPowSettings = settings.nodeSettings.poPowSettings
-
-  def lastHeaders(count: Int, offset: Int = 0): HeaderChain
+trait PoPoWProofsProcessor {
 
   def validate(m: PoPowProof): Try[Unit]
 
   def process(m: PoPowProof): ProgressInfo[ErgoPersistentModifier]
-
-  def generateProof: PoPowProof = algos.prove(lastHeaders(headersHeight).headers, 0) // todo: maxLevel
 
 }

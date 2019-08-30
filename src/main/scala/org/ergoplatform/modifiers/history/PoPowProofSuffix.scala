@@ -22,13 +22,6 @@ final case class PoPowProofSuffix(k: Int,
 
   override def parentId: ModifierId = chain.head.id
 
-  //  def validate: Try[Unit] = {
-  //    failFast
-  //      .demand(chain.lengthCompare(k) == 0, "Invalid suffix length")
-  //      .result
-  //      .toTry
-  //  }
-
 }
 
 object PoPowProofSuffix {

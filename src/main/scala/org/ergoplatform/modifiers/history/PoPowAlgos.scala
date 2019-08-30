@@ -186,7 +186,7 @@ object PoPowAlgos {
   /**
     * Computes max level (μ) of the given [[Header]], such that μ = log(T) − log(id(B))
     */
-  private[history] def maxLevelOf(header: Header): Int = {
+  def maxLevelOf(header: Header): Int = {
     if (!header.isGenesis) {
       def log2(x: Double) = math.log(x) / math.log(2)
 

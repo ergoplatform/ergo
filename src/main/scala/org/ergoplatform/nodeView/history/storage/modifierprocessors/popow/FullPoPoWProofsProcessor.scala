@@ -2,20 +2,24 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{NiPoPowProofSerializer, PoPowProof, PoPowProofPrefix}
+import org.ergoplatform.modifiers.history.PoPowAlgos.maxLevelOf
+import org.ergoplatform.modifiers.history.{Header, NiPoPowProofSerializer, PoPowProof, PoPowProofPrefix}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, ErgoSettings, PoPowSettings}
 import scorex.core.consensus.History.ProgressInfo
+import scorex.core.validation.ModifierValidator
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
-import scala.util.Try
+import scala.util.{Success, Try}
 
 /**
   * Contains all functions required by History to process PoPoWProofs for regime that accept them.
   */
 trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor {
   self: HeadersProcessor with ScorexLogging =>
+
+  protected val settings: ErgoSettings
 
   protected val bestProofPrefixIdOpt: Option[ModifierId] = ???
 
@@ -25,6 +29,8 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor {
   private val emptyProgressInfo = ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
 
   private var proofsChecked: Int = 0
+
+  def poPowSettings: PoPowSettings = settings.nodeSettings.poPowSettings
 
   def proofById(id: ModifierId): Option[PoPowProof] = historyStorage.get(id)
     .flatMap(NiPoPowProofSerializer.parseBytesTry(_).toOption)
@@ -54,18 +60,19 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor {
     }
   }
 
-  def validate(m: PoPowProof): Try[Unit] = ???
-//    m.validate.flatMap { _ =>
-//      val genesis = m.prefix.chain.head
-//      val suffix = m.suffix.chain
-//      suffix.tail
-//        .foldLeft[(Try[Unit], Header)](Success(()), suffix.head) { case ((res, parent), header) =>
-//          res.flatMap(_ => HeaderValidator.validateChildBlockHeader(header, parent).toTry) -> parent
-//        }
-//        ._1
-//        .flatMap(_ => HeaderValidator.validateOrphanedBlockHeader(suffix.head).toTry)
-//        .flatMap(_ => HeaderValidator.validateGenesisBlockHeader(genesis).toTry)
-//    }
+  def validate(m: PoPowProof): Try[Unit] =
+    ModifierValidator.failFast
+      .demand(m.suffix.chain.lengthCompare(m.suffix.k) == 0, "Invalid suffix length")
+      .demand(validPrefix(m.prefix), s"Invalid prefix length")
+      //.demand(m.prefix.chain.tail.forall(_.interlinks.headOption.contains(chain.head.id)), "Chain is not anchored")
+      //.validateHeaders
+      .result
+      .toTry
+
+  private def validPrefix(prefix: PoPowProofPrefix): Boolean = {
+    val levels = prefix.chain.tail.map(maxLevelOf)
+    (0 to levels.max).forall(l => prefix.chain.count(h => maxLevelOf(h) >= l) >= prefix.m) // todo: check max qty overflow as well.
+  }
 
 }
 

@@ -8,7 +8,7 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 final case class PoPowProofPrefix(m: Int,
-                                  chain: Seq[Header],
+                                  chain: Seq[PoPowHeader],
                                   suffixId: ModifierId,
                                   sizeOpt: Option[Int] = None)
   extends ErgoPersistentModifier {
@@ -25,12 +25,14 @@ final case class PoPowProofPrefix(m: Int,
 
   override def parentId: ModifierId = chain.head.id
 
-  def chainOfLevel(l: Int): Seq[Header] = chain.filter(maxLevelOf(_) >= l)
+  def headersChain: Seq[Header] = chain.map(_.header)
+
+  def chainOfLevel(l: Int): Seq[PoPowHeader] = chain.filter(x => maxLevelOf(x.header) >= l)
 
   def isBetterThan(that: PoPowProofPrefix): Boolean = {
-    val (thisDivergingChain, thatDivergingChain) = lowestCommonAncestor(chain, that.chain)
-      .map(h => chain.filter(_.height > h.height) -> that.chain.filter(_.height > h.height))
-      .getOrElse(chain -> that.chain)
+    val (thisDivergingChain, thatDivergingChain) = lowestCommonAncestor(headersChain, that.headersChain)
+      .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
+      .getOrElse(headersChain -> that.headersChain)
     bestArg(thisDivergingChain)(m) > bestArg(thatDivergingChain)(m)
   }
 
@@ -60,7 +62,7 @@ object NiPoPowProofPrefixSerializer extends ScorexSerializer[PoPowProofPrefix] {
     val prefixSize = r.getInt()
     val prefix = (0 until prefixSize).map { _ =>
       val size = r.getInt()
-      HeaderSerializer.parseBytes(r.getBytes(size))
+      PoPowHeaderSerializer.parseBytes(r.getBytes(size))
     }
     PoPowProofPrefix(m, prefix, suffixId, Some(r.position - startPos))
   }

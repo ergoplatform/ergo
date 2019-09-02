@@ -305,7 +305,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
         .result
 
-    private def validateOrphanedBlockHeader(header: Header): ValidationResult[Unit] =
+    private[history] def validateOrphanedBlockHeader(header: Header): ValidationResult[Unit] =
       validationState
         .validateNoFailure(hdrPoW, powScheme.validate(header))
         //.validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent, Some(header.timestamp)))

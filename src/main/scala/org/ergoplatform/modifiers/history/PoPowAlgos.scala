@@ -16,15 +16,15 @@ class PoPowAlgos(settings: PoPowSettings) {
   private val k1 = settings.k1
   private val d = settings.d
 
-  def prove(chain: Seq[Header], maxLevel: Int): PoPowProof = {
+  def prove(chain: Seq[PoPowHeader], maxLevel: Int): PoPowProof = {
     require(chain.lengthCompare(k) >= 0, s"Can not prove chain of size < $k")
-    require(chain.head.isGenesis, "Can not prove not anchored chain")
+    require(chain.head.header.isGenesis, "Can not prove not anchored chain")
     @scala.annotation.tailrec
-    def provePrefix(anchoringPoint: Header, level: Int, acc: Seq[Header] = Seq.empty): Seq[Header] = {
+    def provePrefix(anchoringPoint: PoPowHeader, level: Int, acc: Seq[PoPowHeader] = Seq.empty): Seq[PoPowHeader] = {
       if (level >= 0) {
         val subChain = chain.dropRight(k)
-          .filter(h => maxLevelOf(h) >= level && h.height >= anchoringPoint.height) // C[:−k]{B:}↑µ
-        if (subChain.size >= m && goodSuperChain(chain, subChain, level)) {
+          .filter(h => maxLevelOf(h.header) >= level && h.height >= anchoringPoint.height) // C[:−k]{B:}↑µ
+        if (subChain.size >= m && goodSuperChain(chain.map(_.header), subChain.map(_.header), level)) {
           provePrefix(subChain(subChain.size - m), level - 1, acc ++ subChain)
         } else {
           provePrefix(anchoringPoint, level - 1, acc ++ subChain)

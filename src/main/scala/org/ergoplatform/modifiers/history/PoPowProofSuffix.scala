@@ -8,7 +8,7 @@ import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
 
 final case class PoPowProofSuffix(k: Int,
-                                  chain: Seq[Header],
+                                  chain: Seq[PoPowHeader],
                                   sizeOpt: Option[Int] = None)
   extends ErgoPersistentModifier {
 
@@ -46,7 +46,7 @@ object NiPoPowProofSuffixSerializer extends ScorexSerializer[PoPowProofSuffix] {
     val suffixSize = r.getInt()
     val suffix = (0 until suffixSize).map { _ =>
       val size = r.getInt()
-      HeaderSerializer.parseBytes(r.getBytes(size))
+      PoPowHeaderSerializer.parseBytes(r.getBytes(size))
     }
     PoPowProofSuffix(k, suffix, Some(r.position - startPos))
   }

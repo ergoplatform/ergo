@@ -21,9 +21,9 @@ final case class PoPowProof(prefix: PoPowProofPrefix, suffix: PoPowProofSuffix)
 
   override def parentId: ModifierId = prefix.parentId
 
-  def chain: Seq[Header] = prefix.chain ++ suffix.chain
+  def chain: Seq[PoPowHeader] = prefix.chain ++ suffix.chain
 
-  //  def validate: Try[Unit] = prefix.validate.flatMap(_ => suffix.validate)
+  def headersChain: Seq[Header] = chain.map(_.header)
 
 }
 
@@ -31,7 +31,7 @@ object PoPowProof {
 
   val TypeId: ModifierTypeId = ModifierTypeId @@ (110: Byte)
 
-  def apply(m: Int, k: Int, prefixChain: Seq[Header], suffixChain: Seq[Header]): PoPowProof = {
+  def apply(m: Int, k: Int, prefixChain: Seq[PoPowHeader], suffixChain: Seq[PoPowHeader]): PoPowProof = {
     val suffix = PoPowProofSuffix(k, suffixChain)
     val prefix = PoPowProofPrefix(m, prefixChain, suffix.id)
     new PoPowProof(prefix, suffix)

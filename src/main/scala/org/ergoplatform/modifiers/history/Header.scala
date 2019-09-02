@@ -38,7 +38,8 @@ case class Header(version: Version,
                   extensionRoot: Digest32,
                   powSolution: AutolykosSolution,
                   votes: Array[Byte], //3 bytes
-                  override val sizeOpt: Option[Int] = None) extends PreHeader with ErgoPersistentModifier {
+                  override val sizeOpt: Option[Int] = None)
+  extends PreHeader with ErgoPersistentModifier {
 
   override def serializedId: Array[Version] = Algos.hash(bytes)
 

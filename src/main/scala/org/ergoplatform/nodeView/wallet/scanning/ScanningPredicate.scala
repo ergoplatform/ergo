@@ -2,12 +2,17 @@ package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.ErgoBox
 import sigmastate.Values
+import scorex.util.encode.Base16
 
+/**
+  * Basic interface for box scanning functionality
+  */
 sealed trait ScanningPredicate {
   def filter(box: ErgoBox): Boolean
 }
 
 case class ContainsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byte]) extends ScanningPredicate {
+
   override def filter(box: ErgoBox): Boolean = {
     box.get(regId).exists {
       _ match {
@@ -29,7 +34,7 @@ case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byte]
   }
 }
 
-case class ContainsAssetPredicate(regId: ErgoBox.RegisterId, assetId: ErgoBox.TokenId) extends ScanningPredicate {
+case class ContainsAssetPredicate(assetId: ErgoBox.TokenId) extends ScanningPredicate {
   override def filter(box: ErgoBox): Boolean = {
     box.additionalTokens.exists(_._1.sameElements(assetId))
   }

@@ -149,6 +149,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     & entity(as[Seq[PaymentRequest]])) { requests =>
     sendTransaction(withFee(requests), Seq.empty)
   }
+
   def balancesR: Route = (path("balances") & get) {
     withWallet(_.confirmedBalances)
   }

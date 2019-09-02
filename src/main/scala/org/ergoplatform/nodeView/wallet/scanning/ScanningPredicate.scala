@@ -57,15 +57,18 @@ import io.circe.syntax._
 
 object ScanningPredicateJsonEncoders extends App with ApiCodecs {
 
-  implicit val encodeContainsAsset: Encoder[ContainsAssetPredicate] =
-    Encoder.forProduct2("predicate", "asset")(c => ("containsAsset", Base16.encode(c.assetId)))
-
-
   implicit val encodeScanningPredicate: Encoder[ScanningPredicate] = {predicate =>
     predicate match {
-      case cap: ContainsAssetPredicate => Json.obj("predicate" -> "containsAsset".asJson, "asset" -> Base16.encode(cap.assetId).asJson)
-      case or: OrScanningPredicate => Json.obj("predicate" -> "or".asJson, "args" -> or.subPredicates.asJson)
-      case _ => ???
+      case cp: ContainsScanningPredicate =>
+        Json.obj("predicate" -> "contains".asJson, "regId" -> cp.regId.asJson, "bytes" -> Base16.encode(cp.bytes).asJson)
+      case ep: EqualsScanningPredicate =>
+        Json.obj("predicate" -> "equals".asJson, "regId" -> ep.regId.asJson, "bytes" -> Base16.encode(ep.bytes).asJson)
+      case cap: ContainsAssetPredicate =>
+        Json.obj("predicate" -> "containsAsset".asJson, "asset" -> Base16.encode(cap.assetId).asJson)
+      case and: AndScanningPredicate =>
+        Json.obj("predicate" -> "and".asJson, "args" -> and.subPredicates.asJson)
+      case or: OrScanningPredicate =>
+        Json.obj("predicate" -> "or".asJson, "args" -> or.subPredicates.asJson)
     }
   }
 
@@ -101,6 +104,7 @@ object ScanningPredicateJsonEncoders extends App with ApiCodecs {
   }
 
   val cap = OrScanningPredicate(
+    ContainsScanningPredicate(ErgoBox.R1, Array.fill(32)(1: Byte)),
     ContainsAssetPredicate(Digest32 @@ Array.fill(32)(0: Byte)),
     ContainsAssetPredicate(Digest32 @@ Array.fill(32)(0: Byte))
   )

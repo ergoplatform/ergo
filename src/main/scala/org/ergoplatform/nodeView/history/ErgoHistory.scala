@@ -16,7 +16,7 @@ import org.ergoplatform.utils.LoggingUtil
 import org.iq80.leveldb.Options
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.utils.NetworkTimeProvider
+import scorex.core.utils.{NetworkTimeProvider, ScorexEncoder}
 import scorex.core.validation.RecoverableModifierError
 import scorex.util.{ScorexLogging, idToBytes}
 
@@ -120,7 +120,7 @@ trait ErgoHistory
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
             historyStorage.insert(validityRow, Seq.empty)
-            this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+            this -> ErgoHistory.emptyProgressInfo
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
             val newBestHeaderOpt = loopHeightDown(headersHeight, id => !invalidatedIds.contains(id))
@@ -131,7 +131,7 @@ trait ErgoHistory
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq,
                 Seq.empty
               )
-              this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+              this -> ErgoHistory.emptyProgressInfo
             } else {
               val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
                 .flatMap(f => headerChainBack(fullBlockHeight + 1, f.header, h => !invalidatedIds.contains(h.id)).headers)
@@ -167,7 +167,7 @@ trait ErgoHistory
         historyStorage.insert(
           Seq(validityKey(modifier.id) -> Array(0.toByte)),
           Seq.empty)
-        this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+        this -> ErgoHistory.emptyProgressInfo
     }
   }
 
@@ -195,6 +195,9 @@ object ErgoHistory extends ScorexLogging {
 
   val EmptyHistoryHeight: Int = 0
   val GenesisHeight: Int = EmptyHistoryHeight + 1
+
+  def emptyProgressInfo(implicit e: ScorexEncoder): ProgressInfo[ErgoPersistentModifier] =
+    ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
 
   def heightOf(headerOpt: Option[Header]): Int = headerOpt.map(_.height).getOrElse(EmptyHistoryHeight)
 

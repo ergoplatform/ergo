@@ -293,7 +293,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .result
 
-    private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] =
+    private[history] def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] =
       validationState
         .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, s"${header.timestamp} > ${parent.timestamp}")
         .validate(hdrHeight, header.height == parent.height + 1, s"${header.height} vs ${parent.height}")
@@ -308,7 +308,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     private[history] def validateOrphanedBlockHeader(header: Header): ValidationResult[Unit] =
       validationState
         .validateNoFailure(hdrPoW, powScheme.validate(header))
-        //.validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent, Some(header.timestamp)))
         .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), heightOf(header.parentId).toString)
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")

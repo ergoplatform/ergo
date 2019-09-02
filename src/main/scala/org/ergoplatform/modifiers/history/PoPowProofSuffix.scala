@@ -22,6 +22,8 @@ final case class PoPowProofSuffix(k: Int,
 
   override def parentId: ModifierId = chain.head.id
 
+  def headersChain: Seq[Header] = chain.map(_.header)
+
 }
 
 object PoPowProofSuffix {

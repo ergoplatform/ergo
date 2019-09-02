@@ -23,7 +23,7 @@ object AugWalletTransaction {
       "address" -> e.fromProposition(box.ergoTree).toOption.map(_.toString).asJson,
       "assets" -> box.additionalTokens.toArray.toSeq.asJson,
       "creationHeight" -> box.creationHeight.asJson,
-      "additionalRegisters" -> registersEncoder(box.additionalRegisters)
+      "additionalRegisters" -> nonMandatoryRegistersEncoder(box.additionalRegisters)
     )
   }
 

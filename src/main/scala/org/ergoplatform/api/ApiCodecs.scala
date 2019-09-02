@@ -3,8 +3,8 @@ package org.ergoplatform.api
 import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
-import org.ergoplatform.{ErgoAddress, ErgoBox}
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, RegisterId}
 import org.ergoplatform.api.ApiEncoderOption.Detalization
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
@@ -16,13 +16,11 @@ import scorex.core.validation.ValidationResult
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
-import sigmastate.Values.{ErgoTree, EvaluatedValue, Value}
+import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
-import sigmastate.{SBoolean, SType}
-import special.collection.Coll
-import sigmastate.eval._
+import sigmastate.SType
 
 import scala.util.Try
 
@@ -119,11 +117,22 @@ trait ApiCodecs {
     }
   }
 
-  implicit val registerIdEncoder: KeyEncoder[NonMandatoryRegisterId] = { regId =>
+  implicit val registerIdEncoder: Encoder[RegisterId] = { regId =>
+    s"R${regId.number}".asJson
+  }
+
+  implicit val registerIdDecoder: Decoder[RegisterId] = { implicit cursor =>
+    for {
+      regId <- cursor.as[String]
+      reg <- fromOption(ErgoBox.registerByName.get(regId))
+    } yield reg
+  }
+
+  implicit val nonMandatoryRegisterIdEncoder: KeyEncoder[NonMandatoryRegisterId] = { regId =>
     s"R${regId.number}"
   }
 
-  implicit val registerIdDecoder: KeyDecoder[NonMandatoryRegisterId] = { key =>
+  implicit val nonMandatoryRegisterIdDecoder: KeyDecoder[NonMandatoryRegisterId] = { key =>
     ErgoBox.registerByName.get(key).collect {
       case nonMandatoryId: NonMandatoryRegisterId => nonMandatoryId
     }
@@ -131,15 +140,15 @@ trait ApiCodecs {
 
   implicit val proveDlogEncoder: Encoder[ProveDlog] = _.pkBytes.asJson
 
-  def decodeRegisterId(key: String)(implicit cursor: ACursor): Decoder.Result[NonMandatoryRegisterId] = {
-    registerIdDecoder
+  def decodeNonMandatoryRegisterId(key: String)(implicit cursor: ACursor): Decoder.Result[NonMandatoryRegisterId] = {
+    nonMandatoryRegisterIdDecoder
       .apply(key.toUpperCase)
       .toRight(DecodingFailure(s"Unknown register identifier: $key", cursor.history))
   }
 
-  implicit val registersEncoder: Encoder[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = {
+  implicit val nonMandatoryRegistersEncoder: Encoder[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = {
     _.map { case (key, value) =>
-      registerIdEncoder(key) -> evaluatedValueEncoder(value)
+      nonMandatoryRegisterIdEncoder(key) -> evaluatedValueEncoder(value)
     }.asJson
   }
 
@@ -157,7 +166,7 @@ trait ApiCodecs {
       "ergoTree" -> ergoTreeEncoder(box.ergoTree),
       "assets" -> box.additionalTokens.toArray.toSeq.asJson,
       "creationHeight" -> box.creationHeight.asJson,
-      "additionalRegisters" -> registersEncoder(box.additionalRegisters)
+      "additionalRegisters" -> nonMandatoryRegistersEncoder(box.additionalRegisters)
     )
   }
 

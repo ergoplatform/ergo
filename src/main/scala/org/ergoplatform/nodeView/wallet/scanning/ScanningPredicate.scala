@@ -1,18 +1,12 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
-import io.circe.{DecodingFailure, HCursor}
-import org.ergoplatform.{ErgoAddress, ErgoBox}
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, RegisterId}
+import io.circe.{HCursor, Json}
+import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
-import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
-import org.ergoplatform.settings.ErgoSettings
 import scorex.crypto.hash.Digest32
-import sigmastate.{SType, Values}
+import sigmastate.Values
 import scorex.util.encode.Base16
-import sigmastate.Values.EvaluatedValue
-
-import scala.util.{Failure, Success}
 
 /**
   * Basic interface for box scanning functionality
@@ -61,19 +55,27 @@ case class OrScanningPredicate(subPredicates: ScanningPredicate*) extends Scanni
 import io.circe.{ Decoder, Encoder }, io.circe.generic.auto._
 import io.circe.syntax._
 
-object GenericDerivation extends ApiCodecs {
+object ScanningPredicateJsonEncoders extends App with ApiCodecs {
 
   implicit val encodeContainsAsset: Encoder[ContainsAssetPredicate] =
     Encoder.forProduct2("predicate", "asset")(c => ("containsAsset", Base16.encode(c.assetId)))
 
-  object ScanningPredicateDecoder extends Decoder[ScanningPredicate] {
-    def apply(cursor: HCursor): Decoder.Result[ScanningPredicate] = {
+
+  implicit val encodeScanningPredicate: Encoder[ScanningPredicate] = {predicate =>
+    predicate match {
+      case cap: ContainsAssetPredicate => Json.obj("predicate" -> "containsAsset".asJson, "asset" -> Base16.encode(cap.assetId).asJson)
+      case or: OrScanningPredicate => Json.obj("predicate" -> "or".asJson, "args" -> or.subPredicates.asJson)
+      case _ => ???
+    }
+  }
+
+  implicit val scanningPredicateDecode: Decoder[ScanningPredicate] = { implicit cursor =>
+
       cursor.downField("predicate").as[String].flatMap { predicate =>
         predicate match {
           case _: String if predicate == "containsAsset" =>
             for {
               asset <- cursor.downField("asset").as[ErgoBox.TokenId]
-              //  registers <- cursor.downField("registers").as[Option[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]]
             } yield ContainsAssetPredicate(asset)
           case _: String if predicate == "contains" =>
             for {
@@ -88,14 +90,22 @@ object GenericDerivation extends ApiCodecs {
           case _: String if predicate == "and" =>
             for {
               args <- cursor.downField("args").as[Seq[ScanningPredicate]]
-            } yield AndScanningPredicate(args)
+            } yield AndScanningPredicate(args :_*)
           case _: String if predicate == "or" =>
             for {
               args <- cursor.downField("args").as[Seq[ScanningPredicate]]
-            } yield AndScanningPredicate(args)
+            } yield OrScanningPredicate(args :_*)
         }
       }
-    }
+
   }
 
+  val cap = OrScanningPredicate(
+    ContainsAssetPredicate(Digest32 @@ Array.fill(32)(0: Byte)),
+    ContainsAssetPredicate(Digest32 @@ Array.fill(32)(0: Byte))
+  )
+
+  val j = encodeScanningPredicate(cap)
+  println(j)
+  println(scanningPredicateDecode.decodeJson(j))
 }

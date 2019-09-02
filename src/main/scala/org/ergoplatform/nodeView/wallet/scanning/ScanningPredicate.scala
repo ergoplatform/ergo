@@ -52,60 +52,58 @@ case class OrScanningPredicate(subPredicates: ScanningPredicate*) extends Scanni
   override def filter(box: ErgoBox): Boolean = subPredicates.exists(p => p.filter(box))
 }
 
-import io.circe.{ Decoder, Encoder }, io.circe.generic.auto._
+import io.circe.{Decoder, Encoder}, io.circe.generic.auto._
 import io.circe.syntax._
 
-object ScanningPredicateJsonEncoders extends App with ApiCodecs {
+object ScanningPredicateJsonEncoders extends ApiCodecs {
 
-  implicit val encodeScanningPredicate: Encoder[ScanningPredicate] = {
+  implicit val scanningPredicateEncoder: Encoder[ScanningPredicate] = {
     case cp: ContainsScanningPredicate =>
-      Json.obj("predicate" -> "contains".asJson, "regId" -> cp.regId.asJson, "bytes" -> Base16.encode(cp.bytes).asJson)
+      Json.obj("predicate" -> "contains".asJson, "register" -> cp.regId.asJson, "bytes" -> Base16.encode(cp.bytes).asJson)
     case ep: EqualsScanningPredicate =>
-      Json.obj("predicate" -> "equals".asJson, "regId" -> ep.regId.asJson, "bytes" -> Base16.encode(ep.bytes).asJson)
+      Json.obj("predicate" -> "equals".asJson, "register" -> ep.regId.asJson, "bytes" -> Base16.encode(ep.bytes).asJson)
     case cap: ContainsAssetPredicate =>
-      Json.obj("predicate" -> "containsAsset".asJson, "asset" -> Base16.encode(cap.assetId).asJson)
+      Json.obj("predicate" -> "containsAsset".asJson, "assetId" -> Base16.encode(cap.assetId).asJson)
     case and: AndScanningPredicate =>
       Json.obj("predicate" -> "and".asJson, "args" -> and.subPredicates.asJson)
     case or: OrScanningPredicate =>
       Json.obj("predicate" -> "or".asJson, "args" -> or.subPredicates.asJson)
   }
 
-  implicit val scanningPredicateDecode: Decoder[ScanningPredicate] = { implicit cursor =>
-
-      cursor.downField("predicate").as[String].flatMap {
-        case predicate@(_: String) if predicate == "containsAsset" =>
-          for {
-            asset <- cursor.downField("asset").as[ErgoBox.TokenId]
-          } yield ContainsAssetPredicate(asset)
-        case predicate@(_: String) if predicate == "contains" =>
-          for {
-            bytes <- cursor.downField("bytes").as[Array[Byte]]
-            register <- cursor.downField("register").as[Option[RegisterId]]
-          } yield ContainsScanningPredicate(register.getOrElse(ErgoBox.R1), bytes)
-        case predicate@(_: String) if predicate == "equals" =>
-          for {
-            bytes <- cursor.downField("bytes").as[Array[Byte]]
-            register <- cursor.downField("register").as[Option[RegisterId]]
-          } yield EqualsScanningPredicate(register.getOrElse(ErgoBox.R1), bytes)
-        case predicate@(_: String) if predicate == "and" =>
-          for {
-            args <- cursor.downField("args").as[Seq[ScanningPredicate]]
-          } yield AndScanningPredicate(args: _*)
-        case predicate@(_: String) if predicate == "or" =>
-          for {
-            args <- cursor.downField("args").as[Seq[ScanningPredicate]]
-          } yield OrScanningPredicate(args: _*)
-      }
-
+  implicit val scanningPredicateDecoder: Decoder[ScanningPredicate] = { implicit cursor =>
+    cursor.downField("predicate").as[String].flatMap {
+      case predicate@(_: String) if predicate == "containsAsset" =>
+        for {
+          asset <- cursor.downField("assetId").as[ErgoBox.TokenId]
+        } yield ContainsAssetPredicate(asset)
+      case predicate@(_: String) if predicate == "contains" =>
+        for {
+          bytes <- cursor.downField("bytes").as[Array[Byte]]
+          register <- cursor.downField("register").as[Option[RegisterId]]
+        } yield ContainsScanningPredicate(register.getOrElse(ErgoBox.R1), bytes)
+      case predicate@(_: String) if predicate == "equals" =>
+        for {
+          bytes <- cursor.downField("bytes").as[Array[Byte]]
+          register <- cursor.downField("register").as[Option[RegisterId]]
+        } yield EqualsScanningPredicate(register.getOrElse(ErgoBox.R1), bytes)
+      case predicate@(_: String) if predicate == "and" =>
+        for {
+          args <- cursor.downField("args").as[Seq[ScanningPredicate]]
+        } yield AndScanningPredicate(args: _*)
+      case predicate@(_: String) if predicate == "or" =>
+        for {
+          args <- cursor.downField("args").as[Seq[ScanningPredicate]]
+        } yield OrScanningPredicate(args: _*)
+    }
   }
 
   val cap = OrScanningPredicate(
     ContainsScanningPredicate(ErgoBox.R1, Array.fill(32)(1: Byte)),
-    ContainsAssetPredicate(Digest32 @@ Array.fill(32)(0: Byte)),
+    EqualsScanningPredicate(ErgoBox.R4, Array.fill(32)(0: Byte)),
     ContainsAssetPredicate(Digest32 @@ Array.fill(32)(0: Byte))
   )
 
-  val j = encodeScanningPredicate(cap)
+  val j = scanningPredicateEncoder(cap)
   println(j)
-  println(scanningPredicateDecode.decodeJson(j))
+  println(scanningPredicateDecoder.decodeJson(j))
 }

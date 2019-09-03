@@ -7,9 +7,9 @@ import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 
-class ScanningPredicateJsonEncodersSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
+class ScanningPredicateJsonCodecsSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
 
-  import ScanningPredicateJsonEncoders.{scanningPredicateEncoder, scanningPredicateDecoder}
+  import ScanningPredicateJsonCodecs.{scanningPredicateEncoder, scanningPredicateDecoder}
 
   property("complex or roundtrip") {
     val p = OrScanningPredicate(

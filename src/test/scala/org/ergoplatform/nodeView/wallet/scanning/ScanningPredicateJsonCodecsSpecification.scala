@@ -12,23 +12,13 @@ class ScanningPredicateJsonCodecsSpecification extends ErgoPropertyTest with Erg
   import ScanningPredicateJsonCodecs.{scanningPredicateEncoder, scanningPredicateDecoder}
 
   property("complex or roundtrip") {
-    val p = OrScanningPredicate(
-      ContainsScanningPredicate(ErgoBox.R1, Array.fill(32)(1: Byte)),
-      EqualsScanningPredicate(ErgoBox.R4, Array.fill(32)(0: Byte)),
-      ContainsAssetPredicate(Digest32 @@ Array.fill(32)(0: Byte))
-    )
-
+    val p = ScanningPredicateTestVectors.complexOr
     val j = scanningPredicateEncoder(p)
     scanningPredicateDecoder.decodeJson(j).toTry.get == p
   }
 
   property("complex and roundtrip") {
-    val p = AndScanningPredicate(
-      ContainsScanningPredicate(ErgoBox.R1, Array.fill(32)(1: Byte)),
-      EqualsScanningPredicate(ErgoBox.R4, Array.fill(32)(1: Byte)),
-      ContainsAssetPredicate(Digest32 @@ Array.fill(32)(1: Byte))
-    )
-
+    val p = ScanningPredicateTestVectors.complexAnd
     val j = scanningPredicateEncoder(p)
     scanningPredicateDecoder.decodeJson(j).toTry.get == p
   }

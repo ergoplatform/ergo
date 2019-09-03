@@ -9,7 +9,7 @@ import io.circe.{Decoder, Encoder}, io.circe.generic.auto._
 import io.circe.syntax._
 
 
-object ScanningPredicateJsonEncoders extends ApiCodecs {
+object ScanningPredicateJsonCodecs extends ApiCodecs {
 
   implicit val scanningPredicateEncoder: Encoder[ScanningPredicate] = {
     case cp: ContainsScanningPredicate =>

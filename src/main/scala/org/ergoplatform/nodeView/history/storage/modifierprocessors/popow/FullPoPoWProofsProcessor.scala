@@ -85,8 +85,9 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor {
     }
 
   private def validPrefix(prefix: PoPowProofPrefix): Boolean = {
-    val levels = prefix.headersChain.tail.map(maxLevelOf)
-    (0 to levels.max).forall(l => prefix.headersChain.count(h => maxLevelOf(h) >= l) >= prefix.m) // todo: check max qty overflow as well.
+    val maxLevel = prefix.headersChain.tail.map(maxLevelOf).max
+    assert(maxLevel < 256)
+    (0 to maxLevel).forall(l => prefix.headersChain.count(h => maxLevelOf(h) >= l) >= prefix.m)
   }
 
 }

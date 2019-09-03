@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants
 import scorex.core.NodeViewHolder._
 import scorex.core.PersistentNodeViewModifier
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SendLocalSyncInfo}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
@@ -23,13 +23,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                networkSettings: NetworkSettings,
                                timeProvider: NetworkTimeProvider)
-                              (implicit ex: ExecutionContext)
+                              (implicit ec: ExecutionContext)
   extends NodeViewSynchronizer[ErgoTransaction, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier,
     ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider,
     Constants.modifierSerializers) {
 
-  override protected val deliveryTracker = new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks,
-    self, timeProvider)
+  override protected val deliveryTracker = new ErgoDeliveryTracker(
+    context.system, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
 
   /**
     * Approximate number of modifiers to be downloaded simultaneously
@@ -49,10 +49,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
-      historyReaderOpt.foreach { h =>
-        def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(h)) == ModifiersStatus.Unknown
+      historyReaderOpt.foreach { hr =>
+        def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(hr)) == ModifiersStatus.Unknown
 
-        h.nextModifiersToDownload(desiredSizeOfExpectingQueue - deliveryTracker.requestedSize, downloadRequired)
+        hr.nextModifiersToDownload(desiredSizeOfExpectingQueue - deliveryTracker.requestedSize, downloadRequired)
           .groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }
   }
@@ -62,12 +62,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * - headers, if our headers chain is not synced yet (by sending sync message)
     * - block sections, if our headers chain is synced
     */
-  override protected def requestMoreModifiers(applied: Seq[ErgoPersistentModifier]): Unit = {
-    super.requestMoreModifiers(applied)
+  override protected def requestMoreModifiers(applied: Seq[ErgoPersistentModifier]): Unit =
     if (deliveryTracker.requestedSize < desiredSizeOfExpectingQueue / 2) {
       historyReaderOpt foreach { h =>
         if (h.isHeadersChainSynced) {
-          // our requested list is is half empty - request more missed modifiers
+          // our requested list is half empty - request more missed modifiers
           self ! CheckModifiersToDownload
         } else {
           // headers chain is not synced yet, but our requested list is half empty - ask for more headers
@@ -75,7 +74,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       }
     }
-  }
 
   /**
     * If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
@@ -85,12 +83,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       broadcastInvForNewModifier(mod)
   }
 
-  protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
+  protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit =
     mod match {
-      case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) => fb.toSeq.foreach(s => broadcastModifierInv(s))
+      case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) =>
+        fb.toSeq.foreach(s => broadcastModifierInv(s))
       case _ =>
     }
-  }
 
   override protected def viewHolderEvents: Receive =
     onSemanticallySuccessfulModifier orElse
@@ -99,6 +97,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 }
 
 object ErgoNodeViewSynchronizer {
+
   def props(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
@@ -126,6 +125,6 @@ object ErgoNodeViewSynchronizer {
     context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider), name)
 
 
-  case object CheckModifiersToDownload
+  final case object CheckModifiersToDownload
 
 }

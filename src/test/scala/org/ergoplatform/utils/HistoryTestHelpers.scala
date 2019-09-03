@@ -17,7 +17,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
   val BlocksInChain = 10
   val BlocksToKeep: Int = BlocksInChain + 1
 
-  private val poPowSettings = PoPowSettings(enabled = false, 3, 30, 30, 30, 0.45)
+  private val poPowSettings = PoPowSettings(enabled = false, 3, PoPowParams(30, 30, 30, 0.45))
 
   def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
     val historyHeight = history.headersHeight

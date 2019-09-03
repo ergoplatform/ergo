@@ -7,7 +7,7 @@ import scala.concurrent.duration._
 
 class ErgoSettingsSpecification extends ErgoPropertyTest {
 
-  private val poPowSettings = PoPowSettings(enabled = false, 3, 30, 30, 30, 0.45)
+  private val poPowSettings = PoPowSettings(enabled = false, 3, PoPowParams(30, 30, 30, 0.45))
 
   property("should keep data user home  by default") {
     val settings = ErgoSettings.read()

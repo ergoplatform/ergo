@@ -1,6 +1,8 @@
 package org.ergoplatform.db
 
-import org.iq80.leveldb.DBFactory
+import java.io.File
+
+import org.iq80.leveldb.{DBFactory, Options}
 import scorex.util.ScorexLogging
 
 import scala.util.Try
@@ -30,6 +32,15 @@ object LDBFactory extends ScorexLogging {
     }
 
     factory
+  }
+
+  def createKvDb(path: String): LDBKVStore = {
+    val dir = new File(path)
+    dir.mkdirs()
+    val options = new Options()
+    options.createIfMissing(true)
+    val db = factory.open(dir, options)
+    new LDBKVStore(db)
   }
 
 }

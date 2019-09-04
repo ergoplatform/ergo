@@ -3,15 +3,13 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.PoPowProof
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
+import org.ergoplatform.settings.PoPowParams
 import scorex.core.consensus.History.ProgressInfo
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Try}
 
-/**
-  * Contains all functions required by History to process PoPoWProofs for regime that do not accept them.
-  */
-trait EmptyPoPoWProofsProcessor extends PoPoWProofsProcessor {
+trait EmptyPoPowComponent extends PoPowComponent {
   self: HeadersProcessor with ScorexLogging =>
 
   def validate(m: PoPowProof): Try[Unit] =
@@ -19,6 +17,9 @@ trait EmptyPoPoWProofsProcessor extends PoPoWProofsProcessor {
 
   def process(m: PoPowProof): ProgressInfo[ErgoPersistentModifier] =
     ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+
+  def prove(params: PoPowParams): Try[PoPowProof] =
+    Failure(new Exception("PoPow proving is not supported"))
 
 }
 

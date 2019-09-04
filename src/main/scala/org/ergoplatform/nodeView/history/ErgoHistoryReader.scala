@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPowComponent
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
@@ -22,7 +22,7 @@ import scala.util.{Failure, Try}
 trait ErgoHistoryReader
   extends HistoryReader[ErgoPersistentModifier, ErgoSyncInfo]
     with HeadersProcessor
-    with PoPoWProofsProcessor
+    with PoPowComponent
     with UTXOSnapshotChunkProcessor
     with BlockSectionProcessor
     with ScorexLogging

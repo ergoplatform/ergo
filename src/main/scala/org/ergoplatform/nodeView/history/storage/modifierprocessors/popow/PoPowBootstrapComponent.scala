@@ -7,17 +7,17 @@ import org.ergoplatform.modifiers.history.{Header, NiPoPowProofSerializer, PoPow
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Constants, ErgoSettings, PoPowSettings}
+import org.ergoplatform.settings.{Constants, ErgoSettings, PoPowParams, PoPowSettings}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.validation.ModifierValidator
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 /**
   * Contains all functions required by History to process PoPoWProofs for regime that accept them.
   */
-trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor {
+trait PoPowBootstrapComponent extends PoPowComponent {
   self: HeadersProcessor with ScorexLogging =>
 
   protected val settings: ErgoSettings
@@ -78,6 +78,9 @@ trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor {
       }
       .result
       .toTry
+
+  def prove(params: PoPowParams): Try[PoPowProof] =
+    Failure(new Exception("PoPow proving is not supported"))
 
   private def groupConsistentChain(chain: Seq[Header]): Seq[(Header, Header)] =
     chain.sliding(2, 1).foldLeft(Seq.empty[(Header, Header)]) { case (acc, hs) =>

@@ -8,9 +8,13 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInf
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants
 import scorex.core.NodeViewHolder._
-import scorex.core.PersistentNodeViewModifier
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
-import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer}
+import scorex.core.consensus.History.Younger
+import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.DataFromPeer
+import scorex.core.{PersistentNodeViewModifier, idsToString}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{OtherNodeSyncingStatus, SemanticallySuccessfulModifier}
+import scorex.core.network.message.{InvData, Message}
+import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer, SendToPeer}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ModifierId
@@ -74,6 +78,29 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       }
     }
+
+  override protected def processSync: Receive = {
+    case DataFromPeer(spec, syncInfo: ErgoSyncInfo, remote)
+      if spec.messageCode == syncInfoSpec.messageCode =>
+
+      (historyReaderOpt, syncInfo.poPowParamsOpt) match {
+        case (Some(historyReader), Some(poPowParams)) =>
+          historyReader.prove(poPowParams).foreach { proof =>
+            // todo: send `proof` to `remote`
+          }
+        case (Some(historyReader), _) =>
+          val ext = historyReader.continuationIds(syncInfo, networkSettings.desiredInvObjects)
+          val comparison = historyReader.compare(syncInfo)
+          log.debug(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +
+            s"Comparison result is $comparison. Sending extension of length ${ext.length}")
+          log.debug(s"Extension ids: ${idsToString(ext)}")
+
+          if (!(ext.nonEmpty || comparison != Younger)) log.warn("Extension is empty while comparison is younger")
+
+          self ! OtherNodeSyncingStatus(remote, comparison, ext)
+        case _ =>
+      }
+  }
 
   /**
     * If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections

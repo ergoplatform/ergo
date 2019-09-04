@@ -1,15 +1,11 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import java.io.File
-
 import com.google.common.primitives.Ints
-import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.db.{LDBFactory, LDBKVStore}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress}
-import org.iq80.leveldb.Options
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 

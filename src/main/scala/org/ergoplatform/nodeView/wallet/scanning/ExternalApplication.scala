@@ -4,13 +4,23 @@ import org.ergoplatform.api.ApiCodecs
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 
+import scala.util.{Failure, Success, Try}
 
-case class ExternalApplication(appId: Long, appName: String, trackingRule: ScanningPredicate) {
-  require(appId >= 1, s"Wrong application id: $appId")
-  require(appName.getBytes("UTF-8").length <= 255, s"Application name $appName is too long (255 bytes max)")
+case class ExternalApplication(appId: Long, appName: String, trackingRule: ScanningPredicate)
+
+object ExternalApplication {
+  val MaxAppNameLength = 255
 }
 
-case class ExternalAppRequest (appName: String, trackingRule: ScanningPredicate)
+case class ExternalAppRequest(appName: String, trackingRule: ScanningPredicate) {
+  def toApp(appId: Long): Try[ExternalApplication] = {
+    if(appName.getBytes("UTF-8").length > ExternalApplication.MaxAppNameLength) {
+      Failure(new Exception(s"Too application name: $appName"))
+    } else {
+      Success(ExternalApplication(appId, appName, trackingRule))
+    }
+  }
+}
 
 object ExternalApplicationSerializer extends ScorexSerializer[ExternalApplication] {
   override def serialize(obj: ExternalApplication, w: Writer): Unit = {

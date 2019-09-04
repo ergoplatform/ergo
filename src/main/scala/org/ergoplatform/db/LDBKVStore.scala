@@ -7,8 +7,6 @@ import org.iq80.leveldb.DB
   */
 final class LDBKVStore(protected val db: DB) extends KVStore {
 
-
-
   def update(toInsert: Seq[(K, V)], toRemove: Seq[K]): Unit = {
     val batch = db.createWriteBatch()
     try {

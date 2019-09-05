@@ -1,11 +1,11 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
+package org.ergoplatform.nodeView.history.components.popow
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.PoPowAlgos.maxLevelOf
 import org.ergoplatform.modifiers.history.{Header, NiPoPowProofSerializer, PoPowProof, PoPowProofPrefix}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
+import org.ergoplatform.nodeView.history.components.{ChainSyncComponent, HeadersComponent}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Constants, ErgoSettings, PoPowParams, PoPowSettings}
 import scorex.core.consensus.History.ProgressInfo
@@ -17,8 +17,8 @@ import scala.util.{Failure, Try}
 /**
   * Contains all functions required by History to process PoPoWProofs for regime that accept them.
   */
-trait PoPowBootstrapComponent extends PoPowComponent {
-  self: HeadersProcessor with ScorexLogging =>
+trait PoPowBootstrapComponent extends PoPowComponent with ScorexLogging {
+  self: HeadersComponent with ChainSyncComponent =>
 
   protected val settings: ErgoSettings
 

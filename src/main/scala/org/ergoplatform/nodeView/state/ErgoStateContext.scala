@@ -4,7 +4,7 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionValidator
+import org.ergoplatform.nodeView.history.components.ExtensionValidator
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Constants, _}
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext

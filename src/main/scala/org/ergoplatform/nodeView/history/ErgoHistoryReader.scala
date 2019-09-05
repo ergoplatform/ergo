@@ -4,9 +4,10 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPowComponent
+import org.ergoplatform.nodeView.history.components._
+import org.ergoplatform.nodeView.history.components.popow.PoPowComponent
 import org.ergoplatform.settings.ErgoSettings
+import scorex.core.ModifierTypeId
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.ScorexEncoding
@@ -21,10 +22,11 @@ import scala.util.{Failure, Try}
   */
 trait ErgoHistoryReader
   extends HistoryReader[ErgoPersistentModifier, ErgoSyncInfo]
-    with HeadersProcessor
+    with HeadersComponent
+    with ChainSyncComponent
     with PoPowComponent
     with UTXOSnapshotChunkProcessor
-    with BlockSectionProcessor
+    with BlockSectionComponent
     with ScorexLogging
     with ScorexEncoding {
 
@@ -262,6 +264,7 @@ trait ErgoHistoryReader
     assert(contains(header1) && contains(header2), "Should never call this function for non-existing headers")
     val heightDiff = Math.max(header1.height - header2.height, 0)
 
+    @scala.annotation.tailrec
     def loop(numberBack: Int, otherChain: HeaderChain): (HeaderChain, HeaderChain) = {
       val r = commonBlockThenSuffixes(otherChain, header1, numberBack + heightDiff)
       if (r._1.head == r._2.head) {
@@ -301,5 +304,15 @@ trait ErgoHistoryReader
         ModifierSemanticValidity.Absent
     }
   }
+
+  /**
+    * Decides modifiers of which types to accept depending on boot mode and boot stage.
+    */
+  def acceptModifierType(typeId: ModifierTypeId): Boolean =
+    if (settings.nodeSettings.poPowSettings.bootstrap && isEmpty) {
+      Seq(PoPowProofPrefix.TypeId, PoPowProofSuffix.TypeId).contains(ModifierTypeId)
+    } else {
+      true
+    }
 
 }

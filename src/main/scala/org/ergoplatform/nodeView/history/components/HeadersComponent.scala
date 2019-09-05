@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.components
 
 import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
@@ -16,7 +16,7 @@ import org.ergoplatform.settings._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, TaggedValidationState, ValidationResult, ValidationState}
+import scorex.core.validation.{ModifierValidator, TaggedValidationState, ValidationResult}
 import scorex.util._
 
 import scala.annotation.tailrec
@@ -25,7 +25,8 @@ import scala.util.Try
 /**
   * Contains all functions required by History to process Headers.
   */
-trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with ScorexEncoding {
+trait HeadersComponent extends ScorexLogging with ScorexEncoding {
+  self: ChainSyncComponent =>
 
   protected val historyStorage: HistoryStorage
 

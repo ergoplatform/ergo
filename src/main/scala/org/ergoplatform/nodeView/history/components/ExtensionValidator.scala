@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.components
 
 import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}

@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.components
 
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
@@ -11,7 +11,7 @@ import scala.annotation.tailrec
 /**
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
-trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
+trait ChainSyncComponent extends BasicReaders with ScorexLogging {
 
   private val maxTimeDiffFactor = 100
 
@@ -19,8 +19,8 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
   protected val settings: ErgoSettings
 
-  protected[history] lazy val pruningProcessor: FullBlockPruningProcessor =
-    new FullBlockPruningProcessor(nodeSettings, chainSettings)
+  protected[history] lazy val pruningProcessor: ChainSyncController =
+    new ChainSyncController(nodeSettings, chainSettings)
 
   protected def nodeSettings: NodeConfigurationSettings = settings.nodeSettings
 

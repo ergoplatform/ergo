@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.components
 
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
@@ -16,7 +16,7 @@ import scala.util.Try
   * Trait that implements BlockSectionProcessor interfaces for regimes where the node
   * downloads and process full blocks.
   */
-trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProcessor {
+trait FullBlockSectionComponent extends BlockSectionComponent with FullBlockComponent {
 
   private def initialValidationState: TaggedValidationState[Unit] =
     ModifierValidator.failFastTagged(ErgoValidationRules.initial)

@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
+import org.ergoplatform.nodeView.history.components.FullBlockComponent
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
@@ -34,7 +34,7 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     val (hi, pi) = history.append(chain(2).blockTransactions).get
     val expected = chain.drop(2)
 
-    expected.forall(b => hi.asInstanceOf[FullBlockProcessor].isInBestFullChain(b.id)) shouldBe true
+    expected.forall(b => hi.asInstanceOf[FullBlockComponent].isInBestFullChain(b.id)) shouldBe true
 
     pi.toApply.map(_.asInstanceOf[ErgoFullBlock]) shouldBe expected
   }
@@ -42,7 +42,7 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
   property("full chain status updating") {
 
     def isInBestChain(b: ErgoFullBlock, h: ErgoHistory): Boolean = {
-      h.asInstanceOf[FullBlockProcessor].isInBestFullChain(b.id)
+      h.asInstanceOf[FullBlockComponent].isInBestFullChain(b.id)
     }
 
     var history = genHistory()

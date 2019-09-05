@@ -13,9 +13,10 @@ import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.DataFromPeer
 import scorex.core.{PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{OtherNodeSyncingStatus, SemanticallySuccessfulModifier}
-import scorex.core.network.message.{InvData, Message}
+import scorex.core.network.message.{InvData, InvSpec, Message}
 import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer, SendToPeer}
 import scorex.core.settings.NetworkSettings
+import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ModifierId
 
@@ -86,7 +87,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       (historyReaderOpt, syncInfo.poPowParamsOpt) match {
         case (Some(historyReader), Some(poPowParams)) =>
           historyReader.prove(poPowParams).foreach { proof =>
-            // todo: send `proof` to `remote`
+            val ext = Seq[ErgoPersistentModifier](proof.prefix, proof.suffix).map(x => x.modifierTypeId -> x.id)
+            self ! OtherNodeSyncingStatus(remote, Younger, ext)
           }
         case (Some(historyReader), _) =>
           val ext = historyReader.continuationIds(syncInfo, networkSettings.desiredInvObjects)
@@ -99,6 +101,33 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
           self ! OtherNodeSyncingStatus(remote, comparison, ext)
         case _ =>
+      }
+  }
+
+  override protected def processInv: Receive = {
+    case DataFromPeer(spec, invData: InvData, peer)
+      if spec.messageCode == InvSpec.MessageCode =>
+
+      (mempoolReaderOpt, historyReaderOpt) match {
+        case (Some(mempool), Some(history)) =>
+          val modifierTypeId = invData.typeId
+          val acceptedModifierIds = modifierTypeId match {
+            case Transaction.ModifierTypeId =>
+              invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
+            case typeId if history.acceptModifierType(typeId) =>
+              invData.ids.filter(mid => deliveryTracker.status(mid, history) == ModifiersStatus.Unknown)
+            case _ =>
+              Seq.empty
+          }
+
+          if (acceptedModifierIds.nonEmpty) {
+            val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, acceptedModifierIds)), None)
+            peer.handlerRef ! msg
+            deliveryTracker.setRequested(acceptedModifierIds, modifierTypeId, Some(peer))
+          }
+
+        case _ =>
+          log.warn(s"Got data from peer while readers are not ready ${(mempoolReaderOpt, historyReaderOpt)}")
       }
   }
 

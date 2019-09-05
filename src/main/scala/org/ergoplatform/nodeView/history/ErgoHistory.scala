@@ -9,8 +9,8 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPowComponent, PoPowBootstrapComponent}
+import org.ergoplatform.nodeView.history.components._
+import org.ergoplatform.nodeView.history.components.popow.{EmptyPoPowComponent, PoPowBootstrapComponent}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import org.iq80.leveldb.Options
@@ -149,9 +149,9 @@ trait ErgoHistory
               val validChain = validHeadersChain.tail.flatMap(getFullBlock)
 
               val chainStatusRow = validChain.map(b =>
-                FullBlockProcessor.chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
+                FullBlockComponent.chainStatusKey(b.id) -> FullBlockComponent.BestChainMarker) ++
                 invalidatedHeaders.map(h =>
-                  FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
+                  FullBlockComponent.chainStatusKey(h.id) -> FullBlockComponent.NonBestChainMarker)
 
               val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
@@ -220,46 +220,47 @@ object ErgoHistory extends ScorexLogging {
     val indexStore = createDb(s"${ergoSettings.directory}/history/index")
     val objectsStore = createDb(s"${ergoSettings.directory}/history/objects")
     val db = new HistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
-    val nodeSettings = ergoSettings.nodeSettings
+    val settings = ergoSettings.nodeSettings
 
-    val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.poPoWBootstrap) match {
-      case (true, true) =>
-        new ErgoHistory with FullBlockSectionProcessor
-          with PoPowBootstrapComponent {
-          override protected val settings: ErgoSettings = ergoSettings
-          override protected[history] val historyStorage: HistoryStorage = db
-          override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-          override protected val timeProvider: NetworkTimeProvider = ntp
-        }
+    val history: ErgoHistory =
+      (settings.verifyTransactions, settings.poPowSettings.bootstrap) match {
+        case (true, true) =>
+          new ErgoHistory with FullBlockSectionComponent
+            with PoPowBootstrapComponent {
+            override protected val settings: ErgoSettings = ergoSettings
+            override protected[history] val historyStorage: HistoryStorage = db
+            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
+            override protected val timeProvider: NetworkTimeProvider = ntp
+          }
 
-      case (false, true) =>
-        new ErgoHistory with EmptyBlockSectionProcessor
-          with PoPowBootstrapComponent {
-          override protected val settings: ErgoSettings = ergoSettings
-          override protected[history] val historyStorage: HistoryStorage = db
-          override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-          override protected val timeProvider: NetworkTimeProvider = ntp
-        }
+        case (false, true) =>
+          new ErgoHistory with EmptyBlockSectionComponent
+            with PoPowBootstrapComponent {
+            override protected val settings: ErgoSettings = ergoSettings
+            override protected[history] val historyStorage: HistoryStorage = db
+            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
+            override protected val timeProvider: NetworkTimeProvider = ntp
+          }
 
-      case (true, false) =>
-        new ErgoHistory with FullBlockSectionProcessor
-          with EmptyPoPowComponent {
-          override protected val settings: ErgoSettings = ergoSettings
-          override protected[history] val historyStorage: HistoryStorage = db
-          override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-          override protected val timeProvider: NetworkTimeProvider = ntp
-        }
+        case (true, false) =>
+          new ErgoHistory with FullBlockSectionComponent
+            with EmptyPoPowComponent {
+            override protected val settings: ErgoSettings = ergoSettings
+            override protected[history] val historyStorage: HistoryStorage = db
+            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
+            override protected val timeProvider: NetworkTimeProvider = ntp
+          }
 
-      case (false, false) =>
-        new ErgoHistory with EmptyBlockSectionProcessor
-          with EmptyPoPowComponent {
-          override protected val settings: ErgoSettings = ergoSettings
-          override protected[history] val historyStorage: HistoryStorage = db
-          override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-          override protected val timeProvider: NetworkTimeProvider = ntp
-        }
+        case (false, false) =>
+          new ErgoHistory with EmptyBlockSectionComponent
+            with EmptyPoPowComponent {
+            override protected val settings: ErgoSettings = ergoSettings
+            override protected[history] val historyStorage: HistoryStorage = db
+            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
+            override protected val timeProvider: NetworkTimeProvider = ntp
+          }
+      }
+      history
     }
-    history
-  }
 
 }

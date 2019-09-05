@@ -5,7 +5,7 @@ import java.io.File
 import akka.actor.{ActorRef, ActorSystem}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
+import org.ergoplatform.nodeView.history.components.{ChainSyncController, ChainSyncComponent}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{ErgoState, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
@@ -64,12 +64,12 @@ object BenchRunner extends ScorexLogging with NVBenchmark {
   private def adjust(v: CurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool]): Unit = {
     import scala.reflect.runtime.{universe => ru}
     val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
-    val procInstance = runtimeMirror.reflect(v.history.asInstanceOf[ToDownloadProcessor])
-    val ppM = ru.typeOf[ToDownloadProcessor].member(ru.TermName("pruningProcessor")).asMethod
-    val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
-    val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
+    val procInstance = runtimeMirror.reflect(v.history.asInstanceOf[ChainSyncComponent])
+    val ppM = ru.typeOf[ChainSyncComponent].member(ru.TermName("pruningProcessor")).asMethod
+    val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[ChainSyncController]
+    val f = ru.typeOf[ChainSyncController].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
     runtimeMirror.reflect(pp).reflectField(f).set(ErgoHistory.GenesisHeight)
-    val f2 = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
+    val f2 = ru.typeOf[ChainSyncController].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
     runtimeMirror.reflect(pp).reflectField(f2).set(true: Boolean)
     ()
   }

@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.components
 
 import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -10,7 +10,7 @@ import scala.util.{Failure, Try}
   * Trait that implements BlockSectionProcessor interfaces for a regime where the node only
   * downloads block headers
   */
-trait EmptyBlockSectionProcessor extends BlockSectionProcessor {
+trait EmptyBlockSectionComponent extends BlockSectionComponent {
 
   override protected def process(m: BlockSection): ProgressInfo[ErgoPersistentModifier] =
     ErgoHistory.emptyProgressInfo

@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.components
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
@@ -16,16 +16,16 @@ import scala.util.Try
   * Contains functions required by History to process Transactions and Proofs when we have them.
   * Prune modifiers older then blocksToKeep.
   */
-trait FullBlockProcessor extends HeadersProcessor {
+trait FullBlockComponent extends HeadersComponent {
 
-  import FullBlockProcessor._
+  import FullBlockComponent._
 
-  private var nonBestChainsCache = FullBlockProcessor.emptyCache
+  private var nonBestChainsCache = FullBlockComponent.emptyCache
 
   def isInBestFullChain(id: ModifierId): Boolean =
     historyStorage.getIndex(chainStatusKey(id))
       .map(ByteArrayWrapper.apply)
-      .contains(ByteArrayWrapper(FullBlockProcessor.BestChainMarker))
+      .contains(ByteArrayWrapper(FullBlockComponent.BestChainMarker))
 
   /**
     * Id of header that contains transactions and proofs
@@ -72,7 +72,7 @@ trait FullBlockProcessor extends HeadersProcessor {
         .takeWhile(_.isDefined)
         .flatten
       logStatus(Seq(), toApply, fullBlock, None)
-      val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker)
+      val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockComponent.BestChainMarker)
       updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes)
       ProgressInfo(None, Seq.empty, headers.headers.dropRight(1) ++ toApply, Seq.empty)
   }
@@ -96,8 +96,8 @@ trait FullBlockProcessor extends HeadersProcessor {
       if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
 
       // insert updated chains statuses
-      val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
-        toRemove.map(b => chainStatusKey(b.id) -> FullBlockProcessor.NonBestChainMarker)
+      val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockComponent.BestChainMarker) ++
+        toRemove.map(b => chainStatusKey(b.id) -> FullBlockComponent.NonBestChainMarker)
       updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes)
 
       if (blocksToKeep >= 0) {
@@ -238,7 +238,7 @@ trait FullBlockProcessor extends HeadersProcessor {
 
 }
 
-object FullBlockProcessor {
+object FullBlockComponent {
 
   type BlockProcessing = PartialFunction[ToProcess, ProgressInfo[ErgoPersistentModifier]]
 

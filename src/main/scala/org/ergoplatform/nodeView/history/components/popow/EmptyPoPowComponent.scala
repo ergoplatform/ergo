@@ -1,8 +1,8 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
+package org.ergoplatform.nodeView.history.components.popow
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.PoPowProof
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
+import org.ergoplatform.nodeView.history.components.HeadersComponent
 import org.ergoplatform.settings.PoPowParams
 import scorex.core.consensus.History.ProgressInfo
 import scorex.util.ScorexLogging
@@ -10,7 +10,7 @@ import scorex.util.ScorexLogging
 import scala.util.{Failure, Try}
 
 trait EmptyPoPowComponent extends PoPowComponent {
-  self: HeadersProcessor with ScorexLogging =>
+  self: HeadersComponent with ScorexLogging =>
 
   def validate(m: PoPowProof): Try[Unit] =
     Failure(new Error("Regime that do not process PoPoWProof"))

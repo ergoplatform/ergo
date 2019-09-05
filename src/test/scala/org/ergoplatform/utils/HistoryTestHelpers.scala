@@ -1,7 +1,7 @@
 package org.ergoplatform.utils
 
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.{EmptyBlockSectionProcessor, FullBlockPruningProcessor, ToDownloadProcessor}
+import org.ergoplatform.nodeView.history.components.{EmptyBlockSectionComponent, ChainSyncController, ChainSyncComponent}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
 import org.scalacheck.Gen
@@ -17,13 +17,13 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
   val BlocksInChain = 10
   val BlocksToKeep: Int = BlocksInChain + 1
 
-  private val poPowSettings = PoPowSettings(enabled = false, 3, PoPowParams(30, 30, 30, 0.45))
+  private val poPowSettings = PoPowSettings(prove = false, bootstrap = false,  3, PoPowParams(30, 30, 30, 0.45))
 
   def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
     val historyHeight = history.headersHeight
     if (historyHeight < height) {
       history match {
-        case _: EmptyBlockSectionProcessor =>
+        case _: EmptyBlockSectionComponent =>
           val chain = genHeaderChain(height - historyHeight, history, diffBitsOpt = None, useRealTs = false)
           if (history.isEmpty) applyHeaderChain(history, chain) else applyHeaderChain(history, chain.tail)
         case _ =>
@@ -77,12 +77,12 @@ object HistoryTestHelpers {
   def allowToApplyOldBlocks(history: ErgoHistory): Unit = {
     import scala.reflect.runtime.{universe => ru}
     val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
-    val procInstance = runtimeMirror.reflect(history.asInstanceOf[ToDownloadProcessor])
-    val ppM = ru.typeOf[ToDownloadProcessor].member(ru.TermName("pruningProcessor")).asMethod
-    val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[FullBlockPruningProcessor]
-    val f = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
+    val procInstance = runtimeMirror.reflect(history.asInstanceOf[ChainSyncComponent])
+    val ppM = ru.typeOf[ChainSyncComponent].member(ru.TermName("pruningProcessor")).asMethod
+    val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[ChainSyncController]
+    val f = ru.typeOf[ChainSyncController].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
     runtimeMirror.reflect(pp).reflectField(f).set(ErgoHistory.GenesisHeight)
-    val f2 = ru.typeOf[FullBlockPruningProcessor].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
+    val f2 = ru.typeOf[ChainSyncController].member(ru.TermName("isHeadersChainSyncedVar")).asTerm.accessed.asTerm
     runtimeMirror.reflect(pp).reflectField(f2).set(true)
   }
 

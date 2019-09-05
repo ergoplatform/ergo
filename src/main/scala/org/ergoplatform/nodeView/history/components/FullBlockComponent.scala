@@ -16,7 +16,8 @@ import scala.util.Try
   * Contains functions required by History to process Transactions and Proofs when we have them.
   * Prune modifiers older then blocksToKeep.
   */
-trait FullBlockComponent extends HeadersComponent {
+trait FullBlockComponent {
+  self: HeadersComponent with ChainSyncComponent with BasicReaders =>
 
   import FullBlockComponent._
 

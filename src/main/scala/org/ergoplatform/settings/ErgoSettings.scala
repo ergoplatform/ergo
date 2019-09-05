@@ -38,10 +38,12 @@ case class ErgoSettings(directory: String,
 
 }
 
-object ErgoSettings extends ScorexLogging
-  with PowSchemeReaders
-  with NodeConfigurationReaders
-  with SettingsReaders {
+object ErgoSettings
+  extends ScorexLogging
+    with PowSchemeReaders
+    with SettingsReaders {
+
+  import NodeConfigurationSettings._
 
   val configPath: String = "ergo"
   val scorexConfigPath: String = "scorex"
@@ -54,7 +56,7 @@ object ErgoSettings extends ScorexLogging
     val directory = config.as[String](s"$configPath.directory")
     val networkTypeName = config.as[String](s"$configPath.networkType")
     val networkType = NetworkType.fromString(networkTypeName)
-      .getOrElse(throw new Error(s"Unknown `networkType = $networkTypeName`"))
+      .getOrElse(failWithError(s"Unknown `networkType = $networkTypeName`"))
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
     val bootstrappingSettingsOpt = config.as[Option[BootstrapSettings]](s"$configPath.bootstrap")
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
@@ -151,20 +153,18 @@ object ErgoSettings extends ScorexLogging
 
   private def consistentSettings(settings: ErgoSettings,
                                  desiredNetworkTypeOpt: Option[NetworkType]): ErgoSettings = {
-    if (settings.nodeSettings.keepVersions < 0) {
-      failWithError("nodeSettings.keepVersions should not be negative")
-    } else if (!settings.nodeSettings.verifyTransactions && !settings.nodeSettings.stateType.requireProofs) {
-      failWithError("Can not use UTXO state when nodeSettings.verifyTransactions is false")
-    } else if (desiredNetworkTypeOpt.exists(_ != settings.networkType)) {
-      failWithError(s"Malformed network config. Desired networkType is `${desiredNetworkTypeOpt.get}`, " +
-        s"but one declared in config is `${settings.networkType}`")
-    } else {
-      settings
-    }
+    val validation = settings.nodeSettings.validate
+      .demand(
+        desiredNetworkTypeOpt.forall(_ == settings.networkType),
+        s"Malformed network config. Desired networkType is `${desiredNetworkTypeOpt.get}`, " +
+          s"but one declared in config is `${settings.networkType}`"
+      )
+      .result
+    if (validation.isValid) settings else failWithError(validation.message)
   }
 
   private def failWithError(msg: String): Nothing = {
-    log.error(s"Stop application due to malformed configuration file: $msg")
+    log.error(s"Stopping application due to malformed configuration file: $msg")
     ErgoApp.forceStopApplication()
   }
 }

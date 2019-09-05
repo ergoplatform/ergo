@@ -1,6 +1,11 @@
 package org.ergoplatform.settings
 
-final case class PoPowSettings(prove: Boolean,
-                               bootstrap: Boolean,
-                               minProofsToCheck: Int,
-                               params: PoPowParams)
+import scorex.core.utils.ScorexEncoding
+import scorex.core.validation.{ModifierValidator, ValidationState}
+
+final case class PoPowSettings(
+  prove: Boolean,
+  bootstrap: Boolean,
+  minProofsToCheck: Int,
+  params: PoPowParams
+)

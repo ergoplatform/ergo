@@ -24,6 +24,7 @@ trait ErgoHistoryReader
   extends HistoryReader[ErgoPersistentModifier, ErgoSyncInfo]
     with HeadersComponent
     with ChainSyncComponent
+    with BasicReaders
     with PoPowComponent
     with UTXOSnapshotChunkProcessor
     with BlockSectionComponent

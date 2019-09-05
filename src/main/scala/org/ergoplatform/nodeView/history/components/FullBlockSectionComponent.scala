@@ -16,7 +16,8 @@ import scala.util.Try
   * Trait that implements BlockSectionProcessor interfaces for regimes where the node
   * downloads and process full blocks.
   */
-trait FullBlockSectionComponent extends BlockSectionComponent with FullBlockComponent {
+trait FullBlockSectionComponent extends BlockSectionComponent {
+  self: FullBlockComponent with HeadersComponent with ChainSyncComponent with BasicReaders =>
 
   private def initialValidationState: TaggedValidationState[Unit] =
     ModifierValidator.failFastTagged(ErgoValidationRules.initial)

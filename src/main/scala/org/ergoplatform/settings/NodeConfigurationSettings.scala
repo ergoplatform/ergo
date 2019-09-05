@@ -4,6 +4,8 @@ import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import net.ceedubs.ficus.readers.ValueReader
 import org.ergoplatform.nodeView.state.StateType
+import scorex.core.utils.ScorexEncoding
+import scorex.core.validation.{ModifierValidator, ValidationState}
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -12,27 +14,48 @@ import scala.concurrent.duration.FiniteDuration
   *
   * @see src/main/resources/application.conf for parameters description
   */
-case class NodeConfigurationSettings(stateType: StateType,
-                                     verifyTransactions: Boolean,
-                                     blocksToKeep: Int,
-                                     poPoWBootstrap: Boolean,
-                                     minimalSuffix: Int,
-                                     mining: Boolean,
-                                     maxTransactionComplexity: Int,
-                                     miningDelay: FiniteDuration,
-                                     useExternalMiner: Boolean,
-                                     miningPubKeyHex: Option[String],
-                                     offlineGeneration: Boolean,
-                                     keepVersions: Int,
-                                     mempoolCapacity: Int,
-                                     blacklistCapacity: Int,
-                                     mempoolCleanupDuration: FiniteDuration,
-                                     minimalFeeAmount: Long,
-                                     poPowSettings: PoPowSettings)
+final case class NodeConfigurationSettings(
+   stateType: StateType,
+   verifyTransactions: Boolean,
+   blocksToKeep: Int,
+   poPoWBootstrap: Boolean,
+   minimalSuffix: Int,
+   mining: Boolean,
+   maxTransactionComplexity: Int,
+   miningDelay: FiniteDuration,
+   useExternalMiner: Boolean,
+   miningPubKeyHex: Option[String],
+   offlineGeneration: Boolean,
+   keepVersions: Int,
+   mempoolCapacity: Int,
+   blacklistCapacity: Int,
+   mempoolCleanupDuration: FiniteDuration,
+   minimalFeeAmount: Long,
+   poPowSettings: PoPowSettings
+) extends ValidatedConfig with ScorexEncoding {
 
-trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
+  val historyMode: HistoryOperationMode =
+    (verifyTransactions, poPowSettings.bootstrap, poPowSettings.prove) match {
+      case (true, false, false) => HistoryOperationMode.Full
+      case (true, true, false) => HistoryOperationMode.FullPoPow
+      case (true, false, true) => HistoryOperationMode.FullProving
+      case (false, true, false) => HistoryOperationMode.LightPoPow
+      case _ => HistoryOperationMode.Light
+    }
 
-  implicit val nodeConfigurationReader: ValueReader[NodeConfigurationSettings] = { (cfg, path) =>
+  val validate: ValidationState[Unit] = ModifierValidator.accumulateErrors
+    .demand(!(poPowSettings.prove && poPowSettings.bootstrap), "Proving not supported in PoPow bootstrapped mode")
+    .demand(!poPowSettings.bootstrap || poPowSettings.minProofsToCheck > 0, "`poPow.minProofsToCheck` must be positive")
+    .demand(keepVersions >= 0, "nodeSettings.keepVersions should not be negative")
+    .demand(
+      verifyTransactions || stateType.requireProofs,
+      "UTXO state can't be used when nodeSettings.verifyTransactions is false"
+    )
+}
+
+object NodeConfigurationSettings extends StateTypeReaders with ModifierIdReader {
+
+  implicit val reader: ValueReader[NodeConfigurationSettings] = { (cfg, path) =>
     val stateTypeKey = s"$path.stateType"
     val stateType = stateTypeFromString(cfg.as[String](stateTypeKey), stateTypeKey)
     NodeConfigurationSettings(

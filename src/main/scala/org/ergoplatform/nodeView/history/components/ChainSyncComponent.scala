@@ -11,7 +11,8 @@ import scala.annotation.tailrec
 /**
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
-trait ChainSyncComponent extends BasicReaders with ScorexLogging {
+trait ChainSyncComponent extends ScorexLogging {
+  self: BasicReaders =>
 
   private val maxTimeDiffFactor = 100
 

@@ -26,7 +26,7 @@ import scala.util.Try
   * Contains all functions required by History to process Headers.
   */
 trait HeadersComponent extends ScorexLogging with ScorexEncoding {
-  self: ChainSyncComponent =>
+  self: ChainSyncComponent with BasicReaders =>
 
   protected val historyStorage: HistoryStorage
 

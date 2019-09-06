@@ -21,7 +21,13 @@ final case class ApplicationApiRoute (readersHolder: ActorRef, nodeViewActorRef:
 
   override val route: Route = (pathPrefix("application")) { //& withAuth) {
     registerR ~
+      deregisterR ~
       listR
+  }
+
+  def deregisterR: Route = (path("deregister" / LongNumber) & get) {id =>
+    storage.removeApplication(id)
+    ApiResponse(id)
   }
 
   def registerR: Route = (path("register") & post

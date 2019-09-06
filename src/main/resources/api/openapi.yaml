@@ -297,6 +297,33 @@ components:
           description: Sigma source to be compiled
           type: string
 
+    ScanningPredicate:
+      type: object
+      required:
+      - predicate
+      properties:
+        predicate:
+          type: string
+        bytes:
+          type: string
+        register:
+          type: string
+        assetId:
+            type: string
+        args:
+          type: array
+          items:
+            - $ref: '#/components/schemas/ScanningPredicate'
+
+    ExternalApplicationRequest:
+      type: object
+      properties:
+        appName:
+          type: string
+        trackingRule:
+          $ref: '#/components/schemas/ScanningPredicate'
+
+
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
       type: object
@@ -2495,6 +2522,43 @@ paths:
                     type: string
                     description: serialized Ergo tree
                     example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+
+  /application/register:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Generate and send payment transaction (default fee of 0.001 Erg is used)
+      operationId: registerApplication
+      tags:
+        - application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ExternalApplicationRequest'
+      responses:
+        '200':
+          description: Identifier of an Ergo transaction generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionId'
+        '400':
+          description: Bad payment request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:

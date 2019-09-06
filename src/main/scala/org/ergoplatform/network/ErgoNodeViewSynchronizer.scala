@@ -179,7 +179,6 @@ object ErgoNodeViewSynchronizer {
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
     context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider), name)
 
-
   final case object CheckModifiersToDownload
 
 }

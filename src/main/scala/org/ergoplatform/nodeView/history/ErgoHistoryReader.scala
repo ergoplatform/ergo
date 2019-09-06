@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentMo
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.components._
 import org.ergoplatform.nodeView.history.components.popow.PoPowComponent
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, HistoryOperationMode}
 import scorex.core.ModifierTypeId
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
@@ -122,7 +122,7 @@ trait ErgoHistoryReader
   /**
     * @param info other's node sync info
     * @param size max return size
-    * @return Ids of headerss, that node with info should download and apply to synchronize
+    * @return Ids of headers a node with `info` should download and apply in order to synchronize
     */
   override def continuationIds(info: ErgoSyncInfo, size: Int): ModifierIds =
     if (isEmpty) {
@@ -180,10 +180,15 @@ trait ErgoHistoryReader
   }
 
   /**
-    * @return Node ErgoSyncInfo
+    * Generates [[ErgoSyncInfo]] depending on history state.
     */
   override def syncInfo: ErgoSyncInfo = if (isEmpty) {
-    ErgoSyncInfo(Seq.empty)
+    settings.nodeSettings.historyMode match {
+      case HistoryOperationMode.FullPoPow =>
+        ErgoSyncInfo(Seq.empty, Some(settings.nodeSettings.poPowSettings.params))
+      case _ =>
+        ErgoSyncInfo(Seq.empty)
+    }
   } else {
     val startingPoints = lastHeaders(ErgoSyncInfo.MaxBlockIds).headers
     if (startingPoints.headOption.exists(_.isGenesis)) {

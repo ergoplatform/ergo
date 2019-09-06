@@ -71,10 +71,11 @@ trait ErgoHistoryReader
     * @tparam T - expected Type
     * @return semantically valid ErgoPersistentModifier of type T with the given id it is in history
     */
-  def typedModifierById[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T] = modifierById(id) match {
-    case Some(m: T) => Some(m)
-    case _ => None
-  }
+  def typedModifierById[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T] =
+    modifierById(id) match {
+      case Some(m: T) => Some(m)
+      case _ => None
+    }
 
   override def contains(id: ModifierId): Boolean = historyStorage.contains(id)
 

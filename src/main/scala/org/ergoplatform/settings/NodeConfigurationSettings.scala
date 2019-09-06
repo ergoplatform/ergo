@@ -39,8 +39,7 @@ final case class NodeConfigurationSettings(
       case (true, false, false) => HistoryOperationMode.Full
       case (true, true, false) => HistoryOperationMode.FullPoPow
       case (true, false, true) => HistoryOperationMode.FullProving
-      case (false, true, false) => HistoryOperationMode.LightPoPow
-      case _ => HistoryOperationMode.Light
+      case (false, _, _) => HistoryOperationMode.Light
     }
 
   val validate: ValidationState[Unit] = ModifierValidator.accumulateErrors

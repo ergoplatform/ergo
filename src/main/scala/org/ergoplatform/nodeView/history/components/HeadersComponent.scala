@@ -43,7 +43,6 @@ trait HeadersComponent extends ScorexLogging with ScorexEncoding {
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
-  // todo for performance reasons we may just use key like s"score$id" but this will require to redownload blockchain
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("score".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 

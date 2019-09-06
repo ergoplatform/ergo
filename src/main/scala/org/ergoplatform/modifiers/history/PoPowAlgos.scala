@@ -134,7 +134,7 @@ object PoPowAlgos {
 
   def prove(chain: Seq[PoPowHeader])(params: PoPowParams): PoPowProof = {
     require(chain.lengthCompare(params.k) >= 0, s"Can not prove chain of size < ${params.k}")
-    require(chain.head.header.isGenesis, "Can not prove not anchored chain")
+    require(chain.head.header.isGenesis, "Can not prove non-anchored chain")
     @scala.annotation.tailrec
     def provePrefix(anchoringPoint: PoPowHeader, level: Int, acc: Seq[PoPowHeader] = Seq.empty): Seq[PoPowHeader] =
       if (level >= 0) {

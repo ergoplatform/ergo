@@ -41,13 +41,6 @@ trait ErgoHistoryReader
   def isEmpty: Boolean = bestHeaderIdOpt.isEmpty
 
   /**
-    * Header of best Header chain. Empty if no genesis block is applied yet (from a chain or a PoPoW proof).
-    * Transactions and ADProofs for this Header may be missed, to get block from best full chain (in mode that support
-    * it) call bestFullBlockOpt.
-    */
-  def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
-
-  /**
     * Complete block of the best chain with transactions.
     * Always None for an SPV mode, Some(fullBLock) for fullnode regime after initial bootstrap.
     */

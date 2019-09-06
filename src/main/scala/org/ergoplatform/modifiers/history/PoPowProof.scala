@@ -13,6 +13,8 @@ final case class PoPowProof(prefix: PoPowProofPrefix, suffix: PoPowProofSuffix)
 
   override val modifierTypeId: ModifierTypeId = PoPowProof.TypeId
 
+  override lazy val id: ModifierId = prefix.id
+
   override val sizeOpt: Option[Int] = None
 
   override def serializedId: Array[Byte] = prefix.serializedId

@@ -1,17 +1,33 @@
 package org.ergoplatform.nodeView.history.components.popow
 
-import org.ergoplatform.modifiers.history.{PoPowAlgos, PoPowProof}
-import org.ergoplatform.nodeView.history.components.HeadersComponent
-import org.ergoplatform.settings.PoPowParams
-import scorex.util.ScorexLogging
+import io.iohk.iodb.ByteArrayWrapper
+import org.ergoplatform.modifiers.history.{Extension, PoPowAlgos, PoPowHeader, PoPowProof}
+import org.ergoplatform.nodeView.history.components.{BasicReaders, HeadersComponent}
+import org.ergoplatform.settings.{Algos, PoPowParams}
+import scorex.util.{ScorexLogging, idToBytes}
 
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 trait ProvingPoPowComponent extends EmptyPoPowComponent {
-  self: HeadersComponent with ScorexLogging =>
+  self: HeadersComponent with BasicReaders with ScorexLogging =>
 
-  // todo: create proof and save to db
+  val BestProofId = ByteArrayWrapper(Algos.hash("best_popow_proof"))
+
+  // todo: remove outdated proofs once new proof is created
   override def prove(params: PoPowParams): Try[PoPowProof] =
-    Try(PoPowAlgos.prove(Seq.empty)(params))
+    bestHeaderOpt
+      .fold[Try[PoPowProof]](Failure(new Exception("Empty chain"))) { bestHeader =>
+        val chain = headerChainBack(Int.MaxValue, bestHeader, _.isGenesis).headers
+        val poPowChain = chain.flatMap { h =>
+          typedModifierById[Extension](h.extensionId)
+            .flatMap(ext => PoPowAlgos.unpackInterlinks(ext.fields).toOption)
+            .map(PoPowHeader(h, _))
+        }
+        Try(PoPowAlgos.prove(poPowChain)(params))
+      }
+      .map { proof =>
+        historyStorage.insert(Seq(BestProofId -> idToBytes(proof.id)), Seq(proof.prefix, proof.suffix))
+        proof
+      }
 
 }

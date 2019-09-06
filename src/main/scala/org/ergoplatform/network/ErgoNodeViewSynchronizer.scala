@@ -9,15 +9,14 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants
 import scorex.core.NodeViewHolder._
 import scorex.core.consensus.History.Younger
-import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.DataFromPeer
-import scorex.core.{PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{OtherNodeSyncingStatus, SemanticallySuccessfulModifier}
 import scorex.core.network.message.{InvData, InvSpec, Message}
-import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer, SendToPeer}
+import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer}
 import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
+import scorex.core.{PersistentNodeViewModifier, idsToString}
 import scorex.util.ModifierId
 
 import scala.concurrent.ExecutionContext

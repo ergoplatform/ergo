@@ -14,8 +14,6 @@ import scala.annotation.tailrec
 trait ChainSyncComponent extends ScorexLogging {
   self: BasicReaders with Configuration =>
 
-  private val maxTimeDiffFactor = settings.chainSettings.maxTimeDiffFactor
-
   protected[history] lazy val pruningProcessor: ChainSyncController =
     new ChainSyncController(nodeSettings, chainSettings)
 
@@ -72,7 +70,8 @@ trait ChainSyncComponent extends ScorexLogging {
     } else if (pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)
-    } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * maxTimeDiffFactor)) {
+    } else if (!isHeadersChainSynced &&
+      header.isNew(timeProvider, chainSettings.blockInterval * settings.chainSettings.maxTimeDiffFactor)) {
       // Headers chain is synced after this header. Start downloading full blocks
       pruningProcessor.updateBestFullBlock(header)
       log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")

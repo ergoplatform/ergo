@@ -11,8 +11,10 @@ import scala.annotation.tailrec
 /**
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
-trait ChainSyncComponent extends ScorexLogging {
-  self: BasicReaders with Configuration =>
+trait ChainSyncComponent {
+  self: BasicReaders
+    with Configuration
+    with ScorexLogging =>
 
   protected[history] lazy val pruningProcessor: ChainSyncController =
     new ChainSyncController(nodeSettings, chainSettings)

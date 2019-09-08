@@ -29,7 +29,8 @@ trait HeadersComponent {
     with BasicReaders
     with Configuration
     with Persistence
-    with ScorexEncoding =>
+    with ScorexEncoding
+    with ScorexLogging =>
 
   val powScheme: AutolykosPowScheme
 

@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
-import scorex.util.{ModifierId, bytesToId, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeMap
@@ -17,12 +17,13 @@ import scala.util.Try
   * Contains functions required by History to process Transactions and Proofs when we have them.
   * Prune modifiers older then blocksToKeep.
   */
-trait FullBlockComponent {
-  self: HeadersComponent
-    with ChainSyncComponent
+trait FullBlockComponent extends HeadersComponent {
+  self: ChainSyncComponent
     with BasicReaders
     with Persistence
-    with ScorexEncoding =>
+    with Configuration
+    with ScorexEncoding
+    with ScorexLogging =>
 
   import FullBlockComponent._
 

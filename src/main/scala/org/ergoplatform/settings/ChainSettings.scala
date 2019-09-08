@@ -26,6 +26,7 @@ case class ChainSettings(protocolVersion: Byte,
                          foundersPubkeys: Seq[String],
                          genesisStateDigestHex: String,
                          initialDifficultyHex: String,
+                         maxTimeDiffFactor: Int = 100,
                          genesisId: Option[ModifierId] = None) {
 
   val genesisStateDigest: ADDigest = Base16.decode(genesisStateDigestHex)

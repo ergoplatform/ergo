@@ -14,8 +14,7 @@ import scala.annotation.tailrec
 trait ChainSyncComponent extends ScorexLogging {
   self: BasicReaders with Configuration =>
 
-  // todo: Move to chain settings.
-  private val maxTimeDiffFactor = 100
+  private val maxTimeDiffFactor = settings.chainSettings.maxTimeDiffFactor
 
   protected[history] lazy val pruningProcessor: ChainSyncController =
     new ChainSyncController(nodeSettings, chainSettings)

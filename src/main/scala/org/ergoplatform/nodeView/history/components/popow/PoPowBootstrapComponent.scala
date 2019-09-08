@@ -45,7 +45,8 @@ trait PoPowBootstrapComponent extends PoPowComponent {
       val bestProof = bestProofIdOpt.flatMap(proofById).getOrElse(m)
       settings.nodeSettings.stateType match {
         case StateType.Utxo => // request last headers to reach nearest snapshot height
-          ???
+          // todo: Implement when UTXO snapshots are ready.
+          ErgoHistory.emptyProgressInfo
         case StateType.Digest => // save proved chain and update best header indexes
           val bestHeader = bestProof.headersChain.last
           val indexesToInsert = bestProof.chain

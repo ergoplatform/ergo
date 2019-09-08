@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
+import scorex.core.utils.ScorexEncoding
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
@@ -17,7 +18,11 @@ import scala.util.Try
   * Prune modifiers older then blocksToKeep.
   */
 trait FullBlockComponent {
-  self: HeadersComponent with ChainSyncComponent with BasicReaders =>
+  self: HeadersComponent
+    with ChainSyncComponent
+    with BasicReaders
+    with Persistence
+    with ScorexEncoding =>
 
   import FullBlockComponent._
 
@@ -243,18 +248,18 @@ object FullBlockComponent {
 
   type BlockProcessing = PartialFunction[ToProcess, ProgressInfo[ErgoPersistentModifier]]
 
-  case class ToProcess(fullBlock: ErgoFullBlock,
-                       newModRow: ErgoPersistentModifier,
-                       newBestBlockHeaderOpt: Option[Header],
-                       blocksToKeep: Int,
-                       newBestChain: Seq[ModifierId])
+  final case class ToProcess(fullBlock: ErgoFullBlock,
+                             newModRow: ErgoPersistentModifier,
+                             newBestBlockHeaderOpt: Option[Header],
+                             blocksToKeep: Int,
+                             newBestChain: Seq[ModifierId])
 
-  case class CacheBlock(id: ModifierId, height: Int)
+  final case class CacheBlock(id: ModifierId, height: Int)
 
   /**
     * Stores links mapping ((id, height) -> parentId) of blocks that could possibly be applied.
     */
-  case class IncompleteFullChainCache(cache: TreeMap[CacheBlock, ModifierId]) {
+  final case class IncompleteFullChainCache(cache: TreeMap[CacheBlock, ModifierId]) {
 
     val nonEmpty: Boolean = cache.nonEmpty
 

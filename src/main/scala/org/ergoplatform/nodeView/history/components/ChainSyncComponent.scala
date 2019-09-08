@@ -12,13 +12,10 @@ import scala.annotation.tailrec
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
 trait ChainSyncComponent extends ScorexLogging {
-  self: BasicReaders =>
+  self: BasicReaders with Configuration =>
 
+  // todo: Move to chain settings.
   private val maxTimeDiffFactor = 100
-
-  protected val timeProvider: NetworkTimeProvider
-
-  protected val settings: ErgoSettings
 
   protected[history] lazy val pruningProcessor: ChainSyncController =
     new ChainSyncController(nodeSettings, chainSettings)
@@ -31,11 +28,13 @@ trait ChainSyncComponent extends ScorexLogging {
 
   def isInBestChain(id: ModifierId): Boolean
 
-  /** Returns true if we estimate that our chain is synced with the network. Start downloading full blocks after that
+  /**
+    * Returns true if we estimate that our chain is synced with the network. Start downloading full blocks after that
     */
   def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
 
-  /** Returns Next `howMany` modifier ids satisfying `filter` condition our node should download
+  /**
+    * Returns Next `howMany` modifier ids satisfying `filter` condition our node should download
     * to synchronize full block chain with headers chain
     */
   def nextModifiersToDownload(howMany: Int, condition: ModifierId => Boolean): Seq[(ModifierTypeId, ModifierId)] = {

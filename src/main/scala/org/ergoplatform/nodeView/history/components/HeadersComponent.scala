@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
-import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.history.storage.LDBHistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
@@ -25,12 +25,12 @@ import scala.util.Try
 /**
   * Contains all functions required by History to process Headers.
   */
-trait HeadersComponent extends ScorexLogging with ScorexEncoding {
-  self: ChainSyncComponent with BasicReaders =>
-
-  protected val historyStorage: HistoryStorage
-
-  protected val settings: ErgoSettings
+trait HeadersComponent {
+  self: ChainSyncComponent
+    with BasicReaders
+    with Configuration
+    with Persistence
+    with ScorexEncoding =>
 
   val powScheme: AutolykosPowScheme
 

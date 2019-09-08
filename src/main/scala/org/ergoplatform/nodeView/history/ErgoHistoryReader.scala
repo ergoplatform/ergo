@@ -28,10 +28,10 @@ trait ErgoHistoryReader
     with PoPowComponent
     with UTXOSnapshotChunkProcessor
     with BlockSectionComponent
+    with Configuration
+    with Persistence
     with ScorexLogging
     with ScorexEncoding {
-
-  protected[history] val historyStorage: HistoryStorage
 
   protected val settings: ErgoSettings
 

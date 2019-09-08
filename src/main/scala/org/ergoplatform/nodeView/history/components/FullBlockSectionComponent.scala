@@ -17,7 +17,11 @@ import scala.util.Try
   * downloads and process full blocks.
   */
 trait FullBlockSectionComponent extends BlockSectionComponent {
-  self: FullBlockComponent with HeadersComponent with ChainSyncComponent with BasicReaders =>
+  self: FullBlockComponent
+    with HeadersComponent
+    with ChainSyncComponent
+    with BasicReaders
+    with Persistence =>
 
   private def initialValidationState: TaggedValidationState[Unit] =
     ModifierValidator.failFastTagged(ErgoValidationRules.initial)
@@ -28,7 +32,7 @@ trait FullBlockSectionComponent extends BlockSectionComponent {
     * Otherwise - try to construct full block with this block section, if possible - process this new full block,
     * if not - just put new block section to storage.
     */
-  override protected def process(m: BlockSection): ProgressInfo[ErgoPersistentModifier] = {
+  override protected def process(m: BlockSection): ProgressInfo[ErgoPersistentModifier] =
     m match {
       case _: ADProofs if !requireProofs =>
         // got proofs in UTXO mode. Don't need to try to update better chain
@@ -41,9 +45,8 @@ trait FullBlockSectionComponent extends BlockSectionComponent {
             justPutToHistory(m)
         }
     }
-  }
 
-  override protected def validate(m: BlockSection): Try[Unit] = {
+  override protected def validate(m: BlockSection): Try[Unit] =
     typedModifierById[Header](m.headerId) map { header =>
       new PayloadValidator(initialValidationState)
         .validate(m, header)
@@ -54,7 +57,6 @@ trait FullBlockSectionComponent extends BlockSectionComponent {
         .result
         .toTry
     }
-  }
 
   /**
     * Trying to construct full block with modifier `m` and data, kept in history
@@ -107,7 +109,6 @@ trait FullBlockSectionComponent extends BlockSectionComponent {
       case _: ADProofs if contains(header.transactionsId) => true
       case _ => false
     }
-
 
   }
 

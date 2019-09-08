@@ -8,7 +8,7 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.history.storage.LDBHistoryStorage
 import org.ergoplatform.nodeView.history.components._
 import org.ergoplatform.nodeView.history.components.popow.{EmptyPoPowComponent, PoPowBootstrapComponent, ProvingPoPowComponent}
 import org.ergoplatform.settings._
@@ -219,7 +219,7 @@ object ErgoHistory extends ScorexLogging {
   def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
     val indexStore = createDb(s"${ergoSettings.directory}/history/index")
     val objectsStore = createDb(s"${ergoSettings.directory}/history/objects")
-    val db = new HistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
+    val db = new LDBHistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
     val nodeConfiguration = ergoSettings.nodeSettings
 
     val history: ErgoHistory =
@@ -228,7 +228,7 @@ object ErgoHistory extends ScorexLogging {
           new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
             with EmptyPoPowComponent {
             override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val historyStorage: HistoryStorage = db
+            override protected[history] val historyStorage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }
@@ -236,7 +236,7 @@ object ErgoHistory extends ScorexLogging {
           new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
             with ProvingPoPowComponent {
             override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val historyStorage: HistoryStorage = db
+            override protected[history] val historyStorage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }
@@ -244,7 +244,7 @@ object ErgoHistory extends ScorexLogging {
           new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
             with PoPowBootstrapComponent {
             override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val historyStorage: HistoryStorage = db
+            override protected[history] val historyStorage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }
@@ -252,7 +252,7 @@ object ErgoHistory extends ScorexLogging {
           new ErgoHistory with EmptyBlockSectionComponent
             with EmptyPoPowComponent {
             override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val historyStorage: HistoryStorage = db
+            override protected[history] val historyStorage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }

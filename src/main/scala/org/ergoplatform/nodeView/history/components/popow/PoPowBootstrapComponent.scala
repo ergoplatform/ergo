@@ -5,10 +5,11 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.PoPowAlgos.maxLevelOf
 import org.ergoplatform.modifiers.history.{Header, NiPoPowProofSerializer, PoPowProof, PoPowProofPrefix}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.components.{ChainSyncComponent, HeadersComponent}
+import org.ergoplatform.nodeView.history.components.{ChainSyncComponent, Configuration, HeadersComponent, Persistence}
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Constants, ErgoSettings, PoPowParams, PoPowSettings}
+import org.ergoplatform.settings.{Constants, PoPowParams, PoPowSettings}
 import scorex.core.consensus.History.ProgressInfo
+import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
@@ -17,10 +18,13 @@ import scala.util.{Failure, Try}
 /**
   * Contains all functions required by History to process PoPoWProofs for regime that accept them.
   */
-trait PoPowBootstrapComponent extends PoPowComponent with ScorexLogging {
-  self: HeadersComponent with ChainSyncComponent =>
-
-  protected val settings: ErgoSettings
+trait PoPowBootstrapComponent extends PoPowComponent {
+  self: HeadersComponent
+    with ChainSyncComponent
+    with Configuration
+    with Persistence
+    with ScorexLogging
+    with ScorexEncoding =>
 
   protected val BestProofIdKey: ByteArrayWrapper =
     ByteArrayWrapper(Array.fill(Constants.HashLength)(PoPowProofPrefix.TypeId))
@@ -94,4 +98,3 @@ trait PoPowBootstrapComponent extends PoPowComponent with ScorexLogging {
   }
 
 }
-

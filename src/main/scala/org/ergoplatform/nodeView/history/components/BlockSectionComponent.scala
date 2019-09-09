@@ -11,11 +11,12 @@ import scala.util.Try
   * block sections: BlockTransactions, ADProofs, etc.
   */
 trait BlockSectionComponent extends ScorexEncoding {
+  self: Configuration =>
 
   /**
     * Whether state requires to download adProofs before full block application
     */
-  protected def requireProofs: Boolean
+  protected def requireProofs: Boolean = settings.nodeSettings.stateType.requireProofs
 
   /**
     * @param m - modifier to process

@@ -5,7 +5,8 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
-import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
+import org.ergoplatform.modifiers.history.PoPowAlgos.updateInterlinks
+import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header, PoPowAlgos, PoPowHeader, PoPowProof}
 import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -178,6 +179,23 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ChainGenerator {
 
   lazy val ergoValidationSettingsGen: Gen[ErgoValidationRules] = ergoValidationSettingsUpdateGen
     .map(u => ErgoValidationRules.initial.updated(u))
+
+  def validNiPoPowProofGen(k: Int): Gen[PoPowProof] = for {
+    m <- Gen.chooseNum(50, 100)
+  } yield {
+    val chain = genHeaderChain(m + 1 + k, diffBitsOpt = None, useRealTs = false).headers
+    val poPowChain = chain.foldLeft(Seq.empty[PoPowHeader], None: Option[PoPowHeader]) {
+      case ((acc, bestHeaderOpt), h) =>
+        val links = updateInterlinks(
+          bestHeaderOpt.map(_.header),
+          bestHeaderOpt.map(ph => PoPowAlgos.interlinksToExtension(ph.interlinks).toExtension(ph.id))
+        )
+        val poPowH = PoPowHeader(h, links)
+        (acc :+ poPowH, Some(poPowH))
+    }._1
+    val (prefix, suffix) = poPowChain.splitAt(m + 1)
+    PoPowProof(m, k, prefix, suffix)
+  }
 
   /** Random long from 1 to maximum - 1
     *

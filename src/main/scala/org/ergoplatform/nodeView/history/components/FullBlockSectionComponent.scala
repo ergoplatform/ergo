@@ -21,6 +21,7 @@ trait FullBlockSectionComponent extends BlockSectionComponent {
     with HeadersComponent
     with ChainSyncComponent
     with BasicReaders
+    with Configuration
     with Persistence =>
 
   private def initialValidationState: TaggedValidationState[Unit] =

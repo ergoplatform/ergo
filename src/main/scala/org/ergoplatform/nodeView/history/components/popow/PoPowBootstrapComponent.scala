@@ -27,7 +27,7 @@ trait PoPowBootstrapComponent extends PoPowComponent {
     with ScorexEncoding =>
 
   protected val BestProofIdKey: ByteArrayWrapper =
-    ByteArrayWrapper(Array.fill(Constants.HashLength)(PoPowProofPrefix.TypeId))
+    ByteArrayWrapper(Array.fill(Constants.HashLength)(PoPowProofPrefix.modifierTypeId))
 
   private var proofsChecked: Int = 0
 
@@ -40,12 +40,13 @@ trait PoPowBootstrapComponent extends PoPowComponent {
 
   def process(m: PoPowProof): ProgressInfo[ErgoPersistentModifier] = {
     proofsChecked += 1
-    def isBest = bestProofIdOpt.flatMap(proofById).forall(p => m.prefix.isBetterThan(p.prefix))
+    val isBest = bestProofIdOpt.flatMap(proofById).forall(p => m.prefix.isBetterThan(p.prefix))
+    if (isBest) historyStorage.insert(Seq(BestProofIdKey -> idToBytes(m.id)), Seq(m))
     if (proofsChecked >= poPowSettings.minProofsToCheck) {
       val bestProof = bestProofIdOpt.flatMap(proofById).getOrElse(m)
       settings.nodeSettings.stateType match {
         case StateType.Utxo => // request last headers to reach nearest snapshot height
-          // todo: Implement when UTXO snapshots are ready.
+          // todo: Implement when fast-sync is merged.
           ErgoHistory.emptyProgressInfo
         case StateType.Digest => // save proved chain and update best header indexes
           val bestHeader = bestProof.headersChain.last
@@ -56,9 +57,6 @@ trait PoPowBootstrapComponent extends PoPowComponent {
           historyStorage.insert(indexesToInsert, bestProof.headersChain)
           ProgressInfo(None, Seq.empty, Seq(bestHeader), toDownload(bestHeader))
       }
-    } else if (isBest) {
-      historyStorage.insert(Seq(BestProofIdKey -> idToBytes(m.id)), Seq(m))
-      ErgoHistory.emptyProgressInfo
     } else {
       ErgoHistory.emptyProgressInfo
     }

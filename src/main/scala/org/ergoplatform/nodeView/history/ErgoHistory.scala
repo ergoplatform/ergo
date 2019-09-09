@@ -44,7 +44,6 @@ trait ErgoHistory
     with ErgoHistoryReader {
 
   override type NVCT = ErgoHistory
-  override protected lazy val requireProofs: Boolean = nodeSettings.stateType.requireProofs
 
   def closeStorage(): Unit = historyStorage.close()
 

@@ -310,7 +310,7 @@ trait ErgoHistoryReader
     */
   def acceptModifierType(typeId: ModifierTypeId): Boolean =
     if (settings.nodeSettings.poPowSettings.bootstrap && isEmpty) {
-      Seq(PoPowProofPrefix.TypeId, PoPowProofSuffix.TypeId).contains(ModifierTypeId)
+      Seq(PoPowProofPrefix.modifierTypeId, PoPowProofSuffix.modifierTypeId).contains(ModifierTypeId)
     } else {
       true
     }

@@ -11,6 +11,7 @@ import scala.util.{Failure, Try}
   * downloads block headers
   */
 trait EmptyBlockSectionComponent extends BlockSectionComponent {
+  self: Configuration =>
 
   override protected def process(m: BlockSection): ProgressInfo[ErgoPersistentModifier] =
     ErgoHistory.emptyProgressInfo

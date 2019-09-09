@@ -54,9 +54,9 @@ object NiPoPowProofSerializer extends ScorexSerializer[PoPowProof] {
 
   override def parse(r: Reader): PoPowProof = {
     val prefixSize = r.getInt()
-    val prefix = NiPoPowProofPrefixSerializer.parseBytes(r.getBytes(prefixSize))
+    val prefix = PoPowProofPrefixSerializer.parseBytes(r.getBytes(prefixSize))
     val suffixSize = r.getInt()
-    val suffix = NiPoPowProofSuffixSerializer.parseBytes(r.getBytes(suffixSize))
+    val suffix = PoPowProofSuffixSerializer.parseBytes(r.getBytes(suffixSize))
     PoPowProof(prefix, suffix)
   }
 

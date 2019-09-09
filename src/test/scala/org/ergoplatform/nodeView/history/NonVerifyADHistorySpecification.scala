@@ -14,7 +14,8 @@ import scala.concurrent.duration._
 class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
   private def genHistory() =
-    generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0, epochLength = 1000)
+    generateHistory(verifyTransactions = false, StateType.Digest, poPoWBootstrap = false,
+      poPowProve = true, blocksToKeep = 0, epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
   private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
@@ -38,7 +39,8 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     var history = generateHistory(
       verifyTransactions = false,
       StateType.Digest,
-      PoPoWBootstrap = false,
+      poPoWBootstrap = false,
+      poPowProve = true,
       blocksToKeep = 0,
       epochLength = epochLength,
       useLastEpochs = useLastEpochs,

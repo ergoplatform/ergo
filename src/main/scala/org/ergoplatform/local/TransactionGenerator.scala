@@ -51,7 +51,7 @@ class TransactionGenerator(viewHolder: ActorRef,
       context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[ErgoFullBlock]])
 
       viewHolder ! GetDataFromCurrentView[ErgoHistory, UtxoState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        currentFullHeight = v.history.headersHeight
+        currentFullHeight = v.history.bestHeaderHeight
         v.vault.publicKeys(0, 100).onComplete(_.foreach(pks => propositions = pks))
       }
 

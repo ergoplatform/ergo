@@ -144,7 +144,7 @@ trait NodeViewTestOps extends NodeViewBaseOps {
 
   def getOpenSurfaces(implicit ctx: Ctx): Seq[ModifierId] = getHistory.openSurfaceIds()
 
-  def getHistoryHeight(implicit ctx: Ctx): Int = getHistory.headersHeight
+  def getHistoryHeight(implicit ctx: Ctx): Int = getHistory.bestHeaderHeight
 
   def getHeightOf(id: scorex.util.ModifierId)(implicit ctx: Ctx): Option[Int] = getHistory.heightOf(id)
 

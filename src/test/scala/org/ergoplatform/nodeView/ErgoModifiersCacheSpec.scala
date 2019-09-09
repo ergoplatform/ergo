@@ -48,7 +48,8 @@ class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistoryTestHelpers {
     val limit = 25
     val modifiersCache = new ErgoModifiersCache(limit)
 
-    val history0 = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
+    val history0 = generateHistory(
+      verifyTransactions = true, StateType.Utxo, poPoWBootstrap = false, poPowProve = true, BlocksToKeep)
 
     val chain = genChain(5, history0)
 
@@ -82,7 +83,8 @@ class ErgoModifiersCacheSpec extends ErgoPropertyTest with HistoryTestHelpers {
     val limit = 25
     val modifiersCache = new ErgoModifiersCache(limit)
 
-    var history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
+    var history = generateHistory(
+      verifyTransactions = true, StateType.Utxo, poPoWBootstrap = false, poPowProve = true, BlocksToKeep)
 
     val chain = genChain(1, history)
 

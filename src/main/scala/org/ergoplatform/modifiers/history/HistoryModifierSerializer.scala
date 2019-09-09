@@ -20,12 +20,9 @@ object HistoryModifierSerializer extends ScorexSerializer[ErgoPersistentModifier
       case m: Extension =>
         w.put(Extension.modifierTypeId)
         ExtensionSerializer.serialize(m, w)
-      case m: PoPowProofSuffix =>
-        w.put(PoPowProofSuffix.modifierTypeId)
-        PoPowProofSuffixSerializer.serialize(m, w)
-      case m: PoPowProofPrefix =>
-        w.put(PoPowProofPrefix.modifierTypeId)
-        PoPowProofPrefixSerializer.serialize(m, w)
+      case m: PoPowProof =>
+        w.put(PoPowProof.modifierTypeId)
+        PoPowProofSerializer.serialize(m, w)
       case m =>
         throw new Error(s"Serialization for unknown modifier: $m")
     }
@@ -40,10 +37,8 @@ object HistoryModifierSerializer extends ScorexSerializer[ErgoPersistentModifier
         BlockTransactionsSerializer.parse(r)
       case Extension.`modifierTypeId` =>
         ExtensionSerializer.parse(r)
-      case PoPowProofPrefix.`modifierTypeId` =>
-        PoPowProofPrefixSerializer.parse(r)
-      case PoPowProofSuffix.`modifierTypeId` =>
-        PoPowProofSuffixSerializer.parse(r)
+      case PoPowProof.`modifierTypeId` =>
+        PoPowProofSerializer.parse(r)
       case m =>
         throw new Error(s"Deserialization for unknown type byte: $m")
     }

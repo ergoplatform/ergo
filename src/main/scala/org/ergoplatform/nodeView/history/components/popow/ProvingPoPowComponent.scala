@@ -14,7 +14,7 @@ trait ProvingPoPowComponent extends EmptyPoPowComponent {
 
   val BestProofId = ByteArrayWrapper(Algos.hash("best_proof"))
 
-  override def prove(params: PoPowParams): Try[PoPowProof] =
+  override final def prove(params: PoPowParams): Try[PoPowProof] =
     bestHeaderOpt
       .fold[Try[PoPowProof]](Failure(new Exception("Empty chain"))) { bestHeader =>
         val chain = headerChainBack(Int.MaxValue, bestHeader, _.isGenesis).headers

@@ -22,12 +22,12 @@ class ErgoModifiersCache(override val maxSize: Int)
       }
     }
 
-    val headersHeight = history.headersHeight
+    val headersHeight = history.bestHeaderHeight
 
     {
       // try to apply block sections from height next to best fullBlock
       history
-        .headerIdsAtHeight(history.fullBlockHeight + 1)
+        .headerIdsAtHeight(history.bestFullBlockHeight + 1)
         .flatMap(id => history.typedModifierById[Header](id))
         .flatMap(_.sectionIds)
         .map(_._2)

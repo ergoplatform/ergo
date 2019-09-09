@@ -23,7 +23,7 @@ import scala.concurrent.ExecutionContextExecutor
 class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
 
   override val historyGen: Gen[HT] =
-    generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)
+    generateHistory(verifyTransactions = true, StateType.Digest, poPoWBootstrap = false, poPowProve = true, -1)
 
   override val stateGen: Gen[WrappedDigestState] = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>

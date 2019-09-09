@@ -12,10 +12,10 @@ import scala.util.{Failure, Try}
 trait EmptyPoPowComponent extends PoPowComponent {
   self: HeadersComponent with ScorexEncoding =>
 
-  def validate(m: PoPowProof): Try[Unit] =
+  final def validate(m: PoPowProof): Try[Unit] =
     Failure(new Error("Regime that do not process PoPoWProof"))
 
-  def process(m: PoPowProof): ProgressInfo[ErgoPersistentModifier] =
+  final def process(m: PoPowProof): ProgressInfo[ErgoPersistentModifier] =
     ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
 
   def prove(params: PoPowParams): Try[PoPowProof] =

@@ -19,7 +19,7 @@ final case class PoPowProof(prefix: PoPowProofPrefix, suffix: PoPowProofSuffix)
 
   override def serializedId: Array[Byte] = prefix.serializedId
 
-  override def serializer: ScorexSerializer[M] = NiPoPowProofSerializer
+  override def serializer: ScorexSerializer[M] = PoPowProofSerializer
 
   override def parentId: ModifierId = prefix.parentId
 
@@ -41,7 +41,7 @@ object PoPowProof {
 
 }
 
-object NiPoPowProofSerializer extends ScorexSerializer[PoPowProof] {
+object PoPowProofSerializer extends ScorexSerializer[PoPowProof] {
 
   override def serialize(obj: PoPowProof, w: Writer): Unit = {
     val prefixBytes = obj.prefix.bytes

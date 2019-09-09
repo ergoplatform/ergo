@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.components.popow
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.PoPowAlgos.maxLevelOf
-import org.ergoplatform.modifiers.history.{Header, NiPoPowProofSerializer, PoPowProof, PoPowProofPrefix}
+import org.ergoplatform.modifiers.history.{Header, PoPowProofSerializer, PoPowProof, PoPowProofPrefix}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.components.{ChainSyncComponent, Configuration, HeadersComponent, Persistence}
 import org.ergoplatform.nodeView.state.StateType
@@ -35,10 +35,10 @@ trait PoPowBootstrapComponent extends PoPowComponent {
 
   protected def bestProofIdOpt: Option[ModifierId] = historyStorage.getIndex(BestProofIdKey).map(bytesToId)
 
-  def proofById(id: ModifierId): Option[PoPowProof] = historyStorage.get(id)
-    .flatMap(NiPoPowProofSerializer.parseBytesTry(_).toOption)
+  final def proofById(id: ModifierId): Option[PoPowProof] = historyStorage.get(id)
+    .flatMap(PoPowProofSerializer.parseBytesTry(_).toOption)
 
-  def process(m: PoPowProof): ProgressInfo[ErgoPersistentModifier] = {
+  final def process(m: PoPowProof): ProgressInfo[ErgoPersistentModifier] = {
     proofsChecked += 1
     val isBest = bestProofIdOpt.flatMap(proofById).forall(p => m.prefix.isBetterThan(p.prefix))
     if (isBest) historyStorage.insert(Seq(BestProofIdKey -> idToBytes(m.id)), Seq(m))
@@ -62,7 +62,7 @@ trait PoPowBootstrapComponent extends PoPowComponent {
     }
   }
 
-  def validate(m: PoPowProof): Try[Unit] =
+  final def validate(m: PoPowProof): Try[Unit] =
     ModifierValidator.failFast
       .demand(m.suffix.chain.lengthCompare(m.suffix.k) == 0, "Invalid suffix length")
       .demand(validPrefix(m.prefix), s"Invalid prefix length")
@@ -82,7 +82,7 @@ trait PoPowBootstrapComponent extends PoPowComponent {
       .result
       .toTry
 
-  def prove(params: PoPowParams): Try[PoPowProof] =
+  final def prove(params: PoPowParams): Try[PoPowProof] =
     Failure(new Exception("PoPow proving is not supported"))
 
   private def groupConsistentChain(chain: Seq[Header]): Seq[(Header, Header)] =

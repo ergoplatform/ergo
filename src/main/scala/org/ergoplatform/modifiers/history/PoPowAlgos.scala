@@ -48,7 +48,7 @@ object PoPowAlgos {
   @inline def packInterlinks(links: Seq[ModifierId]): Seq[(Array[Byte], Array[Byte])] = {
     @scala.annotation.tailrec
     def loop(rem: List[(ModifierId, Int)],
-             acc: Seq[(Array[Byte], Array[Byte])]): Seq[(Array[Byte], Array[Byte])] = {
+             acc: Seq[(Array[Byte], Array[Byte])]): Seq[(Array[Byte], Array[Byte])] =
       rem match {
         case (headLink, idx) :: _ =>
           val duplicatesQty = links.count(_ == headLink)
@@ -57,7 +57,6 @@ object PoPowAlgos {
         case Nil =>
           acc
       }
-    }
 
     loop(links.zipWithIndex.toList, Seq.empty)
   }
@@ -71,7 +70,7 @@ object PoPowAlgos {
   @inline def unpackInterlinks(fields: Seq[(Array[Byte], Array[Byte])]): Try[Seq[ModifierId]] = {
     @scala.annotation.tailrec
     def loop(rem: List[(Array[Byte], Array[Byte])],
-             acc: Seq[ModifierId] = Seq.empty): Try[Seq[ModifierId]] = {
+             acc: Seq[ModifierId] = Seq.empty): Try[Seq[ModifierId]] =
       rem match {
         case head :: tail =>
           val value = head._2
@@ -85,7 +84,6 @@ object PoPowAlgos {
         case Nil =>
           Success(acc)
       }
-    }
 
     loop(fields.filter(_._1.headOption.contains(InterlinksVectorPrefix)).toList)
   }
@@ -107,14 +105,13 @@ object PoPowAlgos {
 
   def bestArg(chain: Seq[Header])(m: Int): Int = {
     @scala.annotation.tailrec
-    def loop(level: Int, acc: Seq[(Int, Int)] = Seq.empty): Seq[(Int, Int)] = {
+    def loop(level: Int, acc: Seq[(Int, Int)] = Seq.empty): Seq[(Int, Int)] =
       if (level == 0) {
         loop(level + 1, acc :+ (0, chain.size)) // Supposing each header is at least of level 0.
       } else {
         val args = chain.filter(maxLevelOf(_) >= level)
         if (args.lengthCompare(m) >= 0) loop(level + 1, acc :+ (level, args.size)) else acc
       }
-    }
     loop(level = 0).map { case (lvl, size) =>
       math.pow(2, lvl) * size // 2^µ * |C↑µ|
     }.max.toInt

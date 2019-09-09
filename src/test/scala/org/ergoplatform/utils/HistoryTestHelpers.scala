@@ -20,7 +20,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
   private val poPowSettings = PoPowSettings(prove = false, bootstrap = false,  3, PoPowParams(30, 30, 30, 0.45))
 
   def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
-    val historyHeight = history.headersHeight
+    val historyHeight = history.bestHeaderHeight
     if (historyHeight < height) {
       history match {
         case _: EmptyBlockSectionComponent =>
@@ -37,7 +37,8 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
   // todo looks like copy-paste from Stubs.generateHistory
   def generateHistory(verifyTransactions: Boolean,
                       stateType: StateType,
-                      PoPoWBootstrap: Boolean,
+                      poPoWBootstrap: Boolean,
+                      poPowProve: Boolean,
                       blocksToKeep: Int,
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10,
@@ -46,8 +47,8 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
-      offlineGeneration = false, 200, 100000, 100000, 1.minute, 1000000, poPowSettings)
+      false, minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
+      offlineGeneration = false, 200, 100000, 100000, 1.minute, 1000000, poPowSettings.copy(bootstrap = poPoWBootstrap, prove = poPowProve))
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null

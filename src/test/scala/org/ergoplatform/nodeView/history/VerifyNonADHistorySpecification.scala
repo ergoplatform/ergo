@@ -11,7 +11,7 @@ import scorex.core.consensus.History.ProgressInfo
 class VerifyNonADHistorySpecification extends HistoryTestHelpers {
 
   private def genHistory() =
-    generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
+    generateHistory(verifyTransactions = true, StateType.Utxo, poPoWBootstrap = false, poPowProve = true, BlocksToKeep)
 
   property("block sections application in incorrect order") {
     var history = genHistory()

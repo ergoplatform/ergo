@@ -62,12 +62,14 @@ trait HeadersComponent {
   /**
     * @return height of best header
     */
-  def headersHeight: Int = bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
+  def bestHeaderHeight: Int =
+    bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   /**
     * @return height of best header with all block sections
     */
-  def fullBlockHeight: Int = bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
+  def bestFullBlockHeight: Int =
+    bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   /**
     * @param id - id of ErgoPersistentModifier
@@ -136,7 +138,7 @@ trait HeadersComponent {
     * header ids at this height
     */
   private def bestBlockHeaderIdsRow(h: Header, score: Difficulty): Seq[(ByteArrayWrapper, Array[Byte])] = {
-    val prevHeight = headersHeight
+    val prevHeight = bestHeaderHeight
     log.info(s"New best header ${h.encodedId} with score $score. New height ${h.height}, old height $prevHeight")
     val self: (ByteArrayWrapper, Array[Byte]) =
       heightIdsKey(h.height) -> (Seq(h.id) ++ headerIdsAtHeight(h.height)).flatMap(idToBytes).toArray
@@ -289,7 +291,7 @@ trait HeadersComponent {
         .validateNoFailure(hdrPoW, powScheme.validate(header))
         .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, chainSettings.initialDifficulty)
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
-        .validate(hdrTooOld, fullBlockHeight < nodeSettings.keepVersions, heightOf(header.parentId).toString)
+        .validate(hdrTooOld, bestFullBlockHeight < nodeSettings.keepVersions, heightOf(header.parentId).toString)
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .result
 
@@ -299,7 +301,7 @@ trait HeadersComponent {
         .validate(hdrHeight, header.height == parent.height + 1, s"${header.height} vs ${parent.height}")
         .validateNoFailure(hdrPoW, powScheme.validate(header))
         .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent, Some(header.timestamp)))
-        .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), heightOf(header.parentId).toString)
+        .validate(hdrTooOld, heightOf(header.parentId).exists(h => bestFullBlockHeight - h < nodeSettings.keepVersions), heightOf(header.parentId).toString)
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)

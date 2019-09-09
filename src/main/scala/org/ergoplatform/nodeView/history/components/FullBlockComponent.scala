@@ -130,7 +130,7 @@ trait FullBlockComponent extends HeadersComponent {
   private def nonBestBlock: BlockProcessing = {
     case params =>
       val block = params.fullBlock
-      if (block.header.height > fullBlockHeight - nodeSettings.keepVersions) {
+      if (block.header.height > bestFullBlockHeight - nodeSettings.keepVersions) {
         nonBestChainsCache = nonBestChainsCache.add(block.id, block.parentId, block.header.height)
       }
       //Orphaned block or full chain is not initialized yet
@@ -239,8 +239,8 @@ trait FullBlockComponent extends HeadersComponent {
                             additionalIndexes: Seq[(ByteArrayWrapper, Array[Byte])] = Seq.empty): Unit = {
     val indicesToInsert = Seq(BestFullBlockKey -> idToBytes(bestFullHeaderId)) ++ additionalIndexes
     historyStorage.insert(indicesToInsert, Seq(newModRow))
-      .ensuring(headersHeight >= fullBlockHeight, s"Headers height $headersHeight should be >= " +
-        s"full height $fullBlockHeight")
+      .ensuring(bestHeaderHeight >= bestFullBlockHeight, s"Headers height $bestHeaderHeight should be >= " +
+        s"full height $bestFullBlockHeight")
   }
 
 }

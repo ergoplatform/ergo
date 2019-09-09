@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.components._
 import org.ergoplatform.nodeView.history.components.popow.PoPowComponent
 import org.ergoplatform.settings.{ErgoSettings, HistoryOperationMode}
@@ -128,7 +127,7 @@ trait ErgoHistoryReader
     if (isEmpty) {
       info.startingPoints
     } else if (info.lastHeaderIds.isEmpty) {
-      val heightFrom = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
+      val heightFrom = Math.min(bestHeaderHeight, size + ErgoHistory.EmptyHistoryHeight)
       headerIdsAtHeight(heightFrom).headOption.toSeq.flatMap { startId =>
         typedModifierById[Header](startId).toSeq.flatMap { startHeader =>
           val headers = headerChainBack(size, startHeader, _ => false)
@@ -143,7 +142,7 @@ trait ErgoHistoryReader
         .orElse(if (ids.contains(PreGenesisHeader.id)) Some(PreGenesisHeader.id) else None)
       branchingPointOpt.toSeq.flatMap { branchingPoint =>
         val otherNodeHeight = heightOf(branchingPoint).getOrElse(PreGenesisHeader.height)
-        val heightFrom = Math.min(headersHeight, otherNodeHeight + size)
+        val heightFrom = Math.min(bestHeaderHeight, otherNodeHeight + size)
         val startId = headerIdsAtHeight(heightFrom).head
         val startHeader = typedModifierById[Header](startId).get
         val headerIds = headerChainBack(size, startHeader, _.parentId == branchingPointOpt)

@@ -11,7 +11,7 @@ import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Constants, ErgoValidationRules, ErgoValidationSettingsUpdate, ValidationRules}
+import org.ergoplatform.settings.{Constants, ErgoValidationRules, ErgoValidationSettingsUpdate, PoPowParams, ValidationRules}
 import org.ergoplatform.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -180,10 +180,10 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ChainGenerator {
   lazy val ergoValidationSettingsGen: Gen[ErgoValidationRules] = ergoValidationSettingsUpdateGen
     .map(u => ErgoValidationRules.initial.updated(u))
 
-  def validNiPoPowProofGen(k: Int): Gen[PoPowProof] = for {
-    m <- Gen.chooseNum(50, 100)
+  def validNiPoPowProofGen(m: Int, k: Int)(params: PoPowParams): Gen[PoPowProof] = for {
+    mulM <- Gen.chooseNum(100, 200)
   } yield {
-    val chain = genHeaderChain(m + 1 + k, diffBitsOpt = None, useRealTs = false).headers
+    val chain = genHeaderChain(m * mulM + k, diffBitsOpt = None, useRealTs = false).headers
     val poPowChain = chain.foldLeft(Seq.empty[PoPowHeader], None: Option[PoPowHeader]) {
       case ((acc, bestHeaderOpt), h) =>
         val links = updateInterlinks(
@@ -193,8 +193,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ChainGenerator {
         val poPowH = PoPowHeader(h, links)
         (acc :+ poPowH, Some(poPowH))
     }._1
-    val (prefix, suffix) = poPowChain.splitAt(m + 1)
-    PoPowProof(m, k, prefix, suffix)
+    PoPowAlgos.prove(poPowChain)(params)
   }
 
   /** Random long from 1 to maximum - 1

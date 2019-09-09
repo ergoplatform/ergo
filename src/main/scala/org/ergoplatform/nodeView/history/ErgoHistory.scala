@@ -58,8 +58,8 @@ trait ErgoHistory
           (this, process(header))
         case section: BlockSection =>
           (this, process(section))
-        case poPoWProof: PoPowProof =>
-          (this, process(poPoWProof))
+        case poPowProof: PoPowProof =>
+          (this, process(poPowProof))
         case chunk: UTXOSnapshotChunk =>
           (this, process(chunk))
       }
@@ -125,7 +125,7 @@ trait ErgoHistory
             val newBestHeaderOpt = loopHeightDown(headersHeight, id => !invalidatedIds.contains(id))
 
             if (!bestFullIsInvalidated) {
-              //Only headers chain involved
+              // Only headers chain involved
               historyStorage.insert(
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq,
                 Seq.empty
@@ -173,13 +173,14 @@ trait ErgoHistory
   /**
     * @return header, that corresponds to modifier
     */
-  protected def correspondingHeader(modifier: ErgoPersistentModifier): Option[Header] = modifier match {
-    case h: Header => Some(h)
-    case full: ErgoFullBlock => Some(full.header)
-    case proof: ADProofs => typedModifierById[Header](proof.headerId)
-    case txs: BlockTransactions => typedModifierById[Header](txs.headerId)
-    case _ => None
-  }
+  protected def correspondingHeader(modifier: ErgoPersistentModifier): Option[Header] =
+    modifier match {
+      case h: Header => Some(h)
+      case full: ErgoFullBlock => Some(full.header)
+      case proof: ADProofs => typedModifierById[Header](proof.headerId)
+      case txs: BlockTransactions => typedModifierById[Header](txs.headerId)
+      case _ => None
+    }
 
 }
 

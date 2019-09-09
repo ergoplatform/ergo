@@ -60,8 +60,8 @@ trait ErgoHistoryReader
 
   /** Get modifier of expected type by its identifier
     *
-    * @param id - modifier id
     * @tparam T - expected Type
+    * @param id - modifier id
     * @return semantically valid ErgoPersistentModifier of type T with the given id it is in history
     */
   def typedModifierById[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T] =
@@ -310,7 +310,7 @@ trait ErgoHistoryReader
     */
   def acceptModifierType(typeId: ModifierTypeId): Boolean =
     if (settings.nodeSettings.poPowSettings.bootstrap && isEmpty) {
-      Seq(PoPowProofPrefix.modifierTypeId, PoPowProofSuffix.modifierTypeId).contains(ModifierTypeId)
+      Seq(PoPowProof.modifierTypeId).contains(typeId)
     } else {
       true
     }

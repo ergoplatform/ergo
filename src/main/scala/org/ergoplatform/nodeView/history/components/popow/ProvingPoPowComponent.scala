@@ -28,8 +28,8 @@ trait ProvingPoPowComponent extends EmptyPoPowComponent {
       .map { proof =>
         historyStorage.getIndex(BestProofId)
           .flatMap(id => typedModifierById[PoPowProofPrefix](bytesToId(id)))
-          .foreach(prefix => historyStorage.remove(Seq(prefix.id, prefix.suffixId)))
-        historyStorage.insert(Seq(BestProofId -> idToBytes(proof.id)), Seq(proof.prefix, proof.suffix))
+          .foreach(prefix => historyStorage.remove(Seq(prefix.id)))
+        historyStorage.insert(Seq(BestProofId -> idToBytes(proof.id)), Seq(proof))
         proof
       }
 

@@ -43,10 +43,10 @@ trait HeadersComponent {
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
-  protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
+  def headerScoreKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("score".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
-  protected def headerHeightKey(id: ModifierId): ByteArrayWrapper =
+  def headerHeightKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("height".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
   protected[history] def validityKey(id: ModifierId): ByteArrayWrapper =
@@ -281,7 +281,7 @@ trait HeadersComponent {
         }
       }
 
-    private def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] =
+    private[history] def validateGenesisBlockHeader(header: Header): ValidationResult[Unit] =
       validationState
         .validateEqualIds(hdrGenesisParent, header.parentId, Header.GenesisParentId)
         .validateOrSkipFlatten(hdrGenesisFromConfig, chainSettings.genesisId, (id: ModifierId) => id.equals(header.id))
@@ -305,14 +305,28 @@ trait HeadersComponent {
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
         .result
 
-    private[history] def validateOrphanedBlockHeader(header: Header): ValidationResult[Unit] =
-      validationState
-        .validateNoFailure(hdrPoW, powScheme.validate(header))
-        .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), heightOf(header.parentId).toString)
-        .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
-        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
-        .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
-        .result
+    /**
+      * Partial validation skipping some rules
+      */
+    object Partial {
+      private[history] def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] =
+        validationState
+          .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, s"${header.timestamp} > ${parent.timestamp}")
+          .validate(hdrHeight, header.height == parent.height + 1, s"${header.height} vs ${parent.height}")
+          .validateNoFailure(hdrPoW, powScheme.validate(header))
+          .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
+          .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
+          .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
+          .result
+
+      private[history] def validateOrphanedBlockHeader(header: Header): ValidationResult[Unit] =
+        validationState
+          .validateNoFailure(hdrPoW, powScheme.validate(header))
+          .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
+          .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
+          .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
+          .result
+    }
   }
 
 }

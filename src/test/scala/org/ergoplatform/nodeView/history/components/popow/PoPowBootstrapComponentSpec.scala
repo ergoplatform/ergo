@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history.components.popow
 
+import com.google.common.primitives.Ints
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.nodeView.history.components.EmptyBlockSectionComponent
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, InMemoryHistoryStorage}
@@ -29,20 +30,57 @@ class PoPowBootstrapComponentSpec
       override protected val timeProvider: NetworkTimeProvider = ntp
     }
 
-  property("Best proof application") {
+  property("Indexes are updated correctly when history is PoPow bootstrapped") {
     val cfg = settings.copy(
       nodeSettings = settings.nodeSettings.copy(
         stateType = StateType.Digest,
         poPowSettings = settings.nodeSettings.poPowSettings.copy(minProofsToCheck = 1)
       ),
     )
-    forAll(validNiPoPowProofGen(cfg.nodeSettings.poPowSettings.params.k)) { proof =>
+    val poPowParams = cfg.nodeSettings.poPowSettings.params
+    forAll(validNiPoPowProofGen(poPowParams.m, poPowParams.k)(poPowParams)) { proof =>
       val history = bakeComponent(cfg)
       history.process(proof)
 
-      history.historyStorage
-        .asInstanceOf[InMemoryHistoryStorage]
-        .indexes.get(history.BestHeaderKey).map(bytesToId) shouldBe Some(proof.suffix.chain.last.id)
+      val bestHeader = proof.suffix.chain.last
+      val historyStorage = history.historyStorage.asInstanceOf[InMemoryHistoryStorage]
+
+      historyStorage.indexes.get(history.BestHeaderKey).map(bytesToId) shouldBe Some(bestHeader.id)
+
+      historyStorage.indexes
+        .get(history.headerHeightKey(bestHeader.id)).map(Ints.fromByteArray) shouldBe Some(bestHeader.height)
+
+      history.isEmpty shouldBe false
+    }
+  }
+
+  property("Proof validation") {
+    val cfg = settings.copy(
+      nodeSettings = settings.nodeSettings.copy(
+        stateType = StateType.Digest,
+        poPowSettings = settings.nodeSettings.poPowSettings.copy(minProofsToCheck = 1)
+      ),
+    )
+    val poPowParams = cfg.nodeSettings.poPowSettings.params
+
+    // valid proof
+    forAll(validNiPoPowProofGen(poPowParams.m, poPowParams.k)(poPowParams)) { proof =>
+      val history = bakeComponent(cfg)
+      history.validate(proof) shouldBe 'success
+    }
+
+    // invalid proof (invalid suffix)
+    forAll(validNiPoPowProofGen(poPowParams.m, poPowParams.k)(poPowParams)) { proof =>
+      val history = bakeComponent(cfg)
+      val invalidProof = proof.copy(suffix = proof.suffix.copy(chain = proof.suffix.chain.init))
+      history.validate(invalidProof) shouldBe 'failure
+    }
+
+    // invalid proof (invalid prefix)
+    forAll(validNiPoPowProofGen(poPowParams.m, poPowParams.k)(poPowParams)) { proof =>
+      val history = bakeComponent(cfg)
+      val invalidProof = proof.copy(prefix = proof.prefix.copy(chain = proof.prefix.chain.tail))
+      history.validate(invalidProof) shouldBe 'failure
     }
   }
 

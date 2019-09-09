@@ -17,7 +17,7 @@ final case class PoPowProofPrefix(m: Int,
 
   override type M = PoPowProofPrefix
 
-  override val modifierTypeId: ModifierTypeId = PoPowProof.TypeId
+  override val modifierTypeId: ModifierTypeId = PoPowProof.modifierTypeId
 
   override def serializedId: Array[Byte] = Algos.hash(bytes)
 

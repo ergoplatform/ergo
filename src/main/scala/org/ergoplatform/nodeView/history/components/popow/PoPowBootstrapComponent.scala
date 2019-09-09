@@ -26,7 +26,7 @@ trait PoPowBootstrapComponent extends PoPowComponent {
     with ScorexLogging
     with ScorexEncoding =>
 
-  protected val BestProofIdKey: ByteArrayWrapper =
+  val BestProofIdKey: ByteArrayWrapper =
     ByteArrayWrapper(Array.fill(Constants.HashLength)(PoPowProofPrefix.modifierTypeId))
 
   private var proofsChecked: Int = 0
@@ -75,9 +75,9 @@ trait PoPowBootstrapComponent extends PoPowComponent {
         "Wrong genesis difficulty"
       )
       .validateSeq(m.prefix.headersChain ++ m.suffix.headersChain.headOption)(
-        (_, h) => HeadersValidator.validateOrphanedBlockHeader(h))
+        (_, h) => HeadersValidator.Partial.validateOrphanedBlockHeader(h))
       .validateSeq(groupConsistentChain(m.suffix.headersChain)) { case (_, (h0, h1)) =>
-        HeadersValidator.validateChildBlockHeader(h1, h0)
+        HeadersValidator.Partial.validateChildBlockHeader(h1, h0)
       }
       .result
       .toTry

@@ -158,7 +158,7 @@ object PoPowAlgos {
   def goodSuperChain(chain: Seq[Header], superChain: Seq[Header], level: Int)(params: PoPowParams): Boolean =
     superChainQuality(chain, superChain, level)(params) && multiLevelQuality(chain, superChain, level)(params)
 
-  private def locallyGood(superChainSize: Int, underlyingChainSize: Int, level: Int, d: Double): Boolean =
+  def locallyGood(superChainSize: Int, underlyingChainSize: Int, level: Int, d: Double): Boolean =
     superChainSize > ((1 - d) * math.pow(2, -level) * underlyingChainSize)
 
   /**
@@ -166,8 +166,8 @@ object PoPowAlgos {
     * @param superChain - Super-chain of level µ (C↑µ)
     * @param level      - Level of super-chain (µ)
     */
-  private def superChainQuality(chain: Seq[Header], superChain: Seq[Header], level: Int)
-                               (params: PoPowParams): Boolean = {
+  def superChainQuality(chain: Seq[Header], superChain: Seq[Header], level: Int)
+                       (params: PoPowParams): Boolean = {
     val downChain = chain
       .filter(h => h.height >= superChain.head.height && h.height <= superChain.last.height) // C[C↑µ[0]:C↑µ[−1]] or C'↓
     @scala.annotation.tailrec
@@ -188,8 +188,8 @@ object PoPowAlgos {
     checkLocalGoodnessAt(params.m)
   }
 
-  private def multiLevelQuality(chain: Seq[Header], superChain: Seq[Header], level: Int)
-                               (params: PoPowParams): Boolean = {
+  def multiLevelQuality(chain: Seq[Header], superChain: Seq[Header], level: Int)
+                       (params: PoPowParams): Boolean = {
     val downChain = chain.dropWhile(_ == superChain.head).takeWhile(_ == superChain.last) // C'↓
     @scala.annotation.tailrec
     def checkQualityAt(levelToCheck: Int): Boolean =

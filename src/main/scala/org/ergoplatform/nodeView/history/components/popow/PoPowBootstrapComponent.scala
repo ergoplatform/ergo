@@ -1,13 +1,14 @@
 package org.ergoplatform.nodeView.history.components.popow
 
+import com.google.common.primitives.Ints
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.PoPowAlgos.maxLevelOf
-import org.ergoplatform.modifiers.history.{Header, PoPowProofSerializer, PoPowProof, PoPowProofPrefix}
+import org.ergoplatform.modifiers.history.{Header, PoPowProof, PoPowProofPrefix, PoPowProofSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.components.{ChainSyncComponent, Configuration, HeadersComponent, Persistence}
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Constants, PoPowParams, PoPowSettings}
+import org.ergoplatform.settings.{Algos, Constants, PoPowParams, PoPowSettings}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
@@ -28,21 +29,27 @@ trait PoPowBootstrapComponent extends PoPowComponent {
 
   val BestProofIdKey: ByteArrayWrapper =
     ByteArrayWrapper(Array.fill(Constants.HashLength)(PoPowProofPrefix.modifierTypeId))
+  val ProofsCheckedKey: ByteArrayWrapper =
+    ByteArrayWrapper(Algos.hash("proofs_checked"))
 
-  private var proofsChecked: Int = 0
+  private def proofsChecked: Int = storage.getIndex(ProofsCheckedKey)
+    .map(Ints.fromByteArray)
+    .getOrElse(0)
 
   private def poPowSettings: PoPowSettings = settings.nodeSettings.poPowSettings
 
-  protected def bestProofIdOpt: Option[ModifierId] = historyStorage.getIndex(BestProofIdKey).map(bytesToId)
+  final def bestProofIdOpt: Option[ModifierId] = storage.getIndex(BestProofIdKey)
+    .map(bytesToId)
 
-  final def proofById(id: ModifierId): Option[PoPowProof] = historyStorage.get(id)
+  final def proofById(id: ModifierId): Option[PoPowProof] = storage.get(id)
     .flatMap(PoPowProofSerializer.parseBytesTry(_).toOption)
 
   final def process(m: PoPowProof): ProgressInfo[ErgoPersistentModifier] = {
-    proofsChecked += 1
+    val proofsCheckedInc = proofsChecked + 1
+    storage.updateIndex(ProofsCheckedKey, Ints.toByteArray(proofsCheckedInc))
     val isBest = bestProofIdOpt.flatMap(proofById).forall(p => m.prefix.isBetterThan(p.prefix))
-    if (isBest) historyStorage.insert(Seq(BestProofIdKey -> idToBytes(m.id)), Seq(m))
-    if (proofsChecked >= poPowSettings.minProofsToCheck) {
+    if (isBest) storage.update(Seq(BestProofIdKey -> idToBytes(m.id)), Seq(m))
+    if (proofsCheckedInc >= poPowSettings.minProofsToCheck) {
       val bestProof = bestProofIdOpt.flatMap(proofById).getOrElse(m)
       settings.nodeSettings.stateType match {
         case StateType.Utxo => // request last headers to reach nearest snapshot height
@@ -54,7 +61,7 @@ trait PoPowBootstrapComponent extends PoPowComponent {
             .foldLeft(Seq.empty[(ByteArrayWrapper, Array[Byte])]) { case (acc, h) =>
               acc ++ toInsert(h.header)._1
             }
-          historyStorage.insert(indexesToInsert, bestProof.headersChain)
+          storage.update(indexesToInsert, bestProof.headersChain)
           ProgressInfo(None, Seq.empty, Seq(bestHeader), toDownload(bestHeader))
       }
     } else {

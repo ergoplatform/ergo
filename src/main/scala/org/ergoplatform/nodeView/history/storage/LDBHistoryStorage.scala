@@ -58,8 +58,8 @@ final class LDBHistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, 
 
   def contains(id: ModifierId): Boolean = objectsStore.get(idToBytes(id)).isDefined
 
-  def insert(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
-                   objectsToInsert: Seq[ErgoPersistentModifier]): Unit = {
+  def update(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
+             objectsToInsert: Seq[ErgoPersistentModifier]): Unit = {
     objectsToInsert.foreach(o => modifiersCache.put(o.id, o))
     objectsStore.insert(
       objectsToInsert.map(m => idToBytes(m.id) -> HistoryModifierSerializer.toBytes(m)))

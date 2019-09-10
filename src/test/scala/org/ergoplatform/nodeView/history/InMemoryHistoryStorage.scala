@@ -22,7 +22,7 @@ final class InMemoryHistoryStorage extends HistoryStorage {
 
   def contains(id: ModifierId): Boolean = objects.contains(id)
 
-  def insert(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
+  def update(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
              objectsToInsert: Seq[ErgoPersistentModifier]): Unit = {
     indexes ++= indexesToInsert
     objects ++= objectsToInsert.map(x => x.id -> x)

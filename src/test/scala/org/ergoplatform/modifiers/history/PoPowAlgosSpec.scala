@@ -2,10 +2,16 @@ package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
 import scorex.util.ModifierId
 
-class PoPowAlgosSpec extends PropSpec with Matchers with ChainGenerator with ErgoGenerators {
+class PoPowAlgosSpec
+  extends PropSpec
+    with Matchers
+    with ChainGenerator
+    with ErgoGenerators
+    with GeneratorDrivenPropertyChecks {
 
   import PoPowAlgos._
 

@@ -52,7 +52,7 @@ trait ErgoHistoryReader
     */
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
     if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
-      historyStorage.modifierById(id)
+      storage.modifierById(id)
     } else {
       None
     }
@@ -69,7 +69,7 @@ trait ErgoHistoryReader
       case _ => None
     }
 
-  override def contains(id: ModifierId): Boolean = historyStorage.contains(id)
+  override def contains(id: ModifierId): Boolean = storage.contains(id)
 
   /**
     * Id of best block to mine
@@ -293,7 +293,7 @@ trait ErgoHistoryReader
   }
 
   override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
-    historyStorage.getIndex(validityKey(modifierId)) match {
+    storage.getIndex(validityKey(modifierId)) match {
       case Some(b) if b.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
       case Some(b) if b.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
       case None if contains(modifierId) => ModifierSemanticValidity.Unknown

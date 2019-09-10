@@ -30,7 +30,7 @@ trait FullBlockComponent extends HeadersComponent {
   private var nonBestChainsCache = FullBlockComponent.emptyCache
 
   def isInBestFullChain(id: ModifierId): Boolean =
-    historyStorage.getIndex(chainStatusKey(id))
+    storage.getIndex(chainStatusKey(id))
       .map(ByteArrayWrapper.apply)
       .contains(ByteArrayWrapper(FullBlockComponent.BestChainMarker))
 
@@ -38,7 +38,7 @@ trait FullBlockComponent extends HeadersComponent {
     * Id of header that contains transactions and proofs
     */
   override def bestFullBlockIdOpt: Option[ModifierId] =
-    historyStorage.getIndex(BestFullBlockKey)
+    storage.getIndex(BestFullBlockKey)
       .map(bytesToId)
 
   // todo: `getFullBlock` is frequently used to define whether some`header` have enough
@@ -135,7 +135,7 @@ trait FullBlockComponent extends HeadersComponent {
       }
       //Orphaned block or full chain is not initialized yet
       logStatus(Seq(), Seq(), params.fullBlock, None)
-      historyStorage.insert(Seq.empty, Seq(params.newModRow))
+      storage.update(Seq.empty, Seq(params.newModRow))
       ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
   }
 
@@ -231,14 +231,14 @@ trait FullBlockComponent extends HeadersComponent {
     val toRemove: Seq[ModifierId] = heights.flatMap(h => headerIdsAtHeight(h))
       .flatMap(id => typedModifierById[Header](id))
       .flatMap(_.sectionIds.map(_._2))
-    historyStorage.remove(toRemove)
+    storage.remove(toRemove)
   }
 
   private def updateStorage(newModRow: ErgoPersistentModifier,
                             bestFullHeaderId: ModifierId,
                             additionalIndexes: Seq[(ByteArrayWrapper, Array[Byte])] = Seq.empty): Unit = {
     val indicesToInsert = Seq(BestFullBlockKey -> idToBytes(bestFullHeaderId)) ++ additionalIndexes
-    historyStorage.insert(indicesToInsert, Seq(newModRow))
+    storage.update(indicesToInsert, Seq(newModRow))
       .ensuring(bestHeaderHeight >= bestFullBlockHeight, s"Headers height $bestHeaderHeight should be >= " +
         s"full height $bestFullBlockHeight")
   }

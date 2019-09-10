@@ -87,7 +87,7 @@ trait FullBlockSectionComponent extends BlockSectionComponent {
   }
 
   private def justPutToHistory(m: BlockSection): ProgressInfo[ErgoPersistentModifier] = {
-    historyStorage.insert(Seq.empty, Seq(m))
+    storage.update(Seq.empty, Seq(m))
     ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
   }
 
@@ -98,7 +98,7 @@ trait FullBlockSectionComponent extends BlockSectionComponent {
 
     def validate(m: BlockSection, header: Header): ValidationResult[Unit] =
       validator
-        .validate(alreadyApplied, !historyStorage.contains(m.id), s"${m.encodedId}")
+        .validate(alreadyApplied, !storage.contains(m.id), s"${m.encodedId}")
         .validate(bsCorrespondsToHeader, header.isCorrespondingModifier(m), s"header=${header.encodedId}, id=${m.encodedId}")
         .validateSemantics(bsHeaderValid, isSemanticallyValid(header.id), s"header=${header.encodedId}, id=${m.encodedId}")
         .validate(bsHeadersChainSynced, isHeadersChainSynced)

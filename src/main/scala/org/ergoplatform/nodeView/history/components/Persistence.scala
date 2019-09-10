@@ -4,6 +4,6 @@ import org.ergoplatform.nodeView.history.storage.HistoryStorage
 
 trait Persistence {
 
-  private[history] val historyStorage: HistoryStorage
+  private[history] val storage: HistoryStorage
 
 }

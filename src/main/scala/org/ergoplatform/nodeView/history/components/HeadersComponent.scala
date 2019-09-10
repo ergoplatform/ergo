@@ -52,7 +52,7 @@ trait HeadersComponent {
   protected[history] def validityKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
-  def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(bytesToId)
+  def bestHeaderIdOpt: Option[ModifierId] = storage.getIndex(BestHeaderKey).map(bytesToId)
 
   /**
     * Id of best header with transactions and proofs. None in regime that do not process transactions
@@ -75,7 +75,7 @@ trait HeadersComponent {
     * @param id - id of ErgoPersistentModifier
     * @return height of modifier with such id if is in History
     */
-  def heightOf(id: ModifierId): Option[Int] = historyStorage.getIndex(headerHeightKey(id))
+  def heightOf(id: ModifierId): Option[Int] = storage.getIndex(headerHeightKey(id))
     .map(Ints.fromByteArray)
 
   def isInBestChain(id: ModifierId): Boolean = heightOf(id).flatMap(h => bestHeaderIdAtHeight(h)).contains(id)
@@ -91,7 +91,7 @@ trait HeadersComponent {
   protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
     val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = toInsert(h)
 
-    historyStorage.insert(dataToInsert._1, dataToInsert._2)
+    storage.update(dataToInsert._1, dataToInsert._2)
 
     bestHeaderIdOpt match {
       case Some(bestHeaderId) =>
@@ -167,7 +167,7 @@ trait HeadersComponent {
     * @param id - header id
     * @return score of header with such id if is in History
     */
-  def scoreOf(id: ModifierId): Option[BigInt] = historyStorage.getIndex(headerScoreKey(id))
+  def scoreOf(id: ModifierId): Option[BigInt] = storage.getIndex(headerScoreKey(id))
     .map(BigInt.apply)
 
   /**
@@ -179,7 +179,7 @@ trait HeadersComponent {
     *         First id is always from the best headers chain.
     */
   def headerIdsAtHeight(height: Int): Seq[ModifierId] =
-    historyStorage.getIndex(heightIdsKey(height: Int))
+    storage.getIndex(heightIdsKey(height: Int))
       .getOrElse(Array()).grouped(32).map(bytesToId).toSeq
 
   /**
@@ -290,7 +290,7 @@ trait HeadersComponent {
         .validate(hdrGenesisHeight, header.height == GenesisHeight, header.toString)
         .validateNoFailure(hdrPoW, powScheme.validate(header))
         .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, chainSettings.initialDifficulty)
-        .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
+        .validateNot(alreadyApplied, storage.contains(header.id), header.id.toString)
         .validate(hdrTooOld, bestFullBlockHeight < nodeSettings.keepVersions, heightOf(header.parentId).toString)
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .result
@@ -304,7 +304,7 @@ trait HeadersComponent {
         .validate(hdrTooOld, heightOf(header.parentId).exists(h => bestFullBlockHeight - h < nodeSettings.keepVersions), heightOf(header.parentId).toString)
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
-        .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
+        .validateNot(alreadyApplied, storage.contains(header.id), header.id.toString)
         .result
 
     /**
@@ -318,7 +318,7 @@ trait HeadersComponent {
           .validateNoFailure(hdrPoW, powScheme.validate(header))
           .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
           .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
-          .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
+          .validateNot(alreadyApplied, storage.contains(header.id), header.id.toString)
           .result
 
       private[history] def validateOrphanedBlockHeader(header: Header): ValidationResult[Unit] =
@@ -326,7 +326,7 @@ trait HeadersComponent {
           .validateNoFailure(hdrPoW, powScheme.validate(header))
           .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
           .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
-          .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
+          .validateNot(alreadyApplied, storage.contains(header.id), header.id.toString)
           .result
     }
   }

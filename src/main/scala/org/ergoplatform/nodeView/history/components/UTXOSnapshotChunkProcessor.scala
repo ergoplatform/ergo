@@ -18,11 +18,11 @@ trait UTXOSnapshotChunkProcessor {
   def process(m: UTXOSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
     //TODO
     val toInsert = ???
-    historyStorage.insert(Seq.empty, toInsert)
+    storage.update(Seq.empty, toInsert)
     ProgressInfo(None, Seq.empty, Seq(m), Seq.empty)
   }
 
-  def validate(m: UTXOSnapshotChunk): Try[Unit] = if (historyStorage.contains(m.id)) {
+  def validate(m: UTXOSnapshotChunk): Try[Unit] = if (storage.contains(m.id)) {
     Failure(new Error(s"UTXOSnapshotChunk with id ${m.encodedId} is already in history"))
   } else {
     Success(Unit)

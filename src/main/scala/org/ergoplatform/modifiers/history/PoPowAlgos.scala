@@ -94,7 +94,6 @@ object PoPowAlgos {
   def maxLevelOf(header: Header): Int =
     if (!header.isGenesis) {
       def log2(x: Double) = math.log(x) / math.log(2)
-
       val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
       val realTarget = header.powSolution.d
       val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
@@ -152,6 +151,9 @@ object PoPowAlgos {
     PoPowProof(params.m, params.k, prefix, suffix)
   }
 
+  /**
+    *  "Goodness" bounds the deviation of superblocks of a certain level from their expected mean
+    */
   def goodSuperChain(chain: Seq[Header], superChain: Seq[Header], level: Int)(params: PoPowParams): Boolean =
     superChainQuality(chain, superChain, level)(params) && multiLevelQuality(chain, superChain, level)(params)
 
@@ -196,7 +198,8 @@ object PoPowAlgos {
           if (subChain.nonEmpty) {
             val upperSubChainSize = subChain.count(maxLevelOf(_) >= lvl) // |C*↑µ'|
             if (upperSubChainSize >= params.k1 &&
-              !(subChain.count(maxLevelOf(_) >= level) >= (1 - params.d) * math.pow(2, level - lvl) * upperSubChainSize)) {
+              !(subChain.count(maxLevelOf(_) >= level) >=
+                (1 - params.d) * math.pow(2, level - lvl) * upperSubChainSize)) {
               false
             } else {
               checkQualityAt(lvl - 1)

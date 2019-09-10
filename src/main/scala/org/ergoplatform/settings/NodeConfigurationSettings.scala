@@ -46,6 +46,7 @@ final case class NodeConfigurationSettings(
     .demand(!(poPowSettings.prove && poPowSettings.bootstrap), "Proving not supported in PoPow bootstrapped mode")
     .demand(!poPowSettings.bootstrap || poPowSettings.minProofsToCheck > 0, "`poPow.minProofsToCheck` must be positive")
     .demand(keepVersions >= 0, "nodeSettings.keepVersions should not be negative")
+    .demand(!poPowSettings.prove || blocksToKeep < 0, s"Proving mode is incompatible with pruned chain")
     .demand(
       verifyTransactions || stateType.requireProofs,
       "UTXO state can't be used when nodeSettings.verifyTransactions is false"

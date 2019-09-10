@@ -45,7 +45,7 @@ trait ErgoHistory
 
   override type NVCT = ErgoHistory
 
-  def closeStorage(): Unit = historyStorage.close()
+  def closeStorage(): Unit = storage.close()
 
   /**
     * Append ErgoPersistentModifier to History if valid
@@ -80,15 +80,15 @@ trait ErgoHistory
     modifier match {
       case fb: ErgoFullBlock =>
         val nonMarkedIds = (fb.header.id +: fb.header.sectionIds.map(_._2))
-          .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty)
+          .filter(id => storage.getIndex(validityKey(id)).isEmpty)
 
         if (nonMarkedIds.nonEmpty) {
-          historyStorage.insert(
+          storage.update(
             nonMarkedIds.map(id => validityKey(id) -> Array(1.toByte)),
             Seq.empty)
         }
       case _ =>
-        historyStorage.insert(
+        storage.update(
           Seq(validityKey(modifier.id) -> Array(1.toByte)),
           Seq.empty)
     }
@@ -118,7 +118,7 @@ trait ErgoHistory
         (bestHeaderIsInvalidated, bestFullIsInvalidated) match {
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
-            historyStorage.insert(validityRow, Seq.empty)
+            storage.update(validityRow, Seq.empty)
             this -> ErgoHistory.emptyProgressInfo
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
@@ -126,7 +126,7 @@ trait ErgoHistory
 
             if (!bestFullIsInvalidated) {
               // Only headers chain involved
-              historyStorage.insert(
+              storage.update(
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq,
                 Seq.empty
               )
@@ -155,7 +155,7 @@ trait ErgoHistory
               val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow
-              historyStorage.insert(toInsert, Seq.empty)
+              storage.update(toInsert, Seq.empty)
               val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
 
               this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
@@ -163,7 +163,7 @@ trait ErgoHistory
         }
       case None =>
         //No headers become invalid. Just valid this modifier as invalid
-        historyStorage.insert(
+        storage.update(
           Seq(validityKey(modifier.id) -> Array(0.toByte)),
           Seq.empty)
         this -> ErgoHistory.emptyProgressInfo
@@ -228,7 +228,7 @@ object ErgoHistory extends ScorexLogging {
           new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
             with EmptyPoPowComponent {
             override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val historyStorage: LDBHistoryStorage = db
+            override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }
@@ -236,7 +236,7 @@ object ErgoHistory extends ScorexLogging {
           new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
             with ProvingPoPowComponent {
             override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val historyStorage: LDBHistoryStorage = db
+            override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }
@@ -244,7 +244,7 @@ object ErgoHistory extends ScorexLogging {
           new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
             with PoPowBootstrapComponent {
             override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val historyStorage: LDBHistoryStorage = db
+            override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }
@@ -252,7 +252,7 @@ object ErgoHistory extends ScorexLogging {
           new ErgoHistory with EmptyBlockSectionComponent
             with EmptyPoPowComponent {
             override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val historyStorage: LDBHistoryStorage = db
+            override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }

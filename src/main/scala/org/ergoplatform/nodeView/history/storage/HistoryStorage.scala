@@ -14,9 +14,12 @@ abstract class HistoryStorage extends AutoCloseable {
 
   def contains(id: ModifierId): Boolean
 
-  def insert(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
+  def update(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
              objectsToInsert: Seq[ErgoPersistentModifier]): Unit
 
   def remove(idsToRemove: Seq[ModifierId]): Unit
+
+  def updateIndex(key: ByteArrayWrapper, value: Array[Byte]): Unit =
+    update(Seq(key -> value), Seq.empty)
 
 }

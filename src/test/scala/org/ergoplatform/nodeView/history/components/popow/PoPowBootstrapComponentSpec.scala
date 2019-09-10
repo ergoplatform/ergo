@@ -25,7 +25,7 @@ class PoPowBootstrapComponentSpec
   private def bakeComponent(cfg: ErgoSettings) =
     new ErgoHistoryReader with EmptyBlockSectionComponent with PoPowBootstrapComponent {
       override protected val settings: ErgoSettings = cfg
-      override protected[history] val historyStorage: InMemoryHistoryStorage = new InMemoryHistoryStorage()
+      override protected[history] val storage: InMemoryHistoryStorage = new InMemoryHistoryStorage()
       override val powScheme: AutolykosPowScheme = chainSettings.powScheme
       override protected val timeProvider: NetworkTimeProvider = ntp
     }
@@ -35,7 +35,7 @@ class PoPowBootstrapComponentSpec
       nodeSettings = settings.nodeSettings.copy(
         stateType = StateType.Digest,
         poPowSettings = settings.nodeSettings.poPowSettings.copy(minProofsToCheck = 1)
-      ),
+      )
     )
     val poPowParams = cfg.nodeSettings.poPowSettings.params
     forAll(validNiPoPowProofGen(poPowParams.m, poPowParams.k)(poPowParams)) { proof =>
@@ -43,7 +43,7 @@ class PoPowBootstrapComponentSpec
       history.process(proof)
 
       val bestHeader = proof.suffix.chain.last
-      val historyStorage = history.historyStorage.asInstanceOf[InMemoryHistoryStorage]
+      val historyStorage = history.storage.asInstanceOf[InMemoryHistoryStorage]
 
       historyStorage.indexes.get(history.BestHeaderKey).map(bytesToId) shouldBe Some(bestHeader.id)
 
@@ -59,7 +59,7 @@ class PoPowBootstrapComponentSpec
       nodeSettings = settings.nodeSettings.copy(
         stateType = StateType.Digest,
         poPowSettings = settings.nodeSettings.poPowSettings.copy(minProofsToCheck = 1)
-      ),
+      )
     )
     val poPowParams = cfg.nodeSettings.poPowSettings.params
 

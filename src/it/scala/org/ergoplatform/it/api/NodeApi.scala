@@ -90,20 +90,29 @@ trait NodeApi {
     waitFor[Seq[Peer]](_.connectedPeers, _.length >= targetPeersCount, 1.second)
   }
 
+  def waitForFullHeight(expectedHeight: Int, retryingInterval: FiniteDuration = 1.second): Future[Int] = {
+    waitFor[Int](_.fullHeight, h => h >= expectedHeight, retryingInterval)
+  }
+
   def waitForHeight(expectedHeight: Int, retryingInterval: FiniteDuration = 1.second): Future[Int] = {
-    waitFor[Int](_.height, h => h >= expectedHeight, retryingInterval)
+    waitFor[Int](_.fullHeight, h => h >= expectedHeight, retryingInterval)
   }
 
   def waitForStartup: Future[this.type] = get("/info").map(_ => this)
 
-  def height: Future[Int] = get("/info") flatMap { r =>
+  def getHeight(full: Boolean): Future[Int] = get("/info").flatMap { r =>
     val response = ergoJsonAnswerAs[Json](r.getResponseBody)
-    val eitherHeight = response.hcursor.downField("fullHeight").as[Option[Int]]
-    eitherHeight.fold[Future[Int]](
-      e => Future.failed(new Exception(s"Error getting `fullHeight` from /info response: $e\n$response", e)),
-      maybeHeight => Future.successful(maybeHeight.getOrElse(0))
+    val field = if (full) "fullHeight" else "headersHeight"
+    val eitherVal = response.hcursor.downField(field).as[Option[Int]]
+    eitherVal.fold[Future[Int]](
+      e => Future.failed(new Exception(s"Error getting `$field` from /info response: $e\n$response", e)),
+      resOpt => Future.successful(resOpt.getOrElse(0))
     )
   }
+
+  def fullHeight: Future[Int] = getHeight(true)
+
+  def headersHeight: Future[Int] = getHeight(false)
 
   def status: Future[Status] = get("/info").map(j => Status(ergoJsonAnswerAs[Json](j.getResponseBody).noSpaces))
 

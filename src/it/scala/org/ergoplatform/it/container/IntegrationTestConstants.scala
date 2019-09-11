@@ -92,9 +92,21 @@ trait IntegrationTestConstants extends ErgoTestConstants {
 
   val shortMiningDelayConfig: Config = miningDelayConfig(500)
 
-  val digestStatePeerConfig: Config = ConfigFactory.parseString(
+  val digestStateNodeConfig: Config = ConfigFactory.parseString(
     """
       |ergo.node.stateType = "digest"
+    """.stripMargin
+  )
+
+  def poPowBootstrap(flag: Boolean): Config = ConfigFactory.parseString(
+    s"""
+      |ergo.node.poPow.bootstrap = $flag
+    """.stripMargin
+  )
+
+  def verifyTransactions(flag: Boolean): Config = ConfigFactory.parseString(
+    s"""
+      |ergo.node.verifyTransactions = $flag
     """.stripMargin
   )
 

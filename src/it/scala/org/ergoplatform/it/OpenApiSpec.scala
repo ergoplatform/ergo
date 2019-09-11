@@ -31,7 +31,7 @@ class OpenApiSpec extends FreeSpec with IntegrationSuite {
   }
 
   "OpenApi specification check" in {
-    val result: Future[Unit] = node.waitForHeight(expectedHeight)
+    val result: Future[Unit] = node.waitForFullHeight(expectedHeight)
       .flatMap { _ => node.headerIdsByHeight(expectedHeight) }
       .map { headerIds =>
         createParamsFile(

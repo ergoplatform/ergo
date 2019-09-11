@@ -35,13 +35,13 @@ class NodeRecoverySpec
   // 3. Check that node's state is consistent;
   "Node recovery after unexpected shutdown" in {
 
-    val result = node.waitForHeight(shutdownAtHeight)
+    val result = node.waitForFullHeight(shutdownAtHeight)
       .flatMap(_ => node.headerIdsByHeight(shutdownAtHeight))
       .flatMap { ids =>
         docker.forceStopNode(node.containerId)
         val restartedNode = docker
           .startNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
-        restartedNode.waitForHeight(shutdownAtHeight)
+        restartedNode.waitForFullHeight(shutdownAtHeight)
           .flatMap(_ => restartedNode.headerIdsByHeight(shutdownAtHeight))
           .map(_.headOption.value shouldEqual ids.headOption.value)
       }

@@ -27,7 +27,7 @@ class StateRecoveryDigestNodeSpec extends FreeSpec with IntegrationSuite {
   val minerConfig: Config = nodeSeedConfigs.head
     .withFallback(miningDelayConfig(10000))
     .withFallback(specialDataDirConfig(remoteVolume))
-  val followerConfig: Config = digestStatePeerConfig
+  val followerConfig: Config = digestStateNodeConfig
     .withFallback(blockIntervalConfig(10000))
     .withFallback(nonGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs(1))
@@ -44,18 +44,18 @@ class StateRecoveryDigestNodeSpec extends FreeSpec with IntegrationSuite {
     val minerNode: Node = docker.startNode(minerConfig, specialVolumeOpt = Some((minerLocalVolume, remoteVolume))).get
 
     val result = Async.async {
-      Async.await(minerNode.waitForHeight(approxMinerTargetHeight))
+      Async.await(minerNode.waitForFullHeight(approxMinerTargetHeight))
       docker.stopNode(minerNode, secondsToWait = 0)
 
       FileUtils.copyDirectoryToDirectory(new File(s"$minerLocalVolume/history"), new File(followerLocalVolume))
 
       val nodeForSyncing: Node = docker
         .startNode(minerConfig, specialVolumeOpt = Some((minerLocalVolume, remoteVolume))).get
-      Async.await(nodeForSyncing.waitForHeight(approxMinerTargetHeight + 2))
+      Async.await(nodeForSyncing.waitForFullHeight(approxMinerTargetHeight + 2))
 
       val followerNode: Node = docker
         .startNode(followerConfig, specialVolumeOpt = Some((followerLocalVolume, remoteVolume))).get
-      Async.await(followerNode.waitForHeight(approxFollowerTargetHeight))
+      Async.await(followerNode.waitForFullHeight(approxFollowerTargetHeight))
     }
 
     Await.result(result, 10.minutes)

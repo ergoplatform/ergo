@@ -59,19 +59,19 @@ class ForkResolutionSpec extends FreeSpec with IntegrationSuite {
     val nodes: List[Node] = startNodesWithBinds(minerConfig +: onlineMiningNodesConfig).get
 
     val result = Async.async {
-      val initMaxHeight = Async.await(Future.traverse(nodes)(_.height).map(_.max))
-      Async.await(Future.traverse(nodes)(_.waitForHeight(initMaxHeight + commonChainLength)))
+      val initMaxHeight = Async.await(Future.traverse(nodes)(_.fullHeight).map(_.max))
+      Async.await(Future.traverse(nodes)(_.waitForFullHeight(initMaxHeight + commonChainLength)))
       val isolatedNodes = Async.await {
         nodes.foreach(node => docker.stopNode(node.containerId))
         Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, isolatedPeersConfig).get)
       }
       val forkHeight = initMaxHeight + commonChainLength + forkLength
-      Async.await(Future.traverse(isolatedNodes)(_.waitForHeight(forkHeight)))
+      Async.await(Future.traverse(isolatedNodes)(_.waitForFullHeight(forkHeight)))
       val regularNodes = Async.await {
         isolatedNodes.foreach(node => docker.stopNode(node.containerId))
         Future.successful(startNodesWithBinds(minerConfig +: onlineMiningNodesConfig).get)
       }
-      Async.await(Future.traverse(regularNodes)(_.waitForHeight(forkHeight + syncLength)))
+      Async.await(Future.traverse(regularNodes)(_.waitForFullHeight(forkHeight + syncLength)))
       val headers = Async.await(Future.traverse(regularNodes)(_.headerIdsByHeight(forkHeight)))
 
       log.debug(s"Headers at height $initMaxHeight: ${headers.mkString(",")}")

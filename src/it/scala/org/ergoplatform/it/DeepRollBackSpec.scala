@@ -46,7 +46,7 @@ class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
         specialVolumeOpt = Some((localVolumeA, remoteVolume))).get
 
       // 1. Let the first node mine `chainLength + delta` blocks
-      Async.await(minerAIsolated.waitForHeight(chainLength + delta))
+      Async.await(minerAIsolated.waitForFullHeight(chainLength + delta))
 
       val genesisA = Async.await(minerAIsolated.headerIdsByHeight(ErgoHistory.GenesisHeight)).head
 
@@ -54,7 +54,7 @@ class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
         specialVolumeOpt = Some((localVolumeB, remoteVolume))).get
 
       // 2. Let another node mine `chainLength` blocks
-      Async.await(minerBIsolated.waitForHeight(chainLength))
+      Async.await(minerBIsolated.waitForFullHeight(chainLength))
 
       val genesisB = Async.await(minerBIsolated.headerIdsByHeight(ErgoHistory.GenesisHeight)).head
 
@@ -64,14 +64,14 @@ class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
 
       log.info("Mining phase done")
 
-      val minerABestHeight = Async.await(minerAIsolated.height)
+      val minerABestHeight = Async.await(minerAIsolated.fullHeight)
 
       // 3. Restart node B with disabled mining (it has shorter chain)
       val minerB: Node = docker.startNode(minerBConfigNonGen,
         specialVolumeOpt = Some((localVolumeB, remoteVolume))).get
 
       // 5. Wait until it switches to the better chain
-      Async.await(minerB.waitForHeight(minerABestHeight))
+      Async.await(minerB.waitForFullHeight(minerABestHeight))
 
       log.info("Chain switching done")
 

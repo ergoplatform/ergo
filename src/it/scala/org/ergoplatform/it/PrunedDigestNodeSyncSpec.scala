@@ -28,7 +28,7 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
     .withFallback(specialDataDirConfig(remoteVolume))
   val nodeForSyncingConfig: Config = minerConfig
     .withFallback(nonGeneratingPeerConfig)
-  val digestConfig: Config = digestStatePeerConfig
+  val digestConfig: Config = digestStateNodeConfig
     .withFallback(blockIntervalConfig(500))
     .withFallback(prunedHistoryConfig(blocksToKeep))
     .withFallback(nonGeneratingPeerConfig)
@@ -46,12 +46,12 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
     val minerNode: Node = docker.startNode(minerConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 
     val result = Async.async {
-      Async.await(minerNode.waitForHeight(approxTargetHeight, 1.second))
+      Async.await(minerNode.waitForFullHeight(approxTargetHeight, 1.second))
       docker.stopNode(minerNode, secondsToWait = 0)
 
       val nodeForSyncing = docker
         .startNode(nodeForSyncingConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get
-      Async.await(nodeForSyncing.waitForHeight(approxTargetHeight))
+      Async.await(nodeForSyncing.waitForFullHeight(approxTargetHeight))
       val sampleInfo = Async.await(nodeForSyncing.info)
 
       val digestNode = docker.startNode(digestConfig).get

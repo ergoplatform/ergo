@@ -103,7 +103,7 @@ trait PoPowBootstrapComponent extends PoPowComponent {
   private def validPrefix(prefix: PoPowProofPrefix): Boolean = {
     val maxLevel = prefix.headersChain.tail.map(maxLevelOf).max
     assert(maxLevel < 256)
-    (0 to maxLevel).forall(l => prefix.headersChain.count(h => maxLevelOf(h) >= l) >= prefix.m)
+    (0 to maxLevel).exists(l => prefix.headersChain.count(h => maxLevelOf(h) >= l) >= prefix.m)
   }
 
 }

@@ -45,20 +45,20 @@ case class Header(version: Version,
 
   override type M = Header
 
-  override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
+  override val modifierTypeId: ModifierTypeId = Header.TypeId
 
   lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
-  lazy val ADProofsId: ModifierId = BlockSection.computeId(ADProofs.modifierTypeId, id, ADProofsRoot)
+  lazy val ADProofsId: ModifierId = BlockSection.computeId(ADProofs.TypeId, id, ADProofsRoot)
 
-  lazy val transactionsId: ModifierId = BlockSection.computeId(BlockTransactions.modifierTypeId, id, transactionsRoot)
+  lazy val transactionsId: ModifierId = BlockSection.computeId(BlockTransactions.TypeId, id, transactionsRoot)
 
-  lazy val extensionId: ModifierId = BlockSection.computeId(Extension.modifierTypeId, id, extensionRoot)
+  lazy val extensionId: ModifierId = BlockSection.computeId(Extension.TypeId, id, extensionRoot)
 
   override def minerPk: EcPointType = powSolution.pk
 
-  lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] = Seq((ADProofs.modifierTypeId, ADProofsId),
-    (BlockTransactions.modifierTypeId, transactionsId), (Extension.modifierTypeId, extensionId))
+  lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] = Seq((ADProofs.TypeId, ADProofsId),
+    (BlockTransactions.TypeId, transactionsId), (Extension.TypeId, extensionId))
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
@@ -142,7 +142,7 @@ object Header extends ApiCodecs {
 
   val CurrentVersion: Byte = 1
 
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
+  val TypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
 
   lazy val GenesisParentId: ModifierId = bytesToId(Array.fill(Constants.HashLength)(0: Byte))
 

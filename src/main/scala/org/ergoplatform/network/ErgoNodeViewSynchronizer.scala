@@ -118,7 +118,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             case _ =>
               Seq.empty
           }
-
           if (acceptedModifierIds.nonEmpty) {
             val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, acceptedModifierIds)), None)
             peer.handlerRef ! msg

@@ -28,7 +28,7 @@ trait PoPowBootstrapComponent extends PoPowComponent {
     with ScorexEncoding =>
 
   val BestProofIdKey: ByteArrayWrapper =
-    ByteArrayWrapper(Array.fill(Constants.HashLength)(PoPowProofPrefix.modifierTypeId))
+    ByteArrayWrapper(Array.fill(Constants.HashLength)(PoPowProofPrefix.TypeId))
   val ProofsCheckedKey: ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("proofs_checked"))
 
@@ -71,7 +71,10 @@ trait PoPowBootstrapComponent extends PoPowComponent {
 
   final def validate(m: PoPowProof): Try[Unit] =
     ModifierValidator.failFast
-      .demand(m.suffix.chain.lengthCompare(m.suffix.k) == 0, "Invalid suffix length")
+      .demand(
+        m.suffix.chain.lengthCompare(m.suffix.k) == 0,
+        s"Invalid suffix length, given: ${m.suffix.chain}, required: ${m.suffix.k}"
+      )
       .demand(validPrefix(m.prefix), s"Invalid prefix length")
       .demand(
         m.prefix.chain.tail.forall(_.interlinks.headOption.contains(m.prefix.chain.head.id)),

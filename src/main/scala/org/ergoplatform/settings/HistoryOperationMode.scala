@@ -14,4 +14,6 @@ object HistoryOperationMode {
   object FullPoPow extends HistoryOperationMode
   // Headers chain
   object Light extends HistoryOperationMode
+  // Headers chain
+  object LightPoPow extends HistoryOperationMode
 }

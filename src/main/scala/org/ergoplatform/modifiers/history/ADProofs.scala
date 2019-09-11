@@ -25,7 +25,7 @@ case class ADProofs(headerId: ModifierId,
 
   override def digest: Digest32 = ADProofs.proofDigest(proofBytes)
 
-  override val modifierTypeId: ModifierTypeId = ADProofs.modifierTypeId
+  override val modifierTypeId: ModifierTypeId = ADProofs.TypeId
 
   override type M = ADProofs
 
@@ -70,7 +70,7 @@ case class ADProofs(headerId: ModifierId,
 }
 
 object ADProofs extends ApiCodecs {
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (104: Byte)
+  val TypeId: ModifierTypeId = ModifierTypeId @@ (104: Byte)
 
   val KL = 32
 

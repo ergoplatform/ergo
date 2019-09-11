@@ -11,7 +11,7 @@ final case class PoPowProof(prefix: PoPowProofPrefix, suffix: PoPowProofSuffix)
 
   override type M = PoPowProof
 
-  override val modifierTypeId: ModifierTypeId = PoPowProof.modifierTypeId
+  override val modifierTypeId: ModifierTypeId = PoPowProof.TypeId
 
   override lazy val id: ModifierId = prefix.id
 
@@ -31,7 +31,7 @@ final case class PoPowProof(prefix: PoPowProofPrefix, suffix: PoPowProofSuffix)
 
 object PoPowProof {
 
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (110: Byte)
+  val TypeId: ModifierTypeId = ModifierTypeId @@ (110: Byte)
 
   def apply(m: Int, k: Int, prefixChain: Seq[PoPowHeader], suffixChain: Seq[PoPowHeader]): PoPowProof = {
     val suffix = PoPowProofSuffix(k, suffixChain)

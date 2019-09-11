@@ -9,19 +9,19 @@ object HistoryModifierSerializer extends ScorexSerializer[ErgoPersistentModifier
   override def serialize(obj: ErgoPersistentModifier, w: Writer): Unit =
     obj match {
       case m: Header =>
-        w.put(Header.modifierTypeId)
+        w.put(Header.TypeId)
         HeaderSerializer.serialize(m, w)
       case m: ADProofs =>
-        w.put(ADProofs.modifierTypeId)
+        w.put(ADProofs.TypeId)
         ADProofSerializer.serialize(m, w)
       case m: BlockTransactions =>
-        w.put(BlockTransactions.modifierTypeId)
+        w.put(BlockTransactions.TypeId)
         BlockTransactionsSerializer.serialize(m, w)
       case m: Extension =>
-        w.put(Extension.modifierTypeId)
+        w.put(Extension.TypeId)
         ExtensionSerializer.serialize(m, w)
       case m: PoPowProof =>
-        w.put(PoPowProof.modifierTypeId)
+        w.put(PoPowProof.TypeId)
         PoPowProofSerializer.serialize(m, w)
       case m =>
         throw new Error(s"Serialization for unknown modifier: $m")
@@ -29,15 +29,15 @@ object HistoryModifierSerializer extends ScorexSerializer[ErgoPersistentModifier
 
   override def parse(r: Reader): ErgoPersistentModifier =
     r.getByte() match {
-      case Header.`modifierTypeId` =>
+      case Header.TypeId =>
         HeaderSerializer.parse(r)
-      case ADProofs.`modifierTypeId` =>
+      case ADProofs.TypeId =>
         ADProofSerializer.parse(r)
-      case BlockTransactions.`modifierTypeId` =>
+      case BlockTransactions.TypeId =>
         BlockTransactionsSerializer.parse(r)
-      case Extension.`modifierTypeId` =>
+      case Extension.TypeId =>
         ExtensionSerializer.parse(r)
-      case PoPowProof.`modifierTypeId` =>
+      case PoPowProof.TypeId =>
         PoPowProofSerializer.parse(r)
       case m =>
         throw new Error(s"Deserialization for unknown type byte: $m")

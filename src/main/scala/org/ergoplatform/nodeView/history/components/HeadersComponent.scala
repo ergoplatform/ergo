@@ -159,7 +159,7 @@ trait HeadersComponent {
     */
   protected def validate(header: Header): Try[Unit] = HeadersValidator.validate(header).toTry
 
-  val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
+  val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.TypeId))
 
   protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
 

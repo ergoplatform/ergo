@@ -12,9 +12,9 @@ import scorex.core.{ModifierTypeId, NodeViewModifier}
 object ModifierWriter {
 
   val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: ErgoPersistentModifier]] =
-    Map(Header.modifierTypeId -> HeaderSerializer,
-      BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
-      ADProofs.modifierTypeId -> ADProofSerializer)
+    Map(Header.TypeId -> HeaderSerializer,
+      BlockTransactions.TypeId -> BlockTransactionsSerializer,
+      ADProofs.TypeId -> ADProofSerializer)
 
   def write(mod: NodeViewModifier)(implicit fos: OutputStream): Unit = {
     val typeId = mod.modifierTypeId

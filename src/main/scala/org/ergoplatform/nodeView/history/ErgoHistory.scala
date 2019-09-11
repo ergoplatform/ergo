@@ -256,6 +256,14 @@ object ErgoHistory extends ScorexLogging {
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }
+        case HistoryOperationMode.LightPoPow =>
+          new ErgoHistory with EmptyBlockSectionComponent
+            with PoPowBootstrapComponent {
+            override protected val settings: ErgoSettings = ergoSettings
+            override protected[history] val storage: LDBHistoryStorage = db
+            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
+            override protected val timeProvider: NetworkTimeProvider = ntp
+          }
       }
       history
     }

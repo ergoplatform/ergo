@@ -98,9 +98,10 @@ trait IntegrationTestConstants extends ErgoTestConstants {
     """.stripMargin
   )
 
-  def poPowBootstrap(flag: Boolean): Config = ConfigFactory.parseString(
+  val poPowBootstrap: Config = ConfigFactory.parseString(
     s"""
-      |ergo.node.poPow.bootstrap = $flag
+      |ergo.node.poPow.bootstrap = true
+      |ergo.node.poPow.prove = false
     """.stripMargin
   )
 

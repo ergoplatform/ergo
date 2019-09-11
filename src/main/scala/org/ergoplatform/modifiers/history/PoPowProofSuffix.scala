@@ -14,7 +14,7 @@ final case class PoPowProofSuffix(k: Int,
 
   override type M = PoPowProofSuffix
 
-  override val modifierTypeId: ModifierTypeId = PoPowProof.modifierTypeId
+  override val modifierTypeId: ModifierTypeId = PoPowProof.TypeId
 
   override def serializedId: Array[Byte] = Algos.hash(bytes)
 
@@ -27,7 +27,7 @@ final case class PoPowProofSuffix(k: Int,
 }
 
 object PoPowProofSuffix {
-  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (112: Byte)
+  val TypeId: ModifierTypeId = ModifierTypeId @@ (112: Byte)
 }
 
 object PoPowProofSuffixSerializer extends ScorexSerializer[PoPowProofSuffix] {

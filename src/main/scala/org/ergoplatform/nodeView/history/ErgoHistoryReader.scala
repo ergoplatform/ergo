@@ -132,7 +132,7 @@ trait ErgoHistoryReader
         typedModifierById[Header](startId).toSeq.flatMap { startHeader =>
           val headers = headerChainBack(size, startHeader, _ => false)
             .ensuring(_.headers.exists(_.isGenesis), "Should always contain genesis header")
-          headers.headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
+          headers.headers.flatMap(h => Seq((Header.TypeId, h.id)))
         }
       }
     } else {
@@ -146,7 +146,7 @@ trait ErgoHistoryReader
         val startId = headerIdsAtHeight(heightFrom).head
         val startHeader = typedModifierById[Header](startId).get
         val headerIds = headerChainBack(size, startHeader, _.parentId == branchingPointOpt)
-          .headers.map(Header.modifierTypeId -> _.id)
+          .headers.map(Header.TypeId -> _.id)
         headerIds
       }
     }
@@ -183,7 +183,7 @@ trait ErgoHistoryReader
     */
   override def syncInfo: ErgoSyncInfo = if (isEmpty) {
     settings.nodeSettings.historyMode match {
-      case HistoryOperationMode.FullPoPow =>
+      case HistoryOperationMode.FullPoPow | HistoryOperationMode.LightPoPow =>
         ErgoSyncInfo(Seq.empty, Some(settings.nodeSettings.poPowSettings.params))
       case _ =>
         ErgoSyncInfo(Seq.empty)
@@ -309,7 +309,7 @@ trait ErgoHistoryReader
     */
   def acceptModifierType(typeId: ModifierTypeId): Boolean =
     if (settings.nodeSettings.poPowSettings.bootstrap && isEmpty) {
-      Seq(PoPowProof.modifierTypeId).contains(typeId)
+      Seq(PoPowProof.TypeId).contains(typeId)
     } else {
       true
     }

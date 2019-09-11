@@ -15,7 +15,7 @@ class PoPowBootstrapSpec extends FreeSpec with IntegrationSuite {
   val minerConfig: Config = shortMiningDelayConfig
     .withFallback(nodeSeedConfigs.head)
   val lightNodeConfig: Config = digestStateNodeConfig
-    .withFallback(poPowBootstrap(true))
+    .withFallback(poPowBootstrap)
     .withFallback(verifyTransactions(false))
     .withFallback(nonGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs.last)

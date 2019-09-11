@@ -44,11 +44,14 @@ object Constants {
   val LastHeadersInContext = 10
 
   val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: NodeViewModifier]] =
-    Map(Header.modifierTypeId -> HeaderSerializer,
-      Extension.modifierTypeId -> ExtensionSerializer,
-      BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
-      ADProofs.modifierTypeId -> ADProofSerializer,
-      Transaction.ModifierTypeId -> ErgoTransactionSerializer)
+    Map(
+      Header.TypeId -> HeaderSerializer,
+      Extension.TypeId -> ExtensionSerializer,
+      BlockTransactions.TypeId -> BlockTransactionsSerializer,
+      ADProofs.TypeId -> ADProofSerializer,
+      Transaction.ModifierTypeId -> ErgoTransactionSerializer,
+      PoPowProof.TypeId -> PoPowProofSerializer
+    )
 
   val SoftForkEpochs = 32 //about 45.5 days
 

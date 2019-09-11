@@ -112,8 +112,8 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header).tail))
 
     val missedChain = chain.tail.toList
-    val missedBS = missedChain.flatMap(fb => Seq((BlockTransactions.modifierTypeId, fb.blockTransactions.encodedId),
-      (Extension.modifierTypeId, fb.extension.encodedId)))
+    val missedBS = missedChain.flatMap(fb => Seq((BlockTransactions.TypeId, fb.blockTransactions.encodedId),
+      (Extension.TypeId, fb.extension.encodedId)))
 
     history.nextModifiersToDownload(1, _ => true).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS.take(1)
 

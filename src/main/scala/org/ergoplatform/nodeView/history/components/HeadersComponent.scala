@@ -9,8 +9,8 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
-import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
+import org.ergoplatform.nodeView.history.storage.StorageKeys._
 import org.ergoplatform.settings._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
@@ -159,10 +159,6 @@ trait HeadersComponent {
     * @return Success() if header is valid, Failure(error) otherwise
     */
   protected final def validate(header: Header): Try[Unit] = HeadersValidator.validate(header).toTry
-
-  val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.TypeId))
-
-  val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
 
   /**
     * @param id - header id

@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.nodeView.history.storage.StorageKeys._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}

@@ -7,8 +7,9 @@ import org.ergoplatform.modifiers.history.PoPowAlgos.maxLevelOf
 import org.ergoplatform.modifiers.history.{Header, PoPowProof, PoPowProofPrefix, PoPowProofSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.components.{ChainSyncComponent, Configuration, HeadersComponent, Persistence}
+import org.ergoplatform.nodeView.history.storage.StorageKeys._
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Algos, Constants, PoPowParams, PoPowSettings}
+import org.ergoplatform.settings.{PoPowParams, PoPowSettings}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
@@ -26,11 +27,6 @@ trait PoPowBootstrapComponent extends PoPowComponent {
     with Persistence
     with ScorexLogging
     with ScorexEncoding =>
-
-  val BestProofIdKey: ByteArrayWrapper =
-    ByteArrayWrapper(Array.fill(Constants.HashLength)(PoPowProofPrefix.TypeId))
-  val ProofsCheckedKey: ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("proofs_checked"))
 
   private def proofsChecked: Int = storage.getIndex(ProofsCheckedKey)
     .map(Ints.fromByteArray)

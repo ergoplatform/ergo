@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history.components.popow
 import com.google.common.primitives.Ints
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.nodeView.history.components.EmptyBlockSectionComponent
+import org.ergoplatform.nodeView.history.storage.StorageKeys
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, InMemoryHistoryStorage}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
@@ -45,7 +46,7 @@ class PoPowBootstrapComponentSpec
       val bestHeader = proof.suffix.chain.last
       val historyStorage = history.storage.asInstanceOf[InMemoryHistoryStorage]
 
-      historyStorage.indexes.get(history.BestHeaderKey).map(bytesToId) shouldBe Some(bestHeader.id)
+      historyStorage.indexes.get(StorageKeys.BestHeaderKey).map(bytesToId) shouldBe Some(bestHeader.id)
 
       historyStorage.indexes
         .get(history.headerHeightKey(bestHeader.id)).map(Ints.fromByteArray) shouldBe Some(bestHeader.height)

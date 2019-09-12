@@ -1,9 +1,9 @@
 package org.ergoplatform.nodeView.history.components.popow
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.history.components.{BasicReaders, HeadersComponent, Persistence}
-import org.ergoplatform.settings.{Algos, PoPowParams}
+import org.ergoplatform.nodeView.history.storage.StorageKeys._
+import org.ergoplatform.settings.PoPowParams
 import scorex.core.utils.ScorexEncoding
 import scorex.util.{bytesToId, idToBytes}
 
@@ -11,8 +11,6 @@ import scala.util.{Failure, Try}
 
 trait ProvingPoPowComponent extends EmptyPoPowComponent {
   self: HeadersComponent with BasicReaders with Persistence with ScorexEncoding =>
-
-  val LastProofIdKey = ByteArrayWrapper(Algos.hash("last_proof"))
 
   override final def prove(params: PoPowParams): Try[PoPowProof] =
     bestHeaderOpt

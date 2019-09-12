@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.history.components._
 import org.ergoplatform.nodeView.history.components.popow.{EmptyPoPowComponent, PoPowBootstrapComponent, ProvingPoPowComponent}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
+import org.ergoplatform.nodeView.history.storage.StorageKeys._
 import org.iq80.leveldb.Options
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo

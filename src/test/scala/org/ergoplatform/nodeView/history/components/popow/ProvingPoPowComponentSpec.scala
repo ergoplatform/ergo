@@ -18,8 +18,11 @@ class ProvingPoPowComponentSpec
     with ErgoTestConstants
     with HistoryTestHelpers {
 
+  private val minHeight: Int =
+    settings.nodeSettings.poPowSettings.params.m + settings.nodeSettings.poPowSettings.params.k
+
   property("Chain proving") {
-    forAll(Gen.chooseNum(1000, 2000)) { height =>
+    forAll(Gen.chooseNum(minHeight, minHeight + 200)) { height =>
       val poPowParams = settings.nodeSettings.poPowSettings.params
       val history = generateHistory(
         verifyTransactions = true, StateType.Utxo, poPoWBootstrap = false, poPowProve = true, BlocksToKeep)
@@ -41,8 +44,7 @@ class ProvingPoPowComponentSpec
       override val powScheme: AutolykosPowScheme = chainSettings.powScheme
       override protected val timeProvider: NetworkTimeProvider = ntp
     }
-    val minHeight = cfg.nodeSettings.poPowSettings.params.m + cfg.nodeSettings.poPowSettings.params.k
-    forAll(Gen.chooseNum(minHeight, 2000)) { height =>
+    forAll(Gen.chooseNum(minHeight, minHeight + 200)) { height =>
       val poPowParams = settings.nodeSettings.poPowSettings.params
       val history = generateHistory(
         verifyTransactions = true, StateType.Utxo, poPoWBootstrap = false, poPowProve = true, BlocksToKeep)

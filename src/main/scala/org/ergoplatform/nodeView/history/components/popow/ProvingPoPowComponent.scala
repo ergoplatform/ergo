@@ -12,7 +12,7 @@ import scala.util.{Failure, Try}
 trait ProvingPoPowComponent extends EmptyPoPowComponent {
   self: HeadersComponent with BasicReaders with Persistence with ScorexEncoding =>
 
-  val BestProofIdKey = ByteArrayWrapper(Algos.hash("best_proof"))
+  val LastProofIdKey = ByteArrayWrapper(Algos.hash("last_proof"))
 
   override final def prove(params: PoPowParams): Try[PoPowProof] =
     bestHeaderOpt
@@ -26,10 +26,10 @@ trait ProvingPoPowComponent extends EmptyPoPowComponent {
         Try(PoPowAlgos.prove(poPowChain)(params))
       }
       .map { proof =>
-        storage.getIndex(BestProofIdKey)
+        storage.getIndex(LastProofIdKey)
           .flatMap(id => typedModifierById[PoPowProofPrefix](bytesToId(id)))
           .foreach(prefix => storage.remove(Seq(prefix.id)))
-        storage.update(Seq(BestProofIdKey -> idToBytes(proof.id)), Seq(proof))
+        storage.update(Seq(LastProofIdKey -> idToBytes(proof.id)), Seq(proof))
         proof
       }
 

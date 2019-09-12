@@ -35,7 +35,7 @@ trait HeadersComponent {
   val powScheme: AutolykosPowScheme
 
   //Maximum time in future block header may contain
-  protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
+  protected lazy val maxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
   lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings)
 
@@ -43,16 +43,16 @@ trait HeadersComponent {
 
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
-  def headerScoreKey(id: ModifierId): ByteArrayWrapper =
+  final def headerScoreKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("score".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
-  def headerHeightKey(id: ModifierId): ByteArrayWrapper =
+  final def headerHeightKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("height".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
-  protected[history] def validityKey(id: ModifierId): ByteArrayWrapper =
+  final  def validityKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
-  def bestHeaderIdOpt: Option[ModifierId] = storage.getIndex(BestHeaderKey).map(bytesToId)
+  final def bestHeaderIdOpt: Option[ModifierId] = storage.getIndex(BestHeaderKey).map(bytesToId)
 
   /**
     * Id of best header with transactions and proofs. None in regime that do not process transactions
@@ -62,25 +62,26 @@ trait HeadersComponent {
   /**
     * @return height of best header
     */
-  def bestHeaderHeight: Int =
+  final def bestHeaderHeight: Int =
     bestHeaderIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   /**
     * @return height of best header with all block sections
     */
-  def bestFullBlockHeight: Int =
+  final def bestFullBlockHeight: Int =
     bestFullBlockIdOpt.flatMap(id => heightOf(id)).getOrElse(ErgoHistory.EmptyHistoryHeight)
 
   /**
     * @param id - id of ErgoPersistentModifier
     * @return height of modifier with such id if is in History
     */
-  def heightOf(id: ModifierId): Option[Int] = storage.getIndex(headerHeightKey(id))
+  final def heightOf(id: ModifierId): Option[Int] = storage.getIndex(headerHeightKey(id))
     .map(Ints.fromByteArray)
 
-  def isInBestChain(id: ModifierId): Boolean = heightOf(id).flatMap(h => bestHeaderIdAtHeight(h)).contains(id)
+  final def isInBestChain(id: ModifierId): Boolean =
+    heightOf(id).flatMap(h => bestHeaderIdAtHeight(h)).contains(id)
 
-  def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
+  final def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
 
   private def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
 
@@ -88,7 +89,7 @@ trait HeadersComponent {
     * @param h - header to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
-  protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
+  protected final def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
     val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = toInsert(h)
 
     storage.update(dataToInsert._1, dataToInsert._2)
@@ -108,7 +109,7 @@ trait HeadersComponent {
   /**
     * Data to add to and remove from the storage to process this modifier
     */
-  protected def toInsert(h: Header): (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = {
+  protected final def toInsert(h: Header): (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = {
     val requiredDifficulty: Difficulty = h.requiredDifficulty
     val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + requiredDifficulty
     val bestRow: Seq[(ByteArrayWrapper, Array[Byte])] =
@@ -157,17 +158,17 @@ trait HeadersComponent {
     *
     * @return Success() if header is valid, Failure(error) otherwise
     */
-  protected def validate(header: Header): Try[Unit] = HeadersValidator.validate(header).toTry
+  protected final def validate(header: Header): Try[Unit] = HeadersValidator.validate(header).toTry
 
   val BestHeaderKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(Header.TypeId))
 
-  protected val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
+  val BestFullBlockKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(-1))
 
   /**
     * @param id - header id
     * @return score of header with such id if is in History
     */
-  def scoreOf(id: ModifierId): Option[BigInt] = storage.getIndex(headerScoreKey(id))
+  final def scoreOf(id: ModifierId): Option[BigInt] = storage.getIndex(headerScoreKey(id))
     .map(BigInt.apply)
 
   /**
@@ -178,7 +179,7 @@ trait HeadersComponent {
     *         multiple ids if there are forks at chosen height.
     *         First id is always from the best headers chain.
     */
-  def headerIdsAtHeight(height: Int): Seq[ModifierId] =
+  final def headerIdsAtHeight(height: Int): Seq[ModifierId] =
     storage.getIndex(heightIdsKey(height: Int))
       .getOrElse(Array()).grouped(32).map(bytesToId).toSeq
 
@@ -221,13 +222,12 @@ trait HeadersComponent {
     * @return found header
     */
   @tailrec
-  protected final def loopHeightDown(height: Int, p: ModifierId => Boolean): Option[Header] = {
+  protected final def loopHeightDown(height: Int, p: ModifierId => Boolean): Option[Header] =
     headerIdsAtHeight(height).find(id => p(id)).flatMap(id => typedModifierById[Header](id)) match {
       case Some(header) => Some(header)
       case None if height > 0 => loopHeightDown(height - 1, p)
       case None => None
     }
-  }
 
   private def bestHeadersChainScore: BigInt = bestHeaderIdOpt.flatMap(id => scoreOf(id)).getOrElse(0)
 
@@ -240,8 +240,8 @@ trait HeadersComponent {
     * @param nextBlockTimestampOpt - timestamp of the next block, used in testnets only, see acomment withing the method
     * @return - difficulty for the next block
     */
-  def requiredDifficultyAfter(parent: Header,
-                              nextBlockTimestampOpt: Option[Long] = None): Difficulty = {
+  final def requiredDifficultyAfter(parent: Header,
+                                    nextBlockTimestampOpt: Option[Long] = None): Difficulty = {
     // if testing or dev network, difficulty is set to a minimum value if there is no block for
     // `Constants.DiffFallbackDuration` (5 minutes)
     lazy val timeDifference = nextBlockTimestampOpt.getOrElse(timeProvider.time()) - parent.timestamp
@@ -268,7 +268,7 @@ trait HeadersComponent {
 
   object HeadersValidator {
 
-    private def validationState: TaggedValidationState[Unit] =
+    private val validationState: TaggedValidationState[Unit] =
       ModifierValidator.failFastTagged(ErgoValidationRules.initial)
 
     def validate(header: Header): ValidationResult[Unit] =
@@ -292,7 +292,7 @@ trait HeadersComponent {
         .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, chainSettings.initialDifficulty)
         .validateNot(alreadyApplied, storage.contains(header.id), header.id.toString)
         .validate(hdrTooOld, bestFullBlockHeight < nodeSettings.keepVersions, heightOf(header.parentId).toString)
-        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
+        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= maxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .result
 
     private[history] def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] =
@@ -303,7 +303,7 @@ trait HeadersComponent {
         .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent, Some(header.timestamp)))
         .validate(hdrTooOld, heightOf(header.parentId).exists(h => bestFullBlockHeight - h < nodeSettings.keepVersions), heightOf(header.parentId).toString)
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
-        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
+        .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= maxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .validateNot(alreadyApplied, storage.contains(header.id), header.id.toString)
         .result
 
@@ -317,7 +317,7 @@ trait HeadersComponent {
           .validate(hdrHeight, header.height == parent.height + 1, s"${header.height} vs ${parent.height}")
           .validateNoFailure(hdrPoW, powScheme.validate(header))
           .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
-          .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
+          .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= maxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
           .validateNot(alreadyApplied, storage.contains(header.id), header.id.toString)
           .result
 
@@ -325,7 +325,7 @@ trait HeadersComponent {
         validationState
           .validateNoFailure(hdrPoW, powScheme.validate(header))
           .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
-          .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
+          .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= maxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
           .validateNot(alreadyApplied, storage.contains(header.id), header.id.toString)
           .result
     }

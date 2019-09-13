@@ -105,6 +105,12 @@ trait IntegrationTestConstants extends ErgoTestConstants {
     """.stripMargin
   )
 
+  def poPowProve(flag: Boolean): Config = ConfigFactory.parseString(
+    s"""
+       |ergo.node.poPow.prove = $flag
+    """.stripMargin
+  )
+
   def verifyTransactions(flag: Boolean): Config = ConfigFactory.parseString(
     s"""
       |ergo.node.verifyTransactions = $flag

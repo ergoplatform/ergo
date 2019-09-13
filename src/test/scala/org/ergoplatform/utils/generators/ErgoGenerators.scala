@@ -160,13 +160,12 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ChainGenerator {
 
   lazy val modeFeatureGen: Gen[ModeFeature] = for {
     stateTypeCode <- Gen.choose(StateType.Utxo.stateTypeCode, StateType.Utxo.stateTypeCode)
-    popowSuffix <- Gen.choose(1, 10)
     blocksToKeep <- Gen.choose(1, 100000)
   } yield ModeFeature(
     StateType.fromCode(stateTypeCode),
     Random.nextBoolean(),
-    if (Random.nextBoolean()) Some(popowSuffix) else None,
-    blocksToKeep)
+    blocksToKeep
+  )
 
   lazy val ergoValidationSettingsUpdateGen: Gen[ErgoValidationSettingsUpdate] = for {
     n <- Gen.choose(1, 200)

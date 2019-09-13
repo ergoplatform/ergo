@@ -31,6 +31,7 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
   val digestConfig: Config = digestStateNodeConfig
     .withFallback(blockIntervalConfig(500))
     .withFallback(prunedHistoryConfig(blocksToKeep))
+    .withFallback(poPowProve(false))
     .withFallback(nonGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs(1))
 

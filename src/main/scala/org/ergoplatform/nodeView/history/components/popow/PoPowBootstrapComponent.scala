@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.PoPowAlgos.maxLevelOf
 import org.ergoplatform.modifiers.history.{Header, PoPowProof, PoPowProofPrefix, PoPowProofSerializer}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.components.{ChainSyncComponent, Configuration, HeadersComponent, Persistence}
+import org.ergoplatform.nodeView.history.components.{ChainSyncComponent, Configuration, HeadersComponent, Logging, Persistence}
 import org.ergoplatform.nodeView.history.storage.StorageKeys._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{PoPowParams, PoPowSettings}
@@ -25,7 +25,7 @@ trait PoPowBootstrapComponent extends PoPowComponent {
     with ChainSyncComponent
     with Configuration
     with Persistence
-    with ScorexLogging
+    with Logging
     with ScorexEncoding =>
 
   private def proofsChecked: Int = storage.getIndex(ProofsCheckedKey)

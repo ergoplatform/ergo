@@ -14,7 +14,7 @@ import scala.annotation.tailrec
 trait ChainSyncComponent {
   self: BasicReaders
     with Configuration
-    with ScorexLogging =>
+    with Logging =>
 
   protected[history] lazy val pruningProcessor: ChainSyncController =
     new ChainSyncController(nodeSettings, chainSettings)

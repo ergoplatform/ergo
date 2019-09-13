@@ -29,7 +29,7 @@ trait ErgoHistoryReader
     with BlockSectionComponent
     with Configuration
     with Persistence
-    with ScorexLogging
+    with Logging
     with ScorexEncoding {
 
   protected val settings: ErgoSettings

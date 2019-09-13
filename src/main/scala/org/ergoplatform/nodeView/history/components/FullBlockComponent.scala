@@ -24,7 +24,7 @@ trait FullBlockComponent extends HeadersComponent {
     with Persistence
     with Configuration
     with ScorexEncoding
-    with ScorexLogging =>
+    with Logging =>
 
   import FullBlockComponent._
 

@@ -10,7 +10,8 @@ import scorex.util.bytesToId
 /**
   * Class that implements extension validation based on current to ErgoValidationSettings
   */
-class ExtensionValidator[T](validationState: TaggedValidationState[T]) extends ScorexEncoding {
+final class ExtensionValidator[T](validationState: TaggedValidationState[T])
+  extends ScorexEncoding {
 
   def validateExtension(extension: Extension,
                         header: Header,
@@ -43,4 +44,5 @@ class ExtensionValidator[T](validationState: TaggedValidationState[T]) extends S
           .validate(exIlUnableToValidate, header.isGenesis || prevExtensionOpt.isEmpty)
     }
   }
+
 }

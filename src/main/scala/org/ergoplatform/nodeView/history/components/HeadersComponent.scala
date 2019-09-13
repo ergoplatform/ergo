@@ -30,7 +30,7 @@ trait HeadersComponent {
     with Configuration
     with Persistence
     with ScorexEncoding
-    with ScorexLogging =>
+    with Logging =>
 
   val powScheme: AutolykosPowScheme
 

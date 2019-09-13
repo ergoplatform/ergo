@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.components.popow
 
 import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.nodeView.history.components.EmptyBlockSectionComponent
+import org.ergoplatform.nodeView.history.components.{EmptyBlockSectionComponent, VoidLogging}
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, InMemoryHistoryStorage}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
@@ -38,12 +38,13 @@ class ProvingPoPowComponentSpec
   property("Produce valid proof") {
     val ntp = timeProvider
     val cfg = settings
-    val validator = new ErgoHistoryReader with EmptyBlockSectionComponent with PoPowBootstrapComponent {
-      override protected val settings: ErgoSettings = cfg
-      override protected[history] val storage: InMemoryHistoryStorage = new InMemoryHistoryStorage()
-      override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-      override protected val timeProvider: NetworkTimeProvider = ntp
-    }
+    val validator =
+      new ErgoHistoryReader with EmptyBlockSectionComponent with PoPowBootstrapComponent with VoidLogging {
+        override protected val settings: ErgoSettings = cfg
+        override protected[history] val storage: InMemoryHistoryStorage = new InMemoryHistoryStorage()
+        override val powScheme: AutolykosPowScheme = chainSettings.powScheme
+        override protected val timeProvider: NetworkTimeProvider = ntp
+      }
     forAll(Gen.chooseNum(minHeight, minHeight + 200)) { height =>
       val poPowParams = settings.nodeSettings.poPowSettings.params
       val history = generateHistory(

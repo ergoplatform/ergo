@@ -227,7 +227,7 @@ object ErgoHistory extends ScorexLogging {
       nodeConfiguration.historyMode match {
         case HistoryOperationMode.Full =>
           new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
-            with EmptyPoPowComponent {
+            with EmptyPoPowComponent with Logging.Live {
             override protected val settings: ErgoSettings = ergoSettings
             override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
@@ -235,7 +235,7 @@ object ErgoHistory extends ScorexLogging {
           }
         case HistoryOperationMode.FullProving =>
           new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
-            with ProvingPoPowComponent {
+            with ProvingPoPowComponent with Logging.Live {
             override protected val settings: ErgoSettings = ergoSettings
             override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
@@ -243,7 +243,7 @@ object ErgoHistory extends ScorexLogging {
           }
         case HistoryOperationMode.FullPoPow =>
           new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
-            with PoPowBootstrapComponent {
+            with PoPowBootstrapComponent with Logging.Live {
             override protected val settings: ErgoSettings = ergoSettings
             override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
@@ -251,7 +251,7 @@ object ErgoHistory extends ScorexLogging {
           }
         case HistoryOperationMode.Light =>
           new ErgoHistory with EmptyBlockSectionComponent
-            with EmptyPoPowComponent {
+            with EmptyPoPowComponent with Logging.Live {
             override protected val settings: ErgoSettings = ergoSettings
             override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
@@ -259,7 +259,7 @@ object ErgoHistory extends ScorexLogging {
           }
         case HistoryOperationMode.LightPoPow =>
           new ErgoHistory with EmptyBlockSectionComponent
-            with PoPowBootstrapComponent {
+            with PoPowBootstrapComponent with Logging.Live {
             override protected val settings: ErgoSettings = ergoSettings
             override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
@@ -267,6 +267,6 @@ object ErgoHistory extends ScorexLogging {
           }
       }
       history
-    }
+  }
 
 }

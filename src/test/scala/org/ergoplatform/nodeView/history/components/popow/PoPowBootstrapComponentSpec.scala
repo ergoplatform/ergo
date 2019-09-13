@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.components.popow
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.nodeView.history.components.EmptyBlockSectionComponent
+import org.ergoplatform.nodeView.history.components.{EmptyBlockSectionComponent, VoidLogging}
 import org.ergoplatform.nodeView.history.storage.StorageKeys
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, InMemoryHistoryStorage}
 import org.ergoplatform.nodeView.state.StateType
@@ -24,7 +24,7 @@ class PoPowBootstrapComponentSpec
   private val ntp = timeProvider
 
   private def bakeComponent(cfg: ErgoSettings) =
-    new ErgoHistoryReader with EmptyBlockSectionComponent with PoPowBootstrapComponent {
+    new ErgoHistoryReader with EmptyBlockSectionComponent with PoPowBootstrapComponent with VoidLogging {
       override protected val settings: ErgoSettings = cfg
       override protected[history] val storage: InMemoryHistoryStorage = new InMemoryHistoryStorage()
       override val powScheme: AutolykosPowScheme = chainSettings.powScheme

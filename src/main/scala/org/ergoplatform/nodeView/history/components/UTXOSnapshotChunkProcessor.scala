@@ -13,7 +13,7 @@ import scala.util.{Failure, Success, Try}
   * Contains all functions required by History to process UTXOSnapshotChunk
   */
 trait UTXOSnapshotChunkProcessor {
-  self: Persistence with ScorexLogging with ScorexEncoding =>
+  self: Persistence with Logging with ScorexEncoding =>
 
   def process(m: UTXOSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
     //TODO

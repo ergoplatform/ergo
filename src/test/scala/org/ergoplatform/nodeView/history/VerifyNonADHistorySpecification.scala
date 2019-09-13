@@ -5,7 +5,6 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.history.components.FullBlockComponent
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.History.ProgressInfo
 
 class VerifyNonADHistorySpecification extends HistoryTestHelpers {

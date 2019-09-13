@@ -4,8 +4,8 @@ import org.ergoplatform.Utils
 import org.ergoplatform.Utils.BenchReport
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.NVBenchmark
+import org.ergoplatform.nodeView.history.HistoryTestHelpers
 import org.ergoplatform.settings.{Args, ErgoSettings}
-import org.ergoplatform.utils.HistoryTestHelpers
 
 object UtxoStateBenchmark extends HistoryTestHelpers with NVBenchmark with App {
 

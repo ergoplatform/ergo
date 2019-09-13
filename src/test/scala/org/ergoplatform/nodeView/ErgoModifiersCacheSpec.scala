@@ -1,9 +1,9 @@
 package org.ergoplatform.nodeView
 
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.{ErgoHistory, HistoryTestHelpers}
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.utils.{ErgoPropertyTest, HistoryTestHelpers}
+import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.hash.Blake2b256
 import scorex.util.{ModifierId, bytesToId}
 

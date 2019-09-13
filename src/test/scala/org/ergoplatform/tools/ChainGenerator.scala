@@ -1,6 +1,7 @@
 package org.ergoplatform.tools
 
 import java.io.File
+
 import org.ergoplatform._
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
@@ -9,11 +10,11 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.{ErgoHistory, HistoryTestHelpers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
+import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.wallet.boxes.{BoxSelector, ReplaceCompactCollectBoxSelector}
 import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.ProveDlog
@@ -85,6 +86,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
   log.info("History was generated successfully")
   System.exit(0)
 
+  @scala.annotation.tailrec
   private def loop(state: UtxoState,
                    initBox: Option[ErgoBox],
                    last: Option[Header],

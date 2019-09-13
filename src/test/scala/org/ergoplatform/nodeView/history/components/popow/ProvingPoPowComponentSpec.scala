@@ -2,10 +2,10 @@ package org.ergoplatform.nodeView.history.components.popow
 
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.nodeView.history.components.{EmptyBlockSectionComponent, VoidLogging}
-import org.ergoplatform.nodeView.history.{ErgoHistoryReader, InMemoryHistoryStorage}
+import org.ergoplatform.nodeView.history.{ErgoHistoryReader, HistoryTestHelpers, InMemoryHistoryStorage}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.{ErgoTestConstants, HistoryTestHelpers}
+import org.ergoplatform.utils.ErgoTestConstants
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}

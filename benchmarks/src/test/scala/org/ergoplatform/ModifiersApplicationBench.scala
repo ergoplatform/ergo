@@ -4,9 +4,8 @@ import org.ergoplatform.Utils.BenchReport
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.{BlockTransactions, Extension, Header}
 import org.ergoplatform.nodeView.{ErgoModifiersCache, NVBenchmark}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.{ErgoHistory, HistoryTestHelpers}
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.utils.HistoryTestHelpers
 
 import scala.annotation.tailrec
 

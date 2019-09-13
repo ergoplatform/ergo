@@ -1,11 +1,16 @@
-package org.ergoplatform.utils
+package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.components.{EmptyBlockSectionComponent, ChainSyncController, ChainSyncComponent}
+import org.ergoplatform.mining.AutolykosPowScheme
+import org.ergoplatform.nodeView.history.ErgoHistory.createDb
+import org.ergoplatform.nodeView.history.components.popow.{EmptyPoPowComponent, PoPowBootstrapComponent, ProvingPoPowComponent}
+import org.ergoplatform.nodeView.history.components._
+import org.ergoplatform.nodeView.history.storage.LDBHistoryStorage
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
+import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import scorex.core.settings.ScorexSettings
+import scorex.core.utils.NetworkTimeProvider
 import scorex.util.encode.Base16
 
 import scala.concurrent.duration._
@@ -64,7 +69,60 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings, testingSettings,
       nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
 
-    ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
+    generateHistory(fullHistorySettings)
+  }
+
+  private def generateHistory(ergoSettings: ErgoSettings): ErgoHistory = {
+    val indexStore = createDb(s"${ergoSettings.directory}/history/index")
+    val objectsStore = createDb(s"${ergoSettings.directory}/history/objects")
+    val db = new LDBHistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
+    val nodeConfiguration = ergoSettings.nodeSettings
+    val ntp = timeProvider
+
+    val history: ErgoHistory =
+      nodeConfiguration.historyMode match {
+        case HistoryOperationMode.Full =>
+          new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
+            with EmptyPoPowComponent with VoidLogging {
+            override protected val settings: ErgoSettings = ergoSettings
+            override protected[history] val storage: LDBHistoryStorage = db
+            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
+            override protected val timeProvider: NetworkTimeProvider = ntp
+          }
+        case HistoryOperationMode.FullProving =>
+          new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
+            with ProvingPoPowComponent with VoidLogging {
+            override protected val settings: ErgoSettings = ergoSettings
+            override protected[history] val storage: LDBHistoryStorage = db
+            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
+            override protected val timeProvider: NetworkTimeProvider = ntp
+          }
+        case HistoryOperationMode.FullPoPow =>
+          new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
+            with PoPowBootstrapComponent with VoidLogging {
+            override protected val settings: ErgoSettings = ergoSettings
+            override protected[history] val storage: LDBHistoryStorage = db
+            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
+            override protected val timeProvider: NetworkTimeProvider = ntp
+          }
+        case HistoryOperationMode.Light =>
+          new ErgoHistory with EmptyBlockSectionComponent
+            with EmptyPoPowComponent with VoidLogging {
+            override protected val settings: ErgoSettings = ergoSettings
+            override protected[history] val storage: LDBHistoryStorage = db
+            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
+            override protected val timeProvider: NetworkTimeProvider = ntp
+          }
+        case HistoryOperationMode.LightPoPow =>
+          new ErgoHistory with EmptyBlockSectionComponent
+            with PoPowBootstrapComponent with VoidLogging {
+            override protected val settings: ErgoSettings = ergoSettings
+            override protected[history] val storage: LDBHistoryStorage = db
+            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
+            override protected val timeProvider: NetworkTimeProvider = ntp
+          }
+      }
+    history
   }
 
 }

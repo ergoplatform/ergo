@@ -2,8 +2,8 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Extension, PoPowAlgos}
+import org.ergoplatform.nodeView.history.HistoryTestHelpers
 import org.ergoplatform.settings.Parameters._
-import org.ergoplatform.utils.HistoryTestHelpers
 
 class ErgoStateContextSpec extends HistoryTestHelpers {
 

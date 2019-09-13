@@ -181,7 +181,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ChainGenerator {
     .map(u => ErgoValidationRules.initial.updated(u))
 
   def validNiPoPowProofGen(m: Int, k: Int)(params: PoPowParams): Gen[PoPowProof] = for {
-    mulM <- Gen.chooseNum(100, 200)
+    mulM <- Gen.chooseNum(1, 20)
   } yield {
     val chain = genHeaderChain(m * mulM + k, diffBitsOpt = None, useRealTs = false).headers
     val poPowChain = chain.foldLeft(Seq.empty[PoPowHeader], None: Option[PoPowHeader]) {

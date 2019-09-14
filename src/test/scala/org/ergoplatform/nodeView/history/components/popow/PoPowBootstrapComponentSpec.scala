@@ -23,7 +23,7 @@ class PoPowBootstrapComponentSpec
 
   private val ntp = timeProvider
 
-  private def bakeComponent(cfg: ErgoSettings) =
+  private def makeComponent(cfg: ErgoSettings) =
     new ErgoHistoryReader with EmptyBlockSectionComponent with PoPowBootstrapComponent with VoidLogging {
       override protected val settings: ErgoSettings = cfg
       override protected[history] val storage: InMemoryHistoryStorage = new InMemoryHistoryStorage()
@@ -31,16 +31,19 @@ class PoPowBootstrapComponentSpec
       override protected val timeProvider: NetworkTimeProvider = ntp
     }
 
-  property("Indexes are updated correctly when history is PoPow bootstrapped") {
-    val cfg = settings.copy(
+  private def makeCfg(proofsToCheck: Int): ErgoSettings =
+    settings.copy(
       nodeSettings = settings.nodeSettings.copy(
         stateType = StateType.Digest,
-        poPowSettings = settings.nodeSettings.poPowSettings.copy(minProofsToCheck = 1)
+        poPowSettings = settings.nodeSettings.poPowSettings.copy(minProofsToCheck = proofsToCheck)
       )
     )
+
+  property("Indexes are updated correctly when history is PoPow bootstrapped") {
+    val cfg = makeCfg(proofsToCheck = 1)
     val poPowParams = cfg.nodeSettings.poPowSettings.params
     forAll(validNiPoPowProofGen(poPowParams.m, poPowParams.k)(poPowParams)) { proof =>
-      val history = bakeComponent(cfg)
+      val history = makeComponent(cfg)
       history.process(proof)
 
       val bestHeader = proof.suffix.chain.last
@@ -56,16 +59,11 @@ class PoPowBootstrapComponentSpec
   }
 
   property("Indexes are updated correctly when better proof is applied") {
-    val cfg = settings.copy(
-      nodeSettings = settings.nodeSettings.copy(
-        stateType = StateType.Digest,
-        poPowSettings = settings.nodeSettings.poPowSettings.copy(minProofsToCheck = 2)
-      )
-    )
+    val cfg = makeCfg(proofsToCheck = 2)
     val poPowParams = cfg.nodeSettings.poPowSettings.params
     forAll(validNiPoPowProofGen(poPowParams.m, poPowParams.k)(poPowParams),
       validNiPoPowProofGen(poPowParams.m, poPowParams.k)(poPowParams)) { (proof0, proof1) =>
-      val history = bakeComponent(cfg)
+      val history = makeComponent(cfg)
       history.process(proof0)
 
       val storage = history.storage.asInstanceOf[InMemoryHistoryStorage]
@@ -84,30 +82,25 @@ class PoPowBootstrapComponentSpec
   }
 
   property("Proof validation") {
-    val cfg = settings.copy(
-      nodeSettings = settings.nodeSettings.copy(
-        stateType = StateType.Digest,
-        poPowSettings = settings.nodeSettings.poPowSettings.copy(minProofsToCheck = 1)
-      )
-    )
+    val cfg = makeCfg(proofsToCheck = 1)
     val poPowParams = cfg.nodeSettings.poPowSettings.params
 
     // valid proof
     forAll(validNiPoPowProofGen(poPowParams.m, poPowParams.k)(poPowParams)) { proof =>
-      val history = bakeComponent(cfg)
+      val history = makeComponent(cfg)
       history.validate(proof) shouldBe 'success
     }
 
     // invalid proof (invalid suffix)
     forAll(validNiPoPowProofGen(poPowParams.m, poPowParams.k)(poPowParams)) { proof =>
-      val history = bakeComponent(cfg)
+      val history = makeComponent(cfg)
       val invalidProof = proof.copy(suffix = proof.suffix.copy(chain = proof.suffix.chain.init))
       history.validate(invalidProof) shouldBe 'failure
     }
 
     // invalid proof (invalid prefix)
     forAll(validNiPoPowProofGen(poPowParams.m, poPowParams.k)(poPowParams)) { proof =>
-      val history = bakeComponent(cfg)
+      val history = makeComponent(cfg)
       val invalidProof = proof.copy(prefix = proof.prefix.copy(chain = proof.prefix.chain.tail))
       history.validate(invalidProof) shouldBe 'failure
     }

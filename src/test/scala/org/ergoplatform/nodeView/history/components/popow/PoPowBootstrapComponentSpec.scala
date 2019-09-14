@@ -55,6 +55,34 @@ class PoPowBootstrapComponentSpec
     }
   }
 
+  property("Indexes are updated correctly when better proof is applied") {
+    val cfg = settings.copy(
+      nodeSettings = settings.nodeSettings.copy(
+        stateType = StateType.Digest,
+        poPowSettings = settings.nodeSettings.poPowSettings.copy(minProofsToCheck = 2)
+      )
+    )
+    val poPowParams = cfg.nodeSettings.poPowSettings.params
+    forAll(validNiPoPowProofGen(poPowParams.m, poPowParams.k)(poPowParams),
+      validNiPoPowProofGen(poPowParams.m, poPowParams.k)(poPowParams)) { (proof0, proof1) =>
+      val history = bakeComponent(cfg)
+      history.process(proof0)
+
+      val storage = history.storage.asInstanceOf[InMemoryHistoryStorage]
+
+      storage.indexes.get(StorageKeys.BestHeaderKey).map(bytesToId) shouldBe None
+
+      storage.indexes
+        .get(StorageKeys.BestProofIdKey).map(bytesToId) shouldBe Some(proof0.id)
+
+      history.isEmpty shouldBe true
+
+      history.process(proof1)
+
+      history.isEmpty shouldBe false
+    }
+  }
+
   property("Proof validation") {
     val cfg = settings.copy(
       nodeSettings = settings.nodeSettings.copy(

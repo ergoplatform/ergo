@@ -58,4 +58,41 @@ class PoPowAlgosSpec
     unpackedTry.get shouldEqual interlinks
   }
 
+  property("0 level is always valid for any block") {
+    val chain = genChain(10)
+    chain.foreach(x => maxLevelOf(x.header) >= 0 shouldBe true)
+  }
+
+  property("lowestCommonAncestor") {
+    val chain0 = genChain(10)
+    val branchPoint = chain0(5)
+    val chain1 = chain0.take(5) ++ genChain(5, branchPoint)
+
+    lowestCommonAncestor(chain0.map(_.header), chain1.map(_.header)) shouldBe Some(branchPoint.header)
+  }
+
+  property("bestArg - always equal for equal proofs") {
+    val chain0 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val proof0 = prove(chain0)(settings.nodeSettings.poPowSettings.params)
+    val chain1 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val proof1 = prove(chain1)(settings.nodeSettings.poPowSettings.params)
+    val m = settings.nodeSettings.poPowSettings.params.m
+
+    proof0.prefix.chain.size shouldEqual proof1.prefix.chain.size
+
+    bestArg(proof0.prefix.chain.map(_.header))(m) shouldEqual bestArg(proof1.prefix.chain.map(_.header))(m)
+  }
+
+  property("bestArg - always greater for better proof") {
+    val chain0 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val proof0 = prove(chain0)(settings.nodeSettings.poPowSettings.params)
+    val chain1 = genChain(70).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val proof1 = prove(chain1)(settings.nodeSettings.poPowSettings.params)
+    val m = settings.nodeSettings.poPowSettings.params.m
+
+    proof0.prefix.chain.size > proof1.prefix.chain.size shouldBe true
+
+    bestArg(proof0.prefix.chain.map(_.header))(m) > bestArg(proof1.prefix.chain.map(_.header))(m) shouldBe true
+  }
+
 }

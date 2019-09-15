@@ -69,7 +69,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.scodec" % "scodec-bits_2.12" % "1.1.6",
   "org.scorexfoundation" % "avl-iodb_2.12" % "0.2.15",
   "org.scorexfoundation" % "iodb_2.12" % "0.3.2",
-  "org.scorexfoundation" % "scorex-core_2.12" % "1a523b9d-SNAPSHOT",
+  "org.scorexfoundation" % "scorex-core_2.12" % "4ca3e400-SNAPSHOT",
   "org.scorexfoundation" % "scorex-util_2.12" % "0.1.4",
   "org.scorexfoundation" % "scrypto_2.12" % "2.1.6",
   "org.scorexfoundation" % "sigma-api_2.12" % "master-bd486374-SNAPSHOT",
@@ -90,4 +90,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH a3662b706ff077fb2de34c2ce649dd4c6ade4f76
+// LIBRARY_DEPENDENCIES_HASH 029377f45646611ed8e7b8bb64fd26a5ea39ec92

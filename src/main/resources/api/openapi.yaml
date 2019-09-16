@@ -2565,3 +2565,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
+  /application/deregister/{appId}:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Stop tracking and delete application
+      operationId: registerApplication
+      tags:
+        - application
+      parameters:
+        - in: path
+          name: appId
+          required: true
+          description: identifier of application to remove
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: Identifier of an application removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionId'
+        '400':
+          description: No application found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'

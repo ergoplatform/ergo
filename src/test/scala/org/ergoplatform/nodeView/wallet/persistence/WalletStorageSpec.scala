@@ -27,6 +27,10 @@ class WalletStorageSpec
         val storage = new WalletStorage(store, settings)
         storage.addTrackedAddress(address)
         storage.readTrackedAddresses shouldBe Seq(address)
+
+        val address2 = ergoAddressGen.sample.get
+        storage.addTrackedAddress(address2)
+        storage.readTrackedAddresses shouldBe Seq(address, address2)
       }
     }
   }

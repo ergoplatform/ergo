@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.LDBHistoryStorage
 import org.ergoplatform.nodeView.history.components._
-import org.ergoplatform.nodeView.history.components.popow.{EmptyPoPowComponent, PoPowBootstrapComponent, ProvingPoPowComponent}
+import org.ergoplatform.nodeView.history.components.popow.{EmptyPoPowComponent, ProvingPoPowComponent}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.history.storage.StorageKeys._
@@ -240,25 +240,9 @@ object ErgoHistory extends ScorexLogging {
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }
-        case HistoryOperationMode.FullPoPow =>
-          new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
-            with PoPowBootstrapComponent with Logging.Live {
-            override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val storage: LDBHistoryStorage = db
-            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-            override protected val timeProvider: NetworkTimeProvider = ntp
-          }
         case HistoryOperationMode.Light =>
           new ErgoHistory with EmptyBlockSectionComponent
             with EmptyPoPowComponent with Logging.Live {
-            override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val storage: LDBHistoryStorage = db
-            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-            override protected val timeProvider: NetworkTimeProvider = ntp
-          }
-        case HistoryOperationMode.LightPoPow =>
-          new ErgoHistory with EmptyBlockSectionComponent
-            with PoPowBootstrapComponent with Logging.Live {
             override protected val settings: ErgoSettings = ergoSettings
             override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme

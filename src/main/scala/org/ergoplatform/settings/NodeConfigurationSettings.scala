@@ -35,19 +35,16 @@ final case class NodeConfigurationSettings(
 ) extends ValidatedConfig with ScorexEncoding {
 
   val historyMode: HistoryOperationMode =
-    (verifyTransactions, poPowSettings.bootstrap, poPowSettings.prove) match {
-      case (true, false, false) => HistoryOperationMode.Full
-      case (true, true, _) => HistoryOperationMode.FullPoPow
-      case (true, false, true) => HistoryOperationMode.FullProving
-      case (false, false, _) => HistoryOperationMode.Light
-      case (false, true, _) => HistoryOperationMode.LightPoPow
+    (verifyTransactions, poPowSettings.prove) match {
+      case (true, false) => HistoryOperationMode.Full
+      case (true, true) => HistoryOperationMode.FullProving
+      case (false, false) => HistoryOperationMode.Light
+      case other => throw new Error(s"Illegal configuration: $other")
     }
 
   val validate: ValidationState[Unit] = ModifierValidator.accumulateErrors
-    .demand(!(poPowSettings.prove && poPowSettings.bootstrap), "Proving not supported in PoPow bootstrapped mode")
-    .demand(!poPowSettings.bootstrap || poPowSettings.minProofsToCheck > 0, "`poPow.minProofsToCheck` must be positive")
     .demand(keepVersions >= 0, "nodeSettings.keepVersions should not be negative")
-    .demand(!poPowSettings.prove || blocksToKeep < 0, s"Proving mode is incompatible with pruned chain")
+    .demand(!poPowSettings.prove || blocksToKeep < 0, s"Proving mode is incompatible with pruned mode")
     .demand(
       verifyTransactions || stateType.requireProofs,
       "UTXO state can't be used when nodeSettings.verifyTransactions is false"

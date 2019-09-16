@@ -113,10 +113,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val acceptedModifierIds = modifierTypeId match {
             case Transaction.ModifierTypeId =>
               invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
-            case typeId if history.acceptModifierType(typeId) =>
-              invData.ids.filter(mid => deliveryTracker.status(mid, history) == ModifiersStatus.Unknown)
             case _ =>
-              Seq.empty
+              invData.ids.filter(mid => deliveryTracker.status(mid, history) == ModifiersStatus.Unknown)
           }
           if (acceptedModifierIds.nonEmpty) {
             val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, acceptedModifierIds)), None)

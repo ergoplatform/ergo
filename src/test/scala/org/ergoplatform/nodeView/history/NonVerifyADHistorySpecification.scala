@@ -13,7 +13,7 @@ import scala.concurrent.duration._
 class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
   private def genHistory() =
-    generateHistory(verifyTransactions = false, StateType.Digest, poPoWBootstrap = false,
+    generateHistory(verifyTransactions = false, StateType.Digest,
       poPowProve = true, blocksToKeep = 0, epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
@@ -38,7 +38,6 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     var history = generateHistory(
       verifyTransactions = false,
       StateType.Digest,
-      poPoWBootstrap = false,
       poPowProve = true,
       blocksToKeep = 0,
       epochLength = epochLength,

@@ -83,8 +83,8 @@ object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark wit
     System.exit(0)
   }
 
-  def history(): ErgoHistory = generateHistory(verifyTransactions = true, StateType.Utxo,
-    poPoWBootstrap = false, poPowProve = true, blocksToKeep = -1)
+  def history(): ErgoHistory = generateHistory(
+    verifyTransactions = true, StateType.Utxo, poPowProve = true, blocksToKeep = -1)
 
   def unlockedHistory(): ErgoHistory = {
     val h = history()

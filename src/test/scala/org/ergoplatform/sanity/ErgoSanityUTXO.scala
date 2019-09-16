@@ -22,7 +22,7 @@ import scala.concurrent.ExecutionContextExecutor
 class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
 
   override val historyGen: Gen[HT] =
-    generateHistory(verifyTransactions = true, StateType.Utxo, poPoWBootstrap = false, poPowProve = true, -1)
+    generateHistory(verifyTransactions = true, StateType.Utxo, poPowProve = true, -1)
 
   override val stateGen: Gen[WrappedUtxoState] =
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings))

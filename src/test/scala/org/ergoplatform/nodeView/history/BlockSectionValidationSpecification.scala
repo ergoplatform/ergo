@@ -57,7 +57,7 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
   }
 
   private def genHistory() =
-    generateHistory(verifyTransactions = true, StateType.Utxo, poPoWBootstrap = false, poPowProve = true, BlocksToKeep)
+    generateHistory(verifyTransactions = true, StateType.Utxo, poPowProve = true, BlocksToKeep)
 
   private def withUpdatedHeaderId[T <: BlockSection](section: T, newId: ModifierId): T = section match {
     case s: Extension => s.copy(headerId = newId).asInstanceOf[T]

@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.nodeView.history.ErgoHistory.createDb
-import org.ergoplatform.nodeView.history.components.popow.{EmptyPoPowComponent, PoPowBootstrapComponent, ProvingPoPowComponent}
+import org.ergoplatform.nodeView.history.components.popow.{EmptyPoPowComponent, ProvingPoPowComponent}
 import org.ergoplatform.nodeView.history.components._
 import org.ergoplatform.nodeView.history.storage.LDBHistoryStorage
 import org.ergoplatform.nodeView.state.StateType
@@ -22,7 +22,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
   val BlocksInChain = 10
   val BlocksToKeep: Int = BlocksInChain + 1
 
-  private val poPowSettings = PoPowSettings(prove = false, bootstrap = false,  3, PoPowParams(30, 30, 30, 0.45))
+  private val poPowSettings = PoPowSettings(prove = false, PoPowParams(30, 30, 30, 0.45))
 
   def ensureMinimalHeight(history: ErgoHistory, height: Int = BlocksInChain): ErgoHistory = {
     val historyHeight = history.bestHeaderHeight
@@ -42,7 +42,6 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
   // todo looks like copy-paste from Stubs.generateHistory
   def generateHistory(verifyTransactions: Boolean,
                       stateType: StateType,
-                      poPoWBootstrap: Boolean,
                       poPowProve: Boolean,
                       blocksToKeep: Int,
                       epochLength: Int = 100000000,
@@ -53,7 +52,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       false, minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
-      offlineGeneration = false, 200, 100000, 100000, 1.minute, 1000000, poPowSettings.copy(bootstrap = poPoWBootstrap, prove = poPowProve))
+      offlineGeneration = false, 200, 100000, 100000, 1.minute, 1000000, poPowSettings.copy(prove = poPowProve))
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
@@ -97,25 +96,9 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }
-        case HistoryOperationMode.FullPoPow =>
-          new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
-            with PoPowBootstrapComponent with VoidLogging {
-            override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val storage: LDBHistoryStorage = db
-            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-            override protected val timeProvider: NetworkTimeProvider = ntp
-          }
         case HistoryOperationMode.Light =>
           new ErgoHistory with EmptyBlockSectionComponent
             with EmptyPoPowComponent with VoidLogging {
-            override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val storage: LDBHistoryStorage = db
-            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-            override protected val timeProvider: NetworkTimeProvider = ntp
-          }
-        case HistoryOperationMode.LightPoPow =>
-          new ErgoHistory with EmptyBlockSectionComponent
-            with PoPowBootstrapComponent with VoidLogging {
             override protected val settings: ErgoSettings = ergoSettings
             override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme

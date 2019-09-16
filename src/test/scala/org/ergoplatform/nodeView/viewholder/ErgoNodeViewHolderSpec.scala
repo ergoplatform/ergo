@@ -481,7 +481,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
 
   genesisIdTestCases.foreach { t =>
     property(t.name) {
-      t.run(NodeViewTestConfig(StateType.Digest, verifyTransactions = true, poPowBootstrap = true))
+      t.run(NodeViewTestConfig(StateType.Digest, verifyTransactions = true))
     }
   }
 

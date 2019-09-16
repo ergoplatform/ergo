@@ -181,12 +181,7 @@ trait ErgoHistoryReader
     * Generates [[ErgoSyncInfo]] depending on history state.
     */
   override def syncInfo: ErgoSyncInfo = if (isEmpty) {
-    settings.nodeSettings.historyMode match {
-      case HistoryOperationMode.FullPoPow | HistoryOperationMode.LightPoPow =>
-        ErgoSyncInfo(Seq.empty, Some(settings.nodeSettings.poPowSettings.params))
-      case _ =>
-        ErgoSyncInfo(Seq.empty)
-    }
+    ErgoSyncInfo(Seq.empty)
   } else {
     val startingPoints = lastHeaders(ErgoSyncInfo.MaxBlockIds).headers
     if (startingPoints.headOption.exists(_.isGenesis)) {
@@ -302,15 +297,5 @@ trait ErgoHistoryReader
         ModifierSemanticValidity.Absent
     }
   }
-
-  /**
-    * Decides modifiers of which types to accept depending on boot mode and boot stage.
-    */
-  final def acceptModifierType(typeId: ModifierTypeId): Boolean =
-    if (settings.nodeSettings.poPowSettings.bootstrap && isEmpty) {
-      Seq(PoPowProof.TypeId).contains(typeId)
-    } else {
-      true
-    }
 
 }

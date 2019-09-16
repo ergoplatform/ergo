@@ -7,8 +7,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scala.concurrent.duration._
 
 case class NodeViewTestConfig(stateType: StateType,
-                              verifyTransactions: Boolean,
-                              poPowBootstrap: Boolean) {
+                              verifyTransactions: Boolean) {
 
   def toSettings: ErgoSettings = {
     val defaultSettings = ErgoSettings.read()
@@ -19,14 +18,13 @@ case class NodeViewTestConfig(stateType: StateType,
       walletSettings = defaultSettings.walletSettings.copy(scanningInterval = 15.millis),
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = stateType,
-        verifyTransactions = verifyTransactions,
-        poPowSettings = defaultSettings.nodeSettings.poPowSettings.copy(bootstrap = poPowBootstrap)
+        verifyTransactions = verifyTransactions
       )
     )
   }
 
   override def toString: String = {
-    s"State: $stateType, Verify Transactions: $verifyTransactions, PoPoW Bootstrap: $poPowBootstrap"
+    s"State: $stateType, Verify Transactions: $verifyTransactions"
   }
 }
 
@@ -35,12 +33,9 @@ object NodeViewTestConfig {
   def defaultConfig(config: ErgoSettings): ErgoSettings = config
 
   val allConfigs: List[NodeViewTestConfig] = List(
-    NodeViewTestConfig(StateType.Digest, verifyTransactions = true, poPowBootstrap = true),
-    NodeViewTestConfig(StateType.Digest, verifyTransactions = false, poPowBootstrap = true),
-    NodeViewTestConfig(StateType.Digest, verifyTransactions = false, poPowBootstrap = false),
-    NodeViewTestConfig(StateType.Digest, verifyTransactions = true, poPowBootstrap = false),
-    NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, poPowBootstrap = true),
-    NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, poPowBootstrap = false)
+    NodeViewTestConfig(StateType.Digest, verifyTransactions = true),
+    NodeViewTestConfig(StateType.Digest, verifyTransactions = false),
+    NodeViewTestConfig(StateType.Utxo, verifyTransactions = true),
   )
 
   def verifyTxConfigs: List[NodeViewTestConfig] = NodeViewTestConfig.allConfigs.filter(_.verifyTransactions)

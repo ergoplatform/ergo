@@ -38,7 +38,7 @@ trait ChainSyncComponent {
     */
   def nextModifiersToDownload(howMany: Int, condition: ModifierId => Boolean): Seq[(ModifierTypeId, ModifierId)] = {
     @tailrec
-    def continuation(height: Int, acc: Seq[(ModifierTypeId, ModifierId)]): Seq[(ModifierTypeId, ModifierId)] = {
+    def continuation(height: Int, acc: Seq[(ModifierTypeId, ModifierId)]): Seq[(ModifierTypeId, ModifierId)] =
       if (acc.lengthCompare(howMany) >= 0) {
         acc.take(howMany)
       } else {
@@ -50,7 +50,6 @@ trait ChainSyncComponent {
           case None => acc
         }
       }
-    }
 
     bestFullBlockOpt match {
       case _ if !isHeadersChainSynced || !nodeSettings.verifyTransactions =>
@@ -65,7 +64,7 @@ trait ChainSyncComponent {
   /**
     * Checks whether it's time to download full chain, and returns toDownload modifiers
     */
-  protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] = {
+  protected def toDownload(header: Header): Seq[(ModifierTypeId, ModifierId)] =
     if (!nodeSettings.verifyTransactions) {
       // A regime that do not download and verify transaction
       Seq.empty
@@ -81,9 +80,8 @@ trait ChainSyncComponent {
     } else {
       Seq.empty
     }
-  }
 
-  private def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] = {
+  private def requiredModifiersForHeader(h: Header): Seq[(ModifierTypeId, ModifierId)] =
     if (!nodeSettings.verifyTransactions) {
       Seq.empty
     } else if (nodeSettings.stateType.requireProofs) {
@@ -91,6 +89,5 @@ trait ChainSyncComponent {
     } else {
       h.sectionIds.tail
     }
-  }
 
 }

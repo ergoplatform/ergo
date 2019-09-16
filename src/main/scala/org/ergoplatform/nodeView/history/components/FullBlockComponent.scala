@@ -30,17 +30,15 @@ trait FullBlockComponent extends HeadersComponent {
 
   private var nonBestChainsCache = FullBlockComponent.emptyCache
 
-  def isInBestFullChain(id: ModifierId): Boolean =
-    storage.getIndex(chainStatusKey(id))
-      .map(ByteArrayWrapper.apply)
-      .contains(ByteArrayWrapper(FullBlockComponent.BestChainMarker))
+  def isInBestFullChain(id: ModifierId): Boolean = storage.getIndex(chainStatusKey(id))
+    .map(ByteArrayWrapper.apply)
+    .contains(ByteArrayWrapper(FullBlockComponent.BestChainMarker))
 
   /**
     * Id of header that contains transactions and proofs
     */
-  override def bestFullBlockIdOpt: Option[ModifierId] =
-    storage.getIndex(BestFullBlockKey)
-      .map(bytesToId)
+  override def bestFullBlockIdOpt: Option[ModifierId] = storage.getIndex(BestFullBlockKey)
+    .map(bytesToId)
 
   // todo: `getFullBlock` is frequently used to define whether some`header` have enough
   // todo: related sections - it would be far more efficient to keep such information in the indexes.

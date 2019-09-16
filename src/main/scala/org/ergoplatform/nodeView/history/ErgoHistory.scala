@@ -174,14 +174,13 @@ trait ErgoHistory
   /**
     * @return header, that corresponds to modifier
     */
-  protected def correspondingHeader(modifier: ErgoPersistentModifier): Option[Header] =
-    modifier match {
-      case h: Header => Some(h)
-      case full: ErgoFullBlock => Some(full.header)
-      case proof: ADProofs => typedModifierById[Header](proof.headerId)
-      case txs: BlockTransactions => typedModifierById[Header](txs.headerId)
-      case _ => None
-    }
+  protected def correspondingHeader(modifier: ErgoPersistentModifier): Option[Header] = modifier match {
+    case h: Header => Some(h)
+    case full: ErgoFullBlock => Some(full.header)
+    case proof: ADProofs => typedModifierById[Header](proof.headerId)
+    case txs: BlockTransactions => typedModifierById[Header](txs.headerId)
+    case _ => None
+  }
 
 }
 

@@ -63,11 +63,10 @@ trait ErgoHistoryReader
     * @param id - modifier id
     * @return semantically valid ErgoPersistentModifier of type T with the given id it is in history
     */
-  def typedModifierById[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T] =
-    modifierById(id) match {
-      case Some(m: T) => Some(m)
-      case _ => None
-    }
+  def typedModifierById[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T] = modifierById(id) match {
+    case Some(m: T) => Some(m)
+    case _ => None
+  }
 
   override def contains(id: ModifierId): Boolean = storage.contains(id)
 
@@ -307,7 +306,7 @@ trait ErgoHistoryReader
   /**
     * Decides modifiers of which types to accept depending on boot mode and boot stage.
     */
-  def acceptModifierType(typeId: ModifierTypeId): Boolean =
+  final def acceptModifierType(typeId: ModifierTypeId): Boolean =
     if (settings.nodeSettings.poPowSettings.bootstrap && isEmpty) {
       Seq(PoPowProof.TypeId).contains(typeId)
     } else {

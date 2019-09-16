@@ -78,8 +78,7 @@ trait HeadersComponent {
   final def heightOf(id: ModifierId): Option[Int] = storage.getIndex(headerHeightKey(id))
     .map(Ints.fromByteArray)
 
-  final def isInBestChain(id: ModifierId): Boolean =
-    heightOf(id).flatMap(h => bestHeaderIdAtHeight(h)).contains(id)
+  final def isInBestChain(id: ModifierId): Boolean = heightOf(id).flatMap(h => bestHeaderIdAtHeight(h)).contains(id)
 
   final def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
 

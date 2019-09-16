@@ -14,7 +14,8 @@ import sigmastate.serialization.{GroupElementSerializer, SigmaSerializer}
 
 import scala.util.Failure
 
-class ErgoUtilsApiRoute(ergoSettings: ErgoSettings)(implicit context: ActorRefFactory) extends UtilsApiRoute(ergoSettings.scorexSettings.restApi)(context) {
+class ErgoUtilsApiRoute(ergoSettings: ErgoSettings)(implicit context: ActorRefFactory)
+  extends UtilsApiRoute(ergoSettings.scorexSettings.restApi)(context) {
 
   implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
 

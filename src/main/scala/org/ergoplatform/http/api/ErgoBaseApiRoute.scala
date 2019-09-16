@@ -14,18 +14,15 @@ trait ErgoBaseApiRoute extends ApiRoute {
 
   val paging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 50)
 
-  val modifierId: Directive1[ModifierId] = pathPrefix(Segment).flatMap { h =>
-    Algos.decode(h) match {
-      case Success(bytes) => provide(bytesToId(bytes))
-      case _ => reject(ValidationRejection("Wrong modifierId format"))
-    }
-  }
+  val modifierId: Directive1[ModifierId] = pathPrefix(Segment).flatMap(handleModifierId)
 
-  val modifierIdGet: Directive1[ModifierId] = parameters("id".as[String]).flatMap { h =>
-    Algos.decode(h) match {
+  val modifierIdGet: Directive1[ModifierId] = parameters("id".as[String])
+    .flatMap(handleModifierId)
+
+  private def handleModifierId(value: String): Directive1[ModifierId] =
+    Algos.decode(value) match {
       case Success(bytes) => provide(bytesToId(bytes))
       case _ => reject(ValidationRejection("Wrong modifierId format"))
     }
-  }
 
 }

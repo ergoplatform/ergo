@@ -50,7 +50,7 @@ class WalletStorageSpec
       withStore { store =>
         val storage = new WalletStorage(store, settings)
         paths.foreach(storage.addPath)
-        storage.readPaths should contain theSameElementsAs paths
+        storage.readPaths should contain theSameElementsAs paths.toSet
       }
     }
   }

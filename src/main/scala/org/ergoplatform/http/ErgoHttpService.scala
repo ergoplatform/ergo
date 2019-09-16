@@ -15,13 +15,19 @@ final case class ErgoHttpService(
   val compositeRoute: Route =
     corsHandler {
       apiR ~
-      swaggerRoute.route ~
-      panelRoute.route ~
-      redirectToSwaggerR
+        apiSpecR ~
+        swaggerRoute.route ~
+        panelRoute.route ~
+        redirectToSwaggerR
     }
 
   private def apiR: Route =
     apiRoutes.map(_.route).reduceOption(_ ~ _).getOrElse(RouteDirectives.reject)
+
+  private def apiSpecR: Route =
+    (get & path("api-docs" / "openapi.yaml")) {
+      getFromResource("api/openapi.yaml")
+    }
 
   private def redirectToSwaggerR: Route = path("" | "/") {
     redirect("/swagger", StatusCodes.PermanentRedirect)

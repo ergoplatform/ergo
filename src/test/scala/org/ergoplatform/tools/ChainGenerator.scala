@@ -60,7 +60,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
     -1, poPoWBootstrap = false, minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false,
     miningPubKeyHex = None, offlineGeneration = false, 200, 100000, 100000, 1.minute, 1000000,
-    PoPowSettings(prove = false, PoPowParams(30, 30, 30, 0.45)))
+    PoPowSettings(prove = false))
   val ms = settings.chainSettings.monetary.copy(
     minerRewardDelay = RewardDelay
   )

@@ -19,12 +19,10 @@ class ProvingPoPowComponentSpec
     with ErgoTestConstants
     with HistoryTestHelpers {
 
-  private val minHeight: Int =
-    settings.nodeSettings.poPowSettings.params.m + settings.nodeSettings.poPowSettings.params.k
+  private val minHeight: Int = poPowParams.m + poPowParams.k
 
   property("Chain proving") {
     forAll(Gen.chooseNum(minHeight, minHeight + 200)) { height =>
-      val poPowParams = settings.nodeSettings.poPowSettings.params
       val history = generateHistory(
         verifyTransactions = true, StateType.Utxo, poPowProve = true, BlocksToKeep)
 
@@ -38,7 +36,6 @@ class ProvingPoPowComponentSpec
 
   property("Produce valid proof") {
     forAll(Gen.chooseNum(minHeight, minHeight + 200)) { height =>
-      val poPowParams = settings.nodeSettings.poPowSettings.params
       val history = generateHistory(
         verifyTransactions = true, StateType.Utxo, poPowProve = true, BlocksToKeep)
       genChain(height, history).flatMap(x => Seq(x.header, x.extension)).foreach(history.append)

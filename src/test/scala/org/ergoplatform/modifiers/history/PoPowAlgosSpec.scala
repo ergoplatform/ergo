@@ -73,10 +73,10 @@ class PoPowAlgosSpec
 
   property("bestArg - always equal for equal proofs") {
     val chain0 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
-    val proof0 = prove(chain0)(settings.nodeSettings.poPowSettings.params)
+    val proof0 = prove(chain0)(poPowParams)
     val chain1 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
-    val proof1 = prove(chain1)(settings.nodeSettings.poPowSettings.params)
-    val m = settings.nodeSettings.poPowSettings.params.m
+    val proof1 = prove(chain1)(poPowParams)
+    val m = poPowParams.m
 
     proof0.prefix.chain.size shouldEqual proof1.prefix.chain.size
 
@@ -85,10 +85,10 @@ class PoPowAlgosSpec
 
   property("bestArg - always greater for better proof") {
     val chain0 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
-    val proof0 = prove(chain0)(settings.nodeSettings.poPowSettings.params)
+    val proof0 = prove(chain0)(poPowParams)
     val chain1 = genChain(70).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
-    val proof1 = prove(chain1)(settings.nodeSettings.poPowSettings.params)
-    val m = settings.nodeSettings.poPowSettings.params.m
+    val proof1 = prove(chain1)(poPowParams)
+    val m = poPowParams.m
 
     proof0.prefix.chain.size > proof1.prefix.chain.size shouldBe true
 

@@ -43,6 +43,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val stateConstants: StateConstants = StateConstants(None, settings)
   val genesisStateDigest: ADDigest = settings.chainSettings.genesisStateDigest
   val feeProp: ErgoTree = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
+  val poPowParams = PoPowParams(30, 30, 30, .45)
 
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
   lazy val defaultSeed: Array[Byte] = Mnemonic.toSeed(settings.walletSettings.testMnemonic.get)

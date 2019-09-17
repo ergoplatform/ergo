@@ -30,7 +30,8 @@ Also, reference with [Node Configuration File](https://github.com/ergoplatform/e
 
 ## Build from sources
 
-In order to build the Ergo node from sources you need JDK (>= 1.8) and SBT to be installed on your machine.
+In order to build the Ergo node from sources you need JDK (>= 1.8) and SBT to be 
+[installed](https://docs.scala-lang.org/getting-started/sbt-track/getting-started-with-scala-and-sbt-on-the-command-line.html) on your machine.
 
 In order to simply get a single jar run: `sbt assembly` - assembly would appear in `target/scala-2.12/` directory.
  

@@ -83,6 +83,22 @@ Ergo node works normally behind NAT, so you can keep closed your `9030` port, he
 
 It is also a good practice to keep closed REST API port `9053`, and connect to your node from inside another container in the same Docker network (this case not covered by this short quick start manual).
 
+## Open project in IDE
+
+Your can use IntelliJ IDEA (Community or Ultimate edition).
+Before opening the project in IDE make sure it can be built with sbt
+as described above. You can also run tests using `sbt test` command.
+You may need to fix dependency resolution errors first.
+
+After that you can open the project folder in Idea (File / Open)
+which will run Project Import Wizard. The wizard will use SBT configuration
+(build.sbt file) to generate Idea's project configuration files.
+You can open `File / Project Structure...` dialog to see project configuration.
+If everything is successful you can compile the project in IDE. 
+
+## FAQ
+[Frequently Asked Questions](FAQ.md)
+
 ## Acknowledgements
 
 <img src="https://www.yourkit.com/images/yklogo.png" align="right" />

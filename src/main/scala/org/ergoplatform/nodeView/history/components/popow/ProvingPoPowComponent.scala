@@ -7,20 +7,29 @@ import org.ergoplatform.settings.PoPowParams
 import scorex.core.utils.ScorexEncoding
 import scorex.util.{bytesToId, idToBytes}
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 trait ProvingPoPowComponent extends EmptyPoPowComponent {
   self: HeadersComponent with BasicReaders with Persistence with ScorexEncoding =>
 
   override final def prove(params: PoPowParams): Try[PoPowProof] =
-    bestHeaderOpt
+    getLastProof.fold(makeNewProof(params)(None)) { proof =>
+      bestHeaderOpt.fold[Try[PoPowProof]](Failure(new Exception("Empty chain"))) { bestHeader =>
+        val bestHeaderInProof = proof.chain.last.header
+        if (bestHeaderInProof.id == bestHeader.id) Success(proof) else makeNewProof(params)(Some(bestHeader))
+      }
+    }
+
+  private def makeNewProof(params: PoPowParams)
+                             (prefetchedHeaderOpt: Option[Header]) =
+    (prefetchedHeaderOpt orElse bestHeaderOpt)
       .fold[Try[PoPowProof]](Failure(new Exception("Empty chain"))) { bestHeader =>
         val chain = headerChainBack(Int.MaxValue, bestHeader, _.isGenesis)
         val poPowChain = chain.flatMap(h => interlinksFor(h).map(PoPowHeader(h, _)))
         Try(PoPowAlgos.prove(poPowChain)(params))
       }
       .map { proof =>
-        getLastProof.foreach(prefix => storage.remove(Seq(prefix.id)))
+        getLastProof.foreach(proof => storage.remove(Seq(proof.id)))
         storage.update(Seq(LastProofIdKey -> idToBytes(proof.id)), Seq(proof))
         proof
       }

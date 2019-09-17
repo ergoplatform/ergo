@@ -35,6 +35,13 @@ class ProvingPoPowComponentSpec
 
       result shouldBe 'success
       history.asInstanceOf[ProvingPoPowComponent].getLastProof shouldBe Some(result.get)
+
+      // Repeated proving
+      val result2 = history.prove(poPowParams)
+
+      result2 shouldBe 'success
+      history.asInstanceOf[ProvingPoPowComponent].getLastProof shouldBe Some(result.get)
+
     }
   }
 

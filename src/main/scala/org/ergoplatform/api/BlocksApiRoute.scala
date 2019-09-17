@@ -49,7 +49,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   private def getLastHeaders(n: Int): Future[Json] =
     getHistory.map { history =>
-      history.lastHeaders(n).headers.map(_.asJson).asJson
+      history.lastHeaders(n).map(_.asJson).asJson
     }
 
   private def getHeaderIds(offset: Int, limit: Int): Future[Json] =
@@ -78,7 +78,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       val headers = maxHeaderOpt
         .toIndexedSeq
         .flatMap { maxHeader =>
-          history.headerChainBack(maxHeadersInOneQuery, maxHeader, _.height <= fromHeight + 1).headers
+          history.headerChainBack(maxHeadersInOneQuery, maxHeader, _.height <= fromHeight + 1)
         }
       headers.toList.asJson
     }

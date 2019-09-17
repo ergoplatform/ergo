@@ -256,7 +256,8 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
 
-    val blocks: IndexedSeq[ErgoFullBlock] = r.h.chainToHeader(startBlock, r.h.bestHeaderOpt.get)._2.headers.flatMap(r.h.getFullBlock)
+    val blocks: IndexedSeq[ErgoFullBlock] = r.h.chainToHeader(startBlock, r.h.bestHeaderOpt.get)._2
+      .flatMap(r.h.getFullBlock).toIndexedSeq
     val txs: Seq[ErgoTransaction] = blocks.flatMap(_.blockTransactions.transactions)
     //Make sure that only tx got into chain
     txs.filter(tx => tx.id == tx1.id || tx.id == tx2.id) should have length 1

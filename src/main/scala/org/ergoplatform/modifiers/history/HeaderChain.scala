@@ -42,4 +42,9 @@ object HeaderChain {
 
   def apply(seq: Seq[Header]): HeaderChain = HeaderChain(seq.toIndexedSeq)
 
+  def takeAfter(headers: Seq[Header])(h: Header): Seq[Header] = {
+    val commonIndex = headers.indexWhere(_.id == h.id)
+    headers.takeRight(headers.length - commonIndex)
+  }
+
 }

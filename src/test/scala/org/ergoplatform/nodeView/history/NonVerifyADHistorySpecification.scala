@@ -14,7 +14,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
   private def genHistory() =
     generateHistory(verifyTransactions = false, StateType.Digest,
-      poPowProve = true, blocksToKeep = 0, epochLength = 1000)
+      poPowProve = false, blocksToKeep = 0, epochLength = 1000)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
   private lazy val popowHistory = ensureMinimalHeight(genHistory(), 100)
@@ -38,7 +38,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     var history = generateHistory(
       verifyTransactions = false,
       StateType.Digest,
-      poPowProve = true,
+      poPowProve = false,
       blocksToKeep = 0,
       epochLength = epochLength,
       useLastEpochs = useLastEpochs,
@@ -166,11 +166,11 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
     forAll(smallPositiveInt) { forkLength: Int =>
       whenever(forkLength > 1 && chain.size > forkLength) {
-        val si = ErgoSyncInfo(Seq(chain.headers(chain.size - forkLength - 1).id))
+        val si = ErgoSyncInfo(Seq(chain(chain.size - forkLength - 1).id))
         val continuation = history.continuationIds(si, forkLength)
         continuation.length shouldBe forkLength
         continuation.last._2 shouldEqual chain.last.id
-        continuation.head._2 shouldEqual chain.headers(chain.size - forkLength).id
+        continuation.head._2 shouldEqual chain(chain.size - forkLength).id
       }
     }
   }
@@ -205,12 +205,12 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
     val fork1Chain = history.chainToHeader(None, fork1.last)
     fork1Chain._1 shouldBe None
-    fork1Chain._2 shouldEqual HeaderChain(inChain.headers ++ fork1.headers)
+    fork1Chain._2 shouldEqual inChain.headers ++ fork1.headers
 
     val from1to2Chain = history.chainToHeader(Some(fork1.last), fork2.last)
     from1to2Chain._1.get shouldEqual inChain.last.id
-    from1to2Chain._2.headers.map(_.height) shouldEqual fork2.headers.map(_.height)
-    from1to2Chain._2.headers shouldEqual fork2.headers
+    from1to2Chain._2.map(_.height) shouldEqual fork2.headers.map(_.height)
+    from1to2Chain._2 shouldEqual fork2.headers
 
   }
 
@@ -223,18 +223,18 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     forAll(smallInt, digest32Gen) { (forkLength: Int, extensionHash: Digest32) =>
       whenever(forkLength > forkDepth) {
 
-        val fork1 = genHeaderChain(forkLength, history, diffBitsOpt = None, useRealTs = false).tail
-        val common = fork1.headers(forkDepth)
+        val fork1 = genHeaderChain(forkLength, history, diffBitsOpt = None, useRealTs = false).tail.headers
+        val common = fork1(forkDepth)
         val commonInterlinks = history.typedModifierById[Extension](common.extensionId)
           .map(ext => PoPowAlgos.unpackInterlinks(ext.fields).get)
           .getOrElse(Seq.empty)
         val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common), commonInterlinks,
-          defaultDifficultyControl, extensionHash, diffBitsOpt = None, useRealTs = false)
-        val fork1SuffixIds = fork1.headers.drop(forkDepth + 1).map(_.encodedId)
-        val fork2SuffixIds = fork2.headers.drop(forkDepth + 1).map(_.encodedId)
+          defaultDifficultyControl, extensionHash, diffBitsOpt = None, useRealTs = false).headers
+        val fork1SuffixIds = fork1.drop(forkDepth + 1).map(_.encodedId)
+        val fork2SuffixIds = fork2.drop(forkDepth + 1).map(_.encodedId)
         (fork1SuffixIds intersect fork2SuffixIds) shouldBe empty
 
-        history = applyHeaderChain(history, fork1)
+        history = applyHeaderChain(history, HeaderChain(fork1))
         history.bestHeaderOpt.get shouldBe fork1.last
 
         val (our, their) = history.commonBlockThenSuffixes(fork2, history.bestHeaderOpt.get, 1000)

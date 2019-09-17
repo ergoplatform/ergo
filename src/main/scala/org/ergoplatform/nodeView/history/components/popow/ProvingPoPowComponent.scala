@@ -15,12 +15,8 @@ trait ProvingPoPowComponent extends EmptyPoPowComponent {
   override final def prove(params: PoPowParams): Try[PoPowProof] =
     bestHeaderOpt
       .fold[Try[PoPowProof]](Failure(new Exception("Empty chain"))) { bestHeader =>
-        val chain = headerChainBack(Int.MaxValue, bestHeader, _.isGenesis).headers
-        val poPowChain = chain.flatMap { h =>
-          typedModifierById[Extension](h.extensionId)
-            .flatMap(ext => PoPowAlgos.unpackInterlinks(ext.fields).toOption)
-            .map(PoPowHeader(h, _))
-        }
+        val chain = headerChainBack(Int.MaxValue, bestHeader, _.isGenesis)
+        val poPowChain = chain.flatMap(h => interlinksFor(h).map(PoPowHeader(h, _)))
         Try(PoPowAlgos.prove(poPowChain)(params))
       }
       .map { proof =>
@@ -31,5 +27,10 @@ trait ProvingPoPowComponent extends EmptyPoPowComponent {
 
   private[history] final def getLastProof = storage.getIndex(LastProofIdKey)
     .flatMap(id => typedModifierById[PoPowProof](bytesToId(id)))
+
+  private def interlinksFor(header: Header) =
+    storage.get(header.extensionId)
+      .flatMap(x => ExtensionSerializer.parseBytesTry(x.tail).toOption)
+      .flatMap(ext => PoPowAlgos.unpackInterlinks(ext.fields).toOption)
 
 }

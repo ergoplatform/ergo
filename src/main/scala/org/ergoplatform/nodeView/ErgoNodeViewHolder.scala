@@ -152,7 +152,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val initState = rollbackId
           .map(id => state.rollbackTo(idToVersion(id)).get)
           .getOrElse(recreatedState())
-        val toApply = newChain.headers.map { h =>
+        val toApply = newChain.map { h =>
           history.getFullBlock(h)
             .fold(throw new Error(s"Failed to get full block for header $h"))(fb => fb)
         }
@@ -175,7 +175,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val bestHeight = bestFullBlock.header.height
     val newEpochHeadersQty = bestHeight % votingLength // how many blocks current epoch lasts
     val headersQtyToAcquire = newEpochHeadersQty + Constants.LastHeadersInContext
-    val acquiredChain = history.headerChainBack(headersQtyToAcquire, bestFullBlock.header, _ => false).headers
+    val acquiredChain = history.headerChainBack(headersQtyToAcquire, bestFullBlock.header, _ => false)
     val (lastHeaders, chainToApply) = acquiredChain.splitAt(Constants.LastHeadersInContext)
     val firstExtensionOpt = lastHeaders.lastOption // last extension in the prev epoch to recover from
       .flatMap(h => history.typedModifierById[Extension](h.extensionId))
@@ -195,7 +195,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         chainToApply.foldLeft[Try[DigestState]](Success(state))((acc, m) => acc.flatMap(_.applyModifier(m)))
       case Failure(exception) => // recover using whole headers chain
         log.warn(s"Failed to recover state from current epoch, using whole chain: ${exception.getMessage}")
-        val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, _.isGenesis).headers
+        val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, _.isGenesis)
         val genesisState = DigestState.create(None, None, stateDir(settings), constants)
         wholeChain.foldLeft[Try[DigestState]](Success(genesisState))((acc, m) => acc.flatMap(_.applyModifier(m)))
     }

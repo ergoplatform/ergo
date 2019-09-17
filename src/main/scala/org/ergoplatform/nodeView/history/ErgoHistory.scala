@@ -134,7 +134,7 @@ trait ErgoHistory
               this -> ErgoHistory.emptyProgressInfo
             } else {
               val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
-                .flatMap(f => headerChainBack(bestFullBlockHeight + 1, f.header, h => !invalidatedIds.contains(h.id)).headers)
+                .flatMap(f => headerChainBack(bestFullBlockHeight + 1, f.header, h => !invalidatedIds.contains(h.id)))
                 .flatMap(getFullBlock)
                 .ensuring(_.lengthCompare(1) >= 0, "invalidatedChain should contain at least bestFullBlock")
 

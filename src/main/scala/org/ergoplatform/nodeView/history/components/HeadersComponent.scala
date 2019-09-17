@@ -144,7 +144,7 @@ trait HeadersComponent {
       heightIdsKey(h.height) -> (Seq(h.id) ++ headerIdsAtHeight(h.height)).flatMap(idToBytes).toArray
     val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)
     val forkHeaders = parentHeaderOpt.toSeq
-      .flatMap(parent => headerChainBack(h.height, parent, h => isInBestChain(h)).headers)
+      .flatMap(parent => headerChainBack(h.height, parent, h => isInBestChain(h)))
       .filter(h => !isInBestChain(h))
     val forkIds: Seq[(ByteArrayWrapper, Array[Byte])] = forkHeaders.map { header =>
       val otherIds = headerIdsAtHeight(header.height).filter(id => id != header.id)
@@ -185,13 +185,22 @@ trait HeadersComponent {
     * @return at most limit header back in history starting from startHeader and when condition until is not satisfied
     *         Note now it includes one header satisfying until condition!
     */
-  def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
+  final def headerChainBack(limit: Int,
+                            startHeader: Header,
+                            until: Header => Boolean): Seq[Header] = {
+    val readHeader =
+      if (limit > settings.cacheSettings.modifiersCacheSize * 4) {
+        id: ModifierId => storage.get(id)
+          .flatMap(x => HeaderSerializer.parseBytesTry(x.tail).toOption)
+      } else {
+        id: ModifierId => typedModifierById[Header](id)
+      }
     @tailrec
-    def loop(header: Header, acc: Seq[Header]): Seq[Header] = {
+    def loop(header: Header, acc: Seq[Header]): Seq[Header] =
       if (acc.lengthCompare(limit) == 0 || until(header)) {
         acc
       } else {
-        typedModifierById[Header](header.parentId) match {
+        readHeader(header.parentId) match {
           case Some(parent: Header) =>
             loop(parent, acc :+ parent)
           case None if acc.contains(header) =>
@@ -200,12 +209,11 @@ trait HeadersComponent {
             acc :+ header
         }
       }
-    }
 
     if (bestHeaderIdOpt.isEmpty || (limit == 0)) {
-      HeaderChain(Seq.empty)
+      Array.empty[Header]
     } else {
-      HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
+      loop(startHeader, Array(startHeader)).reverse
     }
   }
 
@@ -255,7 +263,7 @@ trait HeadersComponent {
         difficultyCalculator.calculate(Seq(parent))
       } else {
         val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
-        val headers = chain.headers.filter(p => heights.contains(p.height))
+        val headers = chain.filter(p => heights.contains(p.height))
         difficultyCalculator.calculate(headers)
       }
     }

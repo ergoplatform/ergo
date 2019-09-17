@@ -22,7 +22,7 @@ class BlocksApiRouteSpec extends FlatSpec
 
   val route: Route = BlocksApiRoute(nodeViewRef, readersRef, settings).route
 
-  val headerIdBytes: ModifierId = history.lastHeaders(1).headers.head.id
+  val headerIdBytes: ModifierId = history.lastHeaders(1).head.id
   val headerIdString: String = Algos.encode(headerIdBytes)
 
   it should "get last blocks" in {
@@ -44,7 +44,7 @@ class BlocksApiRouteSpec extends FlatSpec
   it should "get last headers" in {
     Get(prefix + "/lastHeaders/1") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history.lastHeaders(1).headers.map(_.asJson).asJson.toString() shouldEqual responseAs[String]
+      history.lastHeaders(1).map(_.asJson).asJson.toString() shouldEqual responseAs[String]
     }
   }
 

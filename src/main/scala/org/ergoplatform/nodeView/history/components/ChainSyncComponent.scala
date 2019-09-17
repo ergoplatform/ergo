@@ -23,7 +23,7 @@ trait ChainSyncComponent {
 
   protected def chainSettings: ChainSettings = settings.chainSettings
 
-  protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain
+  protected def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): Seq[Header]
 
   def isInBestChain(id: ModifierId): Boolean
 

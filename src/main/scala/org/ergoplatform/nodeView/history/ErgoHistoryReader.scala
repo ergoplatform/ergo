@@ -130,8 +130,8 @@ trait ErgoHistoryReader
       headerIdsAtHeight(heightFrom).headOption.toSeq.flatMap { startId =>
         typedModifierById[Header](startId).toSeq.flatMap { startHeader =>
           val headers = headerChainBack(size, startHeader, _ => false)
-            .ensuring(_.headers.exists(_.isGenesis), "Should always contain genesis header")
-          headers.headers.flatMap(h => Seq((Header.TypeId, h.id)))
+            .ensuring(_.exists(_.isGenesis), "Should always contain genesis header")
+          headers.flatMap(h => Seq((Header.TypeId, h.id)))
         }
       }
     } else {
@@ -145,7 +145,7 @@ trait ErgoHistoryReader
         val startId = headerIdsAtHeight(heightFrom).head
         val startHeader = typedModifierById[Header](startId).get
         val headerIds = headerChainBack(size, startHeader, _.parentId == branchingPointOpt)
-          .headers.map(Header.TypeId -> _.id)
+          .map(Header.TypeId -> _.id)
         headerIds
       }
     }
@@ -183,7 +183,7 @@ trait ErgoHistoryReader
   override def syncInfo: ErgoSyncInfo = if (isEmpty) {
     ErgoSyncInfo(Seq.empty)
   } else {
-    val startingPoints = lastHeaders(ErgoSyncInfo.MaxBlockIds).headers
+    val startingPoints = lastHeaders(ErgoSyncInfo.MaxBlockIds)
     if (startingPoints.headOption.exists(_.isGenesis)) {
       ErgoSyncInfo((PreGenesisHeader +: startingPoints).map(_.id))
     } else {
@@ -194,8 +194,9 @@ trait ErgoHistoryReader
   /**
     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
     */
-  def lastHeaders(count: Int, offset: Int = 0): HeaderChain = bestHeaderOpt
-    .map(bestHeader => headerChainBack(count, bestHeader, _ => false).drop(offset)).getOrElse(HeaderChain.empty)
+  def lastHeaders(count: Int, offset: Int = 0): Seq[Header] = bestHeaderOpt
+    .map(bestHeader => headerChainBack(count, bestHeader, _ => false).drop(offset))
+    .getOrElse(Array.empty[Header])
 
   /**
     * @return ids of count headers starting from offset
@@ -236,7 +237,7 @@ trait ErgoHistoryReader
     * @param finalHeader    - header you should reach
     * @return (Modifier it required to rollback first, header chain to apply)
     */
-  def chainToHeader(startHeaderOpt: Option[Header], finalHeader: Header): (Option[ModifierId], HeaderChain) = {
+  def chainToHeader(startHeaderOpt: Option[Header], finalHeader: Header): (Option[ModifierId], Seq[Header]) = {
     startHeaderOpt match {
       case Some(h1) =>
         val (prevChain, newChain) = commonBlockThenSuffixes(h1, finalHeader)
@@ -253,12 +254,12 @@ trait ErgoHistoryReader
     * @param header2 : Header - header in second subchain
     * @return (chain from common block to header1, chain from common block to header2)
     */
-  protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain) = {
+  protected[history] def commonBlockThenSuffixes(header1: Header, header2: Header): (Seq[Header], Seq[Header]) = {
     assert(contains(header1) && contains(header2), "Should never call this function for non-existing headers")
     val heightDiff = Math.max(header1.height - header2.height, 0)
 
     @scala.annotation.tailrec
-    def loop(numberBack: Int, otherChain: HeaderChain): (HeaderChain, HeaderChain) = {
+    def loop(numberBack: Int, otherChain: Seq[Header]): (Seq[Header], Seq[Header]) = {
       val r = commonBlockThenSuffixes(otherChain, header1, numberBack + heightDiff)
       if (r._1.head == r._2.head) {
         r
@@ -267,22 +268,22 @@ trait ErgoHistoryReader
           val biggerOther = headerChainBack(numberBack, otherChain.head, _ => false) ++ otherChain.tail
           loop(biggerOther.size, biggerOther)
         } else {
-          (HeaderChain(PreGenesisHeader +: r._1.headers), HeaderChain(PreGenesisHeader +: r._2.headers))
+          (PreGenesisHeader +: r._1, PreGenesisHeader +: r._2)
         }
       }
     }
 
-    loop(2, HeaderChain(Seq(header2)))
+    loop(2, Seq(header2))
   }
 
-  protected[history] def commonBlockThenSuffixes(otherChain: HeaderChain,
+  protected[history] def commonBlockThenSuffixes(otherChain: Seq[Header],
                                                  startHeader: Header,
-                                                 limit: Int): (HeaderChain, HeaderChain) = {
+                                                 limit: Int): (Seq[Header], Seq[Header]) = {
     def until(h: Header): Boolean = otherChain.exists(_.id == h.id)
 
     val ourChain = headerChainBack(limit, startHeader, until)
     val commonBlock = ourChain.head
-    val commonBlockThenSuffixes = otherChain.takeAfter(commonBlock)
+    val commonBlockThenSuffixes = HeaderChain.takeAfter(otherChain)(commonBlock)
     (ourChain, commonBlockThenSuffixes)
   }
 

@@ -26,7 +26,7 @@ object HistoryExtractor extends ScorexLogging {
     val wholeChain = h.chainToHeader(None, h.bestHeaderOpt.get)
 
     var counter = 0
-    wholeChain._2.headers.take(10000).foreach { header =>
+    wholeChain._2.take(10000).foreach { header =>
       counter += 1
       if (counter % 100 == 0) { log.info(s"Processed $counter blocks.")}
       val b = h.getFullBlock(header).get

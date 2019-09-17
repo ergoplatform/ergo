@@ -44,7 +44,7 @@ trait FullBlockComponent extends HeadersComponent {
   // todo: related sections - it would be far more efficient to keep such information in the indexes.
   protected def getFullBlock(h: Header): Option[ErgoFullBlock]
 
-  protected def commonBlockThenSuffixes(header1: Header, header2: Header): (HeaderChain, HeaderChain)
+  protected def commonBlockThenSuffixes(header1: Header, header2: Header): (Seq[Header], Seq[Header])
 
   /** Process full block when we have one.
     *
@@ -80,7 +80,7 @@ trait FullBlockComponent extends HeadersComponent {
       logStatus(Seq(), toApply, fullBlock, None)
       val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockComponent.BestChainMarker)
       updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes)
-      ProgressInfo(None, Seq.empty, headers.headers.dropRight(1) ++ toApply, Seq.empty)
+      ProgressInfo(None, Seq.empty, headers.dropRight(1) ++ toApply, Seq.empty)
   }
 
   private def processBetterChain: BlockProcessing = {
@@ -88,8 +88,8 @@ trait FullBlockComponent extends HeadersComponent {
       if bestFullBlockOpt.nonEmpty && isBetterChain(newBestBlockHeader.id) && isLinkable(fullBlock.header) =>
       val prevBest = bestFullBlockOpt.get
       val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, newBestBlockHeader)
-      val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
-      val toApply: Seq[ErgoFullBlock] = newChain.tail.headers
+      val toRemove: Seq[ErgoFullBlock] = prevChain.tail.flatMap(getFullBlock)
+      val toApply: Seq[ErgoFullBlock] = newChain.tail
         .flatMap(h => if (h == fullBlock.header) Some(fullBlock) else getFullBlock(h))
         .ensuring(_.lengthCompare(newChain.length - 1) == 0)
 

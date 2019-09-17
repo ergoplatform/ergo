@@ -4,6 +4,7 @@ import io.iohk.iodb.{LSMStore, Store}
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.utils.generators.WalletGenerators
+import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.testkit.utils.FileUtils
@@ -44,6 +45,16 @@ class WalletStorageSpec
         storage.readLatestPostponedBlockHeight shouldBe Some(block.height)
         storage.removeBlock(block.height)
         storage.readBlocks(block.height, block.height) shouldBe Seq.empty
+      }
+    }
+  }
+
+  it should "add and read derivation paths" in {
+    forAll(Gen.nonEmptyListOf(derivationPathGen)) { paths =>
+      withStore { store =>
+        val storage = new WalletStorage(store, settings)
+        paths.foreach(storage.addPath)
+        storage.readPaths should contain theSameElementsAs paths.toSet
       }
     }
   }

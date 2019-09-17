@@ -24,11 +24,12 @@ trait ProvingPoPowComponent extends EmptyPoPowComponent {
         Try(PoPowAlgos.prove(poPowChain)(params))
       }
       .map { proof =>
-        storage.getIndex(LastProofIdKey)
-          .flatMap(id => typedModifierById[PoPowProofPrefix](bytesToId(id)))
-          .foreach(prefix => storage.remove(Seq(prefix.id)))
+        getLastProof.foreach(prefix => storage.remove(Seq(prefix.id)))
         storage.update(Seq(LastProofIdKey -> idToBytes(proof.id)), Seq(proof))
         proof
       }
+
+  private[history] final def getLastProof = storage.getIndex(LastProofIdKey)
+    .flatMap(id => typedModifierById[PoPowProof](bytesToId(id)))
 
 }

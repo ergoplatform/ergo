@@ -16,10 +16,4 @@ object StorageKeys {
   // PoPow
   val LastProofIdKey: ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("last_proof"))
-
-  val BestProofIdKey: ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("best_checked"))
-
-  val ProofsCheckedKey: ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("proofs_checked"))
 }

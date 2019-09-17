@@ -240,7 +240,6 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   def generateHistory(verifyTransactions: Boolean = true,
                       stateType: StateType = StateType.Digest,
-                      PoPoWBootstrap: Boolean = false,
                       blocksToKeep: Int = 100,
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10): ErgoHistory = {
@@ -249,7 +248,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val minimalSuffix = 2
     val poPowSettings = PoPowSettings(prove = false)
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
+      minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
       offlineGeneration = false, 200, 100000, 100000, 1.minute, 1000000, poPowSettings)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null

@@ -16,6 +16,9 @@ trait PoPowComponent {
 
   def process(m: PoPowProof): ProgressInfo[ErgoPersistentModifier]
 
+  /**
+    * Generate PoPow proof from current chain according to a given `params`.
+    */
   def prove(params: PoPowParams): Try[PoPowProof]
 
 }

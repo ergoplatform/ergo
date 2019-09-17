@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history.components.popow
 import org.ergoplatform.modifiers.history.PoPowAlgos.maxLevelOf
 import org.ergoplatform.modifiers.history.{PoPowProof, PoPowProofPrefix}
 import org.ergoplatform.nodeView.history.HistoryTestHelpers
+import org.ergoplatform.nodeView.history.storage.StorageKeys
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoTestConstants
 import org.scalacheck.Gen
@@ -30,7 +31,10 @@ class ProvingPoPowComponentSpec
 
       genChain(height, history).flatMap(x => Seq(x.header, x.extension)).foreach(history.append)
 
-      history.prove(poPowParams) shouldBe 'success
+      val result = history.prove(poPowParams)
+
+      result shouldBe 'success
+      history.asInstanceOf[ProvingPoPowComponent].getLastProof shouldBe Some(result.get)
     }
   }
 

@@ -301,29 +301,6 @@ trait HeadersComponent {
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= maxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .validateNot(alreadyApplied, storage.contains(header.id), header.id.toString)
         .result
-
-    /**
-      * Partial validation skipping some rules
-      */
-    object Partial {
-      private[history] def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] =
-        validationState
-          .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, s"${header.timestamp} > ${parent.timestamp}")
-          .validate(hdrHeight, header.height == parent.height + 1, s"${header.height} vs ${parent.height}")
-          .validateNoFailure(hdrPoW, powScheme.validate(header))
-          .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
-          .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= maxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
-          .validateNot(alreadyApplied, storage.contains(header.id), header.id.toString)
-          .result
-
-      private[history] def validateOrphanedBlockHeader(header: Header): ValidationResult[Unit] =
-        validationState
-          .validateNoFailure(hdrPoW, powScheme.validate(header))
-          .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
-          .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= maxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
-          .validateNot(alreadyApplied, storage.contains(header.id), header.id.toString)
-          .result
-    }
   }
 
 }

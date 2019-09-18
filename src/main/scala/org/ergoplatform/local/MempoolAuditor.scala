@@ -8,9 +8,13 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.settings.NodeConfigurationSettings
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
+import scorex.core.network.Broadcast
+import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, SemanticallySuccessfulModifier}
+import scorex.core.network.message.{InvData, InvSpec, Message}
+import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.ScorexLogging
 
@@ -21,7 +25,8 @@ import scala.concurrent.duration._
   * mempool cleanup task to [[CleanupWorker]] when needed.
   */
 class MempoolAuditor(nodeViewHolderRef: ActorRef,
-                     nodeSettings: NodeConfigurationSettings) extends Actor with ScorexLogging {
+                     networkControllerRef: ActorRef,
+                     settings: ErgoSettings) extends Actor with ScorexLogging {
 
   override val supervisorStrategy: OneForOneStrategy = OneForOneStrategy(
     maxNrOfRetries = 5,
@@ -40,7 +45,8 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private var stateReaderOpt: Option[TransactionValidation[ErgoTransaction]] = None
   private var poolReaderOpt: Option[ErgoMemPoolReader] = None
 
-  private val worker: ActorRef = context.actorOf(Props(new CleanupWorker(nodeViewHolderRef, nodeSettings)))
+  private val worker: ActorRef =
+    context.actorOf(Props(new CleanupWorker(nodeViewHolderRef, settings.nodeSettings)))
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
@@ -66,6 +72,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private def working: Receive = {
     case CleanupDone =>
       log.info("Cleanup done. Switching to awaiting mode")
+      broadcastTransactions()
       context become awaiting
 
     case _ => // ignore other triggers until work is done
@@ -78,6 +85,18 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     context become working // ignore other triggers until work is done
   }
 
+  private def broadcastTransactions(): Unit = {
+    poolReaderOpt.foreach { pr =>
+      val txs = pr.digest(settings.nodeSettings.reBroadcastVolume)
+      val msg = Message(
+        new InvSpec(settings.scorexSettings.network.maxInvObjects),
+        Right(InvData(Transaction.ModifierTypeId, txs.map(_.id))),
+        None
+      )
+      networkControllerRef ! SendToNetwork(msg, Broadcast)
+    }
+  }
+
 }
 
 object MempoolAuditor {
@@ -87,11 +106,13 @@ object MempoolAuditor {
 object MempoolAuditorRef {
 
   def props(nodeViewHolderRef: ActorRef,
-            nodeSettings: NodeConfigurationSettings): Props =
-    Props(new MempoolAuditor(nodeViewHolderRef, nodeSettings))
+            networkControllerRef: ActorRef,
+            settings: ErgoSettings): Props =
+    Props(new MempoolAuditor(nodeViewHolderRef, networkControllerRef, settings))
 
   def apply(nodeViewHolderRef: ActorRef,
-            nodeSettings: NodeConfigurationSettings)
+            networkControllerRef: ActorRef,
+            settings: ErgoSettings)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(nodeViewHolderRef, nodeSettings))
+    context.actorOf(props(nodeViewHolderRef, networkControllerRef, settings))
 }

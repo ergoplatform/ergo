@@ -152,7 +152,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   }
 
   if (!ergoSettings.nodeSettings.stateType.requireProofs) {
-    MempoolAuditorRef(nodeViewHolderRef, ergoSettings.nodeSettings)
+    MempoolAuditorRef(nodeViewHolderRef, networkControllerRef, ergoSettings)
   }
 
   private def swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")

@@ -8,7 +8,7 @@ import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.ModifierId
 
-import scala.util.Try
+import scala.util.{Random, Try}
 
 /**
   * Immutable memory pool implementation.
@@ -49,6 +49,16 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
 
   override def filter(condition: ErgoTransaction => Boolean): ErgoMemPool = {
     new ErgoMemPool(pool.filter(condition))
+  }
+
+  override def digest(size: Int): Seq[ErgoTransaction] = {
+    val txs = pool.orderedTransactions.values.toArray
+    val (digest, _, _) = (0 to size).foldLeft(Seq.empty[ErgoTransaction], txs, txs.length) {
+      case ((acc, left, leftSize), _) =>
+        val pick = Random.nextInt(leftSize)
+        (acc :+ left(pick), left.take(pick) ++ left.drop(pick + 1), leftSize - 1)
+    }
+    digest
   }
 
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {

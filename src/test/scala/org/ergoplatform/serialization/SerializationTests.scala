@@ -49,6 +49,10 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
     b.lastHeaders shouldBe recovered.lastHeaders
   }
 
+  property("PoPowProof serialization") {
+    checkSerializationRoundtrip(poPowProofGen, PoPowProofSerializer)
+  }
+
   property("Extension serialization") {
     checkSerializationRoundtrip(extensionGen, ExtensionSerializer)
   }

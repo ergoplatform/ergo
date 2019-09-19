@@ -6,7 +6,7 @@ import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.modifiers.history.PoPowAlgos.updateInterlinks
-import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header, PoPowAlgos, PoPowHeader, PoPowProof}
+import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header, PoPowAlgos, PoPowHeader, PoPowProof, PoPowProofPrefix, PoPowProofSuffix}
 import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -179,7 +179,13 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ChainGenerator {
   lazy val ergoValidationSettingsGen: Gen[ErgoValidationRules] = ergoValidationSettingsUpdateGen
     .map(u => ErgoValidationRules.initial.updated(u))
 
-  def validNiPoPowProofGen(m: Int, k: Int)(params: PoPowParams): Gen[PoPowProof] = for {
+  lazy val poPowProofGen: Gen[PoPowProof] = for {
+    m <- Gen.chooseNum(1, 128)
+    k <- Gen.chooseNum(1, 128)
+    proof <- validNiPoPowProofGen(m, k)
+  } yield proof
+
+  def validNiPoPowProofGen(m: Int, k: Int): Gen[PoPowProof] = for {
     mulM <- Gen.chooseNum(1, 20)
   } yield {
     val chain = genHeaderChain(m * mulM + k, diffBitsOpt = None, useRealTs = false).headers
@@ -192,6 +198,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ChainGenerator {
         val poPowH = PoPowHeader(h, links)
         (acc :+ poPowH, Some(poPowH))
     }._1
+    val params = PoPowParams(m, k, k, .45)
     PoPowAlgos.prove(poPowChain)(params)
   }
 

@@ -93,8 +93,20 @@ object PoPowAlgos {
     */
   def maxLevelOf(header: Header): Int =
     if (!header.isGenesis) {
-      def log2(x: Double) = math.log(x) / math.log(2)
       val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
+      val realTarget = header.powSolution.d
+      val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
+      level.toInt
+    } else {
+      Int.MaxValue
+    }
+
+  /**
+    * Computes absolute level (μ_abs) of the given [[Header]], such that μ_abs = 256 − log(id(B))
+    */
+  def absoluteLevelOf(header: Header): Int =
+    if (!header.isGenesis) {
+      val requiredTarget = org.ergoplatform.mining.q
       val realTarget = header.powSolution.d
       val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
       level.toInt
@@ -112,7 +124,7 @@ object PoPowAlgos {
       if (level == 0) {
         loop(level + 1, acc :+ (0, chain.size)) // Supposing each header is at least of level 0.
       } else {
-        val args = chain.filter(maxLevelOf(_) >= level)
+        val args = chain.filter(absoluteLevelOf(_) >= level)
         if (args.lengthCompare(m) >= 0) loop(level + 1, acc :+ (level, args.size)) else acc
       }
     loop(level = 0).map { case (lvl, size) =>
@@ -232,5 +244,7 @@ object PoPowAlgos {
       }
     checkQualityAt(level)
   }
+
+  private def log2(x: Double) = math.log(x) / math.log(2)
 
 }

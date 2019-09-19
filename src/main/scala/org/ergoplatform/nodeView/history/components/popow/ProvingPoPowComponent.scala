@@ -9,6 +9,9 @@ import scorex.util.{bytesToId, idToBytes}
 
 import scala.util.{Failure, Success, Try}
 
+/**
+  * Component which is able to produce NiPoPow proofs but not to process them.
+  */
 trait ProvingPoPowComponent extends EmptyPoPowComponent {
   self: HeadersComponent with BasicReaders with Persistence with ScorexEncoding =>
 
@@ -20,6 +23,11 @@ trait ProvingPoPowComponent extends EmptyPoPowComponent {
       }
     }
 
+  /**
+    * Generates new NiPoPow proof for the current chain and saves it to the storage,
+    * or simply fetches it from the storage in case proof for the current chain was
+    * created earlier.
+    */
   private def makeNewProof(params: PoPowParams)
                           (prefetchedHeaderOpt: Option[Header]) =
     (prefetchedHeaderOpt orElse bestHeaderOpt)

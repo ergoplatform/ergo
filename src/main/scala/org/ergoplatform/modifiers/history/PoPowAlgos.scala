@@ -102,6 +102,10 @@ object PoPowAlgos {
       Int.MaxValue
     }
 
+  /**
+    * Computes best score of a given chain.
+    * The score value depends on number of µ-superblocks in the given chain.
+    */
   def bestArg(chain: Seq[Header])(m: Int): Int = {
     @scala.annotation.tailrec
     def loop(level: Int, acc: Seq[(Int, Int)] = Seq.empty): Seq[(Int, Int)] =
@@ -116,6 +120,9 @@ object PoPowAlgos {
     }.max.toInt
   }
 
+  /**
+    * Finds the last common header (branching point) between `leftChain` and `rightChain`.
+    */
   def lowestCommonAncestor(leftChain: Seq[Header], rightChain: Seq[Header]): Option[Header] = {
     @scala.annotation.tailrec
     def lcaIndex(startIdx: Int): Int =
@@ -128,6 +135,9 @@ object PoPowAlgos {
     if (leftChain.headOption.exists(rightChain.headOption.contains(_))) Some(leftChain(lcaIndex(1))) else None
   }
 
+  /**
+    * Computes NiPoPow proof for the given `chain` according to a given `params`.
+    */
   def prove(chain: Seq[PoPowHeader])(params: PoPowParams): PoPowProof = {
     require(chain.lengthCompare(params.k + params.m) >= 0,
       s"Can not prove chain of size < ${params.k + params.m}")
@@ -155,7 +165,7 @@ object PoPowAlgos {
   }
 
   /**
-    *  "Goodness" bounds the deviation of superblocks of a certain level from their expected mean
+    *  "Goodness" bounds the deviation of superblocks of a certain level from their expected mean.
     */
   def goodSuperChain(chain: Seq[Header], superChain: Seq[Header], level: Int)(params: PoPowParams): Boolean =
     superChainQuality(chain, superChain, level)(params) && multiLevelQuality(chain, superChain, level)(params)
@@ -164,6 +174,8 @@ object PoPowAlgos {
     superChainSize > ((1 - d) * math.pow(2, -level) * underlyingChainSize)
 
   /**
+    * Checks whether a given `superChain` is qualified against a given full `chain` at a given `level`.
+    *
     * @param chain      - Full chain (C)
     * @param superChain - Super-chain of level µ (C↑µ)
     * @param level      - Level of super-chain (µ)
@@ -178,40 +190,45 @@ object PoPowAlgos {
       val downChainSuffixSize = downChain.takeRight(mValue).size
       def isLocallyGood(m: Int) = locallyGood(
         math.min(superChainSuffixSize, m), math.min(downChainSuffixSize, m), level, params.d)
-      mValue match {
-        case mToTest if mToTest < chain.size && isLocallyGood(mToTest)=>
-          checkLocalGoodnessAt(mToTest + 1)
-        case mToTest if mToTest < chain.size =>
-          false
-        case _ =>
-          true
+      if (mValue < chain.size && isLocallyGood(mValue)) {
+        checkLocalGoodnessAt(mValue + 1)
+      } else if (mValue < chain.size) {
+        false
+      } else {
+        true
       }
     }
     checkLocalGoodnessAt(params.m)
   }
 
+  /**
+    * Checks whether a given `superChain` is qualified against a given full `chain` at all levels.
+    *
+    * @param chain      - Full chain (C)
+    * @param superChain - Super-chain of level µ (C↑µ)
+    * @param level      - Level of super-chain (µ)
+    */
   def multiLevelQuality(chain: Seq[Header], superChain: Seq[Header], level: Int)
                        (params: PoPowParams): Boolean = {
     val downChain = chain.dropWhile(_ == superChain.head).takeWhile(_ == superChain.last) // C'↓
     @scala.annotation.tailrec
     def checkQualityAt(levelToCheck: Int): Boolean =
-      levelToCheck match {
-        case lvl if lvl > 0 =>
-          val subChain = downChain.filter(maxLevelOf(_) >= lvl - 1) // C* = C'↓↑µ'−1
-          if (subChain.nonEmpty) {
-            val upperSubChainSize = subChain.count(maxLevelOf(_) >= lvl) // |C*↑µ'|
-            if (upperSubChainSize >= params.k1 &&
-              !(subChain.count(maxLevelOf(_) >= level) >=
-                (1 - params.d) * math.pow(2, level - lvl) * upperSubChainSize)) {
-              false
-            } else {
-              checkQualityAt(lvl - 1)
-            }
+      if (levelToCheck > 0) {
+        val subChain = downChain.filter(maxLevelOf(_) >= levelToCheck - 1) // C* = C'↓↑µ'−1
+        if (subChain.nonEmpty) {
+          val upperSubChainSize = subChain.count(maxLevelOf(_) >= levelToCheck) // |C*↑µ'|
+          if (upperSubChainSize >= params.k1 &&
+            !(subChain.count(maxLevelOf(_) >= level) >=
+              (1 - params.d) * math.pow(2, level - levelToCheck) * upperSubChainSize)) {
+            false
           } else {
-            checkQualityAt(lvl - 1)
+            checkQualityAt(levelToCheck - 1)
           }
-        case _ =>
-          true
+        } else {
+          checkQualityAt(levelToCheck - 1)
+        }
+      } else {
+        true
       }
     checkQualityAt(level)
   }

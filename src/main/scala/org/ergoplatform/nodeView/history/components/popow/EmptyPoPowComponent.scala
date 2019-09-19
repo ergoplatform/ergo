@@ -13,7 +13,7 @@ trait EmptyPoPowComponent extends PoPowComponent {
   self: HeadersComponent with ScorexEncoding =>
 
   final def validate(m: PoPowProof): Try[Unit] =
-    Failure(new Error("Regime that do not process PoPoWProof"))
+    Failure(new Error("PoPowProof validation is not supported"))
 
   final def process(m: PoPowProof): ProgressInfo[ErgoPersistentModifier] =
     ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)

@@ -53,7 +53,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
 
   override def randomDigest(txsNum: Int): Seq[ErgoTransaction] = {
     val txs = pool.orderedTransactions.values.toArray
-    randIndexes(txsNum, txs.length).map(txs)
+    randIndexes(math.min(txsNum, txs.length), txs.length).map(txs)
   }
 
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {
@@ -89,8 +89,18 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
       .map(_.value)
       .sum
 
-  private def randIndexes(qty: Int, max: Int): Seq[Int] =
-    (0 to qty).map(_ => Random.nextInt(max))
+  private def randIndexes(qty: Int, max: Int): Seq[Int] = {
+    require(qty <= max)
+    @scala.annotation.tailrec
+    def loop(acc: Seq[Int], qtyLeft: Int): Seq[Int] =
+      if (qtyLeft > 0) {
+        val idx = Random.nextInt(max)
+        if (acc.contains(idx)) loop(acc, qtyLeft) else loop(acc :+ idx, qtyLeft - 1)
+      } else {
+        acc
+      }
+    loop(Array.empty[Int], qty)
+  }
 
 }
 
@@ -99,9 +109,13 @@ object ErgoMemPool {
   sealed trait ProcessingOutcome
 
   object ProcessingOutcome {
+
     case object Accepted extends ProcessingOutcome
+
     case class Declined(e: Throwable) extends ProcessingOutcome
+
     case class Invalidated(e: Throwable) extends ProcessingOutcome
+
   }
 
   type MemPoolRequest = Seq[ModifierId]

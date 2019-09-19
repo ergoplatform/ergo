@@ -51,9 +51,10 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     new ErgoMemPool(pool.filter(condition))
   }
 
-  override def randomDigest(txsNum: Int): Seq[ErgoTransaction] = {
+  override def randomSlice(txsNum: Int): Seq[ErgoTransaction] = {
     val txs = pool.orderedTransactions.values.toArray
-    randIndexes(math.min(txsNum, txs.length), txs.length).map(txs)
+    val maxTxs = txs.length
+    if (maxTxs <= txsNum) txs else randSliceIndexes(txsNum, txs.length).map(txs)
   }
 
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {
@@ -89,17 +90,17 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
       .map(_.value)
       .sum
 
-  private def randIndexes(qty: Int, max: Int): Seq[Int] = {
+  private def randSliceIndexes(qty: Int, max: Int): Seq[Int] = {
     require(qty <= max)
+    val idx = Random.nextInt(max)
     @scala.annotation.tailrec
-    def loop(acc: Seq[Int], qtyLeft: Int): Seq[Int] =
-      if (qtyLeft > 0) {
-        val idx = Random.nextInt(max)
-        if (acc.contains(idx)) loop(acc, qtyLeft) else loop(acc :+ idx, qtyLeft - 1)
+    def loop(acc: Seq[Int], idx: Int, leftQty: Int): Seq[Int] =
+      if (leftQty > 0) {
+        if (idx <= max) loop(acc :+ idx, idx + 1, leftQty - 1) else loop(acc, 0, leftQty)
       } else {
         acc
       }
-    loop(Array.empty[Int], qty)
+    loop(Array.empty[Int], idx, qty)
   }
 
 }

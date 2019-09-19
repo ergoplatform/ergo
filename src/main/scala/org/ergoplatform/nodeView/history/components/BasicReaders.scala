@@ -6,6 +6,9 @@ import scorex.util.ModifierId
 
 import scala.reflect.ClassTag
 
+/**
+  * A component proving an access to most common history readers.
+  */
 trait BasicReaders {
 
   def bestHeaderIdOpt: Option[ModifierId]
@@ -14,6 +17,11 @@ trait BasicReaders {
 
   def headerIdsAtHeight(height: Int): Seq[ModifierId]
 
+  /**
+    * Read a modifier of some expected type form history.
+    * @param id - modifier id
+    * @tparam T - expected type of modifiers
+    */
   def typedModifierById[T <: ErgoPersistentModifier : ClassTag](id: ModifierId): Option[T]
 
   def contains(id: ModifierId): Boolean

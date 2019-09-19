@@ -15,8 +15,8 @@ import scala.collection.immutable.TreeMap
 import scala.util.Try
 
 /**
-  * Contains functions required by History to process Transactions and Proofs when we have them.
-  * Prune modifiers older then blocksToKeep.
+  * A component providing functionality required for full block processing.
+  * Prunes modifiers older then blocksToKeep.
   */
 trait FullBlockComponent extends HeadersComponent {
   self: ChainSyncComponent

@@ -13,8 +13,8 @@ import scala.reflect.ClassTag
 import scala.util.Try
 
 /**
-  * Trait that implements BlockSectionProcessor interfaces for regimes where the node
-  * downloads and process full blocks.
+  * A component providing functionality required for block sections processing.
+  * Prunes modifiers older then blocksToKeep.
   */
 trait FullBlockSectionComponent extends BlockSectionComponent {
   self: FullBlockComponent

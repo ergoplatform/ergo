@@ -22,7 +22,7 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 /**
-  * Contains all functions required by History to process Headers.
+  * A component providing functionality required for headers processing.
   */
 trait HeadersComponent {
   self: ChainSyncComponent
@@ -153,7 +153,8 @@ trait HeadersComponent {
     forkIds :+ self
   }
 
-  /** Validates given header
+  /**
+    * Validates given header
     *
     * @return Success() if header is valid, Failure(error) otherwise
     */

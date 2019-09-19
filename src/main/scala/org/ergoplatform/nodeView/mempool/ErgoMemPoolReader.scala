@@ -25,6 +25,6 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
   /** Returns a sequence of randomly selected transactions.
     * @param txsNum - number of transactions in the digest
     */
-  def randomDigest(txsNum: Int): Seq[ErgoTransaction]
+  def randomSlice(txsNum: Int): Seq[ErgoTransaction]
 
 }

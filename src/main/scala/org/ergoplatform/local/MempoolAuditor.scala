@@ -87,7 +87,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
 
   private def broadcastTransactions(): Unit = {
     poolReaderOpt.foreach { pr =>
-      val txs = pr.digest(settings.nodeSettings.reBroadcastVolume)
+      val txs = pr.randomDigest(settings.nodeSettings.reBroadcastVolume)
       val msg = Message(
         new InvSpec(settings.scorexSettings.network.maxInvObjects),
         Right(InvData(Transaction.ModifierTypeId, txs.map(_.id))),

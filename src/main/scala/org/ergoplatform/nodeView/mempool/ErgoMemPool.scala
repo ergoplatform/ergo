@@ -51,14 +51,9 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     new ErgoMemPool(pool.filter(condition))
   }
 
-  override def digest(size: Int): Seq[ErgoTransaction] = {
+  override def randomDigest(txsNum: Int): Seq[ErgoTransaction] = {
     val txs = pool.orderedTransactions.values.toArray
-    val (digest, _, _) = (0 to size).foldLeft(Seq.empty[ErgoTransaction], txs, txs.length) {
-      case ((acc, left, leftSize), _) =>
-        val pick = Random.nextInt(leftSize)
-        (acc :+ left(pick), left.take(pick) ++ left.drop(pick + 1), leftSize - 1)
-    }
-    digest
+    randIndexes(txsNum, txs.length).map(txs)
   }
 
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {
@@ -88,13 +83,14 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     }
   }
 
-  private def extractFee(tx: ErgoTransaction): Long = {
-    val propositionBytes = settings.chainSettings.monetary.feePropositionBytes
+  private def extractFee(tx: ErgoTransaction): Long =
     ErgoState.boxChanges(Seq(tx))._2
       .filter(_.ergoTree == settings.chainSettings.monetary.feeProposition)
       .map(_.value)
       .sum
-  }
+
+  private def randIndexes(qty: Int, max: Int): Seq[Int] =
+    (0 to qty).map(_ => Random.nextInt(max))
 
 }
 

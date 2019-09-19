@@ -95,4 +95,14 @@ class PoPowAlgosSpec
     bestArg(proof0.prefix.chain.map(_.header))(m) > bestArg(proof1.prefix.chain.map(_.header))(m) shouldBe true
   }
 
+  property("goodSuperChain") {
+    val chain0 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val proof0 = prove(chain0)(poPowParams)
+    val goodSuperChain = proof0.chain
+    val maxLevel = goodSuperChain.last.interlinks.size - 1
+
+    PoPowAlgos.goodSuperChain(
+      goodSuperChain.map(_.header), chain0.map(_.header), maxLevel)(poPowParams) shouldBe true
+  }
+
 }

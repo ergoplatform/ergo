@@ -182,6 +182,10 @@ object PoPowAlgos {
   def goodSuperChain(chain: Seq[Header], superChain: Seq[Header], level: Int)(params: PoPowParams): Boolean =
     superChainQuality(chain, superChain, level)(params) && multiLevelQuality(chain, superChain, level)(params)
 
+  /**
+    * Checks μ-local goodness of μ-superchain of size `superChainSize` with respect to the underlying
+    * chain of size `underlyingChainSize` and security parameter `d`.
+    */
   def locallyGood(superChainSize: Int, underlyingChainSize: Int, level: Int, d: Double): Boolean =
     superChainSize > ((1 - d) * math.pow(2, -level) * underlyingChainSize)
 

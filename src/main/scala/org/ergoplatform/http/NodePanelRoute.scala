@@ -7,6 +7,6 @@ final case class NodePanelRoute()(implicit system: ActorSystem)
   extends Directives {
 
   val route: Route =
-    path("panel")(getFromResource("panel/index.html")) ~
+    pathPrefix("panel")(getFromResource("panel/index.html")) ~
       getFromResourceDirectory("panel")
 }

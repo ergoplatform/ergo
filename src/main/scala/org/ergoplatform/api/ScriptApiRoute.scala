@@ -5,15 +5,16 @@ import akka.http.scaladsl.server.{Directive1, Route}
 import io.circe.{ACursor, Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.{ErgoAddressJsonEncoder, ErgoWalletReader}
-import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoBox, Pay2SAddress, Pay2SHAddress}
+import org.ergoplatform.settings.{ErgoSettings, ValidationRules}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoLikeContext, ErgoLikeInterpreter, ErgoLikeTransactionTemplate, JsonCodecs, Pay2SAddress, Pay2SHAddress, UnsignedInput}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import sigmastate.Values.{ErgoTree, EvaluatedValue, SValue}
-import sigmastate.{SBoolean, SSigmaProp, SType}
+import sigmastate.{AvlTreeData, SBoolean, SSigmaProp, SType}
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.eval.CompiletimeIRContext
+import sigmastate.eval.{CompiletimeIRContext, RuntimeIRContext}
 import sigmastate.lang.SigmaCompiler
+import sigmastate.interpreter._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -27,11 +28,15 @@ import io.circe.generic.auto._
 import cats.syntax.either._
 import io.circe.Decoder.Result
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
-import sigmastate.interpreter.{Interpreter, InterpreterContext}
+import scorex.crypto.hash.Digest32
+import sigmastate.interpreter.{ContextExtension, Interpreter, InterpreterContext}
 import sigmastate.serialization.DataJsonEncoder
+import org.ergoplatform.ErgoScriptPredef.TrueProp
+import org.ergoplatform.validation.SigmaValidationSettings
 
 case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
@@ -103,7 +108,8 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
 
   case class ExecuteRequest(script: String,
-                            env: Map[String,Any])
+                            env: Map[String,Any],
+                            ctx: ErgoLikeContext)
     extends TransactionRequest
 
 
@@ -114,12 +120,13 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     }
   }
 
-  class ExecuteRequestDecoder(settings: ErgoSettings) extends Decoder[ExecuteRequest]  {
+  class ExecuteRequestDecoder(settings: ErgoSettings) extends Decoder[ExecuteRequest] with JsonCodecs {
     def apply(cursor: HCursor): Decoder.Result[ExecuteRequest] = {
       for {
         script <- cursor.downField("script").as[String]
         env <- cursor.downField("env").as[Map[String,Any]]
-      } yield ExecuteRequest(script, env.asInstanceOf[Map[String,Any]])
+        ctx <- cursor.downField("env").as[ErgoLikeContext]
+      } yield ExecuteRequest(script, env.asInstanceOf[Map[String,Any]], ctx)
     }
   }
 
@@ -129,8 +136,13 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     (path("executeWithContext") & post & entity(as[ExecuteRequest])) { req =>
       compileSource(req.script, req.env).fold(
         e => BadRequest(e.getMessage),
-        tree => ApiResponse(tree.asJson)
-           //ApiResponse(Json.obj(ErgoProvingInterpreter(IndexedSeq[ExtendedSecretKey](), ctx).reduceToCrypto(interpreterContext, exp)))
+        tree => {
+          implicit val irc = new RuntimeIRContext()
+          val interpreter = new ErgoLikeInterpreter()
+          val prop = interpreter.propositionFromErgoTree(tree, req.ctx)
+          val res = interpreter.reduceToCrypto(req.ctx, prop)
+          ApiResponse(Json.obj(res))
+        }
       )
     }
 

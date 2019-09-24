@@ -303,6 +303,20 @@ components:
           description: Sigma source to be compiled
           type: string
 
+    ExecuteScript:
+      type: object
+      required:
+      - script
+      - env
+      properties:
+        script:
+          description: Sigma script to be executed
+          type: string
+        env:
+          description: Environment for compiler
+          type: object
+          nullable: true
+
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
       type: object
@@ -2507,3 +2521,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
+  /script/executeWithContext:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Execute script with context
+      operationId: executeWithContext
+      tags:
+        - script
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteScript'
+      responses:
+        '200':
+          description: Result of reduceToCrypto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SValue'
+        '400':
+          description: Compiler error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+

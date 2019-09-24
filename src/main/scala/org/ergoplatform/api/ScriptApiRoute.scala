@@ -2,27 +2,36 @@ package org.ergoplatform.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
-import io.circe.{Json, Encoder}
+import io.circe.{ACursor, Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.wallet.ErgoWalletReader
+import org.ergoplatform.nodeView.wallet.{ErgoAddressJsonEncoder, ErgoWalletReader}
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoAddressEncoder, ErgoAddress, Pay2SAddress, Pay2SHAddress}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoBox, Pay2SAddress, Pay2SHAddress}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
-import sigmastate.Values.ErgoTree
-import sigmastate.{SBoolean, SSigmaProp}
+import sigmastate.Values.{ErgoTree, EvaluatedValue, SValue}
+import sigmastate.{SBoolean, SSigmaProp, SType}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.CompiletimeIRContext
 import sigmastate.lang.SigmaCompiler
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 import akka.pattern.ask
-import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
+import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, PaymentRequestDecoder, TransactionRequest}
 import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 import io.circe.syntax._
+import io.circe.generic.auto._
+import cats.syntax.either._
+import io.circe.Decoder.Result
+import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
+import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
+import org.ergoplatform.wallet.secrets.ExtendedSecretKey
+import sigmastate.interpreter.{Interpreter, InterpreterContext}
+import sigmastate.serialization.DataJsonEncoder
 
 case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
@@ -37,8 +46,9 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     toStrictEntity(10.seconds) {
       corsHandler {
         p2shAddressR ~
-          p2sAddressR ~
-          addressToTree
+        p2sAddressR ~
+        addressToTree ~
+         executeWithContext
       }
     }
   }
@@ -90,6 +100,39 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       )
     }
   }
+
+
+  case class ExecuteRequest(script: String,
+                            env: Map[String,Any])
+    extends TransactionRequest
+
+
+  implicit final val decodeMap: Decoder[Any] = new Decoder[Any] {
+    final def apply(c: HCursor): Result[Any] = {
+      val x = DataJsonEncoder.decode(c.value)
+      Right(x)
+    }
+  }
+
+  class ExecuteRequestDecoder(settings: ErgoSettings) extends Decoder[ExecuteRequest]  {
+    def apply(cursor: HCursor): Decoder.Result[ExecuteRequest] = {
+      for {
+        script <- cursor.downField("script").as[String]
+        env <- cursor.downField("env").as[Map[String,Any]]
+      } yield ExecuteRequest(script, env.asInstanceOf[Map[String,Any]])
+    }
+  }
+
+  implicit val executeRequestDecoder: ExecuteRequestDecoder = new ExecuteRequestDecoder(ergoSettings)
+
+  def executeWithContext: Route =
+    (path("executeWithContext") & post & entity(as[ExecuteRequest])) { req =>
+      compileSource(req.script, req.env).fold(
+        e => BadRequest(e.getMessage),
+        tree => ApiResponse(tree.asJson)
+           //ApiResponse(Json.obj(ErgoProvingInterpreter(IndexedSeq[ExtendedSecretKey](), ctx).reduceToCrypto(interpreterContext, exp)))
+      )
+    }
 
   def addressToTree: Route = (get & path("addressToTree" / Segment)) { addressStr =>
     addressEncoder.fromString(addressStr)

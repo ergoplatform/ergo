@@ -303,11 +303,201 @@ components:
           description: Sigma source to be compiled
           type: string
 
+    ErgoLikeTransaction:
+      type: object
+      required:
+        - id
+        - inputs
+        - dataInputs
+        - outputs
+      properties:
+        id:
+          type: object
+          $ref: '#/components/schemas/ModifierId'
+        inputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionInput'
+        dataInputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
+        outputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+
+    Header:
+      type: object
+      required:
+        - id
+        - timestamp
+        - version
+        - adProofsRoot
+        - stateRoot
+        - transactionsRoot
+        - nBits
+        - extensionRoot
+        - height
+        - parentId
+        - votes
+      properties:
+        id:
+          $ref: '#/components/schemas/ModifierId'
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        version:
+          $ref: '#/components/schemas/Version'
+        adProofsRoot:
+          $ref: '#/components/schemas/Digest32'
+        stateRoot:
+          $ref: '#/components/schemas/ADDigest'
+        transactionsRoot:
+          $ref: '#/components/schemas/Digest32'
+        nBits:
+          type: integer
+          format: int64
+          minimum: 0
+          example: 19857408
+        extensionRoot:
+          $ref: '#/components/schemas/Digest32'
+        height:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 667
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+        votes:
+          $ref: '#/components/schemas/Votes'
+        minerPk:
+          $ref: '#/components/schemas/Digest32'
+        powOnetimePk:
+          $ref: '#/components/schemas/Digest32'
+        powNonce:
+          $ref: '#/components/schemas/Digest32'
+        powDistance:
+          type: string
+          description: sigma.BigInt
+
+    PreHeader:
+      type: object
+      required:
+        - timestamp
+        - version
+        - nBits
+        - height
+        - parentId
+        - votes
+      properties:
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        version:
+          $ref: '#/components/schemas/Version'
+        nBits:
+          type: integer
+          format: int64
+          minimum: 0
+          example: 19857408
+        height:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 667
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+        votes:
+          $ref: '#/components/schemas/Votes'
+        minerPk:
+          $ref: '#/components/schemas/Digest32'
+
+    AvlTreeData:
+      required:
+        - digest
+      properties:
+        digest:
+          $ref: '#/components/schemas/Digest32'
+        treeFlagsByte:
+          type: integer
+          format: int32
+        keyLength:
+          type: integer
+          format: int32
+        valueLength:
+          type: integer
+          format: int32
+          nullable: true
+
+
+    ErgoLikeContext:
+      required:
+       - astBlockUtxoRoot
+       - headers
+       - preHeader
+       - dataBoxes
+       - boxesToSpend
+       - spendingTransaction
+       - selfIndex
+       - extension
+       - validationSettings
+       - costLimit
+       - initCost
+      properties:
+        astBlockUtxoRoot:
+          type: object
+          description: state root before current block application
+          $ref: '#/components/schemas/AvlTreeData'
+        headers:
+          type: array
+          description: fixed number of last block headers in descending order (first header is the newest one)
+          items:
+            $ref: '#/components/schemas/Header'
+        preHeader:
+          type: object
+          description: fields of block header with the current `spendingTransaction`, that can be predicted by a miner before it's formation
+          $ref: '#/components/schemas/PreHeader'
+        dataBoxes:
+          type: array
+          description: boxes, that corresponds to id's of `spendingTransaction.dataInputs`
+          items:
+            type: ErgoBox
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+        boxesToSpend:
+          type: array
+          description: boxes, that corresponds to id's of `spendingTransaction.inputs`
+          items:
+            type: ErgoBox
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+        spendingTransaction:
+          type: object
+          description: transaction that contains `self` box
+          $ref: '#/components/schemas/ErgoLikeTransaction'
+        selfIndex:
+          type: integer
+          format: int64
+          description: index of the box in `boxesToSpend` that contains the script we're evaluating
+        extension:
+          type: object
+          description: prover-defined key-value pairs, that may be used inside a script
+        validationSettings:
+          type: string
+          description: validataion parameters passed to Interpreter.verify to detect soft-fork conditions
+        costLimit:
+          type: integer
+          format: int64
+          description: hard limit on accumulated execution cost, if exceeded lead to CostLimitException to be thrown
+        initCost:
+          type: integer
+          format: int64
+          description: initial value of execution cost already accumulated before Interpreter.verify is called
+
+
     ExecuteScript:
       type: object
       required:
       - script
       - env
+      - ctx
       properties:
         script:
           description: Sigma script to be executed
@@ -316,6 +506,11 @@ components:
           description: Environment for compiler
           type: object
           nullable: true
+        ctx:
+          description: Interpretator context
+          type: object
+          nullable: true
+          $ref: '#/components/schemas/ErgoLikeContext'
 
     PaymentRequest:
       description: Request for generation of payment transaction to a given address

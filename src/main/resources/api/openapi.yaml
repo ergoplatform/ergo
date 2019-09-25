@@ -512,6 +512,51 @@ components:
           nullable: true
           $ref: '#/components/schemas/ErgoLikeContext'
 
+    SigmaBoolean:
+      description: Algebraic data type of sigma proposition expressions
+      required:
+        - op
+      properties:
+        op:
+          type: integer
+          description: Sigma opCode
+          format: int8
+        h:
+          $ref: '#/components/schemas/HexString'
+        g:
+          $ref: '#/components/schemas/HexString'
+        u:
+          $ref: '#/components/schemas/HexString'
+        v:
+          $ref: '#/components/schemas/HexString'
+        and:
+          type: array
+          items:
+            $ref: '#/components/schemas/SigmaBoolean'
+        or:
+          type: array
+          items:
+            $ref: '#/components/schemas/SigmaBoolean'
+        threshold:
+          type: array
+          items:
+            $ref: '#/components/schemas/SigmaBoolean'
+
+    CryptoResult:
+      description: Result of executeWithContext request (reduceToCrypto)
+      type: object
+      required:
+      - value
+      - cost
+      properties:
+        value:
+          description: value of SigmaProp type which represents a statement verifiable via sigma protocol
+          $ref: '#/components/schemas/SigmaBoolean'
+        cost:
+          description: Estimated cost of contract execution
+          type: integer
+          format: int64
+
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
       type: object
@@ -2737,7 +2782,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SValue'
+                $ref: '#/components/schemas/CryptoResult'
         '400':
           description: Compiler error
           content:

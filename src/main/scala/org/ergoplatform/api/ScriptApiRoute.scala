@@ -9,8 +9,8 @@ import org.ergoplatform.settings.{ErgoSettings, ValidationRules}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoLikeContext, ErgoLikeInterpreter, ErgoLikeTransactionTemplate, JsonCodecs, Pay2SAddress, Pay2SHAddress, UnsignedInput}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
-import sigmastate.Values.{ErgoTree, EvaluatedValue, SValue}
-import sigmastate.{AvlTreeData, SBoolean, SSigmaProp, SType}
+import sigmastate.Values.{ErgoTree, EvaluatedValue, SValue, SigmaBoolean}
+import sigmastate.{AvlTreeData, CAND, COR, CTHRESHOLD, SBoolean, SSigmaProp, SType, TrivialProp}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.{CompiletimeIRContext, RuntimeIRContext}
 import sigmastate.lang.SigmaCompiler
@@ -36,7 +36,15 @@ import scorex.crypto.hash.Digest32
 import sigmastate.interpreter.{ContextExtension, Interpreter, InterpreterContext}
 import sigmastate.serialization.DataJsonEncoder
 import org.ergoplatform.ErgoScriptPredef.TrueProp
+import org.ergoplatform.api.ApiEncoderOption.Detalization
 import org.ergoplatform.validation.SigmaValidationSettings
+import org.ergoplatform.wallet.boxes.TrackedBox
+import sigmastate.Values.SigmaBoolean.serializer
+import sigmastate.Values.SigmaBoolean.serializer.{dhtSerializer, dlogSerializer}
+import sigmastate.basics.ProveDHTuple
+import sigmastate.interpreter.CryptoConstants.EcPointType
+
+case class CryptoResult(value: SigmaBoolean, cost: Long)
 
 case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
@@ -125,12 +133,37 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       for {
         script <- cursor.downField("script").as[String]
         env <- cursor.downField("env").as[Map[String,Any]]
-        ctx <- cursor.downField("env").as[ErgoLikeContext]
+        ctx <- cursor.downField("ctx").as[ErgoLikeContext]
       } yield ExecuteRequest(script, env.asInstanceOf[Map[String,Any]], ctx)
     }
   }
 
   implicit val executeRequestDecoder: ExecuteRequestDecoder = new ExecuteRequestDecoder(ergoSettings)
+
+  implicit def sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
+    sigma =>
+      val op = sigma.opCode.toByte.asJson
+      sigma match {
+        case dlog: ProveDlog   => Map("op" -> op, "h"->dlog.h.asJson).asJson
+        case dht: ProveDHTuple => Map("op" -> op, "g"->dht.g.asJson, "h"->dht.h.asJson, "u"->dht.u.asJson, "v"->dht.v.asJson).asJson
+        case _: TrivialProp => Map("op" -> op).asJson // besides opCode no additional bytes
+        case and: CAND =>
+          Map("op" -> op, "and" -> and.sigmaBooleans.map(_.asJson).asJson).asJson
+        case or: COR =>
+          Map("op" -> op, "or" -> or.sigmaBooleans.map(_.asJson).asJson).asJson
+        case th: CTHRESHOLD =>
+          Map("op" -> op, "threshold" -> th.sigmaBooleans.map(_.asJson).asJson).asJson
+      }
+  }
+
+  implicit def cryptResultEncoder: Encoder[CryptoResult] = {
+    res =>
+      val fields = Map(
+        "value" -> res.value.asJson,
+        "cost" -> res.cost.asJson
+      )
+      fields.asJson
+  }
 
   def executeWithContext: Route =
     (path("executeWithContext") & post & entity(as[ExecuteRequest])) { req =>
@@ -139,9 +172,12 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         tree => {
           implicit val irc = new RuntimeIRContext()
           val interpreter = new ErgoLikeInterpreter()
-          val prop = interpreter.propositionFromErgoTree(tree, req.ctx)
-          val res = interpreter.reduceToCrypto(req.ctx, prop)
-          ApiResponse(Json.obj(res))
+          val prop = interpreter.propositionFromErgoTree(tree, req.ctx.asInstanceOf[interpreter.CTX])
+          val res = interpreter.reduceToCrypto(req.ctx.asInstanceOf[interpreter.CTX], prop)
+          res.fold(
+            e => BadRequest(e.getMessage),
+            s => ApiResponse(CryptoResult(s._1, s._2).asJson)
+          )
         }
       )
     }

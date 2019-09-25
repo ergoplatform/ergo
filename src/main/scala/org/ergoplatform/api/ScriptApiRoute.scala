@@ -2,47 +2,32 @@ package org.ergoplatform.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
-import io.circe.{ACursor, Decoder, Encoder, HCursor, Json}
+import akka.pattern.ask
+import io.circe.Decoder.Result
+import io.circe.generic.auto._
+import io.circe.syntax._
+import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.wallet.{ErgoAddressJsonEncoder, ErgoWalletReader}
-import org.ergoplatform.settings.{ErgoSettings, ValidationRules}
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoLikeContext, ErgoLikeInterpreter, ErgoLikeTransactionTemplate, JsonCodecs, Pay2SAddress, Pay2SHAddress, UnsignedInput}
+import org.ergoplatform.nodeView.wallet.ErgoWalletReader
+import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
+import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform._
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
-import sigmastate.Values.{ErgoTree, EvaluatedValue, SValue, SigmaBoolean}
-import sigmastate.{AvlTreeData, CAND, COR, CTHRESHOLD, SBoolean, SSigmaProp, SType, TrivialProp}
+import scorex.core.settings.RESTApiSettings
+import scorex.util.encode.Base16
+import sigmastate.Values.{ErgoTree, SigmaBoolean}
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.eval.{CompiletimeIRContext, RuntimeIRContext}
+import sigmastate.basics.ProveDHTuple
+import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
 import sigmastate.lang.SigmaCompiler
-import sigmastate.interpreter._
+import sigmastate.serialization.DataJsonEncoder
+import sigmastate._
+import special.sigma.AnyValue
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
-import akka.pattern.ask
-import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, PaymentRequestDecoder, TransactionRequest}
-import scorex.core.settings.RESTApiSettings
-import scorex.util.encode.Base16
-import io.circe.syntax._
-import io.circe.generic.auto._
-import cats.syntax.either._
-import io.circe.Decoder.Result
-import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
-import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
-import org.ergoplatform.wallet.secrets.ExtendedSecretKey
-import scorex.crypto.hash.Digest32
-import sigmastate.interpreter.{ContextExtension, Interpreter, InterpreterContext}
-import sigmastate.serialization.DataJsonEncoder
-import org.ergoplatform.ErgoScriptPredef.TrueProp
-import org.ergoplatform.api.ApiEncoderOption.Detalization
-import org.ergoplatform.validation.SigmaValidationSettings
-import org.ergoplatform.wallet.boxes.TrackedBox
-import sigmastate.Values.SigmaBoolean.serializer
-import sigmastate.Values.SigmaBoolean.serializer.{dhtSerializer, dlogSerializer}
-import sigmastate.basics.ProveDHTuple
-import sigmastate.interpreter.CryptoConstants.EcPointType
 
 case class CryptoResult(value: SigmaBoolean, cost: Long)
 
@@ -60,8 +45,8 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       corsHandler {
         p2shAddressR ~
         p2sAddressR ~
-        addressToTree ~
-         executeWithContext
+        addressToTreeR ~
+        executeWithContextR
       }
     }
   }
@@ -118,7 +103,6 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   case class ExecuteRequest(script: String,
                             env: Map[String,Any],
                             ctx: ErgoLikeContext)
-    extends TransactionRequest
 
 
   implicit final val decodeMap: Decoder[Any] = new Decoder[Any] {
@@ -134,7 +118,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         script <- cursor.downField("script").as[String]
         env <- cursor.downField("env").as[Map[String,Any]]
         ctx <- cursor.downField("ctx").as[ErgoLikeContext]
-      } yield ExecuteRequest(script, env.asInstanceOf[Map[String,Any]], ctx)
+      } yield ExecuteRequest(script, env.asInstanceOf[Map[String,AnyValue]], ctx)
     }
   }
 
@@ -146,7 +130,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       sigma match {
         case dlog: ProveDlog   => Map("op" -> op, "h"->dlog.h.asJson).asJson
         case dht: ProveDHTuple => Map("op" -> op, "g"->dht.g.asJson, "h"->dht.h.asJson, "u"->dht.u.asJson, "v"->dht.v.asJson).asJson
-        case _: TrivialProp => Map("op" -> op).asJson // besides opCode no additional bytes
+        case tp: TrivialProp => Map("op" -> op, "condition"->tp.condition.asJson).asJson
         case and: CAND =>
           Map("op" -> op, "and" -> and.sigmaBooleans.map(_.asJson).asJson).asJson
         case or: COR =>
@@ -165,13 +149,13 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       fields.asJson
   }
 
-  def executeWithContext: Route =
+  def executeWithContextR: Route =
     (path("executeWithContext") & post & entity(as[ExecuteRequest])) { req =>
       compileSource(req.script, req.env).fold(
         e => BadRequest(e.getMessage),
         tree => {
-          implicit val irc = new RuntimeIRContext()
-          val interpreter = new ErgoLikeInterpreter()
+          implicit val irc : IRContext = new RuntimeIRContext()
+          val interpreter : ErgoLikeInterpreter = new ErgoLikeInterpreter()
           val prop = interpreter.propositionFromErgoTree(tree, req.ctx.asInstanceOf[interpreter.CTX])
           val res = interpreter.reduceToCrypto(req.ctx.asInstanceOf[interpreter.CTX], prop)
           res.fold(
@@ -182,7 +166,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       )
     }
 
-  def addressToTree: Route = (get & path("addressToTree" / Segment)) { addressStr =>
+  def addressToTreeR: Route = (get & path("addressToTree" / Segment)) { addressStr =>
     addressEncoder.fromString(addressStr)
       .map(address => address.script.bytes)
       .map(Base16.encode)

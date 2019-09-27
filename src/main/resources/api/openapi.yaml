@@ -1580,7 +1580,7 @@ paths:
 
   /utils/ergoTreeToAddress/{ergoTreeHex}:
     get:
-      summary: Generate Pay-To-Public-Key address from hex-encoded ErgoTree
+      summary: Generate Ergo address from hex-encoded ErgoTree
       operationId: ErgoTreeToAddress
       tags:
         - utils
@@ -1594,7 +1594,7 @@ paths:
             example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
       responses:
         '200':
-          description: Pay-to-public-key (P2PK) address
+          description: Ergo address
           content:
             application/json:
               schema:

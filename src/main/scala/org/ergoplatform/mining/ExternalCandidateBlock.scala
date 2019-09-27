@@ -2,7 +2,7 @@ package org.ergoplatform.mining
 
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
-import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.http.api.ApiCodecs
 import sigmastate.basics.DLogProtocol.ProveDlog
 
 case class ExternalCandidateBlock(msg: Array[Byte], b: BigInt, pk: ProveDlog)

@@ -51,16 +51,16 @@ object FoundationBoxSigner extends App {
   val preSign: ACTION = 1
   val sign: ACTION = 2
 
-  val height = 55500
+  val height = 63300
 
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
   val action: ACTION = generateCommitment
 
   // hints provided by a cosigner
-  val commitmentStringOpt: Option[String] = None
+  val commitmentStringOpt: Option[String] = Some("02e19e010c65e07882d60fa01b8fd96265b96186c6cbe710eeef6766f1ce78e6a2")
   val ownRandomnessStringOpt: Option[String] = None
-  val partialSignarureStringOpt: Option[String] = None
+  val partialSignatureStringOpt: Option[String] = None
 
   //signer is generating commitment and final valid sig
   val signerIndex = 1 //0, 1, 2
@@ -68,7 +68,7 @@ object FoundationBoxSigner extends App {
   val cmtOpt = commitmentStringOpt.map(Base16.decode).map(_.get).map(SigmaSerializer.startReader(_))
                   .map(GroupElementSerializer.parse).map(FirstDLogProverMessage.apply)
   val ownRandomnessOpt = ownRandomnessStringOpt.map(new BigInteger(_))
-  val partialSignatureOpt = partialSignarureStringOpt.map(Base16.decode).map(_.get)
+  val partialSignatureOpt = partialSignatureStringOpt.map(Base16.decode).map(_.get)
 
   val inactiveIndexes = (0 to 2).filter(i => i != signerIndex)
 

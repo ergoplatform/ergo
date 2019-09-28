@@ -56,7 +56,7 @@ class ErgoUtilsApiRoute(ergoSettings: ErgoSettings)(implicit context: ActorRefFa
     Base16.decode(ergoTreeHex)
       .flatMap { etBytes =>
         ergoAddressEncoder.fromProposition(
-          treeSerializer.deserializeErgoTree(etBytes).toProposition(replaceConstants = false))
+          treeSerializer.deserializeErgoTree(etBytes))
       }
       .fold(
         e => BadRequest(e.getMessage),

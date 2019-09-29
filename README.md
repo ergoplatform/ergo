@@ -6,7 +6,6 @@ the [Bitcoin protocol](https://bitcoin.org/bitcoin.pdf).
 
 Ergo Platform website: [https://ergoplatform.org/](https://ergoplatform.org/)
 
-
 ## Differences from Bitcoin
 
 * Memory-hard non-outsourceable Proof-of-Work function [Autolykos](https://github.com/ergoplatform/autoleakus)
@@ -26,7 +25,6 @@ and currently the reference implementation code should be considered as the spec
 You can check our [Wiki](https://github.com/ergoplatform/ergo/wiki/Set-up-a-full-node) page for node installation and configuration guide.
 
 Also, reference with [Node Configuration File](https://github.com/ergoplatform/ergo/wiki/Node-Configuration-File) wiki page for creating your own configuration file.
-
 
 ## Build from sources
 
@@ -56,6 +54,12 @@ The node could be started in a few different ways:
  - Using start script from sbt-native-packager: `sh /path/to/bin/ergo  --<networkId> -c /path/to/local.conf`
  
 Available `networkId` options: `mainnet`, `testnet`, `devnet`. 
+
+## UI
+
+Node UI (graphical interface) gould be accessed at `<node_ip>:<api_port>/panel`
+
+<img src="https://github.com/ergoplatform/static-data/raw/master/img/node_ui.png" align="right" />
 
 ## Docker Quick Start
 

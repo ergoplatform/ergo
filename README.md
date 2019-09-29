@@ -57,7 +57,7 @@ Available `networkId` options: `mainnet`, `testnet`, `devnet`.
 
 ## UI
 
-Node UI (graphical interface) gould be accessed at `<node_ip>:<api_port>/panel`
+Node UI (graphical interface) could be accessed at `<node_ip>:<api_port>/panel` in your browser.
 
 <img src="https://github.com/ergoplatform/static-data/raw/master/img/node_ui.png" align="right" />
 

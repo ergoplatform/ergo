@@ -4,7 +4,7 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.ErgoAddress
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
-import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.box.Box.Amount

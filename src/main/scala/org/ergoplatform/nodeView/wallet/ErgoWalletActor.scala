@@ -198,6 +198,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       util.Arrays.fill(entropy, 0: Byte)
       sender() ! mnemonicTry
       self ! UnlockWallet(pass)
+      log.info("Wallet is initialized")
 
     case RestoreWallet(mnemonic, passOpt, encryptionPass) if secretStorageOpt.isEmpty =>
       val secretStorage = JsonSecretStorage
@@ -205,6 +206,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       secretStorageOpt = Some(secretStorage)
       sender() ! Success(())
       self ! UnlockWallet(encryptionPass)
+      log.info("Wallet is restored")
 
     case _: RestoreWallet | _: InitWallet =>
       sender() ! Failure(new Exception("Wallet is already initialized. Clear keystore to re-init it."))
@@ -487,6 +489,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain, Constants.DefaultAppId)
     }
 
+    log.info(
+      s"Processing ${resolved.size} resolved boxes: [${resolved.map(_._2.id).mkString(", ")}], " +
+      s"${unresolved.size} unresolved boxes: [${unresolved.map(_._2.id).mkString(", ")}]."
+    )
+
     val walletTxs = txs.map(WalletTransaction(_, height, Constants.DefaultAppId))
 
     registry.updateOnBlock(resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs, walletTxs)(id, height)
@@ -508,6 +515,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def processSecretAddition(secret: ExtendedSecretKey): Unit =
     proverOpt.foreach { prover =>
+      log.info(s"New secret created, public image: ${Base16.encode(secret.publicKey.keyBytes)}")
       val secrets = proverOpt.toIndexedSeq.flatMap(_.secretKeys) :+ secret
       proverOpt = Some(new ErgoProvingInterpreter(secrets, parameters)(prover.IR))
       storage.addTrackedAddress(P2PKAddress(secret.publicKey.key))

@@ -386,9 +386,11 @@ components:
         votes:
           $ref: '#/components/schemas/Votes'
         minerPk:
-          $ref: '#/components/schemas/Digest32'
+          type: string
+          example: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
         powOnetimePk:
-          $ref: '#/components/schemas/Digest32'
+          type: string
+          example: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
         powNonce:
           $ref: '#/components/schemas/Digest32'
         powDistance:

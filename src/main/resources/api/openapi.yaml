@@ -330,17 +330,17 @@ components:
     Header:
       type: object
       required:
-        - id
         - timestamp
         - version
         - adProofsRoot
         - stateRoot
         - transactionsRoot
         - nBits
-        - extensionRoot
+        - extensionHash
         - height
         - parentId
         - votes
+        - solutions
       properties:
         id:
           $ref: '#/components/schemas/ModifierId'
@@ -350,24 +350,39 @@ components:
           $ref: '#/components/schemas/Version'
         adProofsRoot:
           $ref: '#/components/schemas/Digest32'
+        adProofsId:
+          $ref: '#/components/schemas/ModifierId'
         stateRoot:
-          $ref: '#/components/schemas/ADDigest'
+          $ref: '#/components/schemas/AvlTreeData'
         transactionsRoot:
           $ref: '#/components/schemas/Digest32'
+        transactionsId:
+          $ref: '#/components/schemas/ModifierId'
         nBits:
           type: integer
           format: int64
           minimum: 0
           example: 19857408
+        extensionHash:
+          $ref: '#/components/schemas/Digest32'
         extensionRoot:
           $ref: '#/components/schemas/Digest32'
+        extensionId:
+          $ref: '#/components/schemas/ModifierId'
         height:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 667
+        size:
           type: integer
           format: int32
           minimum: 0
           example: 667
         parentId:
           $ref: '#/components/schemas/ModifierId'
+        powSolutions:
+          $ref: '#/components/schemas/PowSolutions'
         votes:
           $ref: '#/components/schemas/Votes'
         minerPk:
@@ -379,6 +394,7 @@ components:
         powDistance:
           type: string
           description: sigma.BigInt
+          example: '123456789'
 
     PreHeader:
       type: object
@@ -417,7 +433,7 @@ components:
       properties:
         digest:
           $ref: '#/components/schemas/Digest32'
-        treeFlagsByte:
+        treeFlags:
           type: integer
           format: int32
         keyLength:
@@ -431,7 +447,7 @@ components:
 
     ErgoLikeContext:
       required:
-       - astBlockUtxoRoot
+       - lastBlockUtxoRoot
        - headers
        - preHeader
        - dataBoxes
@@ -443,7 +459,7 @@ components:
        - costLimit
        - initCost
       properties:
-        astBlockUtxoRoot:
+        lastBlockUtxoRoot:
           type: object
           description: state root before current block application
           $ref: '#/components/schemas/AvlTreeData'

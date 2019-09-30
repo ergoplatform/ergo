@@ -3,26 +3,24 @@ package org.ergoplatform.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
-import io.circe.Decoder.Result
 import io.circe.generic.auto._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
+import org.ergoplatform._
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform._
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 import sigmastate.Values.{ErgoTree, SigmaBoolean}
+import sigmastate._
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.basics.ProveDHTuple
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
 import sigmastate.lang.SigmaCompiler
-import sigmastate.serialization.DataJsonEncoder
-import sigmastate._
 import special.sigma.AnyValue
 
 import scala.concurrent.Future
@@ -105,20 +103,13 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                             ctx: ErgoLikeContext)
 
 
-  implicit final val decodeMap: Decoder[Any] = new Decoder[Any] {
-    final def apply(c: HCursor): Result[Any] = {
-      val x = DataJsonEncoder.decode(c.value)
-      Right(x)
-    }
-  }
-
   class ExecuteRequestDecoder(settings: ErgoSettings) extends Decoder[ExecuteRequest] with JsonCodecs {
     def apply(cursor: HCursor): Decoder.Result[ExecuteRequest] = {
       for {
         script <- cursor.downField("script").as[String]
-        env <- cursor.downField("env").as[Map[String,Any]]
+        env <- cursor.downField("env").as[Map[String,AnyValue]]
         ctx <- cursor.downField("ctx").as[ErgoLikeContext]
-      } yield ExecuteRequest(script, env.asInstanceOf[Map[String,AnyValue]], ctx)
+      } yield ExecuteRequest(script, env.map({ case (k,v) => k -> v.value }), ctx)
     }
   }
 

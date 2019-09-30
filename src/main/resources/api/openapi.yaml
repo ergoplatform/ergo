@@ -392,9 +392,9 @@ components:
         powNonce:
           $ref: '#/components/schemas/Digest32'
         powDistance:
-          type: string
+          type: number
           description: sigma.BigInt
-          example: '123456789'
+          example: 123456789
 
     PreHeader:
       type: object

@@ -31,6 +31,8 @@ components:
           $ref: '#/components/schemas/TransactionBoxId'
         spendingProof:
           $ref: '#/components/schemas/SpendingProof'
+        extension:
+          type: object
 
     ErgoTransactionDataInput:
       type: object
@@ -39,6 +41,8 @@ components:
       properties:
         boxId:
           $ref: '#/components/schemas/TransactionBoxId'
+        extension:
+          type: object
 
     SpendingProof:
       description: Spending proof for transaction input
@@ -427,7 +431,8 @@ components:
         votes:
           $ref: '#/components/schemas/Votes'
         minerPk:
-          $ref: '#/components/schemas/Digest32'
+          type: string
+          example: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
 
     AvlTreeData:
       required:
@@ -500,6 +505,7 @@ components:
         validationSettings:
           type: string
           description: validataion parameters passed to Interpreter.verify to detect soft-fork conditions
+          example: "10e8070001e9070001ea070001eb070001ec070001ed070001ee070001ef070001f0070001f1070001f2070001f3070001f4070001f5070001f6070001f7070001"
         costLimit:
           type: integer
           format: int64

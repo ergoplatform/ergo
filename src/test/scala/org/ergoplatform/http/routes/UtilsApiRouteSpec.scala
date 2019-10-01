@@ -12,6 +12,8 @@ import org.ergoplatform.P2PKAddress
 import org.ergoplatform.http.api.ErgoUtilsApiRoute
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
+import scorex.util.encode.Base16
+import sigmastate.serialization.ErgoTreeSerializer
 
 import scala.concurrent.duration._
 
@@ -26,6 +28,8 @@ class UtilsApiRouteSpec extends FlatSpec
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
   val route: Route = ErgoUtilsApiRoute(settings).route
   val p2pkaddress = P2PKAddress(defaultMinerPk)
+
+  val treeSerializer: ErgoTreeSerializer = new ErgoTreeSerializer
 
   it should "do correct raw/address roundtrip" in {
     var raw: String = null
@@ -44,6 +48,15 @@ class UtilsApiRouteSpec extends FlatSpec
       c.downField("address").as[String] shouldEqual Right(p2pkaddress.toString())
     }
   }
+
+  it should "derive address from ErgoTree" in {
+    val et = Base16.encode(treeSerializer.serializeErgoTree(p2pkaddress.script))
+    Get(s"$prefix/ergoTreeToAddress/$et") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(p2pkaddress.toString())
+    }
+  }
+
 
   it should "validate correct p2pk address" in {
     Get(s"$prefix/address/$p2pkaddress") ~> route ~> check {

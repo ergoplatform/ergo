@@ -219,10 +219,13 @@ lazy val ergoWallet = (project in file("ergo-wallet"))
     libraryDependencies += ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)
   )
 
+lazy val It2Test = config("it2") extend (Test)
+
 lazy val ergo = (project in file("."))
   .settings(commonSettings, name := "ergo")
   .dependsOn(ergoWallet % "compile->compile")
   .dependsOn(avldb % "compile->compile")
+  .configs(It2Test)
 
 lazy val benchmarks = (project in file("benchmarks"))
   .settings(commonSettings, name := "ergo-benchmarks")

@@ -98,7 +98,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
 
-  /**
+ /**
    * Represent a request for execution of a script in a given context.
    * @param script  ErgoScript source code of the contract to execute
    * @param env      environment map of named constants used to compile the script
@@ -125,9 +125,9 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     sigma =>
       val op = sigma.opCode.toByte.asJson
       sigma match {
-        case dlog: ProveDlog   => Map("op" -> op, "h"->dlog.h.asJson).asJson
-        case dht: ProveDHTuple => Map("op" -> op, "g"->dht.g.asJson, "h"->dht.h.asJson, "u"->dht.u.asJson, "v"->dht.v.asJson).asJson
-        case tp: TrivialProp => Map("op" -> op, "condition"->tp.condition.asJson).asJson
+        case dlog: ProveDlog   => Map("op" -> op, "h" -> dlog.h.asJson).asJson
+        case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
+        case tp: TrivialProp   => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
         case and: CAND =>
           Map("op" -> op, "and" -> and.sigmaBooleans.map(_.asJson).asJson).asJson
         case or: COR =>
@@ -145,7 +145,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       )
       fields.asJson
   }
-
+  
   def executeWithContextR: Route =
     (path("executeWithContext") & post & entity(as[ExecuteRequest])) { req =>
       compileSource(req.script, req.env).fold(

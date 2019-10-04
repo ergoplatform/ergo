@@ -331,8 +331,9 @@ components:
           items:
             $ref: '#/components/schemas/ErgoTransactionOutput'
 
-    Header:
+    SigmaHeader:
       type: object
+      description: Block header format used for sigma ErgoLikeContext
       required:
         - timestamp
         - version
@@ -474,7 +475,7 @@ components:
           type: array
           description: fixed number of last block headers in descending order (first header is the newest one)
           items:
-            $ref: '#/components/schemas/Header'
+            $ref: '#/components/schemas/SigmaHeader'
         preHeader:
           type: object
           description: fields of block header with the current `spendingTransaction`, that can be predicted by a miner before it's formation

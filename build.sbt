@@ -192,7 +192,11 @@ scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
 
 Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 
-lazy val ergo = (project in file(".")).settings(commonSettings: _*)
+lazy val It2Test = config("it2") extend (Test)
+
+lazy val ergo = (project in file("."))
+  .configs(It2Test)
+  .settings(commonSettings: _*)
 
 lazy val benchmarks = (project in file("benchmarks"))
   .settings(commonSettings, name := "ergo-benchmarks")

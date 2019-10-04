@@ -3,8 +3,8 @@ package org.ergoplatform.nodeView.wallet
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.ErgoAddressEncoder
-import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.api.ApiEncoderOption.{Detalization, ShowDetails}
+import org.ergoplatform.http.api.ApiCodecs
+import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.wallet.boxes.TrackedBox
 
 case class WalletBox(trackedBox: TrackedBox, confirmationsNumOpt: Option[Int])

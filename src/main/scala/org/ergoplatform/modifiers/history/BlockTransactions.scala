@@ -2,7 +2,7 @@ package org.ergoplatform.modifiers.history
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
-import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.settings.{Algos, Constants}

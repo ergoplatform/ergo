@@ -345,7 +345,6 @@ components:
         - height
         - parentId
         - votes
-        - solutions
       properties:
         id:
           $ref: '#/components/schemas/ModifierId'

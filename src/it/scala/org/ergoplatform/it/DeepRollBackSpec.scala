@@ -42,7 +42,7 @@ class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
 
     val result: Future[Unit] = Async.async {
 
-      val minerAIsolated: Node = docker.startNode(minerAConfig, isolatedPeersConfig,
+      val minerAIsolated: Node = docker.startTestNetNode(minerAConfig, isolatedPeersConfig,
         specialVolumeOpt = Some((localVolumeA, remoteVolume))).get
 
       // 1. Let the first node mine `chainLength + delta` blocks
@@ -50,7 +50,7 @@ class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
 
       val genesisA = Async.await(minerAIsolated.headerIdsByHeight(ErgoHistory.GenesisHeight)).head
 
-      val minerBIsolated: Node = docker.startNode(minerBConfig, isolatedPeersConfig,
+      val minerBIsolated: Node = docker.startTestNetNode(minerBConfig, isolatedPeersConfig,
         specialVolumeOpt = Some((localVolumeB, remoteVolume))).get
 
       // 2. Let another node mine `chainLength` blocks
@@ -67,7 +67,7 @@ class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
       val minerABestHeight = Async.await(minerAIsolated.height)
 
       // 3. Restart node B with disabled mining (it has shorter chain)
-      val minerB: Node = docker.startNode(minerBConfigNonGen,
+      val minerB: Node = docker.startTestNetNode(minerBConfigNonGen,
         specialVolumeOpt = Some((localVolumeB, remoteVolume))).get
 
       // 5. Wait until it switches to the better chain

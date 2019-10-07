@@ -20,7 +20,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import net.ceedubs.ficus.Ficus._
 import org.apache.commons.io.FileUtils
 import org.asynchttpclient.Dsl.{config, _}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, NetworkType}
 import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
@@ -30,6 +30,7 @@ import scala.concurrent.{Await, ExecutionContext, Future, blocking}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Random, Try}
 
+// scalastyle:off number.of.methods
 class Docker(suiteConfig: Config = ConfigFactory.empty,
              tag: String = "ergo_integration_test",
              localDataVolumeOpt: Option[String] = None)
@@ -68,13 +69,18 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
   }
 
-  def startNodes(nodeConfigs: List[Config],
-                 configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] = {
+  private def startNodes(networkType: NetworkType,
+                         nodeConfigs: List[Config],
+                         configEnrich: ExtraConfig = noExtraConfig) = {
     log.trace(s"Starting ${nodeConfigs.size} containers")
-     nodeConfigs.map(cfg => startNode(cfg, configEnrich))
+    nodeConfigs.map(cfg => startNode(networkType, cfg, configEnrich))
       .sequence
-      .map(waitForStartupBlocking(_))
+      .map(waitForStartupBlocking)
   }
+
+  def startTestNetNodes(nodeConfigs: List[Config],
+                        configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] =
+    startNodes(NetworkType.TestNet, nodeConfigs, configEnrich)
 
   def waitForStartupBlocking(nodes: List[Node]): List[Node] = {
     log.debug("Waiting for nodes to start")
@@ -102,9 +108,10 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     checker
   }
 
-  def startNode(nodeSpecificConfig: Config,
-                extraConfig: ExtraConfig = noExtraConfig,
-                specialVolumeOpt: Option[(String, String)] = None): Try[Node] = {
+  private def startNode(networkType: NetworkType,
+                        nodeSpecificConfig: Config,
+                        extraConfig: ExtraConfig = noExtraConfig,
+                        specialVolumeOpt: Option[(String, String)] = None) = {
     val initialSettings = buildErgoSettings(nodeSpecificConfig)
     val configuredNodeName = initialSettings.scorexSettings.network.nodeName
     val nodeNumber = configuredNodeName.replace("node", "").toInt
@@ -114,7 +121,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
     val nodeConfig: Config = enrichNodeConfig(nodeSpecificConfig, extraConfig, ip, networkPort)
     val settings: ErgoSettings = buildErgoSettings(nodeConfig)
-    val containerConfig: ContainerConfig = buildPeerContainerConfig(nodeConfig, settings, ip, specialVolumeOpt)
+    val containerConfig: ContainerConfig = buildPeerContainerConfig(networkType, nodeConfig, settings,
+      ip, specialVolumeOpt)
     val containerName = networkName + "-" + configuredNodeName + "-" + uuidShort
 
     Try {
@@ -144,6 +152,16 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
         Failure(new Exception(s"Error: docker image is missing. Run 'sbt it:test' to generate it.", e))
     }
   }
+
+  def startTestNetNode(nodeSpecificConfig: Config,
+                       extraConfig: ExtraConfig = noExtraConfig,
+                       specialVolumeOpt: Option[(String, String)] = None): Try[Node] =
+    startNode(NetworkType.TestNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
+
+  def startMainNetNode(nodeSpecificConfig: Config,
+                       extraConfig: ExtraConfig = noExtraConfig,
+                       specialVolumeOpt: Option[(String, String)] = None): Try[Node] =
+    startNode(NetworkType.MainNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
 
   private def buildErgoSettings(nodeConfig: Config) = {
     val actualConfig = nodeConfig
@@ -181,14 +199,13 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .build()
   }
 
-  private def escapeShellCmd(str: String) = {
-    str.replace(" ", """\ """)
-      .replaceAll("\\t", """\\t""")
-      .replaceAll("\\n", """\\n""")
-      .replace("\"", "\\\"")
-  }
+//  private def escapeShellCmd(str: String) = str.replace(" ", """\ """)
+//    .replaceAll("\\t", """\\t""")
+//    .replaceAll("\\n", """\\n""")
+//    .replace("\"", "\\\"")
 
-  private def buildPeerContainerConfig(nodeConfig: Config,
+  private def buildPeerContainerConfig(networkType: NetworkType,
+                                       nodeConfig: Config,
                                        settings: ErgoSettings,
                                        ip: String,
                                        specialVolumeOpt: Option[(String, String)] = None): ContainerConfig = {
@@ -214,13 +231,21 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
     val configCommandLine = renderProperties(asProperties(nodeConfig))
 
+    val shellCmd = networkType match {
+      case NetworkType.MainNet =>
+        // TODO: switch to mainnet
+        "echo Options: $OPTS; java $OPTS -jar /opt/ergo/ergo.jar --testnet -c /opt/ergo/it2/template.conf"
+      case _ =>
+        "echo Options: $OPTS; java $OPTS -jar /opt/ergo/ergo.jar -c /opt/ergo/it/template.conf"
+    }
+
     ContainerConfig.builder()
       .image(ErgoImageLatest)
       .exposedPorts(restApiPort.toString, networkPort.toString)
       .networkingConfig(networkingConfig)
       .hostConfig(hostConfig)
       .env(s"OPTS=$configCommandLine")
-      .entrypoint("sh", "-c", "echo Options: $OPTS; java $OPTS -jar /opt/ergo/ergo.jar -c /opt/ergo/it2/template.conf")
+      .entrypoint("sh", "-c", shellCmd)
       .build()
   }
 
@@ -400,6 +425,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
   }
 }
+// scalastyle:on number.of.methods
 
 object Docker extends IntegrationTestConstants {
 

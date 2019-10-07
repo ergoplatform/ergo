@@ -17,7 +17,7 @@ class TestOnMainNetSpec
   val targetHeight: Int = 80000
 
   val nodeConfig: Config = nodeSeedConfigs.head.withFallback(nonGeneratingPeerConfig)
-  val node: Node = docker.startNode(nodeConfig).get
+  val node: Node = docker.startMainNetNode(nodeConfig).get
 
   "Start a node on mainnet and wait for a full sync" in {
 

@@ -224,6 +224,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       proverOpt = None
       secretStorageOpt.foreach(_.lock())
 
+    case  GetLockStatus =>
+      sender() ! proverOpt.isDefined
+
     case WatchFor(address) =>
       storage.addTrackedAddress(address)
 
@@ -635,6 +638,8 @@ object ErgoWalletActor {
   case object DeriveNextKey
 
   case object LockWallet
+
+  case object GetLockStatus
 
   case object ReadRandomPublicKey
 

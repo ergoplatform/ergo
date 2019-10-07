@@ -50,7 +50,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
       DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
     }
-  }.sample.value
+    }.sample.value
 
   lazy val wallet = new WalletStub
 
@@ -97,7 +97,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class NodeViewStub extends Actor {
-    def receive:Receive = {
+    def receive: Receive = {
       case _ =>
     }
   }
@@ -143,6 +143,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case _: UnlockWallet => sender() ! Success(())
 
       case LockWallet => ()
+
+      case GetLockStatus => sender() ! true
 
       case GetBoxes(unspentOnly) =>
         val boxes = if (unspentOnly) {
@@ -210,8 +212,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val walletTxs: Seq[AugWalletTransaction] = Seq(augWalletTransactionGen.sample.get, augWalletTransactionGen.sample.get)
 
     def props(): Props = Props(new WalletActorStub)
+
     def balance(chainStatus: ChainStatus): Long = if (chainStatus.onChain) confirmedBalance else unconfirmedBalance
+
     def confirmedBalance: Long = 1L
+
     def unconfirmedBalance: Long = 2L
   }
 

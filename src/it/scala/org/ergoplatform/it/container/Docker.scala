@@ -181,6 +181,13 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .build()
   }
 
+  private def escapeShellCmd(str: String) = {
+    str.replace(" ", """\ """)
+      .replaceAll("\\t", """\\t""")
+      .replaceAll("\\n", """\\n""")
+      .replace("\"", "\\\"")
+  }
+
   private def buildPeerContainerConfig(nodeConfig: Config,
                                        settings: ErgoSettings,
                                        ip: String,
@@ -213,6 +220,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .networkingConfig(networkingConfig)
       .hostConfig(hostConfig)
       .env(s"OPTS=$configCommandLine")
+      .entrypoint("sh", "-c", "echo Options: $OPTS; java $OPTS -jar /opt/ergo/ergo.jar -c /opt/ergo/it2/template.conf")
       .build()
   }
 

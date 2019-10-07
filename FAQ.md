@@ -1,3 +1,3 @@
-# Freqently Asked Questions
+# Frequently Asked Questions
 
 TODO

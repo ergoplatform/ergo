@@ -3,6 +3,7 @@ package org.ergoplatform.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import org.ergoplatform.db.LDBFactory
+import org.ergoplatform.http.api.{ApiCodecs, ErgoBaseApiRoute}
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplicationStorage}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest

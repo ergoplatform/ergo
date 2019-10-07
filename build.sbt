@@ -162,16 +162,15 @@ inConfig(IntegrationTest)(Seq(
 ))
 
 dockerfile in docker := {
-  val configTemplate = (resourceDirectory in IntegrationTest).value / "template.conf"
-  val startErgo = (sourceDirectory in IntegrationTest).value / "container" / "start-ergo.sh"
+  val configTemplateIt = (resourceDirectory in IntegrationTest).value / "template.conf"
+  val configTemplateIt2 = (resourceDirectory in It2Test).value / "template.conf"
 
   new Dockerfile {
     from("openjdk:9-jre-slim")
     label("ergo-integration-tests", "ergo-integration-tests")
     add(assembly.value, "/opt/ergo/ergo.jar")
-    add(Seq(configTemplate, startErgo), "/opt/ergo/")
-    run("chmod", "+x", "/opt/ergo/start-ergo.sh")
-    entryPoint("/opt/ergo/start-ergo.sh")
+    add(Seq(configTemplateIt), "/opt/ergo/it")
+    add(Seq(configTemplateIt2), "/opt/ergo/it2")
   }
 }
 
@@ -192,10 +191,16 @@ scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
 
 Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 
-lazy val It2Test = config("it2") extend (Test)
+lazy val It2Test = config("it2") extend (IntegrationTest, Test)
+configs(It2Test)
+inConfig(It2Test)(Defaults.testSettings)
+
+inConfig(It2Test)(Seq(
+  parallelExecution := false,
+  test := (test dependsOn docker).value,
+))
 
 lazy val ergo = (project in file("."))
-  .configs(It2Test)
   .settings(commonSettings: _*)
 
 lazy val benchmarks = (project in file("benchmarks"))

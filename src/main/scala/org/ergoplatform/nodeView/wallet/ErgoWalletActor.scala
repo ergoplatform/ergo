@@ -224,8 +224,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       proverOpt = None
       secretStorageOpt.foreach(_.lock())
 
-    case  GetLockStatus =>
-      sender() ! proverOpt.isDefined
+    case GetLockStatus =>
+      sender() ! (secretStorageOpt.isDefined -> proverOpt.isDefined)
 
     case WatchFor(address) =>
       storage.addTrackedAddress(address)

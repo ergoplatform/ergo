@@ -154,8 +154,13 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def getLockStatusR: Route = (path("status") & get) {
-    withWalletOp(_.getLockStatus) { x =>
-      ApiResponse(Json.obj("isUnlocked" -> x.asJson))
+    withWalletOp(_.getLockStatus) { case (isInit, isUnlocked) =>
+      ApiResponse(
+        Json.obj(
+          "isInitialized" -> isInit.asJson,
+          "isUnlocked"    -> isUnlocked.asJson
+        )
+      )
     }
   }
 

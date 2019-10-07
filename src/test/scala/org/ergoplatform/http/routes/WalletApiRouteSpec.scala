@@ -174,7 +174,7 @@ class WalletApiRouteSpec extends FlatSpec
     Get(prefix + "/status") ~> route ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[Json]
-      response.hcursor.downField("isUnlocked").as[Boolean] shouldBe true
+      response.hcursor.downField("isUnlocked").as[Boolean] shouldBe Right(true)
     }
   }
 

@@ -3,10 +3,11 @@ package org.ergoplatform.nodeView.wallet.scanning
 import io.circe.Json
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
-import org.ergoplatform.api.ApiCodecs
 import scorex.util.encode.Base16
-import io.circe.{Decoder, Encoder}, io.circe.generic.auto._
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.auto._
 import io.circe.syntax._
+import org.ergoplatform.http.api.ApiCodecs
 
 
 object ScanningPredicateJsonCodecs extends ApiCodecs {

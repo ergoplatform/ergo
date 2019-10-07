@@ -3,8 +3,8 @@ package org.ergoplatform.bench
 import java.io.File
 
 import akka.actor.ActorRef
-import org.ergoplatform.api.{BlocksApiRoute, ErgoUtilsApiRoute, InfoRoute, TransactionsApiRoute}
 import org.ergoplatform.bench.misc.CrawlerConfig
+import org.ergoplatform.http.api.{BlocksApiRoute, ErgoUtilsApiRoute, InfoApiRoute, TransactionsApiRoute}
 import org.ergoplatform.local.{ErgoMinerRef, ErgoStatsCollectorRef}
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
@@ -59,7 +59,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
   override val apiRoutes: Seq[ApiRoute] = Seq(
     ErgoUtilsApiRoute(ergoSettings),
     PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
-    InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
+    InfoApiRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
 

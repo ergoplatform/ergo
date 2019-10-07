@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
-import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.http.api.ApiCodecs
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 

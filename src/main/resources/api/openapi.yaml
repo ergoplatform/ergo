@@ -1790,6 +1790,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/status:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get wallet lock status
+      operationId: getWalletLockStatus
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Wallet lock status
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - isUnlocked
+                properties:
+                  isUnlocked:
+                    type: boolean
+                    description: true if wallet is unlocked, false otherwise
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/updateChangeAddress:
     post:
       security:

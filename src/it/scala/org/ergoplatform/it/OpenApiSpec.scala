@@ -18,7 +18,7 @@ class OpenApiSpec extends FreeSpec with IntegrationSuite {
 
   val offlineGeneratingPeer: Config = offlineGeneratingPeerConfig.withFallback(nodeSeedConfigs.head)
 
-  val node: Node = docker.startNode(offlineGeneratingPeer).get
+  val node: Node = docker.startTestNetNode(offlineGeneratingPeer).get
 
   def renderTemplate(template: String, varMapping: Map[String, String]): String = varMapping
     .foldLeft(template) { case (s, (k, v)) => s.replaceAll(s"@$k", v) }

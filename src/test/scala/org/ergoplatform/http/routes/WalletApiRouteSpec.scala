@@ -175,6 +175,7 @@ class WalletApiRouteSpec extends FlatSpec
       status shouldBe StatusCodes.OK
       val response = responseAs[Json]
       response.hcursor.downField("isUnlocked").as[Boolean] shouldBe Right(true)
+      response.hcursor.downField("isInitialized").as[Boolean] shouldBe Right(true)
     }
   }
 

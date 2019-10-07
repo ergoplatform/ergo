@@ -1794,8 +1794,8 @@ paths:
     get:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Get wallet lock status
-      operationId: getWalletLockStatus
+      summary: Get wallet status
+      operationId: getWalletStatus
       tags:
         - wallet
       responses:
@@ -1806,8 +1806,12 @@ paths:
               schema:
                 type: object
                 required:
+                  - isInitialized
                   - isUnlocked
                 properties:
+                  isInitialized:
+                    type: boolean
+                    description: true if wallet is initialized, false otherwise
                   isUnlocked:
                     type: boolean
                     description: true if wallet is unlocked, false otherwise

@@ -597,7 +597,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     if (secrets.size == 1) {
       Success(DerivationPath(List(0, 1), publicBranch = false))
     } else {
-      nextPath(List.empty, secrets.map(_.path.decodedPath.tail))
+      nextPath(List.empty, secrets.map(_.path.decodedPath.tail.toList))
     }
   }
 

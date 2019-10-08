@@ -1790,6 +1790,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/status:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get wallet status
+      operationId: getWalletStatus
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Wallet status
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - isInitialized
+                  - isUnlocked
+                properties:
+                  isInitialized:
+                    type: boolean
+                    description: true if wallet is initialized, false otherwise
+                  isUnlocked:
+                    type: boolean
+                    description: true if wallet is unlocked, false otherwise
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/updateChangeAddress:
     post:
       security:

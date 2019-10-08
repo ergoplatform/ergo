@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet.requests
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
-import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoScriptPredef, Pay2SAddress}

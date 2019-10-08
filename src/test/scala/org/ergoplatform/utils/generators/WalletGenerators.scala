@@ -7,11 +7,10 @@ import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlock, RegistryInd
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
+import org.ergoplatform.wallet.secrets.{DerivationPath, Index}
 import org.scalacheck.Gen
 
 trait WalletGenerators extends ErgoTransactionGenerators {
-
-  private val ergoSettings = ErgoSettings.read()
 
   def trackedBoxGen: Gen[TrackedBox] = {
     Gen.oneOf(
@@ -115,6 +114,12 @@ trait WalletGenerators extends ErgoTransactionGenerators {
     id <- modifierIdGen
     txs <- Gen.listOf(invalidErgoTransactionGen)
   } yield PostponedBlock(id, height, txs)
+
+  def derivationPathGen: Gen[DerivationPath] = for {
+    isPublic <- Gen.oneOf(Seq(true, false))
+    indices <- Gen.listOf(Gen.oneOf(Seq(true, false))
+      .flatMap(x => Gen.posNum[Int].map(i => if (x) Index.hardIndex(i) else i)))
+  } yield DerivationPath(0 +: indices, isPublic)
 
   private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)
 

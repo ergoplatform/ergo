@@ -38,6 +38,9 @@ trait ErgoWalletReader extends VaultReader {
 
   def lockWallet(): Unit = walletActor ! LockWallet
 
+  def getLockStatus: Future[(Boolean, Boolean)] =
+    (walletActor ? GetLockStatus).mapTo[(Boolean, Boolean)]
+
   def deriveKey(path: String): Future[Try[P2PKAddress]] =
     (walletActor ? DeriveKey(path)).mapTo[Try[P2PKAddress]]
 

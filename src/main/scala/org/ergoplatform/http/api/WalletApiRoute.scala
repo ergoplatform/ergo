@@ -34,7 +34,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   override val route: Route = (pathPrefix("wallet") & withAuth) {
     toStrictEntity(10.seconds) {
-      getLockStatusR ~
+      getWalletStatusR ~
         balancesR ~
         unconfirmedBalanceR ~
         addressesR ~
@@ -153,7 +153,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet(_.confirmedBalances)
   }
 
-  def getLockStatusR: Route = (path("status") & get) {
+  def getWalletStatusR: Route = (path("status") & get) {
     withWalletOp(_.getLockStatus) { case (isInit, isUnlocked) =>
       ApiResponse(
         Json.obj(

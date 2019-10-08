@@ -15,7 +15,7 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "4ca3e400-SNAPSHOT"
-val sigmaStateVersion = "core-opt-b3c4cb66-SNAPSHOT"
+val sigmaStateVersion = "exact-ops-56be9cbd-SNAPSHOT"
 val ergoWalletVersion = "sigma-core-opt-db0bdde0-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)

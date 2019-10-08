@@ -6,7 +6,7 @@ import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
-import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext

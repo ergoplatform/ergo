@@ -4,9 +4,9 @@ import io.circe.syntax._
 import io.circe.{ACursor, Decoder, Encoder, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
-import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.api.ApiEncoderOption.HideDetails.implicitValue
-import org.ergoplatform.api.ApiEncoderOption.{Detalization, ShowDetails}
+import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
+import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._

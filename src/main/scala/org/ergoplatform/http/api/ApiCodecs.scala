@@ -3,7 +3,7 @@ package org.ergoplatform.http.api
 import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.JsonCodecs
-import org.ergoplatform.api.ApiEncoderOption.Detalization
+import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId

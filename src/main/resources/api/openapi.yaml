@@ -1800,7 +1800,7 @@ paths:
         - wallet
       responses:
         '200':
-          description: Wallet lock status
+          description: Wallet status
           content:
             application/json:
               schema:

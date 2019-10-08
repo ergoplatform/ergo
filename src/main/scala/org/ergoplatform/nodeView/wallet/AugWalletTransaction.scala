@@ -4,7 +4,7 @@ import io.circe.syntax._
 import io.circe._
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
 import org.ergoplatform._
-import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import sigmastate.SType
 import sigmastate.Values.EvaluatedValue

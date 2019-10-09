@@ -2603,7 +2603,7 @@ paths:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Generate and send payment transaction (default fee of 0.001 Erg is used)
+      summary: Register an application
       operationId: registerApplication
       tags:
         - application
@@ -2615,13 +2615,13 @@ paths:
               $ref: '#/components/schemas/ExternalApplicationRequest'
       responses:
         '200':
-          description: Identifier of an Ergo transaction generated
+          description: Identifier of an application generated
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransactionId'
         '400':
-          description: Bad payment request
+          description: Bad request
           content:
             application/json:
               schema:
@@ -2637,7 +2637,7 @@ paths:
     get:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Stop tracking and delete application
+      summary: Stop tracking and deregister application
       operationId: deregisterApplication
       tags:
         - application
@@ -2645,7 +2645,7 @@ paths:
         - in: path
           name: appId
           required: true
-          description: identifier of application to remove
+          description: identifier of an application to remove
           schema:
             $ref: '#/components/schemas/ErgoAddress'
       responses:
@@ -2672,13 +2672,13 @@ paths:
     get:
       security:
         - ApiKeyAuth: [api_key]
-      summary: List registered applicationa
+      summary: List registered applications
       operationId: listApplication
       tags:
         - application
       responses:
         '200':
-          description: Identifier of an application removed
+          description: List of applications registered
           content:
             application/json:
               schema:

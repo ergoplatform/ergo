@@ -3,7 +3,7 @@ package org.ergoplatform.mining
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.util.serialization.{Reader, Writer}

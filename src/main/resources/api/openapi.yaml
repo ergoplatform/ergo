@@ -313,7 +313,7 @@ components:
         args:
           type: array
           items:
-            - $ref: '#/components/schemas/ScanningPredicate'
+            $ref: '#/components/schemas/ScanningPredicate'
 
     ExternalApplicationRequest:
       type: object
@@ -332,6 +332,12 @@ components:
           type: integer
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
+
+    ApplicationIdResponse:
+      type: object
+      properties:
+        appId:
+          type: integer
 
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
@@ -2536,7 +2542,7 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Create P2SHAddress from Sigma source
-      operationId: scriptP2SAddress
+      operationId: scriptP2SHAddress
       tags:
         - script
       requestBody:
@@ -2618,7 +2624,8 @@ paths:
           description: Identifier of an application generated
           content:
             application/json:
-              type: integer
+              schema:
+                $ref: '#/components/schemas/ApplicationIdResponse'
         '400':
           description: Bad request
           content:
@@ -2653,7 +2660,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TransactionId'
+                $ref: '#/components/schemas/ApplicationIdResponse'
         '400':
           description: No application found
           content:
@@ -2667,12 +2674,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /application/list:
+  /application/listAll:
     get:
       security:
         - ApiKeyAuth: [api_key]
-      summary: List registered applications
-      operationId: listApplication
+      summary: List all the registered applications
+      operationId: listAllApplications
       tags:
         - application
       responses:

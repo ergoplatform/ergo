@@ -6,11 +6,11 @@ import akka.pattern.ask
 import io.circe.generic.auto._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
-import org.ergoplatform._
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.{ErgoAddressEncoder, ErgoAddress, Pay2SAddress, Pay2SHAddress}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -25,7 +25,7 @@ import special.sigma.AnyValue
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
 case class CryptoResult(value: SigmaBoolean, cost: Long)
 

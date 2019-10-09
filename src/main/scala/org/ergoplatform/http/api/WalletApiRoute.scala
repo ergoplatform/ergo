@@ -34,7 +34,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   override val route: Route = (pathPrefix("wallet") & withAuth) {
     toStrictEntity(10.seconds) {
-      balancesR ~
+      getWalletStatusR ~
+        balancesR ~
         unconfirmedBalanceR ~
         addressesR ~
         getTransactionR ~
@@ -103,9 +104,9 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         .flatMap { address =>
           addressEncoder.fromString(address).toEither
         } match {
-          case Right(value: P2PKAddress) => provide(value)
-          case _ => reject
-        }
+        case Right(value: P2PKAddress) => provide(value)
+        case _ => reject
+      }
     }
 
   private def withFee(requests: Seq[TransactionRequest]): Seq[TransactionRequest] = {
@@ -138,17 +139,29 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def sendTransactionR: Route = (path("transaction" / "send") & post
-    & entity(as[RequestsHolder]))(holder => sendTransaction(holder.withFee, holder.inputsRaw))
+    & entity(as[RequestsHolder])) (holder => sendTransaction(holder.withFee, holder.inputsRaw))
 
   def generateTransactionR: Route = (path("transaction" / "generate") & post
-    & entity(as[RequestsHolder]))(holder => generateTransaction(holder.withFee, holder.inputsRaw))
+    & entity(as[RequestsHolder])) (holder => generateTransaction(holder.withFee, holder.inputsRaw))
 
   def sendPaymentTransactionR: Route = (path("payment" / "send") & post
     & entity(as[Seq[PaymentRequest]])) { requests =>
     sendTransaction(withFee(requests), Seq.empty)
   }
+
   def balancesR: Route = (path("balances") & get) {
     withWallet(_.confirmedBalances)
+  }
+
+  def getWalletStatusR: Route = (path("status") & get) {
+    withWalletOp(_.getLockStatus) { case (isInit, isUnlocked) =>
+      ApiResponse(
+        Json.obj(
+          "isInitialized" -> isInit.asJson,
+          "isUnlocked"    -> isUnlocked.asJson
+        )
+      )
+    }
   }
 
   def unconfirmedBalanceR: Route = (path("balances" / "withUnconfirmed") & get) {
@@ -184,7 +197,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           .map {
             _.filter(tx =>
               tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
-              tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
+                tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
             )
           }
       }

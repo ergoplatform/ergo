@@ -79,7 +79,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   /* NOHF PROOF:
   Changed: removed returning ErgoHistory.EmptyHistoryHeight if sigmaPreHeader is null.
-  Motivation: sigmaPreHeader no longer can be null, returning PreHeader.fake
+  Motivation: sigmaPreHeader no longer can be null, returning PreHeader.fake.
   Safety: In PreHeader.fake.height = ErgoHistory.EmptyHistoryHeight.
   */
   // todo remove from ErgoLikeContext and from ErgoStateContext

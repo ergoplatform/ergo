@@ -2618,8 +2618,7 @@ paths:
           description: Identifier of an application generated
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/TransactionId'
+              type: integer
         '400':
           description: Bad request
           content:

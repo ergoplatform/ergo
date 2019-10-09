@@ -1,7 +1,9 @@
 package org.ergoplatform.api
 
+import io.circe.syntax._
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
+import io.circe.Json
 import org.ergoplatform.db.LDBFactory
 import org.ergoplatform.http.api.{ApiCodecs, ErgoBaseApiRoute}
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplicationStorage}
@@ -28,7 +30,7 @@ final case class ApplicationApiRoute (readersHolder: ActorRef, nodeViewActorRef:
 
   def deregisterR: Route = (path("deregister" / LongNumber) & get) {id =>
     storage.removeApplication(id)
-    ApiResponse(id)
+    ApiResponse(Json.obj("id" -> id.asJson))
   }
 
   def registerR: Route = (path("register") & post
@@ -37,11 +39,11 @@ final case class ApplicationApiRoute (readersHolder: ActorRef, nodeViewActorRef:
     storage.addApplication(request) match {
       case Failure(e) => BadRequest(s"Bad request $request. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(app) =>
-        ApiResponse(app.appId)
+        ApiResponse(Json.obj("id" -> app.appId.asJson))
     }
   }
 
-  def listR: Route = (path("list") & get) {
+  def listR: Route = (path("listAll") & get) {
     ApiResponse(storage.allApplications)
   }
 

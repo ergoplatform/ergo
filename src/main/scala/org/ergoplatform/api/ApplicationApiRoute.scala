@@ -20,7 +20,7 @@ final case class ApplicationApiRoute (readersHolder: ActorRef, nodeViewActorRef:
 
   val storage = new ExternalApplicationStorage(LDBFactory.createKvDb("/tmp/1"))
 
-  override val route: Route = (pathPrefix("application")) { //& withAuth) {
+  override val route: Route = (pathPrefix("application") & withAuth) {
     registerR ~
       deregisterR ~
       listR

@@ -85,8 +85,8 @@ class ScriptApiRouteSpec  extends FlatSpec
     val p2pk = "3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN"
     Get(s"$prefix/$suffix/$p2pk") ~> route ~> check(assertion(responseAs[Json], p2pk))
 
-    val p2sh = "8UmyuJuQ3FS9ts7j72fn3fKChXSGzbL9WC"
-    Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
+//    val p2sh = "8UmyuJuQ3FS9ts7j72fn3fKChXSGzbL9WC"
+//    Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
 
     val script = TrueLeaf
     val tree = ErgoTree.fromProposition(script)

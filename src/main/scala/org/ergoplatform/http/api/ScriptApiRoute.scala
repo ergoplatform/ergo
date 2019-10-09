@@ -35,9 +35,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   override val route: Route = pathPrefix("script") {
     toStrictEntity(10.seconds) {
-      p2shAddressR ~
-        p2sAddressR ~
-        addressToTree
+        p2sAddressR ~ addressToTree
     }
   }
 

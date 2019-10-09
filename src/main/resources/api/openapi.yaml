@@ -2603,9 +2603,7 @@ paths:
         content:
           application/json:
             schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/ExternalApplicationRequest'
+              $ref: '#/components/schemas/ExternalApplicationRequest'
       responses:
         '200':
           description: Identifier of an Ergo transaction generated

@@ -6,7 +6,6 @@ the [Bitcoin protocol](https://bitcoin.org/bitcoin.pdf).
 
 Ergo Platform website: [https://ergoplatform.org/](https://ergoplatform.org/)
 
-
 ## Differences from Bitcoin
 
 * Memory-hard non-outsourceable Proof-of-Work function [Autolykos](https://github.com/ergoplatform/autoleakus)
@@ -27,10 +26,10 @@ You can check our [Wiki](https://github.com/ergoplatform/ergo/wiki/Set-up-a-full
 
 Also, reference with [Node Configuration File](https://github.com/ergoplatform/ergo/wiki/Node-Configuration-File) wiki page for creating your own configuration file.
 
-
 ## Build from sources
 
-In order to build the Ergo node from sources you need JDK (>= 1.8) and SBT to be installed on your machine.
+In order to build the Ergo node from sources you need JDK (>= 1.8) and SBT to be 
+[installed](https://docs.scala-lang.org/getting-started/sbt-track/getting-started-with-scala-and-sbt-on-the-command-line.html) on your machine.
 
 In order to simply get a single jar run: `sbt assembly` - assembly would appear in `target/scala-2.12/` directory.
  
@@ -55,6 +54,12 @@ The node could be started in a few different ways:
  - Using start script from sbt-native-packager: `sh /path/to/bin/ergo  --<networkId> -c /path/to/local.conf`
  
 Available `networkId` options: `mainnet`, `testnet`, `devnet`. 
+
+## UI
+
+Node UI (graphical interface) could be accessed at `<node_ip>:<api_port>/panel` in your browser.
+
+<img src="https://github.com/ergoplatform/static-data/raw/master/img/node_ui.png" align="right" />
 
 ## Docker Quick Start
 
@@ -82,6 +87,23 @@ This command also would store your data in `/path/on/host/to/ergo/data` on host 
 Ergo node works normally behind NAT, so you can keep closed your `9030` port, hence other nodes could not discover and connect to yours one, only your node could initiate connections.
 
 It is also a good practice to keep closed REST API port `9053`, and connect to your node from inside another container in the same Docker network (this case not covered by this short quick start manual).
+
+## Open project in IDE
+
+Your can use [IntelliJ IDEA](https://www.jetbrains.com/idea/) (Community or Ultimate edition) or 
+[VSCode](https://code.visualstudio.com/) + [Metals](https://scalameta.org/metals/).
+Before opening the project in IDE make sure it can be built with sbt
+as described above. You can also run tests using `sbt test` command.
+You may need to fix dependency resolution errors first.
+
+After that you can open the project folder in Idea (File / Open)
+which will run Project Import Wizard. The wizard will use SBT configuration
+(build.sbt file) to generate Idea's project configuration files.
+You can open `File / Project Structure...` dialog to see project configuration.
+If everything is successful you can compile the project in IDE. 
+
+## FAQ
+[Frequently Asked Questions](FAQ.md)
 
 ## Acknowledgements
 

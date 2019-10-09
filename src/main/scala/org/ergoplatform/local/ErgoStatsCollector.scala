@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.Version
-import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header

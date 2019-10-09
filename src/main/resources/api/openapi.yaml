@@ -567,7 +567,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SigmaBoolean'
-		  example: []
+          example: []
         or:
           type: array
           items:

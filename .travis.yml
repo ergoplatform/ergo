@@ -8,6 +8,7 @@ branches:
     - /^\d\.\d+$/
     - v2.2-candidate
     - sigma454-type-check-on-script-deser
+    - develop
 jdk:
 - openjdk9
 scala:

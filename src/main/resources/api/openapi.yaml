@@ -323,6 +323,15 @@ components:
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
 
+    ExternalApplication:
+      type: object
+      properties:
+        appName:
+          type: string
+        appId:
+          type: integer
+        trackingRule:
+          $ref: '#/components/schemas/ScanningPredicate'
 
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
@@ -2652,6 +2661,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /application/list:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: List registered applicationa
+      operationId: listApplication
+      tags:
+        - application
+      responses:
+        '200':
+          description: Identifier of an application removed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExternalApplication'
         default:
           description: Error
           content:

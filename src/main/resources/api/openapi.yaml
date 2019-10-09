@@ -572,12 +572,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SigmaBoolean'
-		  example: []
+          example: []
         threshold:
           type: array
           items:
             $ref: '#/components/schemas/SigmaBoolean'
-		  example: []
+          example: []
 
     CryptoResult:
       description: Result of executeWithContext request (reduceToCrypto)

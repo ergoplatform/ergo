@@ -4,7 +4,9 @@ import org.ergoplatform.ErgoBox
 import sigmastate.Values
 
 /**
-  * Basic interface for box scanning functionality
+  * Basic interface for box scanning predicate functionality
+  *
+  * See EIP-0001 for details (https://github.com/ergoplatform/eips/blob/master/eip-0001.md)
   */
 sealed trait ScanningPredicate {
   def filter(box: ErgoBox): Boolean

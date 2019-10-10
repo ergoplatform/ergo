@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
 import com.google.common.primitives.Longs
-import org.ergoplatform.db.LDBKVStore
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.db.{LDBFactory, LDBKVStore}
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 
 import scala.util.Try
 
@@ -23,4 +23,10 @@ class ExternalApplicationStorage(store: LDBKVStore) {
 
   def lastUsedId: Long = Try(Longs.fromByteArray(store.lastKey())).getOrElse(Constants.DefaultAppId)
 
+}
+
+object ExternalApplicationStorage {
+  def readOrCreate(settings: ErgoSettings): ExternalApplicationStorage = {
+    new ExternalApplicationStorage(LDBFactory.createKvDb(s"${settings.directory}/apps"))
+  }
 }

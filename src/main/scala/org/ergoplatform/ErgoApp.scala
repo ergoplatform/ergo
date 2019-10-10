@@ -128,7 +128,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     MiningApiRoute(minerRef, ergoSettings),
     UtxoApiRoute(readersHolderRef, settings.restApi),
     ScriptApiRoute(readersHolderRef, ergoSettings),
-    ApplicationApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings)
+    ApplicationApiRoute(ergoSettings)
   )
 
   private val swaggerRoute = SwaggerRoute(settings.restApi, swaggerConfig)

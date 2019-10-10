@@ -576,7 +576,7 @@ components:
           items:
             $ref: '#/components/schemas/SigmaBoolean'
       example:
-	    condition: true
+        condition: true
 
     CryptoResult:
       description: Result of executeWithContext request (reduceToCrypto)

@@ -1,7 +1,7 @@
-openapi: "3.0.1"
+openapi: "3.0.2"
 
 info:
-  version: "0.1"
+  version: "3.1.2"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -300,20 +300,68 @@ components:
     ScanningPredicate:
       type: object
       required:
-      - predicate
+        - predicate
       properties:
         predicate:
           type: string
-        bytes:
-          type: string
-        register:
-          type: string
-        assetId:
-            type: string
-        args:
-          type: array
-          items:
-            $ref: '#/components/schemas/ScanningPredicate'
+
+    ContainsPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+          - bytes
+        - properties:
+            register:
+              type: string
+            bytes:
+              type: string
+
+    EqualsPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+            - bytes
+        - properties:
+            register:
+              type: string
+            bytes:
+              type: string
+
+    ContainsAssetPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+            - assetId
+        - properties:
+            assetId:
+              type: string
+
+    AndPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+            - args
+        - properties:
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/ScanningPredicate'
+
+    OrPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+            - args
+        - properties:
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/ScanningPredicate'
 
     ExternalApplicationRequest:
       type: object
@@ -332,6 +380,12 @@ components:
           type: integer
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
+      example:
+        appId: 2
+        appName: Assets Tracker
+        trackingRule:
+          predicate: containsAsset
+          assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
 
     ApplicationIdResponse:
       type: object

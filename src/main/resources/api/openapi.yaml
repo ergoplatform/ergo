@@ -576,7 +576,11 @@ components:
           items:
             $ref: '#/components/schemas/SigmaBoolean'
       example:
+        op: -45
         condition: true
+        or: null
+        and: null
+        threshold: null
 
     CryptoResult:
       description: Result of executeWithContext request (reduceToCrypto)

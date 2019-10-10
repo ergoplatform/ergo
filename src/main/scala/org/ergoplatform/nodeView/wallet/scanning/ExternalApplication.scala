@@ -6,15 +6,31 @@ import scorex.util.serialization.{Reader, Writer}
 
 import scala.util.{Failure, Success, Try}
 
+/**
+  * A class which encodes a request to create an application.
+  *
+  * @param appId        - unique identifier of an application in the local system
+  * @param appName      - application description (255 bytes in UTF-8 encoding max)
+  * @param trackingRule - a predicate to scan the blockchain for specific application-related boxes
+  *
+  */
 case class ExternalApplication(appId: Long, appName: String, trackingRule: ScanningPredicate)
 
 object ExternalApplication {
   val MaxAppNameLength = 255
 }
 
+/**
+  * A class which encodes a request to create an application.
+  *
+  * @param appName      - application description (255 bytes in UTF-8 encoding max)
+  * @param trackingRule - a predicate to scan the blockchain for specific application-related boxes
+  *
+  */
+
 case class ExternalAppRequest(appName: String, trackingRule: ScanningPredicate) {
   def toApp(appId: Long): Try[ExternalApplication] = {
-    if(appName.getBytes("UTF-8").length > ExternalApplication.MaxAppNameLength) {
+    if (appName.getBytes("UTF-8").length > ExternalApplication.MaxAppNameLength) {
       Failure(new Exception(s"Too application name: $appName"))
     } else {
       Success(ExternalApplication(appId, appName, trackingRule))
@@ -38,6 +54,7 @@ object ExternalApplicationSerializer extends ScorexSerializer[ExternalApplicatio
 }
 
 object ExternalApplicationJsonCodecs extends ApiCodecs {
+
   import ScanningPredicateJsonCodecs._
   import io.circe._, io.circe.generic.semiauto._
 

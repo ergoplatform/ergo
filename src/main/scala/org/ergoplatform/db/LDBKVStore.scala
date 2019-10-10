@@ -23,7 +23,7 @@ final class LDBKVStore(protected val db: DB) extends KVStore {
   def remove(keys: Seq[K]): Unit = update(Seq.empty, keys)
 
   /**
-    * Get last key by used comparator. Could be useful for application with sequential ids.
+    * Get last key by used comparator. Could be useful for applications with sequential ids.
     */
   def lastKey(): Array[Byte] = {
     val i = db.iterator()

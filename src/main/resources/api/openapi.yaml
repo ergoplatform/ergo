@@ -370,6 +370,12 @@ components:
           type: string
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
+      example:
+        appName: Assets Tracker
+        trackingRule:
+          predicate: containsAsset
+          assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
+
 
     ExternalApplication:
       type: object

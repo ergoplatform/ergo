@@ -6,6 +6,11 @@ import org.ergoplatform.settings.{Constants, ErgoSettings}
 
 import scala.util.Try
 
+/**
+  * Database for applications.
+  *
+  * @param store - LevelDB key-value storage
+  */
 class ExternalApplicationStorage(store: LDBKVStore) {
 
   def addApplication(appReq: ExternalAppRequest): Try[ExternalApplication] = {

@@ -4,7 +4,6 @@ import io.circe.syntax._
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import io.circe.Json
-import org.ergoplatform.db.LDBFactory
 import org.ergoplatform.http.api.{ApiCodecs, ErgoBaseApiRoute}
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplicationStorage}
 import org.ergoplatform.settings.ErgoSettings
@@ -15,12 +14,12 @@ import scorex.core.settings.RESTApiSettings
 import scala.util.{Failure, Success}
 
 
-final case class ApplicationApiRoute (readersHolder: ActorRef, nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
+final case class ApplicationApiRoute (ergoSettings: ErgoSettings)
                           (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   import org.ergoplatform.nodeView.wallet.scanning.ExternalApplicationJsonCodecs._
 
-  val storage = new ExternalApplicationStorage(LDBFactory.createKvDb("/tmp/1"))
+  lazy val storage = ExternalApplicationStorage.readOrCreate(ergoSettings)
 
   override val route: Route = (pathPrefix("application") & withAuth) {
     registerR ~

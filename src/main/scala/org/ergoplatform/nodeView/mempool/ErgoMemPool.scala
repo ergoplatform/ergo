@@ -93,14 +93,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
   private def randSliceIndexes(qty: Int, max: Int): Seq[Int] = {
     require(qty <= max)
     val idx = Random.nextInt(max)
-    @scala.annotation.tailrec
-    def loop(acc: Seq[Int], idx: Int, leftQty: Int): Seq[Int] =
-      if (leftQty > 0) {
-        if (idx <= max) loop(acc :+ idx, idx + 1, leftQty - 1) else loop(acc, 0, leftQty)
-      } else {
-        acc
-      }
-    loop(Array.empty[Int], idx, qty)
+    (idx until (idx + qty)).map( _ % max)
   }
 
 }

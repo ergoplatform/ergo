@@ -529,7 +529,7 @@ components:
       required:
       - script
       - env
-      - ctx
+      - context
       properties:
         script:
           description: Sigma script to be executed
@@ -538,7 +538,7 @@ components:
           description: Environment for compiler
           type: object
           nullable: true
-        ctx:
+        context:
           description: Interpretator context
           type: object
           nullable: true

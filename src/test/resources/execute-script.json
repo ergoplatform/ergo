@@ -2,7 +2,7 @@
   "script": "{ (HEIGHT > deadline) }",
   "env": {"deadline": {"type": "Int", "value": 1},
     "pkA": { "type": "String", "value": "12345678" } },
-  "ctx": {
+  "context": {
     "lastBlockUtxoRoot" : {
       "digest" : "000000000000000000000000000000000000000000000000000000000000000000",
       "treeFlags" : 7,

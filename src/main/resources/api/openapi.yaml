@@ -563,24 +563,42 @@ components:
           $ref: '#/components/schemas/HexString'
         condition:
           type: boolean
-        and:
-          type: array
-          items:
-            $ref: '#/components/schemas/SigmaBoolean'
-        or:
-          type: array
-          items:
-            $ref: '#/components/schemas/SigmaBoolean'
-        threshold:
-          type: array
-          items:
-            $ref: '#/components/schemas/SigmaBoolean'
-      example:
-        op: -45
-        condition: true
-        or: null
-        and: null
-        threshold: null
+
+    SigmaBooleanAndPredicate:
+      allOf:
+        - $ref: '#/components/schemas/SigmaBoolean'
+        - type: object
+        - required:
+            - args
+        - properties:
+          args:
+            type: array
+            items:
+              $ref: '#/components/schemas/SigmaBoolean'
+
+    SigmaBooleanOrPredicate:
+      allOf:
+        - $ref: '#/components/schemas/SigmaBoolean'
+        - type: object
+        - required:
+            - args
+        - properties:
+          args:
+            type: array
+            items:
+              $ref: '#/components/schemas/SigmaBoolean'
+
+    SigmaBooleanThreasholdPredicate:
+      allOf:
+        - $ref: '#/components/schemas/SigmaBoolean'
+        - type: object
+        - required:
+            - args
+        - properties:
+          args:
+            type: array
+            items:
+              $ref: '#/components/schemas/SigmaBoolean'
 
     CryptoResult:
       description: Result of executeWithContext request (reduceToCrypto)

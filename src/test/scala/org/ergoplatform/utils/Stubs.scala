@@ -22,7 +22,7 @@ import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTr
 import org.ergoplatform.wallet.boxes.{BoxCertainty, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.DerivationPath
-import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
+import org.ergoplatform.P2PKAddress
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
@@ -254,7 +254,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
-      offlineGeneration = false, 200, 100000, 100000, 1.minute, reBroadcastVolume = 200, 1000000)
+      offlineGeneration = false, 200, 100000, 100000, 1.minute, rebroadcastCount = 200, 1000000)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null

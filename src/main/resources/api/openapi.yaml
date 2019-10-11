@@ -571,10 +571,10 @@ components:
         - required:
             - args
         - properties:
-          args:
-            type: array
-            items:
-              $ref: '#/components/schemas/SigmaBoolean'
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/SigmaBoolean'
 
     SigmaBooleanOrPredicate:
       allOf:
@@ -583,22 +583,22 @@ components:
         - required:
             - args
         - properties:
-          args:
-            type: array
-            items:
-              $ref: '#/components/schemas/SigmaBoolean'
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/SigmaBoolean'
 
-    SigmaBooleanThreasholdPredicate:
+    SigmaBooleanThresholdPredicate:
       allOf:
         - $ref: '#/components/schemas/SigmaBoolean'
         - type: object
         - required:
             - args
         - properties:
-          args:
-            type: array
-            items:
-              $ref: '#/components/schemas/SigmaBoolean'
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/SigmaBoolean'
 
     CryptoResult:
       description: Result of executeWithContext request (reduceToCrypto)

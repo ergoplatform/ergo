@@ -1,7 +1,7 @@
-openapi: "3.0.1"
+openapi: "3.0.2"
 
 info:
-  version: "0.1"
+  version: "3.1.2"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -614,6 +614,11 @@ components:
           description: Estimated cost of contract execution
           type: integer
           format: int64
+      example:
+        value:
+          op: -45
+          condition: true
+        cost: 10
 
     PaymentRequest:
       description: Request for generation of payment transaction to a given address

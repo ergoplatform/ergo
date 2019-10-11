@@ -72,7 +72,8 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private def working: Receive = {
     case CleanupDone =>
       log.info("Cleanup done. Switching to awaiting mode")
-      broadcastTransactions()
+      //rebroadcast random transactions
+      broadcastRandomTransactions()
       context become awaiting
 
     case _ => // ignore other triggers until work is done
@@ -85,7 +86,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     context become working // ignore other triggers until work is done
   }
 
-  private def broadcastTransactions(): Unit = {
+  private def broadcastRandomTransactions(): Unit = {
     poolReaderOpt.foreach { pr =>
       val txs = pr.randomSlice(settings.nodeSettings.rebroadcastCount)
       val msg = Message(

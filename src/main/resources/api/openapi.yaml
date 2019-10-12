@@ -528,13 +528,13 @@ components:
       type: object
       required:
       - script
-      - env
+      - namedConstants
       - context
       properties:
         script:
           description: Sigma script to be executed
           type: string
-        env:
+        namedConstants:
           description: Environment for compiler
           type: object
           nullable: true

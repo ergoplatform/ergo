@@ -111,7 +111,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     def apply(cursor: HCursor): Decoder.Result[ExecuteRequest] = {
       for {
         script <- cursor.downField("script").as[String]
-        env <- cursor.downField("env").as[Map[String,AnyValue]]
+        env <- cursor.downField("namedConstants").as[Map[String,AnyValue]]
         ctx <- cursor.downField("context").as[ErgoLikeContext]
       } yield ExecuteRequest(script, env.map({ case (k,v) => k -> v.value }), ctx)
     }

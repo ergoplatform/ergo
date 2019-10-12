@@ -1,6 +1,6 @@
 {
   "script": "{ (HEIGHT > deadline) }",
-  "env": {"deadline": {"type": "Int", "value": 1},
+  "namedConstants": {"deadline": {"type": "Int", "value": 1},
     "pkA": { "type": "String", "value": "12345678" } },
   "context": {
     "lastBlockUtxoRoot" : {

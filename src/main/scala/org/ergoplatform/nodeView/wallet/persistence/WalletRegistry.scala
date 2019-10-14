@@ -18,8 +18,12 @@ import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import scala.util.Try
 
 /**
-  * Provides an access to version-sensitive wallet-specific indexes.
-  * (Such as on-chain UTXO's or balances)
+  * Provides an access to version-sensitive wallet-specific indexes:
+  *
+  *   * current wallet status (height, balances, uncertain boxes)
+  *   * wallet-related transactions
+  *   * certain boxes, spent or not
+  *
   */
 final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
 

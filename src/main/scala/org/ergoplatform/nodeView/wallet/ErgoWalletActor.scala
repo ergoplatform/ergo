@@ -47,19 +47,17 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private implicit val addressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
-  private var proverOpt: Option[ErgoProvingInterpreter] = None
 
+  private val walletSettings: WalletSettings = settings.walletSettings
+  private val parameters: Parameters = LaunchParameters
+
+  private var proverOpt: Option[ErgoProvingInterpreter] = None
   private var secretStorageOpt: Option[JsonSecretStorage] = None
 
   private var offChainRegistry: OffChainRegistry = OffChainRegistry.empty
-
-  private val walletSettings: WalletSettings = settings.walletSettings
-
   private val storage: WalletStorage = WalletStorage.readOrCreate(settings)
-
   private val registry: WalletRegistry = WalletRegistry.readOrCreate(settings)
 
-  private val parameters: Parameters = LaunchParameters
 
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
   // to the wallet (by executing testing transactions against them). The state context is being updated by listening

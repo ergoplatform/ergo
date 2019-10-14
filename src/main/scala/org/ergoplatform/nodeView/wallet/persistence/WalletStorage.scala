@@ -12,7 +12,12 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scala.util.Success
 
 /**
-  * Persists version-agnostic wallet actor's mutable state.
+  * Persists version-agnostic wallet actor's mutable state:
+  *   * tracked addresses
+  *   * derivation paths
+  *   * changed addresses
+  *   * postponed blocks
+  *   * ErgoStateContext (is it version-agnostic?)
   */
 final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
                          (implicit val addressEncoder: ErgoAddressEncoder) {

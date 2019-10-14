@@ -50,7 +50,7 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.bitbucket.inkytonik.dsprofile" % "dsprofile_2.12" % "0.4.0",
   "org.bitbucket.inkytonik.kiama" % "kiama_2.12" % "2.1.0",
   "org.bitlet" % "weupnp" % "0.1.4",
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.62",
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.64",
   "org.ergoplatform" % "ergo-wallet_2.12" % "master-d2135dca-SNAPSHOT",
   "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8",
   "org.iq80.leveldb" % "leveldb" % "0.12",

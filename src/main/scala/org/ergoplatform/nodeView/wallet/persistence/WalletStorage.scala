@@ -1,15 +1,11 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import java.io.File
-
 import com.google.common.primitives.Ints
-import org.ergoplatform.db.LDBFactory.factory
-import org.ergoplatform.db.LDBKVStore
+import org.ergoplatform.db.{LDBFactory, LDBKVStore}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress}
-import org.iq80.leveldb.Options
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 
@@ -137,14 +133,7 @@ object WalletStorage {
 
   def readOrCreate(settings: ErgoSettings)
                   (implicit addressEncoder: ErgoAddressEncoder): WalletStorage = {
-    val dir = new File(s"${settings.directory}/wallet/storage")
-    dir.mkdirs()
-
-    val options = new Options()
-    options.createIfMissing(true)
-    val db = factory.open(dir, options)
-
-    new WalletStorage(new LDBKVStore(db), settings)
+    new WalletStorage(LDBFactory.createKvDb(s"${settings.directory}/wallet/storage"), settings)
   }
 
 }

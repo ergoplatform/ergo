@@ -1,7 +1,7 @@
-openapi: "3.0.1"
+openapi: "3.0.2"
 
 info:
-  version: "0.1"
+  version: "3.1.2"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -296,6 +296,108 @@ components:
         source:
           description: Sigma source to be compiled
           type: string
+
+    ScanningPredicate:
+      type: object
+      required:
+        - predicate
+      properties:
+        predicate:
+          type: string
+
+    ContainsPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+          - bytes
+        - properties:
+            register:
+              type: string
+            bytes:
+              type: string
+
+    EqualsPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+            - bytes
+        - properties:
+            register:
+              type: string
+            bytes:
+              type: string
+
+    ContainsAssetPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+            - assetId
+        - properties:
+            assetId:
+              type: string
+
+    AndPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+            - args
+        - properties:
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/ScanningPredicate'
+
+    OrPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+            - args
+        - properties:
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/ScanningPredicate'
+
+    ExternalApplicationRequest:
+      type: object
+      properties:
+        appName:
+          type: string
+        trackingRule:
+          $ref: '#/components/schemas/ScanningPredicate'
+      example:
+        appName: Assets Tracker
+        trackingRule:
+          predicate: containsAsset
+          assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
+
+
+    ExternalApplication:
+      type: object
+      properties:
+        appName:
+          type: string
+        appId:
+          type: integer
+        trackingRule:
+          $ref: '#/components/schemas/ScanningPredicate'
+      example:
+        appId: 2
+        appName: Assets Tracker
+        trackingRule:
+          predicate: containsAsset
+          assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
+
+    ApplicationIdResponse:
+      type: object
+      properties:
+        appId:
+          type: integer
 
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
@@ -2500,7 +2602,7 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Create P2SHAddress from Sigma source
-      operationId: scriptP2SAddress
+      operationId: scriptP2SHAddress
       tags:
         - script
       requestBody:
@@ -2555,6 +2657,100 @@ paths:
                     type: string
                     description: serialized Ergo tree
                     example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+
+  /application/register:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Register an application
+      operationId: registerApplication
+      tags:
+        - application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExternalApplicationRequest'
+      responses:
+        '200':
+          description: Identifier of an application generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationIdResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /application/deregister/{appId}:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Stop tracking and deregister application
+      operationId: deregisterApplication
+      tags:
+        - application
+      parameters:
+        - in: path
+          name: appId
+          required: true
+          description: identifier of an application to remove
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: Identifier of an application removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationIdResponse'
+        '400':
+          description: No application found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /application/listAll:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: List all the registered applications
+      operationId: listAllApplications
+      tags:
+        - application
+      responses:
+        '200':
+          description: List of applications registered
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExternalApplication'
         default:
           description: Error
           content:

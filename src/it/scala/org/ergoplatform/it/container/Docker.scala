@@ -78,8 +78,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .map(waitForStartupBlocking)
   }
 
-  def startTestNetNodes(nodeConfigs: List[Config],
-                        configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] =
+  def startDevNetNodes(nodeConfigs: List[Config],
+                       configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] =
     startNodes(NetworkType.TestNet, nodeConfigs, configEnrich)
 
   def waitForStartupBlocking(nodes: List[Node]): List[Node] = {
@@ -112,15 +112,15 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
                         nodeSpecificConfig: Config,
                         extraConfig: ExtraConfig = noExtraConfig,
                         specialVolumeOpt: Option[(String, String)] = None) = {
-    val initialSettings = buildErgoSettings(nodeSpecificConfig)
+    val initialSettings = buildErgoSettings(networkType, nodeSpecificConfig)
     val configuredNodeName = initialSettings.scorexSettings.network.nodeName
     val nodeNumber = configuredNodeName.replace("node", "").toInt
     val ip = ipForNode(nodeNumber, networkSeed)
     val restApiPort = initialSettings.scorexSettings.restApi.bindAddress.getPort
     val networkPort = initialSettings.scorexSettings.network.bindAddress.getPort
 
-    val nodeConfig: Config = enrichNodeConfig(nodeSpecificConfig, extraConfig, ip, networkPort)
-    val settings: ErgoSettings = buildErgoSettings(nodeConfig)
+    val nodeConfig: Config = enrichNodeConfig(networkType, nodeSpecificConfig, extraConfig, ip, networkPort)
+    val settings: ErgoSettings = buildErgoSettings(networkType, nodeConfig)
     val containerConfig: ContainerConfig = buildPeerContainerConfig(networkType, nodeConfig, settings,
       ip, specialVolumeOpt)
     val containerName = networkName + "-" + configuredNodeName + "-" + uuidShort
@@ -153,33 +153,43 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
   }
 
+  def startDevNetNode(nodeSpecificConfig: Config,
+                      extraConfig: ExtraConfig = noExtraConfig,
+                      specialVolumeOpt: Option[(String, String)] = None): Try[Node] =
+    startNode(NetworkType.DevNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
+
   def startTestNetNode(nodeSpecificConfig: Config,
-                       extraConfig: ExtraConfig = noExtraConfig,
-                       specialVolumeOpt: Option[(String, String)] = None): Try[Node] =
+                      extraConfig: ExtraConfig = noExtraConfig,
+                      specialVolumeOpt: Option[(String, String)] = None): Try[Node] =
     startNode(NetworkType.TestNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
 
-  def startMainNetNode(nodeSpecificConfig: Config,
-                       extraConfig: ExtraConfig = noExtraConfig,
-                       specialVolumeOpt: Option[(String, String)] = None): Try[Node] =
+  def startMainNetNodeYesImSure(nodeSpecificConfig: Config,
+                                extraConfig: ExtraConfig = noExtraConfig,
+                                specialVolumeOpt: Option[(String, String)] = None): Try[Node] =
     startNode(NetworkType.MainNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
 
-  private def buildErgoSettings(nodeConfig: Config) = {
+  private def buildErgoSettings(networkType: NetworkType, nodeConfig: Config) = {
     val actualConfig = nodeConfig
       .withFallback(suiteConfig)
-      .withFallback(defaultConfigTemplate)
+      .withFallback(defaultConfigTemplate(networkType))
       .withFallback(ConfigFactory.defaultApplication())
       .withFallback(ConfigFactory.defaultReference())
       .resolve()
     ErgoSettings.fromConfig(actualConfig)
   }
 
-  private def enrichNodeConfig(nodeConfig: Config, extraConfig: ExtraConfig, ip: String, port: Int) = {
+  private def enrichNodeConfig(networkType: NetworkType,
+                               nodeConfig: Config,
+                               extraConfig: ExtraConfig,
+                               ip: String,
+                               port: Int) = {
     val publicPeerConfig = nodeConfig//.withFallback(declaredAddressConfig(ip, port))
     val withPeerConfig = nodeRepository.headOption.fold(publicPeerConfig) { node =>
       knownPeersConfig(Seq(node.nodeInfo)).withFallback(publicPeerConfig)
     }
     val enrichedConfig = extraConfig(this, nodeConfig).fold(withPeerConfig)(_.withFallback(withPeerConfig))
-    val actualConfig = enrichedConfig.withFallback(suiteConfig).withFallback(defaultConfigTemplate)
+    val actualConfig = enrichedConfig.withFallback(suiteConfig)
+      .withFallback(defaultConfigTemplate(networkType))
     actualConfig
   }
 
@@ -231,13 +241,14 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
     val configCommandLine = renderProperties(asProperties(nodeConfig))
 
-    val shellCmd = networkType match {
-      case NetworkType.MainNet =>
-        // TODO: switch to mainnet
-        "echo Options: $OPTS; java $OPTS -jar /opt/ergo/ergo.jar --testnet -c /opt/ergo/it2/template.conf"
-      case _ =>
-        "echo Options: $OPTS; java $OPTS -jar /opt/ergo/ergo.jar -c /opt/ergo/it/template.conf"
+    val networkTypeCmdOption = networkType match {
+      case NetworkType.MainNet => "--mainnet"
+      case NetworkType.TestNet => "--testnet"
+      case NetworkType.DevNet => ""
     }
+
+    val shellCmd = "echo Options: $OPTS; java $OPTS -jar /opt/ergo/ergo.jar " +
+      s"$networkTypeCmdOption -c /opt/ergo/${networkType.verboseName}Template.conf"
 
     ContainerConfig.builder()
       .image(ErgoImageLatest)

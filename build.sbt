@@ -160,15 +160,17 @@ inConfig(IntegrationTest)(Seq(
 ))
 
 dockerfile in docker := {
-  val configTemplateIt = (resourceDirectory in IntegrationTest).value / "template.conf"
-  val configTemplateIt2 = (resourceDirectory in It2Test).value / "template.conf"
+  val configDevNet = (resourceDirectory in IntegrationTest).value / "devnetTemplate.conf"
+  val configTestNet = (resourceDirectory in IntegrationTest).value / "testnetTemplate.conf"
+  val configMainNet = (resourceDirectory in IntegrationTest).value / "mainnetTemplate.conf"
 
   new Dockerfile {
     from("openjdk:9-jre-slim")
     label("ergo-integration-tests", "ergo-integration-tests")
     add(assembly.value, "/opt/ergo/ergo.jar")
-    add(Seq(configTemplateIt), "/opt/ergo/it")
-    add(Seq(configTemplateIt2), "/opt/ergo/it2")
+    add(Seq(configDevNet), "/opt/ergo")
+    add(Seq(configTestNet), "/opt/ergo")
+    add(Seq(configMainNet), "/opt/ergo")
   }
 }
 
@@ -220,9 +222,7 @@ lazy val ergoWallet = (project in file("ergo-wallet"))
 
 lazy val It2Test = config("it2") extend (IntegrationTest, Test)
 configs(It2Test)
-inConfig(It2Test)(Defaults.testSettings)
-
-inConfig(It2Test)(Seq(
+inConfig(It2Test)(Defaults.testSettings ++ Seq(
   parallelExecution := false,
   test := (test dependsOn docker).value,
 ))

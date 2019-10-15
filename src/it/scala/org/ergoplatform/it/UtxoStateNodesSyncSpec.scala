@@ -18,7 +18,7 @@ class UtxoStateNodesSyncSpec extends FreeSpec with IntegrationSuite {
   val onlineGeneratingConfigs: List[Config] = nodeSeedConfigs.slice(2, 4).map(onlineGeneratingPeerConfig.withFallback)
   val nodeConfigs: List[Config] = minerConfig +: nonGeneratingConfig +: onlineGeneratingConfigs
 
-  val nodes: List[Node] = docker.startTestNetNodes(nodeConfigs).get
+  val nodes: List[Node] = docker.startDevNetNodes(nodeConfigs).get
 
   s"Utxo state nodes synchronisation ($blocksQty blocks)" in {
     val result = for {

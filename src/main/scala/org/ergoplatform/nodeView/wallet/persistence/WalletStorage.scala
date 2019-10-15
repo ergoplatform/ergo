@@ -7,9 +7,9 @@ import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.Blake2b256
 
-import scala.util.Success
+import scala.util.{Success, Try}
 
 /**
   * Persists version-agnostic wallet actor's mutable state:
@@ -80,7 +80,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
 
   def putBlock(block: PostponedBlock): Unit = {
     val toInsert = Seq(
-      key(block.height) -> PostponedBlockSerializer.toBytes(block),
+      heightPrefixKey(block.height) -> PostponedBlockSerializer.toBytes(block),
       LatestPostponedBlockHeightKey -> Ints.toByteArray(block.height)
     )
     store.insert(toInsert)
@@ -88,14 +88,14 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
 
   def readBlocks(fromHeight: Int, toHeight: Int): Seq[PostponedBlock] =
     (fromHeight to toHeight).foldLeft(Seq.empty[PostponedBlock]) { case (acc, h) =>
-      acc ++ store.get(key(h)).flatMap(r => PostponedBlockSerializer.parseBytesTry(r).toOption)
+      acc ++ store.get(heightPrefixKey(h)).flatMap(r => PostponedBlockSerializer.parseBytesTry(r).toOption)
     }
 
   def removeBlock(height: Int): Unit =
-    store.remove(Seq(key(height)))
+    store.remove(Seq(heightPrefixKey(height)))
 
   def removeBlocks(fromHeight: Int, toHeight: Int): Unit =
-    store.remove((fromHeight to toHeight).map(key))
+    store.remove((fromHeight to toHeight).map(heightPrefixKey))
 
   def readLatestPostponedBlockHeight: Option[Int] = store
     .get(LatestPostponedBlockHeightKey)
@@ -113,28 +113,28 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
         case _ => None
       }
     }
-
 }
 
 object WalletStorage {
+  val ZeroCount = 16
+  val ZeroArray = Array.fill(ZeroCount)(0: Byte)
+  val AppendixCount = 32 - ZeroCount
 
-  val StateContextKey: Array[Byte] =
-    Blake2b256.hash("state_ctx")
+  val HeightPrefixArray = (Array.fill(ZeroCount - 1)(0: Byte) :+ (1:Byte)) ++ Array.fill(8)(0: Byte)
 
-  val TrackedAddressesKey: Array[Byte] =
-    Blake2b256.hash("tracked_pks")
+  def generalPrefixKey(keyString: String) = ZeroArray ++ Blake2b256.hash(keyString).takeRight(AppendixCount)
 
-  val SecretPathsKey: Array[Byte] =
-    Blake2b256.hash("secret_paths")
+  def heightPrefixKey(height: Int) = HeightPrefixArray ++ Ints.toByteArray(height)
 
-  val LatestPostponedBlockHeightKey: Array[Byte] =
-    Blake2b256.hash("latest_block")
+  val StateContextKey: Array[Byte] = generalPrefixKey("state_ctx")
 
-  val ChangeAddressKey: Array[Byte] =
-    Blake2b256.hash("change_address")
+  val TrackedAddressesKey: Array[Byte] = generalPrefixKey("tracked_pks")
 
-  def key(height: Int): Digest32 =
-    Blake2b256.hash(Ints.toByteArray(height))
+  val SecretPathsKey: Array[Byte] = generalPrefixKey("secret_paths")
+
+  val LatestPostponedBlockHeightKey: Array[Byte] = generalPrefixKey("latest_block")
+
+  val ChangeAddressKey: Array[Byte] = generalPrefixKey("change_address")
 
   def readOrCreate(settings: ErgoSettings)
                   (implicit addressEncoder: ErgoAddressEncoder): WalletStorage = {

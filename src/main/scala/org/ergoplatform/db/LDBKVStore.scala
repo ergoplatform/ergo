@@ -1,6 +1,8 @@
 package org.ergoplatform.db
 
+import org.ergoplatform.utils.ByteArrayUtils
 import org.iq80.leveldb.DB
+
 
 /**
   * A LevelDB wrapper providing a convenient db interface.
@@ -29,5 +31,14 @@ final class LDBKVStore(protected val db: DB) extends KVStore {
     val i = db.iterator()
     i.seekToLast()
     i.peekNext().getKey
+  }
+
+  def lastKeyInRange(first: Array[Byte], last:Array[Byte]): Option[Array[Byte]] = {
+    val i = db.iterator()
+    i.seek(first)
+    if(i.hasNext) {
+      val key = i.peekNext().getKey
+      if(ByteArrayUtils.compare(key, last) < 0) Some(key) else None
+    } else None
   }
 }

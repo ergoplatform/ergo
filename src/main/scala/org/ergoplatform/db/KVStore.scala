@@ -1,5 +1,7 @@
 package org.ergoplatform.db
 
+
+import org.ergoplatform.utils.ByteArrayUtils
 import org.iq80.leveldb.{DB, ReadOptions}
 
 import scala.collection.mutable
@@ -26,6 +28,33 @@ trait KVStore extends AutoCloseable {
         val key = next.getKey
         val value = next.getValue
         if (cond(key, value)) bf += (key -> value)
+      }
+      bf.toList
+    } finally {
+      iter.close()
+      ro.snapshot().close()
+    }
+  }
+
+  def getRange(start: K, end: K): Seq[(K, V)] = {
+    val ro = new ReadOptions()
+    ro.snapshot(db.getSnapshot)
+    val iter = db.iterator(ro)
+    try {
+      def check(key:Array[Byte]) = {
+        if (ByteArrayUtils.compare(key, end) <= 0) {
+          true
+        } else {
+          false
+        }
+      }
+      iter.seek(start)
+      val bf = mutable.ArrayBuffer.empty[(K, V)]
+      while (iter.hasNext && check(iter.peekNext.getKey)) {
+        val next = iter.next()
+        val key = next.getKey
+        val value = next.getValue
+        bf += (key -> value)
       }
       bf.toList
     } finally {

@@ -16,8 +16,6 @@ lazy val commonSettings = Seq(
 
 val scorexVersion = "4ca3e400-SNAPSHOT"
 val sigmaStateVersion = "exact-ops-ff7cc0e2-SNAPSHOT"
-val ergoWalletVersion = "sigma-core-opt-982d011d-SNAPSHOT"
-
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
 
@@ -32,8 +30,6 @@ libraryDependencies ++= Seq(
   "org.iq80.leveldb" % "leveldb" % "0.12",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
-  "org.ergoplatform" %% "ergo-wallet" % ergoWalletVersion,
-
   "org.typelevel" %% "cats-free" % "1.6.0",
   "javax.xml.bind" % "jaxb-api" % "2.+",
   "com.iheart" %% "ficus" % "1.4.+",
@@ -45,7 +41,7 @@ libraryDependencies ++= Seq(
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
-  
+
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % "10.1.9" % "test",
@@ -192,7 +188,16 @@ scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
 
 Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 
-lazy val ergo = (project in file(".")).settings(commonSettings: _*)
+lazy val ergoWallet = (project in file("ergo-wallet"))
+  .settings(
+    commonSettings,
+    name := "ergo-wallet",
+    libraryDependencies += ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)
+  )
+
+lazy val ergo = (project in file("."))
+  .settings(commonSettings: _*)
+  .dependsOn(ergoWallet % "compile->compile")
 
 lazy val benchmarks = (project in file("benchmarks"))
   .settings(commonSettings, name := "ergo-benchmarks")

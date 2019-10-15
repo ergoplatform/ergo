@@ -13,21 +13,20 @@ class TestOnMainNetSpec
     with IntegrationSuite
     with OptionValues {
 
-  // TODO: get the current height (from explorer?)
-  val targetHeight: Int = 80000
-
   val nodeConfig: Config = nodeSeedConfigs.head.withFallback(nonGeneratingPeerConfig)
-  val node: Node = docker.startMainNetNode(nodeConfig).get
+  // TODO: switch to mainnet
+  val node: Node = docker.startTestNetNode(nodeConfig).get
 
   "Start a node on mainnet and wait for a full sync" in {
 
     val result = Async.async {
-      Async.await(node.waitForHeight(targetHeight, 1.second))
+      // height is null until the bootstrap sync is complete
+      Async.await(node.waitForHeight(1, 1.second))
       // TODO check the node's health
       docker.forceStopNode(node.containerId)
     }
 
-    Await.result(result, 4.minutes)
+    Await.result(result, 60.minutes)
   }
 
 }

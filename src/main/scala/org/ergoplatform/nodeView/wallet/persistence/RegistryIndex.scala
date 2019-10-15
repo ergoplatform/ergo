@@ -11,25 +11,10 @@ import scorex.util.serialization.{Reader, Writer}
 final case class RegistryIndex(height: Int,
                                balance: Long,
                                assetBalances: Map[EncodedTokenId, Long],
-                               uncertainBoxes: Seq[EncodedBoxId]) {
-
-  override def equals(obj: Any): Boolean = obj match {
-    case that: RegistryIndex =>
-      val equalHeight = that.height == this.height
-      val equalBalance = that.balance == this.balance
-      val equalTokens = that.assetBalances.sameElements(this.assetBalances)
-      val equalUncertain = that.uncertainBoxes.sameElements(this.uncertainBoxes)
-      equalHeight && equalBalance && equalTokens && equalUncertain
-    case _ =>
-      false
-  }
-
-}
-
+                               uncertainBoxes: Seq[EncodedBoxId])
 object RegistryIndex {
 
-  def empty: RegistryIndex =
-    RegistryIndex(ErgoHistory.EmptyHistoryHeight, 0, Map.empty, Seq.empty)
+  def empty: RegistryIndex = RegistryIndex(ErgoHistory.EmptyHistoryHeight, 0, Map.empty, Seq.empty)
 
 }
 

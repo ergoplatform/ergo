@@ -1,8 +1,9 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import com.google.common.primitives.Ints
+import com.google.common.primitives.{Ints, Longs}
 import org.ergoplatform.db.{LDBFactory, LDBKVStore}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
+import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication, ExternalApplicationSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress}
@@ -113,6 +114,23 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
         case _ => None
       }
     }
+
+  def addApplication(appReq: ExternalAppRequest): Try[ExternalApplication] = {
+    val id = lastUsedId + 1
+    appReq.toApp(id).flatMap { app =>
+      Try(store.insert(Seq(appPrefixKey(id) -> ExternalApplicationSerializer.toBytes(app)))).map(_ => app)
+    }
+  }
+
+  def removeApplication(id: Long): Unit = store.remove(Seq(appPrefixKey(id)))
+
+  def allApplications: Seq[ExternalApplication] = {
+    store.getRange(SmallestPossibleApplicationId, BiggestPossibleApplicationId)
+      .map { case (_, v) => ExternalApplicationSerializer.parseBytes(v) }
+  }
+  def lastUsedId: Long = store.lastKeyInRange(SmallestPossibleApplicationId, BiggestPossibleApplicationId)
+    .map(bs => Longs.fromByteArray(bs))
+    .getOrElse(Constants.DefaultAppId)
 }
 
 object WalletStorage {
@@ -120,11 +138,21 @@ object WalletStorage {
   val ZeroArray = Array.fill(ZeroCount)(0: Byte)
   val AppendixCount = 32 - ZeroCount
 
-  val HeightPrefixArray = (Array.fill(ZeroCount - 1)(0: Byte) :+ (1:Byte)) ++ Array.fill(8)(0: Byte)
+  val HeightPrefixByte = 1: Byte
+  val ApplicationPrefixByte = 2: Byte
+
+  val HeightPrefixArray = (Array.fill(ZeroCount - 1)(0: Byte) :+ HeightPrefixByte) ++ Array.fill(12)(0: Byte)
+  val ApplicationPrefixArray = (Array.fill(ZeroCount - 1)(0: Byte) :+ ApplicationPrefixByte) ++ Array.fill(8)(0: Byte)
+
+  val SmallestPossibleApplicationId = ApplicationPrefixArray ++ Longs.toByteArray(0)
+  val BiggestPossibleApplicationId = ApplicationPrefixArray ++ Longs.toByteArray(Long.MaxValue)
+
 
   def generalPrefixKey(keyString: String) = ZeroArray ++ Blake2b256.hash(keyString).takeRight(AppendixCount)
 
   def heightPrefixKey(height: Int) = HeightPrefixArray ++ Ints.toByteArray(height)
+
+  def appPrefixKey(appId: Long) = ApplicationPrefixArray ++ Longs.toByteArray(appId)
 
   val StateContextKey: Array[Byte] = generalPrefixKey("state_ctx")
 

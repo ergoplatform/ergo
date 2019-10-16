@@ -51,7 +51,7 @@ libraryDependencies ++= Seq(
 
 updateOptions := updateOptions.value.withLatestSnapshots(false)
 
-coverageExcludedPackages := ".*ErgoApp.*;.*routes.*;.*ErgoPersistentModifier"
+coverageExcludedPackages := ".*ErgoApp.*;.*ErgoPersistentModifier"
 
 fork := true
 

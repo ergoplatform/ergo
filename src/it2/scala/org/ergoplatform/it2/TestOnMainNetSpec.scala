@@ -1,6 +1,7 @@
 package org.ergoplatform.it2
 
 import com.typesafe.config.Config
+import org.ergoplatform.it.api.NodeApi.NodeInfo
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.scalatest.{FreeSpec, OptionValues}
 
@@ -14,19 +15,19 @@ class TestOnMainNetSpec
     with OptionValues {
 
   val nodeConfig: Config = nodeSeedConfigs.head.withFallback(nonGeneratingPeerConfig)
-  // TODO: switch to mainnet
-  val node: Node = docker.startTestNetNode(nodeConfig).get
+  val node: Node = docker.startMainNetNodeYesImSure(nodeConfig).get
 
   "Start a node on mainnet and wait for a full sync" in {
-
     val result = Async.async {
-      // height is null until the bootstrap sync is complete
-      Async.await(node.waitForHeight(1, 1.second))
-      // TODO check the node's health
-      docker.forceStopNode(node.containerId)
+      Async.await(node.waitFor[NodeInfo](
+        _.info,
+        nodeInfo => {
+          nodeInfo.bestBlockHeightOpt.exists(nodeInfo.bestHeaderHeightOpt.contains)
+        },
+        1.second
+      ))
     }
-
-    Await.result(result, 60.minutes)
+    Await.result(result, 120.minutes)
   }
 
 }

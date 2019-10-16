@@ -20,6 +20,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import net.ceedubs.ficus.Ficus._
 import org.apache.commons.io.FileUtils
 import org.asynchttpclient.Dsl.{config, _}
+import org.ergoplatform.settings.NetworkType.{DevNet, MainNet, TestNet}
 import org.ergoplatform.settings.{ErgoSettings, NetworkType}
 import scorex.util.ScorexLogging
 
@@ -80,7 +81,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
   def startDevNetNodes(nodeConfigs: List[Config],
                        configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] =
-    startNodes(NetworkType.TestNet, nodeConfigs, configEnrich)
+    startNodes(TestNet, nodeConfigs, configEnrich)
 
   def waitForStartupBlocking(nodes: List[Node]): List[Node] = {
     log.debug("Waiting for nodes to start")
@@ -156,17 +157,17 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
   def startDevNetNode(nodeSpecificConfig: Config,
                       extraConfig: ExtraConfig = noExtraConfig,
                       specialVolumeOpt: Option[(String, String)] = None): Try[Node] =
-    startNode(NetworkType.DevNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
+    startNode(DevNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
 
   def startTestNetNode(nodeSpecificConfig: Config,
                       extraConfig: ExtraConfig = noExtraConfig,
                       specialVolumeOpt: Option[(String, String)] = None): Try[Node] =
-    startNode(NetworkType.TestNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
+    startNode(TestNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
 
   def startMainNetNodeYesImSure(nodeSpecificConfig: Config,
                                 extraConfig: ExtraConfig = noExtraConfig,
                                 specialVolumeOpt: Option[(String, String)] = None): Try[Node] =
-    startNode(NetworkType.MainNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
+    startNode(MainNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
 
   private def buildErgoSettings(networkType: NetworkType, nodeConfig: Config) = {
     val actualConfig = nodeConfig
@@ -209,11 +210,6 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .build()
   }
 
-//  private def escapeShellCmd(str: String) = str.replace(" ", """\ """)
-//    .replaceAll("\\t", """\\t""")
-//    .replaceAll("\\n", """\\n""")
-//    .replace("\"", "\\\"")
-
   private def buildPeerContainerConfig(networkType: NetworkType,
                                        nodeConfig: Config,
                                        settings: ErgoSettings,
@@ -226,6 +222,11 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .put(networkPort.toString, Collections.singletonList(PortBinding.randomPort("0.0.0.0")))
       .build()
 
+    val memoryLimit = networkType match {
+      case MainNet => 1L << 32 // 4GB
+      case _ => 1L << 30 // 1GB
+    }
+
     val hostConfig = specialVolumeOpt
       .map { case (lv, rv) =>
         HostConfig.builder()
@@ -233,7 +234,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       }
       .getOrElse(HostConfig.builder())
       .portBindings(portBindings)
-      .memory(1L << 30) //limit memory to 1G
+      .memory(memoryLimit)
       .build()
 
     val networkingConfig = ContainerConfig.NetworkingConfig
@@ -242,13 +243,18 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     val configCommandLine = renderProperties(asProperties(nodeConfig))
 
     val networkTypeCmdOption = networkType match {
-      case NetworkType.MainNet => "--mainnet"
-      case NetworkType.TestNet => "--testnet"
-      case NetworkType.DevNet => ""
+      case MainNet => "--mainnet"
+      case TestNet => "--testnet"
+      case DevNet => ""
     }
 
-    val shellCmd = "echo Options: $OPTS; java $OPTS -jar /opt/ergo/ergo.jar " +
-      s"$networkTypeCmdOption -c /opt/ergo/${networkType.verboseName}Template.conf"
+    val miscCmdOptions = networkType match {
+      case MainNet => "-Xmx3G"
+      case _ => ""
+    }
+
+    val shellCmd = "echo Options: $OPTS; java $OPTS -jar " +
+      s"$miscCmdOptions /opt/ergo/ergo.jar $networkTypeCmdOption -c /opt/ergo/${networkType.verboseName}Template.conf"
 
     ContainerConfig.builder()
       .image(ErgoImageLatest)

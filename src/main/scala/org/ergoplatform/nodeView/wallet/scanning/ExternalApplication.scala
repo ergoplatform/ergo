@@ -31,7 +31,7 @@ object ExternalApplication {
 case class ExternalAppRequest(appName: String, trackingRule: ScanningPredicate) {
   def toApp(appId: Long): Try[ExternalApplication] = {
     if (appName.getBytes("UTF-8").length > ExternalApplication.MaxAppNameLength) {
-      Failure(new Exception(s"Too application name: $appName"))
+      Failure(new Exception(s"Too long application name: $appName"))
     } else {
       Success(ExternalApplication(appId, appName, trackingRule))
     }

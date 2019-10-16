@@ -14,11 +14,17 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
   def getAll: Seq[ErgoTransaction]
 
-  /** Returns all transactions resided in pool sorted by priority */
+  /** Returns all transactions resided in pool sorted by priority
+    */
   def getAllPrioritized: Seq[ErgoTransaction]
 
   def take(limit: Int): Iterable[ErgoTransaction]
 
   def modifierById(modifierId: ModifierId): Option[ErgoTransaction]
+
+  /** Returns a sequence of randomly selected transactions.
+    * @param txsNum - number of transactions in the digest
+    */
+  def randomSlice(txsNum: Int): Seq[ErgoTransaction]
 
 }

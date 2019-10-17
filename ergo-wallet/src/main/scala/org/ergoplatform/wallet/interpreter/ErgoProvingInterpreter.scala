@@ -73,7 +73,8 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[ExtendedSecretKey], para
             val newTC = totalCost + proverResult.cost
             if (newTC > context.costLimit)
               Failure(new Exception(s"Cost of transaction $unsignedTx exceeds limit ${context.costLimit}"))
-            else Success((ins :+ Input(unsignedInput.boxId, proverResult)) -> newTC)
+            else
+              Success((ins :+ Input(unsignedInput.boxId, proverResult)) -> newTC)
           }
         }
       }

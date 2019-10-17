@@ -41,7 +41,7 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
           .flatMap(txt => Base16.decode(encryptedSecret.salt)
             .flatMap(salt => Base16.decode(encryptedSecret.iv)
               .flatMap(iv => Base16.decode(encryptedSecret.authTag)
-                .map((txt, salt, iv, _))
+                .map(tag => (txt, salt, iv, tag))
               )
             )
           )

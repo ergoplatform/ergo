@@ -51,8 +51,6 @@ libraryDependencies ++= Seq(
 
 updateOptions := updateOptions.value.withLatestSnapshots(false)
 
-coverageExcludedPackages := ".*ErgoApp.*;.*ErgoPersistentModifier"
-
 fork := true
 
 val opts = Seq(

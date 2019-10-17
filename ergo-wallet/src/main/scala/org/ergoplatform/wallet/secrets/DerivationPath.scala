@@ -18,10 +18,14 @@ final case class DerivationPath(decodedPath: Seq[Int], publicBranch: Boolean) {
 
   def isMaster: Boolean = depth == 1
 
-  def encoded: String =
-    (if (publicBranch) s"$PublicBranchMasterId/" else s"$PrivateBranchMasterId/") + decodedPath.tail
-      .map(x => if (Index.isHardened(x)) s"${x - Index.HardRangeStart}'" else x.toString)
-      .mkString("/")
+  /** Encode this DerivationPath as a parsable string. */
+  def encoded: String = {
+    val masterPrefix = if (publicBranch) s"$PublicBranchMasterId/" else s"$PrivateBranchMasterId/"
+    val tailPath = decodedPath.tail
+        .map(x => if (Index.isHardened(x)) s"${x - Index.HardRangeStart}'" else x.toString)
+        .mkString("/")
+    masterPrefix + tailPath
+  }
 
   def extended(idx: Int): DerivationPath = DerivationPath(decodedPath :+ idx, publicBranch)
 

@@ -249,7 +249,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       Constants.FallbackDiff
     } else {
       //todo: it is slow to read thousands headers from database for each header
-      //todo; consider caching here
+      //todo: consider caching here
       //todo: https://github.com/ergoplatform/ergo/issues/872
       val parentHeight = parent.height
       val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)

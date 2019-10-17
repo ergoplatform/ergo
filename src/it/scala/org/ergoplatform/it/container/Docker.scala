@@ -81,7 +81,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
   def startDevNetNodes(nodeConfigs: List[Config],
                        configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] =
-    startNodes(TestNet, nodeConfigs, configEnrich)
+    startNodes(DevNet, nodeConfigs, configEnrich)
 
   def waitForStartupBlocking(nodes: List[Node]): List[Node] = {
     log.debug("Waiting for nodes to start")

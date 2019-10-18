@@ -12,6 +12,8 @@ import org.scalameter.picklers.Implicits._
 import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
 import scorex.util.idToBytes
+import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import java.io._
 
 import scala.util.Random
 
@@ -27,6 +29,8 @@ object LDBStoreBench
 
   private def storeVLDB() = new VersionedLDBKVStore(db0, keepVersions = 400)
   private def storeLDB() = new LDBKVStore(db1)
+  private def storeIODB():Store = new LSMStore(createTempDir)
+  private def storeLVDB():Store = new LDBVersionedStore(createTempDir, keepVersions = 400)
 
   private val modsNumGen = Gen.enumeration("modifiers number")(1000, 10000)
 
@@ -75,6 +79,32 @@ object LDBStoreBench
     bts.foreach { bt => db.get(idToBytes(bt.headerId)) }
   }
 
+  private def benchWriteIODB(bts: Seq[BlockTransactions]): Unit = {
+    val toInsert = bts.map(bt => ByteArrayWrapper(idToBytes(bt.headerId)) -> ByteArrayWrapper(bt.bytes))
+    val db = storeIODB()
+    db.update(ByteArrayWrapper(randomVersion), List.empty, toInsert)
+  }
+
+  private def benchWriteReadIODB(bts: Seq[BlockTransactions]): Unit = {
+    val toInsert = bts.map(bt => ByteArrayWrapper(idToBytes(bt.headerId)) -> ByteArrayWrapper(bt.bytes))
+    val db = storeIODB()
+    db.update(ByteArrayWrapper(randomVersion), List.empty, toInsert)
+    bts.foreach { bt => db.get(ByteArrayWrapper(idToBytes(bt.headerId))) }
+  }
+
+  private def benchWriteLVDB(bts: Seq[BlockTransactions]): Unit = {
+    val toInsert = bts.map(bt => ByteArrayWrapper(idToBytes(bt.headerId)) -> ByteArrayWrapper(bt.bytes))
+    val db = storeLVDB()
+    db.update(ByteArrayWrapper(randomVersion), List.empty, toInsert)
+  }
+
+  private def benchWriteReadLVDB(bts: Seq[BlockTransactions]): Unit = {
+    val toInsert = bts.map(bt => ByteArrayWrapper(idToBytes(bt.headerId)) -> ByteArrayWrapper(bt.bytes))
+    val db = storeLVDB()
+    db.update(ByteArrayWrapper(randomVersion), List.empty, toInsert)
+    bts.foreach { bt => db.get(ByteArrayWrapper(idToBytes(bt.headerId))) }
+  }
+
   performance of "LDBStore vs LSMStore" in {
     performance of "LDBStore write" in {
       using(txsGen) config(config: _*) in (bts => benchWriteLDB(bts))
@@ -89,6 +119,22 @@ object LDBStoreBench
     performance of "VLDBStore write/read" in {
       using(txsGen) config(config: _*) in (bts => benchWriteReadVLDB(bts))
     }
+
+    performance of "IODBStore write" in {
+      using(txsGen) config(config: _*) in (bts => benchWriteIODB(bts))
+    }
+    performance of "IODBStore write/read" in {
+      using(txsGen) config(config: _*) in (bts => benchWriteReadIODB(bts))
+    }
+
+    performance of "LVDBStore write" in {
+      using(txsGen) config(config: _*) in (bts => benchWriteLVDB(bts))
+    }
+
+    performance of "LVDBStore write/read" in {
+      using(txsGen) config(config: _*) in (bts => benchWriteReadLVDB(bts))
+    }
   }
+
 
 }

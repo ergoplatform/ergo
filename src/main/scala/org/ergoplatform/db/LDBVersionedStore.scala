@@ -92,7 +92,9 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store 
     packed(1) = keySize.asInstanceOf[Byte]
     Array.copy(versionID.data, 0, packed, 2, versionSize)
     Array.copy(key, 0, packed, 2 + versionSize, keySize)
-    Array.copy(value, 0, packed, 2 + versionSize + keySize, valueSize)
+    if (value != null) {
+      Array.copy(value, 0, packed, 2 + versionSize + keySize, valueSize)
+    }
     packed
   }
 

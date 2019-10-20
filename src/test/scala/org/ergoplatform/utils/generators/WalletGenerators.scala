@@ -5,8 +5,8 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlock, RegistryIndex}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
-import org.ergoplatform.nodeView.wallet.scanning.{AndScanningPredicate, ContainsAssetPredicate, ContainsScanningPredicate, EqualsScanningPredicate, ExternalAppRequest, ExternalApplication, OrScanningPredicate, ScanningPredicate}
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.nodeView.wallet.scanning._
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import org.ergoplatform.wallet.secrets.{DerivationPath, Index}
 import org.scalacheck.Gen

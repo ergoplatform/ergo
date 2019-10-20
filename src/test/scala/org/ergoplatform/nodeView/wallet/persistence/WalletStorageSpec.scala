@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 import io.iohk.iodb.{LSMStore, Store}
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.db.DBSpec
+import org.ergoplatform.nodeView.wallet.scanning.ExternalAppRequest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -55,6 +56,19 @@ class WalletStorageSpec
         val storage = new WalletStorage(store, settings)
         paths.foreach(storage.addPath)
         storage.readPaths should contain theSameElementsAs paths.toSet
+      }
+    }
+  }
+
+  it should "add and read applications" in {
+    forAll(Gen.nonEmptyListOf(externalAppReqGen)) { externalAppReqs =>
+      withStore { store =>
+        val storage = new WalletStorage(store, settings)
+        externalAppReqs.foreach(storage.addApplication)
+        val storageApps = storage.allApplications
+        val storageRequests = storageApps.map(app => ExternalAppRequest(app.appName, app.trackingRule))
+        storageRequests.foreach(r => externalAppReqs.contains(r) shouldBe true)
+        storageApps.map(_.appId).foreach(storage.removeApplication)
       }
     }
   }

@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.ErgoBox
+import scorex.util.encode.Base16
 import sigmastate.Values
 
 /**
@@ -22,6 +23,13 @@ case class ContainsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byt
       }
     }
   }
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: ContainsScanningPredicate => other.regId == regId && other.bytes.sameElements(bytes)
+    case _ => false
+  }
+
+  override def toString: String = s"ContainsScanningPredicate($regId, ${Base16.encode(bytes)})"
 }
 
 case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byte]) extends ScanningPredicate {
@@ -33,12 +41,26 @@ case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byte]
       }
     }
   }
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: EqualsScanningPredicate => other.regId == regId && other.bytes.sameElements(bytes)
+    case _ => false
+  }
+
+  override def toString: String = s"EqualsScanningPredicate($regId, ${Base16.encode(bytes)})"
 }
 
 case class ContainsAssetPredicate(assetId: ErgoBox.TokenId) extends ScanningPredicate {
   override def filter(box: ErgoBox): Boolean = {
     box.additionalTokens.exists(_._1.sameElements(assetId))
   }
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: ContainsAssetPredicate => other.assetId.sameElements(assetId)
+    case _ => false
+  }
+
+  override def toString: String = s"ContainsAssetPredicate(${Base16.encode(assetId)})"
 }
 
 case class AndScanningPredicate(subPredicates: ScanningPredicate*) extends ScanningPredicate {

@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlock, RegistryIndex}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{AndScanningPredicate, ContainsAssetPredicate, ContainsScanningPredicate, EqualsScanningPredicate, ExternalAppRequest, ExternalApplication, OrScanningPredicate, ScanningPredicate}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import org.ergoplatform.wallet.secrets.{DerivationPath, Index}
@@ -120,6 +121,46 @@ trait WalletGenerators extends ErgoTransactionGenerators {
     indices <- Gen.listOf(Gen.oneOf(Seq(true, false))
       .flatMap(x => Gen.posNum[Int].map(i => if (x) Index.hardIndex(i) else i)))
   } yield DerivationPath(0 +: indices, isPublic)
+
+
+  def registerIdGen: Gen[ErgoBox.RegisterId] = Gen.oneOf(ErgoBox.allRegisters)
+  def containsScanningPredicateGen: Gen[ContainsScanningPredicate] = for {
+    regId <- registerIdGen
+    bs <- nonEmptyBytesGen
+  } yield ContainsScanningPredicate(regId, bs)
+
+  def equalsScanningPredicateGen: Gen[EqualsScanningPredicate] = for {
+    regId <- registerIdGen
+    bs <- nonEmptyBytesGen
+  } yield EqualsScanningPredicate(regId, bs)
+
+  def containsAssetPredicateGen: Gen[ContainsAssetPredicate] = for {
+    asset <- assetGen
+  } yield ContainsAssetPredicate(asset._1)
+
+  def orScanningPredicateGen: Gen[OrScanningPredicate] = for {
+    args <- Gen.nonEmptyListOf(Gen.oneOf(containsScanningPredicateGen, equalsScanningPredicateGen,
+                                          containsAssetPredicateGen))
+  } yield OrScanningPredicate(args :_*)
+
+  def andScanningPredicateGen: Gen[AndScanningPredicate] = for {
+    args <- Gen.nonEmptyListOf(Gen.oneOf(containsScanningPredicateGen, equalsScanningPredicateGen,
+      containsAssetPredicateGen, orScanningPredicateGen))
+  } yield AndScanningPredicate(args :_*)
+
+  def scanningPredicateGen: Gen[ScanningPredicate] = for {
+    predicate <- Gen.oneOf(andScanningPredicateGen, orScanningPredicateGen)
+  } yield predicate
+
+  def externalAppReqGen: Gen[ExternalAppRequest] = for {
+    appName <- Gen.alphaNumStr
+    pred <- scanningPredicateGen
+  } yield ExternalAppRequest(appName, pred)
+
+  def externalAppGen: Gen[ExternalApplication] = for {
+    appId <- Gen.posNum[Long]
+    req <- externalAppReqGen
+  } yield req.toApp(appId).get
 
   private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)
 

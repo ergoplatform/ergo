@@ -30,6 +30,8 @@ case class ContainsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byt
   }
 
   override def toString: String = s"ContainsScanningPredicate($regId, ${Base16.encode(bytes)})"
+
+  override def hashCode(): Int = super.hashCode()
 }
 
 case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byte]) extends ScanningPredicate {
@@ -47,6 +49,8 @@ case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byte]
     case _ => false
   }
 
+  override def hashCode(): Int = super.hashCode()
+
   override def toString: String = s"EqualsScanningPredicate($regId, ${Base16.encode(bytes)})"
 }
 
@@ -59,6 +63,8 @@ case class ContainsAssetPredicate(assetId: ErgoBox.TokenId) extends ScanningPred
     case other: ContainsAssetPredicate => other.assetId.sameElements(assetId)
     case _ => false
   }
+
+  override def hashCode(): Int = super.hashCode()
 
   override def toString: String = s"ContainsAssetPredicate(${Base16.encode(assetId)})"
 }

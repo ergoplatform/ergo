@@ -4,8 +4,6 @@ import io.circe.syntax._
 import akka.actor.ActorRefFactory
 import akka.http.scaladsl.server.Route
 import io.circe.Json
-import org.ergoplatform.ErgoAddressEncoder
-import org.ergoplatform.db.LDBFactory
 import org.ergoplatform.http.api.{ApiCodecs, ErgoBaseApiRoute}
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
 import org.ergoplatform.nodeView.wallet.scanning.ExternalAppRequest
@@ -26,12 +24,11 @@ final case class ApplicationApiRoute (ergoSettings: ErgoSettings)
 
   import org.ergoplatform.nodeView.wallet.scanning.ExternalApplicationJsonCodecs._
 
-  //todo: move this storage out of this class during further steps of EIP-1 implementation
-  lazy val storage = new WalletStorage(LDBFactory.createKvDb(s"${ergoSettings.directory}/apps"), ergoSettings)(new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix))
+  lazy val storage: WalletStorage = ergoSettings.walletStorage
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  private def encodeId(id: Long) = Json.obj("id" -> id.asJson)
+  private def encodeId(id: Long): Json = Json.obj("id" -> id.asJson)
 
   override val route: Route = (pathPrefix("application") & withAuth) {
     registerR ~

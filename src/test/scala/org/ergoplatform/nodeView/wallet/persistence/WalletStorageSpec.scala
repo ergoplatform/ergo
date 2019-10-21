@@ -60,7 +60,7 @@ class WalletStorageSpec
     }
   }
 
-  it should "add and read applications" in {
+  it should "add, remove and read applications" in {
     forAll(Gen.nonEmptyListOf(externalAppReqGen)) { externalAppReqs =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
@@ -69,6 +69,7 @@ class WalletStorageSpec
         val storageRequests = storageApps.map(app => ExternalAppRequest(app.appName, app.trackingRule))
         storageRequests.foreach(r => externalAppReqs.contains(r) shouldBe true)
         storageApps.map(_.appId).foreach(storage.removeApplication)
+        storage.allApplications.length shouldBe 0
       }
     }
   }

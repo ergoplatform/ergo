@@ -58,6 +58,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private val storage: WalletStorage = settings.walletStorage
   private val registry: WalletRegistry = settings.walletRegistry
 
+  private val externalApplications = storage.allApplications
+  private val trackingRules = externalApplications.map(_.trackingRule)
+
 
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
   // to the wallet (by executing testing transactions against them). The state context is being updated by listening
@@ -308,9 +311,15 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   /**
     * Extracts all outputs which contain tracked bytes from the given transaction.
     */
-  private def extractWalletOutputs(tx: ErgoTransaction): Seq[ErgoBox] = {
+  private def extractWalletOutputs(tx: ErgoTransaction): Seq[ErgoBox] = { //Seq[TrackedBox] = {
     val trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.contentBytes)
     tx.outputs.filter(bx => trackedBytes.exists(t => bx.propositionBytes.containsSlice(t)))
+
+   /* tx.outputs.flatMap{bx =>
+      val appsTriggered = externalApplications.filter(_.trackingRule.filter(bx))
+      val outIdx = 1.toShort
+      appsTriggered.map(app => TrackedBox(tx, outIdx, None, bx, BoxCertainty.Uncertain, app.appId.toShort))
+    } */
   }
 
   /**

@@ -55,8 +55,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private var secretStorageOpt: Option[JsonSecretStorage] = None
 
   private var offChainRegistry: OffChainRegistry = OffChainRegistry.empty
-  private val storage: WalletStorage = WalletStorage.readOrCreate(settings)
-  private val registry: WalletRegistry = WalletRegistry.readOrCreate(settings)
+  private val storage: WalletStorage = settings.walletStorage
+  private val registry: WalletRegistry = settings.walletRegistry
 
 
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging

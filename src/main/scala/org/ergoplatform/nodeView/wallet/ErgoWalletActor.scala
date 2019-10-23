@@ -126,8 +126,10 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val walletInputs = allInputs.filter(x => outIds.contains(x._2))
       val walletTxIds = walletInputs.map(_._1) ++ walletOutputs.map(_._1)
       val walletTxs = block.transactions.filter(tx => walletTxIds.contains(tx.id))
-
-
+                        .map(WalletTransaction(_, height, Constants.DefaultAppId))
+      registry.updateOnBlock(walletTrackedBoxes, Seq.empty, walletInputs, walletTxs)(block.id, height)
+      val newOnChainIds = walletTrackedBoxes.map(x => encodedBoxId(x.box.id))
+      offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)
 
     case Rollback(version: VersionTag, height: Int) =>
       // remove postponed blocks which were rolled back.
@@ -316,7 +318,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     val appBoxes = tx.outputs.flatMap { bx =>
       val appsTriggered = externalApplications.filter(_.trackingRule.filter(bx))
-      appsTriggered.map(app => TrackedBox(tx, bx.index, None, bx, BoxCertainty.Uncertain, app.appId.toShort))
+      appsTriggered.map(app => TrackedBox(tx, bx.index, None, bx, BoxCertainty.Uncertain, app.appId))
     }
     (walletBoxes, appBoxes)
   }
@@ -477,51 +479,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
   }
 
-  /**
-    * Updates indexes according to a given wallet-critical data.
-    */
-  private def processBlock(id: ModifierId,
-                           height: Int,
-                           inputs: Seq[(ModifierId, EncodedBoxId)],
-                           outputs: Seq[(ModifierId, ErgoBox)],
-                           txs: Seq[ErgoTransaction]): Unit = {
-    // re-create interpreter in order to avoid IR context bloating.
-    proverOpt = proverOpt.map(oldInterpreter => ErgoProvingInterpreter(oldInterpreter.secretKeys, parameters))
-    val prevUncertainBoxes = registry.readUncertainBoxes
-    val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
-      .filterNot { case (_, o) => inputs.map(_._2).contains(encodedBoxId(o.id)) }
-      .partition { case (_, o) => resolve(o) }
-    val resolvedTrackedBoxes = resolved.map { case (txId, bx) =>
-      TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Certain, Constants.DefaultAppId)
-    }
-    val unresolvedTrackedBoxes = unresolved.map { case (txId, bx) =>
-      TrackedBox(txId, bx.index, Some(height), None, None, bx, BoxCertainty.Uncertain, Constants.DefaultAppId)
-    }
-
-    log.info(
-      s"Processing ${resolved.size} resolved boxes: [${resolved.map(_._2.id).mkString(", ")}], " +
-      s"${unresolved.size} unresolved boxes: [${unresolved.map(_._2.id).mkString(", ")}]."
-    )
-
-    val walletTxs = txs.map(WalletTransaction(_, height, Constants.DefaultAppId))
-
-    registry.updateOnBlock(resolvedTrackedBoxes, unresolvedTrackedBoxes, inputs, walletTxs)(id, height)
-
-    val newOnChainIds = (resolvedTrackedBoxes ++ unresolvedTrackedBoxes).map(x => encodedBoxId(x.box.id))
-    offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)
-  }
-
-  private def processBlock(id: ModifierId,
-                           height: Int,
-                           txs: Seq[ErgoTransaction]): Unit = {
-    val (outputs, inputs) = txs
-      .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, EncodedBoxId)]) {
-        case ((outAcc, inAcc), tx) =>
-          (outAcc ++ extractWalletOutputs(tx).map(tx.id -> _), inAcc ++ extractAllInputs(tx).map(tx.id -> _))
-      }
-    processBlock(id, height, inputs, outputs, txs)
-  }
-
   private def processSecretAddition(secret: ExtendedSecretKey): Unit =
     proverOpt.foreach { prover =>
       log.info(s"New secret created, public image: ${Base16.encode(secret.publicKey.keyBytes)}")
@@ -537,16 +494,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     }
     proverOpt = Some(ErgoProvingInterpreter(secrets, parameters))
     storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
-    // process postponed blocks when prover is available.
-    val lastProcessedHeight = registry.readIndex.height
-    storage.readLatestPostponedBlockHeight.foreach { lastPostponedHeight =>
-      val blocks = storage.readBlocks(lastProcessedHeight, lastPostponedHeight)
-      blocks.sortBy(_.height).foreach { case PostponedBlock(id, height, txs) =>
-        processBlock(id, height, txs)
-      }
-      // remove processed blocks from the storage.
-      storage.removeBlocks(lastProcessedHeight, lastPostponedHeight)
-    }
   }
 
   private def inputsFor(targetAmount: Long,

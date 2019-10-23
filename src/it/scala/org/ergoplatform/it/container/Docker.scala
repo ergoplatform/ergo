@@ -224,7 +224,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
     val oneGB: Long = 1024 * 1024 * 1024
     val memoryLimit = networkType match {
-      case MainNet => 3 * oneGB
+      case MainNet => 2 * oneGB
       case _ => oneGB
     }
 
@@ -250,7 +250,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
 
     val miscCmdOptions = networkType match {
-      case MainNet => "-Xmx3G"
+      case MainNet => "-Xmx2G"
       case _ => ""
     }
 

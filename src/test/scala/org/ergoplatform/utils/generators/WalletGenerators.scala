@@ -3,7 +3,7 @@ package org.ergoplatform.utils.generators
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.IdUtils._
-import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlock, RegistryIndex}
+import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning._
 import org.ergoplatform.settings.Constants
@@ -109,12 +109,6 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       RegistryIndex(height, amount, encodedBalances, uncertain.map(encodedBoxId))
     }
   }
-
-  def postponedBlockGen: Gen[PostponedBlock] = for {
-    height <- Gen.posNum[Int]
-    id <- modifierIdGen
-    txs <- Gen.listOf(invalidErgoTransactionGen)
-  } yield PostponedBlock(id, height, txs)
 
   def derivationPathGen: Gen[DerivationPath] = for {
     isPublic <- Gen.oneOf(Seq(true, false))

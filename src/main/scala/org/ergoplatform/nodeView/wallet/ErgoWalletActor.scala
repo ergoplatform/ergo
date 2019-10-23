@@ -132,10 +132,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)
 
     case Rollback(version: VersionTag, height: Int) =>
-      // remove postponed blocks which were rolled back.
-      storage.readLatestPostponedBlockHeight.foreach { latestHeight =>
-        storage.removeBlocks(height, latestHeight)
-      }
       registry.rollback(version).fold(
         e => log.error(s"Failed to rollback wallet registry to version $version due to: $e"), _ => ())
   }

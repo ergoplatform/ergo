@@ -222,9 +222,10 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .put(networkPort.toString, Collections.singletonList(PortBinding.randomPort("0.0.0.0")))
       .build()
 
+    val oneGB: Long = 1024 * 1024 * 1024
     val memoryLimit = networkType match {
-      case MainNet => 1L << 32 // 4GB
-      case _ => 1L << 30 // 1GB
+      case MainNet => 3 * oneGB
+      case _ => oneGB
     }
 
     val hostConfig = specialVolumeOpt

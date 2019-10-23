@@ -17,7 +17,6 @@ import scala.util.{Success, Try}
   *   * tracked addresses
   *   * derivation paths
   *   * changed addresses
-  *   * postponed blocks
   *   * ErgoStateContext (is it version-agnostic?)
   */
 final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
@@ -79,28 +78,11 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     .flatMap(r => ErgoStateContextSerializer(settings.chainSettings.voting).parseBytesTry(r).toOption)
     .getOrElse(ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte), settings))
 
-  def putBlock(block: PostponedBlock): Unit = {
-    val toInsert = Seq(
-      heightPrefixKey(block.height) -> PostponedBlockSerializer.toBytes(block),
-      LatestPostponedBlockHeightKey -> Ints.toByteArray(block.height)
-    )
-    store.insert(toInsert)
-  }
-
-  def readBlocks(fromHeight: Int, toHeight: Int): Seq[PostponedBlock] =
-    (fromHeight to toHeight).foldLeft(Seq.empty[PostponedBlock]) { case (acc, h) =>
-      acc ++ store.get(heightPrefixKey(h)).flatMap(r => PostponedBlockSerializer.parseBytesTry(r).toOption)
-    }
-
   def removeBlock(height: Int): Unit =
     store.remove(Seq(heightPrefixKey(height)))
 
   def removeBlocks(fromHeight: Int, toHeight: Int): Unit =
     store.remove((fromHeight to toHeight).map(heightPrefixKey))
-
-  def readLatestPostponedBlockHeight: Option[Int] = store
-    .get(LatestPostponedBlockHeightKey)
-    .map(r => Ints.fromByteArray(r))
 
   def updateChangeAddress(address: P2PKAddress): Unit = {
     val bytes = addressEncoder.toString(address).getBytes(Constants.StringEncoding)
@@ -159,8 +141,6 @@ object WalletStorage {
   val TrackedAddressesKey: Array[Byte] = generalPrefixKey("tracked_pks")
 
   val SecretPathsKey: Array[Byte] = generalPrefixKey("secret_paths")
-
-  val LatestPostponedBlockHeightKey: Array[Byte] = generalPrefixKey("latest_block")
 
   val ChangeAddressKey: Array[Byte] = generalPrefixKey("change_address")
 

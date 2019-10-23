@@ -37,19 +37,6 @@ class WalletStorageSpec
     }
   }
 
-  it should "process postponed block correctly" in {
-    forAll(postponedBlockGen) { block =>
-      withStore { store =>
-        val storage = new WalletStorage(store, settings)
-        storage.putBlock(block)
-        storage.readBlocks(block.height, block.height) shouldBe Seq(block)
-        storage.readLatestPostponedBlockHeight shouldBe Some(block.height)
-        storage.removeBlock(block.height)
-        storage.readBlocks(block.height, block.height) shouldBe Seq.empty
-      }
-    }
-  }
-
   it should "add and read derivation paths" in {
     forAll(Gen.nonEmptyListOf(derivationPathGen)) { paths =>
       withStore { store =>

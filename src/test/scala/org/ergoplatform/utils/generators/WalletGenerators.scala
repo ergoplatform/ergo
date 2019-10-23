@@ -158,7 +158,7 @@ trait WalletGenerators extends ErgoTransactionGenerators {
   } yield ExternalAppRequest(appName, pred)
 
   def externalAppGen: Gen[ExternalApplication] = for {
-    appId <- Gen.posNum[Long]
+    appId <- Gen.posNum[Short]
     req <- externalAppReqGen
   } yield req.toApp(appId).get
 

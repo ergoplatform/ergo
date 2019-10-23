@@ -99,38 +99,35 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       readers
 
   private def scanLogic: Receive = {
+    //scan mempool transaction
     case ScanOffChain(tx) =>
-      val outputs = extractWalletOutputs(tx)
+      val resolvedTrackedBoxes = extractWalletOutputs(tx)._1
       val inputs = extractAllInputs(tx)
-      val resolved = outputs.filter(resolve)
-      val resolvedTrackedBoxes = resolved.map { bx =>
-        TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain, Constants.DefaultAppId)
-      }
-
       offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
 
+    //scan block transactions
     case ScanOnChain(block) =>
-      val (walletOutputs, allInputs) = block.transactions
-        .foldLeft(Seq.empty[(ModifierId, ErgoBox)], Seq.empty[(ModifierId, EncodedBoxId)]) {
+      //extract wallet-related outputs and all the inputs from all the transactions in the block
+      val (walletAndAppsTrackedBoxes, allInputs) = block.transactions
+        .foldLeft((Seq.empty[TrackedBox], Seq.empty[TrackedBox]), Seq.empty[(ModifierId, EncodedBoxId)]) {
           case ((outAcc, inAcc), tx) =>
             val outputs = extractWalletOutputs(tx)
             val inputs = extractAllInputs(tx)
-            (outAcc ++ outputs.map(tx.id -> _), inAcc ++ inputs.map(tx.id -> _))
+            ((outAcc._1 ++ outputs._1) -> (outAcc._2 ++ outputs._2), inAcc ++ inputs.map(tx.id -> _))
         }
+
+      val walletTrackedBoxes = walletAndAppsTrackedBoxes._1
+      val walletOutputs = walletTrackedBoxes.map(tb => tb.creationTxId -> tb.box)
+
       val outIds = registry.readAllBoxes.map(x => encodedBoxId(x.box.id)) ++
         walletOutputs.map(x => encodedBoxId(x._2.id))
+
+      //leave only spent inputs
       val walletInputs = allInputs.filter(x => outIds.contains(x._2))
       val walletTxIds = walletInputs.map(_._1) ++ walletOutputs.map(_._1)
       val walletTxs = block.transactions.filter(tx => walletTxIds.contains(tx.id))
-      if (proverOpt.isDefined) {
-        log.info(s"Processing block at height ${block.height} with ${walletTxs.size} wallet transactions")
-        processBlock(block.id, block.height, walletInputs, walletOutputs, walletTxs)
-      } else if (walletSettings.postponedScanning && walletTxs.nonEmpty) {
-        log.info(s"Postponing block at height ${block.height} with ${walletTxs.size} wallet transactions")
-        // save wallet-critical data from block to process it later.
-        val postponedBlock = PostponedBlock(block.id, block.height, walletTxs)
-        storage.putBlock(postponedBlock)
-      }
+
+
 
     case Rollback(version: VersionTag, height: Int) =>
       // remove postponed blocks which were rolled back.
@@ -311,15 +308,17 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   /**
     * Extracts all outputs which contain tracked bytes from the given transaction.
     */
-  private def extractWalletOutputs(tx: ErgoTransaction): Seq[ErgoBox] = { //Seq[TrackedBox] = {
-    val trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.contentBytes)
-    tx.outputs.filter(bx => trackedBytes.exists(t => bx.propositionBytes.containsSlice(t)))
+  private def extractWalletOutputs(tx: ErgoTransaction): (Seq[TrackedBox], Seq[TrackedBox]) = {
+    val trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.script.bytes)
+    val walletBoxes = tx.outputs.filter { bx =>
+      trackedBytes.exists(bs => bx.propositionBytes.sameElements(bs))
+    }.map(bx => TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain, Constants.DefaultAppId))
 
-   /* tx.outputs.flatMap{bx =>
+    val appBoxes = tx.outputs.flatMap { bx =>
       val appsTriggered = externalApplications.filter(_.trackingRule.filter(bx))
-      val outIdx = 1.toShort
-      appsTriggered.map(app => TrackedBox(tx, outIdx, None, bx, BoxCertainty.Uncertain, app.appId.toShort))
-    } */
+      appsTriggered.map(app => TrackedBox(tx, bx.index, None, bx, BoxCertainty.Uncertain, app.appId.toShort))
+    }
+    (walletBoxes, appBoxes)
   }
 
   /**

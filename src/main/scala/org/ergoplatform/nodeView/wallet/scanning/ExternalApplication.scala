@@ -14,7 +14,7 @@ import scala.util.{Failure, Success, Try}
   * @param trackingRule - a predicate to scan the blockchain for specific application-related boxes
   *
   */
-case class ExternalApplication(appId: Long, appName: String, trackingRule: ScanningPredicate)
+case class ExternalApplication(appId: Short, appName: String, trackingRule: ScanningPredicate)
 
 object ExternalApplication {
   val MaxAppNameLength = 255
@@ -29,7 +29,7 @@ object ExternalApplication {
   */
 
 case class ExternalAppRequest(appName: String, trackingRule: ScanningPredicate) {
-  def toApp(appId: Long): Try[ExternalApplication] = {
+  def toApp(appId: Short): Try[ExternalApplication] = {
     if (appName.getBytes("UTF-8").length > ExternalApplication.MaxAppNameLength) {
       Failure(new Exception(s"Too application name: $appName"))
     } else {
@@ -40,13 +40,13 @@ case class ExternalAppRequest(appName: String, trackingRule: ScanningPredicate) 
 
 object ExternalApplicationSerializer extends ScorexSerializer[ExternalApplication] {
   override def serialize(obj: ExternalApplication, w: Writer): Unit = {
-    w.putLong(obj.appId)
+    w.putShort(obj.appId)
     w.putShortString(obj.appName)
     ScanningPredicateSerializer.serialize(obj.trackingRule, w)
   }
 
   override def parse(r: Reader): ExternalApplication = {
-    val appId = r.getLong()
+    val appId = r.getShort()
     val appName = r.getShortString()
     val sp = ScanningPredicateSerializer.parse(r)
     ExternalApplication(appId, appName, sp)

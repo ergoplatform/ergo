@@ -28,7 +28,7 @@ final case class ApplicationApiRoute (ergoSettings: ErgoSettings)
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  private def encodeId(id: Long): Json = Json.obj("id" -> id.asJson)
+  private def encodeId(id: Short): Json = Json.obj("id" -> id.asJson)
 
   override val route: Route = (pathPrefix("application") & withAuth) {
     registerR ~
@@ -36,7 +36,8 @@ final case class ApplicationApiRoute (ergoSettings: ErgoSettings)
       listR
   }
 
-  def deregisterR: Route = (path("deregister" / LongNumber) & get) {id =>
+  def deregisterR: Route = (path("deregister" / IntNumber) & get) {idInt =>
+    val id = idInt.toShort
     storage.removeApplication(id)
     ApiResponse(encodeId(id))
   }

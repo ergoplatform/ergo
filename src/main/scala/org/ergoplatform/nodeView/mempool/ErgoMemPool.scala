@@ -8,7 +8,7 @@ import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.ModifierId
 
-import scala.util.Try
+import scala.util.{Random, Try}
 
 /**
   * Immutable memory pool implementation.
@@ -51,6 +51,12 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     new ErgoMemPool(pool.filter(condition))
   }
 
+  override def randomSlice(txsNum: Int): Seq[ErgoTransaction] = {
+    val txs = pool.orderedTransactions.values.toArray
+    val maxTxs = txs.length
+    if (maxTxs <= txsNum) txs else randSliceIndexes(txsNum, txs.length).map(txs)
+  }
+
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {
     new ErgoMemPool(pool.invalidate(tx))
   }
@@ -78,12 +84,16 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     }
   }
 
-  private def extractFee(tx: ErgoTransaction): Long = {
-    val propositionBytes = settings.chainSettings.monetary.feePropositionBytes
+  private def extractFee(tx: ErgoTransaction): Long =
     ErgoState.boxChanges(Seq(tx))._2
       .filter(_.ergoTree == settings.chainSettings.monetary.feeProposition)
       .map(_.value)
       .sum
+
+  private def randSliceIndexes(qty: Int, max: Int): Seq[Int] = {
+    require(qty <= max)
+    val idx = Random.nextInt(max)
+    (idx until (idx + qty)).map( _ % max)
   }
 
 }
@@ -93,9 +103,13 @@ object ErgoMemPool {
   sealed trait ProcessingOutcome
 
   object ProcessingOutcome {
+
     case object Accepted extends ProcessingOutcome
+
     case class Declined(e: Throwable) extends ProcessingOutcome
+
     case class Invalidated(e: Throwable) extends ProcessingOutcome
+
   }
 
   type MemPoolRequest = Seq[ModifierId]

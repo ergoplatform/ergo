@@ -35,9 +35,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   override val route: Route = pathPrefix("script") {
     toStrictEntity(10.seconds) {
-      p2shAddressR ~
-        p2sAddressR ~
-        addressToTree
+        p2sAddressR ~ addressToTree
     }
   }
 
@@ -80,6 +78,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     }
   }
 
+  //todo: temporarily switched off due to https://github.com/ergoplatform/ergo/issues/936
   def p2shAddressR: Route = (path("p2shAddress") & post & source) { source =>
     withWalletOp(_.publicKeys(0, loadMaxKeys)) { addrs =>
       compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SHAddress.apply).fold(

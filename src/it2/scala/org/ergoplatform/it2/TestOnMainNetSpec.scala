@@ -24,7 +24,7 @@ class TestOnMainNetSpec
         nodeInfo => {
           nodeInfo.bestBlockHeightOpt.exists(nodeInfo.bestHeaderHeightOpt.contains)
         },
-        1.second
+        60.second
       ))
     }
     Await.result(result, 120.minutes)

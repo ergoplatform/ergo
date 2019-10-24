@@ -130,11 +130,12 @@ object WalletStorage {
   val BiggestPossibleApplicationId = ApplicationPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
 
 
-  def generalPrefixKey(keyString: String) = ZeroArray ++ Blake2b256.hash(keyString).takeRight(AppendixCount)
+  def generalPrefixKey(keyString: String): Array[Byte] =
+    ZeroArray ++ Blake2b256.hash(keyString).takeRight(AppendixCount)
 
-  def heightPrefixKey(height: Int) = HeightPrefixArray ++ Ints.toByteArray(height)
+  def heightPrefixKey(height: Int): Array[Byte] = HeightPrefixArray ++ Ints.toByteArray(height)
 
-  def appPrefixKey(appId: Long) = ApplicationPrefixArray ++ Longs.toByteArray(appId)
+  def appPrefixKey(appId: Long): Array[Byte] = ApplicationPrefixArray ++ Longs.toByteArray(appId)
 
   val StateContextKey: Array[Byte] = generalPrefixKey("state_ctx")
 

@@ -52,15 +52,6 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     val bestHeaderOpt = history.bestHeaderOpt
 
     history.requiredDifficultyAfter(bestHeaderOpt.get) shouldBe initDiff
-
-    // Difficulty fallback check
-    val delayedHeader = nextHeader(bestHeaderOpt, defaultDifficultyControl,
-      tsOpt = Some(bestHeaderOpt.get.timestamp + 5.minutes.toMillis + 1),
-      diffBitsOpt = Some(RequiredDifficulty.encodeCompactBits(Constants.FallbackDiff)))
-
-    history = applyHeaderChain(history, HeaderChain(Seq(delayedHeader)))
-
-    history.requiredDifficultyAfter(delayedHeader) shouldBe Constants.FallbackDiff
   }
 
   property("lastHeaders() should return correct number of blocks") {

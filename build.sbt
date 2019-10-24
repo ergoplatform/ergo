@@ -4,8 +4,8 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "3.1.1",
-  scalaVersion := "2.12.8",
+  version := "3.1.3",
+  scalaVersion := "2.12.10",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
     "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",

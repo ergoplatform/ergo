@@ -250,7 +250,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
 
     val miscCmdOptions = networkType match {
-      case MainNet => "-Xmx2G"
+      case MainNet => ""
       case _ => ""
     }
 

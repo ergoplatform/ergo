@@ -27,7 +27,7 @@ class TestOnMainNetSpec
         60.second
       ))
     }
-    Await.result(result, 120.minutes)
+    Await.result(result, 4.hours)
   }
 
 }

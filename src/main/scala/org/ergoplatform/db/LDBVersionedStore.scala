@@ -13,11 +13,18 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store 
   private val undo: DB = createDB(dir, "ldb_undo")
   private var lsn : Long = getLastLSN
   private val versions : ArrayBuffer[VersionID] = getAllVersions
+  private val writeOptions = defaultWriteOptions
 
   private def createDB(dir: File, storeName: String): DB = {
     val op = new Options()
     op.createIfMissing(true)
     factory.open(new File(dir, storeName), op)
+  }
+
+  private def defaultWriteOptions = {
+    val options = new WriteOptions()
+    options.sync(true)
+    options
   }
 
   def get(key: K): Option[V] = {
@@ -130,9 +137,9 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store 
         }
         batch.put(key, v.data)
       }
-      db.write(batch)
+      db.write(batch, writeOptions)
       if (keepVersions > 0) {
-        undo.write(undoBatch)
+        undo.write(undoBatch, writeOptions)
         if (lastVersionID.isEmpty || !versionID.equals(lastVersionID.get)) {
           versions += versionID
           cleanStart(keepVersions)
@@ -195,8 +202,8 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store 
             }
           }
         }
-        db.write(batch)
-        undo.write(undoBatch)
+        db.write(batch, writeOptions)
+        undo.write(undoBatch, writeOptions)
       } finally {
         // Make sure you close the batch to avoid resource leaks.
         iterator.close()

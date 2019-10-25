@@ -21,14 +21,11 @@ class RegistryOpsSpec
 
   def createStore: Store = new LSMStore(createTempDir)
 
-  property("putBox/getBox/updateBox/removeBox") {
+  property("putBox/getBox/removeBox") {
     forAll(trackedBoxGen) { tb =>
       withVersionedStore(10) { store =>
         putBox(tb).transact(store)
         getBox(tb.box.id).transact(store) shouldBe Some(tb)
-        val updatedBox = tb.copy(certainty = BoxCertainty.Certain, spendingHeightOpt = Some(0))
-        updateBox(tb.box.id)(_ => updatedBox).transact(store)
-        getBox(tb.box.id).transact(store) shouldBe Some(updatedBox)
         removeBoxes(Seq(tb.box.id)).transact(store)
         getBox(tb.box.id).transact(store) shouldBe None
       }

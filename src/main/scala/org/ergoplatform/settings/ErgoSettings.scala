@@ -40,8 +40,8 @@ case class ErgoSettings(directory: String,
         .toOption
     }
 
-  val walletStorage: WalletStorage = WalletStorage.readOrCreate(this)(addressEncoder)
-  val walletRegistry: WalletRegistry = WalletRegistry.readOrCreate(this)
+  lazy val walletStorage: WalletStorage = WalletStorage.readOrCreate(this)(addressEncoder)
+  lazy val walletRegistry: WalletRegistry = WalletRegistry.readOrCreate(this)
 }
 
 object ErgoSettings extends ScorexLogging

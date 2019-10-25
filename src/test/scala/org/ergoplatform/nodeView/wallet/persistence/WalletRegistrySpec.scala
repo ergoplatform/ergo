@@ -39,7 +39,7 @@ class WalletRegistrySpec
     forAll(trackedBoxGen) { box =>
       withVersionedStore(10) { store =>
         val uncertainBox = box.copy(certainty = Uncertain)
-        val index = RegistryIndex(0, 0, Map.empty, Seq(encodedBoxId(uncertainBox.box.id)))
+        val index = RegistrySummary(0, 0, Map.empty, Seq(encodedBoxId(uncertainBox.box.id)))
         putBox(uncertainBox).flatMap(_ => putIndex(index)).transact(store)
         val registry = new WalletRegistry(store)(settings.walletSettings)
 

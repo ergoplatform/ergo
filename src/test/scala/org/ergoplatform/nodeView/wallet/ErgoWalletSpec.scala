@@ -4,7 +4,7 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
-import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
+import org.ergoplatform.nodeView.wallet.persistence.RegistrySummary
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils._
@@ -579,7 +579,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       waitForScanning(block)
       val historyHeight = getHistory.headersHeight
 
-      val confirmedBeforeRollback: RegistryIndex = getConfirmedBalances
+      val confirmedBeforeRollback: RegistrySummary = getConfirmedBalances
       val totalBeforeRollback = getBalancesWithUnconfirmed
       wallet.rollback(initialState.version)
       blocking(Thread.sleep(100))

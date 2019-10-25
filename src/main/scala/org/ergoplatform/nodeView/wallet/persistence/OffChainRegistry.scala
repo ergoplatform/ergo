@@ -18,14 +18,14 @@ final case class OffChainRegistry(height: Int,
   /**
     * Off-chain index considering on-chain balances.
     */
-  val readIndex: RegistryIndex = {
+  val readIndex: RegistrySummary = {
     val balance = offChainBalances.map(_.value).sum + onChainBalances.map(_.value).sum
     val tokensBalance = (offChainBalances ++ onChainBalances)
       .flatMap(_.assets)
       .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
         acc.updated(id, acc.getOrElse(id, 0L) + amt)
       }
-    RegistryIndex(height, balance, tokensBalance, Seq.empty)
+    RegistrySummary(height, balance, tokensBalance, Seq.empty)
   }
 
   /**

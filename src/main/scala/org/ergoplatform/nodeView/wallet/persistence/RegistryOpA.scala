@@ -33,8 +33,8 @@ object RegistryOpA {
 
   final case class RemoveTxs(ids: Seq[ModifierId]) extends RegistryOpA[Unit]
 
-  final case class PutIndex(index: RegistryIndex) extends RegistryOpA[Unit]
+  final case class PutIndex(index: RegistrySummary) extends RegistryOpA[Unit]
 
-  case object GetIndex extends RegistryOpA[RegistryIndex]
+  case object GetIndex extends RegistryOpA[RegistrySummary]
 
 }

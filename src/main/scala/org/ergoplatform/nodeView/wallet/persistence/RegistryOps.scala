@@ -100,13 +100,13 @@ object RegistryOps {
   def removeTxs(ids: Seq[ModifierId]): RegistryOp[Unit] =
     liftF[RegistryOpA, Unit](RemoveTxs(ids))
 
-  def putIndex(index: RegistryIndex): RegistryOp[Unit] =
+  def putIndex(index: RegistrySummary): RegistryOp[Unit] =
     liftF[RegistryOpA, Unit](PutIndex(index))
 
-  def getIndex: RegistryOp[RegistryIndex] =
-    liftF[RegistryOpA, RegistryIndex](GetIndex)
+  def getIndex: RegistryOp[RegistrySummary] =
+    liftF[RegistryOpA, RegistrySummary](GetIndex)
 
-  def updateIndex(updateF: RegistryIndex => RegistryIndex): RegistryOp[Unit] =
+  def updateIndex(updateF: RegistrySummary => RegistrySummary): RegistryOp[Unit] =
     getIndex.flatMap(v => putIndex(updateF(v)))
 
   private def interpreter(store: VersionedLDBKVStore): RegistryOpA ~> RegistryOpState =
@@ -170,20 +170,20 @@ object RegistryOps {
           }
         case PutIndex(index) =>
           State.modify { case (toInsert, toRemove) =>
-            val registryBytes = RegistryIndexSerializer.toBytes(index)
-            (toInsert :+ (RegistryIndexKey, registryBytes), toRemove)
+            val registryBytes = RegistrySummarySerializer.toBytes(index)
+            (toInsert :+ (RegistrySummaryKey, registryBytes), toRemove)
           }
         case GetIndex =>
           State.inspect { _ =>
-            store.get(RegistryIndexKey)
-              .flatMap(r => RegistryIndexSerializer.parseBytesTry(r).toOption)
-              .getOrElse(RegistryIndex.empty)
+            store.get(RegistrySummaryKey)
+              .flatMap(r => RegistrySummarySerializer.parseBytesTry(r).toOption)
+              .getOrElse(RegistrySummary.empty)
               .asInstanceOf[A]
           }
       }
     }
 
-  private val RegistryIndexKey = Algos.hash("reg_index")
+  private val RegistrySummaryKey = Algos.hash("reg_summary")
 
   private val BoxPrefix: Byte = 0x00
 

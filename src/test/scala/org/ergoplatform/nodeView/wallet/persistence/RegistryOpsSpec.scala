@@ -72,7 +72,7 @@ class RegistryOpsSpec
   }
 
   property("putIndex/getIndex/updateIndex") {
-    forAll(registryIndexGen) { index =>
+    forAll(registrySummaryGen) { index =>
       withVersionedStore(10) { store =>
         putIndex(index).transact(store)
         getIndex.transact(store) shouldBe index

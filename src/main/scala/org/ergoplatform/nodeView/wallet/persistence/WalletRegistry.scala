@@ -32,7 +32,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
 
   private val keepHistory = ws.keepSpentBoxes
 
-  def readIndex: RegistryIndex =
+  def readIndex: RegistrySummary =
     getIndex.transact(store)
 
   def readTransactions: Seq[WalletTransaction] =
@@ -92,7 +92,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
         _.flatten.flatMap(bx => inputs.find(_._2 == encodedBoxId(bx.box.id)).map { case (txId, _) => txId -> bx })
       )
       _ <- processHistoricalBoxes(spentBoxesWithTx, blockHeight)
-      _ <- updateIndex { case RegistryIndex(_, balance, tokensBalance, _) =>
+      _ <- updateIndex { case RegistrySummary(_, balance, tokensBalance, _) =>
         val spentCertainBoxes = spentBoxesWithTx.map(_._2).filter(_.certainty.certain)
         val spentAmt = spentCertainBoxes.map(_.box.value).sum
         val spentTokensAmt = spentCertainBoxes
@@ -120,7 +120,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
         require(
           (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
           "Balance could not be negative")
-        RegistryIndex(blockHeight, newBalance, newTokensBalance, uncertain)
+        RegistrySummary(blockHeight, newBalance, newTokensBalance, uncertain)
       }
     } yield ()
 

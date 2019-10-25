@@ -8,19 +8,19 @@ import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 
-final case class RegistryIndex(height: Int,
-                               balance: Long,
-                               assetBalances: Map[EncodedTokenId, Long],
-                               uncertainBoxes: Seq[EncodedBoxId])
-object RegistryIndex {
+final case class RegistrySummary(height: Int,
+                                 balance: Long,
+                                 assetBalances: Map[EncodedTokenId, Long],
+                                 uncertainBoxes: Seq[EncodedBoxId])
+object RegistrySummary {
 
-  def empty: RegistryIndex = RegistryIndex(ErgoHistory.EmptyHistoryHeight, 0, Map.empty, Seq.empty)
+  def empty: RegistrySummary = RegistrySummary(ErgoHistory.EmptyHistoryHeight, 0, Map.empty, Seq.empty)
 
 }
 
-object RegistryIndexSerializer extends ScorexSerializer[RegistryIndex] {
+object RegistrySummarySerializer extends ScorexSerializer[RegistrySummary] {
 
-  override def serialize(obj: RegistryIndex, w: Writer): Unit = {
+  override def serialize(obj: RegistrySummary, w: Writer): Unit = {
     w.putInt(obj.height)
     w.putLong(obj.balance)
     w.putInt(obj.assetBalances.size)
@@ -32,7 +32,7 @@ object RegistryIndexSerializer extends ScorexSerializer[RegistryIndex] {
     obj.uncertainBoxes.foreach(x => w.putBytes(decodedBoxId(x)))
   }
 
-  override def parse(r: Reader): RegistryIndex = {
+  override def parse(r: Reader): RegistrySummary = {
     val height = r.getInt()
     val balance = r.getLong()
     val tokensQty = r.getInt()
@@ -43,7 +43,7 @@ object RegistryIndexSerializer extends ScorexSerializer[RegistryIndex] {
     val uncertainIds = (0 until uncertainQty).map { _ =>
       encodedBoxId(ADKey @@ r.getBytes(Constants.ModifierIdSize))
     }
-    RegistryIndex(height, balance, tokenBalances.toMap, uncertainIds)
+    RegistrySummary(height, balance, tokenBalances.toMap, uncertainIds)
   }
 
 }

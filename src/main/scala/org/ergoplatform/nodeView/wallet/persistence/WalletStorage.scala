@@ -18,6 +18,7 @@ import scala.util.{Success, Try}
   *   * derivation paths
   *   * changed addresses
   *   * ErgoStateContext (is it version-agnostic?)
+  *   * external applications
   */
 final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
                          (implicit val addressEncoder: ErgoAddressEncoder) {

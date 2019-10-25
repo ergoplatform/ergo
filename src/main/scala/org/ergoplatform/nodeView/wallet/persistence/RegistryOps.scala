@@ -8,8 +8,8 @@ import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.VersionedLDBKVStore
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA._
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
+import scorex.util.encode.Base16
 import scorex.util.{ModifierId, idToBytes}
 
 import scala.language.implicitConversions
@@ -109,27 +109,27 @@ object RegistryOps {
         case PutBox(box) =>
           State.modify { case (toInsert, toRemove) =>
             val boxBytes = TrackedBoxSerializer.toBytes(box)
-            (toInsert :+ (key(box), BoxPrefix +: boxBytes), toRemove)
+            (toInsert :+ (key(box), boxBytes), toRemove)
           }
         case GetBox(id) =>
           State.inspect { _ =>
             store.get(id)
-              .flatMap(r => TrackedBoxSerializer.parseBytesTry(r.tail).toOption)
+              .flatMap(r => TrackedBoxSerializer.parseBytesTry(r).toOption)
               .asInstanceOf[A]
           }
         case GetBoxes(ids) =>
           State.inspect { _ =>
             ids
-              .map { id => store.get(id)
+              .map { id => store.get(key(id))
                 .flatMap { x =>
-                  TrackedBoxSerializer.parseBytesTry(x.tail).toOption
+                  TrackedBoxSerializer.parseBytesTry(x).toOption
                 }
               }
               .asInstanceOf[A]
           }
         case GetAllBoxes =>
           State.inspect { _ =>
-            store.getAll((_, v) => v.head == BoxPrefix)
+            store.getRange(FirstBoxSpaceKey, LastBoxSpaceKey)
               .flatMap { case (_, boxBytes) =>
                 TrackedBoxSerializer.parseBytesTry(boxBytes.tail).toOption
               }
@@ -142,25 +142,27 @@ object RegistryOps {
         case PutTx(wtx) =>
           State.modify { case (toInsert, toRemove) =>
             val txBytes = WalletTransactionSerializer.toBytes(wtx)
-            (toInsert :+ (key(wtx.id), TxPrefix +: txBytes), toRemove)
+           // println("tx key: " + Base16.encode(txKey(wtx.id)))
+            (toInsert :+ (txKey(wtx.id), txBytes), toRemove)
           }
         case GetTx(id) =>
           State.inspect { _ =>
-            store.get(key(id))
-              .flatMap(r => WalletTransactionSerializer.parseBytesTry(r.tail).toOption)
+            store.get(txKey(id))
+              .flatMap(r => WalletTransactionSerializer.parseBytesTry(r).toOption)
               .asInstanceOf[A]
           }
         case GetAllTxs =>
           State.inspect { _ =>
-            store.getAll((_, v) => v.head == TxPrefix)
-              .flatMap { case (_, txBytes) =>
-                WalletTransactionSerializer.parseBytesTry(txBytes.tail).toOption
+            store.getRange(FirstTxSpaceKey, LastTxSpaceKey)
+              .flatMap { case (tk, txBytes) =>
+             //   println("tx key: " + Base16.encode(tk))
+                WalletTransactionSerializer.parseBytesTry(txBytes).toOption
               }
               .asInstanceOf[A]
           }
         case RemoveTxs(ids) =>
           State.modify { case (toInsert, toRemove) =>
-            (toInsert, toRemove ++ ids.map(key))
+            (toInsert, toRemove ++ ids.map(txKey))
           }
         case PutIndex(index) =>
           State.modify { case (toInsert, toRemove) =>
@@ -177,16 +179,22 @@ object RegistryOps {
       }
     }
 
-  private val RegistrySummaryKey = Algos.hash("reg_summary")
+  private val BoxKeyPrefix: Byte = 0x00
 
-  private val BoxPrefix: Byte = 0x00
+  private val FirstBoxSpaceKey: Array[Byte] = BoxKeyPrefix +: Array.fill(32)(0: Byte)
+  private val LastBoxSpaceKey: Array[Byte] = BoxKeyPrefix +: Array.fill(32)(1: Byte)
 
-  private val TxPrefix: Byte = 0x01
+  private val TxKeyPrefix: Byte = 0x01
 
-  private def key(trackedBox: TrackedBox): Array[Byte] = trackedBox.box.id
+  private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
+  private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(1: Byte)
 
-  private def key(id: BoxId): Array[Byte] = id
+  private val RegistrySummaryKey: Array[Byte] = Array(0x02: Byte)
 
-  private def key(id: ModifierId): Array[Byte] = idToBytes(id)
+  private def key(trackedBox: TrackedBox): Array[Byte] = BoxKeyPrefix +: trackedBox.box.id
+
+  private def key(id: BoxId): Array[Byte] = BoxKeyPrefix +: id
+
+  private def txKey(id: ModifierId): Array[Byte] = TxKeyPrefix +: idToBytes(id)
 
 }

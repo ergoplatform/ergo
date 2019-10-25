@@ -22,7 +22,7 @@ import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTr
 import org.ergoplatform.wallet.boxes.{BoxCertainty, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.DerivationPath
-import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
+import org.ergoplatform.P2PKAddress
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
@@ -97,7 +97,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class NodeViewStub extends Actor {
-    def receive:Receive = {
+    def receive: Receive = {
       case _ =>
     }
   }
@@ -143,6 +143,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case _: UnlockWallet => sender() ! Success(())
 
       case LockWallet => ()
+
+      case GetLockStatus => sender() ! (true, true)
 
       case GetBoxes(unspentOnly) =>
         val boxes = if (unspentOnly) {
@@ -210,8 +212,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val walletTxs: Seq[AugWalletTransaction] = Seq(augWalletTransactionGen.sample.get, augWalletTransactionGen.sample.get)
 
     def props(): Props = Props(new WalletActorStub)
+
     def balance(chainStatus: ChainStatus): Long = if (chainStatus.onChain) confirmedBalance else unconfirmedBalance
+
     def confirmedBalance: Long = 1L
+
     def unconfirmedBalance: Long = 2L
   }
 
@@ -249,7 +254,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val poPowSettings = PoPowSettings(prove = false)
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
-      offlineGeneration = false, 200, 100000, 100000, 1.minute, 1000000, poPowSettings)
+      offlineGeneration = false, 200, 100000, 100000, 1.minute, rebroadcastCount = 200, 1000000, poPowSettings)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null

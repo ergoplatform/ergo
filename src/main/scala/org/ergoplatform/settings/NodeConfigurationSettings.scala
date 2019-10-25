@@ -29,6 +29,7 @@ final case class NodeConfigurationSettings(
    mempoolCapacity: Int,
    blacklistCapacity: Int,
    mempoolCleanupDuration: FiniteDuration,
+   rebroadcastCount: Int,
    minimalFeeAmount: Long,
    poPowSettings: PoPowSettings
 ) extends ValidatedConfig with ScorexEncoding {
@@ -70,6 +71,7 @@ object NodeConfigurationSettings extends StateTypeReaders with ModifierIdReader 
       cfg.as[Int](s"$path.mempoolCapacity"),
       cfg.as[Int](s"$path.blacklistCapacity"),
       cfg.as[FiniteDuration](s"$path.mempoolCleanupDuration"),
+      cfg.as[Int](s"$path.rebroadcastCount"),
       cfg.as[Long](s"$path.minimalFeeAmount"),
       cfg.as[PoPowSettings](s"$path.poPow")
     )

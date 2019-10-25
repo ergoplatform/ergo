@@ -53,3 +53,5 @@ project/project/
 
 local.conf
 
+# osx files
+.DS_Store

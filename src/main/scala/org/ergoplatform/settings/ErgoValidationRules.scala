@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
 import org.ergoplatform.validation.SigmaValidationSettings
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}

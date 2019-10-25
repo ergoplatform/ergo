@@ -48,7 +48,7 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
     testProbe.expectMsgClass(cleanupDuration, newTx)
     getPoolSize shouldBe 2
 
-    val _: ActorRef = MempoolAuditorRef(nodeViewHolderRef, settingsToTest.nodeSettings)
+    val _: ActorRef = MempoolAuditorRef(nodeViewHolderRef, nodeViewHolderRef, settingsToTest)
 
     // include first transaction in the block so that second tx becomes invalid
     val block = validFullBlock(Some(genesis), wusAfterGenesis, Seq(validTx))

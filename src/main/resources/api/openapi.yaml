@@ -1578,6 +1578,34 @@ paths:
             schema:
               $ref: '#/components/schemas/ApiError'
 
+  /utils/ergoTreeToAddress/{ergoTreeHex}:
+    get:
+      summary: Generate Ergo address from hex-encoded ErgoTree
+      operationId: ErgoTreeToAddress
+      tags:
+        - utils
+      parameters:
+        - in: path
+          name: ergoTreeHex
+          required: true
+          description: ErgoTree to derive an address from
+          schema:
+            type: string
+            example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
+      responses:
+        '200':
+          description: Ergo address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoAddress'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /utils/seed/{length}:
     get:
       summary: Generate random seed of specified length in bytes
@@ -1755,6 +1783,38 @@ paths:
       responses:
         '200':
           description: Wallet locked successfully
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/status:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get wallet status
+      operationId: getWalletStatus
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Wallet status
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - isInitialized
+                  - isUnlocked
+                properties:
+                  isInitialized:
+                    type: boolean
+                    description: true if wallet is initialized, false otherwise
+                  isUnlocked:
+                    type: boolean
+                    description: true if wallet is unlocked, false otherwise
         default:
           description: Error
           content:

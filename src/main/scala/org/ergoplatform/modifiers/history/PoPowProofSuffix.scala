@@ -7,6 +7,12 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
 
+/**
+  * A structure representing NiPoPow proof suffix as a persistent modifier.
+  * @param k        - security parameter (min suffix length)
+  * @param chain    - proof suffix headers
+  * @param sizeOpt  - size of the modifier
+  */
 final case class PoPowProofSuffix(k: Int,
                                   chain: Seq[PoPowHeader],
                                   sizeOpt: Option[Int] = None)

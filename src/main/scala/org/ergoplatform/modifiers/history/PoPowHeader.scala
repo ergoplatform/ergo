@@ -4,6 +4,8 @@ import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.util.{ModifierId, idToBytes, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
 
+/** Header with unpacked interlinks.
+  */
 final case class PoPowHeader(header: Header, interlinks: Seq[ModifierId])
   extends BytesSerializable {
 

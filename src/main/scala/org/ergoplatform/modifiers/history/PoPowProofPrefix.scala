@@ -7,6 +7,13 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
+/**
+  * A structure representing NiPoPow proof prefix as a persistent modifier.
+  * @param m        - security parameter (min μ-level superchain length)
+  * @param chain    - proof headers
+  * @param suffixId - id of the corresponding suffix
+  * @param sizeOpt  - size of the modifier
+  */
 final case class PoPowProofPrefix(m: Int,
                                   chain: Seq[PoPowHeader],
                                   suffixId: ModifierId,

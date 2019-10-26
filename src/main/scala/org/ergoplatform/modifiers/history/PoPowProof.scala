@@ -6,6 +6,9 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
 
+/**
+  * A structure representing NiPoPow proof as a persistent modifier.
+  */
 final case class PoPowProof(prefix: PoPowProofPrefix, suffix: PoPowProofSuffix)
   extends ErgoPersistentModifier {
 

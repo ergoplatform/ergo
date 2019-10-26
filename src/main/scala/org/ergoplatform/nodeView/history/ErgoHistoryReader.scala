@@ -283,7 +283,7 @@ trait ErgoHistoryReader
 
     val ourChain = headerChainBack(limit, startHeader, until)
     val commonBlock = ourChain.head
-    val commonBlockThenSuffixes = HeaderChain.takeAfter(otherChain)(commonBlock)
+    val commonBlockThenSuffixes = HeaderChain.dropBefore(otherChain)(commonBlock)
     (ourChain, commonBlockThenSuffixes)
   }
 

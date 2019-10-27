@@ -3,6 +3,7 @@ package org.ergoplatform.it.container
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import org.ergoplatform.it.container.Docker.ExtraConfig
+import org.ergoplatform.settings.NetworkType
 import org.ergoplatform.utils.ErgoTestConstants
 
 import scala.collection.JavaConverters._
@@ -16,7 +17,12 @@ trait IntegrationTestConstants extends ErgoTestConstants {
     """.stripMargin
   )
 
-  val defaultConfigTemplate: Config = ConfigFactory.parseResources("template.conf").withFallback(walletAutoInitConfig)
+  def defaultConfigTemplate(networkType: NetworkType): Config = networkType match {
+    case NetworkType.DevNet =>
+      ConfigFactory.parseResources(s"${networkType.verboseName}Template.conf").withFallback(walletAutoInitConfig)
+    case _ =>
+      ConfigFactory.parseResources(s"${networkType.verboseName}Template.conf")
+  }
   val nodesJointConfig: Config = ConfigFactory.parseResources("nodes.conf").resolve()
   val nodeSeedConfigs: List[Config] = nodesJointConfig.getConfigList("nodes").asScala.toList
 

@@ -79,6 +79,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
     }
 
+  /** Process SyncInfo from another node.
+    */
   override protected def processSync: Receive = {
     case DataFromPeer(spec, syncInfo: ErgoSyncInfo, remote)
       if spec.messageCode == syncInfoSpec.messageCode =>
@@ -100,30 +102,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
           self ! OtherNodeSyncingStatus(remote, comparison, ext)
         case _ =>
-      }
-  }
-
-  override protected def processInv: Receive = {
-    case DataFromPeer(spec, invData: InvData, peer)
-      if spec.messageCode == InvSpec.MessageCode =>
-
-      (mempoolReaderOpt, historyReaderOpt) match {
-        case (Some(mempool), Some(history)) =>
-          val modifierTypeId = invData.typeId
-          val acceptedModifierIds = modifierTypeId match {
-            case Transaction.ModifierTypeId =>
-              invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
-            case _ =>
-              invData.ids.filter(mid => deliveryTracker.status(mid, history) == ModifiersStatus.Unknown)
-          }
-          if (acceptedModifierIds.nonEmpty) {
-            val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, acceptedModifierIds)), None)
-            peer.handlerRef ! msg
-            deliveryTracker.setRequested(acceptedModifierIds, modifierTypeId, Some(peer))
-          }
-
-        case _ =>
-          log.warn(s"Got data from peer while readers are not ready ${(mempoolReaderOpt, historyReaderOpt)}")
       }
   }
 

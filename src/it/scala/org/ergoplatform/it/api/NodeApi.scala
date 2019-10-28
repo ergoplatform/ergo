@@ -95,7 +95,7 @@ trait NodeApi {
   }
 
   def waitForHeight(expectedHeight: Int, retryingInterval: FiniteDuration = 1.second): Future[Int] = {
-    waitFor[Int](_.fullHeight, h => h >= expectedHeight, retryingInterval)
+    waitFor[Int](_.headersHeight, h => h >= expectedHeight, retryingInterval)
   }
 
   def waitForStartup: Future[this.type] = get("/info").map(_ => this)

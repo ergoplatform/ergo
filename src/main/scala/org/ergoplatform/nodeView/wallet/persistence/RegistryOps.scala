@@ -9,7 +9,6 @@ import org.ergoplatform.db.VersionedLDBKVStore
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA._
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
-import scorex.util.encode.Base16
 import scorex.util.{ModifierId, idToBytes}
 
 import scala.language.implicitConversions
@@ -113,7 +112,7 @@ object RegistryOps {
           }
         case GetBox(id) =>
           State.inspect { _ =>
-            store.get(id)
+            store.get(key(id))
               .flatMap(r => TrackedBoxSerializer.parseBytesTry(r).toOption)
               .asInstanceOf[A]
           }
@@ -131,7 +130,7 @@ object RegistryOps {
           State.inspect { _ =>
             store.getRange(FirstBoxSpaceKey, LastBoxSpaceKey)
               .flatMap { case (_, boxBytes) =>
-                TrackedBoxSerializer.parseBytesTry(boxBytes.tail).toOption
+                TrackedBoxSerializer.parseBytesTry(boxBytes).toOption
               }
               .asInstanceOf[A]
           }
@@ -142,7 +141,6 @@ object RegistryOps {
         case PutTx(wtx) =>
           State.modify { case (toInsert, toRemove) =>
             val txBytes = WalletTransactionSerializer.toBytes(wtx)
-           // println("tx key: " + Base16.encode(txKey(wtx.id)))
             (toInsert :+ (txKey(wtx.id), txBytes), toRemove)
           }
         case GetTx(id) =>
@@ -155,7 +153,6 @@ object RegistryOps {
           State.inspect { _ =>
             store.getRange(FirstTxSpaceKey, LastTxSpaceKey)
               .flatMap { case (tk, txBytes) =>
-             //   println("tx key: " + Base16.encode(tk))
                 WalletTransactionSerializer.parseBytesTry(txBytes).toOption
               }
               .asInstanceOf[A]
@@ -182,12 +179,12 @@ object RegistryOps {
   private val BoxKeyPrefix: Byte = 0x00
 
   private val FirstBoxSpaceKey: Array[Byte] = BoxKeyPrefix +: Array.fill(32)(0: Byte)
-  private val LastBoxSpaceKey: Array[Byte] = BoxKeyPrefix +: Array.fill(32)(1: Byte)
+  private val LastBoxSpaceKey: Array[Byte] = BoxKeyPrefix +: Array.fill(32)(-1: Byte)
 
   private val TxKeyPrefix: Byte = 0x01
 
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
-  private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(1: Byte)
+  private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)
 
   private val RegistrySummaryKey: Array[Byte] = Array(0x02: Byte)
 

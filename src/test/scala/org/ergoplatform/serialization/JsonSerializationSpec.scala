@@ -109,7 +109,6 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     def stringify(assets: Seq[(ErgoBox.TokenId, Long)]) = {
       assets map { case (tokenId, amount) => (Algos.encode(tokenId), amount) }
     }
-    import ErgoTransaction.assetDecoder
     val Right(decodedAssets) = c.as[Seq[(ErgoBox.TokenId, Long)]]
     stringify(decodedAssets) should contain theSameElementsAs stringify(assets)
   }

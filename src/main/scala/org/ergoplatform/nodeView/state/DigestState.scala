@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
@@ -10,6 +10,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.state.ErgoState.ModifierProcessing
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
+import scorex.db.LDBVersionedStore
 import scorex.core._
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexEncoding
@@ -148,7 +149,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
               stateContext: ErgoStateContext,
               dir: File,
               constants: StateConstants): DigestState = {
-    val store = new LSMStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
     val wrappedVersion = Algos.versionToBAW(version)
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
@@ -160,7 +161,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
              rootHashOpt: Option[ADDigest],
              dir: File,
              constants: StateConstants): DigestState = Try {
-    val store = new LSMStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
     val context = ErgoStateReader.storageStateContext(store, constants)
     (versionOpt, rootHashOpt) match {
       case (Some(version), Some(rootHash)) =>

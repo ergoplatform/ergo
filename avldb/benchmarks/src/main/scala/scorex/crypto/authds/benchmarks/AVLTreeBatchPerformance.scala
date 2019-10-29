@@ -43,7 +43,7 @@ object AVLTreeBatchPerformance extends {
   }
 
   class StateWith1000000 extends Basic(1000000, 100000)
-/*
+
   class StateWith2000000 extends Basic(2000000, 100000)
 
   class StateWith4000000 extends Basic(4000000, 100000)
@@ -53,7 +53,7 @@ object AVLTreeBatchPerformance extends {
   class StateWith16000000 extends Basic(16000000, 100000)
 
   class StateWith32000000 extends Basic(32000000, 100000)
-*/
+
 }
 
 

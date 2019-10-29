@@ -7,7 +7,7 @@ import com.google.common.primitives.{Longs, Shorts}
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.crypto.authds.avltree.batch._
-import scorex.crypto.encode.Base16
+import scorex.util.encode.Base16
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.LDBVersionedStore
 import scala.collection.immutable.SortedMap

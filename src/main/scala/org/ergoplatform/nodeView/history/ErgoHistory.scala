@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{Empty
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import org.iq80.leveldb.Options
-import scarex.db.LDBFactory.factory
+import scorex.db.LDBFactory.factory
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider

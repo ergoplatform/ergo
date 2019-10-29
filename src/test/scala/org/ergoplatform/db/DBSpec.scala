@@ -5,10 +5,9 @@ import org.ergoplatform.settings.Algos
 import org.iq80.leveldb.impl.Iq80DBFactory.bytes
 import org.iq80.leveldb.{DB, Options}
 import scorex.testkit.utils.FileUtils
+import scorex.db.LDBFactory.factory
 
 trait DBSpec extends FileUtils {
-
-  import LDBFactory.factory
 
   implicit class ValueOps(x: Option[Array[Byte]]) {
     def toBs: Option[ByteString] = x.map(ByteString.apply)

@@ -1,7 +1,9 @@
-package org.ergoplatform.db
+package scorex.db
 
 import org.iq80.leveldb.DBFactory
 import scorex.util.ScorexLogging
+
+import scala.util.Try
 
 object LDBFactory extends ScorexLogging {
 
@@ -14,7 +16,8 @@ object LDBFactory extends ScorexLogging {
     val pairs = loaders.view
       .zip(factories)
       .flatMap { case (loader, factoryName) =>
-        loadFactory(loader, factoryName).map(factoryName -> _)
+        Try(loader.loadClass(factoryName).getConstructor().newInstance().asInstanceOf[DBFactory]).toOption
+          .map(factoryName -> _)
       }
 
     val (name, factory) = pairs.headOption.getOrElse(
@@ -28,13 +31,5 @@ object LDBFactory extends ScorexLogging {
 
     factory
   }
-
-  private def loadFactory(loader: ClassLoader, factoryName: String): Option[DBFactory] =
-    try Some(loader.loadClass(factoryName).getConstructor().newInstance().asInstanceOf[DBFactory])
-    catch {
-      case e: Throwable =>
-        log.warn(s"Failed to load database factory $factoryName due to: $e")
-        None
-    }
 
 }

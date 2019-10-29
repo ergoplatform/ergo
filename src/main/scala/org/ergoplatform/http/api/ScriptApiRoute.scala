@@ -4,25 +4,25 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
 import io.circe.syntax._
-import io.circe.{Encoder, Json}
+import io.circe.{Json, Encoder}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress, Pay2SHAddress}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoAddress, Pay2SAddress, Pay2SHAddress}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.eval.RuntimeIRContext
+import sigmastate.eval.CompiletimeIRContext
 import sigmastate.lang.SigmaCompiler
 import sigmastate.{SBoolean, SSigmaProp}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
 case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
@@ -55,7 +55,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   private def compileSource(source: String, env: Map[String, Any]): Try[ErgoTree] = {
     import sigmastate.Values._
     val compiler = SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
-    Try(compiler.compile(env, source)(new RuntimeIRContext)).flatMap {
+    Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
       case script: Value[SSigmaProp.type@unchecked] if script.tpe == SSigmaProp =>
         Success(script)
       case script: Value[SBoolean.type@unchecked] if script.tpe == SBoolean =>

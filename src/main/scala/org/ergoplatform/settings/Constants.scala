@@ -64,10 +64,6 @@ object Constants {
   // Default limit for transaction complexity to be included into block.
   val DefaultComplexityLimit: Int = 100000
 
-  val DiffFallbackDuration: FiniteDuration = 5.minutes
-
-  val FallbackDiff = BigInt(1)
-
   // SimplePayments application identifier
   val DefaultAppId: Short = 1
 

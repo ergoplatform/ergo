@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.ErgoConstants.{MaxBoxSize, MaxPropositionBytes}
+import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction

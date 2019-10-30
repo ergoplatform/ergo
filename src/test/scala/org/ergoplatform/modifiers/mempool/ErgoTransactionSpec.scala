@@ -98,6 +98,13 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
   }
 
+  property("transaction with non-unique inputs is invalidated") {
+    forAll(validErgoTransactionGen) { case (_, tx) =>
+      println(tx.copy(inputs = tx.inputs ++ tx.inputs).statelessValidity)
+      tx.copy(inputs = tx.inputs ++ tx.inputs).statelessValidity shouldBe 'failure
+    }
+  }
+
   property("ergo preservation law holds") {
     forAll(validErgoTransactionGen, smallPositiveInt) { case ((from, tx), deltaAbs) =>
       val delta = if (Random.nextBoolean()) -deltaAbs else deltaAbs

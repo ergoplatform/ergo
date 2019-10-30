@@ -160,31 +160,34 @@ object DigestState extends ScorexLogging with ScorexEncoding {
   def create(versionOpt: Option[VersionTag],
              rootHashOpt: Option[ADDigest],
              dir: File,
-             constants: StateConstants): DigestState = Try {
+             constants: StateConstants): DigestState = {
     val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
-    val context = ErgoStateReader.storageStateContext(store, constants)
-    (versionOpt, rootHashOpt) match {
-      case (Some(version), Some(rootHash)) =>
-        val state = if (store.lastVersionID.map(w => bytesToVersion(w.data)).contains(version)) {
-          new DigestState(version, rootHash, store, constants.settings)
-        } else {
-          val inVersion = store.lastVersionID.map(w => bytesToVersion(w.data)).getOrElse(version)
-          new DigestState(inVersion, rootHash, store, constants.settings)
-            .update(version, rootHash, context).get //sync store
-        }
-        state.ensuring(bytesToVersion(store.lastVersionID.get.data) == version)
-      case (None, None) if store.lastVersionID.isEmpty =>
+    Try {
+      val context = ErgoStateReader.storageStateContext(store, constants)
+      (versionOpt, rootHashOpt) match {
+        case (Some(version), Some(rootHash)) =>
+          val state = if (store.lastVersionID.map(w => bytesToVersion(w.data)).contains(version)) {
+            new DigestState(version, rootHash, store, constants.settings)
+          } else {
+            val inVersion = store.lastVersionID.map(w => bytesToVersion(w.data)).getOrElse(version)
+            new DigestState(inVersion, rootHash, store, constants.settings)
+              .update(version, rootHash, context).get //sync store
+          }
+          state.ensuring(bytesToVersion(store.lastVersionID.get.data) == version)
+        case (None, None) if store.lastVersionID.isEmpty =>
+          ErgoState.generateGenesisDigestState(dir, constants.settings)
+        case _ =>
+          val version = bytesToVersion(store.lastVersionID.get.data)
+          val rootHash = store.get(Algos.versionToBAW(version)).get.data
+          new DigestState(version, ADDigest @@ rootHash, store, constants.settings)
+      }
+    } match {
+      case Success(state) => state
+      case Failure(e) =>
+        store.close()
+        log.warn(s"Failed to create state with ${versionOpt.map(encoder.encode)} and ${rootHashOpt.map(encoder.encode)}", e)
         ErgoState.generateGenesisDigestState(dir, constants.settings)
-      case _ =>
-        val version = bytesToVersion(store.lastVersionID.get.data)
-        val rootHash = store.get(Algos.versionToBAW(version)).get.data
-        new DigestState(version, ADDigest @@ rootHash, store, constants.settings)
     }
-  } match {
-    case Success(state) => state
-    case Failure(e) =>
-      log.warn(s"Failed to create state with ${versionOpt.map(encoder.encode)} and ${rootHashOpt.map(encoder.encode)}", e)
-      ErgoState.generateGenesisDigestState(dir, constants.settings)
   }
 
   protected def metadata(newVersion: VersionTag,

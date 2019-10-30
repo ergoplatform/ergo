@@ -26,6 +26,7 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store 
   private def createDB(dir: File, storeName: String): DB = {
     val op = new Options()
     op.createIfMissing(true)
+    op.maxOpenFiles(10000)
     factory.open(new File(dir, storeName), op)
   }
 

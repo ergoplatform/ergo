@@ -116,10 +116,20 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     Some((history, state, wallet, memPool))
   }
 
+  def deleteRecursive(dir: File): Unit = {
+    for (file <- dir.listFiles) {
+      if (!file.getName.startsWith(("."))) {
+        if (file.isDirectory)
+          deleteRecursive(file)
+        file.delete()
+      }
+    }
+  }
+
   @SuppressWarnings(Array("AsInstanceOf"))
   private def recreatedState(): State = {
     val dir = stateDir(settings)
-    for (file <- dir.listFiles) file.delete
+    deleteRecursive(dir)
 
     val constants = StateConstants(Some(self), settings)
     ErgoState.readOrGenerate(settings, constants)

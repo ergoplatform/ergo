@@ -207,6 +207,16 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
   }
 
+  def deleteRecursive(dir: File): Unit = {
+    for (file <- dir.listFiles) {
+      if (!file.getName.startsWith(("."))) {
+        if (file.isDirectory)
+          deleteRecursive(file)
+        file.delete()
+      }
+    }
+  }
+
   private val t10 = TestCase("NodeViewHolder start from inconsistent state") { fixture =>
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
@@ -221,7 +231,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
 
     stopNodeViewHolder()
     val stateDir = new File(s"${nodeViewDir.getAbsolutePath}/state")
-    for (file <- stateDir.listFiles) file.delete
+    deleteRecursive(stateDir)
     startNodeViewHolder()
 
     getRootHash shouldBe Algos.encode(block1.header.stateRoot)

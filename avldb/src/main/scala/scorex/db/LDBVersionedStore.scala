@@ -1,16 +1,17 @@
 package scorex.db
 
+import java.io.File
+
 import scorex.db.LDBFactory.factory
 import io.iohk.iodb.Store.{K, V, VersionID}
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.iq80.leveldb._
 import java.nio.ByteBuffer
-import java.io._
 
 import scala.collection.mutable.ArrayBuffer
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
-import scorex.util.encode.Base58
+
 
 class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store {
   type LSN = Long // logical serial number: type use to provide order of records in undo list
@@ -26,7 +27,7 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store 
   private def createDB(dir: File, storeName: String): DB = {
     val op = new Options()
     op.createIfMissing(true)
-    op.maxOpenFiles(10000)
+    op.maxOpenFiles(2000)
     factory.open(new File(dir, storeName), op)
   }
 
@@ -110,7 +111,10 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store 
     var lastVersion: VersionID = null
     var lastLsn: LSN = 0
     // We iterate in LSN descending order
-    undo.forEach(entry => {
+    val iterator = undo.iterator()
+    iterator.seekToFirst()
+    while (iterator.hasNext) {
+      val entry = iterator.next
       val currVersion = deserializeUndo(entry.getValue).versionID
       lastLsn = decodeLSN(entry.getKey)
       if (!currVersion.equals(lastVersion)) {
@@ -118,7 +122,8 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store 
         versions += currVersion
         lastVersion = currVersion
       }
-    })
+    }
+    iterator.close()
     // As far as org.iq80.leveldb doesn't support iteration in reverse order, we have to iterate in the order
     // of decreasing LSNs and then revert version list. For each version we store first (smallest) LSN.
     versionLsn += lastLsn // first LSN of oldest version
@@ -290,7 +295,7 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store 
           undoBatch.close()
         }
         val nVersions = versions.size
-        assert((versionIndex+1 == nVersions && nUndoRecords == 0) || (versionIndex+1 < nVersions && lsn - versionLsn(versionIndex+1) + 1 == nUndoRecords))
+        assert((versionIndex + 1 == nVersions && nUndoRecords == 0) || (versionIndex + 1 < nVersions && lsn - versionLsn(versionIndex + 1) + 1 == nUndoRecords))
         versions.remove(versionIndex + 1, nVersions - versionIndex - 1)
         versionLsn.remove(versionIndex + 1, nVersions - versionIndex - 1)
         lsn -= nUndoRecords // reuse deleted LSN to avoid holes in LSNs

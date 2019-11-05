@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.utils.FileUtils
 import scorex.core._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
 import scorex.core.settings.ScorexSettings
@@ -116,20 +117,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     Some((history, state, wallet, memPool))
   }
 
-  def deleteRecursive(dir: File): Unit = {
-    for (file <- dir.listFiles) {
-      if (!file.getName.startsWith(("."))) {
-        if (file.isDirectory)
-          deleteRecursive(file)
-        file.delete()
-      }
-    }
-  }
-
   @SuppressWarnings(Array("AsInstanceOf"))
   private def recreatedState(): State = {
     val dir = stateDir(settings)
-    deleteRecursive(dir)
+    FileUtils.deleteRecursive(dir)
 
     val constants = StateConstants(Some(self), settings)
     ErgoState.readOrGenerate(settings, constants)

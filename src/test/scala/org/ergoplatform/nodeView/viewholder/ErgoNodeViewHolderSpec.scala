@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestConfig, NodeViewTestOps, TestCase}
+import org.ergoplatform.utils.{ErgoPropertyTest, FileUtils, NodeViewTestConfig, NodeViewTestOps, TestCase}
 import scorex.core.NodeViewHolder.ReceivableMessages._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
@@ -207,16 +207,6 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     }
   }
 
-  def deleteRecursive(dir: File): Unit = {
-    for (file <- dir.listFiles) {
-      if (!file.getName.startsWith(("."))) {
-        if (file.isDirectory)
-          deleteRecursive(file)
-        file.delete()
-      }
-    }
-  }
-
   private val t10 = TestCase("NodeViewHolder start from inconsistent state") { fixture =>
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
@@ -231,7 +221,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
 
     stopNodeViewHolder()
     val stateDir = new File(s"${nodeViewDir.getAbsolutePath}/state")
-    deleteRecursive(stateDir)
+    FileUtils.deleteRecursive(stateDir)
     startNodeViewHolder()
 
     getRootHash shouldBe Algos.encode(block1.header.stateRoot)

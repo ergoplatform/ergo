@@ -13,7 +13,6 @@ import scorex.testkit.utils.FileUtils
 import scorex.util.idToBytes
 import scorex.db.LDBFactory.factory
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
-import java.io._
 
 import scorex.db.LDBVersionedStore
 

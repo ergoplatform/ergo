@@ -14,7 +14,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 
 
 class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store {
-  type LSN = Long // logical serial number: type use to provide order of records in undo list
+  type LSN = Long // logical serial number: type used to provide order of records in undo list
   private val db: DB = createDB(dir, "ldb_main")
   private val undo: DB = createDB(dir, "ldb_undo")
   private var lsn : LSN = getLastLSN

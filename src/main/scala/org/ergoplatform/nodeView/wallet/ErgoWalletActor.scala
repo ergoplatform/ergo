@@ -452,8 +452,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     val changeAddress = storage.readChangeAddress
       .map(_.pubkey)
       .getOrElse {
-        log.warn("Change address not specified. Using random address from wallet.")
-        prover.pubKeys(Random.nextInt(prover.pubKeys.size))
+        log.warn("Change address not specified. Using root address from wallet.")
+        prover.pubKeys.head
       }
 
     val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>

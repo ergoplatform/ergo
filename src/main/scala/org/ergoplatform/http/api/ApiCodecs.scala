@@ -2,9 +2,10 @@ package org.ergoplatform.http.api
 
 import io.circe._
 import io.circe.syntax._
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, RegisterId}
-import org.ergoplatform.{ErgoBox, JsonCodecs}
+import org.ergoplatform.JsonCodecs
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
+import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
@@ -14,6 +15,7 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 import scorex.core.validation.ValidationResult
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.interpreter.CryptoConstants.EcPointType
+
 
 trait ApiCodecs extends JsonCodecs {
 
@@ -64,16 +66,6 @@ trait ApiCodecs extends JsonCodecs {
       regId <- cursor.as[String]
       reg <- fromOption(ErgoBox.registerByName.get(regId))
     } yield reg
-  }
-
-  implicit val nonMandatoryRegisterIdEncoder: KeyEncoder[NonMandatoryRegisterId] = { regId =>
-    s"R${regId.number}"
-  }
-
-  implicit val nonMandatoryRegisterIdDecoder: KeyDecoder[NonMandatoryRegisterId] = { key =>
-    ErgoBox.registerByName.get(key).collect {
-      case nonMandatoryId: NonMandatoryRegisterId => nonMandatoryId
-    }
   }
 
   implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = { box =>

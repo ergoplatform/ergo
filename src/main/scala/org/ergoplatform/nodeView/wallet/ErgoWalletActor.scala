@@ -119,7 +119,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val walletTrackedBoxes = walletAndAppsTrackedBoxes._1
       val walletOutputs = walletTrackedBoxes.map(tb => tb.creationTxId -> tb.box)
 
-      val outIds = registry.readAllBoxes.map(x => encodedBoxId(x.box.id)) ++
+      val outIds = registry.readAllBoxes.map(tb => encodedBoxId(tb.box.id)) ++
         walletOutputs.map(x => encodedBoxId(x._2.id))
 
       //leave only spent inputs
@@ -131,7 +131,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val newOnChainIds = walletTrackedBoxes.map(x => encodedBoxId(x.box.id))
       offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)
 
-    case Rollback(version: VersionTag, height: Int) =>
+    case Rollback(version: VersionTag) =>
       registry.rollback(version).fold(
         e => log.error(s"Failed to rollback wallet registry to version $version due to: $e"), _ => ())
   }
@@ -561,7 +561,7 @@ object ErgoWalletActor {
 
   final case class ScanOnChain(block: ErgoFullBlock)
 
-  final case class Rollback(version: VersionTag, height: Int)
+  final case class Rollback(version: VersionTag)
 
   final case class GenerateTransaction(requests: Seq[TransactionRequest], inputsRaw: Seq[String])
 

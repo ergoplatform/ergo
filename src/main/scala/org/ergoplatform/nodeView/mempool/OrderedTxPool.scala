@@ -10,15 +10,16 @@ import scala.collection.immutable.TreeMap
 
 /**
   * An immutable pool of transactions of limited size with priority management and blacklisting support.
-  * @param orderedTransactions - collection containing transactions ordered by `tx.weight`
+  *
+  * @param orderedTransactions  - collection containing transactions ordered by `tx.weight`
   * @param transactionsRegistry - mapping `tx.id` -> `tx.weight` required for fast access to transaction by its `id`
-  * @param invalidated - collection containing invalidated transaction ids as keys
-  *                      ordered by invalidation timestamp (values)
+  * @param invalidated          - collection containing invalidated transaction ids as keys
+  *                             ordered by invalidation timestamp (values)
   */
-case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
-                         transactionsRegistry: TreeMap[ModifierId, Double],
-                         invalidated: TreeMap[ModifierId, Long])
-                        (implicit settings: ErgoSettings) extends ScorexLogging {
+final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
+                               transactionsRegistry: TreeMap[ModifierId, Double],
+                               invalidated: TreeMap[ModifierId, Long])
+                              (implicit settings: ErgoSettings) extends ScorexLogging {
 
   import OrderedTxPool.weighted
 
@@ -83,6 +84,7 @@ object OrderedTxPool {
       case that: WeightedTxId => that.id == id
       case _ => false
     }
+
     override def hashCode(): Int = Ints.fromByteArray(Algos.decodeUnsafe(id.take(8)))
   }
 

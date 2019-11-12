@@ -452,8 +452,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     val changeAddress = storage.readChangeAddress
       .map(_.pubkey)
       .getOrElse {
-        log.warn("Change address not specified. Using random address from wallet.")
-        prover.pubKeys(Random.nextInt(prover.pubKeys.size))
+        log.warn("Change address not specified. Using root address from wallet.")
+        prover.pubKeys.head
       }
 
     val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>
@@ -579,7 +579,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     * Finds next available path index for a new key.
     */
   private def nextPath: Try[DerivationPath] = {
-    def nextPath(accPath: List[Int], rem: Seq[List[Int]]): Try[DerivationPath] = {
+    @scala.annotation.tailrec
+    def nextPath(accPath: List[Int], rem: Seq[Seq[Int]]): Try[DerivationPath] = {
       if (!rem.forall(_.isEmpty)) {
         val maxChildIdx = rem.flatMap(_.headOption).max
         if (!Index.isHardened(maxChildIdx)) {
@@ -595,7 +596,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     val secrets = proverOpt.toIndexedSeq.flatMap(_.secretKeys)
     if (secrets.size == 1) {
-      Success(DerivationPath(List(0, 1), publicBranch = false))
+      Success(DerivationPath(Array(0, 1), publicBranch = false))
     } else {
       nextPath(List.empty, secrets.map(_.path.decodedPath.tail))
     }

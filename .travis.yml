@@ -3,11 +3,12 @@ language: scala
 sudo: required
 branches:
   only:
-    - v2.1
+    - v3.1.3
     - master
     - /^\d\.\d+$/
     - v2.2-candidate
     - sigma454-type-check-on-script-deser
+    - develop
 jdk:
 - openjdk9
 scala:

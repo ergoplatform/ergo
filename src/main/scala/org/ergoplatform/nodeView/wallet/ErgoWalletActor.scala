@@ -69,6 +69,32 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def height: Int = stateContext.currentHeight
 
+  private def scanBlockTransactions(blockId: ModifierId, transactions: Seq[ErgoTransaction]): Unit = {
+    //extract wallet-related outputs and all the inputs from all the transactions in the block
+    val (walletAndAppsTrackedBoxes, allInputs) = transactions
+      .foldLeft((Seq.empty[TrackedBox], Seq.empty[TrackedBox]), Seq.empty[(ModifierId, EncodedBoxId)]) {
+        case ((outAcc, inAcc), tx) =>
+          val outputs = extractWalletOutputs(tx)
+          val inputs = extractAllInputs(tx)
+          ((outAcc._1 ++ outputs._1) -> (outAcc._2 ++ outputs._2), inAcc ++ inputs.map(tx.id -> _))
+      }
+
+    val walletTrackedBoxes = walletAndAppsTrackedBoxes._1
+    val walletOutputs = walletTrackedBoxes.map(tb => tb.creationTxId -> tb.box)
+
+    val outIds = registry.readAllBoxes.map(tb => encodedBoxId(tb.box.id)) ++
+      walletOutputs.map(x => encodedBoxId(x._2.id))
+
+    //leave only spent inputs
+    val walletInputs = allInputs.filter(x => outIds.contains(x._2))
+    val walletTxIds = walletInputs.map(_._1) ++ walletOutputs.map(_._1)
+    val walletTxs = transactions.filter(tx => walletTxIds.contains(tx.id))
+      .map(WalletTransaction(_, height, Constants.DefaultAppId))
+    registry.updateOnBlock(walletTrackedBoxes, Seq.empty, walletInputs, walletTxs)(blockId, height)
+    val newOnChainIds = walletTrackedBoxes.map(x => encodedBoxId(x.box.id))
+    offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)
+  }
+
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
     walletSettings.testMnemonic match {
@@ -107,29 +133,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     //scan block transactions
     case ScanOnChain(block) =>
-      //extract wallet-related outputs and all the inputs from all the transactions in the block
-      val (walletAndAppsTrackedBoxes, allInputs) = block.transactions
-        .foldLeft((Seq.empty[TrackedBox], Seq.empty[TrackedBox]), Seq.empty[(ModifierId, EncodedBoxId)]) {
-          case ((outAcc, inAcc), tx) =>
-            val outputs = extractWalletOutputs(tx)
-            val inputs = extractAllInputs(tx)
-            ((outAcc._1 ++ outputs._1) -> (outAcc._2 ++ outputs._2), inAcc ++ inputs.map(tx.id -> _))
-        }
-
-      val walletTrackedBoxes = walletAndAppsTrackedBoxes._1
-      val walletOutputs = walletTrackedBoxes.map(tb => tb.creationTxId -> tb.box)
-
-      val outIds = registry.readAllBoxes.map(tb => encodedBoxId(tb.box.id)) ++
-        walletOutputs.map(x => encodedBoxId(x._2.id))
-
-      //leave only spent inputs
-      val walletInputs = allInputs.filter(x => outIds.contains(x._2))
-      val walletTxIds = walletInputs.map(_._1) ++ walletOutputs.map(_._1)
-      val walletTxs = block.transactions.filter(tx => walletTxIds.contains(tx.id))
-                        .map(WalletTransaction(_, height, Constants.DefaultAppId))
-      registry.updateOnBlock(walletTrackedBoxes, Seq.empty, walletInputs, walletTxs)(block.id, height)
-      val newOnChainIds = walletTrackedBoxes.map(x => encodedBoxId(x.box.id))
-      offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)
+      scanBlockTransactions(block.id, block.transactions)
 
     case Rollback(version: VersionTag) =>
       registry.rollback(version).fold(

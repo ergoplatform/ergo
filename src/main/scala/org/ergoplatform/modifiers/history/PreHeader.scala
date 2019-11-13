@@ -12,7 +12,6 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
 /**
   * Only header fields that can be predicted by a miner
   */
-//todo: add votes to the PreHeader?
 trait PreHeader {
   val version: Version
   val parentId: ModifierId

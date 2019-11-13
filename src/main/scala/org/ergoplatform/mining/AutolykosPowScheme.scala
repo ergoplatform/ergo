@@ -1,11 +1,13 @@
 package org.ergoplatform.mining
 
 import com.google.common.primitives.{Bytes, Ints, Longs}
+import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import scorex.core.block.Block
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
@@ -87,18 +89,18 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
             maxNonce: Long = Long.MaxValue): Option[Header] = {
     val (parentId, height) = AutolykosPowScheme.derivedHeaderFields(parentOpt)
 
-    val h = Header(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionHash, null, votes)
+    val h = HeaderWithoutPow(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
+      nBits, height, extensionHash, votes)
     val msg = msgByHeader(h)
     val b = getB(nBits)
     val x = randomSecret()
-    checkNonces(msg, sk, x, b, minNonce, maxNonce).map(s => h.copy(powSolution = s))
+    checkNonces(msg, sk, x, b, minNonce, maxNonce).map(s => h.toHeader(s, None))
   }
 
   /**
     * Get message we should proof for header `h`
     */
-  def msgByHeader(h: Header): Array[Byte] = Blake2b256(HeaderSerializer.bytesWithoutPow(h))
+  def msgByHeader(h: HeaderWithoutPow): Array[Byte] = Blake2b256(HeaderSerializer.bytesWithoutPow(h))
 
   /**
     * Find a nonce from `minNonce` to `maxNonce`, such that full block with the specified fields will contain
@@ -154,25 +156,28 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
-    * Assembles `ErgoFullBlock` using candidate block and external pow solution.
-    */
-  def completeBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
-    val header = AutolykosPowScheme.deriveUnprovedHeader(candidate).copy(powSolution = solution)
-    val adProofs = ADProofs(header.id, candidate.adProofBytes)
-    val blockTransactions = BlockTransactions(header.id, candidate.transactions)
-    val extension = Extension(header.id, candidate.extension.fields)
-    new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
-  }
-
-  /**
     * Assembles candidate block derivative required for external miner.
     */
   def deriveExternalCandidate(candidate: CandidateBlock, pk: ProveDlog): ExternalCandidateBlock = {
-    val h = AutolykosPowScheme.deriveUnprovedHeader(candidate)
+    deriveExternalCandidate(candidate, pk, Seq.empty)
+  }
+
+  def deriveExternalCandidate(candidate: CandidateBlock,
+                              pk: ProveDlog,
+                              mandatoryTxIds: Seq[ModifierId]): ExternalCandidateBlock = {
+    val h = ErgoMiner.deriveUnprovenHeader(candidate)
     val msg = msgByHeader(h)
     val b = getB(candidate.nBits)
 
-    ExternalCandidateBlock(msg, b, pk)
+    val proofs = if(mandatoryTxIds.nonEmpty) {
+      val fakeHeaderId = scorex.util.bytesToId(Array.fill(32)(0: Byte))
+      val bt = BlockTransactions(fakeHeaderId, candidate.transactions)
+      val ps = mandatoryTxIds.flatMap { txId => bt.proofFor(txId).map(mp => TransactionMembershipProof(txId, mp)) }
+      Some(ProofForMandatoryTransactions(h, ps))
+    } else {
+      None
+    }
+    ExternalCandidateBlock(msg, b, pk, proofs)
   }
 
   /**
@@ -243,30 +248,6 @@ object AutolykosPowScheme {
     val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
 
     (parentId, height)
-  }
-
-  /**
-    * Derives header without pow from [[CandidateBlock]].
-    */
-  def deriveUnprovedHeader(candidate: CandidateBlock): Header = {
-    val (parentId, height) = derivedHeaderFields(candidate.parentOpt)
-    val transactionsRoot = BlockTransactions.transactionsRoot(candidate.transactions)
-    val adProofsRoot = ADProofs.proofDigest(candidate.adProofBytes)
-    val extensionRoot: Digest32 = Extension.rootHash(candidate.extension)
-
-    Header(
-      candidate.version,
-      parentId,
-      adProofsRoot,
-      candidate.stateRoot,
-      transactionsRoot,
-      candidate.timestamp,
-      candidate.nBits,
-      height,
-      extensionRoot,
-      null,
-      candidate.votes
-    )
   }
 
 }

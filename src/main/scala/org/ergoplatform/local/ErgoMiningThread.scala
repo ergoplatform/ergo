@@ -71,15 +71,6 @@ object ErgoMiningThread {
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(ergoSettings, minerRef, startCandidate, sk, timeProvider))
 
-  def apply(ergoSettings: ErgoSettings,
-            minerRef: ActorRef,
-            startCandidate: CandidateBlock,
-            sk: BigInt,
-            timeProvider: NetworkTimeProvider,
-            name: String)
-           (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, minerRef, startCandidate, sk, timeProvider), name)
-
   case object MineBlock
 
 }

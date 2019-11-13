@@ -28,6 +28,8 @@ object Algos extends ErgoAlgos with scorex.core.utils.ScorexEncoding {
     Constants.MaxTarget / blockTarget
   }
 
+  def merkleTree(elements: Seq[LeafData]): MerkleTree[Digest32] = MerkleTree(elements)(hash)
+
   def merkleTreeRoot(elements: Seq[LeafData]): Digest32 =
-    if (elements.isEmpty) emptyMerkleTreeRoot else MerkleTree(elements)(hash).rootHash
+    if (elements.isEmpty) emptyMerkleTreeRoot else merkleTree(elements).rootHash
 }

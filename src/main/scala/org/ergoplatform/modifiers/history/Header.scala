@@ -24,22 +24,43 @@ import scala.concurrent.duration.FiniteDuration
 import scorex.util.Extensions._
 import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement, CHeader}
 import sigmastate.eval.Extensions._
-import special.collection.{Coll, CollOverArray}
-import special.sigma
-import special.sigma.{AvlTree,GroupElement}
 
-case class Header(version: Version,
+class HeaderWithoutPow(val version: Version, // 1 byte
+                       val parentId: ModifierId, // 32 bytes
+                       val ADProofsRoot: Digest32, // 32 bytes
+                       val stateRoot: ADDigest, //33 bytes! extra byte with tree height here!
+                       val transactionsRoot: Digest32, // 32 bytes
+                       val timestamp: Timestamp,
+                       val nBits: Long, //actually it is unsigned int
+                       val height: Int,
+                       val extensionRoot: Digest32,
+                       val votes: Array[Byte]) { //3 bytes
+  def toHeader(powSolution: AutolykosSolution, headerSize: Option[Int]): Header =
+    Header(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
+      nBits, height, extensionRoot, powSolution, votes, headerSize)
+}
+
+object HeaderWithoutPow {
+  def apply(version: Version, parentId: ModifierId, ADProofsRoot: Digest32, stateRoot: ADDigest,
+             transactionsRoot: Digest32, timestamp: Timestamp, nBits: Long, height: Int,
+             extensionRoot: Digest32, votes: Array[Byte]) = new HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
+    nBits, height, extensionRoot, votes)
+}
+
+
+case class Header(override val version: Version,
                   override val parentId: ModifierId,
-                  ADProofsRoot: Digest32,
-                  stateRoot: ADDigest, //33 bytes! extra byte with tree height here!
-                  transactionsRoot: Digest32,
-                  timestamp: Timestamp,
-                  nBits: Long, //actually it is unsigned int
-                  height: Int,
-                  extensionRoot: Digest32,
+                  override val ADProofsRoot: Digest32,
+                  override val stateRoot: ADDigest, //33 bytes! extra byte with tree height here!
+                  override val transactionsRoot: Digest32,
+                  override val timestamp: Timestamp,
+                  override val nBits: Long, //actually it is unsigned int
+                  override val height: Int,
+                  override val extensionRoot: Digest32,
                   powSolution: AutolykosSolution,
-                  votes: Array[Byte], //3 bytes
-                  override val sizeOpt: Option[Int] = None) extends PreHeader with ErgoPersistentModifier {
+                  override val votes: Array[Byte], //3 bytes
+                  override val sizeOpt: Option[Int] = None) extends HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
+  nBits, height, extensionRoot, votes) with PreHeader with ErgoPersistentModifier {
 
   override def serializedId: Array[Version] = Algos.hash(bytes)
 
@@ -180,7 +201,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     AutolykosSolutionSerializer.serialize(h.powSolution, w)
   }
 
-  def serializeWithoutPow(h: Header, w: Writer): Unit = {
+  def serializeWithoutPow(h: HeaderWithoutPow, w: Writer): Unit = {
     w.put(h.version)
     w.putBytes(idToBytes(h.parentId))
     w.putBytes(h.ADProofsRoot)
@@ -193,13 +214,13 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     w.putBytes(h.votes)
   }
 
-  def bytesWithoutPow(header: Header): Array[Byte] = {
+  def bytesWithoutPow(header: HeaderWithoutPow): Array[Byte] = {
     val w = new VLQByteBufferWriter(new ByteArrayBuilder())
     serializeWithoutPow(header, w)
     w.result().toBytes
   }
 
-  override def parse(r: Reader): Header = {
+  def parseWithoutPow(r: Reader): HeaderWithoutPow = {
     val version = r.getByte()
     val parentId = bytesToId(r.getBytes(32))
     val ADProofsRoot = Digest32 @@ r.getBytes(32)
@@ -211,9 +232,13 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     val height = r.getUInt().toIntExact
     val votes = r.getBytes(3)
 
-    val powSolution = AutolykosSolutionSerializer.parse(r)
+    HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
+      nBits, height, extensionHash, votes)
+  }
 
-    Header(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionHash, powSolution, votes, Some(r.consumed))
+  override def parse(r: Reader): Header = {
+    val headerWithoutPow = parseWithoutPow(r)
+    val powSolution = AutolykosSolutionSerializer.parse(r)
+    headerWithoutPow.toHeader(powSolution, Some(r.consumed))
   }
 }

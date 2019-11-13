@@ -59,7 +59,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private val registry: WalletRegistry = settings.walletRegistry
 
   private val externalApplications = storage.allApplications
-  private val trackingRules = externalApplications.map(_.trackingRule)
 
 
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
@@ -90,6 +89,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     val walletTxIds = walletInputs.map(_._1) ++ walletOutputs.map(_._1)
     val walletTxs = transactions.filter(tx => walletTxIds.contains(tx.id))
       .map(WalletTransaction(_, height, Constants.DefaultAppId))
+
+    // function effects: updating registry and offchainRegistry datasets
     registry.updateOnBlock(walletTrackedBoxes, Seq.empty, walletInputs, walletTxs)(blockId, height)
     val newOnChainIds = walletTrackedBoxes.map(x => encodedBoxId(x.box.id))
     offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)

@@ -1,4 +1,4 @@
-# A New Quest for Decentralization
+# A New Quest for Decentralization, Part I: Technical Aspects
 
 While most active conversations today in the space are about wider adoption of the blockchain technology (which often means
 selling out to the Wall St.) and competition with systems like Visa and Mastercard (which often means giving up with 
@@ -13,6 +13,9 @@ decentralization? Can we cover most of issues with technical means?
 Decentralization is about many issues lying in many fields, of technical, social, and hybrid kinds. Researchers and 
 developers are trying to find technical solutions, preferably, elegant and efficient. However, for many issues 
 such solutions are not known, thus social solutions are also needed. 
+
+In this article I will cover only technical aspects of decentralization, namely, decentralization of mining and 
+decentralization of verification.
 
 ## Decentralization of Mining
 
@@ -41,11 +44,19 @@ dominate in the mining market for the coin, however, it is always not quite clea
 
 Decentralization of verification is about possibility to check validity of blockchain history. Such check provides
 confidence that nothing bad (i.e not conforming to a protocol) was injected to the blockchain and thus give a user 
-a right to reject malicious chain even if it has absorbed more work than alternatives (there were many talks about
-such the right in the Bitcoin community when it was partly hot about User-Activated Soft Fork (UASF) idea). 
+a right to reject malicious chain even if it has absorbed more work than alternatives. There were many talks about
+such the right in the Bitcoin community when it was partly hot about User-Activated Soft Fork (UASF) idea, and 
+recent article ["Who secures Bitcoin?"](https://medium.com/@BitcoinErrorLog/who-secures-bitcoin-95b19bbcda3c) is
+summarizing this way of thinking well. 
 
-If verification can be done in reasonable time only by an entity able to spend millions on renting a datacenter,  
+If verification can be done in reasonable time only by an entity able to spend millions on renting a datacenter, 
+obviously a network is not decentralized. Ideally, it should be possible to check integrity of the whole blockchain 
+on commodity hardware, like a decent laptop.
 
-
-## Decentraliztion of Development
+However, new blockchains also tend to absorb more and more features, and they are not coming for free. Then the 
+huge topic in the research community is about how to make possible to check integrity of the whole blockchain
+with pruned blocks or system state (or both) under plausible assumptions. Possible solutions here are about bootstrapping 
+state snapshot and blockchain suffix on top of it (popular in Ethereum protocol clients, and formalized in [an academic
+paper even](https://eprint.iacr.org/2018/129.pdf)), stateless clients (partially stateless, as implemented in Ergo Platform
+ or fully stateless which do exist only in research papers currently). 
 

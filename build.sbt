@@ -4,7 +4,7 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "3.1.4-SNAPSHOT",
+  version := "3.1.3",
   scalaVersion := "2.12.10",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
@@ -16,6 +16,7 @@ lazy val commonSettings = Seq(
 
 val scorexVersion = "4ca3e400-SNAPSHOT"
 val sigmaStateVersion = "3.1.0"
+val ergoWalletVersion = "master-7921c215-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -33,6 +34,8 @@ libraryDependencies ++= Seq(
   "org.iq80.leveldb" % "leveldb" % "0.12",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
+  "org.ergoplatform" %% "ergo-wallet" % ergoWalletVersion,
+
   "org.typelevel" %% "cats-free" % "1.6.0",
   "javax.xml.bind" % "jaxb-api" % "2.+",
   "com.iheart" %% "ficus" % "1.4.+",
@@ -44,7 +47,7 @@ libraryDependencies ++= Seq(
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
-
+  
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % "10.1.9" % "test",
@@ -54,6 +57,8 @@ libraryDependencies ++= Seq(
 )
 
 updateOptions := updateOptions.value.withLatestSnapshots(false)
+
+coverageExcludedPackages := ".*ErgoApp.*;.*routes.*;.*ErgoPersistentModifier"
 
 fork := true
 
@@ -116,7 +121,6 @@ assemblyMergeStrategy in assembly := {
   case "module-info.class" => MergeStrategy.discard
   case "reference.conf" => CustomMergeStrategy.concatReversed
   case PathList("org", "iq80", "leveldb", xs @ _*) => MergeStrategy.first
-  case PathList("javax", "activation", xs @ _*) => MergeStrategy.first
   case other => (assemblyMergeStrategy in assembly).value(other)
 }
 
@@ -190,16 +194,7 @@ scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
 
 Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 
-lazy val ergoWallet = (project in file("ergo-wallet"))
-  .settings(
-    commonSettings,
-    name := "ergo-wallet",
-    libraryDependencies += ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)
-  )
-
-lazy val ergo = (project in file("."))
-  .settings(commonSettings, name := "ergo")
-  .dependsOn(ergoWallet % "compile->compile")
+lazy val ergo = (project in file(".")).settings(commonSettings: _*)
 
 lazy val benchmarks = (project in file("benchmarks"))
   .settings(commonSettings, name := "ergo-benchmarks")

@@ -7,6 +7,7 @@ import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.{AutolykosSolution, ExternalCandidateBlock}
+import org.ergoplatform.modifiers.mempool.CostedTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoScriptPredef, Pay2SAddress}
@@ -25,12 +26,20 @@ case class MiningApiRoute(miner: ActorRef, ergoSettings: ErgoSettings)
 
   override val route: Route = pathPrefix("mining") {
     candidateR ~
+      candidateWithTxsR ~
       solutionR ~
       rewardAddressR
   }
 
   def candidateR: Route = (path("candidate") & pathEndOrSingleSlash & get) {
-    val candidateF = (miner ? ErgoMiner.PrepareCandidate).mapTo[Future[ExternalCandidateBlock]].flatten
+    val prepareCmd = ErgoMiner.PrepareCandidate(Seq.empty)
+    val candidateF = (miner ? prepareCmd).mapTo[Future[ExternalCandidateBlock]].flatten
+    ApiResponse(candidateF)
+  }
+
+  def candidateWithTxsR: Route = (path("candidateWithTxs") & post & entity(as[Seq[CostedTransaction]]) ) { txs =>
+    val prepareCmd = ErgoMiner.PrepareCandidate(txs)
+    val candidateF = (miner ? prepareCmd).mapTo[Future[ExternalCandidateBlock]].flatten
     ApiResponse(candidateF)
   }
 

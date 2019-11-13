@@ -3,6 +3,7 @@ package org.ergoplatform.mining
 import org.ergoplatform.ErgoScriptPredef
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.modifiers.mempool.CostedTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{LaunchParameters, MonetarySettings}
 import org.ergoplatform.utils.ErgoPropertyTest
@@ -60,13 +61,13 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
 
   property("filter out double spend txs") {
     val cost = 1L
-    val tx = validErgoTransactionGen.sample.get._2 -> cost
+    val tx = CostedTransaction(validErgoTransactionGen.sample.get._2, cost)
     ErgoMiner.fixTxsConflicts(Seq(tx, tx, tx)) should have length 1
 
     val inputs = validErgoTransactionGenTemplate(0, -1, 100).sample.get._1
     val (l, r) = inputs.splitAt(50)
-    val tx_1 = validTransactionFromBoxes(l) -> cost
-    val tx_2 = validTransactionFromBoxes(r :+ l.last) -> cost
+    val tx_1 = CostedTransaction(validTransactionFromBoxes(l), cost)
+    val tx_2 = CostedTransaction(validTransactionFromBoxes(r :+ l.last), cost)
 
     ErgoMiner.fixTxsConflicts(Seq(tx_1, tx_2, tx)) should contain theSameElementsAs Seq(tx_1, tx)
     ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)

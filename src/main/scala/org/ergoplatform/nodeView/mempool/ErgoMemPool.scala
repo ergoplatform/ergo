@@ -17,6 +17,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
   extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {
 
   import ErgoMemPool._
+  import EmissionRules.CoinsInOneErgo
 
   override type NVCT = ErgoMemPool
 
@@ -76,10 +77,9 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
             new Exception("Transaction validation not supported"))
       }
     } else {
-      val den = EmissionRules.CoinsInOneErgo
       this -> ProcessingOutcome.Declined(
-        new Exception(
-          s"Minimal fee amount not met. ${minFee.toDouble / den} Ergo required, ${fee.toDouble / den} Ergo given")
+        new Exception(s"Min fee not met: ${minFee.toDouble / CoinsInOneErgo} ergs required, " +
+          s"${fee.toDouble / CoinsInOneErgo} ergs given")
       )
     }
   }
@@ -93,7 +93,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
   private def randSliceIndexes(qty: Int, max: Int): Seq[Int] = {
     require(qty <= max)
     val idx = Random.nextInt(max)
-    (idx until (idx + qty)).map( _ % max)
+    (idx until (idx + qty)).map(_ % max)
   }
 
 }

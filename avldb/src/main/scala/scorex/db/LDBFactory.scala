@@ -9,11 +9,16 @@ import scorex.util.ScorexLogging
 import scala.collection.mutable
 import scala.util.Try
 
+// Registry of opened LevelDB instances.
+// LevelDB prohibit access to the same storage file from more than one DB instance.
+// And ergo application (mostly tests) quit frequently doesn't not explicitly close
+// database and tries to reopen it.
 case class StoreRegistry(val factory : DBFactory) extends DBFactory {
 
   val lock = new ReentrantReadWriteLock()
   val map = new mutable.HashMap[File, RegisteredDB]
 
+  // Decorator of LevelDB DB class which overrides close() methods and unlinks database from registry on close.
   case class RegisteredDB(val impl:DB, val path: File) extends DB {
     var count: Int = 0
 

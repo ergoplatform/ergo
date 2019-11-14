@@ -12,7 +12,6 @@ object IODBBenchmark extends App with FileHelper {
   val NumMods = 2000000
   val Step = 1000
 
-  //val store = new LSMStore(getRandomTempDir)
   val store = new LDBVersionedStore(getRandomTempDir, 10)
   val mods = generateModifications()
   var currentVersion: Option[Long] = None

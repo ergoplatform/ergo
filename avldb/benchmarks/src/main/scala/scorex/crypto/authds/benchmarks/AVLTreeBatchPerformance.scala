@@ -2,7 +2,6 @@ package scorex.crypto.authds.benchmarks
 
 import java.util.concurrent.{ThreadPoolExecutor, TimeUnit}
 
-import io.iohk.iodb.LSMStore
 import org.openjdk.jmh.annotations._
 import org.slf4j.LoggerFactory
 import scorex.crypto.authds.avltree.batch.{Operation, PersistentBatchAVLProver, VersionedIODBAVLStorage}
@@ -21,7 +20,6 @@ object AVLTreeBatchPerformance extends {
 
     val logger = LoggerFactory.getLogger("TEST")
     var prover: Prover = _
-	//var store: LSMStore = _
     var store: LDBVersionedStore = _
     var storage: VersionedIODBAVLStorage[Digest32] = _
     var operations: Array[Operation] = _

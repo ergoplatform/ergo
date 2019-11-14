@@ -36,7 +36,6 @@ trait TestHelper extends FileHelper with ScorexLogging {
   def createLSMStore(keepVersions: Int = 10): Store = {
     val dir = getRandomTempDir
     new LDBVersionedStore(dir, keepVersions = keepVersions)
-	//    new LSMStore(dir, keepVersions = keepVersions)
   }
 
   def createQuickStore(keepVersions: Int = 0): Store = {

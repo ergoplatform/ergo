@@ -12,15 +12,15 @@ import scala.collection.mutable.ArrayBuffer
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 
-//
-// Implementation of verioned storage on top of leveldb.
-// This class implements IODB io.iohk.iodb.Store interface.
-// Only this interface is used from IODB to avoid changes in existed code which works with this interface.
-// LevelDB implementation of versioned store is based on maintaining "compensating transaction" list,
-// list of reverse operations needed to undo changes of applied transactions.
-// This list is stored in separate levedb database (undo) and size of list is limited by keepVersions parameter.
-// If keepVersions isd 0, then undo list is not maintained and rollback of the committed transactions is no possible.
-//
+/**
+ * Implementation of versioned storage on top of leveldb.
+ * This class implements IODB io.iohk.iodb.Store interface.
+ * Only this interface is used from IODB to avoid changes in existed code which works with this interface.
+ * LevelDB implementation of versioned store is based on maintaining "compensating transaction" list,
+ * list of reverse operations needed to undo changes of applied transactions.
+ * This list is stored in separate levedb database (undo) and size of list is limited by keepVersions parameter.
+ * If keepVersions isd 0, then undo list is not maintained and rollback of the committed transactions is no possible.
+ */
 class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store {
   type LSN = Long // logical serial number: type used to provide order of records in undo list
   private val db: DB = createDB(dir, "ldb_main")
@@ -75,8 +75,10 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store 
     encodeLSN(lsn)
   }
 
-  // Invert word to provide descending key order.
-  // Java implementation of LevelDB org.iq80.leveldb doesn't support iteration in backward direction.
+  /**
+   * Invert word to provide descending key order.
+   * Java implementation of LevelDB org.iq80.leveldb doesn't support iteration in backward direction.
+   */
   private def decodeLSN(lsn: Array[Byte]): LSN = {
     ~ByteBuffer.wrap(lsn).getLong
   }

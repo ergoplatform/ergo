@@ -4,7 +4,7 @@ import java.io.File
 import java.nio.file.Files
 
 import com.google.common.primitives.{Longs, Shorts}
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
+import io.iohk.iodb.ByteArrayWrapper
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.crypto.authds.avltree.batch._
 import scorex.util.encode.Base16
@@ -20,7 +20,6 @@ object OOMTest extends App {
   protected implicit val hf = Blake2b256
 
   val dir: File = Files.createTempDirectory("oom-test").toFile
-  //val store = new LSMStore(dir, keepVersions = 200)
   val store = new LDBVersionedStore(dir, keepVersions = 200)
 
   val bestVersionKey = Blake2b256("best state version")

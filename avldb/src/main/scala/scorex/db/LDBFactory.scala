@@ -13,7 +13,8 @@ import scala.util.Try
  * Registry of opened LevelDB instances.
  * LevelDB prohibit access to the same storage file from more than one DB instance.
  * And ergo application (mostly tests) quit frequently doesn't not explicitly close
- */ database and tries to reopen it.
+ * database and tries to reopen it.
+ */
 case class StoreRegistry(val factory : DBFactory) extends DBFactory {
 
   val lock = new ReentrantReadWriteLock()

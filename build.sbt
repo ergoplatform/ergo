@@ -26,7 +26,6 @@ libraryDependencies ++= Seq(
     .exclude("org.scorexfoundation", "scrypto"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
 
-  ("org.scorexfoundation" %% "avl-iodb" % "0.2.15").exclude("ch.qos.logback", "logback-classic"),
   "org.scorexfoundation" %% "iodb" % "0.3.2",
 
   ("org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8").exclude("org.iq80.leveldb", "leveldb"),
@@ -116,7 +115,8 @@ assemblyMergeStrategy in assembly := {
   case "module-info.class" => MergeStrategy.discard
   case "reference.conf" => CustomMergeStrategy.concatReversed
   case PathList("org", "iq80", "leveldb", xs @ _*) => MergeStrategy.first
-  case PathList("javax", "activation", xs @ _*) => MergeStrategy.first
+  case PathList("javax", "activation", xs @ _*) => MergeStrategy.last
+  case PathList("javax", "annotation", xs @ _*) => MergeStrategy.last
   case other => (assemblyMergeStrategy in assembly).value(other)
 }
 
@@ -190,6 +190,28 @@ scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
 
 Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 
+lazy val avldb = (project in file("avldb"))
+  .settings(
+    commonSettings,
+    name := "avldb"
+  )
+
+lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
+  .settings(
+    commonSettings,
+    name := "avldb-benchmarks",
+    libraryDependencies ++= Seq(
+      "com.storm-enroute" %% "scalameter" % "0.9" % "test"
+    ),
+    publishArtifact := false,
+    resolvers ++= Seq("Sonatype OSS Releases" at "https://oss.sonatype.org/content/repositories/releases"),
+    testFrameworks += new TestFramework("org.scalameter.ScalaMeterFramework"),
+    parallelExecution in Test := false,
+    logBuffered := false
+  )
+  .dependsOn(avldb)
+  .enablePlugins(JmhPlugin)
+
 lazy val ergoWallet = (project in file("ergo-wallet"))
   .settings(
     commonSettings,
@@ -200,6 +222,7 @@ lazy val ergoWallet = (project in file("ergo-wallet"))
 lazy val ergo = (project in file("."))
   .settings(commonSettings, name := "ergo")
   .dependsOn(ergoWallet % "compile->compile")
+  .dependsOn(avldb % "compile->compile")
 
 lazy val benchmarks = (project in file("benchmarks"))
   .settings(commonSettings, name := "ergo-benchmarks")

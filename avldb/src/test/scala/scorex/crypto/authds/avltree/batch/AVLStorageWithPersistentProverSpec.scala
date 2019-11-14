@@ -6,6 +6,7 @@ import scorex.crypto.authds.avltree.batch.benchmark.IODBBenchmark.getRandomTempD
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.utils.Random
+import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 
@@ -14,7 +15,8 @@ class AVLStorageWithPersistentProverSpec extends PropSpec with Matchers {
   type HF = Blake2b256.type
   implicit val hf: HF = Blake2b256
 
-  val stateStore: Store = new LSMStore(getRandomTempDir)
+  //val stateStore: Store = new LSMStore(getRandomTempDir)
+  val stateStore: Store = new LDBVersionedStore(getRandomTempDir, 10)
 
   private lazy val np =
     NodeParameters(keySize = 32, valueSize = None, labelSize = 32)

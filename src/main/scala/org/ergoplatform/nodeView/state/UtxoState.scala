@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import cats.Traverse
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -20,6 +20,7 @@ import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
+import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 
@@ -176,7 +177,7 @@ object UtxoState {
   }
 
   def create(dir: File, constants: StateConstants): UtxoState = {
-    val store = new LSMStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
     val version = store.get(ByteArrayWrapper(bestVersionKey)).map(w => bytesToVersion(w.data))
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
@@ -198,7 +199,7 @@ object UtxoState {
       p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess)
     }
 
-    val store = new LSMStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
 
     implicit val votingSettings: VotingSettings = constants.votingSettings
 

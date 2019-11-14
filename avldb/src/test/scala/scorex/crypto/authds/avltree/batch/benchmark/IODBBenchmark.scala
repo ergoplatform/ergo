@@ -3,6 +3,7 @@ package scorex.crypto.authds.avltree.batch.benchmark
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import scorex.crypto.authds.avltree.batch.helpers.FileHelper
 import scorex.utils.Random
+import scorex.db.LDBVersionedStore
 
 object IODBBenchmark extends App with FileHelper {
   val KL = 32
@@ -11,7 +12,8 @@ object IODBBenchmark extends App with FileHelper {
   val NumMods = 2000000
   val Step = 1000
 
-  val store = new LSMStore(getRandomTempDir)
+  //val store = new LSMStore(getRandomTempDir)
+  val store = new LDBVersionedStore(getRandomTempDir, 10)
   val mods = generateModifications()
   var currentVersion: Option[Long] = None
 

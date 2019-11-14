@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
 
-import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.db.VersionedLDBKVStore
 import org.ergoplatform.db.VersionedLDBKVStore.VersionId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
@@ -11,6 +10,7 @@ import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA.RegistryOp
 import org.ergoplatform.settings.{ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.iq80.leveldb.Options
+import scorex.db.LDBFactory.factory
 import scorex.core.VersionTag
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}

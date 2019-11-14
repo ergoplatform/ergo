@@ -113,7 +113,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
   }
   def lastUsedId: Short = store.lastKeyInRange(SmallestPossibleApplicationId, BiggestPossibleApplicationId)
     .map(bs => Shorts.fromByteArray(bs.takeRight(2)))
-    .getOrElse(Constants.DefaultAppId)
+    .getOrElse(Constants.WalletAppId)
 }
 
 object WalletStorage {

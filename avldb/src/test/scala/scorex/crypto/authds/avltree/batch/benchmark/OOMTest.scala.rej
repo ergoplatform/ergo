@@ -1,0 +1,12 @@
+--- avldb/src/test/scala/scorex/crypto/authds/avltree/batch/benchmark/OOMTest.scala	2019-11-14 10:16:12.534328295 +0300
++++ avldb/src/test/scala/scorex/crypto/authds/avltree/batch/benchmark/OOMTest.scala	2019-11-11 12:10:35.330941786 +0300
+@@ -7,8 +7,8 @@
+ import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
+ import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
+ import scorex.crypto.authds.avltree.batch._
+-import scorex.crypto.encode.Base16
++import scorex.util.encode.Base16
+ import scorex.crypto.hash.{Blake2b256, Digest32}
+ import scala.collection.immutable.SortedMap
+ 
+ object OOMTest extends App {

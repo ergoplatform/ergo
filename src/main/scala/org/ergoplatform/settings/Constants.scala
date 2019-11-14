@@ -65,6 +65,6 @@ object Constants {
   val DefaultComplexityLimit: Int = 100000
 
   // SimplePayments application identifier
-  val DefaultAppId: Short = 1
+  val WalletAppId: Short = 1
 
 }

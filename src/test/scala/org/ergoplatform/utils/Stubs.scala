@@ -193,7 +193,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         spendingHeightOpt = None,
         box = ergoBoxGen.sample.get,
         certainty = BoxCertainty.Certain,
-        applicationId = Constants.DefaultAppId
+        applicationId = Constants.WalletAppId
       ),
       confirmationsNumOpt = Some(10)
     )

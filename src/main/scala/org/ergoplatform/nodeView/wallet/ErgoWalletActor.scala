@@ -78,17 +78,17 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           ((outAcc._1 ++ outputs._1) -> (outAcc._2 ++ outputs._2), inAcc ++ inputs.map(tx.id -> _))
       }
 
-    val walletTrackedBoxes = walletAndAppsTrackedBoxes._1
+    val walletTrackedBoxes: Seq[TrackedBox] = walletAndAppsTrackedBoxes._1
     val walletOutputs = walletTrackedBoxes.map(tb => tb.creationTxId -> tb.box)
 
-    val outIds = registry.readAllBoxes.map(tb => encodedBoxId(tb.box.id)) ++
+    val allWalletOutIds = registry.readAllBoxes.map(tb => encodedBoxId(tb.box.id)) ++
       walletOutputs.map(x => encodedBoxId(x._2.id))
 
     //leave only spent inputs
-    val walletInputs = allInputs.filter(x => outIds.contains(x._2))
+    val walletInputs = allInputs.filter(x => allWalletOutIds.contains(x._2))
     val walletTxIds = walletInputs.map(_._1) ++ walletOutputs.map(_._1)
     val walletTxs = transactions.filter(tx => walletTxIds.contains(tx.id))
-      .map(WalletTransaction(_, height, Constants.DefaultAppId))
+      .map(WalletTransaction(_, height, Constants.WalletAppId))
 
     // function effects: updating registry and offchainRegistry datasets
     registry.updateOnBlock(walletTrackedBoxes, Seq.empty, walletInputs, walletTxs)(blockId, height)
@@ -315,7 +315,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     val trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.script.bytes)
     val walletBoxes = tx.outputs.filter { bx =>
       trackedBytes.exists(bs => bx.propositionBytes.sameElements(bs))
-    }.map(bx => TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain, Constants.DefaultAppId))
+    }.map(bx => TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain, Constants.WalletAppId))
 
     val appBoxes = tx.outputs.flatMap { bx =>
       val appsTriggered = externalApplications.filter(_.trackingRule.filter(bx))
@@ -388,7 +388,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def boxesToFakeTracked(inputs: Seq[ErgoBox]): Iterator[TrackedBox] = {
     inputs
       .map { box => // declare fake inclusion height in order to confirm the box is onchain
-        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, BoxCertainty.Certain, Constants.DefaultAppId)
+        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, BoxCertainty.Certain, Constants.WalletAppId)
       }
       .toIterator
   }

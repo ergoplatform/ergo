@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.http.api.ApiCodecs
+import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 
@@ -14,9 +15,11 @@ import scala.util.{Failure, Success, Try}
   * @param trackingRule - a predicate to scan the blockchain for specific application-related boxes
   *
   */
-case class ExternalApplication(appId: Short, appName: String, trackingRule: ScanningPredicate)
+case class ExternalApplication(appId: AppId, appName: String, trackingRule: ScanningPredicate)
 
 object ExternalApplication {
+  type AppId = Short
+
   val MaxAppNameLength = 255
 }
 
@@ -29,7 +32,7 @@ object ExternalApplication {
   */
 
 case class ExternalAppRequest(appName: String, trackingRule: ScanningPredicate) {
-  def toApp(appId: Short): Try[ExternalApplication] = {
+  def toApp(appId: AppId): Try[ExternalApplication] = {
     if (appName.getBytes("UTF-8").length > ExternalApplication.MaxAppNameLength) {
       Failure(new Exception(s"Too long application name: $appName"))
     } else {

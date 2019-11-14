@@ -82,8 +82,10 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
   /**
     * Updates indexes according to a data extracted from a block and performs versioned update.
     */
-  def updateOnBlock(certainBxs: Seq[TrackedBox], uncertainBxs: Seq[TrackedBox],
-                    inputs: Seq[(ModifierId, EncodedBoxId)], txs: Seq[WalletTransaction])
+  def updateOnBlock(certainBxs: Seq[TrackedBox],
+                    uncertainBxs: Seq[TrackedBox],
+                    inputs: Seq[(ModifierId, EncodedBoxId)],
+                    txs: Seq[WalletTransaction])
                    (blockId: ModifierId, blockHeight: Int): Unit = {
     val update = for {
       _ <- putBoxes(certainBxs ++ uncertainBxs)

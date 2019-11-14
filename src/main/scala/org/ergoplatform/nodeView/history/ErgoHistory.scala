@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
-import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.db.LDBKVStore
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
@@ -14,6 +13,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{Empty
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import org.iq80.leveldb.Options
+import scorex.db.LDBFactory.factory
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider

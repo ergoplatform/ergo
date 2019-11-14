@@ -30,7 +30,6 @@ import scorex.core.network.{Handshake, PeerSpec}
 import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
-import scorex.testkit.utils.FileUtils
 import scorex.util.Random
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
@@ -38,7 +37,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Success
 
-trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with FileUtils {
+trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with scorex.testkit.utils.FileUtils {
 
   implicit val system: ActorSystem
 

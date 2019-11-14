@@ -152,7 +152,7 @@ object RegistryOps {
         case GetAllTxs =>
           State.inspect { _ =>
             store.getRange(FirstTxSpaceKey, LastTxSpaceKey)
-              .flatMap { case (tk, txBytes) =>
+              .flatMap { case (_, txBytes) =>
                 WalletTransactionSerializer.parseBytesTry(txBytes).toOption
               }
               .asInstanceOf[A]

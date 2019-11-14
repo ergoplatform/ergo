@@ -34,7 +34,6 @@ object AVLTreeBatchPerformance extends {
 
     @TearDown(Level.Iteration)
     def down: Unit = {
-      store.executor.asInstanceOf[ThreadPoolExecutor].shutdownNow()
       prover = null
       operations = Array.empty
     }

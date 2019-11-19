@@ -174,7 +174,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) { (minConfNum, minHeight) =>
     withWallet {
-      _.boxes(unspentOnly = true)
+      _.walletBoxes(unspentOnly = true)
         .map {
           _.filter(boxPredicate(_, minConfNum, minHeight))
         }
@@ -183,7 +183,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def boxesR: Route = (path("boxes") & get & boxParams) { (minConfNum, minHeight) =>
     withWallet {
-      _.boxes()
+      _.walletBoxes()
         .map {
           _.filter(boxPredicate(_, minConfNum, minHeight))
         }

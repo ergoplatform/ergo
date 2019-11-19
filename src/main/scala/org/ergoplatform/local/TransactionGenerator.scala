@@ -92,9 +92,9 @@ class TransactionGenerator(viewHolder: ActorRef,
     val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances.map { balances =>
       Random.nextInt(100) match {
         case i if i < 70 =>
-          Some(PaymentRequest(randProposition, math.min(randAmount, balances.balance - feeReq.value), Seq.empty, Map.empty))
-        case i if i < 95 && balances.assetBalances.nonEmpty =>
-          val tokenToSpend = balances.assetBalances.toSeq(Random.nextInt(balances.assetBalances.size))
+          Some(PaymentRequest(randProposition, math.min(randAmount, balances.walletBalance - feeReq.value), Seq.empty, Map.empty))
+        case i if i < 95 && balances.walletAssetBalances.nonEmpty =>
+          val tokenToSpend = balances.walletAssetBalances.toSeq(Random.nextInt(balances.walletAssetBalances.size))
           val tokenAmountToSpend = tokenToSpend._2 / 4
           val assets = Seq(IdUtils.decodedTokenId(tokenToSpend._1) -> tokenAmountToSpend)
           Some(PaymentRequest(randProposition, minimalErgoAmount, assets, Map.empty))

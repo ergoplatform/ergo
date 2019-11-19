@@ -6,12 +6,16 @@ import cats.free.Free.liftF
 import cats.~>
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.VersionedLDBKVStore
-import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA._
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import scorex.util.{ModifierId, idToBytes}
 
 import scala.language.implicitConversions
+
+object RegistryOps
+
+
+/*
 
 object RegistryOps {
 
@@ -19,10 +23,13 @@ object RegistryOps {
 
   type RegistryOpState[A] = State[UpdateBatch, A]
 
+
+
   implicit class TransactionOp[A](ma: RegistryOp[A]) {
 
     /**
       * Applies non-versioned transaction to a given `store`.
+
       */
     def transact(store: VersionedLDBKVStore): A = transact(store, None)
 
@@ -76,6 +83,8 @@ object RegistryOps {
       }
     }
 
+
+
   def putTx(tx: WalletTransaction): RegistryOp[Unit] =
     liftF[RegistryOpA, Unit](PutTx(tx))
 
@@ -87,22 +96,23 @@ object RegistryOps {
   def getTx(id: ModifierId): RegistryOp[Option[WalletTransaction]] =
     liftF[RegistryOpA, Option[WalletTransaction]](GetTx(id))
 
-  def getAllTxs: RegistryOp[Seq[WalletTransaction]] =
-    liftF[RegistryOpA, Seq[WalletTransaction]](GetAllTxs)
+  def getAllWalletTxs: RegistryOp[Seq[WalletTransaction]] =
+    liftF[RegistryOpA, Seq[WalletTransaction]](GetAllWalletTxs)
 
   def removeTxs(ids: Seq[ModifierId]): RegistryOp[Unit] =
     liftF[RegistryOpA, Unit](RemoveTxs(ids))
 
-  def putIndex(index: RegistrySummary): RegistryOp[Unit] =
+  def putDigest(index: RegistryDigest): RegistryOp[Unit] =
     liftF[RegistryOpA, Unit](PutIndex(index))
 
-  def getIndex: RegistryOp[RegistrySummary] =
-    liftF[RegistryOpA, RegistrySummary](GetIndex)
+  def getDigest: RegistryOp[RegistryDigest] =
+    liftF[RegistryOpA, RegistryDigest](GetIndex)
 
-  def updateIndex(updateF: RegistrySummary => RegistrySummary): RegistryOp[Unit] =
-    getIndex.flatMap(v => putIndex(updateF(v)))
+  def updateDigest(updateF: RegistryDigest => RegistryDigest): RegistryOp[Unit] =
+    getDigest.flatMap(v => putDigest(updateF(v)))
 
   private def interpreter(store: VersionedLDBKVStore): RegistryOpA ~> RegistryOpState =
+
     new (RegistryOpA ~> RegistryOpState) {
       override def apply[A](fa: RegistryOpA[A]): RegistryOpState[A] = fa match {
         case PutBox(box) =>
@@ -149,7 +159,7 @@ object RegistryOps {
               .flatMap(r => WalletTransactionSerializer.parseBytesTry(r).toOption)
               .asInstanceOf[A]
           }
-        case GetAllTxs =>
+        case GetAllWalletTxs =>
           State.inspect { _ =>
             store.getRange(FirstTxSpaceKey, LastTxSpaceKey)
               .flatMap { case (_, txBytes) =>
@@ -170,7 +180,7 @@ object RegistryOps {
           State.inspect { _ =>
             store.get(RegistrySummaryKey)
               .flatMap(r => RegistrySummarySerializer.parseBytesTry(r).toOption)
-              .getOrElse(RegistrySummary.empty)
+              .getOrElse(RegistryDigest.empty)
               .asInstanceOf[A]
           }
       }
@@ -195,3 +205,4 @@ object RegistryOps {
   private def txKey(id: ModifierId): Array[Byte] = TxKeyPrefix +: idToBytes(id)
 
 }
+*/

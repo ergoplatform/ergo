@@ -36,7 +36,7 @@ object AugWalletTransaction extends ApiCodecs {
       "outputs" -> obj.wtx.tx.outputs.toSeq.asJson(Encoder.encodeSeq(enc)),
       "size" -> obj.wtx.tx.size.asJson,
       "inclusionHeight" -> obj.wtx.inclusionHeight.asJson,
-      "applicationId" -> obj.wtx.applicationId.asJson,
+      "applicationIds" -> obj.wtx.applicationIds.asJson,
       "numConfirmations" -> obj.numConfirmations.asJson
     )
   }
@@ -46,7 +46,7 @@ object AugWalletTransaction extends ApiCodecs {
       ergoTx <- c.as[ErgoTransaction]
       inclusionHeight <- c.downField("inclusionHeight").as[Int]
       numConfirmations <- c.downField("numConfirmations").as[Int]
-      appId <- c.downField("applicationId").as[Short]} yield AugWalletTransaction(WalletTransaction(ergoTx, inclusionHeight, appId), numConfirmations)
+      appIds <- c.downField("applicationIds").as[Seq[Short]]} yield AugWalletTransaction(WalletTransaction(ergoTx, inclusionHeight, appIds), numConfirmations)
   }
 
 }

@@ -157,7 +157,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     @tailrec
     def loop(toSend: Int): Unit = {
-      val toSpend: Seq[ErgoBox] = await(wallet.boxes()).map(_.trackedBox.box).toList
+      val toSpend: Seq[ErgoBox] = await(wallet.walletBoxes()).map(_.trackedBox.box).toList
       log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains," +
         s"pool size: ${requestReaders.m.size}")
       val txs: Seq[ErgoTransaction] = toSpend.take(toSend) map { boxToSend =>

@@ -31,6 +31,7 @@ import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
+import org.ergoplatform.wallet.Constants.WalletAppId
 
 import scala.util.{Failure, Random, Success, Try}
 
@@ -68,7 +69,74 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def height: Int = stateContext.currentHeight
 
+
+  /**
+    * Extracts all outputs which contain tracked bytes from the given transaction.
+    */
+  private def extractWalletOutputs(tx: ErgoTransaction): Seq[TrackedBox] = {
+    val trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.script.bytes)
+    println("Tracked bytes: " + trackedBytes.map(_.mkString("-")))
+    println("tracked scripts: " + trackedAddresses.map(_.script))
+
+    tx.outputs.flatMap { bx =>
+      val appsTriggered = externalApplications.filter(_.trackingRule.filter(bx))
+        .map(app => app.appId -> BoxCertainty.Uncertain)
+
+      println("bx propbytes: " + bx.propositionBytes.mkString("-"))
+      println("bx prop: " + bx.ergoTree)
+
+      val statuses = if (trackedBytes.exists(bs => bx.propositionBytes.sameElements(bs))) {
+        (WalletAppId, BoxCertainty.Certain) +: appsTriggered
+      } else {
+        appsTriggered
+      }
+      if (statuses.nonEmpty) {
+        val tb = TrackedBox(tx.id, bx.index, None, None, None, bx, statuses)
+        println("tb: " + tb)
+        Some(tb)
+      } else {
+        None
+      }
+    }
+  }
+
+  /**
+    * Extracts all inputs from the given transaction.
+    */
+  private def extractAllInputs(tx: ErgoTransaction): Seq[EncodedBoxId] = tx.inputs.map(x => encodedBoxId(x.boxId))
+
   private def scanBlockTransactions(blockId: ModifierId, transactions: Seq[ErgoTransaction]): Unit = {
+    //todo: replace with Bloom filter?
+    val previousBoxIds = registry.walletUnspentBoxes().map(tb => encodedBoxId(tb.box.id))
+
+    //outputs, input ids, related transactions
+    type ScanResults = (Seq[TrackedBox], Seq[(ModifierId, EncodedBoxId, TrackedBox)], Seq[WalletTransaction])
+    val initialScanResults: ScanResults = (Seq.empty, Seq.empty, Seq.empty)
+
+    val scanRes = transactions.foldLeft((initialScanResults, previousBoxIds)) { case ((scanResults, accBoxIds), tx) =>
+      val txInputIds = tx.inputs.map(x => encodedBoxId(x.boxId))
+      val outputs = extractWalletOutputs(tx)
+
+      val boxIds: Seq[EncodedBoxId] = accBoxIds ++ outputs.map(x => EncodedBoxId @@ x.boxId)
+      val relatedInputIds = txInputIds.filter(x => boxIds.contains(x))
+
+      if (outputs.nonEmpty || relatedInputIds.nonEmpty) {
+        val spentBoxes = relatedInputIds.map { inpId =>
+          registry.getBox(decodedBoxId(inpId)).get   //todo: .get
+        }
+        val walletAppIds = (spentBoxes ++ outputs).flatMap(_.applicationStatuses.map(_._1)).toSet
+        val wtx = WalletTransaction(tx, height, walletAppIds.toSeq)
+
+        val newRel = (scanResults._2: Seq[(ModifierId, EncodedBoxId, TrackedBox)]) ++
+          relatedInputIds.zip(spentBoxes).map(t => (tx.id, t._1, t._2))
+        (scanResults._1 ++ outputs, newRel, scanResults._3 :+ wtx) -> boxIds
+      } else {
+        scanResults -> accBoxIds
+      }
+    }._1
+
+
+    /*
     //extract wallet-related outputs and all the inputs from all the transactions in the block
     val (walletAndAppsTrackedBoxes, allInputs) = transactions
       .foldLeft((Seq.empty[TrackedBox], Seq.empty[TrackedBox]), Seq.empty[(ModifierId, EncodedBoxId)]) {
@@ -77,10 +145,10 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           val inputs = extractAllInputs(tx)
           ((outAcc._1 ++ outputs._1) -> (outAcc._2 ++ outputs._2), inAcc ++ inputs.map(tx.id -> _))
       }
-
     val walletTrackedBoxes: Seq[TrackedBox] = walletAndAppsTrackedBoxes._1
     val walletOutputs = walletTrackedBoxes.map(tb => tb.creationTxId -> tb.box)
 
+    ///
     val allWalletOutIds = registry.readAllBoxes.map(tb => encodedBoxId(tb.box.id)) ++
       walletOutputs.map(x => encodedBoxId(x._2.id))
 
@@ -89,11 +157,13 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     val walletTxIds = walletInputs.map(_._1) ++ walletOutputs.map(_._1)
     val walletTxs = transactions.filter(tx => walletTxIds.contains(tx.id))
       .map(WalletTransaction(_, height, Constants.WalletAppId))
+     */
+
 
     // function effects: updating registry and offchainRegistry datasets
-    registry.updateOnBlock(walletTrackedBoxes, Seq.empty, walletInputs, walletTxs)(blockId, height)
-    val newOnChainIds = walletTrackedBoxes.map(x => encodedBoxId(x.box.id))
-    offChainRegistry = offChainRegistry.updateOnBlock(height, registry.readCertainUnspentBoxes, newOnChainIds)
+    registry.updateOnBlock(scanRes._1, scanRes._2, scanRes._3)(blockId, height)
+    val newOnChainIds = scanRes._1.map(x => encodedBoxId(x.box.id))
+    offChainRegistry = offChainRegistry.updateOnBlock(height, registry.walletUnspentBoxes(), newOnChainIds)
   }
 
   override def preStart(): Unit = {
@@ -128,7 +198,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def scanLogic: Receive = {
     //scan mempool transaction
     case ScanOffChain(tx) =>
-      val resolvedTrackedBoxes = extractWalletOutputs(tx)._1
+      val resolvedTrackedBoxes = extractWalletOutputs(tx)
       val inputs = extractAllInputs(tx)
       offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
 
@@ -143,7 +213,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def readers: Receive = {
     case ReadBalances(chainStatus) =>
-      sender() ! (if (chainStatus.onChain) registry.readIndex else offChainRegistry.readIndex)
+      sender() ! (if (chainStatus.onChain) registry.getDigest() else offChainRegistry.readIndex)
 
     case ReadPublicKeys(from, until) =>
       sender() ! publicKeys.slice(from, until)
@@ -155,19 +225,20 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         sender() ! Failure(new Exception("Wallet is locked"))
       }
 
-    case GetBoxes(unspent) =>
+    //todo: returns only confirmed boxes now is it okay?
+    case GetWalletBoxes(unspent) =>
       val currentHeight = height
-      sender() ! (if (unspent) registry.readCertainUnspentBoxes else registry.readCertainBoxes)
+      sender() ! (if (unspent) registry.walletUnspentBoxes() else registry.walletConfirmedBoxes(0))
         .map(tb => WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _)))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
     case GetTransactions =>
-      sender() ! registry.readTransactions
+      sender() ! registry.getAllWalletTxs()
         .sortBy(-_.inclusionHeight)
         .map(tx => AugWalletTransaction(tx, height - tx.inclusionHeight))
 
     case GetTransaction(id) =>
-      sender() ! registry.getTransactionById(id)
+      sender() ! registry.getTx(id)
         .map(tx => AugWalletTransaction(tx, height - tx.inclusionHeight))
 
     case ReadRandomPublicKey =>
@@ -308,27 +379,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined
   }
 
-  /**
-    * Extracts all outputs which contain tracked bytes from the given transaction.
-    */
-  private def extractWalletOutputs(tx: ErgoTransaction): (Seq[TrackedBox], Seq[TrackedBox]) = {
-    val trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.script.bytes)
-    val walletBoxes = tx.outputs.filter { bx =>
-      trackedBytes.exists(bs => bx.propositionBytes.sameElements(bs))
-    }.map(bx => TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain, Constants.WalletAppId))
-
-    val appBoxes = tx.outputs.flatMap { bx =>
-      val appsTriggered = externalApplications.filter(_.trackingRule.filter(bx))
-      appsTriggered.map(app => TrackedBox(tx, bx.index, None, bx, BoxCertainty.Uncertain, app.appId))
-    }
-    (walletBoxes, appBoxes)
-  }
-
-  /**
-    * Extracts all inputs from the given transaction.
-    */
-  private def extractAllInputs(tx: ErgoTransaction): Seq[EncodedBoxId] = tx.inputs.map(x => encodedBoxId(x.boxId))
-
   private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] =
     Traverse[List].sequence {
       requests.toList
@@ -388,7 +438,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def boxesToFakeTracked(inputs: Seq[ErgoBox]): Iterator[TrackedBox] = {
     inputs
       .map { box => // declare fake inclusion height in order to confirm the box is onchain
-        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, BoxCertainty.Certain, Constants.WalletAppId)
+        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, Seq(WalletAppId -> BoxCertainty.Certain))
       }
       .toIterator
   }
@@ -436,7 +486,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                 (boxesToFakeTracked(inputs), noFilter)
               } else {
                 //inputs are to be selected by the wallet
-                (registry.readCertainUnspentBoxes.toIterator, onChainFilter)
+                (registry.walletUnspentBoxes().toIterator, onChainFilter)
               }
 
               val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
@@ -500,7 +550,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def inputsFor(targetAmount: Long,
                         targetAssets: Map[ModifierId, Long] = Map.empty): Seq[ErgoBox] =
     boxSelector
-      .select(registry.readCertainUnspentBoxes.toIterator, onChainFilter, targetAmount, targetAssets)
+      .select(registry.walletUnspentBoxes().toIterator, onChainFilter, targetAmount, targetAssets)
       .toSeq
       .flatMap(_.boxes)
 
@@ -582,7 +632,7 @@ object ErgoWalletActor {
 
   final case class DeriveKey(path: String)
 
-  final case class GetBoxes(unspentOnly: Boolean)
+  final case class GetWalletBoxes(unspentOnly: Boolean)
 
   final case class UpdateChangeAddress(address: P2PKAddress)
 

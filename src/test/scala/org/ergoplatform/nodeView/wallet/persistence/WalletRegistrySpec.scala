@@ -1,10 +1,11 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
+import org.ergoplatform.wallet.Constants.WalletAppId
+
 import io.iohk.iodb.{LSMStore, Store}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.BoxCertainty
-import org.ergoplatform.wallet.boxes.BoxCertainty.{Certain, Uncertain}
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
@@ -18,43 +19,44 @@ class WalletRegistrySpec
     with WalletGenerators
     with FileUtils {
 
-  import RegistryOps._
-  import org.ergoplatform.nodeView.wallet.IdUtils._
 
   def createStore: Store = new LSMStore(createTempDir)
 
-  it should "read certain boxes" in {
+  private val emptyBag = KeyValuePairsBag.empty
+  val walletBoxStatus = Seq(WalletAppId -> BoxCertainty.Certain)
+
+  it should "read unspent wallet boxes" in {
     forAll(trackedBoxGen) { box =>
       withVersionedStore(10) { store =>
-        val certainBox = box.copy(certainty = Certain, spendingHeightOpt = None, spendingTxIdOpt = None)
-        putBox(certainBox).transact(store)
-        val registry = new WalletRegistry(store)(settings.walletSettings)
+        val unspentBox = box.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applicationStatuses = walletBoxStatus)
+        WalletRegistry.putBox(emptyBag, unspentBox).transact(store)
 
-        registry.readCertainUnspentBoxes shouldBe Seq(certainBox)
+        val registry = new WalletRegistry(store)(settings.walletSettings)
+        registry.walletUnspentBoxes() shouldBe Seq(unspentBox)
       }
     }
   }
 
-  it should "read uncertain boxes" in {
+  it should "read spent wallet boxes" in {
     forAll(trackedBoxGen) { box =>
-      withVersionedStore(10) { store =>
-        val uncertainBox = box.copy(certainty = Uncertain)
-        val index = RegistrySummary(0, 0, Map.empty, Seq(encodedBoxId(uncertainBox.box.id)))
-        putBox(uncertainBox).flatMap(_ => putIndex(index)).transact(store)
-        val registry = new WalletRegistry(store)(settings.walletSettings)
-
-        registry.readUncertainBoxes shouldBe Seq(uncertainBox)
+      forAll(modifierIdGen) {txId =>
+        withVersionedStore(10) { store =>
+          val uncertainBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), applicationStatuses = walletBoxStatus)
+          WalletRegistry.putBox(emptyBag, uncertainBox).transact(store)
+          val registry = new WalletRegistry(store)(settings.walletSettings)
+          registry.walletSpentBoxes() shouldBe Seq(uncertainBox)
+        }
       }
     }
   }
 
-  it should "read transactions" in {
+  it should "read wallet transactions" in {
     forAll(walletTransactionGen) { wtx =>
       withVersionedStore(10) { store =>
-        putTx(wtx).transact(store)
+        WalletRegistry.putTx(emptyBag, wtx).transact(store)
         val registry = new WalletRegistry(store)(settings.walletSettings)
 
-        registry.readTransactions shouldBe Seq(wtx)
+        registry.getAllWalletTxs() shouldBe Seq(wtx)
       }
     }
   }
@@ -65,14 +67,14 @@ class WalletRegistrySpec
     forAll(Gen.nonEmptyListOf(trackedBoxGen), modifierIdGen) { (boxes, txId) =>
       withVersionedStore(10) { store =>
         val unspentBoxes = boxes.map(
-          _.copy(spendingHeightOpt = None, spendingTxIdOpt = None, certainty = BoxCertainty.Certain))
+          _.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applicationStatuses = walletBoxStatus))
         val transitedBoxes = unspentBoxes.map(
           _.copy(spendingHeightOpt = Some(spendingHeight), spendingTxIdOpt = Some(txId)))
 
-        putBoxes(unspentBoxes).transact(store)
+        WalletRegistry.putBoxes(emptyBag, unspentBoxes).transact(store)
         val registry = new WalletRegistry(store)(ws)
-        registry.processHistoricalBoxes(unspentBoxes.map(txId -> _), spendingHeight).transact(store)
-        registry.readHistoricalBoxes.toList should contain theSameElementsAs transitedBoxes
+        registry.processHistoricalBoxes(emptyBag, unspentBoxes.map(txId -> _), spendingHeight).transact(store)
+        registry.walletSpentBoxes().toList should contain theSameElementsAs transitedBoxes
       }
     }
   }

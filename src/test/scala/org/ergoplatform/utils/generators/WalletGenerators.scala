@@ -3,17 +3,17 @@ package org.ergoplatform.utils.generators
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.IdUtils._
-import org.ergoplatform.nodeView.wallet.persistence.RegistrySummary
+import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning._
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
-import org.ergoplatform.wallet.secrets.{DerivationPath, Index}
+import org.ergoplatform.wallet.boxes.{TrackedBox}
+import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Gen
 
-trait WalletGenerators extends ErgoTransactionGenerators {
+trait WalletGenerators extends ErgoTransactionGenerators with Generators {
 
-  def trackedBoxGen: Gen[TrackedBox] = {
+  override def trackedBoxGen: Gen[TrackedBox] = {
     Gen.oneOf(
       unspentOffchainBoxGen,
       unspentOnchainBoxGen,
@@ -28,9 +28,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       (boxes, tx) <- validErgoTransactionGen
       outIndex <- outIndexGen(tx)
       ergoBox <- Gen.oneOf(boxes)
-      certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-      appId <- Gen.posNum[Short]
-    } yield TrackedBox(tx, outIndex, None, ergoBox, certainty, appId)
+      appStatuses <- appStatusesGen
+    } yield TrackedBox(tx, outIndex, None, ergoBox, appStatuses)
   }
 
   def unspentOnchainBoxGen: Gen[TrackedBox] = {
@@ -39,9 +38,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       outIndex <- outIndexGen(tx)
       height <- heightGen()
       ergoBox <- Gen.oneOf(boxes)
-      certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-      appId <- Gen.posNum[Short]
-    } yield TrackedBox(tx, outIndex, Some(height), ergoBox, certainty, appId)
+      appStatuses <- appStatusesGen
+    } yield TrackedBox(tx, outIndex, Some(height), ergoBox, appStatuses)
   }
 
   def spentOffchainBoxGen: Gen[TrackedBox] = {
@@ -50,9 +48,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       (_, spendingTx) <- validErgoTransactionGen
       outIndex <- outIndexGen(tx)
       ergoBox <- Gen.oneOf(boxes)
-      certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-      appId <- Gen.posNum[Short]
-    } yield TrackedBox(tx.id, outIndex, None, Some(spendingTx.id), None, ergoBox, certainty, appId)
+      appStatuses <- appStatusesGen
+    } yield TrackedBox(tx.id, outIndex, None, Some(spendingTx.id), None, ergoBox, appStatuses)
   }
 
   def spentPartiallyOffchainBoxGen: Gen[TrackedBox] = {
@@ -62,9 +59,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       outIndex <- outIndexGen(tx)
       height <- heightGen()
       ergoBox <- Gen.oneOf(boxes)
-      certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-      appId <- Gen.posNum[Short]
-    } yield TrackedBox(tx.id, outIndex, Some(height), Some(spendingTx.id), None, ergoBox, certainty, appId)
+      appStatuses <- appStatusesGen
+    } yield TrackedBox(tx.id, outIndex, Some(height), Some(spendingTx.id), None, ergoBox, appStatuses)
   }
 
   def spentOnchainBoxGen: Gen[TrackedBox] = {
@@ -75,10 +71,9 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       height <- heightGen()
       spendingHeight <- heightGen(height)
       ergoBox <- Gen.oneOf(boxes)
-      certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-      appId <- Gen.posNum[Short]
+      appStatuses <- appStatusesGen
     } yield TrackedBox(
-      tx.id, outIndex, Some(height), Some(spendingTx.id), Some(spendingHeight), ergoBox, certainty, appId)
+      tx.id, outIndex, Some(height), Some(spendingTx.id), Some(spendingHeight), ergoBox, appStatuses)
   }
 
   def paymentRequestGen: Gen[PaymentRequest] = {
@@ -98,26 +93,20 @@ trait WalletGenerators extends ErgoTransactionGenerators {
     } yield AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), amount, name, description, decimals)
   }
 
-  def registrySummaryGen: Gen[RegistrySummary] = {
+  def registrySummaryGen: Gen[RegistryDigest] = {
     for {
       height <- Gen.posNum[Int]
       amount <- Gen.choose(1L, 100000L)
       balances <- additionalTokensGen
-      uncertain <- Gen.listOf(boxIdGen)
+      // uncertain <- Gen.listOf(boxIdGen)
     } yield {
       val encodedBalances = balances.map { case (x1, x2) => encodedTokenId(x1) -> x2 }.toMap
-      RegistrySummary(height, amount, encodedBalances, uncertain.map(encodedBoxId))
+      RegistryDigest(height, amount, encodedBalances, Map.empty, Map.empty, Map.empty)
     }
   }
 
-  def derivationPathGen: Gen[DerivationPath] = for {
-    isPublic <- Gen.oneOf(Seq(true, false))
-    indices <- Gen.listOf(Gen.oneOf(Seq(true, false))
-      .flatMap(x => Gen.posNum[Int].map(i => if (x) Index.hardIndex(i) else i)))
-  } yield DerivationPath(0 +: indices, isPublic)
-
-
   def registerIdGen: Gen[ErgoBox.RegisterId] = Gen.oneOf(ErgoBox.allRegisters)
+
   def containsScanningPredicateGen: Gen[ContainsScanningPredicate] = for {
     regId <- registerIdGen
     bs <- nonEmptyBytesGen
@@ -134,13 +123,13 @@ trait WalletGenerators extends ErgoTransactionGenerators {
 
   def orScanningPredicateGen: Gen[OrScanningPredicate] = for {
     args <- Gen.nonEmptyListOf(Gen.oneOf(containsScanningPredicateGen, equalsScanningPredicateGen,
-                                          containsAssetPredicateGen))
-  } yield OrScanningPredicate(args :_*)
+      containsAssetPredicateGen))
+  } yield OrScanningPredicate(args: _*)
 
   def andScanningPredicateGen: Gen[AndScanningPredicate] = for {
     args <- Gen.nonEmptyListOf(Gen.oneOf(containsScanningPredicateGen, equalsScanningPredicateGen,
       containsAssetPredicateGen, orScanningPredicateGen))
-  } yield AndScanningPredicate(args :_*)
+  } yield AndScanningPredicate(args: _*)
 
   def scanningPredicateGen: Gen[ScanningPredicate] = for {
     predicate <- Gen.oneOf(andScanningPredicateGen, orScanningPredicateGen)

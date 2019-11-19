@@ -4,7 +4,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.wallet.boxes.TrackedBox
 
 /**
-  * Holds version-agnostic indexes (such as off-chain boxes) in runtime memory.
+  * Holds version-agnostic offchain data (such as off-chain boxes) in runtime memory.
   * @param height - latest processed block height
   * @param offChainBalances - balances from off-chain transactions
   * @param onChainBalances - on-chain balances snapshot (required to calculate off-chain indexes)
@@ -18,14 +18,14 @@ final case class OffChainRegistry(height: Int,
   /**
     * Off-chain index considering on-chain balances.
     */
-  val readIndex: RegistrySummary = {
+  val readIndex: RegistryDigest = {
     val balance = offChainBalances.map(_.value).sum + onChainBalances.map(_.value).sum
     val tokensBalance = (offChainBalances ++ onChainBalances)
       .flatMap(_.assets)
       .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
         acc.updated(id, acc.getOrElse(id, 0L) + amt)
       }
-    RegistrySummary(height, balance, tokensBalance, Seq.empty)
+    RegistryDigest(height, balance, tokensBalance, Map.empty, Map.empty, Map.empty) //todo: provide app data here?
   }
 
   /**

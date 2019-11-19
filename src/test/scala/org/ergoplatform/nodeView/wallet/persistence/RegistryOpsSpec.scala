@@ -17,17 +17,21 @@ class RegistryOpsSpec
     with WalletGenerators
     with FileUtils {
 
-  import RegistryOps._
 
   def createStore: Store = new LSMStore(createTempDir)
+
+  private val ws = settings.walletSettings
+  private val emptyBag = KeyValuePairsBag.empty
 
   property("putBox/getBox/removeBox") {
     forAll(trackedBoxGen) { tb =>
       withVersionedStore(10) { store =>
-        putBox(tb).transact(store)
-        getBox(tb.box.id).transact(store) shouldBe Some(tb)
-        removeBoxes(Seq(tb.box.id)).transact(store)
-        getBox(tb.box.id).transact(store) shouldBe None
+        val reg = new WalletRegistry(store)(ws)
+
+        WalletRegistry.putBox(emptyBag, tb).transact(store)
+        reg.getBox(tb.box.id) shouldBe Some(tb)
+        WalletRegistry.removeBoxes(emptyBag, Seq(tb)).transact(store)
+        reg.getBox(tb.box.id) shouldBe None
       }
     }
   }
@@ -35,14 +39,17 @@ class RegistryOpsSpec
   property("putBoxes/getBoxes/updateBoxes/removeBoxes") {
     forAll(Gen.listOf(trackedBoxGen)) { tbs =>
       withVersionedStore(10) { store =>
-        putBoxes(tbs).transact(store)
-        getBoxes(tbs.map(_.box.id)).transact(store) should contain theSameElementsAs tbs.map(Some.apply)
-        val updateFn = (tb: TrackedBox) => tb.copy(certainty = BoxCertainty.Certain, spendingHeightOpt = Some(0))
+        val reg = new WalletRegistry(store)(ws)
+
+        WalletRegistry.putBoxes(emptyBag, tbs).transact(store)
+        reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs tbs.map(Some.apply)
+        val updateFn = (tb: TrackedBox) => tb.copy(spendingHeightOpt = Some(0),
+          applicationStatuses = Seq(1.toShort -> BoxCertainty.Certain, 2.toShort -> BoxCertainty.Uncertain))
         val updatedBoxes = tbs.map(updateFn)
-        updateBoxes(tbs.map(_.box.id))(updateFn).transact(store)
-        getBoxes(tbs.map(_.box.id)).transact(store) should contain theSameElementsAs updatedBoxes.map(Some.apply)
-        removeBoxes(tbs.map(_.box.id)).transact(store)
-        getBoxes(tbs.map(_.box.id)).transact(store).flatten shouldBe Seq()
+        reg.updateBoxes(emptyBag, tbs.map(_.box.id))(updateFn).transact(store)
+        reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs updatedBoxes.map(Some.apply)
+        WalletRegistry.removeBoxes(emptyBag, tbs).transact(store)
+        reg.getBoxes(tbs.map(_.box.id)).flatten shouldBe Seq()
       }
     }
   }
@@ -50,11 +57,13 @@ class RegistryOpsSpec
   property("putTx/getTx/getAllTxs/removeTxs") {
     forAll(walletTransactionGen) { wtx =>
       withVersionedStore(10) { store =>
-        putTx(wtx).transact(store)
-        getTx(wtx.id).transact(store) shouldEqual Some(wtx)
-        getAllTxs.transact(store) shouldEqual Seq(wtx)
-        removeTxs(Seq(wtx.id)).transact(store)
-        getAllTxs.transact(store) should not contain wtx
+        val reg = new WalletRegistry(store)(ws)
+
+        WalletRegistry.putTx(emptyBag, wtx).transact(store)
+        reg.getTx(wtx.id) shouldEqual Some(wtx)
+        reg.getAllWalletTxs() shouldEqual Seq(wtx)
+        WalletRegistry.removeTxs(emptyBag, Seq(wtx.id)).transact(store)
+        reg.getAllWalletTxs() should not contain wtx
       }
     }
   }
@@ -62,20 +71,24 @@ class RegistryOpsSpec
   property("putTxs/getAllTxs") {
     forAll(Gen.listOf(walletTransactionGen)) { wtxs =>
       withVersionedStore(10) { store =>
-        putTxs(wtxs).transact(store)
-        getAllTxs.transact(store) should contain theSameElementsAs wtxs
+        val reg = new WalletRegistry(store)(ws)
+
+        WalletRegistry.putTxs(emptyBag, wtxs).transact(store)
+        reg.getAllWalletTxs() should contain theSameElementsAs wtxs
       }
     }
   }
 
-  property("putIndex/getIndex/updateIndex") {
+  property("putIndex/getDigest/updateIndex") {
     forAll(registrySummaryGen) { index =>
       withVersionedStore(10) { store =>
-        putIndex(index).transact(store)
-        getIndex.transact(store) shouldBe index
-        val updatedIndex = index.copy(height = 0, balance = 0)
-        updateIndex(_ => updatedIndex).transact(store)
-        getIndex.transact(store) shouldBe updatedIndex
+        val reg = new WalletRegistry(store)(ws)
+
+        WalletRegistry.putDigest(emptyBag, index).transact(store)
+        reg.getDigest() shouldBe index
+        val updatedIndex = index.copy(height = 0, walletBalance = 0)
+        reg.updateDigest(emptyBag)(_ => updatedIndex).transact(store)
+        reg.getDigest() shouldBe updatedIndex
       }
     }
   }

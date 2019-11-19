@@ -7,7 +7,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
-import org.ergoplatform.nodeView.wallet.persistence.RegistrySummary
+import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
@@ -47,12 +47,12 @@ trait ErgoWalletReader extends VaultReader {
   def deriveNextKey: Future[Try[(DerivationPath, P2PKAddress)]] =
     (walletActor ? DeriveNextKey).mapTo[Try[(DerivationPath, P2PKAddress)]]
 
-  def balances(chainStatus: ChainStatus): Future[RegistrySummary] =
-    (walletActor ? ReadBalances(chainStatus)).mapTo[RegistrySummary]
+  def balances(chainStatus: ChainStatus): Future[RegistryDigest] =
+    (walletActor ? ReadBalances(chainStatus)).mapTo[RegistryDigest]
 
-  def confirmedBalances: Future[RegistrySummary] = balances(OnChain)
+  def confirmedBalances: Future[RegistryDigest] = balances(OnChain)
 
-  def balancesWithUnconfirmed: Future[RegistrySummary] = balances(OffChain)
+  def balancesWithUnconfirmed: Future[RegistryDigest] = balances(OffChain)
 
   def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] =
     (walletActor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
@@ -60,8 +60,8 @@ trait ErgoWalletReader extends VaultReader {
   def firstSecret: Future[Try[DLogProverInput]] =
     (walletActor ? GetFirstSecret).mapTo[Try[DLogProverInput]]
 
-  def boxes(unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
-    (walletActor ? GetBoxes(unspentOnly)).mapTo[Seq[WalletBox]]
+  def walletBoxes(unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
+    (walletActor ? GetWalletBoxes(unspentOnly)).mapTo[Seq[WalletBox]]
 
   def updateChangeAddress(address: P2PKAddress): Unit =
     walletActor ! UpdateChangeAddress(address)

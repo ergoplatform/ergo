@@ -7,12 +7,15 @@ import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
+import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
-import org.ergoplatform.nodeView.wallet.persistence.RegistrySummary
+import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import scorex.core.validation.ValidationResult
+import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
@@ -45,12 +48,12 @@ trait ApiCodecs extends JsonCodecs {
 
   implicit val encodedTokenIdEncoder: Encoder[EncodedTokenId] = _.asJson
 
-  implicit val balancesSnapshotEncoder: Encoder[RegistrySummary] = { v =>
+  implicit val balancesSnapshotEncoder: Encoder[RegistryDigest] = { v =>
     import v._
     Json.obj(
       "height" -> height.asJson,
-      "balance" -> balance.asJson,
-      "assets" -> assetBalances.map(x => (x._1: String, x._2)).asJson
+      "balance" -> walletBalance.asJson,
+      "assets" -> walletAssetBalances.map(x => (x._1: String, x._2)).asJson
     )
   }
 
@@ -68,15 +71,25 @@ trait ApiCodecs extends JsonCodecs {
     } yield reg
   }
 
+  implicit val applicationBoxStatusEncoder: Encoder[(Short, BoxCertainty)] = {appStatus =>
+    Json.obj("appId" -> appStatus._1.asJson, "certainty" -> appStatus._2.certain.asJson)
+  }
+
+  implicit val applicationBoxStatusDecoder: Decoder[(Short, BoxCertainty)] = { c: HCursor =>
+    for {
+      appId <- c.downField("appId").as[Short]
+      certain <- c.downField("certainty").as[Boolean].map(BoxCertainty.fromBoolean)
+    } yield (appId, certain)
+  }
+
   implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = { box =>
     val plainFields = Map(
       "spent" -> box.spendingStatus.spent.asJson,
       "onchain" -> box.chainStatus.onChain.asJson,
-      "certain" -> box.certainty.certain.asJson,
       "creationOutIndex" -> box.creationOutIndex.asJson,
       "inclusionHeight" -> box.inclusionHeightOpt.asJson,
       "spendingHeight" -> box.spendingHeightOpt.asJson,
-      "applicationId" -> box.applicationId.asJson,
+      "applications" -> box.applicationStatuses.asJson,
       "box" -> box.box.asJson
     )
 

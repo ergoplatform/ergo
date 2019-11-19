@@ -12,8 +12,10 @@ import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, SigmaPropValue, TrueLeaf}
+import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate.{SByte, SType}
+import org.ergoplatform.wallet.Constants.WalletAppId
+import scorex.util._
 
 trait Generators {
 
@@ -47,18 +49,19 @@ trait Generators {
     v <- Gen.chooseNum(0, Short.MaxValue)
   } yield v.toShort
 
-  def genBoundedBytes(minSize: Int, maxSize: Int): Gen[Array[Byte]] = {
+
+  def genLimitedSizedBytes(minSize: Int, maxSize: Int): Gen[Array[Byte]] = {
     Gen.choose(minSize, maxSize) flatMap { sz => Gen.listOfN(sz, Arbitrary.arbitrary[Byte]).map(_.toArray) }
   }
 
-  def genBytes(size: Int): Gen[Array[Byte]] = genBoundedBytes(size, size)
+  def genExactSizeBytes(size: Int): Gen[Array[Byte]] = genLimitedSizedBytes(size, size)
 
   val boxIdGen: Gen[BoxId] = {
-    val x = ADKey @@ genBytes(Constants.ModifierIdLength)
+    val x = ADKey @@ genExactSizeBytes(Constants.ModifierIdLength)
     x
   }
 
-  val modIdGen: Gen[ModifierId] = genBytes(Constants.ModifierIdLength).map(bytesToId)
+  val modIdGen: Gen[ModifierId] = genExactSizeBytes(Constants.ModifierIdLength).map(bytesToId)
 
   val assetGen: Gen[(TokenId, Long)] = for {
     id <- boxIdGen
@@ -68,7 +71,7 @@ trait Generators {
   def additionalTokensGen(cnt: Int): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
 
   def additionalTokensGen: Gen[Seq[(TokenId, Long)]] = for {
-    cnt <- Gen.chooseNum[Int](0, 20)
+    cnt <- Gen.chooseNum[Int](0, 10)
     assets <- additionalTokensGen(cnt)
   } yield assets
 
@@ -105,18 +108,26 @@ trait Generators {
     Gen.choose(minValue, CoinsTotalTest / 1000)
   }
 
-  def ergoBoxGen(propGen: Gen[SigmaPropValue] = Gen.const(TrueLeaf.toSigmaProp),
+  def ergoBoxGen(propGen: Gen[ErgoTree] = Gen.const(TrueLeaf.toSigmaProp),
                  tokensGen: Gen[Seq[(TokenId, Long)]] = additionalTokensGen,
                  valueGenOpt: Option[Gen[Long]] = None,
                  heightGen: Gen[Int] = heightGen): Gen[ErgoBox] = for {
     h <- heightGen
     prop <- propGen
-    transactionId: Array[Byte] <- genBytes(Constants.ModifierIdLength)
+    transactionId: Array[Byte] <- genExactSizeBytes(Constants.ModifierIdLength)
     boxId: Short <- boxIndexGen
     ar <- additionalRegistersGen
     tokens <- tokensGen
     value <- valueGenOpt.getOrElse(validValueGen(prop, tokens, ar, bytesToId(transactionId), boxId))
-  } yield ErgoBox(value, prop, h, tokens, ar, bytesToId(transactionId), boxId)
+  } yield {
+    val box = ErgoBox(value, prop, h, tokens, ar, transactionId.toModifierId, boxId)
+    if (box.bytes.length < ErgoBox.MaxBoxSize) {
+      box
+    } else {
+      // is size limit is reached, generate box without registers and tokens
+      ErgoBox(value, prop, h, Seq(), Map(), transactionId.toModifierId, boxId)
+    }
+  }
 
   val ergoBoxGen: Gen[ErgoBox] = ergoBoxGen()
 
@@ -129,6 +140,17 @@ trait Generators {
     seed <- Gen.const(Constants.KeyLen).map(scorex.utils.Random.randomBytes)
   } yield ExtendedSecretKey.deriveMasterKey(seed)
 
+  def appStatusesGen: Gen[Seq[(Short, BoxCertainty)]] = {
+    Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.toSet.toSeq).flatMap { appIds =>
+      Gen.listOfN(appIds.length, Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)).map { certainities =>
+        appIds.zip(certainities)
+      }
+    }.map(_.map { case (appId, certainty) =>
+      appId -> (if (appId == WalletAppId) BoxCertainty.Certain else certainty)
+    })
+  }
+
+
   def trackedBoxGen: Gen[TrackedBox] = for {
     creationTxId <- modIdGen
     creationOutIndex <- boxIndexGen
@@ -136,8 +158,8 @@ trait Generators {
     spendingTxIdOpt <- Gen.option(modIdGen)
     spendingHeightOpt <- Gen.option(heightGen)
     box <- ergoBoxGen
-    certainty <- Gen.oneOf(Seq(BoxCertainty.Certain, BoxCertainty.Uncertain))
+    appStatuses <- appStatusesGen
   } yield TrackedBox(
-    creationTxId, creationOutIndex, inclusionHeightOpt, spendingTxIdOpt, spendingHeightOpt, box, certainty, 1)
+    creationTxId, creationOutIndex, inclusionHeightOpt, spendingTxIdOpt, spendingHeightOpt, box, appStatuses)
 
 }

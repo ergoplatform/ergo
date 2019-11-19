@@ -14,9 +14,10 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.persistence.RegistrySummary
+import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.HashLength
+import org.ergoplatform.wallet.Constants.WalletAppId
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, ChainStatus, TrackedBox}
@@ -146,7 +147,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case GetLockStatus => sender() ! (true, true)
 
-      case GetBoxes(unspentOnly) =>
+      case GetWalletBoxes(unspentOnly) =>
         val boxes = if (unspentOnly) {
           Seq(walletBox10_10, walletBox20_30)
         } else {
@@ -165,7 +166,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         sender() ! trackedAddresses.slice(from, until)
 
       case ReadBalances(chainStatus) =>
-        sender ! RegistrySummary(0, WalletActorStub.balance(chainStatus), Map.empty, Seq.empty)
+        sender ! RegistryDigest(0, WalletActorStub.balance(chainStatus), Map.empty, Map.empty, Map.empty, Map.empty)
 
       case ReadTrackedAddresses =>
         sender ! trackedAddresses
@@ -192,8 +193,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         spendingTxIdOpt = Some(modifierIdGen.sample.get),
         spendingHeightOpt = None,
         box = ergoBoxGen.sample.get,
-        certainty = BoxCertainty.Certain,
-        applicationId = Constants.WalletAppId
+        applicationStatuses = Seq(WalletAppId -> BoxCertainty.Certain)
       ),
       confirmationsNumOpt = Some(10)
     )

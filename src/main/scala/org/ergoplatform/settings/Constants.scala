@@ -10,7 +10,6 @@ import scorex.core.{ModifierTypeId, NodeViewModifier}
 import sigmastate.Values
 import sigmastate.Values.ErgoTree
 
-import scala.concurrent.duration._
 
 object Constants {
   val HashLength: Int = 32
@@ -63,8 +62,5 @@ object Constants {
   val MaxExtensionSizeMax: Int = 1024 * 1024
   // Default limit for transaction complexity to be included into block.
   val DefaultComplexityLimit: Int = 100000
-
-  // SimplePayments application identifier
-  val WalletAppId: Short = 1
 
 }

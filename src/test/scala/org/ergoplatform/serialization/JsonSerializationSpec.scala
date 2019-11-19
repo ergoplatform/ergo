@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{Algos, Args, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
-import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import org.scalatest.Inspectors
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
@@ -85,7 +85,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   private def checkTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {
     c.downField("spent").as[Boolean] shouldBe Right(b.spendingStatus.spent)
     c.downField("onchain").as[Boolean] shouldBe Right(b.chainStatus.onChain)
-    c.downField("certain").as[Boolean] shouldBe Right(b.certainty.certain)
+    c.downField("applicationStatuses").as[Seq[(Short, BoxCertainty)]] shouldBe Right(b.applicationStatuses)
     c.downField("creationOutIndex").as[Short] shouldBe Right(b.creationOutIndex)
     c.downField("inclusionHeight").as[Option[Int]] shouldBe Right(b.inclusionHeightOpt)
     c.downField("spendingHeight").as[Option[Int]] shouldBe Right(b.spendingHeightOpt)

@@ -2,16 +2,21 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
 
+import com.google.common.primitives.{Ints, Shorts}
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.db.VersionedLDBKVStore
 import org.ergoplatform.db.VersionedLDBKVStore.VersionId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
-import org.ergoplatform.nodeView.wallet.WalletTransaction
-import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA.RegistryOp
+import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, EncodedTokenId}
+import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
+import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
 import org.ergoplatform.settings.{ErgoSettings, WalletSettings}
-import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import org.iq80.leveldb.Options
 import scorex.core.VersionTag
+import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
@@ -20,113 +25,169 @@ import scala.util.Try
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
   *
-  *   * current wallet status (height, balances, uncertain boxes)
-  *   * wallet-related transactions
-  *   * certain boxes, spent or not
+  * * current wallet status (height, balances, uncertain boxes)
+  * * wallet-related transactions
+  * * certain boxes, spent or not
   *
   */
 final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
 
-  import RegistryOps._
-  import org.ergoplatform.nodeView.wallet.IdUtils._
+  import WalletRegistry._
+  import org.ergoplatform.nodeView.wallet.IdUtils.{decodedBoxId, encodedBoxId, decodedTokenId, encodedTokenId}
 
   private val keepHistory = ws.keepSpentBoxes
 
-  def readIndex: RegistrySummary =
-    getIndex.transact(store)
-
-  def readTransactions: Seq[WalletTransaction] =
-    getAllTxs.transact(store)
-
-  def getTransactionById(id: ModifierId): Option[WalletTransaction] =
-    getTx(id).transact(store)
-
-  def readCertainUnspentBoxes: Seq[TrackedBox] = {
-    val query = for {
+  def readWalletUnspentBoxes: Seq[TrackedBox] = {
+    /*val query = for {
       allBoxes <- getAllBoxes
-      index <- getIndex
+      digest <- getDigest
     } yield {
-      val uncertainIds = index.uncertainBoxes
+      val uncertainIds = digest.uncertainBoxes
       allBoxes.filterNot(b =>
         uncertainIds.contains(encodedBoxId(b.box.id)) || b.spendingHeightOpt.isDefined
       )
     }
-    query.transact(store)
+    query.transact(store)*/
+    ???
   }
 
-  def readAllBoxes: Seq[TrackedBox] = getAllBoxes.transact(store)
 
-  def readCertainBoxes: Seq[TrackedBox] = {
+  def readAppUnspentBoxes(appId: AppId): Seq[TrackedBox] = {
+    ???
+  }
+
+  def readCertainBoxes(appId: AppId): Seq[TrackedBox] = {
+    /*
     val query = for {
       allBoxes <- getAllBoxes
-      index <- getIndex
+      index <- getDigest
     } yield {
       val uncertainIds = index.uncertainBoxes
       allBoxes.filterNot(b => uncertainIds.contains(encodedBoxId(b.box.id)))
     }
     query.transact(store)
+    */
+    ???
   }
 
-  def readUncertainBoxes: Seq[TrackedBox] = {
-    val query = for {
-      index <- getIndex
+  def readUncertainBoxes(appId: AppId): Seq[TrackedBox] = {
+    /* val query = for {
+      index <- getDigest
       uncertainBoxes <- getBoxes(index.uncertainBoxes.map(decodedBoxId))
     } yield uncertainBoxes.flatten
-    query.transact(store)
+    query.transact(store) */
+    ???
   }
 
-  def readHistoricalBoxes: Seq[TrackedBox] = getAllBoxes
-    .map(_.filter(_.spendingHeightOpt.isDefined))
-    .transact(store)
+  def updateBoxes(bag: KeyValuePairsBag,
+                  ids: Seq[BoxId])(updateF: TrackedBox => TrackedBox): KeyValuePairsBag = {
+    putBoxes(bag, getBoxes(ids).flatten.map(updateF))
+  }
+
+  def getBox(id: BoxId): Option[TrackedBox] = {
+    store.get(key(id)).flatMap(r => TrackedBoxSerializer.parseBytesTry(r).toOption)
+  }
+
+  def getBoxes(ids: Seq[BoxId]): Seq[Option[TrackedBox]] = {
+    ids.map(id => store.get(key(id)).flatMap(x => TrackedBoxSerializer.parseBytesTry(x).toOption))
+  }
+
+  def getUnspentBoxes(appId: AppId): Seq[TrackedBox] = {
+    store.getRange(firstAppBoxSpaceKey(appId), lastAppBoxSpaceKey(appId))
+      .flatMap { case (_, boxId) =>
+        getBox(ADKey @@ boxId)
+      }
+  }
+
+  def getSpentBoxes(appId: AppId): Seq[TrackedBox] = {
+    store.getRange(firstSpentAppBoxSpaceKey(appId), lastSpentAppBoxSpaceKey(appId))
+      .flatMap { case (_, boxId) =>
+        getBox(ADKey @@ boxId)
+      }
+  }
+
+  def walletUnspentBoxes(): Seq[TrackedBox] = getUnspentBoxes(Constants.WalletAppId)
+
+  def walletSpentBoxes(): Seq[TrackedBox] = getSpentBoxes(Constants.WalletAppId)
+
+  def confirmedBoxes(appId: AppId, fromHeight: Int): Seq[TrackedBox] = {
+    store.getRange(firstIncludedAppBoxSpaceKey(appId, fromHeight), lastIncludedAppBoxSpaceKey(appId)).flatMap { case (_, boxId) =>
+      getBox(ADKey @@ boxId)
+    }
+  }
+
+  def walletConfirmedBoxes(fromHeight: Int): Seq[TrackedBox] = confirmedBoxes(Constants.WalletAppId, fromHeight)
+
+  def getTx(id: ModifierId): Option[WalletTransaction] = {
+    store.get(txKey(id)).flatMap(r => WalletTransactionSerializer.parseBytesTry(r).toOption)
+  }
+
+  //todo: filter by application
+  def getAllWalletTxs(): Seq[WalletTransaction] = {
+    store.getRange(FirstTxSpaceKey, LastTxSpaceKey)
+      .flatMap { case (_, txBytes) =>
+        WalletTransactionSerializer.parseBytesTry(txBytes).toOption
+      }
+  }
+
+  def getDigest(): RegistryDigest = {
+    store.get(RegistrySummaryKey)
+      .flatMap(r => RegistrySummarySerializer.parseBytesTry(r).toOption)
+      .getOrElse(RegistryDigest.empty)
+  }
+
+  def updateDigest(bag: KeyValuePairsBag)(updateF: RegistryDigest => RegistryDigest): KeyValuePairsBag = {
+    val digest = getDigest()
+    putDigest(bag, updateF(digest))
+  }
 
   /**
     * Updates indexes according to a data extracted from a block and performs versioned update.
     */
-  def updateOnBlock(certainBxs: Seq[TrackedBox],
-                    uncertainBxs: Seq[TrackedBox],
-                    inputs: Seq[(ModifierId, EncodedBoxId)],
+  def updateOnBlock(outputs: Seq[TrackedBox],
+                    inputs: Seq[(ModifierId, EncodedBoxId, TrackedBox)],
                     txs: Seq[WalletTransaction])
                    (blockId: ModifierId, blockHeight: Int): Unit = {
-    val update = for {
-      _ <- putBoxes(certainBxs ++ uncertainBxs)
-      _ <- putTxs(txs)
-      spentBoxesWithTx <- getBoxes(inputs.map(x => decodedBoxId(x._2))).map(
-        _.flatten.flatMap(bx => inputs.find(_._2 == encodedBoxId(bx.box.id)).map { case (txId, _) => txId -> bx })
-      )
-      _ <- processHistoricalBoxes(spentBoxesWithTx, blockHeight)
-      _ <- updateIndex { case RegistrySummary(_, balance, tokensBalance, _) =>
-        val spentCertainBoxes = spentBoxesWithTx.map(_._2).filter(_.certainty.certain)
-        val spentAmt = spentCertainBoxes.map(_.box.value).sum
-        val spentTokensAmt = spentCertainBoxes
-          .flatMap(_.box.additionalTokens.toArray)
-          .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
-            acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
-          }
-        val receivedTokensAmt = certainBxs
-          .flatMap(_.box.additionalTokens.toArray)
-          .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
-            acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
-          }
-        val decreasedTokensBalance = spentTokensAmt
-          .foldLeft(tokensBalance) { case (acc, (encodedId, amt)) =>
-            val decreasedAmt = acc.getOrElse(encodedId, 0L) - amt
-            if (decreasedAmt > 0) acc.updated(encodedId, decreasedAmt) else acc - encodedId
-          }
-        val newTokensBalance = receivedTokensAmt
-          .foldLeft(decreasedTokensBalance) { case (acc, (encodedId, amt)) =>
-            acc.updated(encodedId, acc.getOrElse(encodedId, 0L) + amt)
-          }
-        val receivedAmt = certainBxs.map(_.box.value).sum
-        val newBalance = balance - spentAmt + receivedAmt
-        val uncertain = uncertainBxs.map(x => encodedBoxId(x.box.id))
-        require(
-          (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
-          "Balance could not be negative")
-        RegistrySummary(blockHeight, newBalance, newTokensBalance, uncertain)
-      }
-    } yield ()
 
-    update.transact(store, idToBytes(blockId))
+    val spentBoxesWithTx = inputs.map(t => t._1 -> t._3)
+
+    val bag0 = KeyValuePairsBag.empty
+    val bag1 = putBoxes(bag0, outputs)
+    val bag2 = putTxs(bag1, txs)
+
+    val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
+
+    val bag4 = updateDigest(bag3) { case RegistryDigest(height, wBalance, wTokens, aBalances, aTokens, appUncertain) =>
+      val spentCertainBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.map(_._1).contains(1: Short))
+      val spentAmt = spentCertainBoxes.map(_.box.value).sum
+      val spentTokensAmt = spentCertainBoxes
+        .flatMap(_.box.additionalTokens.toArray)
+        .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
+          acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
+        }
+      val receivedTokensAmt = outputs.filter(_.applicationStatuses.map(_._1).contains(1: Short))
+        .flatMap(_.box.additionalTokens.toArray)
+        .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
+          acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
+        }
+      val decreasedTokensBalance = spentTokensAmt
+        .foldLeft(wTokens) { case (acc, (encodedId, amt)) =>
+          val decreasedAmt = acc.getOrElse(encodedId, 0L) - amt
+          if (decreasedAmt > 0) acc.updated(encodedId, decreasedAmt) else acc - encodedId
+        }
+      val newTokensBalance = receivedTokensAmt
+        .foldLeft(decreasedTokensBalance) { case (acc, (encodedId, amt)) =>
+          acc.updated(encodedId, acc.getOrElse(encodedId, 0L) + amt)
+        }
+      val receivedAmt = outputs.filter(_.applicationStatuses.map(_._1).contains(1: Short)).map(_.box.value).sum
+      val newBalance = wBalance - spentAmt + receivedAmt
+      require(
+        (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
+        "Balance could not be negative")
+      RegistryDigest(blockHeight, newBalance, newTokensBalance, aBalances, aTokens, appUncertain)
+    }
+
+    bag4.transact(store, idToBytes(blockId))
   }
 
   def rollback(version: VersionTag): Try[Unit] =
@@ -135,17 +196,18 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.
     */
-  private[persistence] def processHistoricalBoxes(spentBoxes: Seq[(ModifierId, TrackedBox)],
-                                                  spendingHeight: Int): RegistryOp[Unit] = {
+  private[persistence] def processHistoricalBoxes(bag: KeyValuePairsBag,
+                                                  spentBoxes: Seq[(ModifierId, TrackedBox)],
+                                                  spendingHeight: Int): KeyValuePairsBag = {
     if (keepHistory) {
-      updateBoxes(spentBoxes.map(_._2.box.id)) { tb =>
+      updateBoxes(bag, spentBoxes.map(_._2.box.id)) { tb =>
         val spendingTxIdOpt = spentBoxes
           .find { case (_, x) => encodedBoxId(x.box.id) == encodedBoxId(tb.box.id) }
           .map(_._1)
         tb.copy(spendingHeightOpt = Some(spendingHeight), spendingTxIdOpt = spendingTxIdOpt)
       }
     } else {
-      removeBoxes(spentBoxes.map(_._2.box.id))
+      removeBoxes(bag, spentBoxes.map(_._2))
     }
   }
 
@@ -170,4 +232,120 @@ object WalletRegistry {
     new WalletRegistry(store)(settings.walletSettings)
   }
 
+
+  private val BoxKeyPrefix: Byte = 0x00
+  private val TxKeyPrefix: Byte = 0x01
+  private val AppBoxIndexPrefix: Byte = 0x02
+  private val SpentAppBoxIndexPrefix: Byte = 0x03
+  private val InclusionHeightAppBoxPrefix: Byte = 0x04
+
+  private val FirstBoxSpaceKey: Array[Byte] = BoxKeyPrefix +: Array.fill(32)(0: Byte)
+  private val LastBoxSpaceKey: Array[Byte] = BoxKeyPrefix +: Array.fill(32)(-1: Byte)
+
+  private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
+  private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)
+
+  private def firstAppBoxSpaceKey(appId: AppId): Array[Byte] = AppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
+  private def lastAppBoxSpaceKey(appId: AppId): Array[Byte] = AppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
+
+  private def firstSpentAppBoxSpaceKey(appId: AppId): Array[Byte] =
+    SpentAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
+  private def lastSpentAppBoxSpaceKey(appId: AppId): Array[Byte] =
+    SpentAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
+
+  private def firstIncludedAppBoxSpaceKey(appId: AppId, height: Int): Array[Byte] =
+    AppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Ints.toByteArray(height) ++ Array.fill(32)(0: Byte))
+  private def lastIncludedAppBoxSpaceKey(appId: AppId): Array[Byte] =
+    AppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Ints.toByteArray(Int.MaxValue) ++ Array.fill(32)(-1: Byte))
+
+  private val RegistrySummaryKey: Array[Byte] = Array(0x02: Byte)
+
+  private def key(trackedBox: TrackedBox): Array[Byte] = BoxKeyPrefix +: trackedBox.box.id
+
+  private def key(id: BoxId): Array[Byte] = BoxKeyPrefix +: id
+
+  private def txKey(id: ModifierId): Array[Byte] = TxKeyPrefix +: idToBytes(id)
+
+  private def boxToKvPair(box: TrackedBox) = key(box) -> TrackedBoxSerializer.toBytes(box)
+
+  private def txToKvPair(tx: WalletTransaction) = txKey(tx.id) -> WalletTransactionSerializer.toBytes(tx)
+
+  private def appBoxIndexKey(appId: AppId, trackedBox: TrackedBox): Array[Byte] = {
+    val prefix = if (trackedBox.spent) SpentAppBoxIndexPrefix else AppBoxIndexPrefix
+    prefix +: (Shorts.toByteArray(appId) ++ trackedBox.box.id)
+  }
+
+  private def inclusionHeightAppBoxIndexKey(appId: AppId, trackedBox: TrackedBox): Array[Byte] = {
+    val inclusionHeightBytes = Ints.toByteArray(trackedBox.inclusionHeightOpt.getOrElse(0))
+    InclusionHeightAppBoxPrefix +: (Shorts.toByteArray(appId) ++ inclusionHeightBytes ++ trackedBox.box.id)
+  }
+
+
+  def putBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
+    val appIndexUpdates = box.applicationStatuses.flatMap { case (appId, _) =>
+      Seq(appBoxIndexKey(appId, box) -> box.box.id,
+        inclusionHeightAppBoxIndexKey(appId, box) -> box.box.id
+      )
+    }
+    val newKvPairs = appIndexUpdates :+ boxToKvPair(box)
+    bag.copy(toInsert = bag.toInsert ++ newKvPairs)
+  }
+
+  def putBoxes(bag: KeyValuePairsBag, boxes: Seq[TrackedBox]): KeyValuePairsBag = {
+    boxes.foldLeft(bag) { case (b, box) => putBox(b, box) }
+  }
+
+  def removeBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
+    val appIndexUpdates = box.applicationStatuses.flatMap { case (appId, _) =>
+      Seq(appBoxIndexKey(appId, box), inclusionHeightAppBoxIndexKey(appId, box))
+    }
+    val ids = appIndexUpdates :+ key(box)
+
+    bag.copy(toRemove = bag.toRemove ++ ids)
+  }
+
+  def removeBoxes(bag: KeyValuePairsBag, boxes: Seq[TrackedBox]): KeyValuePairsBag = {
+    boxes.foldLeft(bag) { case (b, box) => removeBox(b, box) }
+  }
+
+  def putTx(bag: KeyValuePairsBag, wtx: WalletTransaction): KeyValuePairsBag = {
+    bag.copy(toInsert = bag.toInsert :+ txToKvPair(wtx))
+  }
+
+  def putTxs(bag: KeyValuePairsBag, txs: Seq[WalletTransaction]): KeyValuePairsBag = {
+    bag.copy(toInsert = bag.toInsert ++ txs.map(txToKvPair))
+  }
+
+  def removeTxs(bag: KeyValuePairsBag, ids: Seq[ModifierId]): KeyValuePairsBag = {
+    bag.copy(toRemove = bag.toRemove ++ ids.map(txKey))
+  }
+
+  def putDigest(bag: KeyValuePairsBag, index: RegistryDigest): KeyValuePairsBag = {
+    val registryBytes = RegistrySummarySerializer.toBytes(index)
+    bag.copy(toInsert = bag.toInsert :+ (RegistrySummaryKey, registryBytes))
+  }
+
+}
+
+case class KeyValuePairsBag(toInsert: Seq[(Array[Byte], Array[Byte])], toRemove: Seq[Array[Byte]]) {
+
+  /**
+    * Applies non-versioned transaction to a given `store`.
+    *
+    */
+  def transact(store: VersionedLDBKVStore): Unit = transact(store, None)
+
+  /**
+    * Applies versioned transaction to a given `store`.
+    */
+  def transact(store: VersionedLDBKVStore, version: Array[Byte]): Unit = transact(store, Some(version))
+
+  private def transact(store: VersionedLDBKVStore, versionOpt: Option[Array[Byte]]): Unit =
+    if (toInsert.nonEmpty || toRemove.nonEmpty) {
+      store.update(toInsert, toRemove)(versionOpt.getOrElse(scorex.utils.Random.randomBytes()))
+    }
+}
+
+object KeyValuePairsBag {
+  def empty: KeyValuePairsBag = KeyValuePairsBag(Seq.empty, Seq.empty)
 }

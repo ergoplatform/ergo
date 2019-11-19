@@ -11,6 +11,12 @@ object BoxCertainty {
     * but prover isn't certain whether he could spend it */
   case object Uncertain extends BoxCertainty(certain = false)
 
+  def fromBoolean(value: Boolean): BoxCertainty = if(value) {
+    Certain
+  } else {
+    Uncertain
+  }
+
 }
 
 sealed abstract class ChainStatus(val onChain: Boolean)

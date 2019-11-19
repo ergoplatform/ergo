@@ -11,7 +11,7 @@ import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 import scorex.crypto.authds.ADDigest
 import scorex.util.Random
 import scorex.util.encode.Base16
-import sigmastate.Values.SigmaPropValue
+import sigmastate.Values.{ErgoTree, SigmaPropValue}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import special.sigma._
 import sigmastate.eval.Extensions._
@@ -107,6 +107,6 @@ class ErgoUnsafeProverSpec
     )
   }
 
-  private def propGen(dlog: ProveDlog): Gen[SigmaPropValue] = Gen.const(dlog.toSigmaProp)
+  private def propGen(dlog: ProveDlog): Gen[ErgoTree] = Gen.const(dlog.toSigmaProp)
 
 }

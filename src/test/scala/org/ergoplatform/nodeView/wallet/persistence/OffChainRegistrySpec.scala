@@ -19,8 +19,8 @@ class OffChainRegistrySpec
       registry = registry.updated(boxes, Seq.empty)
       val balance = balanceAmount(boxes.map(_.box))
       val assetsBalance = assetAmount(boxes.map(_.box))
-      registry.readIndex.balance shouldEqual balance
-      registry.readIndex.assetBalances shouldEqual assetsBalance
+      registry.readIndex.walletBalance shouldEqual balance
+      registry.readIndex.walletAssetBalances shouldEqual assetsBalance
     }
   }
 

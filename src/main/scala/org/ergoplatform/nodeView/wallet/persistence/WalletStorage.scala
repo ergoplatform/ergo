@@ -9,6 +9,7 @@ import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
+import org.ergoplatform.wallet.Constants.WalletAppId
 
 import scala.util.{Success, Try}
 
@@ -113,7 +114,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
   }
   def lastUsedId: Short = store.lastKeyInRange(SmallestPossibleApplicationId, BiggestPossibleApplicationId)
     .map(bs => Shorts.fromByteArray(bs.takeRight(2)))
-    .getOrElse(Constants.WalletAppId)
+    .getOrElse(WalletAppId)
 }
 
 object WalletStorage {

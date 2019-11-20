@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import org.ergoplatform.wallet.Constants.WalletAppId
+import org.ergoplatform.wallet.Constants.PaymentsAppId
 
 import io.iohk.iodb.{LSMStore, Store}
 import org.ergoplatform.db.DBSpec
@@ -23,7 +23,7 @@ class WalletRegistrySpec
   def createStore: Store = new LSMStore(createTempDir)
 
   private val emptyBag = KeyValuePairsBag.empty
-  val walletBoxStatus = Seq(WalletAppId -> BoxCertainty.Certain)
+  val walletBoxStatus = Seq(PaymentsAppId -> BoxCertainty.Certain)
 
   it should "read unspent wallet boxes" in {
     forAll(trackedBoxGen) { box =>
@@ -79,4 +79,15 @@ class WalletRegistrySpec
     }
   }
 
+  it should "updateOnBlock() in correct way - only outputs" in {
+    forAll(Gen.nonEmptyListOf(trackedBoxGen)) { boxes =>
+      withVersionedStore(10) { store =>
+        val registry = new WalletRegistry(store)(settings.walletSettings)
+        val blockId = modifierIdGen.sample.get
+        val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applicationStatuses = walletBoxStatus))
+        registry.updateOnBlock(unspentBoxes, Seq.empty, Seq.empty)(blockId, 100)
+        registry.walletUnspentBoxes().toList  should contain theSameElementsAs unspentBoxes
+      }
+    }
+  }
 }

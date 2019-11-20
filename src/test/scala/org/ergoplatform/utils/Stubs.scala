@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.wallet.Constants.WalletAppId
+import org.ergoplatform.wallet.Constants.PaymentsAppId
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, ChainStatus, TrackedBox}
@@ -193,7 +193,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         spendingTxIdOpt = Some(modifierIdGen.sample.get),
         spendingHeightOpt = None,
         box = ergoBoxGen.sample.get,
-        applicationStatuses = Seq(WalletAppId -> BoxCertainty.Certain)
+        applicationStatuses = Seq(PaymentsAppId -> BoxCertainty.Certain)
       ),
       confirmationsNumOpt = Some(10)
     )

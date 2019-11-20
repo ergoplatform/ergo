@@ -19,7 +19,7 @@ object WalletTransactionSerializer extends ScorexSerializer[WalletTransaction] {
     w.putInt(wtx.inclusionHeight)
 
     val appsCount = wtx.applicationIds.size.toShort
-    if (appsCount == 1 && wtx.applicationIds.head == Constants.WalletAppId) {
+    if (appsCount == 1 && wtx.applicationIds.head == Constants.PaymentsAppId) {
       w.putShort(0)
     } else {
       w.putShort(appsCount)
@@ -36,7 +36,7 @@ object WalletTransactionSerializer extends ScorexSerializer[WalletTransaction] {
 
     val appsCount = r.getShort()
     val appIds = if (appsCount == 0) {
-      Seq(Constants.WalletAppId)
+      Seq(Constants.PaymentsAppId)
     } else {
       (0 until appsCount).map(_ => r.getShort())
     }

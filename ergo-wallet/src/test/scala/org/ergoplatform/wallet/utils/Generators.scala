@@ -14,7 +14,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate.{SByte, SType}
-import org.ergoplatform.wallet.Constants.WalletAppId
+import org.ergoplatform.wallet.Constants.PaymentsAppId
 import scorex.util._
 
 trait Generators {
@@ -146,7 +146,7 @@ trait Generators {
         appIds.zip(certainities)
       }
     }.map(_.map { case (appId, certainty) =>
-      appId -> (if (appId == WalletAppId) BoxCertainty.Certain else certainty)
+      appId -> (if (appId == PaymentsAppId) BoxCertainty.Certain else certainty)
     })
   }
 

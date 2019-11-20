@@ -106,9 +106,9 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
       }
   }
 
-  def walletUnspentBoxes(): Seq[TrackedBox] = getUnspentBoxes(Constants.WalletAppId)
+  def walletUnspentBoxes(): Seq[TrackedBox] = getUnspentBoxes(Constants.PaymentsAppId)
 
-  def walletSpentBoxes(): Seq[TrackedBox] = getSpentBoxes(Constants.WalletAppId)
+  def walletSpentBoxes(): Seq[TrackedBox] = getSpentBoxes(Constants.PaymentsAppId)
 
   def confirmedBoxes(appId: AppId, fromHeight: Int): Seq[TrackedBox] = {
     store.getRange(firstIncludedAppBoxSpaceKey(appId, fromHeight), lastIncludedAppBoxSpaceKey(appId)).flatMap { case (_, boxId) =>
@@ -116,7 +116,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
     }
   }
 
-  def walletConfirmedBoxes(fromHeight: Int): Seq[TrackedBox] = confirmedBoxes(Constants.WalletAppId, fromHeight)
+  def walletConfirmedBoxes(fromHeight: Int): Seq[TrackedBox] = confirmedBoxes(Constants.PaymentsAppId, fromHeight)
 
   def getTx(id: ModifierId): Option[WalletTransaction] = {
     store.get(txKey(id)).flatMap(r => WalletTransactionSerializer.parseBytesTry(r).toOption)

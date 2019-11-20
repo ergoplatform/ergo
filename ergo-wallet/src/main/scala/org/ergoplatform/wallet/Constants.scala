@@ -12,5 +12,7 @@ object Constants {
   val BitcoinSeed: Array[Byte] = "Bitcoin seed".getBytes(Encoding)
 
   // SimplePayments application identifier
-  val WalletAppId: Short = 1
+  val PaymentsAppId: Short = 1
+
+  val WalletRewardsQueueId: Short = 2
 }

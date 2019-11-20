@@ -79,7 +79,7 @@ object TrackedBox {
 }
 
 object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
-  val walletAppId: Short = Constants.WalletAppId
+  val walletAppId: Short = Constants.PaymentsAppId
 
   override def serialize(obj: TrackedBox, w: Writer): Unit = {
     w.putBytes(idToBytes(obj.creationTxId))

@@ -31,7 +31,7 @@ import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
-import org.ergoplatform.wallet.Constants.PaymentsAppId
+import org.ergoplatform.wallet.Constants.{PaymentsAppId, MiningRewardsQueueId}
 
 import scala.util.{Failure, Random, Success, Try}
 
@@ -74,7 +74,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     * Extracts all outputs which contain tracked bytes from the given transaction.
     */
   private def extractWalletOutputs(tx: ErgoTransaction, inclusionHeight: Option[Int]): Seq[TrackedBox] = {
-    val miningAddresses = proverOpt.toSeq.flatMap(_.pubKeys).map(pk =>
+    val miningScriptsBytes = proverOpt.toSeq.flatMap(_.pubKeys).map(pk =>
       ErgoScriptPredef.rewardOutputScript(settings.chainSettings.monetary.minerRewardDelay, pk)
     ).map(_.bytes)
 
@@ -84,14 +84,19 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val appsTriggered = externalApplications.filter(_.trackingRule.filter(bx))
         .map(app => app.appId -> BoxCertainty.Uncertain)
 
-      val miningIncomeTriggered = miningAddresses.exists(ms => bx.propositionBytes.sameElements(ms))
+      val miningIncomeTriggered = miningScriptsBytes.exists(ms => bx.propositionBytes.sameElements(ms))
       val paymentsTriggered = trackedBytes.exists(bs => bx.propositionBytes.sameElements(bs))
 
-      val statuses = if (paymentsTriggered || miningIncomeTriggered) {
-        (PaymentsAppId, BoxCertainty.Certain) +: appsTriggered
-      } else {
-        appsTriggered
+      lazy val paymentStatus = PaymentsAppId -> BoxCertainty.Certain
+      lazy val miningStatus = PaymentsAppId -> MiningRewardsQueueId -> BoxCertainty.Uncertain
+
+      val statuses = (paymentsTriggered, miningIncomeTriggered) match {
+        case (true, true) => Seq(paymentStatus, miningStatus) ++ appsTriggered
+        case (true, false) => paymentStatus +: appsTriggered
+        case (false, true) => miningStatus +: appsTriggered
+        case (false, false) => appsTriggered
       }
+
       if (statuses.nonEmpty) {
         val tb = TrackedBox(tx.id, bx.index, inclusionHeight, None, None, bx, statuses)
         println("tb: " + tb)
@@ -111,9 +116,14 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     //todo: replace with Bloom filter?
     val previousBoxIds = registry.walletUnspentBoxes().map(tb => encodedBoxId(tb.box.id))
 
+    val resolvedBoxes = registry.uncertainBoxes(MiningRewardsQueueId).flatMap { tb =>
+      //todo: more efficient resolving, just by height
+      if (resolve(tb.box)) Some(tb.copy(applicationStatuses = Seq(PaymentsAppId -> BoxCertainty.Certain))) else None
+    }
+
     //outputs, input ids, related transactions
     type ScanResults = (Seq[TrackedBox], Seq[(ModifierId, EncodedBoxId, TrackedBox)], Seq[WalletTransaction])
-    val initialScanResults: ScanResults = (Seq.empty, Seq.empty, Seq.empty)
+    val initialScanResults: ScanResults = (resolvedBoxes, Seq.empty, Seq.empty)
 
     val scanRes = transactions.foldLeft((initialScanResults, previousBoxIds)) { case ((scanResults, accBoxIds), tx) =>
       val txInputIds = tx.inputs.map(x => encodedBoxId(x.boxId))
@@ -124,7 +134,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
       if (outputs.nonEmpty || relatedInputIds.nonEmpty) {
         val spentBoxes = relatedInputIds.map { inpId =>
-          registry.getBox(decodedBoxId(inpId)).get   //todo: .get
+          registry.getBox(decodedBoxId(inpId)).get //todo: .get
         }
         val walletAppIds = (spentBoxes ++ outputs).flatMap(_.applicationStatuses.map(_._1)).toSet
         val wtx = WalletTransaction(tx, height, walletAppIds.toSeq)

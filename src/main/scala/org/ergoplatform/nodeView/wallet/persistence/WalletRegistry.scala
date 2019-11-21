@@ -130,9 +130,9 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
     val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
 
     val bag4 = updateDigest(bag3) { case RegistryDigest(height, wBalance, wTokens, aBalances, aTokens, appUncertain) =>
-      val spentCertainBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.map(_._1).contains(1: Short))
-      val spentAmt = spentCertainBoxes.map(_.box.value).sum
-      val spentTokensAmt = spentCertainBoxes
+      val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.map(_._1).contains(1: Short))
+      val spentAmt = spentWalletBoxes.map(_.box.value).sum
+      val spentTokensAmt = spentWalletBoxes
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
@@ -142,15 +142,17 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
-      val decreasedTokensBalance = spentTokensAmt
-        .foldLeft(wTokens) { case (acc, (encodedId, amt)) =>
+
+      val increasedTokenBalances = receivedTokensAmt.foldLeft(wTokens){ case (acc, (encodedId, amt)) =>
+        acc.updated(encodedId, acc.getOrElse(encodedId, 0L) + amt)
+      }
+
+      val newTokensBalance = spentTokensAmt
+        .foldLeft(increasedTokenBalances) { case (acc, (encodedId, amt)) =>
           val decreasedAmt = acc.getOrElse(encodedId, 0L) - amt
           if (decreasedAmt > 0) acc.updated(encodedId, decreasedAmt) else acc - encodedId
         }
-      val newTokensBalance = receivedTokensAmt
-        .foldLeft(decreasedTokensBalance) { case (acc, (encodedId, amt)) =>
-          acc.updated(encodedId, acc.getOrElse(encodedId, 0L) + amt)
-        }
+
       val receivedAmt = outputs.filter(_.applicationStatuses.map(_._1).contains(1: Short)).map(_.box.value).sum
       val newBalance = wBalance - spentAmt + receivedAmt
       require(

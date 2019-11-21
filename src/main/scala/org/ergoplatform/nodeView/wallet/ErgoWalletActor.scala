@@ -88,7 +88,13 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val paymentsTriggered = trackedBytes.exists(bs => bx.propositionBytes.sameElements(bs))
 
       lazy val paymentStatus = PaymentsAppId -> BoxCertainty.Certain
-      lazy val miningStatus = PaymentsAppId -> MiningRewardsQueueId -> BoxCertainty.Uncertain
+
+      //tweak for tests and possibly networks with no miner reward delay
+      lazy val miningStatus = if (settings.chainSettings.monetary.minerRewardDelay > 0) {
+        MiningRewardsQueueId -> BoxCertainty.Uncertain
+      } else {
+        PaymentsAppId -> BoxCertainty.Certain
+      }
 
       val statuses = (paymentsTriggered, miningIncomeTriggered) match {
         case (true, true) => Seq(paymentStatus, miningStatus) ++ appsTriggered
@@ -134,7 +140,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
       if (outputs.nonEmpty || relatedInputIds.nonEmpty) {
         val spentBoxes = relatedInputIds.map { inpId =>
-          registry.getBox(decodedBoxId(inpId)).get //todo: .get
+          registry.getBox(decodedBoxId(inpId))
+            .orElse(scanResults._1.find(tb => tb.box.id.sameElements(decodedBoxId(inpId)))).get //todo: .get
         }
         val walletAppIds = (spentBoxes ++ outputs).flatMap(_.applicationStatuses.map(_._1)).toSet
         val wtx = WalletTransaction(tx, height, walletAppIds.toSeq)
@@ -147,11 +154,20 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       }
     }._1
 
+    val outputs = scanRes._1
+    val inputs = scanRes._2
+    val affectedTransactions = scanRes._3
 
+    println(("txs: " + transactions))
+    println("outputs: " + outputs.map(_.boxId))
+    println("inputs: " + inputs.map(_._3.boxId))
+
+    println("================")
     // function effects: updating registry and offchainRegistry datasets
-    registry.updateOnBlock(scanRes._1, scanRes._2, scanRes._3)(blockId, height)
-    val newOnChainIds = scanRes._1.map(x => encodedBoxId(x.box.id))
-    offChainRegistry = offChainRegistry.updateOnBlock(height, registry.walletUnspentBoxes(), newOnChainIds)
+    registry.updateOnBlock(outputs, inputs, affectedTransactions)(blockId, height)
+    val walletUnspent = registry.walletUnspentBoxes()
+    val newOnChainIds = outputs.map(x => encodedBoxId(x.box.id))
+    offChainRegistry = offChainRegistry.updateOnBlock(height, walletUnspent, newOnChainIds)
   }
 
   override def preStart(): Unit = {

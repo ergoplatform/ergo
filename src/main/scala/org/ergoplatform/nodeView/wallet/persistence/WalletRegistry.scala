@@ -37,48 +37,6 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
 
   private val keepHistory = ws.keepSpentBoxes
 
-  def readWalletUnspentBoxes: Seq[TrackedBox] = {
-    /*val query = for {
-      allBoxes <- getAllBoxes
-      digest <- getDigest
-    } yield {
-      val uncertainIds = digest.uncertainBoxes
-      allBoxes.filterNot(b =>
-        uncertainIds.contains(encodedBoxId(b.box.id)) || b.spendingHeightOpt.isDefined
-      )
-    }
-    query.transact(store)*/
-    ???
-  }
-
-
-  def readAppUnspentBoxes(appId: AppId): Seq[TrackedBox] = {
-    ???
-  }
-
-  def readCertainBoxes(appId: AppId): Seq[TrackedBox] = {
-    /*
-    val query = for {
-      allBoxes <- getAllBoxes
-      index <- getDigest
-    } yield {
-      val uncertainIds = index.uncertainBoxes
-      allBoxes.filterNot(b => uncertainIds.contains(encodedBoxId(b.box.id)))
-    }
-    query.transact(store)
-    */
-    ???
-  }
-
-  def readUncertainBoxes(appId: AppId): Seq[TrackedBox] = {
-    /* val query = for {
-      index <- getDigest
-      uncertainBoxes <- getBoxes(index.uncertainBoxes.map(decodedBoxId))
-    } yield uncertainBoxes.flatten
-    query.transact(store) */
-    ???
-  }
-
   def updateBoxes(bag: KeyValuePairsBag,
                   ids: Seq[BoxId])(updateF: TrackedBox => TrackedBox): KeyValuePairsBag = {
     putBoxes(bag, getBoxes(ids).flatten.map(updateF))
@@ -92,7 +50,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
     ids.map(id => store.get(key(id)).flatMap(x => TrackedBoxSerializer.parseBytesTry(x).toOption))
   }
 
-  def getUnspentBoxes(appId: AppId): Seq[TrackedBox] = {
+  def unspentBoxes(appId: AppId): Seq[TrackedBox] = {
     store.getRange(firstAppBoxSpaceKey(appId), lastAppBoxSpaceKey(appId))
       .flatMap { case (_, boxId) =>
         getBox(ADKey @@ boxId)
@@ -106,7 +64,21 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
       }
   }
 
-  def walletUnspentBoxes(): Seq[TrackedBox] = getUnspentBoxes(Constants.PaymentsAppId)
+  def uncertainBoxes(appId: AppId): Seq[TrackedBox] = {
+    store.getRange(firstUncertainAppBoxSpaceKey(appId), lastUncertainAppBoxSpaceKey(appId))
+      .flatMap { case (_, boxId) =>
+        getBox(ADKey @@ boxId)
+      }
+  }
+
+  def certainBoxes(appId: AppId): Seq[TrackedBox] = {
+    store.getRange(firstCertainAppBoxSpaceKey(appId), lastCertainAppBoxSpaceKey(appId))
+      .flatMap { case (_, boxId) =>
+        getBox(ADKey @@ boxId)
+      }
+  }
+
+  def walletUnspentBoxes(): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsAppId)
 
   def walletSpentBoxes(): Seq[TrackedBox] = getSpentBoxes(Constants.PaymentsAppId)
 
@@ -237,10 +209,11 @@ object WalletRegistry {
   private val TxKeyPrefix: Byte = 0x01
   private val AppBoxIndexPrefix: Byte = 0x02
   private val SpentAppBoxIndexPrefix: Byte = 0x03
-  private val InclusionHeightAppBoxPrefix: Byte = 0x04
 
-  private val FirstBoxSpaceKey: Array[Byte] = BoxKeyPrefix +: Array.fill(32)(0: Byte)
-  private val LastBoxSpaceKey: Array[Byte] = BoxKeyPrefix +: Array.fill(32)(-1: Byte)
+  private val UncertainAppBoxIndexPrefix: Byte = 0x04
+  private val CertainAppBoxIndexPrefix: Byte = 0x05
+
+  private val InclusionHeightAppBoxPrefix: Byte = 0x06
 
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
   private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)
@@ -252,6 +225,16 @@ object WalletRegistry {
     SpentAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
   private def lastSpentAppBoxSpaceKey(appId: AppId): Array[Byte] =
     SpentAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
+
+  private def firstUncertainAppBoxSpaceKey(appId: AppId): Array[Byte] =
+    UncertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
+  private def lastUncertainAppBoxSpaceKey(appId: AppId): Array[Byte] =
+    UncertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
+
+  private def firstCertainAppBoxSpaceKey(appId: AppId): Array[Byte] =
+    CertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
+  private def lastCertainAppBoxSpaceKey(appId: AppId): Array[Byte] =
+    CertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
 
   private def firstIncludedAppBoxSpaceKey(appId: AppId, height: Int): Array[Byte] =
     AppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Ints.toByteArray(height) ++ Array.fill(32)(0: Byte))
@@ -275,6 +258,11 @@ object WalletRegistry {
     prefix +: (Shorts.toByteArray(appId) ++ trackedBox.box.id)
   }
 
+  private def certaintyKey(appId: AppId, trackedBox: TrackedBox): Array[Byte] = {
+    val prefix = if (trackedBox.certain(appId).get.certain) CertainAppBoxIndexPrefix else UncertainAppBoxIndexPrefix //todo: .get
+    prefix +: (Shorts.toByteArray(appId) ++ trackedBox.box.id)
+  }
+
   private def inclusionHeightAppBoxIndexKey(appId: AppId, trackedBox: TrackedBox): Array[Byte] = {
     val inclusionHeightBytes = Ints.toByteArray(trackedBox.inclusionHeightOpt.getOrElse(0))
     InclusionHeightAppBoxPrefix +: (Shorts.toByteArray(appId) ++ inclusionHeightBytes ++ trackedBox.box.id)
@@ -283,7 +271,9 @@ object WalletRegistry {
 
   def putBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
     val appIndexUpdates = box.applicationStatuses.flatMap { case (appId, _) =>
-      Seq(appBoxIndexKey(appId, box) -> box.box.id,
+      Seq(
+        appBoxIndexKey(appId, box) -> box.box.id,
+        certaintyKey(appId, box) -> box.box.id, //todo: avoid for simple payments app
         inclusionHeightAppBoxIndexKey(appId, box) -> box.box.id
       )
     }
@@ -297,7 +287,7 @@ object WalletRegistry {
 
   def removeBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
     val appIndexUpdates = box.applicationStatuses.flatMap { case (appId, _) =>
-      Seq(appBoxIndexKey(appId, box), inclusionHeightAppBoxIndexKey(appId, box))
+      Seq(appBoxIndexKey(appId, box), certaintyKey(appId, box), inclusionHeightAppBoxIndexKey(appId, box))
     }
     val ids = appIndexUpdates :+ key(box)
 

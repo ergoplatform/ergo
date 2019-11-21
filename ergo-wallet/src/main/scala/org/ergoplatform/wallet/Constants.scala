@@ -14,5 +14,5 @@ object Constants {
   // SimplePayments application identifier
   val PaymentsAppId: Short = 1
 
-  val WalletRewardsQueueId: Short = 2
+  val MiningRewardsQueueId: Short = 2
 }

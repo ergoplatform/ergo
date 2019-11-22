@@ -147,6 +147,12 @@ Ergo is also designed as a Level 3 platform. However, Ergo's scripting language,
 
 Discuss weak and strong variants; pool resistance; other works
 
+We start with overviweing (non-)outsourceability definitions in existing literature. Different works, such as
+Non-outsourceable Scratch-Off Puzzles~\cite{miller2015nonoutsourceable},  2-Phase Proof-of-Work (2P-PoW)~\cite{twophase},
+PieceWork~\cite{daian2017short}, Autolykos~\cite{autolykos}.
+
+
+
 \snote{Following is copied from PoW intro paper}
 
 A non-outsourceable puzzle is one with the following properties~\cite{miller2015nonoutsourceable}. If any party is able to generate a solution $d$ for some block header $m$ that sends rewards to a pool address, then the same party can then efficiently generate another solution $d'$ for an $m'$ that sends rewards to any other chosen address, and that too without revealing the identity. This results in a race condition where the party can steal the rewards if the solution to $m'$ gets accepted, thereby making it non-outsourceable. 
@@ -154,8 +160,12 @@ A non-outsourceable puzzle is one with the following properties~\cite{miller2015
 We note that non-outsourceability of~\cite{miller2015nonoutsourceable} is preserved if the ability to steal the rewards is present in the spending stage rather than in the mining stage. That is, any party that generates a valid solution for $m$ then has the ability to spend the reward transaction of $m$ in an untraceable manner. 
 In this view, Ergo is a special instance of a non-outsourceable puzzle of~\cite{miller2015nonoutsourceable}, where the contention is not to generate a new message $m'$, that sends the reward to a different address (which is not possible in Ergo). Instead the goal is to steal the reward 720 blocks later, when it becomes spendable. 
 
-\subsection{Overview of \langname}
-4 Levels of context
+\subsection{Overview of Execution Context in Ergo}
+
+To give understanding of how a smart contract can bypass non-outsourceability, we first explain what data the contract
+can access.
+
+In Proof-of-Work currencies a block is split usually into sections, with a compact section called {\em header}
 
 \begin{tabular}{llllllll}
 	& Level & Box & Transaction & Block-Solution & Block & Example\\\hline

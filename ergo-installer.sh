@@ -147,7 +147,7 @@ LATEST_ERGO_RELEASE=$(curl --silent "https://api.github.com/repos/ergoplatform/e
 LATEST_ERGO_RELEASE_NUMBERS=$(echo ${LATEST_ERGO_RELEASE} | cut -c 2-)
 ERGO_DOWNLOAD_URL=https://github.com/ergoplatform/ergo/releases/download/${LATEST_ERGO_RELEASE}/ergo-${LATEST_ERGO_RELEASE_NUMBERS}.jar
 echo "Latest known Ergo release: ${LATEST_ERGO_RELEASE}, downloading it to ${APP_DIR}/ergo.jar with overwrite..."
-#curl --silent -L ${ERGO_DOWNLOAD_URL} --output ${APP_DIR}/ergo.jar
+curl --silent -L ${ERGO_DOWNLOAD_URL} --output ${APP_DIR}/ergo.jar
 echo "Ergo was downloaded to ${APP_DIR}/ergo.jar"
 
 # First run of Ergo node, to create API key hash that later be added into config

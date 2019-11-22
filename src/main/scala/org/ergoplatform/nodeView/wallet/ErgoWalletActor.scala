@@ -158,11 +158,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     val inputs = scanRes._2
     val affectedTransactions = scanRes._3
 
-    println(("txs: " + transactions))
-    println("outputs: " + outputs.map(_.boxId))
-    println("inputs: " + inputs.map(_._3.boxId))
-
-    println("================")
     // function effects: updating registry and offchainRegistry datasets
     registry.updateOnBlock(outputs, inputs, affectedTransactions)(blockId, height)
     val walletUnspent = registry.walletUnspentBoxes()

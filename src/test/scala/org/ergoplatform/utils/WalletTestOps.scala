@@ -15,7 +15,7 @@ import org.ergoplatform.utils.fixtures.WalletFixture
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ProverResult
@@ -34,6 +34,9 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def getPublicKeys(implicit w: WalletFixture): Seq[P2PKAddress] =
     await(w.wallet.publicKeys(0, Int.MaxValue))
+
+  def getSecret(implicit w: WalletFixture): Option[DLogProverInput] =
+    await(w.wallet.firstSecret).toOption
 
   def getConfirmedBalances(implicit w: WalletFixture): RegistryDigest =
     await(w.wallet.confirmedBalances)

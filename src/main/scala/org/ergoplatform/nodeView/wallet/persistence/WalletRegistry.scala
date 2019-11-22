@@ -33,7 +33,7 @@ import scala.util.Try
 final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
-  import org.ergoplatform.nodeView.wallet.IdUtils.{decodedBoxId, encodedBoxId, decodedTokenId, encodedTokenId}
+  import org.ergoplatform.nodeView.wallet.IdUtils.{encodedBoxId, encodedTokenId}
 
   private val keepHistory = ws.keepSpentBoxes
 
@@ -154,7 +154,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
         }
 
       val receivedAmt = outputs.filter(_.applicationStatuses.map(_._1).contains(1: Short)).map(_.box.value).sum
-      val newBalance = wBalance - spentAmt + receivedAmt
+      val newBalance = wBalance + receivedAmt - spentAmt
       require(
         (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
         "Balance could not be negative")

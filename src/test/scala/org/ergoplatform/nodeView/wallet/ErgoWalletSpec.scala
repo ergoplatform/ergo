@@ -15,11 +15,10 @@ import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import sigmastate.Values.ByteArrayConstant
 import sigmastate._
-import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
 import sigmastate.Values._
-import special.sigma._
+import sigmastate.basics.DLogProtocol.DLogProverInput
 
 import scala.concurrent.blocking
 import scala.util.Random
@@ -28,14 +27,11 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
-  /* todo: fix
   property("uncertain boxes spending") {
     withFixture { implicit w =>
       val walletPk = getPublicKeys.head.pubkey
 
-      val foreignSecret = DLogProverInput.random()
-      val foreignPk = foreignSecret.publicImage
-      val uncertainProp = SigmaOr(SigmaAnd(walletPk, GE(IntConstant(0), IntConstant(10))), foreignPk)
+      val uncertainProp = ErgoScriptPredef.rewardOutputScript(settings.chainSettings.monetary.minerRewardDelay, walletPk)
 
       val genesisBlock = makeGenesisBlock(walletPk, randomNewAsset)
 
@@ -53,17 +49,15 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       applyBlock(block) shouldBe 'success
       waitForScanning(block)
 
-      val index = await(wallet.confirmedBalances)
-
-      index.uncertainBoxes.size shouldBe 1
-      index.walletBalance shouldBe balanceAfterSpending
+      val registryDigest = await(wallet.confirmedBalances)
+      registryDigest.walletBalance shouldBe balanceAfterSpending
 
       val uncertainTxUnsigned = new UnsignedErgoTransaction(
-        index.uncertainBoxes.map(id => new UnsignedInput(decodedBoxId(id))).toIndexedSeq,
+        tx.outputs.find(_.ergoTree == uncertainProp).toIndexedSeq.map(b => new UnsignedInput(b.id)),
         IndexedSeq(),
         IndexedSeq(new ErgoBoxCandidate(balanceToMakeUncertain, Constants.TrueLeaf, block.height + 1))
       )
-      val uncertainTx = ErgoUnsafeProver.prove(uncertainTxUnsigned, foreignSecret)
+      val uncertainTx = ErgoUnsafeProver.prove(uncertainTxUnsigned, getSecret.get)
 
       val finalBlock = makeNextBlock(getUtxoState, Seq(ErgoTransaction(uncertainTx)))
       applyBlock(finalBlock) shouldBe 'success
@@ -71,11 +65,10 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val finalIndex = await(wallet.confirmedBalances)
 
-      finalIndex.uncertainBoxes shouldBe empty
       finalIndex.walletBalance shouldBe balanceAfterSpending
     }
   }
-   */
+
 
   property("do not use inputs spent in off-chain transaction") {
     withFixture { implicit w =>

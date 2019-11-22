@@ -13,6 +13,8 @@ import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication}
+import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
@@ -31,7 +33,7 @@ import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
-import org.ergoplatform.wallet.Constants.{PaymentsAppId, MiningRewardsQueueId}
+import org.ergoplatform.wallet.Constants.{MiningRewardsQueueId, PaymentsAppId}
 
 import scala.util.{Failure, Random, Success, Try}
 
@@ -59,7 +61,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private val storage: WalletStorage = settings.walletStorage
   private val registry: WalletRegistry = settings.walletRegistry
 
-  private val externalApplications = storage.allApplications
+  private def externalApplications: Seq[ExternalApplication] = storage.allApplications
 
 
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
@@ -231,6 +233,18 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         .map(tb => WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _)))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
+    case GetAppBoxes(appId, unspent) =>
+      val currentHeight = height
+      sender() ! (if (unspent) registry.unspentBoxes(appId) else registry.confirmedBoxes(appId,0))
+        .map(tb => WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _)))
+        .sortBy(_.trackedBox.inclusionHeightOpt)
+
+    case GetUncertainBoxes(appId) =>
+      val currentHeight = height
+      sender() ! registry.uncertainBoxes(appId)
+        .map(tb => WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _)))
+        .sortBy(_.trackedBox.inclusionHeightOpt)
+
     case GetTransactions =>
       sender() ! registry.getAllWalletTxs()
         .sortBy(-_.inclusionHeight)
@@ -245,6 +259,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case ReadTrackedAddresses =>
       sender() ! trackedAddresses.toIndexedSeq
+
+    case ReadApplications =>
+      sender() ! externalApplications
   }
 
   private def onStateChanged: Receive = {
@@ -332,6 +349,12 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case UpdateChangeAddress(address) =>
       storage.updateChangeAddress(address)
+
+    case RemoveApplication(appId) =>
+      Try(storage.removeApplication(appId))
+
+    case AddApplication(appRequest) =>
+      sender() ! storage.addApplication(appRequest)
   }
 
   private def withWalletLockHandler(callback: ActorRef)
@@ -635,7 +658,15 @@ object ErgoWalletActor {
 
   final case class GetWalletBoxes(unspentOnly: Boolean)
 
+  final case class GetAppBoxes(appId: AppId, unspentOnly: Boolean)
+
+  final case class GetUncertainBoxes(appId: AppId)
+
   final case class UpdateChangeAddress(address: P2PKAddress)
+
+  final case class AddApplication(appRequest: ExternalAppRequest)
+
+  final case class RemoveApplication(appId: AppId)
 
   final case class GetTransaction(id: ModifierId)
 
@@ -647,10 +678,12 @@ object ErgoWalletActor {
 
   case object GetLockStatus
 
+  case object GetFirstSecret
+
   case object ReadRandomPublicKey
 
   case object ReadTrackedAddresses
 
-  case object GetFirstSecret
+  case object ReadApplications
 
 }

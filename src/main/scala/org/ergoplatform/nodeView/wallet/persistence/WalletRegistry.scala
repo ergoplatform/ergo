@@ -57,7 +57,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
       }
   }
 
-  def getSpentBoxes(appId: AppId): Seq[TrackedBox] = {
+  def spentBoxes(appId: AppId): Seq[TrackedBox] = {
     store.getRange(firstSpentAppBoxSpaceKey(appId), lastSpentAppBoxSpaceKey(appId))
       .flatMap { case (_, boxId) =>
         getBox(ADKey @@ boxId)
@@ -80,7 +80,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
 
   def walletUnspentBoxes(): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsAppId)
 
-  def walletSpentBoxes(): Seq[TrackedBox] = getSpentBoxes(Constants.PaymentsAppId)
+  def walletSpentBoxes(): Seq[TrackedBox] = spentBoxes(Constants.PaymentsAppId)
 
   def confirmedBoxes(appId: AppId, fromHeight: Int): Seq[TrackedBox] = {
     store.getRange(firstIncludedAppBoxSpaceKey(appId, fromHeight), lastIncludedAppBoxSpaceKey(appId)).flatMap { case (_, boxId) =>

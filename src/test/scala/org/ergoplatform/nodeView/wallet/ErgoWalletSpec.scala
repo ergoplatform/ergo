@@ -6,6 +6,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ExternalAppRequest}
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils._
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoUnsafeProver}
@@ -18,7 +19,6 @@ import sigmastate._
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
 import sigmastate.Values._
-import sigmastate.basics.DLogProtocol.DLogProverInput
 
 import scala.concurrent.blocking
 import scala.util.Random
@@ -31,7 +31,9 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     withFixture { implicit w =>
       val walletPk = getPublicKeys.head.pubkey
 
-      val uncertainProp = ErgoScriptPredef.rewardOutputScript(settings.chainSettings.monetary.minerRewardDelay, walletPk)
+      val uncertainProp = Constants.TrueLeaf
+      val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, uncertainProp.bytes)
+      val app = await(w.wallet.addApplication(ExternalAppRequest("True detector", scanningPredicate))).get
 
       val genesisBlock = makeGenesisBlock(walletPk, randomNewAsset)
 
@@ -51,6 +53,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val registryDigest = await(wallet.confirmedBalances)
       registryDigest.walletBalance shouldBe balanceAfterSpending
+      await(wallet.uncertainBoxes(app.appId)).head.trackedBox.box.value shouldBe balanceToMakeUncertain
 
       val uncertainTxUnsigned = new UnsignedErgoTransaction(
         tx.outputs.find(_.ergoTree == uncertainProp).toIndexedSeq.map(b => new UnsignedInput(b.id)),

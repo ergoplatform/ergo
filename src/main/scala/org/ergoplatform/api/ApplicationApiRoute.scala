@@ -1,11 +1,10 @@
 package org.ergoplatform.api
 
 import io.circe.syntax._
-import akka.actor.ActorRefFactory
+import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import io.circe.Json
-import org.ergoplatform.http.api.{ApiCodecs, ErgoBaseApiRoute}
-import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
+import org.ergoplatform.http.api.{ApiCodecs, WalletApiOperations}
 import org.ergoplatform.nodeView.wallet.scanning.ExternalAppRequest
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
@@ -19,12 +18,10 @@ import scala.util.{Failure, Success}
   * See EIP-0001 (https://github.com/ergoplatform/eips/blob/master/eip-0001.md)
   */
 
-final case class ApplicationApiRoute (ergoSettings: ErgoSettings)
-                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
+final case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
+                          (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
 
   import org.ergoplatform.nodeView.wallet.scanning.ExternalApplicationJsonCodecs._
-
-  lazy val storage: WalletStorage = ergoSettings.walletStorage
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
@@ -38,19 +35,21 @@ final case class ApplicationApiRoute (ergoSettings: ErgoSettings)
 
   def deregisterR: Route = (path("deregister" / IntNumber) & get) {idInt =>
     val id = idInt.toShort
-    storage.removeApplication(id)
-    ApiResponse(encodeId(id))
+    withWalletOp(_.removeApplication(id)) {
+      case Failure(e) => BadRequest(s"No application exists or db error: ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success(_) => ApiResponse(encodeId(id))
+    }
   }
 
   def registerR: Route = (path("register") & post & entity(as[ExternalAppRequest])) { request =>
-    storage.addApplication(request) match {
+    withWalletOp(_.addApplication(request)) {
       case Failure(e) => BadRequest(s"Bad request $request. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(app) => ApiResponse(encodeId(app.appId))
     }
   }
 
   def listR: Route = (path("listAll") & get) {
-    ApiResponse(storage.allApplications)
+    withWallet(_.readApplications())
   }
 
 }

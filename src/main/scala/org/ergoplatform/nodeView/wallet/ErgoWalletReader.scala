@@ -9,6 +9,8 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
+import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication}
+import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.secrets.DerivationPath
@@ -63,6 +65,12 @@ trait ErgoWalletReader extends VaultReader {
   def walletBoxes(unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
     (walletActor ? GetWalletBoxes(unspentOnly)).mapTo[Seq[WalletBox]]
 
+  def appBoxes(appId: AppId, unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
+    (walletActor ? GetAppBoxes(appId, unspentOnly)).mapTo[Seq[WalletBox]]
+
+  def uncertainBoxes(appId: AppId): Future[Seq[WalletBox]] =
+    (walletActor ? GetUncertainBoxes(appId)).mapTo[Seq[WalletBox]]
+
   def updateChangeAddress(address: P2PKAddress): Unit =
     walletActor ! UpdateChangeAddress(address)
 
@@ -82,4 +90,12 @@ trait ErgoWalletReader extends VaultReader {
                           inputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
     (walletActor ? GenerateTransaction(requests, inputsRaw)).mapTo[Try[ErgoTransaction]]
 
+  def addApplication(appRequest: ExternalAppRequest): Future[Try[ExternalApplication]] =
+    (walletActor ? AddApplication(appRequest)).mapTo[Try[ExternalApplication]]
+
+  def removeApplication(appId: AppId): Future[Try[Unit]] =
+    (walletActor ? RemoveApplication(appId)).mapTo[Try[Unit]]
+
+  def readApplications(): Future[Seq[ExternalApplication]] =
+    (walletActor ? ReadApplications).mapTo[Seq[ExternalApplication]]
 }

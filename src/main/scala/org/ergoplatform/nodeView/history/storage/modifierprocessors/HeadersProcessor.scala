@@ -249,8 +249,8 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     if (heights.lengthCompare(1) == 0) {
       difficultyCalculator.calculate(Seq(parent))
     } else {
-      val headers = heights.map(height => headerIdsAtHeight(height).lastOption).flatten.map(id=>typedModifierById[Header](id)).flatten
-      difficultyCalculator.calculate(headers)
+       val headers = heights.flatMap(height => headerIdsAtHeight(height).headOption).flatMap(typedModifierById[Header])
+       difficultyCalculator.calculate(headers)
     }
   }
 

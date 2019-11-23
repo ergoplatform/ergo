@@ -122,11 +122,12 @@ object PoPowAlgos {
     @scala.annotation.tailrec
     def loop(level: Int, acc: Seq[(Int, Int)] = Seq.empty): Seq[(Int, Int)] =
       if (level == 0) {
-        loop(level + 1, acc :+ (0, chain.size)) // Supposing each header is at least of level 0.
+        loop(level + 1, (0, chain.size) +: acc) // Supposing each header is at least of level 0.
       } else {
         val args = chain.filter(absoluteLevelOf(_) >= level)
-        if (args.lengthCompare(m) >= 0) loop(level + 1, acc :+ (level, args.size)) else acc
+        if (args.lengthCompare(m) >= 0) loop(level + 1, (level, args.size) +: acc) else acc
       }
+
     loop(level = 0).map { case (lvl, size) =>
       math.pow(2, lvl) * size // 2^µ * |C↑µ|
     }.max.toInt
@@ -144,6 +145,7 @@ object PoPowAlgos {
       } else {
         startIdx - 1
       }
+
     if (leftChain.headOption.exists(rightChain.headOption.contains(_))) Some(leftChain(lcaIndex(1))) else None
   }
 
@@ -154,6 +156,7 @@ object PoPowAlgos {
     require(chain.lengthCompare(params.k + params.m) >= 0,
       s"Can not prove chain of size < ${params.k + params.m}")
     require(chain.head.header.isGenesis, "Can not prove non-anchored chain")
+
     @scala.annotation.tailrec
     def provePrefix(anchoringPoint: PoPowHeader,
                     level: Int,
@@ -170,6 +173,7 @@ object PoPowAlgos {
       } else {
         acc
       }
+
     val suffix = chain.takeRight(params.k)
     val maxLevel = suffix.head.interlinks.size - 1
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height)
@@ -177,7 +181,7 @@ object PoPowAlgos {
   }
 
   /**
-    *  "Goodness" bounds the deviation of superblocks of a certain level from their expected mean.
+    * "Goodness" bounds the deviation of superblocks of a certain level from their expected mean.
     */
   def goodSuperChain(chain: Seq[Header], superChain: Seq[Header], level: Int)(params: PoPowParams): Boolean =
     superChainQuality(chain, superChain, level)(params) && multiLevelQuality(chain, superChain, level)(params)
@@ -204,8 +208,10 @@ object PoPowAlgos {
     def checkLocalGoodnessAt(mValue: Int): Boolean = {
       val superChainSuffixSize = superChain.takeRight(mValue).size
       val downChainSuffixSize = downChain.takeRight(mValue).size
+
       def isLocallyGood(m: Int) = locallyGood(
         math.min(superChainSuffixSize, m), math.min(downChainSuffixSize, m), level, params.d)
+
       if (mValue < chain.size && isLocallyGood(mValue)) {
         checkLocalGoodnessAt(mValue + 1)
       } else if (mValue < chain.size) {
@@ -214,6 +220,7 @@ object PoPowAlgos {
         true
       }
     }
+
     checkLocalGoodnessAt(params.m)
   }
 
@@ -246,6 +253,7 @@ object PoPowAlgos {
       } else {
         true
       }
+
     checkQualityAt(level)
   }
 

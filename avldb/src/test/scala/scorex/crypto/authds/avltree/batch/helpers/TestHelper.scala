@@ -5,14 +5,15 @@ import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.util.encode.Base58
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.utils.ScryptoLogging
+import scorex.util.ScorexLogging
 
 trait TestHelper extends FileHelper with ScorexLogging {
 
   val enableQuickStore: Boolean = System.getProperty("java.specification.version").startsWith("8")
 
-  def quickTest[R](block: => R): Option[R] = if(enableQuickStore) Some(block)
-  else None
+  def quickTest[R](block: => R): Option[R] =
+    if (enableQuickStore) Some(block)
+    else None
 
   type HF = Blake2b256.type
   type D = Digest32

@@ -22,6 +22,7 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
     * Performs versioned update.
     * @param toInsert - key, value pairs to be inserted/updated
     * @param toRemove - keys to be removed
+    * @param version - version tag for the update
     */
   def update(toInsert: Seq[(K, V)], toRemove: Seq[K])(version: VersionId): Unit = {
     require(version.length == Constants.HashLength, "Illegal version id size")

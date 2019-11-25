@@ -25,7 +25,7 @@ final case class TrackedBox(creationTxId: ModifierId,
                             spendingTxIdOpt: Option[ModifierId],
                             spendingHeightOpt: Option[Int],
                             box: ErgoBox,
-                            applicationStatuses: Seq[(Short, BoxCertainty)]) {
+                            applicationStatuses: Map[Short, BoxCertainty]) {
 
   /**
     * Whether the box is spent or not
@@ -76,7 +76,7 @@ final case class TrackedBox(creationTxId: ModifierId,
 object TrackedBox {
 
   def apply(creationTx: ErgoLikeTransaction, creationOutIndex: Short, creationHeight: Option[Int],
-            box: ErgoBox, appStatuses: Seq[(Short, BoxCertainty)]): TrackedBox =
+            box: ErgoBox, appStatuses: Map[Short, BoxCertainty]): TrackedBox =
     apply(creationTx.id, creationOutIndex, creationHeight, None, None, box, appStatuses)
 }
 
@@ -120,7 +120,7 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
     }
     val box = ErgoBoxSerializer.parse(r)
     TrackedBox(
-      creationTxId, creationOutIndex, inclusionHeightOpt, spendingTxIdOpt, spendingHeightOpt, box, appStatuses)
+      creationTxId, creationOutIndex, inclusionHeightOpt, spendingTxIdOpt, spendingHeightOpt, box, appStatuses.toMap)
   }
 
 }

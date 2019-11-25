@@ -37,4 +37,6 @@ trait DBSpec extends FileUtils {
   protected def withVersionedStore(keepVersions: Int)(body: VersionedLDBKVStore => Unit): Unit =
     withDb { db: DB => body(new VersionedLDBKVStore(db, keepVersions)) }
 
+  protected def withHybridStore(keepVersions: Int)(body: HybridLDBKVStore => Unit): Unit =
+    withDb { db: DB => body(new HybridLDBKVStore(db, keepVersions)) }
 }

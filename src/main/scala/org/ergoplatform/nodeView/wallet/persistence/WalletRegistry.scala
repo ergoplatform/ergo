@@ -5,13 +5,13 @@ import java.io.File
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.LDBFactory.factory
-import org.ergoplatform.db.VersionedLDBKVStore
+import org.ergoplatform.db.{HybridLDBKVStore, VersionedLDBKVStore}
 import org.ergoplatform.db.VersionedLDBKVStore.VersionId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, EncodedTokenId}
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
-import org.ergoplatform.settings.{ErgoSettings, WalletSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import org.iq80.leveldb.Options
@@ -20,7 +20,7 @@ import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
@@ -30,7 +30,7 @@ import scala.util.Try
   * * certain boxes, spent or not
   *
   */
-final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
+final class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
   import org.ergoplatform.nodeView.wallet.IdUtils.{encodedBoxId, encodedTokenId}
@@ -130,14 +130,14 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
     val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
 
     val bag4 = updateDigest(bag3) { case RegistryDigest(height, wBalance, wTokens) =>
-      val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.map(_._1).contains(1: Short))
+      val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.contains(1: Short))
       val spentAmt = spentWalletBoxes.map(_.box.value).sum
       val spentTokensAmt = spentWalletBoxes
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
-      val receivedTokensAmt = outputs.filter(_.applicationStatuses.map(_._1).contains(1: Short))
+      val receivedTokensAmt = outputs.filter(_.applicationStatuses.contains(1: Short))
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
@@ -153,7 +153,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
           if (decreasedAmt > 0) acc.updated(encodedId, decreasedAmt) else acc - encodedId
         }
 
-      val receivedAmt = outputs.filter(_.applicationStatuses.map(_._1).contains(1: Short)).map(_.box.value).sum
+      val receivedAmt = outputs.filter(_.applicationStatuses.contains(1: Short)).map(_.box.value).sum
       val newBalance = wBalance + receivedAmt - spentAmt
       require(
         (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
@@ -198,7 +198,7 @@ object WalletRegistry {
     val options = new Options()
     options.createIfMissing(true)
     val db = factory.open(dir, options)
-    val store = new VersionedLDBKVStore(db, settings.nodeSettings.keepVersions)
+    val store = new HybridLDBKVStore(db, settings.nodeSettings.keepVersions)
 
     // Create pre-genesis state checkpoint
     if (!store.versionIdExists(PreGenesisStateVersion)) store.update(Seq.empty, Seq.empty)(PreGenesisStateVersion)
@@ -272,7 +272,7 @@ object WalletRegistry {
 
 
   def putBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
-    val appIndexUpdates = box.applicationStatuses.flatMap { case (appId, _) =>
+    val appIndexUpdates = box.applicationStatuses.toSeq.flatMap { case (appId, _) =>
       Seq(
         spentIndexKey(appId, box) -> box.box.id,
         certaintyKey(appId, box) -> box.box.id, //todo: avoid for simple payments app
@@ -288,7 +288,7 @@ object WalletRegistry {
   }
 
   def removeBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
-    val appIndexUpdates = box.applicationStatuses.flatMap { case (appId, _) =>
+    val appIndexUpdates = box.applicationStatuses.toSeq.flatMap { case (appId, _) =>
       Seq(spentIndexKey(appId, box), certaintyKey(appId, box), inclusionHeightAppBoxIndexKey(appId, box))
     }
     val ids = appIndexUpdates :+ key(box)
@@ -316,7 +316,6 @@ object WalletRegistry {
     val registryBytes = RegistrySummarySerializer.toBytes(index)
     bag.copy(toInsert = bag.toInsert :+ (RegistrySummaryKey, registryBytes))
   }
-
 }
 
 case class KeyValuePairsBag(toInsert: Seq[(Array[Byte], Array[Byte])], toRemove: Seq[Array[Byte]]) {

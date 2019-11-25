@@ -25,7 +25,7 @@ class RegistryOpsSpec
 
   property("putBox/getBox/removeBox") {
     forAll(trackedBoxGen) { tb =>
-      withVersionedStore(10) { store =>
+      withHybridStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
 
         WalletRegistry.putBox(emptyBag, tb).transact(store)
@@ -38,13 +38,13 @@ class RegistryOpsSpec
 
   property("putBoxes/getBoxes/updateBoxes/removeBoxes") {
     forAll(Gen.listOf(trackedBoxGen)) { tbs =>
-      withVersionedStore(10) { store =>
+      withHybridStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
 
         WalletRegistry.putBoxes(emptyBag, tbs).transact(store)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs tbs.map(Some.apply)
         val updateFn = (tb: TrackedBox) => tb.copy(spendingHeightOpt = Some(0),
-          applicationStatuses = Seq(1.toShort -> BoxCertainty.Certain, 2.toShort -> BoxCertainty.Uncertain))
+          applicationStatuses = Map(1.toShort -> BoxCertainty.Certain, 2.toShort -> BoxCertainty.Uncertain))
         val updatedBoxes = tbs.map(updateFn)
         reg.updateBoxes(emptyBag, tbs.map(_.box.id))(updateFn).transact(store)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs updatedBoxes.map(Some.apply)
@@ -56,7 +56,7 @@ class RegistryOpsSpec
 
   property("putTx/getTx/getAllTxs/removeTxs") {
     forAll(walletTransactionGen) { wtx =>
-      withVersionedStore(10) { store =>
+      withHybridStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
 
         WalletRegistry.putTx(emptyBag, wtx).transact(store)
@@ -70,7 +70,7 @@ class RegistryOpsSpec
 
   property("putTxs/getAllTxs") {
     forAll(Gen.listOf(walletTransactionGen)) { wtxs =>
-      withVersionedStore(10) { store =>
+      withHybridStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
 
         WalletRegistry.putTxs(emptyBag, wtxs).transact(store)
@@ -81,7 +81,7 @@ class RegistryOpsSpec
 
   property("putIndex/digest/updateIndex") {
     forAll(registrySummaryGen) { index =>
-      withVersionedStore(10) { store =>
+      withHybridStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
 
         WalletRegistry.putDigest(emptyBag, index).transact(store)

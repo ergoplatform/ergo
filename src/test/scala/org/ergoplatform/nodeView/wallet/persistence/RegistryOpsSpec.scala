@@ -61,9 +61,9 @@ class RegistryOpsSpec
 
         WalletRegistry.putTx(emptyBag, wtx).transact(store)
         reg.getTx(wtx.id) shouldEqual Some(wtx)
-        reg.getAllWalletTxs() shouldEqual Seq(wtx)
+        reg.allWalletTxs() shouldEqual Seq(wtx)
         WalletRegistry.removeTxs(emptyBag, Seq(wtx.id)).transact(store)
-        reg.getAllWalletTxs() should not contain wtx
+        reg.allWalletTxs() should not contain wtx
       }
     }
   }
@@ -74,12 +74,12 @@ class RegistryOpsSpec
         val reg = new WalletRegistry(store)(ws)
 
         WalletRegistry.putTxs(emptyBag, wtxs).transact(store)
-        reg.getAllWalletTxs() should contain theSameElementsAs wtxs
+        reg.allWalletTxs() should contain theSameElementsAs wtxs
       }
     }
   }
 
-  property("putIndex/getDigest/updateIndex") {
+  property("putIndex/digest/updateIndex") {
     forAll(registrySummaryGen) { index =>
       withVersionedStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)

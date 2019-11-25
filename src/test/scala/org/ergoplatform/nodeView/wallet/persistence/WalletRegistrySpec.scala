@@ -56,7 +56,7 @@ class WalletRegistrySpec
         WalletRegistry.putTx(emptyBag, wtx).transact(store)
         val registry = new WalletRegistry(store)(settings.walletSettings)
 
-        registry.getAllWalletTxs() shouldBe Seq(wtx)
+        registry.allWalletTxs() shouldBe Seq(wtx)
       }
     }
   }

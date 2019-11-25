@@ -166,7 +166,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         sender() ! trackedAddresses.slice(from, until)
 
       case ReadBalances(chainStatus) =>
-        sender ! RegistryDigest(0, WalletActorStub.balance(chainStatus), Map.empty, Map.empty, Map.empty, Map.empty)
+        sender ! RegistryDigest(0, WalletActorStub.balance(chainStatus), Map.empty)
 
       case ReadTrackedAddresses =>
         sender ! trackedAddresses

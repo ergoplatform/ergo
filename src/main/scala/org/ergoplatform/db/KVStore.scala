@@ -8,6 +8,8 @@ import scala.collection.mutable
 
 trait KVStore extends AutoCloseable {
 
+  val firstUnusedPrefix: Byte = 0
+
   type K = Array[Byte]
   type V = Array[Byte]
 
@@ -16,6 +18,7 @@ trait KVStore extends AutoCloseable {
   def get(key: K): Option[V] =
     Option(db.get(key))
 
+  //todo: getAll used in tests only, remove
   def getAll(cond: (K, V) => Boolean): Seq[(K, V)] = {
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
@@ -35,6 +38,8 @@ trait KVStore extends AutoCloseable {
       ro.snapshot().close()
     }
   }
+
+  def getAll: Seq[(K, V)] = getAll((_, _) => true)
 
   def getRange(start: K, end: K): Seq[(K, V)] = {
     val ro = new ReadOptions()
@@ -62,8 +67,6 @@ trait KVStore extends AutoCloseable {
       ro.snapshot().close()
     }
   }
-
-  def getAll: Seq[(K, V)] = getAll((_, _) => true)
 
   def getOrElse(key: K, default: => V): V =
     get(key).getOrElse(default)

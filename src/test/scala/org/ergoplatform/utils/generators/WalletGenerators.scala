@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning._
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.wallet.boxes.{TrackedBox}
+import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Gen
 
@@ -101,7 +101,7 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
       // uncertain <- Gen.listOf(boxIdGen)
     } yield {
       val encodedBalances = balances.map { case (x1, x2) => encodedTokenId(x1) -> x2 }.toMap
-      RegistryDigest(height, amount, encodedBalances, Map.empty, Map.empty, Map.empty)
+      RegistryDigest(height, amount, encodedBalances)
     }
   }
 

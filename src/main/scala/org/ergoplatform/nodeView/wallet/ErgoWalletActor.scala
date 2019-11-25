@@ -253,7 +253,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
     case GetTransactions =>
-      sender() ! registry.getAllWalletTxs()
+      sender() ! registry.allWalletTxs()
         .sortBy(-_.inclusionHeight)
         .map(tx => AugWalletTransaction(tx, height - tx.inclusionHeight))
 

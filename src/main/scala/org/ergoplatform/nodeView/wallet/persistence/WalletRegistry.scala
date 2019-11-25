@@ -95,7 +95,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
   }
 
   //todo: filter by application
-  def getAllWalletTxs(): Seq[WalletTransaction] = {
+  def allWalletTxs(): Seq[WalletTransaction] = {
     store.getRange(FirstTxSpaceKey, LastTxSpaceKey)
       .flatMap { case (_, txBytes) =>
         WalletTransactionSerializer.parseBytesTry(txBytes).toOption
@@ -129,7 +129,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
 
     val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
 
-    val bag4 = updateDigest(bag3) { case RegistryDigest(height, wBalance, wTokens, aBalances, aTokens, appUncertain) =>
+    val bag4 = updateDigest(bag3) { case RegistryDigest(height, wBalance, wTokens) =>
       val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.map(_._1).contains(1: Short))
       val spentAmt = spentWalletBoxes.map(_.box.value).sum
       val spentTokensAmt = spentWalletBoxes
@@ -158,7 +158,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
       require(
         (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
         "Balance could not be negative")
-      RegistryDigest(blockHeight, newBalance, newTokensBalance, aBalances, aTokens, appUncertain)
+      RegistryDigest(blockHeight, newBalance, newTokensBalance)
     }
 
     bag4.transact(store, idToBytes(blockId))
@@ -207,15 +207,15 @@ object WalletRegistry {
   }
 
 
-  private val BoxKeyPrefix: Byte = 0x00
-  private val TxKeyPrefix: Byte = 0x01
-  private val AppBoxIndexPrefix: Byte = 0x02
-  private val SpentAppBoxIndexPrefix: Byte = 0x03
+  private val BoxKeyPrefix: Byte = 0x01
+  private val TxKeyPrefix: Byte = 0x02
+  private val AppBoxIndexPrefix: Byte = 0x03
+  private val SpentAppBoxIndexPrefix: Byte = 0x04
 
-  private val UncertainAppBoxIndexPrefix: Byte = 0x04
-  private val CertainAppBoxIndexPrefix: Byte = 0x05
+  private val UncertainAppBoxIndexPrefix: Byte = 0x05
+  private val CertainAppBoxIndexPrefix: Byte = 0x06
 
-  private val InclusionHeightAppBoxPrefix: Byte = 0x06
+  private val InclusionHeightAppBoxPrefix: Byte = 0x07
 
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
   private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)

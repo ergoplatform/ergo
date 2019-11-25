@@ -10,11 +10,14 @@ import scala.util.{Failure, Success, Try}
 /**
   * A LevelDB wrapper providing additional versioning layer along with a convenient db interface.
   */
-final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends KVStore {
+class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends KVStore {
 
   import VersionedLDBKVStore.VersionId
 
-  val VersionsKey: Array[Byte] = Algos.hash("versions")
+  override val firstUnusedPrefix: Byte = 1
+
+  private val VersionPrefix = 0: Byte
+  val VersionsKey: Array[Byte] = VersionPrefix +: Algos.hash("versions")
 
   val ChangeSetPrefix: Byte = 0x16
 
@@ -133,5 +136,7 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
 }
 
 object VersionedLDBKVStore {
+
   type VersionId = Array[Byte]
+
 }

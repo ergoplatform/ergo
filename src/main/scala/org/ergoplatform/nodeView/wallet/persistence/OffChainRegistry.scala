@@ -25,7 +25,7 @@ final case class OffChainRegistry(height: Int,
       .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
         acc.updated(id, acc.getOrElse(id, 0L) + amt)
       }
-    RegistryDigest(height, balance, tokensBalance, Map.empty, Map.empty, Map.empty) //todo: provide app data here?
+    RegistryDigest(height, balance, tokensBalance)
   }
 
   /**

@@ -87,22 +87,29 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         .map(app => app.appId -> BoxCertainty.Uncertain)
 
       val miningIncomeTriggered = miningScriptsBytes.exists(ms => bx.propositionBytes.sameElements(ms))
-      val paymentsTriggered = trackedBytes.exists(bs => bx.propositionBytes.sameElements(bs))
 
-      lazy val paymentStatus = PaymentsAppId -> BoxCertainty.Certain
 
-      //tweak for tests and possibly networks with no miner reward delay
+      //tweak for tests
       lazy val miningStatus = if (settings.chainSettings.monetary.minerRewardDelay > 0) {
         MiningRewardsQueueId -> BoxCertainty.Uncertain
       } else {
         PaymentsAppId -> BoxCertainty.Certain
       }
 
-      val statuses = (paymentsTriggered, miningIncomeTriggered) match {
-        case (true, true) => Seq(paymentStatus, miningStatus) ++ appsTriggered
-        case (true, false) => paymentStatus +: appsTriggered
-        case (false, true) => miningStatus +: appsTriggered
-        case (false, false) => appsTriggered
+      val prePaymentStatuses = if(miningIncomeTriggered) {
+        miningStatus +: appsTriggered
+      } else appsTriggered
+
+      val statuses = if(prePaymentStatuses.nonEmpty){
+        prePaymentStatuses
+      } else {
+        val paymentsTriggered = trackedBytes.exists(bs => bx.propositionBytes.sameElements(bs))
+
+        if(paymentsTriggered){
+          Seq(PaymentsAppId -> BoxCertainty.Certain)
+        } else {
+          Seq.empty
+        }
       }
 
       if (statuses.nonEmpty) {

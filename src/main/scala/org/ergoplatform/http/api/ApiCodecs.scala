@@ -89,7 +89,7 @@ trait ApiCodecs extends JsonCodecs {
       "creationOutIndex" -> box.creationOutIndex.asJson,
       "inclusionHeight" -> box.inclusionHeightOpt.asJson,
       "spendingHeight" -> box.spendingHeightOpt.asJson,
-      "applications" -> box.applicationStatuses.asJson,
+      "applications" -> box.applicationStatuses.toSeq.asJson,
       "box" -> box.box.asJson
     )
 

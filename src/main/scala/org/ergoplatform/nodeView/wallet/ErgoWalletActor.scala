@@ -85,30 +85,29 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     tx.outputs.flatMap { bx =>
       val appsTriggered = externalApplications.filter(_.trackingRule.filter(bx))
         .map(app => app.appId -> BoxCertainty.Uncertain)
+        .toMap
 
       val miningIncomeTriggered = miningScriptsBytes.exists(ms => bx.propositionBytes.sameElements(ms))
 
 
       //tweak for tests
-      lazy val miningStatus = if (settings.chainSettings.monetary.minerRewardDelay > 0) {
+      lazy val miningStatus: (AppId, BoxCertainty) = if (settings.chainSettings.monetary.minerRewardDelay > 0) {
         MiningRewardsQueueId -> BoxCertainty.Uncertain
       } else {
         PaymentsAppId -> BoxCertainty.Certain
       }
 
-      val prePaymentStatuses = if(miningIncomeTriggered) {
-        miningStatus +: appsTriggered
-      } else appsTriggered
+      val prePaymentStatuses = if(miningIncomeTriggered) appsTriggered + miningStatus else appsTriggered
 
-      val statuses = if(prePaymentStatuses.nonEmpty){
+      val statuses: Map[AppId, BoxCertainty] = if(prePaymentStatuses.nonEmpty){
         prePaymentStatuses
       } else {
         val paymentsTriggered = trackedBytes.exists(bs => bx.propositionBytes.sameElements(bs))
 
         if(paymentsTriggered){
-          Seq(PaymentsAppId -> BoxCertainty.Certain)
+          Map(PaymentsAppId -> BoxCertainty.Certain)
         } else {
-          Seq.empty
+          Map.empty
         }
       }
 
@@ -133,7 +132,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     val resolvedBoxes = registry.uncertainBoxes(MiningRewardsQueueId).flatMap { tb =>
       //todo: more efficient resolving, just by height
-      if (resolve(tb.box)) Some(tb.copy(applicationStatuses = Seq(PaymentsAppId -> BoxCertainty.Certain))) else None
+      if (resolve(tb.box)) Some(tb.copy(applicationStatuses = Map(PaymentsAppId -> BoxCertainty.Certain))) else None
     }
 
     //outputs, input ids, related transactions
@@ -467,7 +466,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def boxesToFakeTracked(inputs: Seq[ErgoBox]): Iterator[TrackedBox] = {
     inputs
       .map { box => // declare fake inclusion height in order to confirm the box is onchain
-        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, Seq(PaymentsAppId -> BoxCertainty.Certain))
+        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, Map(PaymentsAppId -> BoxCertainty.Certain))
       }
       .toIterator
   }

@@ -23,11 +23,11 @@ class WalletRegistrySpec
   def createStore: Store = new LSMStore(createTempDir)
 
   private val emptyBag = KeyValuePairsBag.empty
-  val walletBoxStatus = Seq(PaymentsAppId -> BoxCertainty.Certain)
+  val walletBoxStatus = Map(PaymentsAppId -> BoxCertainty.Certain)
 
   it should "read unspent wallet boxes" in {
     forAll(trackedBoxGen) { box =>
-      withVersionedStore(10) { store =>
+      withHybridStore(10) { store =>
         val unspentBox = box.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applicationStatuses = walletBoxStatus)
         WalletRegistry.putBox(emptyBag, unspentBox).transact(store)
 
@@ -40,7 +40,7 @@ class WalletRegistrySpec
   it should "read spent wallet boxes" in {
     forAll(trackedBoxGen) { box =>
       forAll(modifierIdGen) {txId =>
-        withVersionedStore(10) { store =>
+        withHybridStore(10) { store =>
           val uncertainBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), applicationStatuses = walletBoxStatus)
           WalletRegistry.putBox(emptyBag, uncertainBox).transact(store)
           val registry = new WalletRegistry(store)(settings.walletSettings)
@@ -52,7 +52,7 @@ class WalletRegistrySpec
 
   it should "read wallet transactions" in {
     forAll(walletTransactionGen) { wtx =>
-      withVersionedStore(10) { store =>
+      withHybridStore(10) { store =>
         WalletRegistry.putTx(emptyBag, wtx).transact(store)
         val registry = new WalletRegistry(store)(settings.walletSettings)
 
@@ -65,7 +65,7 @@ class WalletRegistrySpec
     val ws = settings.walletSettings.copy(keepSpentBoxes = true)
     val spendingHeight = 0
     forAll(Gen.nonEmptyListOf(trackedBoxGen), modifierIdGen) { (boxes, txId) =>
-      withVersionedStore(10) { store =>
+      withHybridStore(10) { store =>
         val unspentBoxes = boxes.map(
           _.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applicationStatuses = walletBoxStatus))
         val transitedBoxes = unspentBoxes.map(
@@ -81,7 +81,7 @@ class WalletRegistrySpec
 
   it should "updateOnBlock() in correct way - only outputs" in {
     forAll(Gen.nonEmptyListOf(trackedBoxGen)) { boxes =>
-      withVersionedStore(10) { store =>
+      withHybridStore(10) { store =>
         val registry = new WalletRegistry(store)(settings.walletSettings)
         val blockId = modifierIdGen.sample.get
         val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applicationStatuses = walletBoxStatus))

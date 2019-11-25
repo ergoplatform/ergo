@@ -140,14 +140,14 @@ trait Generators {
     seed <- Gen.const(Constants.KeyLen).map(scorex.utils.Random.randomBytes)
   } yield ExtendedSecretKey.deriveMasterKey(seed)
 
-  def appStatusesGen: Gen[Seq[(Short, BoxCertainty)]] = {
+  def appStatusesGen: Gen[Map[Short, BoxCertainty]] = {
     Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.toSet.toSeq).flatMap { appIds =>
       Gen.listOfN(appIds.length, Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)).map { certainities =>
         appIds.zip(certainities)
       }
     }.map(_.map { case (appId, certainty) =>
       appId -> (if (appId == PaymentsAppId) BoxCertainty.Certain else certainty)
-    })
+    }.toMap)
   }
 
 

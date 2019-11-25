@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSer
 import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
 import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.Constants
-import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
+import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox, TrackedBoxSerializer}
 import org.iq80.leveldb.Options
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
@@ -143,7 +143,7 @@ final class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends 
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
 
-      val increasedTokenBalances = receivedTokensAmt.foldLeft(wTokens){ case (acc, (encodedId, amt)) =>
+      val increasedTokenBalances = receivedTokensAmt.foldLeft(wTokens) { case (acc, (encodedId, amt)) =>
         acc.updated(encodedId, acc.getOrElse(encodedId, 0L) + amt)
       }
 
@@ -185,6 +185,42 @@ final class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends 
     }
   }
 
+  def makeCertain(boxId: BoxId, appId: AppId): Try[Unit] = {
+    getBox(boxId) match {
+      case Some(tb) => tb.applicationStatuses.get(appId).map { _ =>
+        val updTb = tb.copy(applicationStatuses = tb.applicationStatuses.updated(appId, BoxCertainty.Certain))
+
+        store.cachePut(Seq(boxToKvPair(updTb), certaintyKey(appId, updTb) -> boxId))
+        Success((): Unit)
+      }.getOrElse(Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId")))
+
+      case None => Failure(new Exception(s"No box with id ${Algos.encode(boxId)} found in the wallet database"))
+    }
+  }
+
+  def removeApp(boxId: BoxId, appId: AppId): Try[Unit] = {
+    getBox(boxId) match {
+      case Some(tb) =>
+        (if (tb.applicationStatuses.size == 1) {
+          tb.applicationStatuses.get(appId).map { _ =>
+            val bag = WalletRegistry.removeBox(KeyValuePairsBag.empty, tb)
+            Success(bag)
+          }.getOrElse(Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId")))
+        } else {
+          tb.applicationStatuses.get(appId).map { _ =>
+            val updTb = tb.copy(applicationStatuses = tb.applicationStatuses - appId)
+            Success(KeyValuePairsBag(Seq(boxToKvPair(updTb)), Seq(spentIndexKey(appId, updTb),
+              certaintyKey(appId, updTb),
+              inclusionHeightAppBoxIndexKey(appId, updTb))))
+          }.getOrElse(Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId")))
+        }).map { bag =>
+          store.cachePut(bag.toInsert)
+          store.cacheRemove(bag.toRemove)
+        }
+
+      case None => Failure(new Exception(s"No box with id ${Algos.encode(boxId)} found in the wallet database"))
+    }
+  }
 }
 
 object WalletRegistry {
@@ -221,25 +257,30 @@ object WalletRegistry {
   private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)
 
   private def firstAppBoxSpaceKey(appId: AppId): Array[Byte] = UnspentIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
+
   private def lastAppBoxSpaceKey(appId: AppId): Array[Byte] = UnspentIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
 
   private def firstSpentAppBoxSpaceKey(appId: AppId): Array[Byte] =
     SpentIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
+
   private def lastSpentAppBoxSpaceKey(appId: AppId): Array[Byte] =
     SpentIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
 
   private def firstUncertainAppBoxSpaceKey(appId: AppId): Array[Byte] =
     UncertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
+
   private def lastUncertainAppBoxSpaceKey(appId: AppId): Array[Byte] =
     UncertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
 
   private def firstCertainAppBoxSpaceKey(appId: AppId): Array[Byte] =
     CertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
+
   private def lastCertainAppBoxSpaceKey(appId: AppId): Array[Byte] =
     CertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
 
   private def firstIncludedAppBoxSpaceKey(appId: AppId, height: Int): Array[Byte] =
     UnspentIndexPrefix +: (Shorts.toByteArray(appId) ++ Ints.toByteArray(height) ++ Array.fill(32)(0: Byte))
+
   private def lastIncludedAppBoxSpaceKey(appId: AppId): Array[Byte] =
     UnspentIndexPrefix +: (Shorts.toByteArray(appId) ++ Ints.toByteArray(Int.MaxValue) ++ Array.fill(32)(-1: Byte))
 

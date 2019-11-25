@@ -209,8 +209,8 @@ object WalletRegistry {
 
   private val BoxKeyPrefix: Byte = 0x01
   private val TxKeyPrefix: Byte = 0x02
-  private val AppBoxIndexPrefix: Byte = 0x03
-  private val SpentAppBoxIndexPrefix: Byte = 0x04
+  private val UnspentIndexPrefix: Byte = 0x03
+  private val SpentIndexPrefix: Byte = 0x04
 
   private val UncertainAppBoxIndexPrefix: Byte = 0x05
   private val CertainAppBoxIndexPrefix: Byte = 0x06
@@ -220,13 +220,13 @@ object WalletRegistry {
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
   private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)
 
-  private def firstAppBoxSpaceKey(appId: AppId): Array[Byte] = AppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
-  private def lastAppBoxSpaceKey(appId: AppId): Array[Byte] = AppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
+  private def firstAppBoxSpaceKey(appId: AppId): Array[Byte] = UnspentIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
+  private def lastAppBoxSpaceKey(appId: AppId): Array[Byte] = UnspentIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
 
   private def firstSpentAppBoxSpaceKey(appId: AppId): Array[Byte] =
-    SpentAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
+    SpentIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
   private def lastSpentAppBoxSpaceKey(appId: AppId): Array[Byte] =
-    SpentAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
+    SpentIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
 
   private def firstUncertainAppBoxSpaceKey(appId: AppId): Array[Byte] =
     UncertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
@@ -239,9 +239,9 @@ object WalletRegistry {
     CertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
 
   private def firstIncludedAppBoxSpaceKey(appId: AppId, height: Int): Array[Byte] =
-    AppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Ints.toByteArray(height) ++ Array.fill(32)(0: Byte))
+    UnspentIndexPrefix +: (Shorts.toByteArray(appId) ++ Ints.toByteArray(height) ++ Array.fill(32)(0: Byte))
   private def lastIncludedAppBoxSpaceKey(appId: AppId): Array[Byte] =
-    AppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Ints.toByteArray(Int.MaxValue) ++ Array.fill(32)(-1: Byte))
+    UnspentIndexPrefix +: (Shorts.toByteArray(appId) ++ Ints.toByteArray(Int.MaxValue) ++ Array.fill(32)(-1: Byte))
 
   private val RegistrySummaryKey: Array[Byte] = Array(0x02: Byte)
 
@@ -255,8 +255,8 @@ object WalletRegistry {
 
   private def txToKvPair(tx: WalletTransaction) = txKey(tx.id) -> WalletTransactionSerializer.toBytes(tx)
 
-  private def appBoxIndexKey(appId: AppId, trackedBox: TrackedBox): Array[Byte] = {
-    val prefix = if (trackedBox.spent) SpentAppBoxIndexPrefix else AppBoxIndexPrefix
+  private def spentIndexKey(appId: AppId, trackedBox: TrackedBox): Array[Byte] = {
+    val prefix = if (trackedBox.spent) SpentIndexPrefix else UnspentIndexPrefix
     prefix +: (Shorts.toByteArray(appId) ++ trackedBox.box.id)
   }
 
@@ -274,7 +274,7 @@ object WalletRegistry {
   def putBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
     val appIndexUpdates = box.applicationStatuses.flatMap { case (appId, _) =>
       Seq(
-        appBoxIndexKey(appId, box) -> box.box.id,
+        spentIndexKey(appId, box) -> box.box.id,
         certaintyKey(appId, box) -> box.box.id, //todo: avoid for simple payments app
         inclusionHeightAppBoxIndexKey(appId, box) -> box.box.id
       )
@@ -289,7 +289,7 @@ object WalletRegistry {
 
   def removeBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
     val appIndexUpdates = box.applicationStatuses.flatMap { case (appId, _) =>
-      Seq(appBoxIndexKey(appId, box), certaintyKey(appId, box), inclusionHeightAppBoxIndexKey(appId, box))
+      Seq(spentIndexKey(appId, box), certaintyKey(appId, box), inclusionHeightAppBoxIndexKey(appId, box))
     }
     val ids = appIndexUpdates :+ key(box)
 

@@ -162,15 +162,27 @@ In this view, Ergo is a special instance of a non-outsourceable puzzle of~\cite{
 
 \subsection{Overview of Execution Context in Ergo}
 
-To give understanding of how a smart contract can bypass non-outsourceability, we first explain what data the contract
+To give understanding of how a smart contract can bypass non-outsourceability, we first explain what kind of data the contract
 can access.
 
-In Proof-of-Work currencies a block is split usually into sections, with a compact section called {\em header}
+In Proof-of-Work currencies a block is split usually into sections, with a compact section called {\em header} which is
+enough to verify Proof-of-Work puzzle solution and also to check integrity of other sections (such as block transactions).
+
+Execution context is what available to a contract during execution. Considering UTXO-based cryptocurrencies, such as
+Bitcoin and Ergo, we can think about following components of the execution context. In the first place, smart contract
+ may have access to the UTXO it is locking (e.g. monetary value of the UTXO). In the second place, smart contract may
+ have access to the spending transaction with its inputs and outputs. In the third place, smart contract may have access
+ to block header data. For example, in Ergo last ten block headers and also parts of the next block header which could
+ be known to the miner before starting mining of the new block do belong to the execution context. Finally, execution
+ context may contain the full block with all its transactions. Please note, as execution context must be fit into
+ random-access memory of commodity hardware, accessing full blockchain is not the realistic case. Table \ref{???}
+ summarizing possible execution context components.
+
 
 \begin{tabular}{llllllll}
-	& Level & Box & Transaction & Block-Solution & Block & Example\\\hline
-	& 1     & Yes & No          & No  		   & No    & Bitcoin \\
-	& 2     & Yes & Yes         & No 		   & No    & --    \\
+	& Level & UTXO & Transaction & Header      & Block & Example \\ \hline
+	& 1     & No  & No          & No  		   & No    & Bitcoin \\
+	& 2     & Yes & Yes         & No 		   & No    & -- \\
 	& 3     & Yes & Yes         & Yes 		   & No    & Ergo    \\
 	& 4     & Yes & Yes         & Yes 		   & Yes   & --    \\
 \end{tabular}

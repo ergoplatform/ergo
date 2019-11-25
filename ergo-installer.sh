@@ -6,14 +6,15 @@ APP_DIR=~/Ergo
 NODE_NAME=${USER}-$(hostname)
 API_KEY=
 INSTALLATION_RECOMMENDATIONS=
-USE_TOR=no
-USE_DAEMON=no
+TOR=no
 CONFIG_TEMPLATE="ergo.node.mining = false\nscorex.network.nodeName = \"<NODE_NAME>\"\nscorex.restApi.apiKeyHash = \"<API_KEY_HASH>\""
+NODE_PARAMS="-Xmx$(awk '/MemTotal/ { printf "%.0f", $2*0.9 }' /proc/meminfo)K"
+
 
 while :; do
     case $1 in
         -h|-\?|--help)
-            echo "Usage: $0 --api-key=YOUR_API_KEY [--node-name=YOUR_NODE_NAME] [--app-dir=APP_DIR] [--daemon] [--tor]"
+            echo "Usage: $0 --api-key=YOUR_API_KEY [--node-name=YOUR_NODE_NAME] [--app-dir=APP_DIR] [--tor]"
             exit
             ;;
 
@@ -68,12 +69,8 @@ while :; do
             exit 1
             ;;
 
-        --daemon)
-            USE_DAEMON=yes
-            ;;
-
         --tor)
-            USE_TOR=yes
+            TOR=yes
             ;;
 
         --)              # End of all options.
@@ -91,7 +88,7 @@ while :; do
 done
 
 if [ -z "${API_KEY}" ]; then
-  echo 'ERROR: "--api-key" is requiered and requires a non-empty option argument.'
+  echo 'ERROR: "--api-key" is required and requires a non-empty option argument.'
   exit 1
 fi
 
@@ -115,11 +112,13 @@ if [ $? != 0 ]; then
   INSTALLATION_RECOMMENDATIONS="${INSTALLATION_RECOMMENDATIONS}\nsudo apt install daemon"
 fi
 
-if [ "${USE_TOR}" != "no" ]; then
+if [ "${TOR}" != "no" ]; then
   which tor > /dev/null
   if [ $? != 0 ]; then
     INSTALLATION_RECOMMENDATIONS="${INSTALLATION_RECOMMENDATIONS}\nsudo apt install tor"
   fi
+  NODE_PARAMS="${NODE_PARAMS} -DsocksProxyHost=localhost -DsocksProxyPort=9050"
+  CONFIG_TEMPLATE="${CONFIG_TEMPLATE}\nscorex.network.bindAddress = \"127.0.0.1:9030\"\nscorex.restApi.bindAddress = \"127.0.0.1:9053\""
 fi
 
 if [ -n "${INSTALLATION_RECOMMENDATIONS}" ]; then
@@ -147,7 +146,7 @@ LATEST_ERGO_RELEASE=$(curl --silent "https://api.github.com/repos/ergoplatform/e
 LATEST_ERGO_RELEASE_NUMBERS=$(echo ${LATEST_ERGO_RELEASE} | cut -c 2-)
 ERGO_DOWNLOAD_URL=https://github.com/ergoplatform/ergo/releases/download/${LATEST_ERGO_RELEASE}/ergo-${LATEST_ERGO_RELEASE_NUMBERS}.jar
 echo "Latest known Ergo release: ${LATEST_ERGO_RELEASE}, downloading it to ${APP_DIR}/ergo.jar with overwrite..."
-curl --silent -L ${ERGO_DOWNLOAD_URL} --output ${APP_DIR}/ergo.jar
+#curl --silent -L ${ERGO_DOWNLOAD_URL} --output ${APP_DIR}/ergo.jar
 echo "Ergo was downloaded to ${APP_DIR}/ergo.jar"
 
 # First run of Ergo node, to create API key hash that later be added into config
@@ -164,11 +163,11 @@ echo "\nStopped."
 
 # Writing config file
 echo ${CONFIG_TEMPLATE} | sed "s/<NODE_NAME>/${NODE_NAME}/g" | sed "s/<API_KEY_HASH>/${API_KEY_HASH}/g" > ${APP_DIR}/application.conf
-echo "Config file writed to ${APP_DIR}/application.conf"
+echo "Config file was written to ${APP_DIR}/application.conf"
 
 # Start node with config
 echo -n "Starting node..."
-daemon --chdir=${APP_DIR} -- java -jar ${APP_DIR}/ergo.jar --mainnet -c ${APP_DIR}/application.conf
+daemon --chdir=${APP_DIR} -- java ${NODE_PARAMS} -jar ${APP_DIR}/ergo.jar --mainnet -c ${APP_DIR}/application.conf
 PID=$(pgrep -f "daemon --chdir=${APP_DIR} -- java")
 while ! curl --output /dev/null --silent --head --fail http://localhost:9053; do sleep 1 && echo -n '.'; done;
 echo "\nNode started."

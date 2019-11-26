@@ -15,7 +15,7 @@ import scala.util.Try
  * And ergo application (mostly tests) quit frequently doesn't not explicitly close
  * database and tries to reopen it.
  */
-case class StoreRegistry(val factory : DBFactory) extends DBFactory {
+case class StoreRegistry(val factory : DBFactory) extends DBFactory with ScorexLogging {
 
   val lock = new ReentrantReadWriteLock()
   val map = new mutable.HashMap[File, RegisteredDB]
@@ -89,6 +89,12 @@ case class StoreRegistry(val factory : DBFactory) extends DBFactory {
     lock.writeLock().lock()
     try {
       add(path, factory.open(path, options))
+	} catch {
+	  case x: Throwable => {
+        log.error(s"Failed to initialize storage: ${x}. Please check that directory ${path} exists and is not used by some other active node")
+        java.lang.System.exit(2)
+		null
+      }
     } finally {
       lock.writeLock().unlock()
     }

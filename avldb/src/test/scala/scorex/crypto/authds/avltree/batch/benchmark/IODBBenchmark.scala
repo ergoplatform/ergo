@@ -1,6 +1,6 @@
 package scorex.crypto.authds.avltree.batch.benchmark
 
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
+import io.iohk.iodb.ByteArrayWrapper
 import scorex.crypto.authds.avltree.batch.helpers.FileHelper
 import scorex.utils.Random
 import scorex.db.LDBVersionedStore

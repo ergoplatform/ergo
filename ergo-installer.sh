@@ -9,12 +9,13 @@ INSTALLATION_RECOMMENDATIONS=
 TOR=no
 CONFIG_TEMPLATE="ergo.node.mining = false\nscorex.network.nodeName = \"<NODE_NAME>\"\nscorex.restApi.apiKeyHash = \"<API_KEY_HASH>\""
 NODE_PARAMS="-Xmx$(awk '/MemTotal/ { printf "%.0f", $2*0.9 }' /proc/meminfo)K"
+MODE=full
 
 
 while :; do
     case $1 in
         -h|-\?|--help)
-            echo "Usage: $0 --api-key=YOUR_API_KEY [--node-name=YOUR_NODE_NAME] [--app-dir=APP_DIR] [--tor]"
+            echo "Usage: $0 --api-key=YOUR_API_KEY [--node-name=YOUR_NODE_NAME] [--app-dir=APP_DIR] [--mode=full|mining] [--tor]"
             exit
             ;;
 
@@ -69,6 +70,23 @@ while :; do
             exit 1
             ;;
 
+        --mode)
+            if [ "$2" ]; then
+                MODE=$2
+                shift
+            else
+                echo 'ERROR: "--mode" requires a non-empty option argument.'
+                exit 1
+            fi
+            ;;
+        --mode=?*)
+            MODE=${1#*=} # Delete everything up to "=" and assign the remainder.
+            ;;
+        --mode=)         # Handle the case of an empty --mode=
+            echo 'ERROR: "--mode" requires a non-empty option argument.'
+            exit 1
+            ;;
+
         --tor)
             TOR=yes
             ;;
@@ -89,6 +107,11 @@ done
 
 if [ -z "${API_KEY}" ]; then
   echo 'ERROR: "--api-key" is required and requires a non-empty option argument.'
+  exit 1
+fi
+
+if [ "${MODE}" != 'full' ] && [ "${MODE}" != 'mining' ]; then
+  echo 'ERROR: "--mode" requires a non-empty option argument that can be "full" or "mining" only.'
   exit 1
 fi
 
@@ -146,7 +169,7 @@ LATEST_ERGO_RELEASE=$(curl --silent "https://api.github.com/repos/ergoplatform/e
 LATEST_ERGO_RELEASE_NUMBERS=$(echo ${LATEST_ERGO_RELEASE} | cut -c 2-)
 ERGO_DOWNLOAD_URL=https://github.com/ergoplatform/ergo/releases/download/${LATEST_ERGO_RELEASE}/ergo-${LATEST_ERGO_RELEASE_NUMBERS}.jar
 echo "Latest known Ergo release: ${LATEST_ERGO_RELEASE}, downloading it to ${APP_DIR}/ergo.jar with overwrite..."
-#curl --silent -L ${ERGO_DOWNLOAD_URL} --output ${APP_DIR}/ergo.jar
+curl --silent -L ${ERGO_DOWNLOAD_URL} --output ${APP_DIR}/ergo.jar
 echo "Ergo was downloaded to ${APP_DIR}/ergo.jar"
 
 # First run of Ergo node, to create API key hash that later be added into config
@@ -163,6 +186,9 @@ echo "\nStopped."
 
 # Writing config file
 echo ${CONFIG_TEMPLATE} | sed "s/<NODE_NAME>/${NODE_NAME}/g" | sed "s/<API_KEY_HASH>/${API_KEY_HASH}/g" > ${APP_DIR}/application.conf
+if [ "${MODE}" = 'mining' ]; then
+  sed -i 's/mining = false/mining = true/g' ${APP_DIR}/application.conf
+fi
 echo "Config file was written to ${APP_DIR}/application.conf"
 
 # Start node with config

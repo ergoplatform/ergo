@@ -1,6 +1,6 @@
 package scorex.crypto.authds.avltree.batch.helpers
 
-import io.iohk.iodb.{LSMStore, QuickStore, Store}
+import io.iohk.iodb.{QuickStore, Store}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.util.encode.Base58

@@ -142,6 +142,10 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store 
     versions.reverse
   }
 
+  /**
+	* Undo action. To implement recovery to the specified version, we store in the separate undo database
+	* sequence of undo operations corresponding to the updates done by the committed transactions.
+	*/
   case class Undo(versionID: VersionID, key: Array[Byte], value : Array[Byte])
 
   private def serializeUndo(versionID: VersionID, key: Array[Byte], value : Array[Byte]): Array[Byte] = {

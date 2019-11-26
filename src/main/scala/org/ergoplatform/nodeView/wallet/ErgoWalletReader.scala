@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
@@ -98,4 +99,11 @@ trait ErgoWalletReader extends VaultReader {
 
   def readApplications(): Future[Seq[ExternalApplication]] =
     (walletActor ? ReadApplications).mapTo[Seq[ExternalApplication]]
+
+  def makeCertain(appId: AppId, boxId: BoxId): Future[Try[Unit]] =
+    (walletActor ? MakeCertain(appId, boxId)).mapTo[Try[Unit]]
+
+  def stopTracking(appId: AppId, boxId: BoxId): Future[Try[Unit]] =
+    (walletActor ? StopTracking(appId, boxId)).mapTo[Try[Unit]]
+
 }

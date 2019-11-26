@@ -1,25 +1,19 @@
 package org.ergoplatform.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.{Directive, Directive1, Route}
+import akka.http.scaladsl.server.Route
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
 import org.ergoplatform.http.api.{ApiCodecs, WalletApiOperations}
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.nodeView.wallet.scanning.ExternalAppRequest
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import scorex.core.api.http.ApiError.{BadRequest, NotExists}
+import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 
-import scala.concurrent.Future
-import scala.concurrent.duration._
 import scala.util.{Failure, Success}
-import WalletBox.encoder
 import scorex.crypto.authds.ADKey
 
 /**
@@ -42,7 +36,11 @@ final case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: Ergo
   override val route: Route = (pathPrefix("application") & withAuth) {
     registerR ~
       deregisterR ~
-      listR
+      listR ~
+      uncertainR ~
+      unspentR ~
+      makeCertainR ~
+      stopTrackingR
   }
 
   def deregisterR: Route = (path("deregister" / IntNumber) & get) {idInt =>

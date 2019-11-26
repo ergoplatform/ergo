@@ -53,7 +53,9 @@ final class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends 
   def unspentBoxes(appId: AppId): Seq[TrackedBox] = {
     store.getRange(firstAppBoxSpaceKey(appId), lastAppBoxSpaceKey(appId))
       .flatMap { case (_, boxId) =>
-        getBox(ADKey @@ boxId)
+        getBox(ADKey @@ boxId).flatMap{b =>
+          if(b.applicationStatuses(appId).certain) Some(b) else None
+        }
       }
   }
 

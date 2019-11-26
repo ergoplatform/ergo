@@ -185,7 +185,7 @@ final class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends 
     }
   }
 
-  def makeCertain(boxId: BoxId, appId: AppId): Try[Unit] = {
+  def makeCertain(appId: AppId, boxId: BoxId): Try[Unit] = {
     getBox(boxId) match {
       case Some(tb) => tb.applicationStatuses.get(appId).map { _ =>
         val updTb = tb.copy(applicationStatuses = tb.applicationStatuses.updated(appId, BoxCertainty.Certain))
@@ -198,7 +198,7 @@ final class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends 
     }
   }
 
-  def removeApp(boxId: BoxId, appId: AppId): Try[Unit] = {
+  def removeApp(appId: AppId, boxId: BoxId): Try[Unit] = {
     getBox(boxId) match {
       case Some(tb) =>
         (if (tb.applicationStatuses.size == 1) {

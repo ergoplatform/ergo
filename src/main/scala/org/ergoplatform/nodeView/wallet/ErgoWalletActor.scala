@@ -361,6 +361,12 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case AddApplication(appRequest) =>
       sender() ! storage.addApplication(appRequest)
+
+    case MakeCertain(appId: AppId, boxId: BoxId) =>
+      sender() ! registry.makeCertain(appId, boxId)
+
+    case StopTracking(appId: AppId, boxId: BoxId) =>
+      sender() ! registry.removeApp(appId, boxId)
   }
 
   private def withWalletLockHandler(callback: ActorRef)
@@ -691,5 +697,9 @@ object ErgoWalletActor {
   case object ReadTrackedAddresses
 
   case object ReadApplications
+
+  case class MakeCertain(appId: AppId, boxId: BoxId)
+
+  case class StopTracking(appId: AppId, boxId: BoxId)
 
 }

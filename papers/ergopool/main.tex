@@ -152,8 +152,16 @@ Non-outsourceable Scratch-Off Puzzles~\cite{miller2015nonoutsourceable}, 2-Phase
 PieceWork~\cite{daian2017short}, Autolykos~\cite{autolykos}.
 
 
-Non-outsourceability definitions could be simply split into two classes 
+Non-outsourceability definitions could be simply split into two classes. In~\cite{miller2015nonoutsourceable} it is
+assumed that a Proof-of-Work scheme is non-outsourceable if for a generated block a miner can generate another one
+efficiently with a non-negligible probability. Motivation behind this definition is that a miner can get paid for shares
+by generating trying to generate a block for the pool. In case of successful block generation, however, miner is supposedly generating
+another block for which rewards are going to the miner instead of the pool.
 
+In contrary, in works~\cite{autolykos, daian2017short, twophase} a scheme is called
+non-outsourceable if is it not possible to iterate over solution space without knowing a secret, with block rewards
+associated with a public image~(key). The reasoning here is that the pool is not trusting the miner and so will not give
+the secret away to him.
 
 
 \snote{Following is copied from PoW intro paper}

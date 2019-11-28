@@ -23,20 +23,6 @@ class WalletStorageSpec
 
   def createStore: Store = new LSMStore(createTempDir)
 
-  it should "add and read tracked addresses" in {
-    forAll(ergoAddressGen) { address =>
-      withStore { store =>
-        val storage = new WalletStorage(store, settings)
-        storage.addTrackedAddress(address)
-        storage.readTrackedAddresses shouldBe Seq(address)
-
-        val address2 = ergoAddressGen.sample.get
-        storage.addTrackedAddress(address2)
-        storage.readTrackedAddresses shouldBe Seq(address, address2)
-      }
-    }
-  }
-
   it should "add and read derivation paths" in {
     forAll(Gen.nonEmptyListOf(derivationPathGen)) { paths =>
       withStore { store =>

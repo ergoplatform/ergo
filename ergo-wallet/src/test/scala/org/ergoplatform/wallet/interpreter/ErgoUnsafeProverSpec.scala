@@ -6,8 +6,8 @@ import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.wallet.utils.Generators
 import org.ergoplatform._
 import org.scalacheck.Gen
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
-import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 import scorex.crypto.authds.ADDigest
 import scorex.util.Random
 import scorex.util.encode.Base16
@@ -22,7 +22,7 @@ import special.sigma.{Header, PreHeader}
 
 class ErgoUnsafeProverSpec
   extends FlatSpec
-    with ScalaCheckDrivenPropertyChecks
+    with GeneratorDrivenPropertyChecks
     with Matchers
     with Generators {
 

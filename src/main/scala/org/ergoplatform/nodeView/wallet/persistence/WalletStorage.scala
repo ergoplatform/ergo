@@ -6,7 +6,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerial
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication, ExternalApplicationSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress}
+import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.PaymentsAppId
@@ -25,30 +25,6 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
                          (implicit val addressEncoder: ErgoAddressEncoder) {
 
   import WalletStorage._
-
-  def addTrackedAddresses(addresses: Seq[ErgoAddress]): Unit = {
-    val updatedKeys = (readTrackedAddresses ++ addresses).toSet
-    val toInsert = Ints.toByteArray(updatedKeys.size) ++ updatedKeys
-      .foldLeft(Array.empty[Byte]) { case (acc, address) =>
-        val bytes = addressEncoder.toString(address).getBytes(Constants.StringEncoding)
-        acc ++ Ints.toByteArray(bytes.length) ++ bytes
-      }
-    store.insert(Seq(TrackedAddressesKey -> toInsert))
-  }
-
-  def addTrackedAddress(address: ErgoAddress): Unit = addTrackedAddresses(Seq(address))
-
-  def readTrackedAddresses: Seq[ErgoAddress] = store
-    .get(TrackedAddressesKey)
-    .toSeq
-    .flatMap { r =>
-      val qty = Ints.fromByteArray(r.take(4))
-      (0 until qty).foldLeft(Seq.empty[ErgoAddress], r.drop(4)) { case ((acc, bytes), _) =>
-        val length = Ints.fromByteArray(bytes.take(4))
-        val addressTry = addressEncoder.fromString(new String(bytes.slice(4, 4 + length), Constants.StringEncoding))
-        addressTry.map(acc :+ _).getOrElse(acc) -> bytes.drop(4 + length)
-      }._1
-    }
 
   def addPath(derivationPath: DerivationPath): Unit = {
     val updatedPaths = (readPaths :+ derivationPath).toSet
@@ -140,8 +116,6 @@ object WalletStorage {
   def appPrefixKey(appId: Long): Array[Byte] = ApplicationPrefixArray ++ Longs.toByteArray(appId)
 
   val StateContextKey: Array[Byte] = generalPrefixKey("state_ctx")
-
-  val TrackedAddressesKey: Array[Byte] = generalPrefixKey("tracked_pks")
 
   val SecretPathsKey: Array[Byte] = generalPrefixKey("secret_paths")
 

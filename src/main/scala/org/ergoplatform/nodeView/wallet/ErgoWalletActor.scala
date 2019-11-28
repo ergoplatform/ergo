@@ -80,7 +80,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       ErgoScriptPredef.rewardOutputScript(settings.chainSettings.monetary.minerRewardDelay, pk)
     ).map(_.bytes)
 
-    val trackedBytes: Seq[Array[Byte]] = trackedAddresses.map(_.script.bytes)
+    val trackedBytes: Seq[Array[Byte]] = proverOpt.toSeq.flatMap(_.pubKeys).map(_.propBytes.toArray)
 
     tx.outputs.flatMap { bx =>
       val appsTriggered = externalApplications.filter(_.trackingRule.filter(bx))
@@ -182,7 +182,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         val rootSk = ExtendedSecretKey.deriveMasterKey(seed)
         val childSks = walletSettings.testKeysQty.toIndexedSeq.flatMap(x => (0 until x).map(rootSk.child))
         proverOpt = Some(ErgoProvingInterpreter(rootSk +: childSks, parameters))
-        storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
       case None =>
         log.info("Trying to read wallet in secure mode ..")
         readSecretStorage.fold(
@@ -263,9 +262,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case ReadRandomPublicKey =>
       sender() ! publicKeys(Random.nextInt(publicKeys.size))
 
-    case ReadTrackedAddresses =>
-      sender() ! trackedAddresses.toIndexedSeq
-
     case ReadApplications =>
       sender() ! externalApplications
   }
@@ -320,9 +316,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case GetLockStatus =>
       sender() ! (secretStorageOpt.isDefined -> proverOpt.isDefined)
-
-    case WatchFor(address) =>
-      storage.addTrackedAddress(address)
 
     case GenerateTransaction(requests, inputsRaw) =>
       sender() ! generateTransactionWithOutputs(requests, inputsRaw)
@@ -381,8 +374,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     }
 
   private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
-
-  private def trackedAddresses: Seq[ErgoAddress] = storage.readTrackedAddresses
 
   private type FilterFn = TrackedBox => Boolean
   /**
@@ -569,7 +560,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       log.info(s"New secret created, public image: ${Base16.encode(secret.publicKey.keyBytes)}")
       val secrets = proverOpt.toIndexedSeq.flatMap(_.secretKeys) :+ secret
       proverOpt = Some(new ErgoProvingInterpreter(secrets, parameters)(prover.IR))
-      storage.addTrackedAddress(P2PKAddress(secret.publicKey.key))
       storage.addPath(secret.path)
     }
 
@@ -578,7 +568,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       secretStorage.secret.toSeq.map(_.derive(path).asInstanceOf[ExtendedSecretKey])
     }
     proverOpt = Some(ErgoProvingInterpreter(secrets, parameters))
-    storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
   }
 
   private def inputsFor(targetAmount: Long,

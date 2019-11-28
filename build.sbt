@@ -33,21 +33,21 @@ libraryDependencies ++= Seq(
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
   "org.typelevel" %% "cats-free" % "1.6.0",
-  "javax.xml.bind" % "jaxb-api" % "2.+",
-  "com.iheart" %% "ficus" % "1.4.+",
+  "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
+  "com.iheart" %% "ficus" % "1.4.7",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
   "com.joefkelley" %% "argyle" % "1.0.0",
 
-  "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
-  "org.scalactic" %% "scalactic" % "3.0.+" % "test",
+  "com.storm-enroute" %% "scalameter" % "0.9" % "test",
+  "org.scalactic" %% "scalactic" % "3.0.5" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
-  "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.14.0" % "test",
 
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % "10.1.9" % "test",
-  "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
+  "org.asynchttpclient" % "async-http-client" % "2.6.0" % "test",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test",
   "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded"
 )
@@ -221,8 +221,8 @@ lazy val ergoWallet = (project in file("ergo-wallet"))
 
 lazy val ergo = (project in file("."))
   .settings(commonSettings, name := "ergo")
-  .dependsOn(ergoWallet % "compile->compile")
-  .dependsOn(avldb % "compile->compile")
+  .dependsOn(ergoWallet % "test->test;compile->compile")
+  .dependsOn(avldb % "test->test;compile->compile")
 
 lazy val benchmarks = (project in file("benchmarks"))
   .settings(commonSettings, name := "ergo-benchmarks")

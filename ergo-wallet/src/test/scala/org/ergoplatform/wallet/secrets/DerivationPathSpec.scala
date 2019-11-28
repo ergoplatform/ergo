@@ -1,13 +1,13 @@
 package org.ergoplatform.wallet.secrets
 
 import org.ergoplatform.wallet.utils.Generators
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
-import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 class DerivationPathSpec
   extends PropSpec
     with Matchers
-    with ScalaCheckDrivenPropertyChecks
+    with GeneratorDrivenPropertyChecks
     with Generators {
 
   property("derivation from encoded path") {

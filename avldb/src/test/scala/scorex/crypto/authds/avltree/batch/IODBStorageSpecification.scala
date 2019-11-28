@@ -4,15 +4,13 @@ import com.google.common.primitives.Longs
 import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
-import org.scalatestplus.scalacheck.{ScalaCheckDrivenPropertyChecks, ScalaCheckPropertyChecks}
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.hash.Blake2b256
 
 import scala.collection.mutable.ArrayBuffer
 
 class IODBStorageSpecification extends PropSpec
-  with ScalaCheckPropertyChecks
-  with ScalaCheckDrivenPropertyChecks
+  with GeneratorDrivenPropertyChecks
   with Matchers
   with TestHelper {
 

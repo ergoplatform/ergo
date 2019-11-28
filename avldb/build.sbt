@@ -3,15 +3,15 @@ import sbt.Keys.testFrameworks
 name := "avldb"
 
 libraryDependencies ++= Seq(
-  "javax.xml.bind" % "jaxb-api" % "2.+",
+  "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "org.scorexfoundation" %% "scrypto" % "2.1.4",
   "org.scorexfoundation" %% "iodb" % "0.3.2"
 )
 
 libraryDependencies ++= Seq(
-  "org.scalatest" %% "scalatest" % "3.0.+" % "test",
-  "org.scalacheck" %% "scalacheck" % "1.13.+" % "test",
+  "org.scalatest" %% "scalatest" % "3.0.5" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.14.0" % "test",
   "com.storm-enroute" %% "scalameter" % "0.9" % "test"
 )
 
@@ -40,3 +40,9 @@ publishTo := {
 pomIncludeRepository := { _ => false }
 
 scalacOptions ++= Seq("-Xfatal-warnings", "-feature", "-deprecation")
+
+// set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
+// see https://github.com/eclipse/jetty.project/issues/3244
+// these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
+// see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
+scalacOptions in(Compile, compile) ++= Seq("-release", "8")

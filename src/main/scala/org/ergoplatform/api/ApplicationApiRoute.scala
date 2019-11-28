@@ -3,11 +3,14 @@ package org.ergoplatform.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import io.circe.syntax._
-import io.circe.{Encoder, Json}
+import io.circe.{Decoder, Encoder, HCursor, Json}
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform._
 import org.ergoplatform.http.api.{ApiCodecs, WalletApiOperations}
+import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.scanning.ExternalAppRequest
+import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
@@ -21,6 +24,55 @@ import scorex.crypto.authds.ADKey
   * See EIP-0001 (https://github.com/ergoplatform/eips/blob/master/eip-0001.md)
   */
 
+
+case class ApplicationId(appId: AppId)
+
+object ApplicationId {
+
+  implicit val applicationIdEncoder: Encoder[ApplicationId] = {appStatus =>
+    Json.obj("appId" -> appStatus.appId.asJson)
+  }
+
+  implicit val applicationIdDecoder: Decoder[ApplicationId] = { c: HCursor =>
+    for {
+      appId <- c.downField("appId").as[Short]
+    } yield ApplicationId(appId)
+  }
+
+}
+
+case class ApplicationIdBoxId(appId: AppId, boxId: BoxId)
+
+object ApplicationIdBoxId extends JsonCodecs {
+
+  implicit val applicationIdBoxIdEncoder: Encoder[ApplicationIdBoxId] = {appStatus =>
+    Json.obj("appId" -> appStatus.appId.asJson, "boxId" -> Algos.encode(appStatus.boxId).asJson)
+  }
+
+  implicit val applicationIdDecoder: Decoder[ApplicationIdBoxId] = { c: HCursor =>
+    for {
+      appId <- c.downField("appId").as[Short]
+      boxId <- c.downField("boxId").as[ADKey]
+    } yield ApplicationIdBoxId(appId, boxId)
+  }
+
+}
+
+case class ApplicationIdBox(appId: AppId, boxBytes: Array[Byte])
+
+object ApplicationIdBox extends JsonCodecs {
+
+  implicit val applicationIdDecoder: Decoder[ApplicationIdBox] = { c: HCursor =>
+    for {
+      appId <- c.downField("appId").as[Short]
+      boxBytes <- c.downField("boxBytes").as[Array[Byte]]
+    } yield ApplicationIdBox(appId, boxBytes)
+  }
+
+}
+
+
+
 final case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                           (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
 
@@ -30,8 +82,6 @@ final case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: Ergo
   implicit val walletBoxEncoder: Encoder[WalletBox] = WalletBox.encoder
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
-
-  private def encodeAppId(id: Short): Json = Json.obj("id" -> id.asJson)
 
   override val route: Route = (pathPrefix("application") & withAuth) {
     registerR ~
@@ -43,18 +93,17 @@ final case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: Ergo
       stopTrackingR
   }
 
-  def deregisterR: Route = (path("deregister" / IntNumber) & get) {idInt =>
-    val id = idInt.toShort
-    withWalletOp(_.removeApplication(id)) {
+  def deregisterR: Route = (path("deregister") & post & entity(as[ApplicationId])) {appId =>
+    withWalletOp(_.removeApplication(appId.appId)) {
       case Failure(e) => BadRequest(s"No application exists or db error: ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(_) => ApiResponse(encodeAppId(id))
+      case Success(_) => ApiResponse(appId.asJson)
     }
   }
 
   def registerR: Route = (path("register") & post & entity(as[ExternalAppRequest])) { request =>
     withWalletOp(_.addApplication(request)) {
       case Failure(e) => BadRequest(s"Bad request $request. ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(app) => ApiResponse(encodeAppId(app.appId))
+      case Success(app) => ApiResponse(ApplicationId(app.appId))
     }
   }
 
@@ -75,23 +124,22 @@ final case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: Ergo
     withWallet(_.appBoxes(appId, unspentOnly = true))
   }
 
-  def makeCertainR: Route = (path("makeCertain" / IntNumber) & modifierIdGet & get) {case (appIdInt, boxId) =>
-    val appId = appIdInt.toShort
-    withWalletOp(_.makeCertain(appId, ADKey @@ Algos.decode(boxId).get)) {
-      case Failure(e) => BadRequest(s"Bad request ($appIdInt, $boxId): ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(_) => ApiResponse(encodeAppId(appId))
+  def makeCertainR: Route = (path("makeCertain") & post & entity(as[ApplicationIdBoxId])) {appIdBoxId =>
+    withWalletOp(_.makeCertain(appIdBoxId.appId, appIdBoxId.boxId)) {
+      case Failure(e) => BadRequest(s"Bad request ($appIdBoxId): ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success(_) => ApiResponse(appIdBoxId)
     }
   }
 
-  def stopTrackingR: Route = (path("stopTracking" / IntNumber) & modifierIdGet & get) {case (appIdInt, boxId) =>
-    val appId = appIdInt.toShort
-    withWalletOp(_.stopTracking(appId, ADKey @@ Algos.decode(boxId).get)) {
-      case Failure(e) => BadRequest(s"Bad request ($appIdInt, $boxId): ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(app) => ApiResponse(encodeAppId(appId))
+  def stopTrackingR: Route = (path("stopTracking") & post & entity(as[ApplicationIdBoxId])) {appIdBoxId =>
+    withWalletOp(_.stopTracking(appIdBoxId.appId, appIdBoxId.boxId)) {
+      case Failure(e) => BadRequest(s"Bad request ($appIdBoxId): ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success(app) => ApiResponse(appIdBoxId)
     }
   }
 
 
-  //todo: add box
+
+
 
 }

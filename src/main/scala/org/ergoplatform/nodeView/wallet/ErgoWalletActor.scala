@@ -701,5 +701,5 @@ object ErgoWalletActor {
   case class MakeCertain(appId: AppId, boxId: BoxId)
 
   case class StopTracking(appId: AppId, boxId: BoxId)
-
+  
 }

@@ -7,15 +7,12 @@ import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
-import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
 import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import scorex.core.validation.ValidationResult
-import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
@@ -40,8 +37,8 @@ trait ApiCodecs extends JsonCodecs {
     } yield groupElemFromBytes(bytes)
   }
 
-  implicit val ecPointEncoder: Encoder[EcPointType] = { point:EcPointType =>
-      groupElemToBytes(point).asJson
+  implicit val ecPointEncoder: Encoder[EcPointType] = { point: EcPointType =>
+    groupElemToBytes(point).asJson
   }
 
   implicit val proveDlogEncoder: Encoder[ProveDlog] = _.pkBytes.asJson
@@ -71,7 +68,7 @@ trait ApiCodecs extends JsonCodecs {
     } yield reg
   }
 
-  implicit val applicationBoxStatusEncoder: Encoder[(Short, BoxCertainty)] = {appStatus =>
+  implicit val applicationBoxStatusEncoder: Encoder[(Short, BoxCertainty)] = { appStatus =>
     Json.obj("appId" -> appStatus._1.asJson, "certainty" -> appStatus._2.certain.asJson)
   }
 

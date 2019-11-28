@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 import java.io.File
 
 import com.google.common.primitives.{Ints, Shorts}
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.db.{HybridLDBKVStore, VersionedLDBKVStore}
@@ -211,9 +212,10 @@ final class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends 
         } else {
           tb.applicationStatuses.get(appId).map { _ =>
             val updTb = tb.copy(applicationStatuses = tb.applicationStatuses - appId)
-            Success(KeyValuePairsBag(Seq(boxToKvPair(updTb)), Seq(spentIndexKey(appId, updTb),
+            val keyToRemove = Seq(spentIndexKey(appId, updTb),
               certaintyKey(appId, updTb),
-              inclusionHeightAppBoxIndexKey(appId, updTb))))
+              inclusionHeightAppBoxIndexKey(appId, updTb))
+            Success(KeyValuePairsBag(Seq(boxToKvPair(updTb)), keyToRemove))
           }.getOrElse(Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId")))
         }).map { bag =>
           store.cachePut(bag.toInsert)

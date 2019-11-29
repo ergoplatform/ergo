@@ -23,11 +23,11 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
  */
 class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store {
   type LSN = Long // logical serial number: type used to provide order of records in undo list
-  private val db: DB = createDB(dir, "ldb_main")
-  private val undo: DB = createDB(dir, "ldb_undo")
-  private var lsn : LSN = getLastLSN
-  private var versionLsn = ArrayBuffer.empty[LSN] // var because we need to invert this array
-  private val versions : ArrayBuffer[VersionID] = getAllVersions
+  private val db: DB = createDB(dir, "ldb_main")   // storage for main data
+  private val undo: DB = createDB(dir, "ldb_undo") // storage for undo data
+  private var lsn : LSN = getLastLSN               // last assigned logical serial number
+  private var versionLsn = ArrayBuffer.empty[LSN]  // LSNs of versions (var because we need to invert this array)
+  private val versions : ArrayBuffer[VersionID] = getAllVersions // array of all kept versions
   private val writeOptions = defaultWriteOptions
   private val lock = new ReentrantReadWriteLock()
   private var lastVersion : Option[VersionID] = versions.lastOption

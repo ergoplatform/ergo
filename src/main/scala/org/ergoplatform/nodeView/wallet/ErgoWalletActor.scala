@@ -587,7 +587,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     )
 
     prover.sign(unsignedTx, inputs, IndexedSeq(), stateContext)
-      .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
+      .fold(e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputs", e)), tx => Success(tx))
   }
 
   private def processSecretAddition(secret: ExtendedSecretKey): Unit =
@@ -663,7 +663,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     if (secrets.size == 1) {
       Success(DerivationPath(Array(0, 1), publicBranch = false))
     } else {
-      nextPath(List.empty, secrets.map(_.path.decodedPath.tail))
+      nextPath(List.empty, secrets.map(_.path.decodedPath.tail.toList))
     }
   }
 

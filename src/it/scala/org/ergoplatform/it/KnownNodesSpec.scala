@@ -10,7 +10,7 @@ import scala.concurrent.duration._
 class KnownNodesSpec extends FreeSpec with IntegrationSuite {
 
   val nodeConfigs: List[Config] = nodeSeedConfigs.take(3).map(nonGeneratingPeerConfig.withFallback)
-  val nodes: List[Node] = docker.startNodes(nodeConfigs, sequentialTopologyConfig).get
+  val nodes: List[Node] = docker.startDevNetNodes(nodeConfigs, sequentialTopologyConfig).get
 
   // todo: https://github.com/ergoplatform/ergo/issues/653
   s"The third node knows first node" ignore {

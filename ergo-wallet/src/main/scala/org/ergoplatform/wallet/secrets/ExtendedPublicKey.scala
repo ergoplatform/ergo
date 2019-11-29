@@ -1,9 +1,11 @@
 package org.ergoplatform.wallet.secrets
 
+import java.util
+
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.crypto.HmacSHA512
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
 import sigmastate.interpreter.CryptoConstants
 
 /**
@@ -20,6 +22,22 @@ final class ExtendedPublicKey(val keyBytes: Array[Byte],
   )
 
   def child(idx: Int): ExtendedPublicKey = ExtendedPublicKey.deriveChildPublicKey(this, idx)
+
+  override def equals(obj: Any): Boolean = (this eq obj.asInstanceOf[AnyRef]) || (obj match {
+    case that: ExtendedSecretKey =>
+      util.Arrays.equals(that.keyBytes, this.keyBytes) &&
+          util.Arrays.equals(that.chainCode, this.chainCode) &&
+          that.path == this.path
+    case _ => false
+  })
+
+  override def hashCode(): Int = {
+    var h = util.Arrays.hashCode(keyBytes)
+    h = 31 * h + util.Arrays.hashCode(chainCode)
+    h = 31 * h + path.hashCode()
+    h
+  }
+
 }
 
 object ExtendedPublicKey {

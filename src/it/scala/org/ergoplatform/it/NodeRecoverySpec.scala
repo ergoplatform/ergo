@@ -27,7 +27,7 @@ class NodeRecoverySpec
     .withFallback(offlineGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs.head)
 
-  val node: Node = docker.startNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
+  val node: Node = docker.startDevNetNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 
   //  Testing scenario:
   // 1. Start up one node and let it mine {shutdownAtHeight} blocks;
@@ -40,7 +40,7 @@ class NodeRecoverySpec
       .flatMap { ids =>
         docker.forceStopNode(node.containerId)
         val restartedNode = docker
-          .startNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
+          .startDevNetNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
         restartedNode.waitForHeight(shutdownAtHeight)
           .flatMap(_ => restartedNode.headerIdsByHeight(shutdownAtHeight))
           .map(_.headOption.value shouldEqual ids.headOption.value)

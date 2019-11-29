@@ -1810,7 +1810,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: '7e1e79dd4936bdc7d09f4ba9212849136b589fba4bcf4263a0961a95b65d08cb16'
+                example: '"7e1e79dd4936bdc7d09f4ba9212849136b589fba4bcf4263a0961a95b65d08cb16"'
         default:
           description: Error
           content:
@@ -1949,7 +1949,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: '83375fd213cfd7dfd984ce1901d62c302a1db53160b416674c8da1a393a6bbc316'
+                example: '"83375fd213cfd7dfd984ce1901d62c302a1db53160b416674c8da1a393a6bbc316"'
         default:
           description: Error
           content:
@@ -1969,7 +1969,7 @@ paths:
           application/json:
             schema:
               type: string
-              example: '7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV'
+              example: '"7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV"'
       responses:
         '200':
           description: Base16-encoded 32 byte hash
@@ -1977,7 +1977,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: '7e1e79dd4936bdc7d09f4ba9212849136b589fba4bcf4263a0961a95b65d08cb16'
+                example: '"6ed54addddaf10fe8fcda330bd443a57914fbce38a9fa27248b07e361cc76a41"'
         default:
           description: Error
           content:

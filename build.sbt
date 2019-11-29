@@ -4,8 +4,8 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "3.1.1",
-  scalaVersion := "2.12.8",
+  version := "3.1.4-SNAPSHOT",
+  scalaVersion := "2.12.10",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
     "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
@@ -15,8 +15,7 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "4ca3e400-SNAPSHOT"
-val sigmaStateVersion = "exact-ops-ff7cc0e2-SNAPSHOT"
-val ergoWalletVersion = "sigma-core-opt-982d011d-SNAPSHOT"
+val sigmaStateVersion = "3.1.0"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -26,13 +25,12 @@ libraryDependencies ++= Seq(
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
   "org.scala-lang.modules" %% "scala-async" % "0.9.7",
-  ("org.scorexfoundation" %% "avl-iodb" % "0.2.15").exclude("ch.qos.logback", "logback-classic"),
+
   "org.scorexfoundation" %% "iodb" % "0.3.2",
+
   ("org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8").exclude("org.iq80.leveldb", "leveldb"),
   "org.iq80.leveldb" % "leveldb" % "0.12",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
-
-  "org.ergoplatform" %% "ergo-wallet" % ergoWalletVersion,
 
   "org.typelevel" %% "cats-free" % "1.6.0",
   "javax.xml.bind" % "jaxb-api" % "2.+",
@@ -45,7 +43,7 @@ libraryDependencies ++= Seq(
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
-  
+
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % "10.1.9" % "test",
@@ -55,8 +53,6 @@ libraryDependencies ++= Seq(
 )
 
 updateOptions := updateOptions.value.withLatestSnapshots(false)
-
-coverageExcludedPackages := ".*ErgoApp.*;.*routes.*;.*ErgoPersistentModifier"
 
 fork := true
 
@@ -119,6 +115,8 @@ assemblyMergeStrategy in assembly := {
   case "module-info.class" => MergeStrategy.discard
   case "reference.conf" => CustomMergeStrategy.concatReversed
   case PathList("org", "iq80", "leveldb", xs @ _*) => MergeStrategy.first
+  case PathList("javax", "activation", xs @ _*) => MergeStrategy.last
+  case PathList("javax", "annotation", xs @ _*) => MergeStrategy.last
   case other => (assemblyMergeStrategy in assembly).value(other)
 }
 
@@ -192,7 +190,39 @@ scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
 
 Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 
-lazy val ergo = (project in file(".")).settings(commonSettings: _*)
+lazy val avldb = (project in file("avldb"))
+  .settings(
+    commonSettings,
+    name := "avldb"
+  )
+
+lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
+  .settings(
+    commonSettings,
+    name := "avldb-benchmarks",
+    libraryDependencies ++= Seq(
+      "com.storm-enroute" %% "scalameter" % "0.9" % "test"
+    ),
+    publishArtifact := false,
+    resolvers ++= Seq("Sonatype OSS Releases" at "https://oss.sonatype.org/content/repositories/releases"),
+    testFrameworks += new TestFramework("org.scalameter.ScalaMeterFramework"),
+    parallelExecution in Test := false,
+    logBuffered := false
+  )
+  .dependsOn(avldb)
+  .enablePlugins(JmhPlugin)
+
+lazy val ergoWallet = (project in file("ergo-wallet"))
+  .settings(
+    commonSettings,
+    name := "ergo-wallet",
+    libraryDependencies += ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)
+  )
+
+lazy val ergo = (project in file("."))
+  .settings(commonSettings, name := "ergo")
+  .dependsOn(ergoWallet % "compile->compile")
+  .dependsOn(avldb % "compile->compile")
 
 lazy val benchmarks = (project in file("benchmarks"))
   .settings(commonSettings, name := "ergo-benchmarks")

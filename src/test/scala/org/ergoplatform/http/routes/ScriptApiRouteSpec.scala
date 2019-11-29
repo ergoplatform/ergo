@@ -42,6 +42,22 @@ class ScriptApiRouteSpec  extends FlatSpec
       |}
       |""".stripMargin
 
+  it should "execute script with context" in {
+    val suffix = "/executeWithContext"
+    val stream = ClassLoader.getSystemClassLoader.getResourceAsStream("execute-script.json")
+    val req = scala.io.Source.fromInputStream(stream).getLines().mkString("\n")
+    val assertion = (json: Json) => {
+      status shouldBe StatusCodes.OK
+      val value = json.hcursor.downField("value").downField("op").as[Int].right.get
+      val condition = json.hcursor.downField("value").downField("condition").as[Boolean].right.get
+      val cost = json.hcursor.downField("cost").as[Int].right.get
+      value shouldEqual -45
+      condition shouldEqual true
+      cost shouldEqual 40
+    }
+    val json = io.circe.parser.parse(req)
+    Post(prefix + suffix, json) ~> route ~> check(assertion(responseAs[Json]))
+  }
 
   it should "generate valid P2SAddress form source" in {
     val suffix = "/p2sAddress"

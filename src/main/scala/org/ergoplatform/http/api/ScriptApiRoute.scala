@@ -25,7 +25,7 @@ import special.sigma.AnyValue
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Failure, Try}
+import scala.util.{Success, Failure, Try}
 
 case class CryptoResult(value: SigmaBoolean, cost: Long)
 

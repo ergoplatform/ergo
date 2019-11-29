@@ -25,7 +25,7 @@ import special.sigma.AnyValue
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Try}
 
 case class CryptoResult(value: SigmaBoolean, cost: Long)
 
@@ -40,7 +40,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   override val route: Route = pathPrefix("script") {
     toStrictEntity(10.seconds) {
-      p2shAddressR ~
+      // p2shAddressR ~
       p2sAddressR ~
       addressToTreeR ~
       executeWithContextR

@@ -40,11 +40,14 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     .get(SecretPathsKey)
     .toSeq
     .flatMap { r =>
+      // TODO refactor: read using Reader
       val qty = Ints.fromByteArray(r.take(4))
-      (0 until qty).foldLeft(Seq.empty[DerivationPath], r.drop(4)) { case ((acc, bytes), _) =>
+      (0 until qty).foldLeft((Seq.empty[DerivationPath], r.drop(4))) { case ((acc, bytes), _) =>
         val length = Ints.fromByteArray(bytes.take(4))
         val pathTry = DerivationPathSerializer.parseBytesTry(bytes.slice(4, 4 + length))
-        pathTry.map(acc :+ _).getOrElse(acc) -> bytes.drop(4 + length)
+        val newAcc = pathTry.map(acc :+ _).getOrElse(acc)
+        val bytesTail = bytes.drop(4 + length)
+        newAcc -> bytesTail
       }._1
     }
 

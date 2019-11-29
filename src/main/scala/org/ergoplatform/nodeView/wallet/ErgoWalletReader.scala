@@ -29,6 +29,11 @@ trait ErgoWalletReader extends VaultReader {
 
   private implicit val timeout: Timeout = Timeout(60, TimeUnit.SECONDS)
 
+  /** Returns the Future generated mnemonic phrase.
+    * @param pass   storage encription password
+    * @param mnemonicPassOpt  mnemonic encription password
+    * @return  menmonic phrase for the new wallet
+    */
   def initWallet(pass: String, mnemonicPassOpt: Option[String]): Future[Try[String]] =
     (walletActor ? InitWallet(pass, mnemonicPassOpt)).mapTo[Try[String]]
 

@@ -121,7 +121,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   private def sendTransaction(requests: Seq[TransactionRequest], inputsRaw: Seq[String]): Route = {
     withWalletOp(_.generateTransaction(requests, inputsRaw)) {
-      case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Failure(e) =>
+        BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) =>
         nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
         ApiResponse(tx.id)

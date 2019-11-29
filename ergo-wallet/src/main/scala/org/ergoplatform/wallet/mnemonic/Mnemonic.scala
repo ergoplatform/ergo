@@ -65,11 +65,11 @@ object Mnemonic {
     */
   def toSeed(mnemonic: String, passOpt: Option[String] = None): Array[Byte] = {
     val normalizedMnemonic = normalize(mnemonic.toCharArray, NFKD).toCharArray
-    val normalizedSeed = normalize(s"mnemonic${passOpt.getOrElse("")}", NFKD)
+    val normalizedPass = normalize(s"mnemonic${passOpt.getOrElse("")}", NFKD)
 
     val spec = new PBEKeySpec(
       normalizedMnemonic,
-      normalizedSeed.getBytes,
+      normalizedPass.getBytes,
       Pbkdf2Iterations,
       Pbkdf2KeyLength
     )

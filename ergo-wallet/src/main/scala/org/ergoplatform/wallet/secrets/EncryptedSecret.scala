@@ -16,7 +16,12 @@ final case class EncryptedSecret(cipherText: String, salt: String, iv: String, a
 
 object EncryptedSecret {
   def apply(cipherText: Array[Byte], salt: Array[Byte], iv: Array[Byte], authTag: Array[Byte],
-            cipherParams: EncryptionSettings): EncryptedSecret = new EncryptedSecret(
-    Base16.encode(cipherText), Base16.encode(salt), Base16.encode(iv), Base16.encode(authTag), cipherParams
-  )
+            cipherParams: EncryptionSettings): EncryptedSecret = {
+    new EncryptedSecret(
+      Base16.encode(cipherText),
+      Base16.encode(salt),
+      Base16.encode(iv),
+      Base16.encode(authTag), cipherParams)
+  }
+
 }

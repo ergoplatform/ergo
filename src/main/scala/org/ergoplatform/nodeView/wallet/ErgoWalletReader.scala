@@ -89,9 +89,6 @@ trait ErgoWalletReader extends VaultReader {
   def randomPublicKey: Future[P2PKAddress] =
     (walletActor ? ReadRandomPublicKey).mapTo[P2PKAddress]
 
-  def trackedAddresses: Future[Seq[ErgoAddress]] =
-    (walletActor ? ReadTrackedAddresses).mapTo[Seq[ErgoAddress]]
-
   def generateTransaction(requests: Seq[TransactionRequest],
                           inputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
     (walletActor ? GenerateTransaction(requests, inputsRaw)).mapTo[Try[ErgoTransaction]]

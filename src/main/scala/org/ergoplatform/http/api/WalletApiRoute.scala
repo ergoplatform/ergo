@@ -149,7 +149,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       ApiResponse(
         Json.obj(
           "isInitialized" -> isInit.asJson,
-          "isUnlocked"    -> isUnlocked.asJson
+          "isUnlocked" -> isUnlocked.asJson
         )
       )
     }
@@ -160,7 +160,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def addressesR: Route = (path("addresses") & get) {
-    withWallet(_.trackedAddresses)
+    withWallet(_.publicKeys(0, Int.MaxValue): Future[Seq[ErgoAddress]])
   }
 
   def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) { (minConfNum, minHeight) =>

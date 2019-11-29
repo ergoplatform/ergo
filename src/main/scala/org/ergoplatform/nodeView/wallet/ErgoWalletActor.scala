@@ -719,8 +719,6 @@ object ErgoWalletActor {
 
   case object ReadRandomPublicKey
 
-  case object ReadTrackedAddresses
-
   case object ReadApplications
 
   case class MakeCertain(appId: AppId, boxId: BoxId)

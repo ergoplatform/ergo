@@ -8,7 +8,7 @@ import org.ergoplatform.settings.Constants.HashLength
 object StorageKeys {
 
   val BestHeaderKey: ByteArrayWrapper =
-    ByteArrayWrapper(Array.fill(HashLength)(Header.TypeId))
+    ByteArrayWrapper(Array.fill(HashLength)(Header.modifierTypeId))
 
   val BestFullBlockKey: ByteArrayWrapper =
     ByteArrayWrapper(Array.fill(HashLength)(-1))

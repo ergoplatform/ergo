@@ -24,10 +24,10 @@ import scala.util.Try
 /**
   * A component providing functionality required for headers processing.
   */
-trait HeadersComponent {
-  self: ChainSyncComponent
+trait HeadersProcessor {
+  self: ChainSyncProcessor
     with BasicReaders
-    with Configuration
+    with NodeProcessor
     with Persistence
     with ScorexEncoding
     with Logging =>

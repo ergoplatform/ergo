@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.components._
-import org.ergoplatform.nodeView.history.components.popow.PoPowComponent
+import org.ergoplatform.nodeView.history.components.popow.PoPowProcessor
 import org.ergoplatform.settings.{ErgoSettings, HistoryOperationMode}
 import scorex.core.ModifierTypeId
 import scorex.core.consensus.History._
@@ -21,13 +21,13 @@ import scala.util.{Failure, Try}
   */
 trait ErgoHistoryReader
   extends HistoryReader[ErgoPersistentModifier, ErgoSyncInfo]
-    with HeadersComponent
-    with ChainSyncComponent
+    with HeadersProcessor
+    with ChainSyncProcessor
     with BasicReaders
-    with PoPowComponent
+    with PoPowProcessor
     with UTXOSnapshotChunkProcessor
-    with BlockSectionComponent
-    with Configuration
+    with BlockSectionProcessor
+    with NodeProcessor
     with Persistence
     with Logging
     with ScorexEncoding {
@@ -131,7 +131,7 @@ trait ErgoHistoryReader
         typedModifierById[Header](startId).toSeq.flatMap { startHeader =>
           val headers = headerChainBack(size, startHeader, _ => false)
             .ensuring(_.exists(_.isGenesis), "Should always contain genesis header")
-          headers.flatMap(h => Seq((Header.TypeId, h.id)))
+          headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
         }
       }
     } else {
@@ -145,7 +145,7 @@ trait ErgoHistoryReader
         val startId = headerIdsAtHeight(heightFrom).head
         val startHeader = typedModifierById[Header](startId).get
         val headerIds = headerChainBack(size, startHeader, _.parentId == branchingPointOpt)
-          .map(Header.TypeId -> _.id)
+          .map(Header.modifierTypeId -> _.id)
         headerIds
       }
     }

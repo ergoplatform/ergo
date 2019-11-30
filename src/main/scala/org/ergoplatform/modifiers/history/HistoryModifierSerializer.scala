@@ -9,7 +9,7 @@ object HistoryModifierSerializer extends ScorexSerializer[ErgoPersistentModifier
   override def serialize(obj: ErgoPersistentModifier, w: Writer): Unit =
     obj match {
       case m: Header =>
-        w.put(Header.TypeId)
+        w.put(Header.modifierTypeId)
         HeaderSerializer.serialize(m, w)
       case m: ADProofs =>
         w.put(ADProofs.TypeId)
@@ -29,7 +29,7 @@ object HistoryModifierSerializer extends ScorexSerializer[ErgoPersistentModifier
 
   override def parse(r: Reader): ErgoPersistentModifier =
     r.getByte() match {
-      case Header.TypeId =>
+      case Header.`modifierTypeId` =>
         HeaderSerializer.parse(r)
       case ADProofs.TypeId =>
         ADProofSerializer.parse(r)

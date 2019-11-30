@@ -10,7 +10,7 @@ import scala.util.Try
 /**
   * Contains all functions required by History to process PoPoWProofs and generate them.
   */
-trait PoPowComponent {
+trait PoPowProcessor {
 
   def validate(m: PoPowProof): Try[Unit]
 

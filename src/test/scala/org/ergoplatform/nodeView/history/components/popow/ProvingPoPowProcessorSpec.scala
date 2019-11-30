@@ -13,7 +13,7 @@ import scorex.core.validation.ModifierValidator
 
 import scala.util.Try
 
-class ProvingPoPowComponentSpec
+class ProvingPoPowProcessorSpec
   extends PropSpec
     with Matchers
     with GeneratorDrivenPropertyChecks
@@ -34,13 +34,13 @@ class ProvingPoPowComponentSpec
       val result = history.prove(poPowParams)
 
       result shouldBe 'success
-      history.asInstanceOf[ProvingPoPowComponent].getLastProof shouldBe Some(result.get)
+      history.asInstanceOf[ProvingPoPowProcessor].getLastProof shouldBe Some(result.get)
 
       // Repeated proving
       val result2 = history.prove(poPowParams)
 
       result2 shouldBe 'success
-      history.asInstanceOf[ProvingPoPowComponent].getLastProof shouldBe Some(result.get)
+      history.asInstanceOf[ProvingPoPowProcessor].getLastProof shouldBe Some(result.get)
 
     }
   }

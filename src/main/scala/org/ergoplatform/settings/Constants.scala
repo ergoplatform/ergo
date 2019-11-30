@@ -45,7 +45,7 @@ object Constants {
 
   val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: NodeViewModifier]] =
     Map(
-      Header.TypeId -> HeaderSerializer,
+      Header.modifierTypeId -> HeaderSerializer,
       Extension.TypeId -> ExtensionSerializer,
       BlockTransactions.TypeId -> BlockTransactionsSerializer,
       ADProofs.TypeId -> ADProofSerializer,

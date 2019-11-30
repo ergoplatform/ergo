@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.LDBHistoryStorage
 import org.ergoplatform.nodeView.history.components._
-import org.ergoplatform.nodeView.history.components.popow.{EmptyPoPowComponent, ProvingPoPowComponent}
+import org.ergoplatform.nodeView.history.components.popow.{EmptyPoPowProcessor, ProvingPoPowProcessor}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.history.storage.StorageKeys._
@@ -149,9 +149,9 @@ trait ErgoHistory
               val validChain = validHeadersChain.tail.flatMap(getFullBlock)
 
               val chainStatusRow = validChain.map(b =>
-                FullBlockComponent.chainStatusKey(b.id) -> FullBlockComponent.BestChainMarker) ++
+                FullBlockProcessor.chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
                 invalidatedHeaders.map(h =>
-                  FullBlockComponent.chainStatusKey(h.id) -> FullBlockComponent.NonBestChainMarker)
+                  FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
 
               val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
@@ -225,24 +225,24 @@ object ErgoHistory extends ScorexLogging {
     val history: ErgoHistory =
       nodeConfiguration.historyMode match {
         case HistoryOperationMode.Full =>
-          new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
-            with EmptyPoPowComponent with Logging.Live {
+          new ErgoHistory with FullBlockSectionProcessor with FullBlockProcessor
+            with EmptyPoPowProcessor with Logging.Live {
             override protected val settings: ErgoSettings = ergoSettings
             override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }
         case HistoryOperationMode.FullProving =>
-          new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
-            with ProvingPoPowComponent with Logging.Live {
+          new ErgoHistory with FullBlockSectionProcessor with FullBlockProcessor
+            with ProvingPoPowProcessor with Logging.Live {
             override protected val settings: ErgoSettings = ergoSettings
             override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }
         case HistoryOperationMode.Light =>
-          new ErgoHistory with EmptyBlockSectionComponent
-            with EmptyPoPowComponent with Logging.Live {
+          new ErgoHistory with EmptyBlockSectionProcessor
+            with EmptyPoPowProcessor with Logging.Live {
             override protected val settings: ErgoSettings = ergoSettings
             override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme

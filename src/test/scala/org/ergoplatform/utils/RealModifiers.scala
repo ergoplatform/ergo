@@ -17,7 +17,7 @@ trait RealModifiers {
   def takeHeaders(maxQty: Int): Seq[Header] = readModifiers(fileName, maxQty).collect { case h: Header => h }
 
   val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: ErgoPersistentModifier]] =
-    Map(Header.TypeId -> HeaderSerializer,
+    Map(Header.modifierTypeId -> HeaderSerializer,
       BlockTransactions.TypeId -> BlockTransactionsSerializer,
       ADProofs.TypeId -> ADProofSerializer)
 
@@ -29,7 +29,7 @@ trait RealModifiers {
       .continually{
         counter += 1
         val mod = read(is)
-        if (mod.exists(_.modifierTypeId == Header.TypeId)) headers += 1
+        if (mod.exists(_.modifierTypeId == Header.modifierTypeId)) headers += 1
         mod
       }
       .takeWhile(m => (headers <= threshold) && m.isDefined)

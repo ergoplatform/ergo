@@ -5,7 +5,7 @@ import java.io.File
 import akka.actor.{ActorRef, ActorSystem}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.components.{ChainSyncController, ChainSyncComponent}
+import org.ergoplatform.nodeView.history.components.{ChainSyncController, ChainSyncProcessor}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{ErgoState, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
@@ -64,8 +64,8 @@ object BenchRunner extends ScorexLogging with NVBenchmark {
   private def adjust(v: CurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool]): Unit = {
     import scala.reflect.runtime.{universe => ru}
     val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
-    val procInstance = runtimeMirror.reflect(v.history.asInstanceOf[ChainSyncComponent])
-    val ppM = ru.typeOf[ChainSyncComponent].member(ru.TermName("pruningProcessor")).asMethod
+    val procInstance = runtimeMirror.reflect(v.history.asInstanceOf[ChainSyncProcessor])
+    val ppM = ru.typeOf[ChainSyncProcessor].member(ru.TermName("pruningProcessor")).asMethod
     val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[ChainSyncController]
     val f = ru.typeOf[ChainSyncController].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
     runtimeMirror.reflect(pp).reflectField(f).set(ErgoHistory.GenesisHeight)

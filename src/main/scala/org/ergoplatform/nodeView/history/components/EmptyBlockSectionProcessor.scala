@@ -10,8 +10,8 @@ import scala.util.{Failure, Try}
   * Trait that implements BlockSectionProcessor interfaces for a regime where the node only
   * downloads block headers
   */
-trait EmptyBlockSectionComponent extends BlockSectionComponent {
-  self: Configuration =>
+trait EmptyBlockSectionProcessor extends BlockSectionProcessor {
+  self: NodeProcessor =>
 
   override protected def process(m: BlockSection): ProgressInfo[ErgoPersistentModifier] =
     ErgoHistory.emptyProgressInfo

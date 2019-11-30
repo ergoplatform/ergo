@@ -18,7 +18,7 @@ final case class ErgoSyncInfo(lastHeaderIds: Seq[ModifierId],
   override lazy val serializer: ScorexSerializer[M] = ErgoSyncInfoSerializer
 
   override def startingPoints: Seq[(ModifierTypeId, ModifierId)] =
-    lastHeaderIds.map(Header.TypeId -> _)
+    lastHeaderIds.map(Header.modifierTypeId -> _)
 }
 
 object ErgoSyncInfo {

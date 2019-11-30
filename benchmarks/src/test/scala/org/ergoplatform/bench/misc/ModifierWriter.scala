@@ -12,7 +12,7 @@ import scorex.core.{ModifierTypeId, NodeViewModifier}
 object ModifierWriter {
 
   val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: ErgoPersistentModifier]] =
-    Map(Header.TypeId -> HeaderSerializer,
+    Map(Header.modifierTypeId -> HeaderSerializer,
       BlockTransactions.TypeId -> BlockTransactionsSerializer,
       ADProofs.TypeId -> ADProofSerializer)
 

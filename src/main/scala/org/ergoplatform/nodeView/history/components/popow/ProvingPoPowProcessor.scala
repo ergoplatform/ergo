@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.components.popow
 
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.nodeView.history.components.{BasicReaders, HeadersComponent, Persistence}
+import org.ergoplatform.nodeView.history.components.{BasicReaders, HeadersProcessor, Persistence}
 import org.ergoplatform.nodeView.history.storage.StorageKeys._
 import org.ergoplatform.settings.PoPowParams
 import scorex.core.utils.ScorexEncoding
@@ -12,8 +12,8 @@ import scala.util.{Failure, Success, Try}
 /**
   * Component which is able to produce NiPoPow proofs but not to process them.
   */
-trait ProvingPoPowComponent extends EmptyPoPowComponent {
-  self: HeadersComponent with BasicReaders with Persistence with ScorexEncoding =>
+trait ProvingPoPowProcessor extends EmptyPoPowProcessor {
+  self: HeadersProcessor with BasicReaders with Persistence with ScorexEncoding =>
 
   override final def prove(params: PoPowParams): Try[PoPowProof] =
     getLastProof.fold(makeNewProof(params)(None)) { proof =>

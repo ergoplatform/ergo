@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.nodeView.history.ErgoHistory.createDb
-import org.ergoplatform.nodeView.history.components.popow.{EmptyPoPowComponent, ProvingPoPowComponent}
+import org.ergoplatform.nodeView.history.components.popow.{EmptyPoPowProcessor, ProvingPoPowProcessor}
 import org.ergoplatform.nodeView.history.components._
 import org.ergoplatform.nodeView.history.storage.LDBHistoryStorage
 import org.ergoplatform.nodeView.state.StateType
@@ -28,7 +28,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val historyHeight = history.bestHeaderHeight
     if (historyHeight < height) {
       history match {
-        case _: EmptyBlockSectionComponent =>
+        case _: EmptyBlockSectionProcessor =>
           val chain = genHeaderChain(height - historyHeight, history, diffBitsOpt = None, useRealTs = false)
           if (history.isEmpty) applyHeaderChain(history, chain) else applyHeaderChain(history, chain.tail)
         case _ =>
@@ -81,24 +81,24 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val history: ErgoHistory =
       nodeConfiguration.historyMode match {
         case HistoryOperationMode.Full =>
-          new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
-            with EmptyPoPowComponent with VoidLogging {
+          new ErgoHistory with FullBlockSectionProcessor with FullBlockProcessor
+            with EmptyPoPowProcessor with VoidLogging {
             override protected val settings: ErgoSettings = ergoSettings
             override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }
         case HistoryOperationMode.FullProving =>
-          new ErgoHistory with FullBlockSectionComponent with FullBlockComponent
-            with ProvingPoPowComponent with VoidLogging {
+          new ErgoHistory with FullBlockSectionProcessor with FullBlockProcessor
+            with ProvingPoPowProcessor with VoidLogging {
             override protected val settings: ErgoSettings = ergoSettings
             override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
             override protected val timeProvider: NetworkTimeProvider = ntp
           }
         case HistoryOperationMode.Light =>
-          new ErgoHistory with EmptyBlockSectionComponent
-            with EmptyPoPowComponent with VoidLogging {
+          new ErgoHistory with EmptyBlockSectionProcessor
+            with EmptyPoPowProcessor with VoidLogging {
             override protected val settings: ErgoSettings = ergoSettings
             override protected[history] val storage: LDBHistoryStorage = db
             override val powScheme: AutolykosPowScheme = chainSettings.powScheme
@@ -119,8 +119,8 @@ object HistoryTestHelpers {
   def allowToApplyOldBlocks(history: ErgoHistory): Unit = {
     import scala.reflect.runtime.{universe => ru}
     val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
-    val procInstance = runtimeMirror.reflect(history.asInstanceOf[ChainSyncComponent])
-    val ppM = ru.typeOf[ChainSyncComponent].member(ru.TermName("pruningProcessor")).asMethod
+    val procInstance = runtimeMirror.reflect(history.asInstanceOf[ChainSyncProcessor])
+    val ppM = ru.typeOf[ChainSyncProcessor].member(ru.TermName("pruningProcessor")).asMethod
     val pp = procInstance.reflectMethod(ppM).apply().asInstanceOf[ChainSyncController]
     val f = ru.typeOf[ChainSyncController].member(ru.TermName("minimalFullBlockHeightVar")).asTerm.accessed.asTerm
     runtimeMirror.reflect(pp).reflectField(f).set(ErgoHistory.GenesisHeight)

@@ -10,8 +10,8 @@ import scala.util.Try
   * Trait that declares interfaces for validation and processing of various
   * block sections: BlockTransactions, ADProofs, etc.
   */
-trait BlockSectionComponent extends ScorexEncoding {
-  self: Configuration =>
+trait BlockSectionProcessor extends ScorexEncoding {
+  self: NodeProcessor =>
 
   /**
     * Whether state requires to download adProofs before full block application

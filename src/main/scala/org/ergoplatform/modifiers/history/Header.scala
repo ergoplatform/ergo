@@ -46,7 +46,7 @@ case class Header(version: Version,
 
   override type M = Header
 
-  override val modifierTypeId: ModifierTypeId = Header.TypeId
+  override val modifierTypeId: ModifierTypeId = Header.modifierTypeId
 
   lazy val requiredDifficulty: Difficulty = RequiredDifficulty.decodeCompactBits(nBits)
 
@@ -130,7 +130,7 @@ object Header extends ApiCodecs {
 
   val CurrentVersion: Byte = 1
 
-  val TypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
+  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
 
   lazy val GenesisParentId: ModifierId = bytesToId(Array.fill(Constants.HashLength)(0: Byte))
 

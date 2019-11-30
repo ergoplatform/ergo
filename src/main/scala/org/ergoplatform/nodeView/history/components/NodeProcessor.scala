@@ -4,9 +4,9 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.utils.NetworkTimeProvider
 
 /**
-  * A component proving an access to configuration.
+  * A component proving an access to a node configuration.
   */
-trait Configuration {
+trait NodeProcessor {
 
   protected val timeProvider: NetworkTimeProvider
 

@@ -16,12 +16,12 @@ import scala.util.Try
   * A component providing functionality required for block sections processing.
   * Prunes modifiers older then blocksToKeep.
   */
-trait FullBlockSectionComponent extends BlockSectionComponent {
-  self: FullBlockComponent
-    with HeadersComponent
-    with ChainSyncComponent
+trait FullBlockSectionProcessor extends BlockSectionProcessor {
+  self: FullBlockProcessor
+    with HeadersProcessor
+    with ChainSyncProcessor
     with BasicReaders
-    with Configuration
+    with NodeProcessor
     with Persistence =>
 
   private def initialValidationState: TaggedValidationState[Unit] =

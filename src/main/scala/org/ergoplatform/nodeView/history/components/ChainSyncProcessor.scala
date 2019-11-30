@@ -11,9 +11,9 @@ import scala.annotation.tailrec
 /**
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
   */
-trait ChainSyncComponent {
+trait ChainSyncProcessor {
   self: BasicReaders
-    with Configuration
+    with NodeProcessor
     with Logging =>
 
   protected[history] lazy val pruningProcessor: ChainSyncController =

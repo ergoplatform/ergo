@@ -145,7 +145,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     chain.headers.map(_.id) should contain theSameElementsAs ci1.map(_._2)
 
     val ci = history.continuationIds(ErgoSyncInfo(Seq()), BlocksInChain)
-    ci.foreach(c => c._1 shouldBe Header.TypeId)
+    ci.foreach(c => c._1 shouldBe Header.modifierTypeId)
     chain.headers.map(_.id) should contain theSameElementsAs ci.map(_._2)
   }
 

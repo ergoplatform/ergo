@@ -1,4 +1,4 @@
-package org.ergoplatform.api
+package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
@@ -6,8 +6,6 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform._
-import org.ergoplatform.http.api.{ApiCodecs, WalletApiOperations}
-import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.scanning.ExternalAppRequest
 import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
@@ -15,9 +13,9 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
+import scorex.crypto.authds.ADKey
 
 import scala.util.{Failure, Success}
-import scorex.crypto.authds.ADKey
 
 /**
   * This class contains methods to register / deregister and list external applications.
@@ -29,7 +27,7 @@ case class ApplicationId(appId: AppId)
 
 object ApplicationId {
 
-  implicit val applicationIdEncoder: Encoder[ApplicationId] = {appStatus =>
+  implicit val applicationIdEncoder: Encoder[ApplicationId] = { appStatus =>
     Json.obj("appId" -> appStatus.appId.asJson)
   }
 
@@ -45,7 +43,7 @@ case class ApplicationIdBoxId(appId: AppId, boxId: BoxId)
 
 object ApplicationIdBoxId extends JsonCodecs {
 
-  implicit val applicationIdBoxIdEncoder: Encoder[ApplicationIdBoxId] = {appStatus =>
+  implicit val applicationIdBoxIdEncoder: Encoder[ApplicationIdBoxId] = { appStatus =>
     Json.obj("appId" -> appStatus.appId.asJson, "boxId" -> Algos.encode(appStatus.boxId).asJson)
   }
 
@@ -72,9 +70,8 @@ object ApplicationIdBox extends JsonCodecs {
 }
 
 
-
 final case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
-                          (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
+                                    (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
 
   import org.ergoplatform.nodeView.wallet.scanning.ExternalApplicationJsonCodecs._
 
@@ -93,7 +90,7 @@ final case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: Ergo
       stopTrackingR
   }
 
-  def deregisterR: Route = (path("deregister") & post & entity(as[ApplicationId])) {appId =>
+  def deregisterR: Route = (path("deregister") & post & entity(as[ApplicationId])) { appId =>
     withWalletOp(_.removeApplication(appId.appId)) {
       case Failure(e) => BadRequest(s"No application exists or db error: ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(_) => ApiResponse(appId.asJson)
@@ -113,33 +110,29 @@ final case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: Ergo
   }
 
   //todo: paging
-  def uncertainR: Route = (path("uncertainBoxes" / IntNumber) & get) {appIdInt =>
+  def uncertainR: Route = (path("uncertainBoxes" / IntNumber) & get) { appIdInt =>
     val appId = appIdInt.toShort
     withWallet(_.uncertainBoxes(appId))
   }
 
   //todo: paging
-  def unspentR: Route = (path("unspentBoxes" / IntNumber) & get) {appIdInt =>
+  def unspentR: Route = (path("unspentBoxes" / IntNumber) & get) { appIdInt =>
     val appId = appIdInt.toShort
     withWallet(_.appBoxes(appId, unspentOnly = true))
   }
 
-  def makeCertainR: Route = (path("makeCertain") & post & entity(as[ApplicationIdBoxId])) {appIdBoxId =>
+  def makeCertainR: Route = (path("makeCertain") & post & entity(as[ApplicationIdBoxId])) { appIdBoxId =>
     withWalletOp(_.makeCertain(appIdBoxId.appId, appIdBoxId.boxId)) {
       case Failure(e) => BadRequest(s"Bad request ($appIdBoxId): ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(_) => ApiResponse(appIdBoxId)
     }
   }
 
-  def stopTrackingR: Route = (path("stopTracking") & post & entity(as[ApplicationIdBoxId])) {appIdBoxId =>
+  def stopTrackingR: Route = (path("stopTracking") & post & entity(as[ApplicationIdBoxId])) { appIdBoxId =>
     withWalletOp(_.stopTracking(appIdBoxId.appId, appIdBoxId.boxId)) {
       case Failure(e) => BadRequest(s"Bad request ($appIdBoxId): ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(app) => ApiResponse(appIdBoxId)
     }
   }
-
-
-
-
 
 }

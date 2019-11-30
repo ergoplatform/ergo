@@ -1,20 +1,22 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.utils.ErgoPropertyTest
-import org.ergoplatform.utils.generators.ErgoTransactionGenerators
+import org.ergoplatform.utils.generators.WalletGenerators
 
-class ScanningPredicateSerializerSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
+class ScanningPredicateSerializerSpecification extends ErgoPropertyTest with WalletGenerators {
 
   property("complex or roundtrip") {
-    val p = ScanningPredicateTestVectors.complexOr
-    val bs = ScanningPredicateSerializer.toBytes(p)
-    ScanningPredicateSerializer.parseBytes(bs) == p
+    forAll(scanningPredicateGen) { p =>
+      val bs = ScanningPredicateSerializer.toBytes(p)
+      ScanningPredicateSerializer.parseBytes(bs) == p
+    }
   }
 
   property("complex and roundtrip") {
-    val p = ScanningPredicateTestVectors.complexAnd
-    val bs = ScanningPredicateSerializer.toBytes(p)
-    ScanningPredicateSerializer.parseBytes(bs) == p
+    forAll(scanningPredicateGen) { p =>
+      val bs = ScanningPredicateSerializer.toBytes(p)
+      ScanningPredicateSerializer.parseBytes(bs) == p
+    }
   }
 
 }

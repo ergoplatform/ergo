@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoBox.RegisterId
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
@@ -39,27 +40,36 @@ object ScanningPredicateSerializer extends ScorexSerializer[ScanningPredicate] {
   }
 
   override def parse(r: Reader): ScanningPredicate = {
+    //helper subfunctions
+    def parseArgs(r: Reader): Array[ScanningPredicate] = {
+      val argsCount = r.getInt()
+      val args = new Array[ScanningPredicate](argsCount)
+      (0 until argsCount).foreach(idx => args(idx) = parse(r))
+      args
+    }
+
+    def parseRegisterAndBytes(r: Reader): (RegisterId, Array[Byte]) = {
+      val reg = ErgoBox.registerByIndex(r.getByte())
+      val len = r.getInt()
+      val bs = r.getBytes(len)
+      reg -> bs
+    }
+
     val prefix = r.getByte()
     prefix match {
       case b: Byte if b == EqualsPrefix =>
-        val reg = ErgoBox.registerByIndex(r.getByte())
-        val len = r.getInt()
-        val bs = r.getBytes(len)
+        val (reg, bs) = parseRegisterAndBytes(r)
         EqualsScanningPredicate(reg, bs)
       case b: Byte if b == ContainsPrefix =>
-        val reg = ErgoBox.registerByIndex(r.getByte())
-        val len = r.getInt()
-        val bs = r.getBytes(len)
+        val (reg, bs) = parseRegisterAndBytes(r)
         ContainsScanningPredicate(reg, bs)
       case b: Byte if b == ContainsAssetPrefix =>
         val bs = r.getBytes(32)
         ContainsAssetPredicate(Digest32 @@ bs)
       case b: Byte if b == AndPrefix =>
-        val argsCount = r.getInt()
-        AndScanningPredicate((1 to argsCount).map(_ => parse(r)) :_*)
+        AndScanningPredicate(parseArgs(r) :_*)
       case b: Byte if b == OrPrefix =>
-        val argsCount = r.getInt()
-        OrScanningPredicate((1 to argsCount).map(_ => parse(r)) :_*)
+        OrScanningPredicate(parseArgs(r) :_*)
     }
   }
 }

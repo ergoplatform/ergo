@@ -44,18 +44,18 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
   // 5. Make sure digest node does not store full blocks with height < {targetHeight - blocksToKeep};
   "Pruned digest node synchronization" in {
 
-    val minerNode: Node = docker.startNode(minerConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get
+    val minerNode: Node = docker.startDevNetNode(minerConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 
     val result = Async.async {
       Async.await(minerNode.waitForFullHeight(approxTargetHeight, 1.second))
       docker.stopNode(minerNode, secondsToWait = 0)
 
       val nodeForSyncing = docker
-        .startNode(nodeForSyncingConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get
+        .startDevNetNode(nodeForSyncingConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get
       Async.await(nodeForSyncing.waitForFullHeight(approxTargetHeight))
       val sampleInfo = Async.await(nodeForSyncing.info)
 
-      val digestNode = docker.startNode(digestConfig).get
+      val digestNode = docker.startDevNetNode(digestConfig).get
       val targetHeight = sampleInfo.bestBlockHeightOpt.value
       val targetBlockId = sampleInfo.bestBlockIdOpt.value
       val blocksToPrune = Async.await(nodeForSyncing.headers(0, targetHeight - blocksToKeep - 3))

@@ -62,8 +62,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private val parameters: Parameters = LaunchParameters
 
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
-  // to the wallet (by executing testing transactions against them). The state context is being updated by listening
-  // to state updates.
+  // to the wallet (by executing testing transactions against them).
+  // The state context is being updated by listening to state updates.
   private def stateContext: ErgoStateContext = storage.readStateContext
 
   private def height: Int = stateContext.currentHeight
@@ -75,7 +75,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         log.warn("Initializing wallet in test mode. Switch to secure mode for production usage.")
         val seed = Mnemonic.toSeed(testMnemonic)
         val rootSk = ExtendedSecretKey.deriveMasterKey(seed)
-        val childSks = walletSettings.testKeysQty.toIndexedSeq.flatMap(x => (0 until x).map(rootSk.child))
+        val childSks = walletSettings
+            .testKeysQty.toIndexedSeq
+            .flatMap(qty => (0 until qty).map(rootSk.child))
         proverOpt = Some(ErgoProvingInterpreter(rootSk +: childSks, parameters))
         storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
       case None =>
@@ -292,7 +294,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private val noFilter: FilterFn = (_: TrackedBox) => true
 
   /**
-    * Tries to prove given box in order to define whether it could be spent by this wallet.
+    * Tries to prove the given box in order to define whether it could be spent by this wallet.
     */
   private def resolve(box: ErgoBox): Boolean = {
     val testingTx = UnsignedErgoLikeTransaction(
@@ -442,7 +444,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           }
 
       case None =>
-        Failure(new Exception("Wallet is locked"))
+        Failure(new Exception(s"Cannot generateTransactionWithOutputs($requests, $inputsRaw): Wallet is locked"))
     }
 
   private def prepareTransaction(prover: ErgoProvingInterpreter, payTo: Seq[ErgoBoxCandidate])
@@ -527,10 +529,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def processUnlock(secretStorage: JsonSecretStorage): Unit = {
     val secrets = secretStorage.secret.toIndexedSeq ++ storage.readPaths.flatMap { path =>
-      secretStorage.secret.toSeq.map(_.derive(path).asInstanceOf[ExtendedSecretKey])
+      secretStorage.secret.toSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
     }
-    proverOpt = Some(ErgoProvingInterpreter(secrets, parameters))
-    storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
+    val prover = ErgoProvingInterpreter(secrets, parameters)
+    proverOpt = Some(prover)
+    storage.addTrackedAddresses(prover.pubKeys.map(pk => P2PKAddress(pk)))
     // process postponed blocks when prover is available.
     val lastProcessedHeight = registry.readIndex.height
     storage.readLatestPostponedBlockHeight.foreach { lastPostponedHeight =>
@@ -555,14 +558,14 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     if (dir.exists()) {
       dir.listFiles().toList match {
         case files if files.size > 1 =>
-          Failure(new Exception("Ambiguous secret files"))
+          Failure(new Exception(s"Ambiguous secret files in dir '$dir'"))
         case headFile :: _ =>
           Success(new JsonSecretStorage(headFile, settings.walletSettings.secretStorage.encryption))
         case Nil =>
-          Failure(new Exception("Secret file not found"))
+          Failure(new Exception(s"Cannot readSecretStorage: Secret file not found in dir '$dir'"))
       }
     } else {
-      Failure(new Exception("Secret dir does not exist"))
+      Failure(new Exception(s"Cannot readSecretStorage: Secret dir '$dir' doesn't exist"))
     }
   }
 
@@ -598,7 +601,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     if (secrets.size == 1) {
       Success(DerivationPath(Array(0, 1), publicBranch = false))
     } else {
-      nextPath(List.empty, secrets.map(_.path.decodedPath.tail))
+      nextPath(List.empty, secrets.map(_.path.decodedPath.tail.toList))
     }
   }
 

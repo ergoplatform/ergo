@@ -31,12 +31,19 @@ final class ExtendedSecretKey(val keyBytes: Array[Byte],
 
   def zeroSecret(): Unit = util.Arrays.fill(keyBytes, 0: Byte)
 
-  override def equals(obj: Any): Boolean = obj match {
+  override def equals(obj: Any): Boolean = (this eq obj.asInstanceOf[AnyRef]) || (obj match {
     case that: ExtendedSecretKey =>
-      java.util.Arrays.equals(that.keyBytes, this.keyBytes) &&
-        java.util.Arrays.equals(that.chainCode, this.chainCode) &&
+      util.Arrays.equals(that.keyBytes, this.keyBytes) &&
+        util.Arrays.equals(that.chainCode, this.chainCode) &&
         that.path == this.path
     case _ => false
+  })
+
+  override def hashCode(): Int = {
+    var h = util.Arrays.hashCode(keyBytes)
+    h = 31 * h + util.Arrays.hashCode(chainCode)
+    h = 31 * h + path.hashCode()
+    h
   }
 
 }

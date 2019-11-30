@@ -42,7 +42,7 @@ class ForkResolutionSpec extends FreeSpec with IntegrationSuite {
     val nodes: Try[List[Node]] = nodeConfigs
       .map(_.withFallback(specialDataDirConfig(remoteVolume)))
       .zip(volumesMapping)
-      .map { case (cfg, vol) => docker.startNode(cfg, configEnrich, Some(vol)) }
+      .map { case (cfg, vol) => docker.startDevNetNode(cfg, configEnrich, Some(vol)) }
       .sequence
     blocking(Thread.sleep(nodeConfigs.size * 3000))
     nodes

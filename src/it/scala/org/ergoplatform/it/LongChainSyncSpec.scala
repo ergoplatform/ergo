@@ -14,13 +14,15 @@ class LongChainSyncSpec extends FreeSpec with IntegrationSuite {
   val minerConfig: Config = shortMiningDelayConfig.withFallback(nodeSeedConfigs.head)
   val nonGeneratingConfig: Config = nonGeneratingPeerConfig.withFallback(nodeSeedConfigs(1))
 
+  val miner: Node = docker.startDevNetNode(minerConfig).get
+
   s"Long chain ($chainLength blocks) synchronization" in {
     val miner: Node = docker.startNode(minerConfig).get
 
     val result: Future[Int] = miner.waitForFullHeight(chainLength)
       .flatMap { _ =>
-        val follower = docker.startNode(nonGeneratingConfig).get
-        follower.waitForFullHeight(chainLength)
+        val follower = docker.startDevNetNode(nonGeneratingConfig).get
+        follower.waitForHeight(chainLength)
       }
 
     Await.result(result, 10.minutes)

@@ -41,7 +41,7 @@ class StateRecoveryDigestNodeSpec extends FreeSpec with IntegrationSuite {
   //    - it would require testing node to recover state correctly and apply new blocks on top of it;
   "Startup with only history available" in {
 
-    val minerNode: Node = docker.startNode(minerConfig, specialVolumeOpt = Some((minerLocalVolume, remoteVolume))).get
+    val minerNode: Node = docker.startDevNetNode(minerConfig, specialVolumeOpt = Some((minerLocalVolume, remoteVolume))).get
 
     val result = Async.async {
       Async.await(minerNode.waitForFullHeight(approxMinerTargetHeight))
@@ -50,11 +50,11 @@ class StateRecoveryDigestNodeSpec extends FreeSpec with IntegrationSuite {
       FileUtils.copyDirectoryToDirectory(new File(s"$minerLocalVolume/history"), new File(followerLocalVolume))
 
       val nodeForSyncing: Node = docker
-        .startNode(minerConfig, specialVolumeOpt = Some((minerLocalVolume, remoteVolume))).get
+        .startDevNetNode(minerConfig, specialVolumeOpt = Some((minerLocalVolume, remoteVolume))).get
       Async.await(nodeForSyncing.waitForFullHeight(approxMinerTargetHeight + 2))
 
       val followerNode: Node = docker
-        .startNode(followerConfig, specialVolumeOpt = Some((followerLocalVolume, remoteVolume))).get
+        .startDevNetNode(followerConfig, specialVolumeOpt = Some((followerLocalVolume, remoteVolume))).get
       Async.await(followerNode.waitForFullHeight(approxFollowerTargetHeight))
     }
 

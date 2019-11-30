@@ -56,7 +56,7 @@ trait ApiCodecs extends JsonCodecs {
 
   // todo: this val is named "anyRegisterIdEncoder" because parent trait already contains
   // "registerIdEncoder" which is actually a KeyEncoder for NonMandatoryRegisterId
-  implicit val RegisterIdEncoder: Encoder[RegisterId] = { regId =>
+  implicit val anyRegisterIdEncoder: Encoder[RegisterId] = { regId =>
     s"R${regId.number}".asJson
   }
 

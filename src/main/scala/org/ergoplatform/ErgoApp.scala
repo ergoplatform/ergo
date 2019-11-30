@@ -6,9 +6,8 @@ import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler}
 import akka.stream.ActorMaterializer
-import org.ergoplatform.api.ApplicationApiRoute
 import org.ergoplatform.http._
-import org.ergoplatform.http.api._
+import org.ergoplatform.http.api.{ApplicationApiRoute, _}
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local._

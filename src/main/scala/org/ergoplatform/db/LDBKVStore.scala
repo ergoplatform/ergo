@@ -27,12 +27,12 @@ class LDBKVStore(protected val db: DB) extends KVStore {
   /**
     * Get last key within some range by used comparator. Could be useful for applications with sequential ids.
     */
-  def lastKeyInRange(first: Array[Byte], last:Array[Byte]): Option[Array[Byte]] = {
+  def lastKeyInRange(first: Array[Byte], last: Array[Byte]): Option[K] = {
     val i = db.iterator()
     i.seek(first)
-    if(i.hasNext) {
+    if (i.hasNext) {
       val key = i.peekNext().getKey
-      if(ByteArrayUtils.compare(key, last) < 0) Some(key) else None
+      if (ByteArrayUtils.compare(key, last) < 0) Some(key) else None
     } else {
       None
     }

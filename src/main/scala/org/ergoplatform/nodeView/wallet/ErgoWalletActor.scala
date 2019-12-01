@@ -53,17 +53,17 @@ case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
 
   def resetProver(): WalletVars = this.copy(proverOpt = None)
 
-  def withProver(prover: ErgoProvingInterpreter):WalletVars = this.copy(proverOpt = Some(prover))
+  def withProver(prover: ErgoProvingInterpreter): WalletVars = this.copy(proverOpt = Some(prover))
 
-  def removeApplication(appId: AppId):WalletVars =
+  def removeApplication(appId: AppId): WalletVars =
     this.copy(externalApplications = this.externalApplications.filter(_.appId != appId))
 
-  def addApplication(app: ExternalApplication):WalletVars =
+  def addApplication(app: ExternalApplication): WalletVars =
     this.copy(externalApplications = this.externalApplications :+ app)
 }
 
 object WalletVars {
-  def initial(storage: WalletStorage, settings: ErgoSettings):WalletVars = WalletVars(None, storage.allApplications)(settings)
+  def initial(storage: WalletStorage, settings: ErgoSettings): WalletVars = WalletVars(None, storage.allApplications)(settings)
 }
 
 class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
@@ -126,14 +126,14 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         PaymentsAppId -> BoxCertainty.Certain
       }
 
-      val prePaymentStatuses = if(miningIncomeTriggered) appsTriggered + miningStatus else appsTriggered
+      val prePaymentStatuses = if (miningIncomeTriggered) appsTriggered + miningStatus else appsTriggered
 
-      val statuses: Map[AppId, BoxCertainty] = if(prePaymentStatuses.nonEmpty){
+      val statuses: Map[AppId, BoxCertainty] = if (prePaymentStatuses.nonEmpty) {
         prePaymentStatuses
       } else {
         val paymentsTriggered = trackedBytes.exists(bs => bx.propositionBytes.sameElements(bs))
 
-        if(paymentsTriggered){
+        if (paymentsTriggered) {
           Map(PaymentsAppId -> BoxCertainty.Certain)
         } else {
           Map.empty
@@ -271,7 +271,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case GetAppBoxes(appId, unspent) =>
       val currentHeight = height
-      sender() ! (if (unspent) registry.unspentBoxes(appId) else registry.confirmedBoxes(appId,0))
+      sender() ! (if (unspent) registry.unspentBoxes(appId) else registry.confirmedBoxes(appId, 0))
         .map(tb => WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _)))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 

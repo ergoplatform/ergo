@@ -20,6 +20,7 @@ import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import Constants.PaymentsAppId
 
 import scala.util.{Failure, Success, Try}
 
@@ -133,14 +134,14 @@ final class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends 
     val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
 
     val bag4 = updateDigest(bag3) { case RegistryDigest(height, wBalance, wTokens) =>
-      val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.contains(1: Short))
+      val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.contains(PaymentsAppId))
       val spentAmt = spentWalletBoxes.map(_.box.value).sum
       val spentTokensAmt = spentWalletBoxes
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
-      val receivedTokensAmt = outputs.filter(_.applicationStatuses.contains(1: Short))
+      val receivedTokensAmt = outputs.filter(_.applicationStatuses.contains(PaymentsAppId))
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
@@ -156,7 +157,7 @@ final class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends 
           if (decreasedAmt > 0) acc.updated(encodedId, decreasedAmt) else acc - encodedId
         }
 
-      val receivedAmt = outputs.filter(_.applicationStatuses.contains(1: Short)).map(_.box.value).sum
+      val receivedAmt = outputs.filter(_.applicationStatuses.contains(PaymentsAppId)).map(_.box.value).sum
       val newBalance = wBalance + receivedAmt - spentAmt
       require(
         (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,

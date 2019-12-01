@@ -14,7 +14,6 @@ import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.utils.Generators
 import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
-import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.Values.ErgoTree
@@ -187,6 +186,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     val dataInputs = dataBoxes.map(b => DataInput(b.id))
     val unsignedTx = UnsignedErgoTransaction(inputs, dataInputs, newBoxes)
     require(unsignedTx.dataInputs.length == dataBoxes.length, s"${unsignedTx.dataInputs.length} == ${dataBoxes.length}")
+
+    require(unsignedTx.outputs.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, parameters)), "Minimal ERG value not met")
 
     defaultProver.sign(unsignedTx, boxesToSpend, dataBoxes, stateCtxOpt.getOrElse(emptyStateContext))
       .map(ErgoTransaction.apply)

@@ -41,6 +41,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       waitForScanning(genesisBlock)
 
       val confirmedBalance = getConfirmedBalances.walletBalance
+      confirmedBalance > 1000000 shouldBe true
       val balanceToMakeUncertain = confirmedBalance - 1000000
       val balanceAfterSpending = confirmedBalance - balanceToMakeUncertain
 

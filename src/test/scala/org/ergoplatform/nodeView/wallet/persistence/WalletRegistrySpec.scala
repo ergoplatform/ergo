@@ -114,7 +114,7 @@ class WalletRegistrySpec
         WalletRegistry.putBoxes(emptyBag, tbs).transact(store)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs tbs.map(Some.apply)
         val updateFn = (tb: TrackedBox) => tb.copy(spendingHeightOpt = Some(0),
-          applicationStatuses = Map(1.toShort -> BoxCertainty.Certain, 2.toShort -> BoxCertainty.Uncertain))
+          applicationStatuses = Map(PaymentsAppId -> BoxCertainty.Certain, 2.toShort -> BoxCertainty.Uncertain))
         val updatedBoxes = tbs.map(updateFn)
         reg.updateBoxes(emptyBag, tbs.map(_.box.id))(updateFn).transact(store)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs updatedBoxes.map(Some.apply)

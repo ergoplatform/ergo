@@ -37,9 +37,9 @@ object RegistrySummarySerializer extends ScorexSerializer[RegistryDigest] {
     val walletAssetBalancesSize = r.getInt()
     val walletAssetBalances = (0 until walletAssetBalancesSize).map { _ =>
       encodedTokenId(Digest32 @@ r.getBytes(Constants.ModifierIdSize)) -> r.getLong()
-    }
+    }.toMap
 
-    RegistryDigest(height, balance, walletAssetBalances.toMap)
+    RegistryDigest(height, balance, walletAssetBalances)
   }
 
 }

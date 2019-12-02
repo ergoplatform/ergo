@@ -57,7 +57,7 @@ trait WalletTestOps extends NodeViewBaseOps {
   }
 
   def scanTime(boxCount: Int, tokenCount: Int)(implicit ctx: Ctx): Long = {
-    boxCount * scanningInterval + tokenCount * scanningInterval * 2 + 2500
+    boxCount * scanningInterval + tokenCount * scanningInterval * 2 + 5000
   }
 
   def waitForOffchainScanning(tx: ErgoTransaction): Unit = {
@@ -154,4 +154,5 @@ trait WalletTestOps extends NodeViewBaseOps {
   def randomNewAsset: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> randomLong())
   def assetsWithRandom(boxes: Seq[ErgoBox]): Seq[(TokenId, Long)] = randomNewAsset ++ assetsByTokenId(boxes)
   def badAssets: Seq[(TokenId, Long)] = additionalTokensGen.sample.value
+
 }

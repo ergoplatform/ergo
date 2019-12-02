@@ -18,9 +18,6 @@ class WalletRegistrySpec
     with WalletGenerators
     with FileUtils {
 
-
-  private def createStore: Store = new LSMStore(createTempDir)
-
   private val emptyBag = KeyValuePairsBag.empty
   private val walletBoxStatus = Map(PaymentsAppId -> BoxCertainty.Certain)
 
@@ -155,10 +152,10 @@ class WalletRegistrySpec
         val reg = new WalletRegistry(store)(ws)
 
         WalletRegistry.putDigest(emptyBag, index).transact(store)
-        reg.getDigest() shouldBe index
+        reg.fetchDigest() shouldBe index
         val updatedIndex = index.copy(height = 0, walletBalance = 0)
         reg.updateDigest(emptyBag)(_ => updatedIndex).transact(store)
-        reg.getDigest() shouldBe updatedIndex
+        reg.fetchDigest() shouldBe updatedIndex
       }
     }
   }

@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.wallet.persistence
 import java.io.File
 
 import com.google.common.primitives.{Ints, Shorts}
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.db.{HybridLDBKVStore, VersionedLDBKVStore}
@@ -106,14 +105,14 @@ final class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends 
       }
   }
 
-  def getDigest(): RegistryDigest = {
+  def fetchDigest(): RegistryDigest = {
     store.get(RegistrySummaryKey)
       .flatMap(r => RegistrySummarySerializer.parseBytesTry(r).toOption)
       .getOrElse(RegistryDigest.empty)
   }
 
   def updateDigest(bag: KeyValuePairsBag)(updateF: RegistryDigest => RegistryDigest): KeyValuePairsBag = {
-    val digest = getDigest()
+    val digest = fetchDigest()
     putDigest(bag, updateF(digest))
   }
 

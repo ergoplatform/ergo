@@ -1,5 +1,6 @@
 package org.ergoplatform.wallet.boxes
 
+import org.ergoplatform.wallet.Constants.PaymentsAppId
 import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.scalatest.{Matchers, PropSpec}
@@ -14,7 +15,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers {
   val TrueLeaf: SigmaPropValue = Values.TrueLeaf.toSigmaProp
 
   def box(value:Long) = ErgoBox(value, TrueLeaf, 0)
-  def trackedBox(value:Long) = TrackedBox(parentTx, 0, None, box(value), Map(1.toShort -> BoxCertainty.Certain))
+  def trackedBox(value:Long) = TrackedBox(parentTx, 0, None, box(value), Map(PaymentsAppId -> BoxCertainty.Certain))
 
   property("compress() done propery") {
     val selector = new ReplaceCompactCollectBoxSelector(3, 2)

@@ -104,28 +104,29 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     testProbe.expectMsgClass(newBlockDelay, newBlock)
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
 
+    //check that tx is included into UTXO set
+    val state = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
+    tx.outputs.foreach(o => state.boxById(o.id) should not be None)
+
     // try to spend all the boxes with complex scripts
     val complexInputs = tx.outputs.map(o => Input(o.id, emptyProverResult))
     val complexOut = new ErgoBoxCandidate(tx.outputs.map(_.value).sum, complexScript, r.s.stateContext.currentHeight)
     val unsignedComplexTx = new UnsignedErgoTransaction(complexInputs, IndexedSeq(), IndexedSeq(complexOut))
     val complexTx = defaultProver.sign(unsignedComplexTx, tx.outputs, IndexedSeq(), r.s.stateContext).get
     tx.outputs.map(_.ergoTree.complexity).sum should be > ergoSettings.nodeSettings.maxTransactionComplexity
-    // ensure that complex transaction was included into mempool
-    var mempoolSize = 0
-    while (mempoolSize == 0) {
-      nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(complexTx))
-      mempoolSize = await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size
-    }
+    // send complex transaction to the mempool
+    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(complexTx))
 
     testProbe.expectMsgClass(newBlockDelay, newBlock)
     testProbe.expectMsgClass(newBlockDelay, newBlock)
     testProbe.expectMsgClass(newBlockDelay, newBlock)
+
     // complex tx was removed from mempool
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
     // complex tx was not included
-    val state = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
-    tx.outputs.foreach(o => state.boxById(o.id) should not be None)
-    complexTx.outputs.foreach(o => state.boxById(o.id) shouldBe None)
+    val state2 = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
+    tx.outputs.foreach(o => state2.boxById(o.id) should not be None)
+    complexTx.outputs.foreach(o => state2.boxById(o.id) shouldBe None)
   }
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {

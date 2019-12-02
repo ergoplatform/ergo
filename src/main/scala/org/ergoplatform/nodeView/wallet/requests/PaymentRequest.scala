@@ -11,7 +11,7 @@ import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
 
 /**
-  * A payment request contains a script, value, assets, additional registers.
+  * A payment request contains an address (probably containing script), value, assets, additional registers.
   */
 case class PaymentRequest(address: ErgoAddress,
                           value: Long,

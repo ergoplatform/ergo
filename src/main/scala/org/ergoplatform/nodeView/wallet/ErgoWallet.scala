@@ -1,10 +1,9 @@
 package org.ergoplatform.nodeView.wallet
 
 import akka.actor.{ActorRef, ActorSystem, Props}
-import org.ergoplatform.ErgoAddress
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.ErgoSettings
@@ -35,11 +34,6 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   override val walletActor: ActorRef =
     actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings, boxSelector))
 
-  def watchFor(address: ErgoAddress): ErgoWallet = {
-    walletActor ! WatchFor(address)
-    this
-  }
-
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     walletActor ! ScanOffChain(tx)
     this
@@ -69,6 +63,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
       Failure(new Exception(s"Height of a modifier with id $to not found"))
     }
   }
+
 }
 
 object ErgoWallet {
@@ -76,4 +71,5 @@ object ErgoWallet {
                      settings: ErgoSettings)(implicit actorSystem: ActorSystem): ErgoWallet = {
     new ErgoWallet(historyReader, settings)
   }
+
 }

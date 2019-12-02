@@ -112,7 +112,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       // trying to create a new transaction
       val tx3 = await(wallet.generateTransaction(req2)).get
-      // check that tx3 have inputs, different from tx2
+      // check that tx3 has inputs different from tx2
       tx3.inputs.foreach { in =>
         tx2.inputs.exists(tx2In => tx2In.boxId sameElements in.boxId) shouldBe false
       }
@@ -267,17 +267,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val bs2 = getBalancesWithUnconfirmed
       bs2.walletBalance shouldBe (balance1 + balance2)
       bs2.walletAssetBalances shouldBe assetAmount(box1 ++ box2)
-
-      wallet.watchFor(Pay2SAddress(Constants.TrueLeaf))
-      val balance3 = Random.nextInt(1000) + 1
-      val box3 = IndexedSeq(new ErgoBoxCandidate(balance3, Constants.TrueLeaf, startHeight, randomNewAsset.toColl))
-      wallet.scanOffchain(ErgoTransaction(fakeInput, IndexedSeq(), box3))
-
-      blocking(Thread.sleep(1000))
-
-      val bs3 = getBalancesWithUnconfirmed
-      bs3.walletBalance shouldBe (balance1 + balance2 + balance3)
-      bs3.walletAssetBalances shouldBe assetAmount(box1 ++ box2 ++ box3)
     }
   }
 
@@ -830,42 +819,4 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       await(wallet.generateTransaction(Seq(requestWithCertainAmount))) shouldBe 'success
     }
   }
-
-  property("watchFor") {
-    withFixture { implicit w =>
-      val pubKey = getPublicKeys.head.pubkey
-      val genesisBlock = makeGenesisBlock(pubKey)
-      val initialBoxes = boxesAvailable(genesisBlock, pubKey)
-      val initialBalance = balanceAmount(initialBoxes)
-      applyBlock(genesisBlock) shouldBe 'success
-      waitForScanning(genesisBlock)
-      val initialState = getCurrentState
-
-      val preimage = ByteArrayConstant("hello world".getBytes("UTF-8"))
-      val hash = Blake2b256(preimage.value.toArray)
-      val p2s = Pay2SAddress(EQ(CalcBlake2b256(preimage), hash).toSigmaProp)
-      val balanceToSpend = randomLong(initialBalance)
-      val tx = makeTx(initialBoxes, emptyProverResult, balanceToSpend, p2s.script, randomNewAsset)
-      val assets = assetAmount(boxesAvailable(tx, p2s.script.bytes))
-      val block = makeNextBlock(getUtxoState, Seq(tx))
-
-      wallet.scanPersistent(block)
-      waitForScanning(block)
-      val confirmedBalance = getConfirmedBalances
-      val sumOutputs = balanceAmount(boxesAvailable(block, p2s.script.bytes))
-      confirmedBalance.walletBalance shouldBe 0
-      confirmedBalance.walletAssetBalances shouldBe empty
-
-      wallet.rollback(initialState.version)
-      blocking(Thread.sleep(100))
-
-      wallet.watchFor(p2s)
-      wallet.scanPersistent(block)
-      waitForScanning(block)
-      val confirmedBalance2 = getConfirmedBalances
-      confirmedBalance2.walletBalance shouldBe sumOutputs
-      confirmedBalance2.walletAssetBalances shouldBe assets
-    }
-  }
-
 }

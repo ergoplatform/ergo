@@ -41,7 +41,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
   implicit private val timeout: Timeout = defaultTimeout
 
   val newBlock: Class[msgType] = classOf[msgType]
-  val newBlockDuration: FiniteDuration = 30 seconds
+  val newBlockDelay: FiniteDuration = 30 seconds
 
   val defaultSettings: ErgoSettings = {
     val empty = ErgoSettings.read()
@@ -83,7 +83,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     minerRef ! StartMining
 
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
 
 
     val boxToSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
@@ -99,9 +99,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx))
     expectNoMessage(1 seconds)
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 1
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
 
     // try to spend all the boxes with complex scripts
@@ -117,9 +117,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
       mempoolSize = await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size
     }
 
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
     // complex tx was removed from mempool
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
     // complex tx was not included
@@ -153,7 +153,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     minerRef ! StartMining
 
     // wait for 1 block to be generated
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
 
     @tailrec
     def loop(toSend: Int): Unit = {
@@ -182,7 +182,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
       if (toSend > toSpend.size) {
         // wait for the next block
-        testProbe.expectMsgClass(newBlockDuration, newBlock)
+        testProbe.expectMsgClass(newBlockDelay, newBlock)
         loop(toSend - toSpend.size)
       }
     }
@@ -227,7 +227,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     minerRef ! StartMining
 
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
 
     val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
@@ -250,9 +250,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 2
 
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
 
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
 

@@ -219,7 +219,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def readers: Receive = {
     case ReadBalances(chainStatus) =>
-      sender() ! (if (chainStatus.onChain) registry.getDigest() else offChainRegistry.readIndex)
+      sender() ! (if (chainStatus.onChain) registry.fetchDigest() else offChainRegistry.readIndex)
 
     case ReadPublicKeys(from, until) =>
       sender() ! walletVars.publicKeys.slice(from, until)

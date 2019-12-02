@@ -5,13 +5,14 @@
 APP_DIR=~/Ergo
 NODE_NAME=${USER}-$(hostname)
 API_KEY=
-INSTALLATION_RECOMMENDATIONS=
+DEBIAN_INSTALLATION_RECOMMENDATIONS=
 TOR=no
 CONFIG_TEMPLATE="ergo.node.mining = false\nscorex.network.nodeName = \"<NODE_NAME>\"\nscorex.restApi.apiKeyHash = \"<API_KEY_HASH>\""
-NODE_PARAMS="-Xmx$(awk '/MemTotal/ { printf "%.0f", $2*0.9 }' /proc/meminfo)K"
 MODE=full
+# Initial Ergo node Java parameter is Java heap size with 90% of total RAM
+NODE_PARAMS="-Xmx$(awk '/MemTotal/ { printf "%.0f", $2*0.9 }' /proc/meminfo)K"
 
-
+# Parse given options
 while :; do
     case $1 in
         -h|-\?|--help)
@@ -105,6 +106,7 @@ while :; do
     shift
 done
 
+# Check required options
 if [ -z "${API_KEY}" ]; then
   echo 'ERROR: "--api-key" is required and requires a non-empty option argument.'
   exit 1
@@ -118,34 +120,33 @@ fi
 echo "Ergo node with config file will be installed into '${APP_DIR}' directory and will be named as '${NODE_NAME}' and has API key '${API_KEY}'."
 
 
-## Check preinstalled software
-INSTALLATION_RECOMMENDATIONS=
+# Check preinstalled software
 which java > /dev/null
 if [ $? != 0 ]; then
-  INSTALLATION_RECOMMENDATIONS="${INSTALLATION_RECOMMENDATIONS}\nsudo apt install default-jre-headless"
+  DEBIAN_INSTALLATION_RECOMMENDATIONS="${DEBIAN_INSTALLATION_RECOMMENDATIONS}\nsudo apt install default-jre-headless"
 fi
 
 which curl > /dev/null
 if [ $? != 0 ]; then
-  INSTALLATION_RECOMMENDATIONS="${INSTALLATION_RECOMMENDATIONS}\nsudo apt install curl"
+  DEBIAN_INSTALLATION_RECOMMENDATIONS="${DEBIAN_INSTALLATION_RECOMMENDATIONS}\nsudo apt install curl"
 fi
 
 which daemon > /dev/null
 if [ $? != 0 ]; then
-  INSTALLATION_RECOMMENDATIONS="${INSTALLATION_RECOMMENDATIONS}\nsudo apt install daemon"
+  DEBIAN_INSTALLATION_RECOMMENDATIONS="${DEBIAN_INSTALLATION_RECOMMENDATIONS}\nsudo apt install daemon"
 fi
 
 if [ "${TOR}" != "no" ]; then
   which tor > /dev/null
   if [ $? != 0 ]; then
-    INSTALLATION_RECOMMENDATIONS="${INSTALLATION_RECOMMENDATIONS}\nsudo apt install tor"
+    DEBIAN_INSTALLATION_RECOMMENDATIONS="${DEBIAN_INSTALLATION_RECOMMENDATIONS}\nsudo apt install tor"
   fi
   NODE_PARAMS="${NODE_PARAMS} -DsocksProxyHost=localhost -DsocksProxyPort=9050"
   CONFIG_TEMPLATE="${CONFIG_TEMPLATE}\nscorex.network.bindAddress = \"127.0.0.1:9030\"\nscorex.restApi.bindAddress = \"127.0.0.1:9053\""
 fi
 
-if [ -n "${INSTALLATION_RECOMMENDATIONS}" ]; then
-  echo "To run Ergo node as you desired, you first need to install required software. For Ubuntu, run:${INSTALLATION_RECOMMENDATIONS}"
+if [ -n "${DEBIAN_INSTALLATION_RECOMMENDATIONS}" ]; then
+  echo "To run Ergo node as you desired, you first need to install required software. For Ubuntu, run:${DEBIAN_INSTALLATION_RECOMMENDATIONS}"
   echo "After software installed, just run this script again with same parameters"
   exit 1
 fi
@@ -176,13 +177,12 @@ echo "Ergo was downloaded to ${APP_DIR}/ergo.jar"
 echo -n "Executing ergo node to obtain API key hash..."
 daemon --chdir=${APP_DIR} -- java -jar ${APP_DIR}/ergo.jar --mainnet
 PID=$(pgrep -f "daemon --chdir=${APP_DIR} -- java")
-while ! curl --output /dev/null --silent --head --fail http://localhost:9053; do sleep 1 && echo -n '.'; done;
+while ! curl --output /dev/null --silent --head --fail http://localhost:9053; do sleep 1 && echo -n '.'; done;  # wait for node be ready with progress bar
 API_KEY_HASH=$(curl -X POST "http://localhost:9053/utils/hash/blake2b" -H  "accept: application/json" -H  "Content-Type: application/json" -d "\"${APP_KEY}\"" --silent | cut -c 2- | rev | cut -c 2- | rev)
 echo "\nAPI key hash obtained: ${API_KEY_HASH}"
 echo -n "Stopping Ergo node with PID=${PID}..."
-kill ${PID} && while kill -0 ${PID} > /dev/null 2>&1; do sleep 1 && echo -n '.'; done;
+kill ${PID} && while kill -0 ${PID} > /dev/null 2>&1; do sleep 1 && echo -n '.'; done;  # wait for node exit with progress bar
 echo "\nStopped."
-
 
 # Writing config file
 echo ${CONFIG_TEMPLATE} | sed "s/<NODE_NAME>/${NODE_NAME}/g" | sed "s/<API_KEY_HASH>/${API_KEY_HASH}/g" > ${APP_DIR}/application.conf
@@ -195,6 +195,6 @@ echo "Config file was written to ${APP_DIR}/application.conf"
 echo -n "Starting node..."
 daemon --chdir=${APP_DIR} -- java ${NODE_PARAMS} -jar ${APP_DIR}/ergo.jar --mainnet -c ${APP_DIR}/application.conf
 PID=$(pgrep -f "daemon --chdir=${APP_DIR} -- java")
-while ! curl --output /dev/null --silent --head --fail http://localhost:9053; do sleep 1 && echo -n '.'; done;
+while ! curl --output /dev/null --silent --head --fail http://localhost:9053; do sleep 1 && echo -n '.'; done;  # wait for node be ready with progress bar
 echo "\nNode started."
 echo "To stop the node later, use: kill ${PID}"

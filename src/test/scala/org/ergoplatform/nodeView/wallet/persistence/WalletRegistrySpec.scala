@@ -19,10 +19,10 @@ class WalletRegistrySpec
     with FileUtils {
 
 
-  def createStore: Store = new LSMStore(createTempDir)
+  private def createStore: Store = new LSMStore(createTempDir)
 
   private val emptyBag = KeyValuePairsBag.empty
-  val walletBoxStatus = Map(PaymentsAppId -> BoxCertainty.Certain)
+  private val walletBoxStatus = Map(PaymentsAppId -> BoxCertainty.Certain)
 
   private val ws = settings.walletSettings
 

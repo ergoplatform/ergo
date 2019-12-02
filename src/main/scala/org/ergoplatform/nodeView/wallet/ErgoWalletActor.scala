@@ -37,35 +37,6 @@ import org.ergoplatform.wallet.Constants.{MiningRewardsQueueId, PaymentsAppId}
 
 import scala.util.{Failure, Random, Success, Try}
 
-case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
-                      externalApplications: Seq[ExternalApplication])(implicit val settings: ErgoSettings) {
-
-  private[wallet] implicit val addressEncoder: ErgoAddressEncoder =
-    ErgoAddressEncoder(settings.chainSettings.addressPrefix)
-
-  val publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
-
-  val miningScriptsBytes: Seq[Array[Byte]] = proverOpt.toSeq.flatMap(_.pubKeys).map(pk =>
-    ErgoScriptPredef.rewardOutputScript(settings.chainSettings.monetary.minerRewardDelay, pk)
-  ).map(_.bytes)
-
-  val trackedBytes: Seq[Array[Byte]] = proverOpt.toSeq.flatMap(_.pubKeys).map(_.propBytes.toArray)
-
-  def resetProver(): WalletVars = this.copy(proverOpt = None)
-
-  def withProver(prover: ErgoProvingInterpreter): WalletVars = this.copy(proverOpt = Some(prover))
-
-  def removeApplication(appId: AppId): WalletVars =
-    this.copy(externalApplications = this.externalApplications.filter(_.appId != appId))
-
-  def addApplication(app: ExternalApplication): WalletVars =
-    this.copy(externalApplications = this.externalApplications :+ app)
-}
-
-object WalletVars {
-  def initial(storage: WalletStorage, settings: ErgoSettings): WalletVars = WalletVars(None, storage.allApplications)(settings)
-}
-
 class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   extends Actor
     with ScorexLogging
@@ -75,7 +46,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   import ErgoWalletActor._
   import IdUtils._
-
 
   private val walletSettings: WalletSettings = settings.walletSettings
   //todo: update parameters
@@ -105,8 +75,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     */
   private def extractWalletOutputs(tx: ErgoTransaction,
                                    inclusionHeight: Option[Int],
-                                   walletVars: WalletVars
-                                  ): Seq[TrackedBox] = {
+                                   walletVars: WalletVars): Seq[TrackedBox] = {
 
     val trackedBytes: Seq[Array[Byte]] = walletVars.trackedBytes
     val miningScriptsBytes: Seq[Array[Byte]] = walletVars.miningScriptsBytes
@@ -670,6 +639,35 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 }
 
 object ErgoWalletActor {
+
+  case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
+                        externalApplications: Seq[ExternalApplication])(implicit val settings: ErgoSettings) {
+
+    private[wallet] implicit val addressEncoder: ErgoAddressEncoder =
+      ErgoAddressEncoder(settings.chainSettings.addressPrefix)
+
+    val publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
+
+    val miningScriptsBytes: Seq[Array[Byte]] = proverOpt.toSeq.flatMap(_.pubKeys).map(pk =>
+      ErgoScriptPredef.rewardOutputScript(settings.chainSettings.monetary.minerRewardDelay, pk)
+    ).map(_.bytes)
+
+    val trackedBytes: Seq[Array[Byte]] = proverOpt.toSeq.flatMap(_.pubKeys).map(_.propBytes.toArray)
+
+    def resetProver(): WalletVars = this.copy(proverOpt = None)
+
+    def withProver(prover: ErgoProvingInterpreter): WalletVars = this.copy(proverOpt = Some(prover))
+
+    def removeApplication(appId: AppId): WalletVars =
+      this.copy(externalApplications = this.externalApplications.filter(_.appId != appId))
+
+    def addApplication(app: ExternalApplication): WalletVars =
+      this.copy(externalApplications = this.externalApplications :+ app)
+  }
+
+  object WalletVars {
+    def initial(storage: WalletStorage, settings: ErgoSettings): WalletVars = WalletVars(None, storage.allApplications)(settings)
+  }
 
   final case class WatchFor(address: ErgoAddress)
 

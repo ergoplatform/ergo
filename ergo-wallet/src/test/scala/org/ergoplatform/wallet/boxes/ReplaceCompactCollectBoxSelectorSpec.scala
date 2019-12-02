@@ -17,7 +17,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers {
   def box(value:Long) = ErgoBox(value, TrueLeaf, 0)
   def trackedBox(value:Long) = TrackedBox(parentTx, 0, None, box(value), Map(PaymentsAppId -> BoxCertainty.Certain))
 
-  property("compress() done propery") {
+  property("compress() done properly") {
     val selector = new ReplaceCompactCollectBoxSelector(3, 2)
 
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)

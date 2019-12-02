@@ -111,7 +111,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
       if (statuses.nonEmpty) {
         val tb = TrackedBox(tx.id, bx.index, inclusionHeight, None, None, bx, statuses)
-        log.info("New tracked box: " + tb.boxId)
+        log.debug("New tracked box: " + tb.boxId)
         Some(tb)
       } else {
         None

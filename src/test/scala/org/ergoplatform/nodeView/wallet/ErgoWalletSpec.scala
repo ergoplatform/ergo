@@ -33,7 +33,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val uncertainProp = Constants.TrueLeaf
       val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, uncertainProp.bytes)
-      val app = await(w.wallet.addApplication(ExternalAppRequest("True detector", scanningPredicate))).get
+      val appReq = ExternalAppRequest("True detector", scanningPredicate, alwaysCertain = false)
+      val app = await(w.wallet.addApplication(appReq)).get
 
       val genesisBlock = makeGenesisBlock(walletPk, randomNewAsset)
 

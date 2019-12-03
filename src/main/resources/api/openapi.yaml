@@ -693,12 +693,14 @@ components:
           type: string
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
+        alwaysCertain:
+          type: boolean
       example:
         appName: Assets Tracker
         trackingRule:
           predicate: containsAsset
           assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
-
+          alwaysCertain: true
 
     ExternalApplication:
       type: object
@@ -709,12 +711,15 @@ components:
           type: integer
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
+        alwaysCertain:
+            type: boolea
       example:
         appId: 2
         appName: Assets Tracker
         trackingRule:
           predicate: containsAsset
           assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
+        alwaysCertain: true
 
     ApplicationIdResponse:
       type: object

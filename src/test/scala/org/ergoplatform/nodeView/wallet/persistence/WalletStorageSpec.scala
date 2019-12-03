@@ -39,7 +39,7 @@ class WalletStorageSpec
         val storage = new WalletStorage(store, settings)
         externalAppReqs.foreach(storage.addApplication)
         val storageApps = storage.allApplications
-        val storageRequests = storageApps.map(app => ExternalAppRequest(app.appName, app.trackingRule))
+        val storageRequests = storageApps.map(app => ExternalAppRequest(app.appName, app.trackingRule, app.alwaysCertain))
         storageRequests.foreach(r => externalAppReqs.contains(r) shouldBe true)
         storageApps.map(_.appId).foreach(storage.removeApplication)
         storage.allApplications.length shouldBe 0

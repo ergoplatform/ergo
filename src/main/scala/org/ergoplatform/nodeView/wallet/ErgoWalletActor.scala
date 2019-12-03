@@ -83,14 +83,14 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     tx.outputs.flatMap { bx =>
       val appsTriggered = externalApplications.filter(_.trackingRule.filter(bx))
-        .map(app => app.appId -> BoxCertainty.Uncertain)
+        .map(app => app.appId -> app.initialCertainty)
         .toMap
 
       val miningIncomeTriggered = miningScriptsBytes.exists(ms => bx.propositionBytes.sameElements(ms))
 
       //tweak for tests
       lazy val miningStatus: (AppId, BoxCertainty) = if (settings.chainSettings.monetary.minerRewardDelay > 0) {
-        MiningRewardsQueueId -> BoxCertainty.Uncertain
+        MiningRewardsQueueId -> BoxCertainty.Certain
       } else {
         PaymentsAppId -> BoxCertainty.Certain
       }
@@ -640,6 +640,17 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
 object ErgoWalletActor {
 
+  /**
+    * Inner class of the wallet actor which it encapsulating its mutable state (aside of the databases
+    * the actor modifies). The main intention behind the class is to make modifications of this part of the internal
+    * state explicit and unit-testable.
+    *
+    *
+    * @param proverOpt
+    * @param externalApplications
+    *
+    * @param settings
+    */
   case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
                         externalApplications: Seq[ExternalApplication])(implicit val settings: ErgoSettings) {
 

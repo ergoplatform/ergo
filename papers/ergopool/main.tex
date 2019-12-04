@@ -86,21 +86,33 @@
 \begin{document}
 
 
-\title{\poolname: Breaking Non-Outsourceable Puzzles Using Smart Contracts (working title)}
+\title{Bypassing Non-Outsourceability in Proof-of-Work Puzzles Using Smart Contracts}
 \author{Ergo Developers}
 %\institute{Ergo Platform}
 \maketitle
 
 \begin{abstract}
-	Ergo is a proof-of-work (PoW) smart contract platform based on the UTXO model. Its underlying PoW, called \powname, is designed to be {\em non-outsourceable} or {\em pool-resistant}, which in simplet terms means that the system aims to prevent mining centralization by discouraging pool formation. 
-	In this work, we show how create a centralized mining pool for Ergo and thereby break its pool resistance. Our ideas are generic enough to be applied to other non-outsourseable puzzles provided that the underlying smart contract language is expressive enough. 
+% 	Ergo is a 
+	Non-outsourceable puzzles have been proposed to prevent mining pool formation in Proof-of-work (PoW) platforms. In this work, we show how bypass such restrictions provided the underlying platform supports smart contracts in a sufficiently advanced language. In particular, the language should allow access to the PoW solution and use it in creating guard conditions. We demonstrate a practical implementation of our attack using \poolname, a pool for Ergo, which is an advanced smart contract platform designed to be pool-resistant. Our approach allows complete centralization of mining, where the pool operator not only collects the rewards but also decided which transactions to accept. 
 	
 \end{abstract}
 
 \section{Introduction}
 \snote{Below text copied from PoW intro paper}
 
-Ergo\footnote{\url{https://ergoplatform.org}} is a smart contract platform whose contracts are written in a high-level language called \langname. It provides Ethereum-like functionality but is more closer to Bitcoin in the underlying design. For instance, it is based on short-lived immutable objects (called UTXOs in Bitcoin and {\em boxes} in Ergo) instead of long-lived mutable objects (called accounts in Ethereum) to store data and code. It also has some features different from both Bitcoin and Ethereum relating to scalability and long-term survivability. For instance, it has a {\em storage-rent} component, so that boxes must pay rent to continue staying on the blockchain. Secondly, it allows running a fully verifying node on low-power devices using the idea of partially stateless clients implementation~\cite{RMCI17}. Finally, it uses a PoW algorithm called \powname~\cite{autolykos} that discourages mining-pool formation, which we informally term {\em pool-resistance}. 
+Blockchain platforms such as Ethereum and Ergo provide advanced financial capabilities using sophisticated guard scripts, which are also called smart contracts. While Ethereum is an account based platform, Ergo follows the more traditional UTXO model. This allows Ergo to be more scalable than Ethereum in the long run, at least when it comes to memory and computation requirements of participant nodes. 
+Another dimension of long-term scalability in blockchain platforms is how well it is able to withstand some of the following threats:
+\begin{enumerate}
+    \item Centralization of mining power
+    \item Transaction censorship
+    \item Forking attacks, where it is difficult to select the correct chain due to a large number of forks of identical difficulty parameters.
+\end{enumerate}
+
+Non-outsourcable puzzles have been proposed to prevent the first two but not the third. In fact some approaches to non-outsourceable puzzles increase the chances of forking attacks, where there were none in the original scheme (Type 1 schemes below). 
+
+In this work, we describe an approach using smart contracts to bypass the non-outsorceability of most such approaches. 
+
+% Ergo\footnote{\url{https://ergoplatform.org}} is a smart contract platform whose contracts are written in a high-level language called \langname. It provides Ethereum-like functionality but is more closer to Bitcoin in the underlying design. For instance, it is based on short-lived immutable objects (called UTXOs in Bitcoin and {\em boxes} in Ergo) instead of long-lived mutable objects (called accounts in Ethereum) to store data and code. It also has some features different from both Bitcoin and Ethereum relating to scalability and long-term survivability. For instance, it has a {\em storage-rent} component, so that boxes must pay rent to continue staying on the blockchain. Secondly, it allows running a fully verifying node on low-power devices using the idea of partially stateless clients implementation~\cite{RMCI17}. Finally, it uses a PoW algorithm called \powname~\cite{autolykos} that discourages mining-pool formation, which we informally term {\em pool-resistance}. 
 
 \section{Background}
 \subsection{Outsourceable Puzzles}
@@ -209,33 +221,35 @@ Bitcoin and Ergo, we can think about following components of the execution conte
 	& 4     & Yes & Yes         & Yes 		   & Yes   & --    \\
 \end{tabular}
 	
-\section{Overview of \powname}
+\section{Non-Outsourceable Puzzles}
 
-Ergo uses \powname as its underlying proof-of-work mechanism and Ergo's reward system can be considered as a type of PieceWork puzzle \snote{Check validity of this statement}. 
+% Ergo uses \powname as its underlying proof-of-work mechanism and Ergo's reward system can be considered as a type of PieceWork puzzle \snote{Check validity of this statement}. 
 
-Ergo was designed to be resistant to mining pools and this was done using a combination of two techniques: (1) replacing the core hash function with a digital signature (i.e., using public-key cryptography) and (2) tying the public key to the rewards. 
+We first describe the basic Type 2 approach in detail before describing our approach in the next section.
+In a nutshell, this method uses a combination of two techniques: (1) replacing the core hash function with a digital signature (i.e., using public-key cryptography) and (2) tying the public key to the rewards. 
 
 \subsection{Using Public-Key Cryptography}
-Ergo is based on \powname uses Schnorr signatures as the underlying signature scheme, the idea works for any randomized signature scheme that satisfies standard requirements (i.e., strongly unforgeable against adaptive chosen message attacks (s-UFCMA)). For this discussion, we will use a randomized signature scheme that outputs signatures uniformly spread over $\mathbb{Z}_{2^{256}}$. 
 
-A candidate block header is constructed using transactions as in Bitcoin along with a public key. A valid block header is a candidate block header along with a signature $s$ that (1) verifies with this public key and (2) satisfies the difficulty constraints as in bitcoin (i.e., is less than a certain value).
+The method requires a randomized signature scheme that is strongly unforgeable against adaptive chosen message attacks (s-UFCMA)) and outputs signatures uniformly spread over $\mathbb{Z}_{2^{256}}$ irrespective of how the signer behaves. Schnorr signature scheme is one such scheme.  
 
-The difficulty parameter is automatically adjusted to ensure consistent time between solutions. Note that the protocol does not put any constraints on how the rewards are collected. Thus, at the protocol level, Ergo does not prevent pooled mining. Consequently, such a system does not seem to have any advantage over the hash-function based solution of Bitcoin, at least in terms of pool-resistance.
+A candidate block header is constructed using transactions as in Bitcoin along with a public key $pk$. A valid block header is a candidate block header along with a signature $s$ that (1) verifies with this public key and (2) satisfies the difficulty constraints as in bitcoin (i.e., is less than a certain value).
 
-At this point we must distinguish between two types of reward mechanisms. The first is where the rewards are {\em created} at the time of mining, also termed as {\em post-mine}. The second is where the rewards are {\em unlocked} at the time of mining, but were created much earlier {\em pre-mine}. 
+The difficulty parameter is automatically adjusted to ensure consistent time between solutions. 
+% At this point we must distinguish between two types of reward mechanisms. The first is where the rewards are {\em created} at the time of mining, also termed as {\em post-mine}. The second is where the rewards are {\em unlocked} at the time of mining, but were created much earlier {\em pre-mine}. 
 
-Using this terminology, we can say that an Ergo-like system does not prevent pools for post-mined rewards but can be made pool-resistant for pre-mined rewards, as discussed next.
+% Using this terminology, we can say that an Ergo-like system does not prevent pools for post-mined rewards but can be made pool-resistant for pre-mined rewards, as discussed next.
 
 \subsection{Tying Public-Key to Rewards}
 
-The key to making Ergo pool-resistant is to tie the rewards to the public key corresponding to the block solution. 
-Ergo stores the pre-mined rewards in a so called \textbf{Emission box}, which contains all the ergs that will ever be emitted in rewards. The box is protected by a script that enforces certain conditions on how the rewards must be collected. In particular, it requires that a reward transaction has exactly two output boxes, such that the first is another emission box containing the remaining ergs and the second is a box with the miners reward (initially 67.5 Ergs) protected using the script: {\em prove knowledge of secret key corresponding to public key of the block-solution AND height is greater than or equal to the box-creation height plus 720}.  
+The second technique in making a Type 2 pool-resistant scheme is to tie the rewards to the public key corresponding to the block solution. That is, the platform enforces that any mining rewards are protected by the statement {\em prove knowledge of secret key corresponding to the public key $pk$ (from the block solution)}
+
+Rather than enforcing this logic within the protocol, Ergo uses smart contracts to enforce it. In particular, this rule is enforced in a so called \textbf{Emission box}, a UTXO which contains all the ergs that will ever be emitted in rewards. The box is protected by a script that enforces certain conditions on how the rewards must be collected. In particular, it requires that a reward transaction has exactly two outputs, such that the first is another emission box containing the remaining ergs and the second is a box with the miners reward (initially 67.5 Ergs) protected using the script: {\em prove knowledge of the discrete logarithm (to some fixed base $g$) of group element $pk$ AND height is greater than or equal to the box-creation height plus 720}.  
 This is possible because Ergo's (Level 3) context includes the block solution.  
 
 The above approach ensures that the private key used for finding the block solution is also needed for spending the rewards. Consequently, anyone who finds a block also has the ability to spend those rewards. 
 If we try to create any standard type of pool, we find that anyone having the ability to find a solution also has the ability to spend (i.e., steal) the reward. In fact, any standard pool must share the same private key among all participants, thereby making it impossible to determine the actual spender. This restriction also applies to decentralized schemes such as P2Pool and SmartPool because they both require the miner be able to use arbitrary public keys for receiving the reward
 
-Note that the same richness of \langname that allows it be pool-resistant (at least to standard pooling techniques) also allows us break pool-resistance using non-standard techniques. In this paper we discuss two such methods.  
+% Note that the same richness of \langname that allows it be pool-resistant (at least to standard pooling techniques) also allows us break pool-resistance using non-standard techniques. In this paper we discuss two such methods.  
 
 \snote{Discuss how \powname fits (which) definition of non-outsourceable puzzles.}
 

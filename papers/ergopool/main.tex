@@ -115,50 +115,41 @@
 \section{Introduction}
 
 Security of Bitcoin and many other cryptocurrencies relies on a Proof-of-Work scheme~(also known as scratch-off puzzle
-scheme). In Bitcoin, a miner collects a number of unconfirmed transactions and concatenates them using a Merkle tree. All nodes of this tree except the leaves are 32 byte hashes computed from its children. The root of this tree, denoted $t$ here, is stored in another structure called the {\em block header}, which also includes the hash of the previous block's header $h$ and a random string $n$ called the nonce. We use the term $m$ to denote the concatenation of Merkle root and the hash of the previous block.
-That is, $m = t\|h$ and the header is of the form $m\|n$.
+scheme). Security is critical for a decentralized cryptocurrency, and security of its consensus protocol is based on
+the assumption that no single entity controls large part of the mining power. For example, if a single entity controls
+33\% then it can earn unproportially more by performing selfish mining, and with more than 50\% an adversary can do
+double spending or filter out certain transactions. However, miners tend to join mining pools which is causing
+concentration of mining power. Another threat, especially for new cryptocurrencies due to potential goldfinger attacks,
+is hosted mining services where it is possible to rent mining power in order to mine~(or attack) a cryptocurrency. \knote{links}
 
+\subsection{Proof-of-Work internals}
 
-\snote{Below text copied from PoW intro paper}
+In Bitcoin, a miner collects a number of unconfirmed transactions and builds a Merkle tree on top of them.
+% All nodes of this tree except the leaves are 32 byte hashes computed from its children.
+The digest of this tree, denoted $t$ here, is stored in a block section called the {\em block header}, which also
+includes the hash of the previous block's header $h$ and a random string $n$ called the nonce. We use the term $m$ to
+denote the puzzle made of the concatenation of the Merkle tree digest and the hash of the previous block. That is, $m = t\|h$ and
+then the header is of the form $m\|n$.
+The solution is also determined by another parameter $b < 2^{256}$, denoting the `difficulty'. Let $H$ be a collision
+resistant hash function taking as input an arbitrary sized array of bits and outputting an array of 256 bits. The
+output of $H$ can be considered a number between 0 and $2^{256}-1$. The header $m\|n$ is considered a valid solution
+if $H(m\|n) \leq b$.
+A miner repeatedly tries different values of $n$ (also possibly changing $m$ as well by including new transactions into block
+ candidate) until a solution is found. Since the output of $H$ can be thought of as distributed uniformly in the
+output space, the probability of finding a solution in each try is $\tau = b/2^{256}$. All proof-of-work algorithms
+follow this basic idea of restricting the output to be less than some $b$. It is worth noting
+that, for Bitcoin, as of this writing (July 2019), $b\approx 2^{181}$, and so $\tau \approx 2^{-75}$.
+%\approx 10^{-22.6} \approx 0.0000000000000000000000257$.
 
-Blockchain platforms such as Ethereum and Ergo provide advanced financial capabilities using sophisticated guard scripts, which are also called smart contracts. While Ethereum is an account based platform, Ergo follows the more traditional UTXO model. This allows Ergo to be more scalable than Ethereum in the long run, at least when it comes to memory and computation requirements of participant nodes.
-Another dimension of long-term scalability in blockchain platforms is how well it is able to withstand some of the following threats:
-\begin{enumerate}
-    \item Centralization of mining power
-    \item Transaction censorship
-    \item Forking attacks, where it is difficult to select the correct chain due to a large number of forks of identical difficulty parameters.
-\end{enumerate}
-
-Non-outsourcable puzzles have been proposed to prevent the first two but not the third. In fact some approaches to non-outsourceable puzzles increase the chances of forking attacks, where there were none in the original scheme (Type 1 schemes below).
-
-In this work, we describe an approach using smart contracts to bypass the non-outsorceability of most such approaches.
-
-% Ergo\footnote{\url{https://ergoplatform.org}} is a smart contract platform whose contracts are written in a high-level language called \langname. It provides Ethereum-like functionality but is more closer to Bitcoin in the underlying design. For instance, it is based on short-lived immutable objects (called UTXOs in Bitcoin and {\em boxes} in Ergo) instead of long-lived mutable objects (called accounts in Ethereum) to store data and code. It also has some features different from both Bitcoin and Ethereum relating to scalability and long-term survivability. For instance, it has a {\em storage-rent} component, so that boxes must pay rent to continue staying on the blockchain. Secondly, it allows running a fully verifying node on low-power devices using the idea of partially stateless clients implementation~\cite{RMCI17}. Finally, it uses a PoW algorithm called \powname~\cite{autolykos} that discourages mining-pool formation, which we informally term {\em pool-resistance}.
-
-\section{Background}
-\subsection{Outsourceable Puzzles}
-
-Below describes how generic outsourceable puzzles work. 
-
-\snote{Following is more or less copy-pasted from PoW intro paper. Needs rework}
-
-
-In Bitcoin, a miner collects a number of unconfirmed transactions and concatenates them using a Merkle tree. All nodes of this tree except the leaves are 32 byte hashes computed from its children. The root of this tree, denoted $t$ here, is stored in another structure called the {\em block header}, which also includes the hash of the previous block's header $h$ and a random string $n$ called the nonce. We use the term $m$ to denote the concatenation of Merkle root and the hash of the previous block. 
-That is, $m = t\|h$ and the header is of the form $m\|n$. 
-
-The solution is also determined by another parameter $b < 2^{256}$, denoting the `difficulty'. Let $H$ be a collision resistant hash function taking as input an arbitrary sized array of bits and outputting an array of 256 bits. The output of $H$ can be considered a number between 0 and $2^{256}-1$. The header $m\|n$ is considered a valid solution if $H(m\|n) \leq b$. 
-
-A miner repeatedly tries different values of $n$ (possibly changing $m$ as well by including new transactions in between tries) until a solution is found. Since the output of $Hash$ can be thought of as distributed uniformly in the output space, the probability of finding a solution in each try is $\tau = b/2^{256}$. All proof-of-work algorithms (including that of Ergo) follow this basic idea of restricting the output to be less than some $b$. It is worth noting that, for Bitcoin, as of this writing (July 2019), $b\approx 2^{181}$, and so $\tau \approx 2^{-75}$. %\approx 10^{-22.6} \approx 0.0000000000000000000000257$.
-
-\textbf{Mining Pools:} Bitcoin allows mining pools, which roughly work as follows. The pool distributes work, based on a some $m$ that it decides. Each miner tries to find a solution for the given $m$ and any solution found is sent to the network. 
+\textbf{Mining Pools:} Bitcoin allows mining pools, which roughly work as follows. The pool distributes work, based on a some $m$ that it decides. Each miner tries to find a solution for the given $m$ and any solution found is sent to the network.
 A miner actually tries to find a {\em share}, which is like a solution but with reduced difficulty (also decided by the pool). Some of the shares may also be real solutions, which become valid blocks. A miner gets paid by the number of shares submitted.
 The key observation with pools is that miners do work for some other entity who then distributes the rewards back to the workers.
-We define three levels of centralization in pools. 
+We define three levels of centralization in pools.
 
 \begin{enumerate}
-	\item {\em Level 1 (Complete centralization):} The pool operator is defines both $m$ and the reward address. Thus, a pool operator has full control over which transactions are included (censorship) and also carries the risk of losing the rewards.
-	\item {\em Level 2 (Partial centralization):} The pool operator does not defines $m$ but collects the rewards. This is resistant to censorship but still carries the risk of losing the rewards. This is what we will try achieve. 
-	\item {\em Level 3 (No centralization):} There is no pool operator and rewards are automatically given to the participants based on the shares they submitted (P2Pool for Bitcoin and SmartPool for Ethereum).
+	\item {\em Level 1 (Complete centralization):} The pool operator defines both $m$ and the reward address. Thus, a pool operator has full control over which transactions are included (censorship) and also carries the risk of losing the rewards.
+	\item {\em Level 2 (Partial centralization):} The pool operator does not define $m$ but collects the rewards. This is resistant to censorship but still carries the risk of losing the rewards. This is what we will try achieve.
+	\item {\em Level 3 (No centralization):} There is no pool operator and rewards are automatically given to the participants based on the shares they submitted (see P2Pool for Bitcoin and SmartPool for Ethereum).
 \end{enumerate}
 We also add another parameter, namely {\em mineability}, which captures the ability of miners with smaller investments to join and receive small but frequent rewards rather than large but infrequent ones, despite the yield of the latter being larger over a long time. If the system does not allow smaller miners to receive any rewards in a reasonable time, we say that the system has low mineability and is only suitable for larger miners (and will eventually lead to centralization). A system with high mineability allows miners to receive a steady income to cover running costs their mining equipment, thereby encouraging such miners to join and keep the mining power spread over a larger network.
 The following table summarizes the concepts.\\
@@ -172,27 +163,60 @@ The following table summarizes the concepts.\\
 
 ~\\
 
-Note that P2Pool and SmartPool operate at Level 3 but maintain high minability because they only work in systems that also support Levels  1 and 2. In particular, these approaches don't work in systems that are designed to operate only in Level 3, such as the non-outsourceable puzzles of~\cite{} (see next Section). 
+Note that P2Pool and SmartPool operate at Level 3 but maintain high minability because they only work in systems that also support Levels  1 and 2. In particular, these approaches don't work in systems that are designed to operate only in Level 3, such as the non-outsourceable puzzles of~\cite{} (see next Section).
 
 Ergo is also designed as a Level 3 platform. However, Ergo's scripting language, \langname enables us to create \poolname, a mining pool for Ergo that operates at Levels 1 and 2. In particular, we use the block solution (available as contextual information in \langname) to define a pooled mining contract.
 
+
+%\snote{Below text copied from PoW intro paper}
+
+%Blockchain platforms such as Ethereum and Ergo provide advanced financial capabilities using sophisticated guard scripts, which are also called smart contracts. While Ethereum is an account based platform, Ergo follows the more traditional UTXO model. This allows Ergo to be more scalable than Ethereum in the long run, at least when it comes to memory and computation requirements of participant nodes.
+%Another dimension of long-term scalability in blockchain platforms is how well it is able to withstand some of the following threats:
+%\begin{enumerate}
+%    \item Centralization of mining power
+%    \item Transaction censorship
+%    \item Forking attacks, where it is difficult to select the correct chain due to a large number of forks of identical difficulty parameters.
+%\end{enumerate}
+
+%Non-outsourcable puzzles have been proposed to prevent the first two but not the third. In fact some approaches to non-outsourceable puzzles increase the chances of forking attacks, where there were none in the original scheme (Type 1 schemes below).
+
+%In this work, we describe an approach using smart contracts to bypass the non-outsorceability of most such approaches.
+
+% Ergo\footnote{\url{https://ergoplatform.org}} is a smart contract platform whose contracts are written in a high-level language called \langname. It provides Ethereum-like functionality but is more closer to Bitcoin in the underlying design. For instance, it is based on short-lived immutable objects (called UTXOs in Bitcoin and {\em boxes} in Ergo) instead of long-lived mutable objects (called accounts in Ethereum) to store data and code. It also has some features different from both Bitcoin and Ethereum relating to scalability and long-term survivability. For instance, it has a {\em storage-rent} component, so that boxes must pay rent to continue staying on the blockchain. Secondly, it allows running a fully verifying node on low-power devices using the idea of partially stateless clients implementation~\cite{RMCI17}. Finally, it uses a PoW algorithm called \powname~\cite{autolykos} that discourages mining-pool formation, which we informally term {\em pool-resistance}.
+
+%\section{Background}
+%\subsection{Outsourceable Puzzles}
+
+%Below describes how generic outsourceable puzzles work.
+
+%\snote{Following is more or less copy-pasted from PoW intro paper. Needs rework}
+
+
+% In Bitcoin, a miner collects a number of unconfirmed transactions and concatenates them using a Merkle tree. All nodes of this tree except the leaves are 32 byte hashes computed from its children. The root of this tree, denoted $t$ here, is stored in another structure called the {\em block header}, which also includes the hash of the previous block's header $h$ and a random string $n$ called the nonce. We use the term $m$ to denote the concatenation of Merkle root and the hash of the previous block.
+% That is, $m = t\|h$ and the header is of the form $m\|n$.
+
+%The solution is also determined by another parameter $b < 2^{256}$, denoting the `difficulty'. Let $H$ be a collision resistant hash function taking as input an arbitrary sized array of bits and outputting an array of 256 bits. The output of $H$ can be considered a number between 0 and $2^{256}-1$. The header $m\|n$ is considered a valid solution if $H(m\|n) \leq b$.
+
+%A miner repeatedly tries different values of $n$ (possibly changing $m$ as well by including new transactions in between tries) until a solution is found. Since the output of $Hash$ can be thought of as distributed uniformly in the output space, the probability of finding a solution in each try is $\tau = b/2^{256}$. All proof-of-work algorithms (including that of Ergo) follow this basic idea of restricting the output to be less than some $b$. It is worth noting that, for Bitcoin, as of this writing (July 2019), $b\approx 2^{181}$, and so $\tau \approx 2^{-75}$. %\approx 10^{-22.6} \approx 0.0000000000000000000000257$.
+
+
 \subsection{Non-Outsourceable Puzzles}
 
-Discuss weak and strong variants; pool resistance; other works
+% Discuss weak and strong variants; pool resistance; other works
 
 We start with overviewing (non-)outsourceability definitions in existing literature. Different works, such as
 Non-outsourceable Scratch-Off Puzzles~\cite{miller2015nonoutsourceable}, 2-Phase Proof-of-Work (2P-PoW)~\cite{twophase},
 PieceWork~\cite{daian2017short}, Autolykos~\cite{autolykos}.
 
 
-Non-outsourceability approaches can be broadly divided into two into two categories. In the first one~\cite{autolykos, daian2017short, twophase}, which we call \textbf{Type 1}, a scheme is considered
-non-outsourceable if is it not possible to iterate over the solution space without knowing a private key, with block rewards associated with the corresponding public key. The reasoning here is that a pool does not trust miners and so will not give the secret away to them.
+Non-outsourceability approaches can be broadly divided into two categories. In the first one~\cite{autolykos, daian2017short, twophase}, which we call \textbf{Type 1}, a scheme is considered
+non-outsourceable if it is not possible to iterate over the solution space without knowing a private key, with block rewards associated with the corresponding public key. The reasoning here is that a pool does not trust miners and so will not give the secret away to them.
 
 In the other category
-~\cite{miller2015nonoutsourceable}, called \textbf{Type 2}, a Proof-of-Work scheme is considered non-outsourceable if for any generated block, a miner can generate another unrelated block efficiently with non-negligible probability. Motivation behind this definition is that a miner can get paid for shares
+~\cite{miller2015nonoutsourceable}, called \textbf{Type 2}, a Proof-of-Work scheme is considered non-outsourceable if for any generated block, a miner can generate another block efficiently with non-negligible probability. Motivation behind this definition is that a miner can get paid for shares
 by trying to generate a block that pays the reward to the pool. In case of successful block generation, however, the miner generates and broadcasts another block for which rewards go to the miner instead of the pool, thereby stealing the reward.
 
-At a technical level, both approach rely on the attacker creating a race condition to steal the pool's rewards. The difference lies in the way this occurs. In Type 1 schemes, the miner is able to steal the reward after the block gets finalized. That is, any party that generates a valid solution for $m$ then has the ability to spend the reward transaction of $m$ in an untraceable manner. In particular, the race condition occurs {\em after} a block is accepted.
+At a technical level, both approaches rely on the attacker creating a race condition to steal the pool's rewards. The difference lies in the way this occurs. In Type 1 schemes, the miner is able to steal the reward after the block gets finalized. That is, any party that generates a valid solution for $m$ then has the ability to spend the reward transaction of $m$ in an untraceable manner. In particular, the race condition occurs {\em after} a block is accepted.
 
 In Type 2, any party is able to generate a solution $d$ for some block header $m$ that sends rewards to a pool address, then the same party can then efficiently generate another solution $d'$ for an $m'$ that sends rewards to any other chosen address. This results in a race condition where the party can steal the rewards if the solution to $m'$ gets accepted. In particular the race condition occurs {\em before} a block is finalized into the blockchain. We further classify Type 2 into {\em weak} if the identity of the miner stealing the rewards is public and {\em strong} if it is secret.
 
@@ -252,7 +276,7 @@ The method requires a randomized signature scheme that is strongly unforgeable a
 
 A candidate block header is constructed using transactions as in Bitcoin along with a public key $p$. A valid block header is a candidate block header along with a signature $d$ that (1) verifies with this public key and (2) satisfies the difficulty constraints as in bitcoin (i.e., is less than a certain value). The difficulty parameter is automatically adjusted to ensure consistent time between solutions.
 
-One real-world implementation of this concept is in \powname, the PoW algorithm of Ergo which uses a variation of Schnorr signatures as follows. The goal of a miner is to output $d$ such that $d < 2^{256}/\lambda$, where $\lambda$ is the difficulty parameter. The value $d$ is to be computed as follows. First compute $r = H(m\|n\|p\|w)$ where $m$ is the transaction Merkle root, $n$ is a nonce, $p$ is a public key (an elliptic curve group element) and $w$ is an ephemeral public key that should never to be reused in two different blocks. Let $x$ be the corresponding private key of $w$. Compute $d = xr - s$, where $s$ is the private key corresponding to $p$.
+One real-world implementation of this concept is in \powname, the PoW algorithm of Ergo which uses a variation of Schnorr signatures as follows. The goal of a miner is to output $d$ such that $d < 2^{256}/\lambda$, where $\lambda$ is the difficulty parameter. The value $d$ is to be computed as follows. First compute $r = H(m\|n\|p\|w)$ where $m$ is the transactions digest, $n$ is a nonce, $p$ is a public key (an elliptic curve group element) and $w$ is an ephemeral public key that should never to be reused in two different blocks. Let $x$ be the corresponding private key of $w$. Compute $d = xr - s$, where $s$ is the private key corresponding to $p$.
 
 
 % At this point we must distinguish between two types of reward mechanisms. The first is where the rewards are {\em created} at the time of mining, also termed as {\em post-mine}. The second is where the rewards are {\em unlocked} at the time of mining, but were created much earlier {\em pre-mine}.

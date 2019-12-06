@@ -105,7 +105,12 @@ class DigestState protected(override val version: VersionTag,
       validate(fb)
         .flatMap { _ =>
           val version: VersionTag = idToVersion(fb.header.id)
-          stateContext.appendFullBlock(fb, votingSettings).flatMap(update(version, fb.header.stateRoot, _))
+          stateContext.appendFullBlock(fb, votingSettings) match {
+            case Success(sc) => update(version, fb.header.stateRoot, sc)
+            case Failure(e) =>
+              log.error(s"Can't modify state context due to ${e.getMessage} ", e)
+              Failure(e)
+          }
         }
         .recoverWith { case e =>
           log.warn(s"Invalid block ${fb.encodedId}, reason: ${LoggingUtil.getReasonMsg(e)}")
@@ -117,7 +122,13 @@ class DigestState protected(override val version: VersionTag,
     case h: Header =>
       log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
       val version: VersionTag = idToVersion(h.id)
-      stateContext.appendHeader(h, votingSettings).flatMap(update(version, h.stateRoot, _))
+      stateContext.appendHeader(h, votingSettings) match {
+        case Success(sc) => update(version, h.stateRoot, sc)
+        case Failure(e) =>
+          log.error(s"Can't modify state context due to ${e.getMessage} ", e)
+          Failure(e)
+      }
+      //stateContext.appendHeader(h, votingSettings).flatMap(update(version, h.stateRoot, _))
   }
 
   private def processOther: ModifierProcessing[DigestState] = {

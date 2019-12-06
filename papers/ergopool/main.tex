@@ -329,6 +329,25 @@ Note that the above attack mitigation strategy is unique to Ergo and will not wo
 Can a Level 2 smart contract platform be used to bypass non-outsourceability of Type 1 schemes?
 How can we make it fully decentralized (as in SmartPool or P2Pool)?
 
+\section{10 Blocks}
+
+We describe a collateralized smart contract which is working for both Type 1 and Type 2 scheme. For sake of brevity,
+we describe a solution for Type 2 schemes only here. We remind that in such schemes a miner can produce~(with
+non-negligible probability) an alternative block for the same PoW solution. Thus the miner can generate block shares
+which the pool accepts, but in case of block with network difficulty generated, the miner is replacing it with another
+block paying to the miner only. As noted in~\cite{miller2015nonoutsourceable}, the pool still can detect that the miner
+run away by requiring for the block solution to have some watermark~(e.g. by splitting the nonce into two halfs and
+requiring first half to contain certain bits).
+However, if block solutions for some number $L$ of last block headers are available in the script execution context
+then the scheme could be bypassed by the following contract. First, the miner is creating a coin which is locking
+collateral to the following condition "payable to the pool's public key if one of the last L headers contains
+the watermarked solution"~(we are skipping needed in practice deadline condition for withdrawing the collateral for
+simlicity's sake here).
+Then the miner simply gets away with the mined block, anyway, the pool will claim the collateral within $L$. The only
+way for the miner to save the collateral is to generate $L$ blocks after one with the watermark, but this is unlikely
+the case for pool user if $L$ is big enough. For example, in Ergo, 10~last block headers available in the execution
+context, and chance to generate 11 blocks in a row is small~\cite{Nak08}.
+
 \bibliographystyle{unsrt}
 \bibliography{main}
 \appendix

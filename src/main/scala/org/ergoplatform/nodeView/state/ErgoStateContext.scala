@@ -12,6 +12,7 @@ import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADDigest
+import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
@@ -60,7 +61,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                       (implicit val votingSettings: VotingSettings)
   extends ErgoLikeStateContext
     with BytesSerializable
-    with ScorexEncoding {
+    with ScorexEncoding
+    with ScorexLogging
+{
 
   override type M = ErgoStateContext
 
@@ -184,10 +187,13 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   }
 
   def appendHeader(header: Header, votingSettings: VotingSettings): Try[ErgoStateContext] = {
+    if (lastHeaders.isEmpty) {
+      log.info("Last headers is empty!")
+    }
     validateVotes(header)
       .validate(hdrHeight,
-        lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight) == header.height,
-        s"${header.id} => ${lastHeaderOpt.map(_.height)} == ${header.height}")
+        lastHeaders.isEmpty || lastHeaders.head.height + 1 == header.height,
+        s"${header.id} => ${lastHeaderOpt.map(_.height + 1)} == ${header.height}")
       .result
       .toTry
       .flatMap { _ =>
@@ -207,9 +213,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val votesValidationState = validateVotes(fb.header)
     new ExtensionValidator(votesValidationState)
       .validateExtension(fb.extension, fb.header, lastExtensionOpt, lastHeaderOpt)
-      .validate(hdrHeight,
-        lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight) == fb.header.height,
-        s"${fb.id} => ${lastHeaderOpt.map(_.height)} == ${fb.header.height}")
+      .validate(hdrHeight,lastHeaders.isEmpty || lastHeaders.head.height + 1 == fb.header.height,
+        s"${fb.id} => ${lastHeaderOpt.map(_.height + 1)} == ${fb.header.height}")
       .validate(bsBlockTransactionsSize,
         fb.blockTransactions.size <= currentParameters.maxBlockSize,
         s"${fb.id} => ${fb.blockTransactions.size} == ${currentParameters.maxBlockSize}")

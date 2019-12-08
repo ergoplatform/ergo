@@ -15,7 +15,7 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "4ca3e400-SNAPSHOT"
-val sigmaStateVersion = "3.1.0"
+val sigmaStateVersion = "3.1.1-RC1"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -33,8 +33,8 @@ libraryDependencies ++= Seq(
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
   "org.typelevel" %% "cats-free" % "1.6.0",
-  "javax.xml.bind" % "jaxb-api" % "2.+",
-  "com.iheart" %% "ficus" % "1.4.+",
+  "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
+  "com.iheart" %% "ficus" % "1.4.7",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
   "com.joefkelley" %% "argyle" % "1.0.0",
@@ -42,7 +42,7 @@ libraryDependencies ++= Seq(
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
-  "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.13.5" % "test",
 
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",
@@ -214,7 +214,9 @@ lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
   .enablePlugins(JmhPlugin)
 
 lazy val ergoWallet = (project in file("ergo-wallet"))
+  .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
   .settings(
+    crossScalaVersions := Seq(scalaVersion.value, "2.11.12"),
     commonSettings,
     name := "ergo-wallet",
     libraryDependencies += ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)

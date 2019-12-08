@@ -1,3 +1,15 @@
+/*
+### How to publish snapshot version fo ergoWallet:
+1. make sure the sonatype credentials are in file `Path.userHome / ".sbt" / ".ergo-sonatype-credentials"` in format:
+```
+realm=Sonatype Nexus Repository Manager
+host=oss.sonatype.org
+user=LOGIN
+password=PASSWORD
+```
+2. run `sbt +ergoWallet/publish`
+ */
+
 val circeVersion = "0.10.0"
 
 libraryDependencies ++= Seq(

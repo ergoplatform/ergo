@@ -120,20 +120,18 @@ The rest of the paper is organized as follows [...]
 
 \subsection{Proofs of Work} 
 
-In Bitcoin and all PoW-based currencies, a miner collects a number of unconfirmed transactions and builds a Merkle tree on top of them.
+We first describe the vanilla proof-of-work mechanism used in Bitcoin. A miner collects a number of unconfirmed transactions and builds a Merkle tree on top of them.
 % All nodes of this tree except the leaves are 32 byte hashes computed from its children.
 The digest of this tree, denoted $t$ here, is stored in a section of the block called the {\em block header}, which also includes the hash of the previous block's header $h$ and a random string $n$ called the nonce. We use the term $m$ to denote the puzzle made of the concatenation of the Merkle tree digest and the hash of the previous block. That is, $m = t\|h$ and
 then the header is of the form $m\|n$.
-The solution is also determined by another parameter $b < 2^{256}$, denoting the `difficulty'. Let $H$ be a collision
-resistant hash function taking as input an arbitrary sized array of bits and outputting an array of 256 bits. The
-output of $H$ can be considered a number between 0 and $2^{256}-1$. The header $m\|n$ is considered a valid solution
-if $H(m\|n) \leq b$.
-A miner repeatedly tries different values of $n$ (also possibly changing $m$ as well by including new transactions into block
- candidate) until a solution is found. Since the output of $H$ can be thought of as distributed uniformly in the
-output space, the probability of finding a solution in each try is $\tau = b/2^{256}$. All proof-of-work algorithms
-follow this basic idea of restricting the output to be less than some $b$. It is worth noting
-that, for Bitcoin, as of this writing (July 2019), $b\approx 2^{181}$, and so $\tau \approx 2^{-75}$.
-%\approx 10^{-22.6} \approx 0.0000000000000000000000257$.
+The solution is also determined by another parameter $\lambda > 1$, called the {\em difficulty}. Let $H$ be a collision
+resistant hash function with output of 256 bits. 
+The header $m\|n$ is considered a valid solution
+if $H(m\|n) \leq 2^{256}/\lambda$.
+A miner repeatedly tries different values of $n$ (and possibly $m$) until a solution is found. 
+Since $H$ is like a random oracle, the probability of fining a solution in one attempt is 
+$1 / \lambda$.\footnote{It is worth mentioning that as of July 2019, this value is $\approx 2^{-75}$.} %\approx 10^{-22.6} \approx 0.0000000000000000000000257$.
+All PoW-based systems use the above idea of finding a value from a uniform distribution that falls within some narrower range computed using the difficulty parameter. 
 
 \subsection{Pooled Mining} 
 
@@ -210,10 +208,10 @@ non-outsourceable if it is not possible to iterate over the solution space witho
 
 In the other category
 ~\cite{miller2015nonoutsourceable}, called \textbf{Type 2}, a Proof-of-Work scheme is considered non-outsourceable if for any solved block, a miner can generate another block efficiently with non-negligible probability. The motivation behind this definition is that a miner can get paid for shares
-by trying to generate a block that pays the reward to the pool. In case of successful block generation, however, the miner generates and broadcasts another block that sends the reward to the miner instead of the pool.
+by trying to generate a block that pays the reward to the pool. In case of successful block generation, however, the miner could generate and broadcast another block that sends the reward to the miner instead of the pool. 
 We further classify Type 2 into {\em weak} if the identity of the miner stealing the rewards can be ascertained and {\em strong} if the identity remains secret.
 
-At a technical level, both approaches rely on a miner's ability to steal the pool's rewards. The difference lies in the way this occurs. In Type 1 schemes, the miner is able to steal the reward {\em after} the block gets finalized.
+At a technical level, both Type 1 and 2 approaches rely on a miner's ability to steal the pool's rewards. The difference lies in the way this occurs. In Type 1 schemes, the miner is able to steal the reward {\em after} the block gets finalized.
 % while in Type 2 schemes, this happens before block finilzation. 
 % That is, any party that generates a valid solution for $m$ then has the ability to spend the reward transaction of $m$ in an untraceable manner. 
 % In particular, the theft happens {\em after} a block is accepted, whil.
@@ -269,8 +267,8 @@ Bitcoin and Ergo, we can think about following components of the execution conte
 
 % Ergo uses \powname as its underlying proof-of-work mechanism and Ergo's reward system can be considered as a type of PieceWork puzzle \snote{Check validity of this statement}.
 
-We first describe Type 1 puzzles in detail before describing our break in the next section.
-In a nutshell, this method uses a combination of two techniques: (1) replacing the core hash function with a digital signature (i.e., using public-key cryptography) and (2) tying the public key to the rewards.
+% We first describe Type 1 puzzles in detail before describing our break in the next section.
+In a nutshell, Type 1 puzzles use a combination of two techniques: (1) replacing the core hash function with a digital signature (i.e., using public-key cryptography) and (2) tying the public key to the rewards.
 
 \subsection{Using Public-Key Cryptography}
 
@@ -287,7 +285,7 @@ One real-world implementation of this concept is in \powname, the PoW algorithm 
 
 \subsection{Tying Public-Key to Rewards}
 
-The second technique in making a Type 2 pool-resistant scheme is to tie the rewards to the public key $p$ contained in the block solution. That is, the platform enforces that any mining rewards are protected by the statement {\em prove knowledge of secret key corresponding to the public key $p$ (from the block solution)}
+The second technique in making a Type 1 pool-resistant scheme is to tie the rewards to the public key $p$ contained in the block solution. That is, the platform enforces that any mining rewards are protected by the statement {\em prove knowledge of secret key corresponding to the public key $p$ (from the block solution)}
 
 Rather than enforcing this logic within the protocol, Ergo uses smart contracts to enforce it. In particular, this rule is enforced in a so called \textbf{Emission box}, a UTXO which contains all the ergs that will ever be emitted in rewards. The box is protected by a script that enforces certain conditions on how the rewards must be collected. In particular, it requires that a reward transaction has exactly two outputs, such that the first is another emission box containing the remaining ergs and the second is a box with the miners reward (initially 67.5 Ergs) protected using the script: {\em prove knowledge of the discrete logarithm (to some fixed base $g$) of group element $p$ AND height is greater than or equal to the box-creation height plus 720}.
 This is possible because Ergo's (Level 3) context includes the block solution.  
@@ -323,8 +321,11 @@ The first part ensures that when used to fund the pool output, the miner must be
 
 Note that the above attack mitigation strategy is unique to Ergo and will not work in generic pool-resistant protocols described in~\cite{miller2015nonoutsourceable}. One may envisage a hiding strategy, where the pool transaction is not revealed in a share (only a commitment is revealed). The actual transaction is revealed only for claiming shares or if a block is found. However, this is also insecure as discussed below. First note that there are two types of broadcast attacks. The first is the ``extract from share'' attack discussed above. The second is the ``extract from orphaned block'' attack, where the transaction is extracted from a mined block that ends up getting orphaned. While the hiding strategy works for the first attack, it does not mitigate the second. 
 
-\section{Pooled Mining in Type 2 Schemes}
+\section{Pooled Mining with Type 2 Puzzles}
 % \section{10 Blocks}
+
+Type 2 puzzles can be considered an variation of Type 1 puzzle. Recall that a Type 1 puzzle comprises of two steps: (1) embedding a public key $p$ in the block header, whose private key is needed in generating the solution, and (2) tying the block rewards to $p$. In the vanilla (weak) Type 2 puzzle, Step 1 remains the same and Step 2 above is modified as follows. The block rewards are not directly tied to $p$ but instead to another public key $a$ certified by $p$. The logic is similar to that of Type 1 puzzles. A miner computes shares where he sends the rewards to the pool public key $a$ but if a real solution is found, he sends the rewards to his own public key $a'$. Thus, similar to Type 1 puzzles, if the pool shares the secret key with a miner, they it risks losing the rewards. 
+In the basic Type 2 scheme, a pool can make it possible to identify stolen rewards by publicly fixing a watermark identifying its blocks in advance~\cite{miller2015nonoutsourceable}. A watermark in this context is something that is preserved even if the pool key $a$ is replaced by the miner key $a'$. A few examples are the certifying key $p$ or the half the bits of the nonce. The stronger variant of Type 2 puzzles replaces $a$ by a zero knowledge proof so that it is not possible to distinguish the cases when $a$ or some other $a'$ is present in the solution.  
 
 We describe a collateralized smart contract which is working for both Type 1 and Type 2 scheme. For sake of brevity,
 we describe a solution for Type 2 schemes only here. We remind that in such schemes a miner can produce~(with

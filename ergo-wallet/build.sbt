@@ -31,3 +31,9 @@ pomExtra in ThisBuild :=
 // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
 // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
 scalacOptions in(Compile, compile) ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8"))
+
+
+val credentialFile = Path.userHome / ".sbt" / ".ergo-sonatype-credentials"
+credentials ++= (for {
+  file <- if (credentialFile.exists) Some(credentialFile) else None
+} yield Credentials(file)).toSeq

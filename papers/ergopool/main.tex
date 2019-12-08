@@ -129,7 +129,7 @@ resistant hash function with output of 256 bits.
 The header $m\|n$ is considered a valid solution
 if $H(m\|n) \leq 2^{256}/\lambda$.
 A miner repeatedly tries different values of $n$ (and possibly $m$) until a solution is found. 
-Since $H$ is like a random oracle, the probability of fining a solution in one attempt is 
+Since $H$ is like a random oracle, the probability of finding a solution in one attempt is 
 $1 / \lambda$.\footnote{It is worth mentioning that as of July 2019, this value is $\approx 2^{-75}$.} %\approx 10^{-22.6} \approx 0.0000000000000000000000257$.
 All PoW-based systems use the above idea of finding a value from a uniform distribution that falls within some narrower range computed using the difficulty parameter. 
 
@@ -272,7 +272,7 @@ In a nutshell, Type 1 puzzles use a combination of two techniques: (1) replacing
 
 \subsection{Using Public-Key Cryptography}
 
-The method requires a randomized signature scheme that is strongly unforgeable against adaptive chosen message attacks (s-UFCMA)) and outputs signatures uniformly spread over some range irrespective of how the signer behaves. Schnorr signature scheme is one such scheme.
+The method requires a randomized signature scheme that is strongly unforgeable against adaptive chosen message attacks (s-UFCMA)) and outputs signatures uniformly spread over some range irrespective of how the signer behaves. Schnorr signature is one such method.
 
 A candidate block header is constructed using transactions as in Bitcoin along with a public key $p$. A valid block header is a candidate block header along with a signature $d$ that (1) verifies with this public key and (2) satisfies the difficulty constraints as in bitcoin (i.e., is less than a certain value). The difficulty parameter is automatically adjusted to ensure consistent time between solutions.
 
@@ -286,6 +286,8 @@ One real-world implementation of this concept is in \powname, the PoW algorithm 
 \subsection{Tying Public-Key to Rewards}
 
 The second technique in making a Type 1 pool-resistant scheme is to tie the rewards to the public key $p$ contained in the block solution. That is, the platform enforces that any mining rewards are protected by the statement {\em prove knowledge of secret key corresponding to the public key $p$ (from the block solution)}
+
+\snote{Maybe make this section less Ergo-specific}
 
 Rather than enforcing this logic within the protocol, Ergo uses smart contracts to enforce it. In particular, this rule is enforced in a so called \textbf{Emission box}, a UTXO which contains all the ergs that will ever be emitted in rewards. The box is protected by a script that enforces certain conditions on how the rewards must be collected. In particular, it requires that a reward transaction has exactly two outputs, such that the first is another emission box containing the remaining ergs and the second is a box with the miners reward (initially 67.5 Ergs) protected using the script: {\em prove knowledge of the discrete logarithm (to some fixed base $g$) of group element $p$ AND height is greater than or equal to the box-creation height plus 720}.
 This is possible because Ergo's (Level 3) context includes the block solution.  
@@ -305,6 +307,8 @@ The key observation is that in a valid share, the reward need not necessarily be
 	\item The block must also have another transaction sending the same amount as the reward to the pool address ({\em pool transaction}).
 \end{enumerate}
 
+\snote{Maybe make this section less Ergo-specific}
+
 A valid share is a solution to a block with the above structure. A pool operator collects such shares and any funds thus received are distributed among the miners based on the number of shares they submitted. One drawback of this is that each miner must have an equivalent amount of ergs to cover the reward amount at any time, even though the reward become spendable only after 720 blocks. 
 This means that in order to continue mining after a block is found, each miner must keep the reserved amount of at least 2 rewards (possibly more depending on the expected time to find a block).
 
@@ -315,37 +319,46 @@ This means that in order to continue mining after a block is found, each miner m
 
 \textbf{Full variant:} The full protocol mitigates the above attack. This is possible because \langname allows us to use the block solution in the context, using which we can secure the pool transaction as follows. Instead of paying to the pool from an arbitrary box (or boxes), Alice will instead store these funds in a special box protected by the following script:
 \begin{verbatim}
-(minerPubKey == alice) || bob
+(minerPubKey == alice) || alice
 \end{verbatim}
-The first part ensures that when used to fund the pool output, the miner must be Alice. The second ensures that the coins are not stuck till Alice finds a block (if ever). Here \texttt{bob} is another public key owned by Alice.
+The first part ensures that when used to fund the pool output, the miner must be Alice. The second ensures that the coins are not stuck till Alice finds a block (if ever). 
 
-Note that the above attack mitigation strategy is unique to Ergo and will not work in generic pool-resistant protocols described in~\cite{miller2015nonoutsourceable}. One may envisage a hiding strategy, where the pool transaction is not revealed in a share (only a commitment is revealed). The actual transaction is revealed only for claiming shares or if a block is found. However, this is also insecure as discussed below. First note that there are two types of broadcast attacks. The first is the ``extract from share'' attack discussed above. The second is the ``extract from orphaned block'' attack, where the transaction is extracted from a mined block that ends up getting orphaned. While the hiding strategy works for the first attack, it does not mitigate the second. 
+Note that the above attack mitigation strategy requires Level 3 context (i.e., access to the block solution to access \texttt{minerPubKey}) and will not work in Level 2 or lower. One may envisage a hiding strategy, where the pool transaction is not revealed in a share (only a commitment is revealed). The actual transaction is revealed only for claiming shares or if a block is found. However, this is also insecure as discussed below. First note that there are two types of broadcast attacks. The first is the ``extract from share'' attack discussed above. The second is the ``extract from orphaned block'' attack, where the transaction is extracted from a mined block that ends up getting orphaned. While the hiding strategy works for the first attack, it does not mitigate the second. 
 
 \section{Pooled Mining with Type 2 Puzzles}
 % \section{10 Blocks}
+In Type 2 puzzles, a miner can produce~(with non-negligible probability) an alternative block for the same PoW solution~\cite{miller2015nonoutsourceable}.
+For concreteness, we will use public key cryptography to illustrate this, as we did for Type 1 puzzles. However, our approach is generic enough to work for any other implementation of such puzzles.
 
-Type 2 puzzles can be considered an variation of Type 1 puzzle. Recall that a Type 1 puzzle comprises of two steps: (1) embedding a public key $p$ in the block header, whose private key is needed in generating the solution, and (2) tying the block rewards to $p$. In the vanilla (weak) Type 2 puzzle, Step 1 remains the same and Step 2 above is modified as follows. The block rewards are not directly tied to $p$ but instead to another public key $a$ certified by $p$. The logic is similar to that of Type 1 puzzles. A miner computes shares where he sends the rewards to the pool public key $a$ but if a real solution is found, he sends the rewards to his own public key $a'$. Thus, similar to Type 1 puzzles, if the pool shares the secret key with a miner, they it risks losing the rewards. 
-In the basic Type 2 scheme, a pool can make it possible to identify stolen rewards by publicly fixing a watermark identifying its blocks in advance~\cite{miller2015nonoutsourceable}. A watermark in this context is something that is preserved even if the pool key $a$ is replaced by the miner key $a'$. A few examples are the certifying key $p$ or the half the bits of the nonce. The stronger variant of Type 2 puzzles replaces $a$ by a zero knowledge proof so that it is not possible to distinguish the cases when $a$ or some other $a'$ is present in the solution.  
 
-We describe a collateralized smart contract which is working for both Type 1 and Type 2 scheme. For sake of brevity,
-we describe a solution for Type 2 schemes only here. We remind that in such schemes a miner can produce~(with
-non-negligible probability) an alternative block for the same PoW solution. Thus the miner can generate block shares
-which the pool accepts, but in case of block with network difficulty generated, the miner is replacing it with another
-block paying to the miner only. As noted in~\cite{miller2015nonoutsourceable}, the pool still can detect that the miner
-run away by requiring for the block solution to have some watermark~(e.g. by splitting the nonce into two halfs and
-requiring first half to contain certain bits).
-However, if block solutions for some number $L$ of last block headers are available in the script execution context
-then the scheme could be bypassed by the following contract. First, the miner is creating a coin which is locking
-collateral to the following condition "payable to the pool's public key if one of the last L headers contains
-the watermarked solution"~(we are skipping needed in practice deadline condition for withdrawing the collateral for
-simlicity's sake here).
-Then the miner simply gets away with the mined block, anyway, the pool will claim the collateral within $L$. The only
-way for the miner to save the collateral is to generate $L$ blocks after one with the watermark, but this is unlikely
-the case for pool user if $L$ is big enough. For example, in Ergo, 10~last block headers available in the execution
-context, and chance to generate 11 blocks in a row is small~\cite{Nak08}.
+Recall that a Type 1 puzzle comprises of two steps: (1) embedding a public key $p$ in the block header, whose private key is needed in generating the solution, and (2) tying the block rewards to $p$. 
+A Type 2 puzzle can be considered an variation of Type 1, where Step 1 remains the same but Step 2 is modified so that the block rewards are not tied to $p$ but instead to another public key $a$ that is certified by $p$. In other words, the complete solution is defined using a tuple $(p, a, \textsf{cert}_p(a))$, where $\textsf{cert}_p(a)$ is a signature on $a$ that verifies with $p$. The logic of this approach is similar to that of Type 1 puzzles. A cheating miner sharing the private key of $p$ with the pool can the reward as follows. When claiming shares, the miner behaves correctly. That is, it constructs the block so that the rewards go to the pool public key $a$. However, if a real solution is found, the rewards are sent to the miner public $a'$. Thus, similar to Type 1 puzzles, if the pool shares the secret with a miner, they it risks losing the rewards. 
+In the basic Type 2 scheme, a pool can make it possible to identify stolen rewards by publicly fixing a watermark identifying its blocks in advance~\cite{miller2015nonoutsourceable}. A watermark in this context is something that is preserved even if the pool key $a$ is replaced by the miner key $a'$. A few examples are the certifying key $p$ or, say, half the bits of the nonce. If such a watermark is used then it becomes possible to identify the cases when the block rewards are stolen. 
+The stronger variant of Type 2 puzzles replaces $a$ by a zero knowledge proof so that the two cases (block rewards stolen or not) become indistinguishable. 
+
+We describe a smart contract that bypasses both Type 1 and Type 2 schemes. For sake of brevity, however, we only describe the Type 2 solution here. Recall that for such schemes, it is possible to detect when a particular watermark is being used in the block. In our approach, this watermark is attached to the miner instead of the pool. 
+We also require the smart contract language to make available in the execution context the block solutions for not only the current block header but also the last $L$ block header prior to the current one. 
+
+Then a weak Type 2 scheme can be bypassed by the following contract. In order to participate in the pool, a miner creates an unspent coin that locks collateral with the guard script ``payable to pool public key if at least one of the last $L$ headers contains the watermarked solution''.\footnote{For simplicity, we skip the deadline condition for withdrawing the collateral by the miner in case a block is not found for a long time. However, a real world implementation must consider this.}
+Then a miner is permitted to send the reward to any chosen address, since as soon as a valid block is generated, the collateral becomes spendable by the pool. One way the miner can try to save the collateral is to generate $L$ blocks after the one with the watermark, but this case is unlikely for a pool user if $L$ is big enough. In Ergo, for example, $L = 10$, and the chance to generate 11 consecutive blocke is very small~\cite{Nak08}. 
+% allowed to send the reward to any address of simply gets away with the mined block, anyway, the pool will claim the collateral within $L$. The only
+% way for the miner to save the collateral is to generate $L$ blocks after one with the watermark, but this is unlikely
+% the case for pool user if $L$ is big enough. For example, in Ergo, 10~last block headers available in the execution
+% context, and chance to generate 11 blocks in a row is small~\cite{Nak08}.
 
 
 
+
+% We remind that in such schemes a miner can produce~(with
+% non-negligible probability) an alternative block for the same PoW solution. Thus the miner can generate block shares
+% which the pool accepts, but in case of block with network difficulty generated, the miner is replacing it with another
+% block paying to the miner only. As noted in~\cite{miller2015nonoutsourceable}, the pool still can detect that the miner
+% run away by requiring for the block solution to have some watermark~(e.g. by splitting the nonce into two halfs and
+% requiring first half to contain certain bits).
+% However, if block solutions for some number $L$ of last block headers are available in the script execution context
+% then the scheme could be bypassed by the following contract. First, the miner is creating a coin which is locking
+% collateral to the following condition "payable to the pool's public key if one of the last L headers contains
+% the watermarked solution"
 \section{Conclusion}
 
 Can a Level 2 smart contract platform be used to bypass non-outsourceability of Type 1 schemes?

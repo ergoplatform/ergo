@@ -277,7 +277,7 @@ lazy val benchmarks = (project in file("benchmarks"))
 pgpPublicRing := file("ci/pubring.asc")
 pgpSecretRing := file("ci/secring.asc")
 pgpPassphrase := sys.env.get("PGP_PASSPHRASE").map(_.toArray)
-usePgpKeyHex("")
+usePgpKeyHex("D78982639AD538EF361DEC6BF264D529385A0333")
 
 credentials ++= (for {
   username <- Option(System.getenv().get("SONATYPE_USERNAME"))

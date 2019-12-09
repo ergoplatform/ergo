@@ -17,8 +17,6 @@ publishMavenStyle in ThisBuild := true
 
 publishArtifact in Test := false
 
-publishTo := sonatypePublishToBundle.value
-
 pomExtra in ThisBuild :=
   <developers>
     <developer>
@@ -33,45 +31,3 @@ pomExtra in ThisBuild :=
 // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
 scalacOptions in(Compile, compile) ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8"))
 
-enablePlugins(GitVersioning)
-
-version in ThisBuild := {
-  if (git.gitCurrentTags.value.nonEmpty) {
-    git.gitDescribedVersion.value.get
-  } else {
-    if (git.gitHeadCommit.value.contains(git.gitCurrentBranch.value)) {
-      // see https://docs.travis-ci.com/user/environment-variables/#default-environment-variables
-      if (Try(sys.env("TRAVIS")).getOrElse("false") == "true") {
-        // pull request number, "false" if not a pull request
-        if (Try(sys.env("TRAVIS_PULL_REQUEST")).getOrElse("false") != "false") {
-          // build is triggered by a pull request
-          val prBranchName = Try(sys.env("TRAVIS_PULL_REQUEST_BRANCH")).get
-          val prHeadCommitSha = Try(sys.env("TRAVIS_PULL_REQUEST_SHA")).get
-          prBranchName + "-" + prHeadCommitSha.take(8) + "-SNAPSHOT"
-        } else {
-          // build is triggered by a push
-          val branchName = Try(sys.env("TRAVIS_BRANCH")).get
-          branchName + "-" + git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
-        }
-      } else {
-        git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
-      }
-    } else {
-      git.gitCurrentBranch.value + "-" + git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
-    }
-  }
-}
-
-// PGP key for signing a release build published to sonatype
-// signing is done by sbt-pgp plugin
-// how to generate a key - https://central.sonatype.org/pages/working-with-pgp-signatures.html
-// how to export a key and use it with Travis - https://docs.scala-lang.org/overviews/contributors/index.html#export-your-pgp-key-pair
-pgpPublicRing := file("ci/pubring.asc")
-pgpSecretRing := file("ci/secring.asc")
-pgpPassphrase := sys.env.get("PGP_PASSPHRASE").map(_.toArray)
-usePgpKeyHex("")
-
-credentials ++= (for {
-  username <- Option(System.getenv().get("SONATYPE_USERNAME"))
-  password <- Option(System.getenv().get("SONATYPE_PASSWORD"))
-} yield Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", username, password)).toSeq

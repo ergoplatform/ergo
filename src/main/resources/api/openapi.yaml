@@ -727,6 +727,17 @@ components:
         appId:
           type: integer
 
+    ApplicationIdBoxId:
+      type: object
+      required:
+        - appId
+        - boxId
+      properties:
+        appId:
+          type: integer
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
+
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
       type: object
@@ -3077,7 +3088,8 @@ paths:
           required: true
           description: identifier of an application to remove
           schema:
-            $ref: '#/components/schemas/ErgoAddress'
+            type: integer
+            format: int32
       responses:
         '200':
           description: Identifier of an application removed
@@ -3121,3 +3133,98 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
+  /application/uncertainBoxes/{appId}:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: List boxes which delivered to the application but not necessarily belong to it.
+      operationId: listUncertainApplications
+      tags:
+        - application
+      parameters:
+        - in: path
+          name: appId
+          required: true
+          description: identifier of an application to remove
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: List of uncertain boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBox'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+
+  /application/unspentBoxes/{appId}:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: List boxes which are not spent.
+      operationId: listUnspentApplications
+      tags:
+        - application
+      parameters:
+        - in: path
+          name: appId
+          required: true
+          description: identifier of an application to remove
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: List of unspent boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBox'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /application/makeCertain:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Initialize new wallet with randomly generated seed
+      operationId: appMakeCertain
+      tags:
+        - application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationIdBoxId'
+      responses:
+        '200':
+          description: New wallet with randomly generated seed created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationIdBoxId'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+#  /application/stopTracking:

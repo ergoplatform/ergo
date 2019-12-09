@@ -13,9 +13,23 @@ jdk:
 - openjdk9
 scala:
 - 2.12.8
-script:
-  - sbt -Denv=test clean coverage +test coverageReport
-  - sbt -Denv=test benchmarks/compile
+stages:
+  - test
+  - name: release
+    if: tag =~ ^v
+  - name: snapshot
+    if: "(NOT tag IS present) AND (type = push)"
+jobs:
+  include:
+    - stage: test
+      script: sbt -Denv=test clean coverage +test coverageReport && sbt coverage +test && sbt coverageReport coveralls
+    - stage: release
+      script: openssl aes-256-cbc -K $encrypted_dceea7e6c44e_key -iv $encrypted_dceea7e6c44e_iv
+        -in ci/secring.asc.enc -out ci/secring.asc -d && gpg --import ci/secring.asc
+        && sbt +ergoWallet/publishSigned sonatypeBundleRelease
+    - stage: snapshot
+      script: sbt +ergoWallet/publish
+
 # These directories are cached to S3 at the end of the build
 cache:
   directories:

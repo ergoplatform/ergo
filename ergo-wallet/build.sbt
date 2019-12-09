@@ -1,5 +1,5 @@
 /*
-### How to publish snapshot version fo ergoWallet:
+### How to publish snapshot version of ergoWallet:
 1. make sure the sonatype credentials are in file `Path.userHome / ".sbt" / ".ergo-sonatype-credentials"` in format:
 ```
 realm=Sonatype Nexus Repository Manager

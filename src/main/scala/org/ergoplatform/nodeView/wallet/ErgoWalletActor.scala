@@ -470,7 +470,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     )
 
     prover.sign(unsignedTx, inputs, IndexedSeq(), stateContext)
-      .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
+      .fold(e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputs", e)), tx => Success(tx))
   }
 
   /**

@@ -4,7 +4,7 @@ import sbt._
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "3.1.4-SNAPSHOT",
+  version := "3.1.4",
   scalaVersion := "2.12.10",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
@@ -112,7 +112,7 @@ assemblyJarName in assembly := s"ergo-${version.value}.jar"
 
 assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first
-  case "module-info.class" => MergeStrategy.discard
+  case x if x.endsWith("/module-info.class") => MergeStrategy.discard
   case "reference.conf" => CustomMergeStrategy.concatReversed
   case PathList("org", "iq80", "leveldb", xs @ _*) => MergeStrategy.first
   case PathList("javax", "activation", xs @ _*) => MergeStrategy.last

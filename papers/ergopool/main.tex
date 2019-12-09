@@ -96,7 +96,7 @@
     should allow access to the PoW solution.
     At a high level our approach is about the miner locking collateral covering the reward amount and protected by a smart
     contract which acts as an escrow. The smart contract has logic that allows the pool to collect the collateral as soon as the miner collects any block reward. We propose two variants of the approach depending on when the collateral is bound to the block solution. Using this, we show how to bypass
-    previously proposed non-outsourceable Proof-of-Work schemes~(with the notable exception for strong non-outsourceable schemes) 
+    previously proposed non-outsourceable Proof-of-Work schemes~(with the notable exception for strong non-outsourceable schemes)
      and show how to build mining pools for such schemes.
 
 	% Non-outsourceable puzzles have been proposed to prevent mining pool formation in Proof-of-work (PoW) platforms.
@@ -140,8 +140,8 @@ We define three levels of centralization in pools.
 
 \begin{enumerate}
 	\item {\em Level 1 (Complete centralization):} The pool operator defines both $m$ and the reward address. Thus, a pool operator has full control over which transactions are included (censorship) and also carries the risk of losing the rewards.
-	\item {\em Level 2 (Partial centralization):} The pool operator does not define $m$ but collects the rewards. This is resistant to censorship but still carries the risk of losing the rewards. This is what we will try achieve.
-	\item {\em Level 3 (No centralization):} There is no pool operator and rewards are automatically given to the participants based on the shares they submitted (see P2Pool for Bitcoin and SmartPool for Ethereum).
+	\item {\em Level 2 (Partial centralization):} The pool operator does not define $m$ but collects the rewards. This is resistant to censorship but still carries the risk of losing the rewards. % This is what we will try achieve.
+	\item {\em Level 3 (No centralization):} There is no pool operator and rewards are automatically given to the participants based on the shares they submitted (see P2Pool~\cite{chesterman2018p2pool} for Bitcoin and SmartPool~\cite{luu2017smartpool} for Ethereum).
 \end{enumerate}
 % We also add another parameter, namely {\em mineability}, which captures the ability of miners with smaller investments to join and receive small but frequent rewards rather than large but infrequent ones, despite the yield of the latter being larger over a long time. If the system does not allow smaller miners to receive any rewards in a reasonable time, we say that the system has low mineability and is only suitable for larger miners (and will eventually lead to centralization). A system with high mineability allows miners to receive a steady income to cover running costs their mining equipment, thereby encouraging such miners to join and keep the mining power spread over a larger network.
 The following table summarizes the concepts.\\

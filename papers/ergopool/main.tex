@@ -90,12 +90,13 @@
 
 \begin{abstract}
     Centralized pools and renting of mining power are considered as sources of possible censorship threats and even 51\%
-    attacks for decentralized cryptocurrencies. Non-outsourceable Proof-of-Work schemes have been proposed to tackle these issues. However, tenets in the folklore say that such schemes could potentially be bypassed using escrow mechanisms.
-    In this work, we propose a concrete example of such a mechanism using collateralized smart contracts. Our approach allows miners to bypass non-outsourceable Proof-of-Work schemes 
+    attacks for decentralized cryptocurrencies. Non-outsourceable Proof-of-Work schemes have been proposed to tackle these issues. However, tenets in the folklore say that such schemes could potentially be bypassed by using escrow mechanisms.
+    In this work, we propose a concrete example of such a mechanism which is using collateralized smart contracts. Our approach allows miners to bypass non-outsourceable Proof-of-Work schemes
     if the underlying blockchain platform supports smart contracts in a sufficiently advanced language. In particular, the language
     should allow access to the PoW solution.
-    At a high level our approach is for the miner to lock collateral covering the reward amount protected by a smart contract which acts as a trusted escrow. The smart contract has logic that allows the pool to collect the collateral as soon as the miner collects any block reward. We propose two variants of the approach depending on when the collateral is bound to the block solution. Using this, we show how to bypass
-    previously proposed non-outsourceable Proof-of-Work schemes~(with the notable exception for strong non-outsourceable schemes
+    At a high level our approach is about the miner locking collateral covering the reward amount and protected by a smart
+    contract which acts as an escrow. The smart contract has logic that allows the pool to collect the collateral as soon as the miner collects any block reward. We propose two variants of the approach depending on when the collateral is bound to the block solution. Using this, we show how to bypass
+    previously proposed non-outsourceable Proof-of-Work schemes~(with the notable exception for strong non-outsourceable schemes) 
      and show how to build mining pools for such schemes.
 
 	% Non-outsourceable puzzles have been proposed to prevent mining pool formation in Proof-of-work (PoW) platforms.
@@ -367,7 +368,7 @@ moment) as they require for a generic zero-knowledge system with heavy burden on
 Another open question is the issue of block withholding~\cite{courtois2014subversive}. Probably the need to put
 collateral in place may affect attacker's strategy, and this will be considered in a follow-up work.
 
-Hopefully this work will open a new page in research of non-outsourceable schemes. 
+Hopefully this work will open a new page in research of non-outsourceable schemes.
 
 \bibliographystyle{unsrt}
 \bibliography{main}

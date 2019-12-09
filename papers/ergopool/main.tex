@@ -35,11 +35,8 @@
 \newcommand{\authnote}[2]{}
 \fi
 
-\newcommand{\lnote}[1]{{\authnote{\textcolor{orange}{Leo notes}}{#1}}}
-\newcommand{\snote}[1]{{\authnote{\textcolor{yellow}{Scalahub notes}}{#1}}}
+\newcommand{\snote}[1]{{\authnote{\textcolor{red}{Scalahub notes}}{#1}}}
 \newcommand{\knote}[1]{{\authnote{\textcolor{green}{kushti notes}}{#1}}}
-\newcommand{\mnote}[1]{{\authnote{\textcolor{red}{Morphic}}{#1}}}
-\newcommand{\dnote}[1]{{\authnote{\textcolor{brown}{Dima notes}}{#1}}}
 
 \newcommand{\ret}{\mathsf{ret}}
 \newcommand{\new}{\mathsf{new}}
@@ -87,7 +84,7 @@
 
 
 \title{Bypassing Non-Outsourceability in Proof-of-Work Puzzles Using Collateralized Smart Contracts}
-\author{Ergo Developers}
+%\author{Ergo Developers}
 %\institute{Ergo Platform}
 \maketitle
 
@@ -98,8 +95,8 @@
     if the underlying blockchain platform supports smart contracts in a sufficiently advanced language. In particular, the language
     should allow access to the PoW solution.
     At a high level our approach is for the miner to lock collateral covering the reward amount protected by a smart contract which acts as a trusted escrow. The smart contract has logic that allows the pool to collect the collateral as soon as the miner collects any block reward. We propose two variants of the approach depending on when the collateral is bound to the block solution. Using this, we show how to bypass
-    previously proposed non-outsourceable Proof-of-Work schemes~(with the notable exception for strong non-outsourceable scheme
-    \knote{link}) and show how to build mining pools for such schemes.
+    previously proposed non-outsourceable Proof-of-Work schemes~(with the notable exception for strong non-outsourceable schemes
+     and show how to build mining pools for such schemes.
 
 	% Non-outsourceable puzzles have been proposed to prevent mining pool formation in Proof-of-work (PoW) platforms.
 	% In this work, we show how bypass such restrictions provided the underlying platform supports smart contracts in a
@@ -359,10 +356,18 @@ Then a miner is permitted to send the reward to any chosen address, since as soo
 % then the scheme could be bypassed by the following contract. First, the miner is creating a coin which is locking
 % collateral to the following condition "payable to the pool's public key if one of the last L headers contains
 % the watermarked solution"
-\section{Conclusion}
+\section{Conclusion and Further Work}
 
-Can a Level 2 smart contract platform be used to bypass non-outsourceability of Type 1 schemes?
-How can we make it fully decentralized (as in SmartPool or P2Pool)?
+In this paper we have considered concrete solutions to by-pass non-outsourceability properties of Type 1 and weak Type 2
+schemes. Only strong Type 2 schemes~(where a miner is not providing a block solution in clear, rather, encrypted solution
+along with zero-knowledge proof that certifies the correctness of the encrypted solution for the block header) remain
+not bypassed. However, strong schemes are not very practical~(thus there is no any known of such a scheme at the
+moment) as they require for a generic zero-knowledge system with heavy burden on whether a prover or a verifier.
+
+Another open question is the issue of block withholding~\cite{courtois2014subversive}. Probably the need to put
+collateral in place may affect attacker's strategy, and this will be considered in a follow-up work.
+
+Hopefully this work will open a new page in research of non-outsourceable schemes. 
 
 \bibliographystyle{unsrt}
 \bibliography{main}

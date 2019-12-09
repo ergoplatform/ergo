@@ -75,4 +75,4 @@ dependencyOverrides in ThisBuild ++= Seq(
   "org.typelevel" % "spire_2.12" % "0.14.1",
   "org.whispersystems" % "curve25519-java" % "0.5.0"
 )
-// LIBRARY_DEPENDENCIES_HASH 60d58deb9feef1242bf204377351644924f4f406
+// LIBRARY_DEPENDENCIES_HASH d7442ca15d8647ea35926746f57039382fd27921

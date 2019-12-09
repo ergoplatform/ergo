@@ -26,10 +26,10 @@ import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
 
+import scala.annotation.tailrec
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 import scala.io.Source
-import scala.util.{Failure, Success}
 
 class ErgoApp(args: Args) extends ScorexLogging {
 
@@ -202,12 +202,13 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
 object ErgoApp extends ScorexLogging {
 
+  @tailrec
   def parseArgs(list: List[String], args: Args) : Args = {
     list match {
       case Nil => args // true if everything processed successfully
       case ("-c" | "--config") :: config :: rest =>
         if (args.userConfigPathOpt.isEmpty) {
-          parseArgs(rest, Args(Some(config), args.networkTypeOpt))
+          parseArgs(rest, args.copy(userConfigPathOpt = Some(config)))
         } else {
           throw new Exception("Config is specified more than once")
         }
@@ -222,15 +223,15 @@ object ErgoApp extends ScorexLogging {
           } else {
             val networkOpt = NetworkType.fromString(option.substring(2))
             if (networkOpt.isEmpty) {
-              throw new Exception(s"Unknown option ${option}")
+              throw new Exception(s"Unknown option $option")
             } else if (args.networkTypeOpt.isDefined) {
               throw new Exception("Network protocol is specified more than once")
             } else {
-              parseArgs(rest, Args(args.userConfigPathOpt, networkOpt))
+              parseArgs(rest, args.copy(networkTypeOpt = networkOpt))
             }
           }
         } else {
-          throw new Exception(s"Unknown option ${option}")
+          throw new Exception(s"Unknown option $option")
         }
      }
   }

@@ -202,16 +202,42 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
 object ErgoApp extends ScorexLogging {
 
-  import com.joefkelley.argyle._
+  def parseArgs(list: List[String], args: Args) : Args = {
+    list match {
+      case Nil => args // true if everything processed successfully
+      case ("-c" | "--config") :: config :: rest =>
+        if (args.userConfigPathOpt.isEmpty) {
+          parseArgs(rest, Args(Some(config), args.networkTypeOpt))
+        } else {
+          throw new Exception("Config is specified more than once")
+        }
+      case option :: rest =>
+        if (option.startsWith("--")) {
+          if (option.startsWith("--config")) {
+            if (args.userConfigPathOpt.isEmpty) {
+              parseArgs(rest, Args(Some(option.substring(9)), args.networkTypeOpt))
+            } else {
+              throw new Exception("Config is specified more than once")
+            }
+          } else {
+            val networkOpt = NetworkType.fromString(option.substring(2))
+            if (networkOpt.isEmpty) {
+              throw new Exception(s"Unknown option ${option}")
+            } else if (args.networkTypeOpt.isDefined) {
+              throw new Exception("Network protocol is specified more than once")
+            } else {
+              parseArgs(rest, Args(args.userConfigPathOpt, networkOpt))
+            }
+          }
+        } else {
+          throw new Exception(s"Unknown option ${option}")
+        }
+     }
+  }
 
-  val argParser: Arg[Args] = (
-    optional[String]("--config", "-c") and
-      optionalOneOf[NetworkType](NetworkType.all.map(x => s"--${x.verboseName}" -> x): _*)
-    ).to[Args]
-
-  def main(args: Array[String]): Unit = argParser.parse(args) match {
-    case Success(argsParsed) => new ErgoApp(argsParsed).run()
-    case Failure(e) => throw e
+  def main(args: Array[String]): Unit = {
+    val app = new ErgoApp(parseArgs(args.toList, Args.empty))
+    app.run()
   }
 
   def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)

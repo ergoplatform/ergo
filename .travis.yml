@@ -5,16 +5,18 @@ jdk:
 scala:
 - 2.12.8
 stages:
-- test
+- testErgo
+- testWallet
 - name: release
   if: tag =~ ^v
 - name: snapshot
   if: "(NOT tag IS present) AND (type = push)"
 jobs:
   include:
-  - stage: test
+  - stage: testErgo
     script: sbt -Denv=test clean coverage test coverageReport && sbt -Denv=test benchmarks/compile
-      && sbt +ergoWallet/test
+  - stage: testWallet
+    script: sbt +ergoWallet/test
   - stage: release
     script: openssl aes-256-cbc -K $encrypted_394e5a7bea7c_key -iv $encrypted_394e5a7bea7c_iv
       -in ci/secring.asc.enc -out ci/secring.asc -d && gpg --import ci/secring.asc

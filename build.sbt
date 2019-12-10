@@ -93,14 +93,11 @@ scalacOptions in(Compile, compile) ++= Seq("-release", "8")
 
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"
-  val versionExtractor = """(\d+)\.(\d+)\.(\d+).*""".r
-  val versionExtractor(major, minor, bugfix) = version.value
   IO.write(versionFile,
     s"""package org.ergoplatform
        |
        |object Version {
        |  val VersionString = "${version.value}"
-       |  val VersionTuple = ($major, $minor, $bugfix)
        |}
        |""".stripMargin)
   Seq(versionFile)

@@ -6,7 +6,6 @@ import scala.util.Try
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "3.1.4-SNAPSHOT",
   scalaVersion := "2.12.10",
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
@@ -217,39 +216,11 @@ lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
 
 lazy val ergoWallet = (project in file("ergo-wallet"))
   .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
-  .enablePlugins(GitVersioning)
   .settings(
     crossScalaVersions := Seq(scalaVersion.value, "2.11.12"),
     commonSettings,
     name := "ergo-wallet",
     libraryDependencies += ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion),
-    publishTo := sonatypePublishToBundle.value,
-    version := {
-      if (git.gitCurrentTags.value.nonEmpty) {
-        git.gitDescribedVersion.value.get
-      } else {
-        if (git.gitHeadCommit.value.contains(git.gitCurrentBranch.value)) {
-          // see https://docs.travis-ci.com/user/environment-variables/#default-environment-variables
-          if (Try(sys.env("TRAVIS")).getOrElse("false") == "true") {
-            // pull request number, "false" if not a pull request
-            if (Try(sys.env("TRAVIS_PULL_REQUEST")).getOrElse("false") != "false") {
-              // build is triggered by a pull request
-              val prBranchName = Try(sys.env("TRAVIS_PULL_REQUEST_BRANCH")).get
-              val prHeadCommitSha = Try(sys.env("TRAVIS_PULL_REQUEST_SHA")).get
-              prBranchName + "-" + prHeadCommitSha.take(8) + "-SNAPSHOT"
-            } else {
-              // build is triggered by a push
-              val branchName = Try(sys.env("TRAVIS_BRANCH")).get
-              branchName + "-" + git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
-            }
-          } else {
-            git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
-          }
-        } else {
-          git.gitCurrentBranch.value + "-" + git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
-        }
-      }
-    }
   )
 
 lazy val It2Test = config("it2") extend (IntegrationTest, Test)
@@ -283,3 +254,34 @@ credentials ++= (for {
   username <- Option(System.getenv().get("SONATYPE_USERNAME"))
   password <- Option(System.getenv().get("SONATYPE_PASSWORD"))
 } yield Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", username, password)).toSeq
+
+enablePlugins(GitVersioning)
+
+version in ThisBuild := {
+  if (git.gitCurrentTags.value.nonEmpty) {
+    git.gitDescribedVersion.value.get
+  } else {
+    if (git.gitHeadCommit.value.contains(git.gitCurrentBranch.value)) {
+      // see https://docs.travis-ci.com/user/environment-variables/#default-environment-variables
+      if (Try(sys.env("TRAVIS")).getOrElse("false") == "true") {
+        // pull request number, "false" if not a pull request
+        if (Try(sys.env("TRAVIS_PULL_REQUEST")).getOrElse("false") != "false") {
+          // build is triggered by a pull request
+          val prBranchName = Try(sys.env("TRAVIS_PULL_REQUEST_BRANCH")).get
+          val prHeadCommitSha = Try(sys.env("TRAVIS_PULL_REQUEST_SHA")).get
+          prBranchName + "-" + prHeadCommitSha.take(8) + "-SNAPSHOT"
+        } else {
+          // build is triggered by a push
+          val branchName = Try(sys.env("TRAVIS_BRANCH")).get
+          branchName + "-" + git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
+        }
+      } else {
+        git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
+      }
+    } else {
+      git.gitCurrentBranch.value + "-" + git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
+    }
+  }
+}
+
+publishTo := sonatypePublishToBundle.value

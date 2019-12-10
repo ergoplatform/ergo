@@ -12,7 +12,8 @@ lazy val commonSettings = Seq(
     "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
     "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"),
   homepage := Some(url("http://ergoplatform.org/")),
-  licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
+  licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode")),
+  publishTo := sonatypePublishToBundle.value
 )
 
 val scorexVersion = "4ca3e400-SNAPSHOT"
@@ -283,5 +284,3 @@ version in ThisBuild := {
     }
   }
 }
-
-publishTo := sonatypePublishToBundle.value

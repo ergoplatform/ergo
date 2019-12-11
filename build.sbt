@@ -7,6 +7,11 @@ lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
   scalaVersion := "2.12.10",
+  // version is set via git tag vX.Y.Z:
+  // $ git tag v3.2.0
+  // $ git push origin v3.2.0
+  // without the tag version resolves to [branch name]-[git commit hash]-SNAPSHOT
+  // don't set the version manually
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
     "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",

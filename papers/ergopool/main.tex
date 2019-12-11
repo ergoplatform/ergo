@@ -254,9 +254,8 @@ Bitcoin and Ergo, we can think about following components of the execution conte
  to block header data. For example, in Ergo last ten block headers and also parts of the next block header which could
  be known to the miner before starting mining of the new block do belong to the execution context. Finally, execution
  context may contain the full block with all its transactions. Please note, as execution context must be fit into
- random-access memory of commodity hardware, accessing full blockchain is not the realistic case. Table \ref{???}
- summarizing possible execution context components.
-
+ random-access memory of commodity hardware, accessing full blockchain is not the realistic case then. The following
+ table is summarizing possible execution context components.
 
 \begin{tabular}{llllllll}
 	& Level & UTXO & Transaction & Header      & Block & Example \\ \hline

@@ -111,7 +111,7 @@
 \section{Introduction}
 
 Security of Bitcoin and many other cryptocurrencies relies on so called Proof-of-Work (PoW) schemes~(also known as scratch-off puzzles), which are mechanisms to reach fast consensus and guarantee immutability of the ledger. Security of such consensus mechanisms is based on the assumption that no single entity controls a large part of the mining power. For example, if a single entity controls
-33\% then it can earn unproportionally more rewards using {\em selfish mining}~\cite{selfish}, and with more than 50\% an adversary can do double spending or filter out certain transactions. However,  individually, it is more beneficial for a miner to join a pool despite the fact that it is detrimental to the system as a whole since it causes concentration of mining power. Another threat, especially for new cryptocurrencies are potential Goldfinger attacks using hosted mining services to rent mining power in order to mine~(or attack) a cryptocurrency~\cite{goldfinger}. Non-outsourceable puzzles have been proposed to address these issues~\cite{miller2015nonoutsourceable,daian2017short}.\knote{links}. Such approaches require reward spending to depend on some trapdoor information used in solution generation. A notable example of a real world implementation of this idea is Ergo~\cite{ergo}, whose PoW, \powname, is based on~\cite{daian2017short}. In this work, we describe how to bypass the non-outsourceability of many such schemes, including Ergo. 
+33\% then it can earn unproportionally more rewards using {\em selfish mining}~\cite{selfish}, and with more than 50\% an adversary can do double spending or filter out certain transactions. However,  individually, it is more beneficial for a miner to join a pool despite the fact that it is detrimental to the system as a whole since it causes concentration of mining power. Another threat, especially for new cryptocurrencies are potential Goldfinger attacks using hosted mining services to rent mining power in order to mine~(or attack) a cryptocurrency~\cite{goldfinger}. Non-outsourceable scratch-off puzzles have been proposed to address these issues~\cite{miller2015nonoutsourceable,daian2017short}, whose primary goal is to discourage pooled mining. \knote{links}. Such approaches require reward spending to depend on some trapdoor information used in solution generation. A notable example of a real world implementation of this idea is Ergo~\cite{ergo}, whose PoW, \powname, is based on~\cite{daian2017short}. In this work, we describe how to bypass the non-outsourceability of many such schemes, including Ergo. 
 
 The rest of the paper is organized as follows [...]
 \section{Background}
@@ -153,7 +153,12 @@ The following table summarizes the concepts.\\
 		& 3 (no centralization)    & No & No 
 	\end{tabular}
 
-% ~\\
+~\\
+
+The primary issue with pools is that they increase the potential of transaction censorship and 51 percent attacks. One way to address this issue is to disallow pools entirely. This is what non-outsourceable puzzles (discussed in the next section) try to achieve.
+
+However, we observe that these issues are present only at Level 1 and not at Levels 2 and 3. Thus, instead of preventing pools, it will be better to construct Level 2 or 3 pools, so that not only can we have decentralization in mining power but also have all the benefits of pools (such as regular income). Our solution works at Level 2 but can also operate at Level 1. Additionally, it may be possible to extend it to Level 3 using approaches similar to SmartPool or P2Pool.
+
 
 % Note that P2Pool and SmartPool operate at Level 3 but maintain high minability because they only work in systems that also support Levels  1 and 2. In particular, these approaches don't work in systems that are designed to operate only in Level 3, such as the non-outsourceable puzzles of~\cite{} (see next Section).
 

@@ -18,8 +18,8 @@ trait RealModifiers {
 
   val modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: ErgoPersistentModifier]] =
     Map(Header.modifierTypeId -> HeaderSerializer,
-      BlockTransactions.TypeId -> BlockTransactionsSerializer,
-      ADProofs.TypeId -> ADProofSerializer)
+      BlockTransactions.modifierTypeId -> BlockTransactionsSerializer,
+      ADProofs.modifierTypeId -> ADProofSerializer)
 
   def readModifiers(fileName: String, threshold: Int): Vector[ErgoPersistentModifier] = {
     var counter = 0

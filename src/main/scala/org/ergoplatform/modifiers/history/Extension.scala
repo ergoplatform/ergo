@@ -25,7 +25,7 @@ case class Extension(headerId: ModifierId,
                      override val sizeOpt: Option[Int] = None)
   extends ExtensionCandidate(fields) with BlockSection {
 
-  override val modifierTypeId: ModifierTypeId = Extension.TypeId
+  override val modifierTypeId: ModifierTypeId = Extension.modifierTypeId
 
   override def digest: Digest32 = Extension.rootHash(fields)
 
@@ -74,7 +74,7 @@ object Extension extends ApiCodecs {
     Algos.merkleTreeRoot(LeafData @@ elements)
   }
 
-  val TypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)
+  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)
 
   implicit val jsonEncoder: Encoder[Extension] = { e: Extension =>
     Map(

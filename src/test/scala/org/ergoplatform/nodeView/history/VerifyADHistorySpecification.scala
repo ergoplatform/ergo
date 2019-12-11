@@ -145,7 +145,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
 
         r.shuffle(indices).foreach { i =>
           val block = chains(i._1)(i._2)
-          val sectionsToAppend = block.blockSections.filterNot(_.modifierTypeId == Extension.TypeId)
+          val sectionsToAppend = block.blockSections.filterNot(_.modifierTypeId == Extension.modifierTypeId)
           r.shuffle(sectionsToAppend).foreach(s => history.append(s) shouldBe 'success)
 
           appended += block

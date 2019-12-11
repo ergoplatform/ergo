@@ -20,7 +20,7 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction], ov
 
   assert(txs.nonEmpty, "Block should always contain at least 1 coinbase-like transaction")
 
-  override val modifierTypeId: ModifierTypeId = BlockTransactions.TypeId
+  override val modifierTypeId: ModifierTypeId = BlockTransactions.modifierTypeId
 
   override def digest: Digest32 = BlockTransactions.transactionsRoot(txs)
 
@@ -44,7 +44,7 @@ case class BlockTransactions(headerId: ModifierId, txs: Seq[ErgoTransaction], ov
 
 object BlockTransactions extends ApiCodecs {
 
-  val TypeId: ModifierTypeId = ModifierTypeId @@ (102: Byte)
+  val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (102: Byte)
 
   def transactionsRoot(txs: Seq[ErgoTransaction]): Digest32 = rootHash(txs.map(_.serializedId))
 

@@ -12,16 +12,16 @@ object HistoryModifierSerializer extends ScorexSerializer[ErgoPersistentModifier
         w.put(Header.modifierTypeId)
         HeaderSerializer.serialize(m, w)
       case m: ADProofs =>
-        w.put(ADProofs.TypeId)
+        w.put(ADProofs.modifierTypeId)
         ADProofSerializer.serialize(m, w)
       case m: BlockTransactions =>
-        w.put(BlockTransactions.TypeId)
+        w.put(BlockTransactions.modifierTypeId)
         BlockTransactionsSerializer.serialize(m, w)
       case m: Extension =>
-        w.put(Extension.TypeId)
+        w.put(Extension.modifierTypeId)
         ExtensionSerializer.serialize(m, w)
       case m: PoPowProof =>
-        w.put(PoPowProof.TypeId)
+        w.put(PoPowProof.modifierTypeId)
         PoPowProofSerializer.serialize(m, w)
       case m =>
         throw new Error(s"Serialization for unknown modifier: $m")
@@ -31,13 +31,13 @@ object HistoryModifierSerializer extends ScorexSerializer[ErgoPersistentModifier
     r.getByte() match {
       case Header.`modifierTypeId` =>
         HeaderSerializer.parse(r)
-      case ADProofs.TypeId =>
+      case ADProofs.`modifierTypeId` =>
         ADProofSerializer.parse(r)
-      case BlockTransactions.TypeId =>
+      case BlockTransactions.`modifierTypeId` =>
         BlockTransactionsSerializer.parse(r)
-      case Extension.TypeId =>
+      case Extension.`modifierTypeId` =>
         ExtensionSerializer.parse(r)
-      case PoPowProof.TypeId =>
+      case PoPowProof.`modifierTypeId` =>
         PoPowProofSerializer.parse(r)
       case m =>
         throw new Error(s"Deserialization for unknown type byte: $m")

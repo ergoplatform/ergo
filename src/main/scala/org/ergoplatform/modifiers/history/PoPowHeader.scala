@@ -3,6 +3,7 @@ package org.ergoplatform.modifiers.history
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.util.{ModifierId, idToBytes, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
+import scorex.util.Extensions._
 
 /** Header with unpacked interlinks.
   */
@@ -22,16 +23,16 @@ object PoPowHeaderSerializer extends ScorexSerializer[PoPowHeader] {
 
   override def serialize(obj: PoPowHeader, w: Writer): Unit = {
     val headerBytes = obj.header.bytes
-    w.putInt(headerBytes.length)
+    w.putUInt(headerBytes.length)
     w.putBytes(headerBytes)
-    w.putInt(obj.interlinks.size)
+    w.putUInt(obj.interlinks.size)
     obj.interlinks.foreach(x => w.putBytes(idToBytes(x)))
   }
 
   override def parse(r: Reader): PoPowHeader = {
-    val headerSize = r.getInt()
+    val headerSize = r.getUInt().toIntExact
     val header = HeaderSerializer.parseBytes(r.getBytes(headerSize))
-    val linksQty = r.getInt()
+    val linksQty = r.getUInt().toIntExact
     val interlinks = (0 until linksQty).map(_ => bytesToId(r.getBytes(32)))
     PoPowHeader(header, interlinks)
   }

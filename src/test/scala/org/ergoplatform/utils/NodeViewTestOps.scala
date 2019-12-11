@@ -55,7 +55,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
   def applyPayload(fullBlock: ErgoFullBlock, excludeExt: Boolean = false)(implicit ctx: Ctx): Try[Unit] = {
     subscribeModificationOutcome()
     val sections = if (verifyTransactions && excludeExt) {
-      fullBlock.blockSections.filterNot(_.modifierTypeId == Extension.TypeId)
+      fullBlock.blockSections.filterNot(_.modifierTypeId == Extension.modifierTypeId)
     } else if (verifyTransactions) {
       fullBlock.blockSections
     } else {

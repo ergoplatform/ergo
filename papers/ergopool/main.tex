@@ -82,7 +82,7 @@
 \begin{document}
 
 
-\title{Bypassing Non-Outsourceability in Proof-of-Work Schemes Using Collateralized Smart Contracts}
+\title{Bypassing Non-Outsourceabile Proof-of-Work Schemes Using Collateralized Smart Contracts}
 %\author{Ergo Developers}
 %\institute{Ergo Platform}
 \maketitle
@@ -112,9 +112,9 @@
 Security of Bitcoin and many other cryptocurrencies relies on so called Proof-of-Work (PoW) schemes~(also known as scratch-off puzzles), which are mechanisms to reach fast consensus and guarantee immutability of the ledger. Security of such consensus mechanisms is based on the assumption that no single entity controls a large part of the mining power. For example, if a single entity controls
 33\% then it can earn unproportionally more rewards using {\em selfish mining}~\cite{selfish}, and with more than 50\% an adversary can do double spending or filter out certain transactions. However,  individually, it is more beneficial for a miner to join a pool despite the fact that it is detrimental to the system as a whole since it causes concentration of mining power. Another threat, especially for new cryptocurrencies are potential Goldfinger attacks using hosted mining services to rent mining power in order to mine~(or attack) a cryptocurrency~\cite{goldfinger}. Non-outsourceable scratch-off puzzles have been proposed to address these issues~\cite{miller2015nonoutsourceable,daian2017short}, whose primary goal is to discourage pooled mining. Such approaches require reward spending to depend on some trapdoor information used in solution generation. A notable example of a real world implementation of this idea is Ergo~\cite{ergo}, whose PoW, \powname, is based on~\cite{daian2017short}. In this work, we describe how to bypass the non-outsourceability of many such schemes, including Ergo.
 
-The rest of the paper is organized as follows [...]
+The rest of the paper is organized as follows. Section~\ref{background} contains an overview of the current state of affairs in proof of work schemes and pooled mining along a high level overview of non-outsourceable puzzles. Section~\ref{bypasstype1} describes one approach for creating mining pools in many types non-outsourceable puzzles, specifically those of~\cite{daian2017short}. Section~\ref{bypasstype2} describes another approach that covers a wider range of puzzles~\cite{daian2017short,miller2015nonoutsourceable}. We conclude the paper in Section~\ref{conclusion} along with pointers for future research.
 \section{Background}
-
+\label{background}
 \subsection{Proofs of Work} 
 
 We first describe the vanilla proof-of-work mechanism used in Bitcoin. A miner collects a number of unconfirmed transactions and builds a Merkle tree on top of them.
@@ -127,7 +127,8 @@ The header $m\|n$ is considered a valid solution
 if $H(m\|n) \leq 2^{256}/\lambda$.
 A miner repeatedly tries different values of $n$ (and possibly $m$) until a solution is found. 
 Since $H$ is like a random oracle, the probability of finding a solution in one attempt is 
-$1 / \lambda$.\footnote{It is worth mentioning that as of July 2019, this value is $\approx 2^{-75}$.} %\approx 10^{-22.6} \approx 0.0000000000000000000000257$.
+$1 / \lambda$.
+% \footnote{It is worth mentioning that as of July 2019, this value is $\approx 2^{-75}$.} %\approx 10^{-22.6} \approx 0.0000000000000000000000257$.
 All PoW-based systems use the above idea of finding a value from a uniform distribution that falls within some narrower range computed using the difficulty parameter. 
 
 \subsection{Pooled Mining} 
@@ -205,7 +206,7 @@ Non-outsourceable Scratch-Off Puzzles~\cite{miller2015nonoutsourceable}, 2-Phase
 PieceWork~\cite{daian2017short}, Autolykos~\cite{autolykos}.
 
 
-Non-outsourceability approaches can be broadly divided into two categories. In the first one~\cite{autolykos, daian2017short, twophase}, which we call \textbf{Type 1}, a scheme is considered
+Non-outsourceability approaches can be broadly divided into two categories. In the first one~\cite{autolykos,daian2017short,twophase}, which we call \textbf{Type 1}, a scheme is considered
 non-outsourceable if it is not possible to iterate over the solution space without knowing some trapdoor information (such as a secret key) corresponding to some public information (such as a public key) contained in the block header, with block rewards locked by that trapdoor information. The reasoning here is that in order to send the reward to a pool's address, each miner must know the secret corresponding to that address. However, a pool does not trust miners and so will not give the secret away to them. 
 
 In the other category
@@ -220,7 +221,7 @@ At a technical level, both Type 1 and 2 approaches rely on a miner's ability to 
 In Type 2, 
 % any party is able to generate a solution $d$ for some block header $m$ that sends rewards to a pool address, then the same party can then efficiently generate another solution $d'$ for an $m'$ that sends rewards to any other chosen address. This results in a race condition where the party can steal the rewards if the solution to $m'$ gets accepted. 
 % In particular 
-the reward is stolen {\em before} a block is finalized into the blockchain. 
+the reward is stolen {\em before} a block is finalized into the block-chain. 
 
 
 We note that all Type 2 schemes have an inherent problem that allows malicious actors to flood the network with a large number of valid but distinct solutions, thereby causing network partitions and instability. This causes the network to converge very slowly or result in several forks. Hence, we don't consider Type 2 schemes to be robust in reaching consensus, thereby making them impractical in the real world. We call this the {\em forking attack}. Strong Type 2 schemes are even more prone to this attack because there is no fear of detection (and penalization).
@@ -229,7 +230,7 @@ In this work, we bypass the non-outsourceability of all Type 1 and weak Type 2 s
 some minimal smart contract capability. The following table summarizes this. 
 
 ~\\
-	\begin{tabular}{lllll}
+	\begin{tabular}{l|l|l|l|l}
 		  Type     & Thief's Identity   & When Rewards Stolen       & Forking attack  \\\hline
 		  1        & revealed              & after block acceptance   & no             \\
 		  2 (weak)   & revealed           & before block acceptance  & yes            \\
@@ -239,6 +240,7 @@ some minimal smart contract capability. The following table summarizes this.
 % In this view, Ergo is a special instance of a non-outsourceable puzzle of~\cite{miller2015nonoutsourceable}, where the contention is not to generate a new message $m'$, that sends the reward to a different address (which is not possible in Ergo). Instead the goal is to steal the reward 720 blocks later, when it becomes spendable. 
 
 \subsection{Execution Context in Smart Contracts}
+\label{context}
 
 To give understanding of how a smart contract can bypass non-outsourceability, we first explain what kind of data the contract
 can access.
@@ -256,7 +258,7 @@ Bitcoin and Ergo, we can think about following components of the execution conte
  random-access memory of commodity hardware, accessing full blockchain is not the realistic case then. The following
  table is summarizing possible execution context components.
 
-\begin{tabular}{llllllll}
+\begin{tabular}{l|l|l|l|l|l|l|l}
 	& Level & UTXO & Transaction & Header      & Block & Example \\ \hline
 	& 1     & No  & No          & No  		   & No    & Bitcoin \\
 	& 2     & Yes & Yes         & No 		   & No    & -- \\
@@ -265,7 +267,7 @@ Bitcoin and Ergo, we can think about following components of the execution conte
 \end{tabular}
 	
 \section{Pooled Mining in Type 1 Puzzles}
-
+\label{bypasstype1}
 % Ergo uses \powname as its underlying proof-of-work mechanism and Ergo's reward system can be considered as a type of PieceWork puzzle \snote{Check validity of this statement}.
 
 % We first describe Type 1 puzzles in detail before describing our break in the next section.
@@ -273,11 +275,11 @@ In a nutshell, Type 1 puzzles use a combination of two techniques: (1) replacing
 
 \subsection{Using Public-Key Cryptography}
 
-The method requires a randomized signature scheme that is strongly unforgeable against adaptive chosen message attacks (s-UFCMA)) and outputs signatures uniformly spread over some range irrespective of how the signer behaves. Schnorr signature is one such method.
+The method requires a randomized signature scheme that is strongly unforgeable against adaptive chosen message attacks (s-UFCMA) and outputs signatures uniformly spread over some range irrespective of how the signer behaves. Schnorr signature is one such method.
 
 A candidate block header is constructed using transactions as in Bitcoin along with a public key $p$. A valid block header is a candidate block header along with a signature $d$ that (1) verifies with this public key and (2) satisfies the difficulty constraints as in bitcoin (i.e., is less than a certain value). The difficulty parameter is automatically adjusted to ensure consistent time between solutions.
 
-One real-world implementation of this concept is in \powname{}\cite{autolykos}, the PoW algorithm of Ergo which uses a variation of Schnorr signatures as follows. The goal of a miner is to output $d$ such that $d < 2^{256}/\lambda$, where $\lambda$ is the difficulty parameter. The value $d$ is to be computed as follows. First compute $r = H(m\|n\|p\|w)$ where $m$ is the transactions digest, $n$ is a nonce, $p$ is a public key (an elliptic curve group element) and $w$ is an ephemeral public key that should never to be reused in two different blocks. Let $x$ be the corresponding private key of $w$. Compute $d = xr - s$, where $s$ is the private key corresponding to $p$.
+One real-world implementation of this concept is \powname \cite{autolykos}, the PoW algorithm of Ergo. \powname uses a variation of Schnorr signatures, where the goal of a miner is to output $d$ such that $d < 2^{256}/\lambda$ and $\lambda$ is the difficulty parameter. The value $d$ is to be computed as follows. First compute $r = H(m\|n\|p\|w)$ where $m$ is the transactions digest, $n$ is a nonce, $p$ is a public key (an elliptic curve group element) and $w$ is an ephemeral public key that should never be reused in two different blocks. Let $x$ be the corresponding private key of $w$. Compute $d = xr - s$, where $s$ is the private key corresponding to $p$.
 
 
 % At this point we must distinguish between two types of reward mechanisms. The first is where the rewards are {\em created} at the time of mining, also termed as {\em post-mine}. The second is where the rewards are {\em unlocked} at the time of mining, but were created much earlier {\em pre-mine}.
@@ -288,7 +290,7 @@ One real-world implementation of this concept is in \powname{}\cite{autolykos}, 
 
 The second technique in making a Type 1 pool-resistant scheme is to tie the rewards to the public key $p$ contained in the block solution. That is, the platform enforces that any mining rewards are protected by the statement {\em prove knowledge of secret key corresponding to the public key $p$ (from the block solution)}
 
-We consider Ergo as an example here. Rather than enforcing this logic within the protocol, Ergo uses smart contracts to enforce it. In particular, this rule is enforced in a so called \textbf{Emission box}, a UTXO which contains all the ergs that will ever be emitted in rewards. The box is protected by a script that enforces certain conditions on how the rewards must be collected. In particular, it requires that a reward transaction has exactly two outputs, such that the first is another emission box containing the remaining ergs and the second is a box with the miners reward (initially 67.5 Ergs) protected with the following script: {\em prove knowledge of the discrete logarithm (to some fixed base $g$) of group element $p$ AND height is greater than or equal to the box-creation height plus 720}.
+We consider Ergo as an example here. Rather than enforcing this logic within the protocol, Ergo uses smart contracts to enforce it. In particular, this rule is enforced in a so called \textbf{Emission box}\footnote{A box is just fancy for a UTXO in Ergo. We will use these two terms interchangeably.}, a UTXO which contains all the ergs that will ever be emitted in rewards. The box is protected by a script that enforces certain conditions on how the rewards must be collected. In particular, it requires that a reward transaction has exactly two outputs, such that the first is another emission box containing the remaining ergs and the second is a box with the miners reward (initially 67.5 Ergs) protected with the following script: {\em prove knowledge of the discrete logarithm (to some fixed base $g$) of group element $p$ AND height is greater than or equal to the box-creation height plus 720}.
 This is possible because Ergo's (Level 3) context includes the block solution.  
 
 The above approach ensures that the private key used for finding the block solution is also needed for spending the rewards. Consequently, anyone who finds a block also has the ability to spend those rewards. 
@@ -326,6 +328,8 @@ Note that the above attack mitigation strategy requires Level 3 context (i.e., a
 
 \section{Pooled Mining with Type 2 Puzzles}
 % \section{10 Blocks}
+\label{bypasstype2}
+
 In Type 2 puzzles, a miner can produce~(with non-negligible probability) an alternative block for the same PoW solution~\cite{miller2015nonoutsourceable}.
 For concreteness, we will use public key cryptography to illustrate this, as we did for Type 1 puzzles. However, our approach is generic enough to work for any other implementation of such puzzles.
 
@@ -339,7 +343,7 @@ We describe a smart contract that bypasses both Type 1 and Type 2 schemes. For s
 We also require the smart contract language to make available in the execution context the block solutions for not only the current block header but also the last $L$ block header prior to the current one. 
 
 Then a weak Type 2 scheme can be bypassed by the following contract. In order to participate in the pool, a miner creates an unspent coin that locks collateral with the guard script ``payable to pool public key if at least one of the last $L$ headers contains the watermarked solution''.\footnote{For simplicity, we skip the deadline condition for withdrawing the collateral by the miner in case a block is not found for a long time. However, a real world implementation must consider this.}
-Then a miner is permitted to send the reward to any chosen address, since as soon as a valid block is generated, the collateral becomes spendable by the pool. One way the miner can try to save the collateral is to generate $L$ blocks after the one with the watermark, but this case is unlikely for a pool user if $L$ is big enough. In Ergo, for example, $L = 10$, and the chance to generate 11 consecutive blocke is very small~\cite{Nak08}. 
+Then a miner is permitted to send the reward to any chosen address, since as soon as a valid block is generated, the collateral becomes spendable by the pool. One way the miner can try to save the collateral is to generate $L$ blocks after the one with the watermark, but this case is unlikely for a pool user if $L$ is big enough. In Ergo, for example, $L = 10$, and the chance to generate 11 consecutive blocks is very small~\cite{Nak08}. 
 % allowed to send the reward to any address of simply gets away with the mined block, anyway, the pool will claim the collateral within $L$. The only
 % way for the miner to save the collateral is to generate $L$ blocks after one with the watermark, but this is unlikely
 % the case for pool user if $L$ is big enough. For example, in Ergo, 10~last block headers available in the execution
@@ -359,6 +363,7 @@ Then a miner is permitted to send the reward to any chosen address, since as soo
 % collateral to the following condition "payable to the pool's public key if one of the last L headers contains
 % the watermarked solution"
 \section{Conclusion and Further Work}
+\label{conclusion}
 
 In this paper we have considered concrete solutions to by-pass non-outsourceability properties of Type 1 and weak Type 2
 schemes. Only strong Type 2 schemes~(where a miner is not providing a block solution in clear, rather, encrypted solution

@@ -228,11 +228,11 @@ In this work, we bypass the non-outsourceability of all Type 1 and weak Type 2 s
 some minimal smart contract capability. The following table summarizes this. 
 
 ~\\
-	\begin{tabular}{|l|l|l|l|}\hline
-		  Puzzle type     & Thief's Identity   & When Rewards Stolen       & Forking attack  \\\hline
-		  1        & revealed              & after block acceptance   & no             \\
-		  2 (weak)   & revealed           & before block acceptance  & yes            \\
-		  2 (strong) & secret           & before block acceptance  & yes      \\\hline
+	\begin{tabular}{|l|l|l|l|l|}\hline
+		  Puzzle type     & Thief's Identity   & When Rewards Stolen       & Forking attack &Bypassed \\\hline
+		  1        & revealed              & after block acceptance   & no & yes             \\
+		  2 (weak)   & revealed           & before block acceptance  & yes &yes            \\
+		  2 (strong) & secret           & before block acceptance  & yes & no      \\\hline
 	\end{tabular}
 
 % In this view, Ergo is a special instance of a non-outsourceable puzzle of~\cite{miller2015nonoutsourceable}, where the contention is not to generate a new message $m'$, that sends the reward to a different address (which is not possible in Ergo). Instead the goal is to steal the reward 720 blocks later, when it becomes spendable. 
@@ -252,8 +252,8 @@ Bitcoin and Ergo, we can think about following components of the execution conte
  have access to the spending transaction with its inputs and outputs. In the third place, smart contract may have access
  to block header data. For example, in Ergo last ten block headers and also parts of the next block header which could
  be known to the miner before starting mining of the new block do belong to the execution context. Finally, execution
- context may contain the full block with all its transactions. Please note, as execution context must be fit into
- random-access memory of commodity hardware, accessing full blockchain is not the realistic case. The following
+ context may contain the full block with all its transactions. Note that since the execution context must fit into
+ random-access memory of commodity hardware, accessing the full blockchain is not a realistic scenario. The following
  table summarizes possible execution context components.
 
 ~\\
@@ -343,7 +343,7 @@ The stronger variant of Type 2 puzzles replaces $a$ by a zero knowledge proof so
 We describe a smart contract that bypasses both Type 1 and Type 2 schemes. For sake of brevity, however, we only describe the Type 2 solution here. Recall that for such schemes, it is possible to detect when a particular watermark is being used in the block. In our approach, this watermark is attached to the miner instead of the pool. 
 We also require the smart contract language to make available in the execution context the block solutions for not only the current block header but also the last $L$ block header prior to the current one. 
 
-Then a weak Type 2 scheme can be bypassed as follows. In order to participate in the pool, a miner creates an unspent box that locks collateral with the guard script ``payable to pool public key if at least one of the last $L$ headers contains the watermarked solution''.\footnote{For simplicity, we skip the deadline condition for withdrawing the collateral by the miner in case a block is not found for a long time. 
+Then a weak Type 2 scheme can be bypassed as follows. In order to participate in the pool, a miner creates an unspent box that locks collateral with the guard script ``{\em payable to pool public key if at least one of the last $L$ headers contains the watermarked solution}''.\footnote{For simplicity, we skip the deadline condition for withdrawing the collateral by the miner in case a block is not found for a long time. 
 % However, a real world implementation must consider this.
 }
 Then a miner is permitted to send the reward to any chosen address, since as soon as a valid block is generated, the collateral becomes spendable by the pool. One way the miner can try to save the collateral is to generate $L$ blocks after the one with the watermark, but this case is unlikely for a pool user if $L$ is big enough. In Ergo, for example, $L = 10$, and the chance to generate 11 consecutive blocks is very small~\cite{Nak08}. 
@@ -368,11 +368,14 @@ Then a miner is permitted to send the reward to any chosen address, since as soo
 \section{Conclusion and Further Work}
 \label{conclusion}
 
-In this paper we considered concrete solutions to bypass non-outsourceability of Type 1 and weak Type 2
+Non-outsourceable puzzles have been proposed as a possible workaround for attacks that arise due to pool formation in PoW blockchains. Such solutions fall into two broad categories: Type 1, where the reward is directly bound to some trapdoor information used for generating the block solution (and thus, that information is needed while spending), and Type 2, where the reward is decoupled from the trapdoor information but instead linked to it via a cryptographic certificate. Type 2 can be further classified into weak, where the identity of the miner is revealed, and strong, where the identity remains hidden. 
+In this paper we proposed two approaches to bypass non-outsourceability of Type 1 and weak Type 2
 schemes. Only strong Type 2 schemes~(where a miner does not provide a block solution in the clear, but rather provides an encrypted solution
 along with zero-knowledge proof of its correctness) remain secure. However, strong schemes are not very practical as they require a generic zero-knowledge proof system which imposes heavy burden on both the  prover and verifier. Thus, such schemes have no implementations in the real world.
 
-Another open issue is that of block withholding~\cite{courtois2014subversive}, where the miner tries to attack the pool by submitting valid shares but discarding actual solutions. The need for collateral in our schemes may possibly affect the attacker's strategy. This will be considered in a follow-up work.
+Both our approaches rely on smart contracts acting as decentralized escrows and require the underlying programming language to allow predicates at context Level 3 (i.e., access to the block solution; see Section~\ref{context}). Thus, one way to invalidate our methods would be to restrict the language context to Level 2 or lower. Note that even Level 2 contracts allow sophisticated applications such as non-interactive mixing, rock-paper-scissors, and even an ICO~\cite{advtutorial}.
+
+Another open issue in mining pools is that of block withholding~\cite{courtois2014subversive}, where the miner tries to attack the pool by submitting valid shares but discarding actual solutions. The need for collateral in our schemes may possibly affect the attacker's strategy. This will be considered in a follow-up work.
 
 % We hope this work opens up new avenues for research on non-outsourceable schemes.
 

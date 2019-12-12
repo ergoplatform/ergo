@@ -1,5 +1,4 @@
-\documentclass[11pt]{article}
-%\documentclass[runningheads]{llncs}
+\documentclass[runningheads]{llncs}
 \def\shownotes{1}
 \def\notesinmargins{0}
 
@@ -111,7 +110,7 @@
 \section{Introduction}
 
 Security of Bitcoin and many other cryptocurrencies relies on so called Proof-of-Work (PoW) schemes~(also known as scratch-off puzzles), which are mechanisms to reach fast consensus and guarantee immutability of the ledger. Security of such consensus mechanisms is based on the assumption that no single entity controls a large part of the mining power. For example, if a single entity controls
-33\% then it can earn unproportionally more rewards using {\em selfish mining}~\cite{selfish}, and with more than 50\% an adversary can do double spending or filter out certain transactions. However,  individually, it is more beneficial for a miner to join a pool despite the fact that it is detrimental to the system as a whole since it causes concentration of mining power. Another threat, especially for new cryptocurrencies are potential Goldfinger attacks using hosted mining services to rent mining power in order to mine~(or attack) a cryptocurrency~\cite{goldfinger}. Non-outsourceable scratch-off puzzles have been proposed to address these issues~\cite{miller2015nonoutsourceable,daian2017short}, whose primary goal is to discourage pooled mining. \knote{links}. Such approaches require reward spending to depend on some trapdoor information used in solution generation. A notable example of a real world implementation of this idea is Ergo~\cite{ergo}, whose PoW, \powname, is based on~\cite{daian2017short}. In this work, we describe how to bypass the non-outsourceability of many such schemes, including Ergo. 
+33\% then it can earn unproportionally more rewards using {\em selfish mining}~\cite{selfish}, and with more than 50\% an adversary can do double spending or filter out certain transactions. However,  individually, it is more beneficial for a miner to join a pool despite the fact that it is detrimental to the system as a whole since it causes concentration of mining power. Another threat, especially for new cryptocurrencies are potential Goldfinger attacks using hosted mining services to rent mining power in order to mine~(or attack) a cryptocurrency~\cite{goldfinger}. Non-outsourceable scratch-off puzzles have been proposed to address these issues~\cite{miller2015nonoutsourceable,daian2017short}, whose primary goal is to discourage pooled mining. Such approaches require reward spending to depend on some trapdoor information used in solution generation. A notable example of a real world implementation of this idea is Ergo~\cite{ergo}, whose PoW, \powname, is based on~\cite{daian2017short}. In this work, we describe how to bypass the non-outsourceability of many such schemes, including Ergo.
 
 The rest of the paper is organized as follows [...]
 \section{Background}
@@ -307,7 +306,7 @@ The key observation is that in a valid share, the reward need not necessarily be
 	\item The block must also have another transaction sending the same amount as the reward to the pool address ({\em pool transaction}).
 \end{enumerate}
 
-\snote{Maybe make this section less Ergo-specific}
+%\snote{Maybe make this section less Ergo-specific}
 
 A valid share is a solution to a block with the above structure. A pool operator collects such shares and any funds thus received are distributed among the miners based on the number of shares they submitted. One drawback of this is that each miner must have an equivalent amount of ergs to cover the reward amount at any time, even though the reward become spendable only after 720 blocks. 
 This means that in order to continue mining after a block is found, each miner must keep the reserved amount of at least 2 rewards (possibly more depending on the expected time to find a block).

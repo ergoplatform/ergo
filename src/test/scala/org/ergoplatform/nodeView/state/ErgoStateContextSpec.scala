@@ -1,7 +1,8 @@
 package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{Extension, PoPowAlgos}
+import org.ergoplatform.modifiers.history.Extension
+import org.ergoplatform.modifiers.history.popow.PoPowAlgos
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.utils.HistoryTestHelpers
 

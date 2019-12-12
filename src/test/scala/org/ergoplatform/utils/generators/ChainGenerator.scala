@@ -3,6 +3,7 @@ package org.ergoplatform.utils.generators
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.popow.PoPowAlgos
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
@@ -13,6 +14,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.eval._
+
 import scala.util.Random
 
 trait ChainGenerator extends ErgoTestConstants {

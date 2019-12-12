@@ -1,14 +1,23 @@
 package org.ergoplatform.modifiers.history
 
+import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams}
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
 import scorex.util.ModifierId
 
-class PoPowAlgosSpec extends PropSpec with Matchers with ChainGenerator with ErgoGenerators {
+class PoPowAlgosSpec
+  extends PropSpec
+    with Matchers
+    with ChainGenerator
+    with ErgoGenerators
+    with GeneratorDrivenPropertyChecks {
 
+  import org.ergoplatform.modifiers.history.popow.PoPowAlgos
   import PoPowAlgos._
 
+  private val poPowParams = PoPowParams(30, 30, 30, .45)
   private val ChainLength = 10
 
   property("updateInterlinks") {
@@ -50,6 +59,53 @@ class PoPowAlgosSpec extends PropSpec with Matchers with ChainGenerator with Erg
     unpackInterlinks(improperlyPacked) shouldBe 'failure
 
     unpackedTry.get shouldEqual interlinks
+  }
+
+  property("0 level is always valid for any block") {
+    val chain = genChain(10)
+    chain.foreach(x => maxLevelOf(x.header) >= 0 shouldBe true)
+  }
+
+  property("lowestCommonAncestor") {
+    val chain0 = genChain(10)
+    val branchPoint = chain0(5)
+    val chain1 = chain0.take(5) ++ genChain(5, branchPoint)
+
+    lowestCommonAncestor(chain0.map(_.header), chain1.map(_.header)) shouldBe Some(branchPoint.header)
+  }
+
+  property("bestArg - always equal for equal proofs") {
+    val chain0 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val proof0 = prove(chain0)(poPowParams)
+    val chain1 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val proof1 = prove(chain1)(poPowParams)
+    val m = poPowParams.m
+
+    proof0.prefix.size shouldEqual proof1.prefix.size
+
+    bestArg(proof0.prefix.map(_.header))(m) shouldEqual bestArg(proof1.prefix.map(_.header))(m)
+  }
+
+  property("bestArg - always greater for better proof") {
+    val chain0 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val proof0 = prove(chain0)(poPowParams)
+    val chain1 = genChain(70).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val proof1 = prove(chain1)(poPowParams)
+    val m = poPowParams.m
+
+    proof0.prefix.size > proof1.prefix.size shouldBe true
+
+    bestArg(proof0.prefix.map(_.header))(m) > bestArg(proof1.prefix.map(_.header))(m) shouldBe true
+  }
+
+  property("goodSuperChain") {
+    val chain0 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val proof0 = prove(chain0)(poPowParams)
+    val goodSuperChain = proof0.chain
+    val maxLevel = goodSuperChain.last.interlinks.size - 1
+
+    PoPowAlgos.goodSuperChain(
+      goodSuperChain.map(_.header), chain0.map(_.header), maxLevel)(poPowParams) shouldBe true
   }
 
 }

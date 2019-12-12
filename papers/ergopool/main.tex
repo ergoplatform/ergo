@@ -129,7 +129,7 @@ $1 / \lambda$.
 All PoW systems use the above idea of finding a value from a uniform distribution that falls within some narrower range based on the difficulty parameter. 
 
 \subsection{Pooled Mining} 
-
+\label{pool-levels}
 Bitcoin allows mining pools, which roughly work as follows. The pool distributes work based on a some $m$ that it decides. Each miner tries to find a solution for the given $m$ and any solution found is sent to the network.
 A miner actually tries to find a {\em share}, which is like a solution but with reduced difficulty (also decided by the pool). Some of the shares may also be real solutions, which become valid blocks. A miner gets paid by the number of shares submitted. This is possible because the Bitcoin PoW puzzle is a {\em scratch-off puzzle}~\cite{miller2015nonoutsourceable}, a type of PoW puzzle that can be processed in parallel by multiple non-communicating entities with an appropriate reduction in search time. 
 
@@ -312,7 +312,7 @@ The key observation is that in a valid share, the reward need not necessarily be
 
 %\snote{Maybe make this section less Ergo-specific}
 
-A valid share is a solution to a block with the above structure. A pool operator collects such shares and any funds thus received are distributed among the miners based on the number of shares they submitted. One drawback of this is that each miner must have an equivalent amount of ergs to cover the reward amount at any time, even though the reward become spendable only after 720 blocks. 
+A valid share is a solution to a block with the above structure. A pool operator collects such shares and any funds thus received are distributed among the miners based on the number of shares they submitted. One drawback of this is that each miner must have an equivalent amount of ergs to cover the reward amount at any time, even though the reward becomes spendable only after a `cooling-off period' (720 blocks in Ergo). 
 This means that in order to continue mining after a block is found, each miner must keep the reserved amount of at least 2 rewards (possibly more depending on the expected time to find a block).
 
  To overcome this drawback, a pool may provide incentives such as allowing the miner to keep a fraction of the reward (example for the current reward of 67.5 ergs in Ergo, the pool may require only 65 ergs to be sent to it). 
@@ -369,10 +369,16 @@ A miner is permitted to send the reward to any chosen address, since as soon as 
 \section{Conclusion and Further Work}
 \label{conclusion}
 
-Non-outsourceable puzzles have been proposed as a possible workaround for attacks that arise due to pool formation in PoW blockchains. Such solutions fall into two broad categories: Type 1, where the reward is directly bound to some trapdoor information used for generating the block solution (and thus, that information is needed while spending), and Type 2, where the reward is decoupled from the trapdoor information but instead linked to it via a cryptographic certificate. Type 2 can be further classified into weak, where the identity of the miner is revealed, and strong, where the identity remains hidden. 
+Non-outsourceable puzzles have been proposed as a possible workaround for attacks that arise due to pool formation in PoW blockchains. Such solutions fall into two broad categories: Type 1, where the reward is directly bound to some trapdoor information used for generating the block solution (and thus, that information is needed while spending), and Type 2, where the reward is indirectly bound to the trapdoor information via a certificate. Type 2 schemes can be further classified into weak, where the identity of the miner is revealed, and strong, where the identity remains hidden. 
+
 In this paper we proposed two approaches to bypass non-outsourceability of Type 1 and weak Type 2
-schemes. Only strong Type 2 schemes~(where a miner does not provide a block solution in the clear, but rather provides an encrypted solution
-along with zero-knowledge proof of its correctness) remain secure. However, strong schemes are not very practical as they require a generic zero-knowledge proof system which imposes heavy burden on both the  prover and verifier. Thus, such schemes have no implementations in the real world.
+schemes to create mining pools, thereby `breaking' them. Our pools operates at Level 2 (partial centralization), where the pool does not  control transactions to be included in blocks but only collects the rewards (see Section~\ref{pool-levels}). Such pools do not pose stability threats that Level 1 pools do. Although our pools are most efficient when operating at Level 2, they can be converted to operate at Level 1 simply by having the pool create miner-specific blocks using their public keys. 
+Note that Levels 1 and 2 both carry the risk of funds loss due to operator compromise. A topic of further investigation is to have the pools operate at Level 3, where there is no risk of losing funds. 
+
+Only strong Type 2 schemes~(where a miner does not provide a block solution in the clear, but rather provides an encrypted solution
+along with zero-knowledge proof of its correctness) remain unbroken. However, it should also be noted that strong schemes are not very practical as they require a generic zero-knowledge proof system which imposes heavy burden on both the  prover and verifier. Thus, such schemes currently have no implementations in the real world. Additionally, we note that Type 2 schemes in their entirety have an inherent weakness that make them impractical for real world use: the high possibility of forking attacks. 
+
+
 
 Both our approaches rely on smart contracts acting as decentralized escrows and require the underlying programming language to allow predicates at context Level 3 (i.e., access to the block solution; see Section~\ref{context}). Thus, one way to invalidate our methods would be to restrict the language context to Level 2 or lower. Note that even Level 2 contracts allow sophisticated applications such as non-interactive mixing, rock-paper-scissors, and even an ICO~\cite{advtutorial}.
 

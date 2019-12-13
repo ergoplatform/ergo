@@ -20,7 +20,8 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import net.ceedubs.ficus.Ficus._
 import org.apache.commons.io.FileUtils
 import org.asynchttpclient.Dsl.{config, _}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.NetworkType.{DevNet, MainNet, TestNet}
+import org.ergoplatform.settings.{ErgoSettings, NetworkType}
 import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
@@ -30,6 +31,7 @@ import scala.concurrent.{Await, ExecutionContext, Future, blocking}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Random, Try}
 
+// scalastyle:off number.of.methods
 class Docker(suiteConfig: Config = ConfigFactory.empty,
              tag: String = "ergo_integration_test",
              localDataVolumeOpt: Option[String] = None)
@@ -68,13 +70,18 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
   }
 
-  def startNodes(nodeConfigs: List[Config],
-                 configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] = {
+  private def startNodes(networkType: NetworkType,
+                         nodeConfigs: List[Config],
+                         configEnrich: ExtraConfig = noExtraConfig) = {
     log.trace(s"Starting ${nodeConfigs.size} containers")
-     nodeConfigs.map(cfg => startNode(cfg, configEnrich))
+    nodeConfigs.map(cfg => startNode(networkType, cfg, configEnrich))
       .sequence
-      .map(waitForStartupBlocking(_))
+      .map(waitForStartupBlocking)
   }
+
+  def startDevNetNodes(nodeConfigs: List[Config],
+                       configEnrich: ExtraConfig = noExtraConfig): Try[List[Node]] =
+    startNodes(DevNet, nodeConfigs, configEnrich)
 
   def waitForStartupBlocking(nodes: List[Node]): List[Node] = {
     log.debug("Waiting for nodes to start")
@@ -102,19 +109,21 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     checker
   }
 
-  def startNode(nodeSpecificConfig: Config,
-                extraConfig: ExtraConfig = noExtraConfig,
-                specialVolumeOpt: Option[(String, String)] = None): Try[Node] = {
-    val initialSettings = buildErgoSettings(nodeSpecificConfig)
+  private def startNode(networkType: NetworkType,
+                        nodeSpecificConfig: Config,
+                        extraConfig: ExtraConfig = noExtraConfig,
+                        specialVolumeOpt: Option[(String, String)] = None) = {
+    val initialSettings = buildErgoSettings(networkType, nodeSpecificConfig)
     val configuredNodeName = initialSettings.scorexSettings.network.nodeName
     val nodeNumber = configuredNodeName.replace("node", "").toInt
     val ip = ipForNode(nodeNumber, networkSeed)
     val restApiPort = initialSettings.scorexSettings.restApi.bindAddress.getPort
     val networkPort = initialSettings.scorexSettings.network.bindAddress.getPort
 
-    val nodeConfig: Config = enrichNodeConfig(nodeSpecificConfig, extraConfig, ip, networkPort)
-    val settings: ErgoSettings = buildErgoSettings(nodeConfig)
-    val containerConfig: ContainerConfig = buildPeerContainerConfig(nodeConfig, settings, ip, specialVolumeOpt)
+    val nodeConfig: Config = enrichNodeConfig(networkType, nodeSpecificConfig, extraConfig, ip, networkPort)
+    val settings: ErgoSettings = buildErgoSettings(networkType, nodeConfig)
+    val containerConfig: ContainerConfig = buildPeerContainerConfig(networkType, nodeConfig, settings,
+      ip, specialVolumeOpt)
     val containerName = networkName + "-" + configuredNodeName + "-" + uuidShort
 
     Try {
@@ -145,23 +154,43 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
   }
 
-  private def buildErgoSettings(nodeConfig: Config) = {
+  def startDevNetNode(nodeSpecificConfig: Config,
+                      extraConfig: ExtraConfig = noExtraConfig,
+                      specialVolumeOpt: Option[(String, String)] = None): Try[Node] =
+    startNode(DevNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
+
+  def startTestNetNode(nodeSpecificConfig: Config,
+                      extraConfig: ExtraConfig = noExtraConfig,
+                      specialVolumeOpt: Option[(String, String)] = None): Try[Node] =
+    startNode(TestNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
+
+  def startMainNetNodeYesImSure(nodeSpecificConfig: Config,
+                                extraConfig: ExtraConfig = noExtraConfig,
+                                specialVolumeOpt: Option[(String, String)] = None): Try[Node] =
+    startNode(MainNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
+
+  private def buildErgoSettings(networkType: NetworkType, nodeConfig: Config) = {
     val actualConfig = nodeConfig
       .withFallback(suiteConfig)
-      .withFallback(defaultConfigTemplate)
+      .withFallback(defaultConfigTemplate(networkType))
       .withFallback(ConfigFactory.defaultApplication())
       .withFallback(ConfigFactory.defaultReference())
       .resolve()
     ErgoSettings.fromConfig(actualConfig)
   }
 
-  private def enrichNodeConfig(nodeConfig: Config, extraConfig: ExtraConfig, ip: String, port: Int) = {
+  private def enrichNodeConfig(networkType: NetworkType,
+                               nodeConfig: Config,
+                               extraConfig: ExtraConfig,
+                               ip: String,
+                               port: Int) = {
     val publicPeerConfig = nodeConfig//.withFallback(declaredAddressConfig(ip, port))
     val withPeerConfig = nodeRepository.headOption.fold(publicPeerConfig) { node =>
       knownPeersConfig(Seq(node.nodeInfo)).withFallback(publicPeerConfig)
     }
     val enrichedConfig = extraConfig(this, nodeConfig).fold(withPeerConfig)(_.withFallback(withPeerConfig))
-    val actualConfig = enrichedConfig.withFallback(suiteConfig).withFallback(defaultConfigTemplate)
+    val actualConfig = enrichedConfig.withFallback(suiteConfig)
+      .withFallback(defaultConfigTemplate(networkType))
     actualConfig
   }
 
@@ -181,7 +210,8 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .build()
   }
 
-  private def buildPeerContainerConfig(nodeConfig: Config,
+  private def buildPeerContainerConfig(networkType: NetworkType,
+                                       nodeConfig: Config,
                                        settings: ErgoSettings,
                                        ip: String,
                                        specialVolumeOpt: Option[(String, String)] = None): ContainerConfig = {
@@ -192,6 +222,12 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .put(networkPort.toString, Collections.singletonList(PortBinding.randomPort("0.0.0.0")))
       .build()
 
+    val oneGB: Long = 1024 * 1024 * 1024
+    val memoryLimit = networkType match {
+      case MainNet => 3 * oneGB
+      case _ => oneGB
+    }
+
     val hostConfig = specialVolumeOpt
       .map { case (lv, rv) =>
         HostConfig.builder()
@@ -199,7 +235,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       }
       .getOrElse(HostConfig.builder())
       .portBindings(portBindings)
-      .memory(1L << 30) //limit memory to 1G
+      .memory(memoryLimit)
       .build()
 
     val networkingConfig = ContainerConfig.NetworkingConfig
@@ -207,12 +243,27 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
     val configCommandLine = renderProperties(asProperties(nodeConfig))
 
+    val networkTypeCmdOption = networkType match {
+      case MainNet => "--mainnet"
+      case TestNet => "--testnet"
+      case DevNet => ""
+    }
+
+    val miscCmdOptions = networkType match {
+      case MainNet => "-Xmx2G"
+      case _ => ""
+    }
+
+    val shellCmd = "echo Options: $OPTS; java $OPTS -jar " +
+      s"$miscCmdOptions /opt/ergo/ergo.jar $networkTypeCmdOption -c /opt/ergo/${networkType.verboseName}Template.conf"
+
     ContainerConfig.builder()
       .image(ErgoImageLatest)
       .exposedPorts(restApiPort.toString, networkPort.toString)
       .networkingConfig(networkingConfig)
       .hostConfig(hostConfig)
       .env(s"OPTS=$configCommandLine")
+      .entrypoint("sh", "-c", shellCmd)
       .build()
   }
 
@@ -392,6 +443,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
     }
   }
 }
+// scalastyle:on number.of.methods
 
 object Docker extends IntegrationTestConstants {
 

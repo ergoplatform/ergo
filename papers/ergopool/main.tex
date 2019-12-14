@@ -297,11 +297,11 @@ If we try to create any standard type of pool, we find that anyone having the ab
 
 \subsection{Creating a Mining Pool}
 
-We now describe an approach to construct a mining pool for any Type 1 scheme, provided that the underlying smart contract language allows access to Level 3 context (see Section~\ref{context}). Hence one way to mitigate our method would be to restrict the smart contract language to Level 2 or lower. Our concrete implementation uses Ergo as the underlying platform, which supports Level 3 context.
+We now describe an approach to construct a mining pool for any Type 1 scheme, provided that the underlying smart contract language allows access to Level 3 context (see Section~\ref{context}). Hence one way to mitigate our method would be to restrict the smart contract language to Level 2 or lower. Our concrete implementation uses Ergo as the underlying platform, which supports Level 3 context. We will follow the {\em pay-per-share} approach, where the reward is distributed among the miners based on the number of shares they submitted since the last payout. 
 
-\textbf{Basic variant:} We first describe a basic version that is insecure, and thereby does not work in reality. We then create the full version by extending the basic version by patching this vulnerability.
+\textbf{Basic variant:} We first describe a basic version that is  insecure, and thereby does not work in practice. We then incrementally enhance this version to patch the vulnerability to obtain the full version.
 
-The key observation is that in a valid share, the reward need not necessarily be sent directly to the pool's address. What is actually necessary is that an amount equivalent to the reward is sent to the pool's address. This simple observation allows us to create a pool with the following rules:
+The key observation in our approach is that in a valid share, the reward need not necessarily be sent directly to the pool's address. What is actually necessary is that an amount equivalent to the reward is sent to the pool's address. This simple observation allows us to create a pool with the following rules:
 \begin{enumerate}
 	\item Each miner can send the reward to his own public key $p$, whose secret key only he knows ({\em reward transaction}).
 	\item The block must also have another transaction sending the same amount as the reward to the pool address ({\em pool transaction}). 
@@ -312,20 +312,33 @@ The key observation is that in a valid share, the reward need not necessarily be
 
 %\snote{Maybe make this section less Ergo-specific}
 
-A valid share is a solution to a block with the above structure. A pool operator collects such shares and any funds thus received are distributed among the miners based on the number of shares they submitted. One drawback of this is that each miner must have an equivalent amount of ergs to cover the reward amount at any time, even though the reward becomes spendable only after a `cooling-off period' (720 blocks in Ergo). 
+A valid share is a solution to a block with the above structure. A miner can efficiently prove that a share is valid without having to send the entire block to the pool. It can simply send the pool transaction along with the Merkle proof that validates that the transaction~\cite{Hearn:2012:BIP}.
+A pool operator collects such shares (along with the proofs) and any funds thus received when a block is solved are distributed among the miners using the pay-per-share algorithm. 
+
+One drawback of this is that each miner must have an equivalent amount of ergs to cover the reward amount at any time, even though the reward becomes spendable only after a `cooling-off period' (720 blocks in Ergo). 
 This means that in order to continue mining after a block is found, each miner must keep the reserved amount of at least 2 rewards (possibly more depending on the expected time to find a block).
 
  To overcome this drawback, a pool may provide incentives such as allowing the miner to keep a fraction of the reward (example for the current reward of 67.5 ergs in Ergo, the pool may require only 65 ergs to be sent to it). 
 
 \textbf{The broadcast attack:} Let Alice be a miner with public key \texttt{alice}. If such a system is used in, say Bitcoin, then the system becomes insecure. Once the pool-paying transaction is publicized, anyone (not necessarily Alice) may broadcast it (possibly by using it as their own pool transaction). 
 
-\textbf{Full variant:} The full protocol mitigates the above attack. This is possible because \langname allows us to use the block solution in the context, using which we can secure the pool transaction as follows. Instead of paying to the pool from an arbitrary box (or boxes), Alice will instead store these funds in a special box protected by the following script:
+\textbf{Enhanced variant:} The enhanced protocol mitigates the above attack. This is possible because \langname allows us to use the block solution in the context, using which we can secure the pool transaction as follows. Instead of paying to the pool from an arbitrary box (or boxes), Alice will instead store this collateral in a special box protected by the following script:
+\begin{verbatim}
+minerPubKey == alice
+\end{verbatim}
+
+Anyone can create a transaction spending this box. However the transaction is valid only if the block that includes it is mined by Alice. This ensures that the box can only be spent if and when Alice mines a block. 
+Alice creates her pool transaction using this box as input and submits her shares to the pool as before. 
+
+\textbf{Full variant:} Observe that the above collateral box is not spendable until Alice actually mines a block. Depending on her hardware and the global hash rate, this may take a very long time, and her funds will be stuck till then. We would like Alice to be able to withdraw her collateral at any time she decides to stop participating in the pool. This can be done by modifying the above box to contain the script:
+
 \begin{verbatim}
 (minerPubKey == alice) || alice
 \end{verbatim}
-The first part ensures that when used to fund the pool output, the miner must be Alice. The second ensures that the coins are not stuck till Alice finds a block. % (if ever). 
 
-Note that the above attack mitigation strategy requires Level 3 context (i.e., the block solution to access \texttt{minerPubKey}) and will not work in Level 2 or lower. One may envisage a hiding strategy, where the pool transaction is not revealed in a share (only a commitment is revealed). The actual transaction is revealed only if a block is found or when a miner later proves to the pool that the shares were correct. However, this is also insecure. First note that there are two types of broadcast attacks. The first is the ``extract from share'' attack discussed above. The second is the ``extract from orphaned block'' attack, where the transaction is extracted from a mined block that ends up getting orphaned. While the hiding strategy works for the first attack, it does not mitigate the second. 
+The first condition ensures that when used to fund the pool output, the miner must be Alice as in the enhanced variant. The second ensures that the coins are not stuck till Alice finds a block, and allows Alice to spend the box at any time and send the funds to any address of her choice. Note that Alice should always fund the pool transaction by satisfying only the first condition and never the second condition, otherwise the broadcast attack becomes possible.
+
+Note that the above attack mitigation strategy requires Level 3 context (i.e., the block solution to access \texttt{minerPubKey}) and will not work in Level 2 or lower. One may envisage a Level 2 hiding strategy, where the pool transaction is not revealed in a share (only a commitment is revealed). The actual transaction is revealed only if a block is found or when a miner later proves to the pool that the shares were correct. However, this is also insecure. First note that there are two types of broadcast attacks. The first is the ``extract from share'' attack discussed above. The second is the ``extract from orphaned block'' attack, where the transaction is extracted from a mined block that ends up getting orphaned. Th hiding strategy mitigates the first attack but not the second. 
 
 \section{Pooled Mining with Type 2 Puzzles}
 % \section{10 Blocks}

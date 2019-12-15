@@ -279,7 +279,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     val passiveMiner: ActorRef = minerRef
 
-    await((passiveMiner ? PrepareCandidate).mapTo[Future[ExternalCandidateBlock]].flatten)
+    await((passiveMiner ? PrepareCandidate(Seq.empty)).mapTo[Future[ExternalCandidateBlock]].flatten)
     system.terminate()
   }
 

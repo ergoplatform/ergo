@@ -94,14 +94,6 @@
     if the underlying blockchain platform supports smart contracts in a sufficiently advanced language. In particular, the language
     should allow access to the PoW solution.
     At a high level, our approach requires the miner to lock collateral covering the reward amount and protected by a smart contract that acts as an escrow. The smart contract has logic that allows the pool to collect the collateral as soon as the miner collects any block reward. We propose two variants of the approach depending on when the collateral is bound to the block solution. Using this, we show how to bypass previously proposed non-outsourceable Proof-of-Work schemes (with the notable exception for strong non-outsourceable schemes) and show how to build mining pools for such schemes.
-
-	% Non-outsourceable puzzles have been proposed to prevent mining pool formation in Proof-of-work (PoW) platforms.
-	% In this work, we show how bypass such restrictions provided the underlying platform supports smart contracts in a
-	% sufficiently advanced language. In particular, the language should allow access to the PoW solution and use it
-	% in creating guard conditions. We demonstrate a practical implementation of our attack using \poolname, a pool for
-	% Ergo, which is an advanced smart contract platform designed to be pool-resistant. Our approach allows complete
-	% centralization of mining, where the pool operator not only collects the rewards but also decided which
-	% transactions to accept.
 \end{abstract}
 
 \section{Introduction}
@@ -125,7 +117,6 @@ if $H(m\|n) \leq 2^{256}/\lambda$.
 A miner repeatedly tries different values of $n$ (and possibly $m$) until a solution is found. 
 Since $H$ is like a random oracle, the probability of finding a solution in one attempt is 
 $1 / \lambda$.
-% \footnote{It is worth mentioning that as of July 2019, this value is $\approx 2^{-75}$.} %\approx 10^{-22.6} \approx 0.0000000000000000000000257$.
 All PoW systems use the above idea of finding a value from a uniform distribution that falls within some narrower range based on the difficulty parameter. 
 
 \subsection{Pooled Mining} 
@@ -141,7 +132,7 @@ We define three levels of centralization in pools.
 	\item {\em Level 2 (Partial centralization):} The pool operator does not define $m$ but collects the rewards. This is resistant to censorship but still carries the risk of losing the rewards. % This is what we will try achieve.
 	\item {\em Level 3 (No centralization):} There is no pool operator and rewards are automatically given to the participants based on the shares they submitted (see P2Pool~\cite{chesterman2018p2pool} for Bitcoin and SmartPool~\cite{luu2017smartpool} for Ethereum).
 \end{enumerate}
-% We also add another parameter, namely {\em mineability}, which captures the ability of miners with smaller investments to join and receive small but frequent rewards rather than large but infrequent ones, despite the yield of the latter being larger over a long time. If the system does not allow smaller miners to receive any rewards in a reasonable time, we say that the system has low mineability and is only suitable for larger miners (and will eventually lead to centralization). A system with high mineability allows miners to receive a steady income to cover running costs their mining equipment, thereby encouraging such miners to join and keep the mining power spread over a larger network.
+
 The following table summarizes the concepts.\\
 
 	\begin{tabular}{|l|l|l|l|}\hline
@@ -158,46 +149,7 @@ The primary issue with pools is that they increase the potential of transaction 
 However, we observe that these issues are present only in Level 1 pools. Thus, instead of preventing pools completely, it will be better to have pools at Levels 2 or 3, so that not only can we have decentralization in mining power but also have all the benefits of pools (such as regular income for miners and thereby, stronger network). Our solution works at Level 2 but can also operate at Level 1. Additionally, it may be possible to extend it to Level 3 using approaches similar to SmartPool or P2Pool.
 
 
-% Note that P2Pool and SmartPool operate at Level 3 but maintain high minability because they only work in systems that also support Levels  1 and 2. In particular, these approaches don't work in systems that are designed to operate only in Level 3, such as the non-outsourceable puzzles of~\cite{} (see next Section).
-
-% Ergo is designed to be pool-resistant, and thus, not allow pooling at any level. However, Ergo's scripting language, \langname enables us to create \poolname, a mining pool for Ergo that operates at Levels 1 and 2. In particular, we use the block solution (available as contextual information in \langname) to define a pooled mining contract.
-
-
-%\snote{Below text copied from PoW intro paper}
-
-%Blockchain platforms such as Ethereum and Ergo provide advanced financial capabilities using sophisticated guard scripts, which are also called smart contracts. While Ethereum is an account based platform, Ergo follows the more traditional UTXO model. This allows Ergo to be more scalable than Ethereum in the long run, at least when it comes to memory and computation requirements of participant nodes.
-%Another dimension of long-term scalability in blockchain platforms is how well it is able to withstand some of the following threats:
-%\begin{enumerate}
-%    \item Centralization of mining power
-%    \item Transaction censorship
-%    \item Forking attacks, where it is difficult to select the correct chain due to a large number of forks of identical difficulty parameters.
-%\end{enumerate}
-
-%Non-outsourcable puzzles have been proposed to prevent the first two but not the third. In fact some approaches to non-outsourceable puzzles increase the chances of forking attacks, where there were none in the original scheme (Type 1 schemes below).
-
-%In this work, we describe an approach using smart contracts to bypass the non-outsorceability of most such approaches.
-
-% Ergo\footnote{\url{https://ergoplatform.org}} is a smart contract platform whose contracts are written in a high-level language called \langname. It provides Ethereum-like functionality but is more closer to Bitcoin in the underlying design. For instance, it is based on short-lived immutable objects (called UTXOs in Bitcoin and {\em boxes} in Ergo) instead of long-lived mutable objects (called accounts in Ethereum) to store data and code. It also has some features different from both Bitcoin and Ethereum relating to scalability and long-term survivability. For instance, it has a {\em storage-rent} component, so that boxes must pay rent to continue staying on the blockchain. Secondly, it allows running a fully verifying node on low-power devices using the idea of partially stateless clients implementation~\cite{RMCI17}. Finally, it uses a PoW algorithm called \powname~\cite{autolykos} that discourages mining-pool formation, which we informally term {\em pool-resistance}.
-
-%\section{Background}
-%\subsection{Outsourceable Puzzles}
-
-%Below describes how generic outsourceable puzzles work.
-
-%\snote{Following is more or less copy-pasted from PoW intro paper. Needs rework}
-
-
-% In Bitcoin, a miner collects a number of unconfirmed transactions and concatenates them using a Merkle tree. All nodes of this tree except the leaves are 32 byte hashes computed from its children. The root of this tree, denoted $t$ here, is stored in another structure called the {\em block header}, which also includes the hash of the previous block's header $h$ and a random string $n$ called the nonce. We use the term $m$ to denote the concatenation of Merkle root and the hash of the previous block.
-% That is, $m = t\|h$ and the header is of the form $m\|n$.
-
-%The solution is also determined by another parameter $b < 2^{256}$, denoting the `difficulty'. Let $H$ be a collision resistant hash function taking as input an arbitrary sized array of bits and outputting an array of 256 bits. The output of $H$ can be considered a number between 0 and $2^{256}-1$. The header $m\|n$ is considered a valid solution if $H(m\|n) \leq b$.
-
-%A miner repeatedly tries different values of $n$ (possibly changing $m$ as well by including new transactions in between tries) until a solution is found. Since the output of $Hash$ can be thought of as distributed uniformly in the output space, the probability of finding a solution in each try is $\tau = b/2^{256}$. All proof-of-work algorithms (including that of Ergo) follow this basic idea of restricting the output to be less than some $b$. It is worth noting that, for Bitcoin, as of this writing (July 2019), $b\approx 2^{181}$, and so $\tau \approx 2^{-75}$. %\approx 10^{-22.6} \approx 0.0000000000000000000000257$.
-
-
 \subsection{Non-Outsourceable Puzzles}
-
-% Discuss weak and strong variants; pool resistance; other works
 
 We start with overviewing (non-)outsourceability definitions in existing literature expressed in different works, such as
 Non-outsourceable Scratch-Off Puzzles~\cite{miller2015nonoutsourceable}, 2-Phase Proof-of-Work (2P-PoW)~\cite{twophase},
@@ -213,12 +165,7 @@ by trying to generate a block that pays the reward to the pool. In case of succe
 We further classify Type 2 into {\em weak} if the identity of the miner stealing the rewards can be ascertained and {\em strong} if the identity remains secret.
 
 At a technical level, both Type 1 and 2 approaches rely on a miner's ability to steal the pool's rewards. The difference lies in the way this occurs. In Type 1 schemes, the miner is able to steal the reward {\em after} the block gets finalized.
-% while in Type 2 schemes, this happens before block finilzation. 
-% That is, any party that generates a valid solution for $m$ then has the ability to spend the reward transaction of $m$ in an untraceable manner. 
-% In particular, the theft happens {\em after} a block is accepted, whil.
 In Type 2, 
-% any party is able to generate a solution $d$ for some block header $m$ that sends rewards to a pool address, then the same party can then efficiently generate another solution $d'$ for an $m'$ that sends rewards to any other chosen address. This results in a race condition where the party can steal the rewards if the solution to $m'$ gets accepted. 
-% In particular 
 the reward is stolen {\em before} a block is finalized into the blockchain. 
 
 
@@ -234,8 +181,6 @@ some minimal smart contract capability. The following table summarizes this.
 		  2 (weak)   & revealed           & before block acceptance  & yes &yes            \\
 		  2 (strong) & secret           & before block acceptance  & yes & no      \\\hline
 	\end{tabular}
-
-% In this view, Ergo is a special instance of a non-outsourceable puzzle of~\cite{miller2015nonoutsourceable}, where the contention is not to generate a new message $m'$, that sends the reward to a different address (which is not possible in Ergo). Instead the goal is to steal the reward 720 blocks later, when it becomes spendable. 
 
 \subsection{Execution Context in Smart Contracts}
 \label{context}
@@ -267,9 +212,7 @@ Bitcoin and Ergo, we can think about following components of the execution conte
 	
 \section{Pooled Mining in Type 1 Puzzles}
 \label{bypasstype1}
-% Ergo uses \powname as its underlying proof-of-work mechanism and Ergo's reward system can be considered as a type of PieceWork puzzle \snote{Check validity of this statement}.
 
-% We first describe Type 1 puzzles in detail before describing our break in the next section.
 In a nutshell, Type 1 puzzles use a combination of two techniques: (1) replacing the core hash function with a digital signature (i.e., using public-key cryptography) and (2) tying the public key to the rewards.
 
 \subsection{Using Public-Key Cryptography}
@@ -280,10 +223,6 @@ A candidate block header is constructed using transactions as in Bitcoin along w
 
 One real-world implementation of this concept is \powname \cite{autolykos}, the PoW algorithm of Ergo~\cite{ergo}. \powname uses a variation of Schnorr signatures~\cite{Sch91}, where the goal of a miner is to output $d$ such that $d < 2^{256}/\lambda$ and $\lambda$ is the difficulty parameter. The value $d$ is to be computed as follows. First compute $r = H(m\|n\|p\|w)$ where $m$ is the transactions digest, $n$ is a nonce, $p$ is a public key (an elliptic curve group element) and $w$ is an ephemeral public key that should never be reused in two different blocks. Let $x$ be the corresponding private key of $w$. Compute $d = xr - s$, where $s$ is the private key corresponding to $p$.
 
-
-% At this point we must distinguish between two types of reward mechanisms. The first is where the rewards are {\em created} at the time of mining, also termed as {\em post-mine}. The second is where the rewards are {\em unlocked} at the time of mining, but were created much earlier {\em pre-mine}.
-
-% Using this terminology, we can say that an Ergo-like system does not prevent pools for post-mined rewards but can be made pool-resistant for pre-mined rewards, as discussed next.
 
 \subsection{Tying Public-Key to Rewards}
 
@@ -307,8 +246,6 @@ The key observation in our approach is that in a valid share, the reward need no
 \begin{enumerate}
 	\item Each miner can send the reward to his own public key $p$, whose secret key only he knows ({\em reward transaction}).
 	\item The block must also have another transaction sending the same amount as the reward to the pool address ({\em pool transaction}). 
-% 	A pool transaction can pay to any pool defined address. 
-% 	For instance, it could be a P2SH address of \texttt{poolPubKey}.
 
 \end{enumerate}
 
@@ -329,17 +266,19 @@ Therefore, for uninterrupted mining, each miner must keep the reserved amount of
 minerPubKey == alice
 \end{verbatim}
 
-Anyone can create a transaction spending this box. However the transaction is valid only if the block that includes it is mined by Alice. This ensures that the box can only be spent if and when Alice mines a block. 
-Alice creates her pool transaction using this box as input and submits her shares to the pool as before. 
+A box with this script does not require a signature because the above statement only fixes the miner's public key and does not enforce any other spending condition. Thus, anyone can create a transaction spending this box. However the transaction is valid only if the block that includes it is mined by Alice. 
+This ensures that the box can only be spent if and when Alice mines a block.  
+Alice creates her pool transaction using this box as input and submits her shares and proofs to the pool as before. She need not even use a private channel for this purpose and can broadcast this publicly. This enables the possibility of extending the scheme to Level 3 centralization that requires public shares.
 
-\textbf{Full variant:} Observe that the above collateral box is not spendable until Alice actually mines a block. Depending on her hardware and the global hash rate, this may take a very long time, and her funds will be stuck till then. We would like Alice to be able to withdraw her collateral at any time she decides to stop participating in the pool. This can be done by modifying the above box to contain the script:
+The above variant prevents the broadcast attack because knowing the pool transaction does not help the attacker in any way (since anyone can create that transaction without Alice's help). An attacker might try to spend Alice's collateral in a transaction paying to some address other than the pool address. However, Alice will discard such transactions when creating a candidate block and only include her pool paying transaction that spends the collateral. 
+
+\textbf{Full variant:} Observe that the above collateral box is not spendable until Alice actually mines a block. Depending on her hardware and the global hash rate, this may take a very long time, and her funds will be stuck till then. We would like Alice to be able to withdraw her collateral at any time she decides to stop participating in the pool. This can be done as follows. Alice first sets another public key \texttt{bob} that she will use to withdraw the collateral (it is possible to keep \texttt{bob} = \texttt{alice}). The modified script is:
 
 \begin{verbatim}
-(minerPubKey == alice) || alice
+(minerPubKey == alice) || bob
 \end{verbatim}
 
-The first condition, \texttt{minerPubKey == alice}, ensures that when used to fund the pool output, the miner must be Alice as in the enhanced variant. The second condition, \texttt{alice}, ensures that the coins are not stuck till Alice finds a block, because it allows Alice may withdraw the collateral at any time. 
-
+The first condition, \texttt{minerPubKey == alice}, ensures that when used to fund the pool output, the miner must be Alice as in the enhanced variant. The second condition, \texttt{bob}, ensures that the coins are not stuck till Alice finds a block, because it allows Alice may withdraw the collateral at any time.
 Note that Alice should fund the pool transaction by satisfying only the first condition and never the second condition, otherwise the broadcast attack becomes possible. The second condition is be used only for withdrawing collateral.
 
 Note that the above attack mitigation strategy requires Level 3 context (i.e., access to \texttt{minerPubKey}) and will not work in lower context levels. One may envisage a hiding strategy at context Level 2, where the pool transaction is not revealed in a share (only a commitment is revealed). The actual transaction is revealed only if a block is found or when a miner later proves to the pool that the shares were correct. However, this is also insecure. First note that there are two types of broadcast attacks. The first is the ``extract from share'' attack discussed above. The second is the ``extract from orphaned block'' attack, where the transaction is extracted from a mined block that ends up getting orphaned. Th hiding strategy mitigates the first attack but not the second. 

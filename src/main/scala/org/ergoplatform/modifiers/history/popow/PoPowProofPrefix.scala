@@ -1,11 +1,13 @@
-package org.ergoplatform.modifiers.history
+package org.ergoplatform.modifiers.history.popow
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
+import scorex.util.Extensions._
 
 /**
   * A structure representing NiPoPow proof prefix as a persistent modifier.
@@ -52,23 +54,23 @@ object PoPowProofPrefix {
 object PoPowProofPrefixSerializer extends ScorexSerializer[PoPowProofPrefix] {
 
   override def serialize(obj: PoPowProofPrefix, w: Writer): Unit = {
-    w.putInt(obj.m)
+    w.putUInt(obj.m)
     w.putBytes(idToBytes(obj.suffixId))
-    w.putInt(obj.chain.size)
+    w.putUInt(obj.chain.size)
     obj.chain.foreach { h =>
       val hBytes = h.bytes
-      w.putInt(hBytes.length)
+      w.putUInt(hBytes.length)
       w.putBytes(hBytes)
     }
   }
 
   override def parse(r: Reader): PoPowProofPrefix = {
     val startPos = r.position
-    val m = r.getInt()
+    val m = r.getUInt().toIntExact
     val suffixId = bytesToId(r.getBytes(Constants.ModifierIdSize))
-    val prefixSize = r.getInt()
+    val prefixSize = r.getUInt().toIntExact
     val prefix = (0 until prefixSize).map { _ =>
-      val size = r.getInt()
+      val size = r.getUInt().toIntExact
       PoPowHeaderSerializer.parseBytes(r.getBytes(size))
     }
     PoPowProofPrefix(m, prefix, suffixId, Some(r.position - startPos))

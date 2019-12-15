@@ -11,8 +11,9 @@ import org.ergoplatform.mining._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.PoPowAlgos._
-import org.ergoplatform.modifiers.history.{Extension, Header, PoPowAlgos}
+import org.ergoplatform.modifiers.history.popow.PoPowAlgos
+import org.ergoplatform.modifiers.history.popow.PoPowAlgos._
+import org.ergoplatform.modifiers.history.{Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height

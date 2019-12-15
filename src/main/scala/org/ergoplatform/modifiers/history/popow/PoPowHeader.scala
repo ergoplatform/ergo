@@ -1,9 +1,10 @@
-package org.ergoplatform.modifiers.history
+package org.ergoplatform.modifiers.history.popow
 
+import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
-import scorex.util.{ModifierId, idToBytes, bytesToId}
-import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
+import scorex.util.serialization.{Reader, Writer}
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 /** Header with unpacked interlinks.
   */

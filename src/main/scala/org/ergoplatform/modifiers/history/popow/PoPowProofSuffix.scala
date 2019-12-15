@@ -1,11 +1,13 @@
-package org.ergoplatform.modifiers.history
+package org.ergoplatform.modifiers.history.popow
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
+import scorex.util.Extensions._
 
 /**
   * A structure representing NiPoPow proof suffix as a persistent modifier.
@@ -39,21 +41,21 @@ object PoPowProofSuffix {
 object PoPowProofSuffixSerializer extends ScorexSerializer[PoPowProofSuffix] {
 
   override def serialize(obj: PoPowProofSuffix, w: Writer): Unit = {
-    w.putInt(obj.k)
-    w.putInt(obj.chain.size)
+    w.putUInt(obj.k)
+    w.putUInt(obj.chain.size)
     obj.chain.foreach { h =>
       val hBytes = h.bytes
-      w.putInt(hBytes.length)
+      w.putUInt(hBytes.length)
       w.putBytes(hBytes)
     }
   }
 
   override def parse(r: Reader): PoPowProofSuffix = {
     val startPos = r.position
-    val k = r.getInt()
-    val suffixSize = r.getInt()
+    val k = r.getUInt().toIntExact
+    val suffixSize = r.getUInt().toIntExact
     val suffix = (0 until suffixSize).map { _ =>
-      val size = r.getInt()
+      val size = r.getUInt().toIntExact
       PoPowHeaderSerializer.parseBytes(r.getBytes(size))
     }
     PoPowProofSuffix(k, suffix, Some(r.position - startPos))

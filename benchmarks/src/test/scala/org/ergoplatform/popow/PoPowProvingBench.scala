@@ -1,6 +1,7 @@
 package org.ergoplatform.popow
 
-import org.ergoplatform.modifiers.history.{PoPowAlgos, PoPowHeader}
+import org.ergoplatform.modifiers.history.PoPowHeader
+import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader}
 import org.ergoplatform.nodeView.NVBenchmark
 import org.ergoplatform.settings.PoPowParams
 import org.scalameter.KeyValue

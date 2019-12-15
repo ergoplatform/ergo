@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.history
 
+import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader}
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -13,7 +14,7 @@ class PoPowAlgosSpec
     with ErgoGenerators
     with GeneratorDrivenPropertyChecks {
 
-  import PoPowAlgos._
+  import org.ergoplatform.modifiers.history.popow.PoPowAlgos._
 
   private val ChainLength = 10
 
@@ -74,7 +75,7 @@ class PoPowAlgosSpec
   property("bestArg - always equal for equal proofs") {
     val chain0 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
     val proof0 = prove(chain0)(poPowParams)
-    val chain1 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val chain1 = genChain(100).map(b => popow.PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
     val proof1 = prove(chain1)(poPowParams)
     val m = poPowParams.m
 
@@ -84,9 +85,9 @@ class PoPowAlgosSpec
   }
 
   property("bestArg - always greater for better proof") {
-    val chain0 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val chain0 = genChain(100).map(b => popow.PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
     val proof0 = prove(chain0)(poPowParams)
-    val chain1 = genChain(70).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val chain1 = genChain(70).map(b => popow.PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
     val proof1 = prove(chain1)(poPowParams)
     val m = poPowParams.m
 
@@ -96,7 +97,7 @@ class PoPowAlgosSpec
   }
 
   property("goodSuperChain") {
-    val chain0 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val chain0 = genChain(100).map(b => popow.PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
     val proof0 = prove(chain0)(poPowParams)
     val goodSuperChain = proof0.chain
     val maxLevel = goodSuperChain.last.interlinks.size - 1

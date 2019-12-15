@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader, PoPowProof}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.components._

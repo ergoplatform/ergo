@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.components
 
-import org.ergoplatform.modifiers.history.PoPowAlgos._
+import org.ergoplatform.modifiers.history.popow.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.settings.ValidationRules._
 import scorex.core.utils.ScorexEncoding

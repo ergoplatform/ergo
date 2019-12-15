@@ -1,7 +1,8 @@
-package org.ergoplatform.modifiers.history
+package org.ergoplatform.modifiers.history.popow
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.Extension.InterlinksVectorPrefix
+import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.settings.{Constants, PoPowParams}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 

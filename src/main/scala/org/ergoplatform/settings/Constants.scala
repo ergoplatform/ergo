@@ -2,6 +2,7 @@ package org.ergoplatform.settings
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.popow.{PoPowProof, PoPowProofSerializer}
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.serialization.ScorexSerializer

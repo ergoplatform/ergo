@@ -1,16 +1,13 @@
 package org.ergoplatform.nodeView.history.components.popow
 
-import org.ergoplatform.modifiers.history.PoPowAlgos.maxLevelOf
-import org.ergoplatform.modifiers.history.{PoPowProof, PoPowProofPrefix}
+import org.ergoplatform.modifiers.history.popow.PoPowAlgos.maxLevelOf
+import org.ergoplatform.modifiers.history.popow.{PoPowProof, PoPowProofPrefix}
 import org.ergoplatform.nodeView.history.HistoryTestHelpers
-import org.ergoplatform.nodeView.history.storage.StorageKeys
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.ErgoValidationSettings
 import org.ergoplatform.utils.ErgoTestConstants
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
-import scorex.core.validation.ModifierValidator
 
 import scala.util.{Failure, Success, Try}
 

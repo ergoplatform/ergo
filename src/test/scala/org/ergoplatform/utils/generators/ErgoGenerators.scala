@@ -5,8 +5,9 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
-import org.ergoplatform.modifiers.history.PoPowAlgos.updateInterlinks
-import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.popow.PoPowAlgos.updateInterlinks
+import org.ergoplatform.modifiers.history.{popow, _}
+import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader, PoPowProof}
 import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -195,7 +196,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ChainGenerator {
           bestHeaderOpt.map(_.header),
           bestHeaderOpt.map(ph => PoPowAlgos.interlinksToExtension(ph.interlinks).toExtension(ph.id))
         )
-        val poPowH = PoPowHeader(h, links)
+        val poPowH = popow.PoPowHeader(h, links)
         (acc :+ poPowH, Some(poPowH))
     }._1
     val params = PoPowParams(m, k, k, .45)

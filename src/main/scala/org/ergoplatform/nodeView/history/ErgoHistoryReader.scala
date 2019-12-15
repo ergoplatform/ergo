@@ -298,13 +298,21 @@ trait ErgoHistoryReader
   /**
     * Generate PoPow proof from current chain according to a given `params`.
     */
-  final def prove(params: PoPowParams): Try[PoPowProof] =
+  final def proveSuffix(params: PoPowParams): Try[PoPowProof] =
     getLastProof.fold(makeNewProof(params)(None)) { proof =>
       bestHeaderOpt.fold[Try[PoPowProof]](Failure(new Exception("Empty chain"))) { bestHeader =>
         val bestHeaderInProof = proof.chain.last.header
         if (bestHeaderInProof.id == bestHeader.id) Success(proof) else makeNewProof(params)(Some(bestHeader))
       }
     }
+
+  /**
+    * Generate PoPow proof for a header with a given `headerId` according to a given `params`.
+    */
+  final def proveInfix(headerId: ModifierId, params: PoPowParams): Try[PoPowProof] =
+    typedModifierById[Header](headerId).fold[Try[PoPowProof]](
+      Failure(new Exception(s"Header with $headerId not found"))
+    ) { header => makeNewProof(params)(Some(header)) }
 
   /**
     * Generates new NiPoPow proof for the current chain and saves it to the storage,

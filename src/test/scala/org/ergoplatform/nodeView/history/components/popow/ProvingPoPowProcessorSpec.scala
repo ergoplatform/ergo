@@ -32,19 +32,19 @@ class ProvingPoPowProcessorSpec
         BlocksToKeep
       )
 
-      history.prove(poPowParams) shouldBe 'failure
+      history.proveSuffix(poPowParams) shouldBe 'failure
 
       genChain(height, history)
         .flatMap(x => Seq(x.header, x.extension))
         .foreach(history.append)
 
-      val result = history.prove(poPowParams)
+      val result = history.proveSuffix(poPowParams)
 
       result shouldBe 'success
       history.getLastProof shouldBe Some(result.get)
 
       // Repeated proving
-      val result2 = history.prove(poPowParams)
+      val result2 = history.proveSuffix(poPowParams)
 
       result2 shouldBe 'success
       history.getLastProof shouldBe Some(result.get)
@@ -64,7 +64,7 @@ class ProvingPoPowProcessorSpec
         .flatMap(x => Seq(x.header, x.extension))
         .foreach(history.append)
 
-      val proof = history.prove(poPowParams).get
+      val proof = history.proveSuffix(poPowParams).get
 
       validate(proof) shouldBe 'success
     }

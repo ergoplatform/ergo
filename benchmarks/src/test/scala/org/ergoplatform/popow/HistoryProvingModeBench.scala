@@ -13,13 +13,13 @@ object HistoryProvingModeBench extends HistoryTestHelpers with App {
     val history = generateHistory(
       verifyTransactions = true, StateType.Utxo, poPowProve = true, BlocksToKeep)
 
-    history.prove(poPowParams) shouldBe 'failure
+    history.proveSuffix(poPowParams) shouldBe 'failure
 
     genChain(50000, history).flatMap(x => Seq(x.header, x.extension)).foreach(history.append)
 
     def bench: Long =
       Utils.time {
-        history.prove(poPowParams).get
+        history.proveSuffix(poPowParams).get
       }.toLong
 
     (0 to WarmupRuns).foreach(_ => bench)

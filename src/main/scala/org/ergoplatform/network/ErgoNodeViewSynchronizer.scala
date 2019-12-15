@@ -87,7 +87,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
       (historyReaderOpt, syncInfo.poPowParamsOpt) match {
         case (Some(historyReader), Some(poPowParams)) =>
-          historyReader.prove(poPowParams).foreach { proof =>
+          historyReader.proveSuffix(poPowParams).foreach { proof =>
             val ext = Seq(proof.modifierTypeId -> proof.id)
             self ! OtherNodeSyncingStatus(remote, Younger, ext)
           }

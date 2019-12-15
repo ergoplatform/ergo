@@ -10,7 +10,6 @@ import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.LDBHistoryStorage
 import org.ergoplatform.nodeView.history.components._
-import org.ergoplatform.nodeView.history.components.popow.{EmptyPoPowProcessor, ProvingPoPowProcessor}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.nodeView.history.storage.StorageKeys._
@@ -59,8 +58,6 @@ trait ErgoHistory
           (this, process(header))
         case section: BlockSection =>
           (this, process(section))
-        case poPowProof: PoPowProof =>
-          (this, process(poPowProof))
         case chunk: UTXOSnapshotChunk =>
           (this, process(chunk))
       }
@@ -222,34 +219,21 @@ object ErgoHistory extends ScorexLogging {
     val db = new LDBHistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
     val nodeConfiguration = ergoSettings.nodeSettings
 
-    val history: ErgoHistory =
-      nodeConfiguration.historyMode match {
-        case HistoryOperationMode.Full =>
-          new ErgoHistory with FullBlockSectionProcessor with FullBlockProcessor
-            with EmptyPoPowProcessor with Logging.Live {
-            override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val storage: LDBHistoryStorage = db
-            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-            override protected val timeProvider: NetworkTimeProvider = ntp
-          }
-        case HistoryOperationMode.FullProving =>
-          new ErgoHistory with FullBlockSectionProcessor with FullBlockProcessor
-            with ProvingPoPowProcessor with Logging.Live {
-            override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val storage: LDBHistoryStorage = db
-            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-            override protected val timeProvider: NetworkTimeProvider = ntp
-          }
-        case HistoryOperationMode.Light =>
-          new ErgoHistory with EmptyBlockSectionProcessor
-            with EmptyPoPowProcessor with Logging.Live {
-            override protected val settings: ErgoSettings = ergoSettings
-            override protected[history] val storage: LDBHistoryStorage = db
-            override val powScheme: AutolykosPowScheme = chainSettings.powScheme
-            override protected val timeProvider: NetworkTimeProvider = ntp
-          }
+    if (nodeConfiguration.verifyTransactions) {
+      new ErgoHistory with FullBlockSectionProcessor with FullBlockProcessor with Logging.Live {
+        override protected val settings: ErgoSettings = ergoSettings
+        override protected[history] val storage: LDBHistoryStorage = db
+        override val powScheme: AutolykosPowScheme = chainSettings.powScheme
+        override protected val timeProvider: NetworkTimeProvider = ntp
       }
-      history
+    } else {
+      new ErgoHistory with EmptyBlockSectionProcessor with Logging.Live {
+        override protected val settings: ErgoSettings = ergoSettings
+        override protected[history] val storage: LDBHistoryStorage = db
+        override val powScheme: AutolykosPowScheme = chainSettings.powScheme
+        override protected val timeProvider: NetworkTimeProvider = ntp
+      }
+    }
   }
 
 }

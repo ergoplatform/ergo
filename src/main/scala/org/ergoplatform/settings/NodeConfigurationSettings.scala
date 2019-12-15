@@ -34,14 +34,6 @@ final case class NodeConfigurationSettings(
    poPowSettings: PoPowSettings
 ) extends ValidatedConfig with ScorexEncoding {
 
-  val historyMode: HistoryOperationMode =
-    (verifyTransactions, poPowSettings.prove) match {
-      case (true, false) => HistoryOperationMode.Full
-      case (true, true) => HistoryOperationMode.FullProving
-      case (false, false) => HistoryOperationMode.Light
-      case other => throw new Error(s"Illegal configuration: $other")
-    }
-
   val validate: ValidationState[Unit] = ModifierValidator.accumulateErrors
     .demand(keepVersions >= 0, "nodeSettings.keepVersions should not be negative")
     .demand(!poPowSettings.prove || blocksToKeep < 0, s"Proving mode is incompatible with pruned mode")

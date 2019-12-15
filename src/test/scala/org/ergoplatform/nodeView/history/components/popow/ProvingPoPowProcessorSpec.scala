@@ -34,13 +34,13 @@ class ProvingPoPowProcessorSpec
       val result = history.prove(poPowParams)
 
       result shouldBe 'success
-      history.asInstanceOf[ProvingPoPowProcessor].getLastProof shouldBe Some(result.get)
+      history.getLastProof shouldBe Some(result.get)
 
       // Repeated proving
       val result2 = history.prove(poPowParams)
 
       result2 shouldBe 'success
-      history.asInstanceOf[ProvingPoPowProcessor].getLastProof shouldBe Some(result.get)
+      history.getLastProof shouldBe Some(result.get)
 
     }
   }

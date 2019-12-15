@@ -4,17 +4,16 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.components._
-import org.ergoplatform.nodeView.history.components.popow.PoPowProcessor
-import org.ergoplatform.settings.{ErgoSettings, HistoryOperationMode}
-import scorex.core.ModifierTypeId
+import org.ergoplatform.nodeView.history.storage.StorageKeys.LastProofIdKey
+import org.ergoplatform.settings.{ErgoSettings, PoPowParams}
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.ScorexEncoding
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
 import scala.reflect.ClassTag
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * Read-only copy of ErgoHistory
@@ -24,7 +23,6 @@ trait ErgoHistoryReader
     with HeadersProcessor
     with ChainSyncProcessor
     with BasicReaders
-    with PoPowProcessor
     with UTXOSnapshotChunkProcessor
     with BlockSectionProcessor
     with NodeProcessor
@@ -210,8 +208,6 @@ trait ErgoHistoryReader
         validate(header)
       case m: BlockSection =>
         validate(m)
-      case m: PoPowProof =>
-        validate(m)
       case chunk: UTXOSnapshotChunk =>
         validate(chunk)
       case m: Any =>
@@ -219,7 +215,7 @@ trait ErgoHistoryReader
     }
   }
 
-  def getFullBlock(header: Header): Option[ErgoFullBlock] = {
+  final def getFullBlock(header: Header): Option[ErgoFullBlock] = {
     (typedModifierById[BlockTransactions](header.transactionsId),
       typedModifierById[Extension](header.extensionId),
       typedModifierById[ADProofs](header.ADProofsId)) match {
@@ -237,7 +233,7 @@ trait ErgoHistoryReader
     * @param finalHeader    - header you should reach
     * @return (Modifier it required to rollback first, header chain to apply)
     */
-  def chainToHeader(startHeaderOpt: Option[Header], finalHeader: Header): (Option[ModifierId], Seq[Header]) = {
+  final def chainToHeader(startHeaderOpt: Option[Header], finalHeader: Header): (Option[ModifierId], Seq[Header]) = {
     startHeaderOpt match {
       case Some(h1) =>
         val (prevChain, newChain) = commonBlockThenSuffixes(h1, finalHeader)
@@ -287,7 +283,7 @@ trait ErgoHistoryReader
     (ourChain, commonBlockThenSuffixes)
   }
 
-  override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
+  override final def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
     storage.getIndex(validityKey(modifierId)) match {
       case Some(b) if b.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
       case Some(b) if b.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
@@ -298,5 +294,43 @@ trait ErgoHistoryReader
         ModifierSemanticValidity.Absent
     }
   }
+
+  /**
+    * Generate PoPow proof from current chain according to a given `params`.
+    */
+  final def prove(params: PoPowParams): Try[PoPowProof] =
+    getLastProof.fold(makeNewProof(params)(None)) { proof =>
+      bestHeaderOpt.fold[Try[PoPowProof]](Failure(new Exception("Empty chain"))) { bestHeader =>
+        val bestHeaderInProof = proof.chain.last.header
+        if (bestHeaderInProof.id == bestHeader.id) Success(proof) else makeNewProof(params)(Some(bestHeader))
+      }
+    }
+
+  /**
+    * Generates new NiPoPow proof for the current chain and saves it to the storage,
+    * or simply fetches it from the storage in case proof for the current chain was
+    * created earlier.
+    */
+  private def makeNewProof(params: PoPowParams)
+                          (prefetchedHeaderOpt: Option[Header]) =
+    (prefetchedHeaderOpt orElse bestHeaderOpt)
+      .fold[Try[PoPowProof]](Failure(new Exception("Empty chain"))) { bestHeader =>
+        val chain = headerChainBack(Int.MaxValue, bestHeader, _.isGenesis)
+        val poPowChain = chain.flatMap(h => getInterlinksFor(h).map(PoPowHeader(h, _)))
+        Try(PoPowAlgos.prove(poPowChain)(params))
+      }
+      .map { proof =>
+        getLastProof.foreach(proof => storage.remove(Seq(proof.id)))
+        storage.update(Seq(LastProofIdKey -> idToBytes(proof.id)), Seq(proof))
+        proof
+      }
+
+  private[history] final def getLastProof = storage.getIndex(LastProofIdKey)
+    .flatMap(id => typedModifierById[PoPowProof](bytesToId(id)))
+
+  private def getInterlinksFor(header: Header) =
+    storage.get(header.extensionId)
+      .flatMap(x => ExtensionSerializer.parseBytesTry(x.tail).toOption)
+      .flatMap(ext => PoPowAlgos.unpackInterlinks(ext.fields).toOption)
 
 }

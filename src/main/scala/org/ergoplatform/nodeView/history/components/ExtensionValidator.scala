@@ -4,19 +4,18 @@ import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.settings.ValidationRules._
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.TaggedValidationState
+import scorex.core.validation.ValidationState
 import scorex.util.bytesToId
 
 /**
   * Class that implements extension validation based on current to ErgoValidationSettings
   */
-final class ExtensionValidator[T](validationState: TaggedValidationState[T])
-  extends ScorexEncoding {
+class ExtensionValidator[T](validationState: ValidationState[T]) extends ScorexEncoding {
 
   def validateExtension(extension: Extension,
                         header: Header,
                         prevExtensionOpt: Option[ExtensionCandidate],
-                        prevHeaderOpt: Option[Header]): TaggedValidationState[T] = {
+                        prevHeaderOpt: Option[Header]): ValidationState[T] = {
     validateInterlinks(extension, header, prevExtensionOpt, prevHeaderOpt)
       .validate(exKeyLength, extension.fields.forall(_._1.lengthCompare(Extension.FieldKeySize) == 0), extension.encodedId)
       .validate(exValueLength, extension.fields.forall(_._2.lengthCompare(Extension.FieldValueMaxSize) <= 0), extension.encodedId)
@@ -27,7 +26,7 @@ final class ExtensionValidator[T](validationState: TaggedValidationState[T])
   private def validateInterlinks(extension: Extension,
                                  header: Header,
                                  prevExtensionOpt: Option[ExtensionCandidate],
-                                 prevHeaderOpt: Option[Header]): TaggedValidationState[T] = {
+                                 prevHeaderOpt: Option[Header]): ValidationState[T] = {
     (prevHeaderOpt, prevExtensionOpt) match {
       case (Some(parent), Some(parentExt)) =>
         val parentLinksTry = unpackInterlinks(parentExt.fields)
@@ -44,5 +43,4 @@ final class ExtensionValidator[T](validationState: TaggedValidationState[T])
           .validate(exIlUnableToValidate, header.isGenesis || prevExtensionOpt.isEmpty)
     }
   }
-
 }

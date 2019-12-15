@@ -4,8 +4,6 @@ import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import net.ceedubs.ficus.readers.ValueReader
 import org.ergoplatform.nodeView.state.StateType
-import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, ValidationState}
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -32,16 +30,7 @@ final case class NodeConfigurationSettings(
    rebroadcastCount: Int,
    minimalFeeAmount: Long,
    poPowSettings: PoPowSettings
-) extends ValidatedConfig with ScorexEncoding {
-
-  val validate: ValidationState[Unit] = ModifierValidator.accumulateErrors
-    .demand(keepVersions >= 0, "nodeSettings.keepVersions should not be negative")
-    .demand(!poPowSettings.prove || blocksToKeep < 0, s"Proving mode is incompatible with pruned mode")
-    .demand(
-      verifyTransactions || stateType.requireProofs,
-      "UTXO state can't be used when nodeSettings.verifyTransactions is false"
-    )
-}
+)
 
 object NodeConfigurationSettings extends StateTypeReaders with ModifierIdReader {
 

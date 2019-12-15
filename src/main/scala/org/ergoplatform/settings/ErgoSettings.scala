@@ -153,14 +153,16 @@ object ErgoSettings
 
   private def consistentSettings(settings: ErgoSettings,
                                  desiredNetworkTypeOpt: Option[NetworkType]): ErgoSettings = {
-    val validation = settings.nodeSettings.validate
-      .demand(
-        desiredNetworkTypeOpt.forall(_ == settings.networkType),
-        s"Malformed network config. Desired networkType is `${desiredNetworkTypeOpt.get}`, " +
-          s"but one declared in config is `${settings.networkType}`"
-      )
-      .result
-    if (validation.isValid) settings else failWithError(validation.message)
+    if (settings.nodeSettings.keepVersions < 0) {
+      failWithError("nodeSettings.keepVersions should not be negative")
+    } else if (!settings.nodeSettings.verifyTransactions && !settings.nodeSettings.stateType.requireProofs) {
+      failWithError("Can not use UTXO state when nodeSettings.verifyTransactions is false")
+    } else if (desiredNetworkTypeOpt.exists(_ != settings.networkType)) {
+      failWithError(s"Malformed network config. Desired networkType is `${desiredNetworkTypeOpt.get}`, " +
+        s"but one declared in config is `${settings.networkType}`")
+    } else {
+      settings
+    }
   }
 
   private def failWithError(msg: String): Nothing = {

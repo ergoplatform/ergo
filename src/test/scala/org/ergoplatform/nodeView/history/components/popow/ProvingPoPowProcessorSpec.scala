@@ -5,16 +5,17 @@ import org.ergoplatform.modifiers.history.{PoPowProof, PoPowProofPrefix}
 import org.ergoplatform.nodeView.history.HistoryTestHelpers
 import org.ergoplatform.nodeView.history.storage.StorageKeys
 import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.settings.ErgoValidationSettings
 import org.ergoplatform.utils.ErgoTestConstants
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
 import scorex.core.validation.ModifierValidator
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 class ProvingPoPowProcessorSpec
-  extends PropSpec
+    extends PropSpec
     with Matchers
     with GeneratorDrivenPropertyChecks
     with ErgoTestConstants
@@ -25,11 +26,17 @@ class ProvingPoPowProcessorSpec
   property("Chain proving") {
     forAll(Gen.chooseNum(minHeight, minHeight + 200)) { height =>
       val history = generateHistory(
-        verifyTransactions = true, StateType.Utxo, poPowProve = true, BlocksToKeep)
+        verifyTransactions = true,
+        StateType.Utxo,
+        poPowProve = true,
+        BlocksToKeep
+      )
 
       history.prove(poPowParams) shouldBe 'failure
 
-      genChain(height, history).flatMap(x => Seq(x.header, x.extension)).foreach(history.append)
+      genChain(height, history)
+        .flatMap(x => Seq(x.header, x.extension))
+        .foreach(history.append)
 
       val result = history.prove(poPowParams)
 
@@ -48,8 +55,14 @@ class ProvingPoPowProcessorSpec
   property("Produce valid proof") {
     forAll(Gen.chooseNum(minHeight, minHeight + 200)) { height =>
       val history = generateHistory(
-        verifyTransactions = true, StateType.Utxo, poPowProve = true, BlocksToKeep)
-      genChain(height, history).flatMap(x => Seq(x.header, x.extension)).foreach(history.append)
+        verifyTransactions = true,
+        StateType.Utxo,
+        poPowProve = true,
+        BlocksToKeep
+      )
+      genChain(height, history)
+        .flatMap(x => Seq(x.header, x.extension))
+        .foreach(history.append)
 
       val proof = history.prove(poPowParams).get
 
@@ -60,25 +73,30 @@ class ProvingPoPowProcessorSpec
   private def validPrefix(prefix: PoPowProofPrefix): Boolean = {
     val maxLevel = prefix.headersChain.tail.map(maxLevelOf).max
     assert(maxLevel < 256)
-    (0 to maxLevel).exists(l => prefix.headersChain.count(h => maxLevelOf(h) >= l) >= prefix.m)
+    (0 to maxLevel).exists(
+      l => prefix.headersChain.count(h => maxLevelOf(h) >= l) >= prefix.m
+    )
   }
 
   private def validate(m: PoPowProof): Try[Unit] =
-    ModifierValidator.failFast
-      .demand(
-        m.suffix.chain.lengthCompare(m.suffix.k) == 0,
-        s"Invalid suffix length, given: ${m.suffix.chain}, required: ${m.suffix.k}"
+    if (m.suffix.chain.lengthCompare(m.suffix.k) != 0) {
+      Failure(
+        new Exception(
+          s"Invalid suffix length, given: ${m.suffix.chain}, required: ${m.suffix.k}"
+        )
       )
-      .demand(validPrefix(m.prefix), s"Invalid prefix length")
-      .demand(
-        m.prefix.chain.tail.forall(_.interlinks.headOption.contains(m.prefix.chain.head.id)),
-        "Chain is not anchored"
-      )
-      .demand(
-        m.prefix.chain.headOption.exists(_.header.requiredDifficulty == settings.chainSettings.initialDifficulty),
-        "Wrong genesis difficulty"
-      )
-      .result
-      .toTry
+    } else if (!validPrefix(m.prefix)) {
+      Failure(new Exception(s"Invalid prefix length"))
+    } else if (!m.prefix.chain.tail.forall(
+                 _.interlinks.headOption.contains(m.prefix.chain.head.id)
+               )) {
+      Failure(new Exception("Chain is not anchored"))
+    } else if (!m.prefix.chain.headOption.exists(
+                 _.header.requiredDifficulty == settings.chainSettings.initialDifficulty
+               )) {
+      Failure(new Exception("Wrong genesis difficulty"))
+    } else {
+      Success(())
+    }
 
 }

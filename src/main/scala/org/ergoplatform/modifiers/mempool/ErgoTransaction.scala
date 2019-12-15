@@ -10,9 +10,9 @@ import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Algos, ErgoValidationRules}
 import org.ergoplatform.utils.ArithUtils._
+import org.ergoplatform.settings.ValidationRules._
+import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
@@ -20,7 +20,7 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, TaggedValidationState}
+import scorex.core.validation.{ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADKey
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
@@ -94,8 +94,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     *
     * @note Consensus-critical!
     */
-  def validateStateless: TaggedValidationState[Unit] = {
-    ModifierValidator.failFastTagged(ErgoValidationRules.initial)
+  def validateStateless: ValidationState[Unit] = {
+    ModifierValidator(ErgoValidationSettings.initial)
       .validate(txNoInputs, inputs.nonEmpty, s"$id")
       .validate(txNoOutputs, outputCandidates.nonEmpty, s"$id")
       .validate(txManyInputs, inputs.size <= Short.MaxValue, s"$id: ${inputs.size}")
@@ -126,7 +126,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long)
-                      (implicit verifier: ErgoInterpreter): TaggedValidationState[Long] = {
+                      (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
 
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
@@ -142,7 +142,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val maxCost = stateContext.currentParameters.maxBlockCost
     //    val remainingCost = stateContext.currentParameters.maxBlockCost - accumulatedCost
 
-    ModifierValidator.failFastTagged(stateContext.validationSettings)
+    ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big
       .validate(bsBlockTransactionsCost, maxCost >= addExact(initialCost, accumulatedCost), s"$id: initial cost")
       // Starting validation
@@ -152,12 +152,12 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txPositiveAssets, outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)), s"$id: ${outputCandidates.map(_.additionalTokens)}")
       // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) =>
-      validationState
-        .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}")
-        .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s"$id: output $out")
-        .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
-        .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
-    }
+        validationState
+          .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}")
+          .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s"$id: output $out")
+          .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
+          .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
+      }
       // Just to be sure, check that all the input boxes to spend (and to read) are presented.
       // Normally, this check should always pass, if the client is implemented properly
       // so it is not part of the protocol really.
@@ -201,30 +201,30 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
       // Check inputs, the most expensive check usually, so done last.
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
-      val currentTxCost = validation.result.payload.get
+        val currentTxCost = validation.result.payload.get
 
-      val input = inputs(idx)
-      val proof = input.spendingProof
-      val proverExtension = proof.extension
-      val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
-      val ctx = new ErgoContext(stateContext, transactionContext, proverExtension, maxCost - addExact(currentTxCost, accumulatedCost), 0)
+        val input = inputs(idx)
+        val proof = input.spendingProof
+        val proverExtension = proof.extension
+        val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
+        val ctx = new ErgoContext(stateContext, transactionContext, proverExtension, maxCost - addExact(currentTxCost, accumulatedCost), 0)
 
-      val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
-      costTry.recover { case t =>
-        log.debug(s"Tx verification failed: ${t.getMessage}")
+        val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
+        costTry.recover { case t =>
+          log.debug(s"Tx verification failed: ${t.getMessage}")
+        }
+
+        lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
+
+        validation
+          // Just in case, should always be true if client implementation is correct.
+          .validateEquals(txBoxToSpend, box.id, input.boxId)
+          // Check whether input box script interpreter raised exception
+          .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
+          // Check that cost of the transaction after checking the input becomes too big
+          .validate(bsBlockTransactionsCost, maxCost >= addExact(currentTxCost, accumulatedCost, scriptCost), s"$id: cost exceeds limit after input #$idx")
+          .map(c => addExact(c, scriptCost))
       }
-
-      lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
-
-      validation
-        // Just in case, should always be true if client implementation is correct.
-        .validateEquals(txBoxToSpend, box.id, input.boxId)
-        // Check whether input box script interpreter raised exception
-        .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
-        // Check that cost of the transaction after checking the input becomes too big
-        .validate(bsBlockTransactionsCost, maxCost >= addExact(currentTxCost, accumulatedCost, scriptCost), s"$id: cost exceeds limit after input #$idx")
-        .map(c => addExact(c, scriptCost))
-    }
   }
 
   override type M = ErgoTransaction

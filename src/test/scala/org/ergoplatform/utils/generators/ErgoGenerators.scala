@@ -6,12 +6,12 @@ import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.modifiers.history.PoPowAlgos.updateInterlinks
-import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header, PoPowAlgos, PoPowHeader, PoPowProof, PoPowProofPrefix, PoPowProofSuffix}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Constants, ErgoValidationRules, ErgoValidationSettingsUpdate, PoPowParams, ValidationRules}
+import org.ergoplatform.settings._
 import org.ergoplatform.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -176,8 +176,8 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ChainGenerator {
     statusUpdates = org.ergoplatform.validation.ValidationRules.ruleSpecs.take(statuses.size).map(_.id).zip(statuses)
   } yield ErgoValidationSettingsUpdate(disabledRules, statusUpdates)
 
-  lazy val ergoValidationSettingsGen: Gen[ErgoValidationRules] = ergoValidationSettingsUpdateGen
-    .map(u => ErgoValidationRules.initial.updated(u))
+  lazy val ergoValidationSettingsGen: Gen[ErgoValidationSettings] = ergoValidationSettingsUpdateGen
+    .map(u => ErgoValidationSettings.initial.updated(u))
 
   lazy val poPowProofGen: Gen[PoPowProof] = for {
     m <- Gen.chooseNum(1, 128)

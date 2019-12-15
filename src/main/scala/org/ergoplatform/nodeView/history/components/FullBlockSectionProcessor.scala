@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.components
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Algos, ErgoValidationRules}
+import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, _}
@@ -24,8 +24,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor {
     with NodeProcessor
     with Persistence =>
 
-  private def initialValidationState: TaggedValidationState[Unit] =
-    ModifierValidator.failFastTagged(ErgoValidationRules.initial)
+  private def initialValidationState: ValidationState[Unit] = ModifierValidator(ErgoValidationSettings.initial)
 
   /**
     * Process block section.
@@ -47,7 +46,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor {
         }
     }
 
-  override protected def validate(m: BlockSection): Try[Unit] =
+  override protected def validate(m: BlockSection): Try[Unit] = {
     typedModifierById[Header](m.headerId) map { header =>
       new PayloadValidator(initialValidationState)
         .validate(m, header)
@@ -58,6 +57,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor {
         .result
         .toTry
     }
+  }
 
   /**
     * Trying to construct full block with modifier `m` and data, kept in history
@@ -94,7 +94,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor {
   /**
     * Validator for BlockTransactions, ADProofs and Extension
     */
-  class PayloadValidator(validator: TaggedValidationState[Unit]) extends ScorexEncoding {
+  class PayloadValidator(validator: ValidationState[Unit]) extends ScorexEncoding {
 
     def validate(m: BlockSection, header: Header): ValidationResult[Unit] =
       validator

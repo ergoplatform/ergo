@@ -309,27 +309,9 @@ Then a weak Type 2 scheme can be bypassed as follows. In order to participate in
 
 A miner is permitted to send the reward to any chosen address, since as soon as a valid block is generated, the collateral becomes spendable by the pool. One way the miner can try to save the collateral is to generate $L$ blocks after the one with the watermark, but this case is unlikely for a pool user if $L$ is big enough. In Ergo, for example, $L = 10$, and the chance to generate 11 consecutive blocks is very small~\cite{Nak08}. 
 
-Note that the above script locks the collateral until Alice find a block, which may never happen. Hence, as in the Type 1 case, we need to allow Alice to withdraw collateral if she desires. However, the solution used in Type 1 (i.e., simply appending `\texttt{||alice}') will not work here because the pool does not immediately get the collateral when Alice gets the reward, but rather after at most $L$ blocks. If we allow Alice to withdraw the collateral at any time, the she can withdraw it in the same block as the reward.
+Note that the above script locks the collateral until Alice find a block, which may never happen. Hence, as in the Type 1 case, we need to allow Alice to withdraw collateral if she desires. However, the solution used in Type 1 (i.e., simply appending `\texttt{||bob}') will not work here because the pool does not immediately get the collateral when Alice gets the reward, but rather after at most $L$ blocks. If we allow Alice to withdraw the collateral at any time, the she can withdraw it in the same block as the reward.
 One solution would be to allow Alice to withdraw the collateral only after some fixed height $H$, while her participation in the pool using this collateral ends at height $H - L$, after which she must use new collateral. For simplicity, we skip this deadline condition for withdrawing the collateral by the miner in case a block is not found for a long time. However, a real world implementation must consider this.
 
-% allowed to send the reward to any address of simply gets away with the mined block, anyway, the pool will claim the collateral within $L$. The only
-% way for the miner to save the collateral is to generate $L$ blocks after one with the watermark, but this is unlikely
-% the case for pool user if $L$ is big enough. For example, in Ergo, 10~last block headers available in the execution
-% context, and chance to generate 11 blocks in a row is small~\cite{Nak08}.
-
-
-
-
-% We remind that in such schemes a miner can produce~(with
-% non-negligible probability) an alternative block for the same PoW solution. Thus the miner can generate block shares
-% which the pool accepts, but in case of block with network difficulty generated, the miner is replacing it with another
-% block paying to the miner only. As noted in~\cite{miller2015nonoutsourceable}, the pool still can detect that the miner
-% run away by requiring for the block solution to have some watermark~(e.g. by splitting the nonce into two halfs and
-% requiring first half to contain certain bits).
-% However, if block solutions for some number $L$ of last block headers are available in the script execution context
-% then the scheme could be bypassed by the following contract. First, the miner is creating a coin which is locking
-% collateral to the following condition "payable to the pool's public key if one of the last L headers contains
-% the watermarked solution"
 \section{Conclusion and Further Work}
 \label{conclusion}
 
@@ -347,8 +329,6 @@ along with zero-knowledge proof of its correctness) remain unbroken. However, it
 Both our approaches rely on smart contracts acting as decentralized escrows and require the underlying programming language to allow predicates at context Level 3 (i.e., access to the block solution; see Section~\ref{context}). Thus, one way to invalidate our methods would be to restrict the language context to Level 2 or lower. Note that even Level 2 contracts allow sophisticated applications such as non-interactive mixing, rock-paper-scissors, and even an ICO~\cite{advtutorial}.
 
 Another open issue in mining pools is that of block withholding~\cite{courtois2014subversive}, where the miner tries to attack the pool by submitting valid shares but discarding actual solutions. The need for collateral in our schemes may possibly affect the attacker's strategy. This will be considered in a follow-up work.
-
-% We hope this work opens up new avenues for research on non-outsourceable schemes.
 
 \bibliographystyle{unsrt}
 \bibliography{main}

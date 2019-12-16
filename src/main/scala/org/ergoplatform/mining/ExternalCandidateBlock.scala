@@ -6,6 +6,15 @@ import org.ergoplatform.http.api.ApiCodecs
 import sigmastate.basics.DLogProtocol.ProveDlog
 
 
+/**
+  * Block candidate for external miner
+  *
+  * @param msg - message for external miner to work on
+  * @param b - target value for mining
+  * @param pk- public key of a miner
+  * @param proofsForMandatoryTransactions - proofs of transactions membership (optional)
+  *
+  */
 case class ExternalCandidateBlock(msg: Array[Byte],
                                   b: BigInt,
                                   pk: ProveDlog,

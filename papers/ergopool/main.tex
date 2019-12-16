@@ -133,21 +133,21 @@ We define three levels of centralization in pools.
 	\item {\em Level 3 (No centralization):} There is no pool operator and rewards are automatically given to the participants based on the shares they submitted (see P2Pool~\cite{chesterman2018p2pool} for Bitcoin and SmartPool~\cite{luu2017smartpool} for Ethereum).
 \end{enumerate}
 
-The following table summarizes the concepts.\\
-
+The following table summarizes the concepts.\\~\\
 	\begin{tabular}{|l|l|l|l|}\hline
-	Pool level	& Centralization & Censorship Possible & Reward theft risk\\\hline
-	1	& full    & Yes & Yes \\
-	2	& partial    & No & Yes \\
-	3	& none    & No & No \\\hline
+	Pool level	& Censorship & Reward theft risk &Example\\\hline
+	1 (full centralization)	&Yes & Yes  & BTC.com\\
+	2 (partial centralization)	& No & Yes &ErgoPool (this work)\\
+	3 (no centralization)	& No & No &SmartPool\cite{luu2017smartpool}, P2Pool~\cite{chesterman2018p2pool}\\\hline
 	\end{tabular}
 
 ~\\
 
-The primary issue with pools is that they increase the potential of transaction censorship and 51 percent attacks. One way to address this issue is to disallow pools entirely. This is what non-outsourceable puzzles (discussed in the next section) try to achieve.
+The primary issue with pools is that they increase the potential of transaction censorship and 51 percent attacks. One way to address this issue is to disallow pools entirely. This is what non-outsourceable puzzles aim to achieve, and Ergo is the first practical implementation of such puzzles~\cite{ergo}. 
 
-However, we observe that these issues are present only in Level 1 pools. Thus, instead of preventing pools completely, it will be better to have pools at Levels 2 or 3, so that not only can we have decentralization in mining power but also have all the benefits of pools (such as regular income for miners and thereby, stronger network). Our solution works at Level 2 but can also operate at Level 1. Additionally, it may be possible to extend it to Level 3 using approaches similar to SmartPool or P2Pool.
+We, however, note that disallowing pools entirely comes with its own set of problems. For instance, at Ergo launch, the difficulty went up so quickly that miners with single GPUs could not find any blocks in a reasonable time. Since Ergo does not allow pools, such miners had no incentive to continue mining. In fact, this research was motivated from the need to create a mining pool for Ergo. However, we also want our solution to retain the security offered by lack of pools, that is, resistance to censorship and 51\% attacks. 
 
+Our solution is based on the observation that another way to address censorship and 51 percent attacks is to have pools to operate at levels 2 or 3, since these issues are present only in Level 1 pools. Thus, not only can we have decentralization in mining but also have all the benefits of pools (such as regular income for miners and thereby, stronger network). Our solution is designed for Level 2 but can also operate at Level 1. Additionally, it may be possible to extend it to Level 3 using approaches similar to SmartPool or P2Pool. 
 
 \subsection{Non-Outsourceable Puzzles}
 
@@ -169,7 +169,7 @@ In Type 2,
 the reward is stolen {\em before} a block is finalized into the blockchain. 
 
 
-We note that all Type 2 schemes have an inherent problem that allows malicious actors to flood the network with a large number of valid but distinct solutions, thereby causing network partitions and instability. This causes the network to converge very slowly or result in several forks. Hence, we don't consider Type 2 schemes to be robust in reaching consensus, thereby making them impractical in the real world. We call this the {\em forking attack}. Strong Type 2 schemes are even more prone to this attack because there is no fear of detection (and penalization).
+We note that all Type 2 schemes have an inherent problem that allows malicious actors to flood the network with a large number of valid but distinct solutions, thereby causing network partitions and instability. This causes the network to converge very slowly or result in several forks. Hence, we don't consider Type 2 schemes to be robust in reaching consensus, thereby making them impractical in the real world. We call this the {\em forking attack}. Strong Type 2 schemes are even more prone to this attack because there is no fear of detection. % (and penalization).
 
 In this work, we bypass the non-outsourceability of all Type 1 and weak Type 2 schemes assuming that their platforms support
 some minimal smart contract capability. The following table summarizes this. 
@@ -192,13 +192,9 @@ In Proof-of-Work currencies a block is split usually into sections, with a compa
 enough to verify Proof-of-Work puzzle solution and also to check integrity of other sections (such as block transactions).
 
 Execution context is what available to a contract during execution. Considering UTXO-based cryptocurrencies, such as
-Bitcoin and Ergo, we can think about following components of the execution context. In the first place, smart contract
- may have access to the UTXO it is locking (e.g. monetary value of the UTXO). In the second place, smart contract may
- have access to the spending transaction with its inputs and outputs. In the third place, smart contract may have access
- to block header data. For example, in Ergo last ten block headers and also parts of the next block header which could
- be known to the miner before starting mining of the new block do belong to the execution context. Finally, execution
- context may contain the full block with all its transactions. Note that since the execution context must fit into
- random-access memory of commodity hardware, accessing the full blockchain is not a realistic scenario. The following
+Bitcoin and Ergo, we can think about following components of the execution context. At the bare minimum, the first level, the smart contract 
+ should have access to the contents of the UTXO it is locking (i.e., its monetary value and any other data stored in it). At the second level, the smart contract may additionally have access to the spending transaction, that is, all its inputs and outputs. At the third level, the smart contract may have access to block header data in addition to the data at the second level. For example, in Ergo, the last ten block headers and also some parts of the next block header 
+ (which are known in advance before the next block is mined) are also available in the execution context. Finally, at the fourth level, the execution context may contain the entire block with all sibling transactions transactions. Note that since the execution context must fit into random-access memory of commodity hardware, accessing the full blockchain is not a realistic scenario. The following
  table summarizes possible execution context components.
 
 ~\\
@@ -217,7 +213,7 @@ In a nutshell, Type 1 puzzles use a combination of two techniques: (1) replacing
 
 \subsection{Using Public-Key Cryptography}
 
-The method requires a randomized signature scheme that is strongly unforgeable against adaptive chosen message attacks (s-UFCMA) and outputs signatures uniformly spread over some range irrespective of how the signer behaves. Schnorr signature is one such method.
+The method requires a randomized signature scheme that is strongly unforgeable against adaptive chosen message attacks (s-UFCMA) and outputs signatures uniformly spread over some range irrespective of how the signer behaves. Schnorr signature is one such scheme~\cite{Sch91}.
 
 A candidate block header is constructed using transactions as in Bitcoin along with a public key $p$. A valid block header is a candidate block header along with a signature $d$ that (1) verifies with this public key and (2) satisfies the difficulty constraints as before (i.e., is less than a certain value). The difficulty parameter is automatically adjusted as in Bitcoin.
 
@@ -266,7 +262,7 @@ Therefore, for uninterrupted mining, each miner must keep the reserved amount of
 minerPubKey == alice
 \end{verbatim}
 
-A box with this script does not require a signature because the above statement only fixes the miner's public key and does not enforce any other spending condition. Thus, anyone can create a transaction spending this box. However the transaction is valid only if the block that includes it is mined by Alice. 
+A box with this script does not require a signature because the above statement only fixes the miner's public key to \texttt{alice} and does not enforce any other spending condition. Thus, anyone can create a transaction spending this box. However the transaction is valid only if the block that includes it is mined by Alice. 
 This ensures that the box can only be spent if and when Alice mines a block.  
 Alice creates her pool transaction using this box as input and submits her shares and proofs to the pool as before. She need not even use a private channel for this purpose and can broadcast this publicly. This enables the possibility of extending the scheme to Level 3 centralization that requires public shares.
 
@@ -281,7 +277,10 @@ The above variant prevents the broadcast attack because knowing the pool transac
 The first condition, \texttt{minerPubKey == alice}, ensures that when used to fund the pool output, the miner must be Alice as in the enhanced variant. The second condition, \texttt{bob}, ensures that the coins are not stuck till Alice finds a block, because it allows Alice may withdraw the collateral at any time.
 Note that Alice should fund the pool transaction by satisfying only the first condition and never the second condition, otherwise the broadcast attack becomes possible. The second condition is be used only for withdrawing collateral.
 
-Note that the above attack mitigation strategy requires Level 3 context (i.e., access to \texttt{minerPubKey}) and will not work in lower context levels. One may envisage a hiding strategy at context Level 2, where the pool transaction is not revealed in a share (only a commitment is revealed). The actual transaction is revealed only if a block is found or when a miner later proves to the pool that the shares were correct. However, this is also insecure. First note that there are two types of broadcast attacks. The first is the ``extract from share'' attack discussed above. The second is the ``extract from orphaned block'' attack, where the transaction is extracted from a mined block that ends up getting orphaned. Th hiding strategy mitigates the first attack but not the second. 
+Note that the above broadcast attack mitigation strategy requires Level 3 context (i.e., access to \texttt{minerPubKey}) and will not work in lower levels. One may envisage a hiding strategy at context Level 2, where the pool transaction is not revealed in a share (only a commitment is revealed). The actual transaction is revealed only if a block is found or when a miner later proves to the pool that the shares were correct. However, this is also insecure. First note that there are two types of broadcast attacks. The first is the ``extract from share'' attack discussed above. The second is the ``extract from orphaned block'' attack, where the transaction is extracted from a mined block that ends up getting orphaned. The hiding strategy mitigates the first attack but not the second. 
+
+\textbf{Weak Broadcast security:} We can obtain a weaker form of broadcast security for Level 2 context by assuming a trusted pool as follows. A pool-paying transaction is created as before by spending some arbitrary input and paying to the pool address. The miner sends the shares along with the proofs to the pool over a trusted channel, who is trusted not to misuse the transaction.
+
 
 \section{Pooled Mining with Type 2 Puzzles}
 % \section{10 Blocks}
@@ -309,7 +308,7 @@ Then a weak Type 2 scheme can be bypassed as follows. In order to participate in
 
 A miner is permitted to send the reward to any chosen address, since as soon as a valid block is generated, the collateral becomes spendable by the pool. One way the miner can try to save the collateral is to generate $L$ blocks after the one with the watermark, but this case is unlikely for a pool user if $L$ is big enough. In Ergo, for example, $L = 10$, and the chance to generate 11 consecutive blocks is very small~\cite{Nak08}. 
 
-Note that the above script locks the collateral until Alice find a block, which may never happen. Hence, as in the Type 1 case, we need to allow Alice to withdraw collateral if she desires. However, the solution used in Type 1 (i.e., simply appending `\texttt{||bob}') will not work here because the pool does not immediately get the collateral when Alice gets the reward, but rather after at most $L$ blocks. If we allow Alice to withdraw the collateral at any time, the she can withdraw it in the same block as the reward.
+Note that the above script locks the collateral until Alice find a block, which may never happen. Hence, as in the Type 1 case, we need to allow Alice to withdraw collateral if she desires. However, the solution used in Type 1 (i.e., simply appending `\texttt{|| bob}') will not work here because the pool does not immediately get the collateral when Alice gets the reward, but rather after at most $L$ blocks. If we allow Alice to withdraw the collateral at any time, the she can withdraw it in the same block as the reward.
 One solution would be to allow Alice to withdraw the collateral only after some fixed height $H$, while her participation in the pool using this collateral ends at height $H - L$, after which she must use new collateral. For simplicity, we skip this deadline condition for withdrawing the collateral by the miner in case a block is not found for a long time. However, a real world implementation must consider this.
 
 \section{Conclusion and Further Work}

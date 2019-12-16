@@ -156,12 +156,19 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
-    * Assembles candidate block derivative required for external miner.
+    * Assembles candidate block for external miner.
     */
-  def deriveExternalCandidate(candidate: CandidateBlock, pk: ProveDlog): ExternalCandidateBlock = {
+  def deriveExternalCandidate(candidate: CandidateBlock, pk: ProveDlog): ExternalCandidateBlock =
     deriveExternalCandidate(candidate, pk, Seq.empty)
-  }
 
+
+  /**
+    * Assembles candidate block for external miner with certain transactions included into the block
+    * @param candidate - block candidate (contained the transactions)
+    * @param pk - miner pubkey
+    * @param mandatoryTxIds - ids of the transactions to include
+    * @return - block candidate for external miner
+    */
   def deriveExternalCandidate(candidate: CandidateBlock,
                               pk: ProveDlog,
                               mandatoryTxIds: Seq[ModifierId]): ExternalCandidateBlock = {

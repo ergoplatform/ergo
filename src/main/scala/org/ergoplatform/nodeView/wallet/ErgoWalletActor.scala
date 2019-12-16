@@ -184,7 +184,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   private def walletCommands: Receive = {
-    case InitWallet(pass, mnemonicPassOpt) if secretStorageOpt.isEmpty =>
+    case InitWallet(pass, mnemonicPassOpt) if secretStorageOpt.isEmpty && walletSettings.testMnemonic.isEmpty =>
       //Read high-quality random bits from Java's SecureRandom
       val entropy = scorex.utils.Random.randomBytes(settings.walletSettings.seedStrengthBits / 8)
       val mnemonicTry = new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
@@ -202,7 +202,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       self ! UnlockWallet(pass)
       log.info("Wallet is initialized")
 
-    case RestoreWallet(mnemonic, passOpt, encryptionPass) if secretStorageOpt.isEmpty =>
+    case RestoreWallet(mnemonic, passOpt, encryptionPass)
+      if secretStorageOpt.isEmpty && walletSettings.testMnemonic.isEmpty =>
+
       val secretStorage = JsonSecretStorage
         .restore(mnemonic, passOpt, encryptionPass)(settings.walletSettings.secretStorage)
       secretStorageOpt = Some(secretStorage)
@@ -211,7 +213,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       log.info("Wallet is restored")
 
     case _: RestoreWallet | _: InitWallet =>
-      sender() ! Failure(new Exception("Wallet is already initialized. Clear keystore to re-init it."))
+      sender() ! Failure(new Exception("Wallet is already initialized or testMnemonic is set. Clear current secret to re-init it."))
 
     case UnlockWallet(pass) =>
       secretStorageOpt match {

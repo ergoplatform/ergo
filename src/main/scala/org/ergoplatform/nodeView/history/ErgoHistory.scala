@@ -213,11 +213,11 @@ object ErgoHistory extends ScorexLogging {
       val db = factory.open(dir, options)
       new LDBKVStore(db)
     } catch {
-      case x: Throwable => {
-        log.error(s"Failed to initialize storage: ${x}. Please check that directory ${path} exists and is not used by some other active node")
+      case x: Throwable =>
+        log.error(s"Failed to initialize storage: $x. Please check that directory $path could be accessed " +
+          s"and is not used by some other active node")
         java.lang.System.exit(2)
         null
-      }
     }
   }
 

@@ -7,7 +7,6 @@ import scorex.util.encode.Base58
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.ScorexLogging
 
-
 trait TestHelper extends FileHelper with ScorexLogging {
 
   val enableQuickStore: Boolean = System.getProperty("java.specification.version").startsWith("8")

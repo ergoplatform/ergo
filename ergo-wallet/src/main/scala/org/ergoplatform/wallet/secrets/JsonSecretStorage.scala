@@ -12,7 +12,7 @@ import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.settings.{EncryptionSettings, SecretStorageSettings}
 import scorex.util.encode.Base16
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * Secret storage backend.
@@ -36,6 +36,7 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
   override def unlock(pass: String): Try[Unit] = {
     val secretFileRaw = scala.io.Source.fromFile(secretFile, "UTF-8").getLines().mkString
     decode[EncryptedSecret](secretFileRaw)
+      .right
       .map { encryptedSecret =>
         Base16.decode(encryptedSecret.cipherText)
           .flatMap(txt => Base16.decode(encryptedSecret.salt)
@@ -49,7 +50,7 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
             crypto.AES.decrypt(cipherText, pass, salt, iv, tag)(encryptionSettings)
           }
       }
-      .toTry
+      .fold(Failure(_), Success(_))
       .flatten
       .map(seed => unlockedSecret = Some(ExtendedSecretKey.deriveMasterKey(seed)))
   }

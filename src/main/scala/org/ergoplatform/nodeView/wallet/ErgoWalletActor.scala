@@ -76,8 +76,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         val seed = Mnemonic.toSeed(testMnemonic)
         val rootSk = ExtendedSecretKey.deriveMasterKey(seed)
         val childSks = walletSettings
-            .testKeysQty.toIndexedSeq
-            .flatMap(qty => (0 until qty).map(rootSk.child))
+          .testKeysQty.toIndexedSeq
+          .flatMap(qty => (0 until qty).map(rootSk.child))
         proverOpt = Some(ErgoProvingInterpreter(rootSk +: childSks, parameters))
         storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
       case None =>
@@ -94,7 +94,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   override def receive: Receive =
-    walletCommands orElse
+    walletInit orElse
+      walletCommands orElse
       onStateChanged orElse
       scanLogic orElse
       readers
@@ -183,8 +184,12 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       storage.updateStateContext(s.stateContext)
   }
 
-  private def walletCommands: Receive = {
-    case InitWallet(pass, mnemonicPassOpt) if secretStorageOpt.isEmpty && walletSettings.testMnemonic.isEmpty =>
+  //Secret is set in form of keystore file of testMnemonic in the config
+  private def secretIsSet: Boolean = secretStorageOpt.nonEmpty || walletSettings.testMnemonic.nonEmpty
+
+  private def walletInit: Receive = {
+    //Init wallet (w. mnemonic generation) if secret is not set yet
+    case InitWallet(pass, mnemonicPassOpt) if !secretIsSet =>
       //Read high-quality random bits from Java's SecureRandom
       val entropy = scorex.utils.Random.randomBytes(settings.walletSettings.seedStrengthBits / 8)
       val mnemonicTry = new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
@@ -194,27 +199,44 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
             .init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), pass)(settings.walletSettings.secretStorage)
           secretStorageOpt = Some(secretStorage)
           mnemonic
-        }
-        .fold(catchLegalExc, res => Success(res))
-
-      util.Arrays.fill(entropy, 0: Byte)
+        } match {
+        case s: Success[String] =>
+          self ! UnlockWallet(pass)
+          util.Arrays.fill(entropy, 0: Byte)
+          log.info("Wallet is initialized")
+          s
+        case Failure(t) =>
+          val f = wrapLegalExc(t) //getting nicer message for illegal key size exception
+          log.error(s"Wallet initialization is failed, details: ${f.exception.getMessage}")
+          f
+      }
       sender() ! mnemonicTry
-      self ! UnlockWallet(pass)
-      log.info("Wallet is initialized")
 
-    case RestoreWallet(mnemonic, passOpt, encryptionPass)
-      if secretStorageOpt.isEmpty && walletSettings.testMnemonic.isEmpty =>
 
-      val secretStorage = JsonSecretStorage
-        .restore(mnemonic, passOpt, encryptionPass)(settings.walletSettings.secretStorage)
-      secretStorageOpt = Some(secretStorage)
-      sender() ! Success(())
-      self ! UnlockWallet(encryptionPass)
-      log.info("Wallet is restored")
+    //Restore wallet with mnemonic if secret is not set yet
+    case RestoreWallet(mnemonic, passOpt, encryptionPass) if !secretIsSet =>
+      val res = Try {
+        JsonSecretStorage.restore(mnemonic, passOpt, encryptionPass)(settings.walletSettings.secretStorage)
+      }.map { secretStorage =>
+        secretStorageOpt = Some(secretStorage)
+      } match {
+        case s: Success[Unit] =>
+          self ! UnlockWallet(encryptionPass)
+          log.info("Wallet is restored")
+          s
+        case Failure(t) =>
+          val f = wrapLegalExc(t) //getting nicer message for illegal key size exception
+          log.error(s"Wallet restoration is failed, details: ${f.exception.getMessage}")
+          f
+      }
+      sender() ! res
 
+    // branch for key already being set
     case _: RestoreWallet | _: InitWallet =>
       sender() ! Failure(new Exception("Wallet is already initialized or testMnemonic is set. Clear current secret to re-init it."))
+  }
 
+  private def walletCommands: Receive = {
     case UnlockWallet(pass) =>
       secretStorageOpt match {
         case Some(secretStorage) =>
@@ -498,7 +520,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     log.info(
       s"Processing ${resolved.size} resolved boxes: [${resolved.map(_._2.id).mkString(", ")}], " +
-      s"${unresolved.size} unresolved boxes: [${unresolved.map(_._2.id).mkString(", ")}]."
+        s"${unresolved.size} unresolved boxes: [${unresolved.map(_._2.id).mkString(", ")}]."
     )
 
     val walletTxs = txs.map(WalletTransaction(_, height, Constants.DefaultAppId))
@@ -571,7 +593,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     }
   }
 
-  private def catchLegalExc[T](e: Throwable): Failure[T] =
+  private def wrapLegalExc[T](e: Throwable): Failure[T] =
     if (e.getMessage.startsWith("Illegal key size")) {
       val dkLen = settings.walletSettings.secretStorage.encryption.dkLen
       Failure[T](new Exception(s"Key of length $dkLen is not allowed on your JVM version." +

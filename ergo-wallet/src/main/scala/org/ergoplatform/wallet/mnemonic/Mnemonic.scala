@@ -5,6 +5,7 @@ import java.text.Normalizer.normalize
 
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
+import org.ergoplatform.wallet.Constants
 import scodec.bits.BitVector
 
 import scala.util.{Failure, Try}
@@ -69,7 +70,7 @@ object Mnemonic {
 
     val spec = new PBEKeySpec(
       normalizedMnemonic,
-      normalizedPass.getBytes,
+      normalizedPass.getBytes(Constants.Encoding),
       Pbkdf2Iterations,
       Pbkdf2KeyLength
     )

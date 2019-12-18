@@ -185,11 +185,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   //Secret is set in form of keystore file of testMnemonic in the config
-  private def secretSet: Boolean = secretStorageOpt.nonEmpty || walletSettings.testMnemonic.nonEmpty
+  private def secretIsSet: Boolean = secretStorageOpt.nonEmpty || walletSettings.testMnemonic.nonEmpty
 
   private def walletInit: Receive = {
     //Init wallet (w. mnemonic generation) if secret is not set yet
-    case InitWallet(pass, mnemonicPassOpt) if !secretSet =>
+    case InitWallet(pass, mnemonicPassOpt) if !secretIsSet =>
       //Read high-quality random bits from Java's SecureRandom
       val entropy = scorex.utils.Random.randomBytes(settings.walletSettings.seedStrengthBits / 8)
       val mnemonicTry = new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
@@ -214,7 +214,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
 
     //Restore wallet with mnemonic if secret is not set yet
-    case RestoreWallet(mnemonic, passOpt, encryptionPass) if !secretSet =>
+    case RestoreWallet(mnemonic, passOpt, encryptionPass) if !secretIsSet =>
       val res = Try {
         JsonSecretStorage.restore(mnemonic, passOpt, encryptionPass)(settings.walletSettings.secretStorage)
       }.map { secretStorage =>

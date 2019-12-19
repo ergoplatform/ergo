@@ -318,4 +318,13 @@ trait ErgoHistoryReader
     )
   }
 
+  /**
+    * Constructs popow header (header + interlinks) for a best header at given height
+    * @param height - height
+    * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available
+    */
+  def popowHeader(height: Int): Option[PoPowHeader] = {
+    bestHeaderIdAtHeight(height).flatMap(popowHeader)
+  }
+
 }

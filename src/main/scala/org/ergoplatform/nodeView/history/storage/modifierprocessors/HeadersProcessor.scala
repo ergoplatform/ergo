@@ -80,7 +80,12 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
 
-  private def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
+  /**
+    * Get header from the longest chain at given height
+    * @param h - height
+    * @return header if exists, None otherwise
+    */
+  def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
 
   /**
     * @param h - header to process

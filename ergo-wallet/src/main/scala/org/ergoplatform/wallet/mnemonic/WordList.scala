@@ -28,5 +28,5 @@ object WordList {
     Try(loadFile()).map(r => try r.getLines().toList finally r.close())
 
   private def resourceLoader(fileName: String): () => BufferedSource =
-    () => Source.fromResource(s"wordlist/$fileName")(Codec.UTF8)
+    () => Source.fromInputStream(getClass.getResourceAsStream(s"/wordlist/$fileName"))(Codec.UTF8)
 }

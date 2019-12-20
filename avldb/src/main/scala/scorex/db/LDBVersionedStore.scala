@@ -19,7 +19,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
  * LevelDB implementation of versioned store is based on maintaining "compensating transaction" list,
  * list of reverse operations needed to undo changes of applied transactions.
  * This list is stored in separate levedb database (undo) and size of list is limited by keepVersions parameter.
- * If keepVersions isd 0, then undo list is not maintained and rollback of the committed transactions is no possible.
+ * If keepVersions == 0, then undo list is not maintained and rollback of the committed transactions is no possible.
  */
 class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store {
   type LSN = Long // logical serial number: type used to provide order of records in undo list
@@ -41,7 +41,8 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends Store 
 
   private def defaultWriteOptions = {
     val options = new WriteOptions()
-    options.sync(true) // Is it enough to provide fault tolerance???
+    // sync is off to make bootstrapping significantly faster. However, it makes database less stable
+    options.sync(false)
     options
   }
 

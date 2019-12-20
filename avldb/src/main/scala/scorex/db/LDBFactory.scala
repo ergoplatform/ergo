@@ -7,7 +7,6 @@ import org.iq80.leveldb.{DB, Range, DBFactory, DBIterator, Options, ReadOptions,
 import scorex.util.ScorexLogging
 
 import scala.collection.mutable
-import scala.util.Try
 
 /**
  * Registry of opened LevelDB instances.
@@ -15,7 +14,7 @@ import scala.util.Try
  * And ergo application (mostly tests) quit frequently doesn't not explicitly close
  * database and tries to reopen it.
  */
-case class StoreRegistry(val factory : DBFactory) extends DBFactory with ScorexLogging {
+case class StoreRegistry(factory : DBFactory) extends DBFactory with ScorexLogging {
 
   val lock = new ReentrantReadWriteLock()
   val map = new mutable.HashMap[File, RegisteredDB]
@@ -25,7 +24,7 @@ case class StoreRegistry(val factory : DBFactory) extends DBFactory with ScorexL
 	* So if database was not explicitly closed, then next attempt to open database with the same path will
 	* return existed instance instead of creating new one.
 	*/
-  case class RegisteredDB(val impl:DB, val path: File) extends DB {
+  case class RegisteredDB(impl:DB, path: File) extends DB {
 
     def get(key: Array[Byte]): Array[Byte] = impl.get(key)
 
@@ -35,19 +34,19 @@ case class StoreRegistry(val factory : DBFactory) extends DBFactory with ScorexL
 
     def iterator(options: ReadOptions): DBIterator = impl.iterator(options)
 
-    def put(key: Array[Byte], value: Array[Byte]) = impl.put(key, value)
+    def put(key: Array[Byte], value: Array[Byte]): Unit = impl.put(key, value)
 
-    def delete(key: Array[Byte]) = impl.delete(key)
+    def delete(key: Array[Byte]): Unit = impl.delete(key)
 
-    def write(batch: WriteBatch) = impl.write(batch)
+    def write(batch: WriteBatch): Unit = impl.write(batch)
 
-    def write(batch: WriteBatch, options: WriteOptions) = impl.write(batch, options)
+    def write(batch: WriteBatch, options: WriteOptions): Snapshot = impl.write(batch, options)
 
     def createWriteBatch: WriteBatch = impl.createWriteBatch()
 
-    def put(key: Array[Byte], value: Array[Byte], options: WriteOptions) = impl.put(key, value, options)
+    def put(key: Array[Byte], value: Array[Byte], options: WriteOptions): Snapshot = impl.put(key, value, options)
 
-    def delete(key: Array[Byte], options: WriteOptions) = impl.delete(key, options)
+    def delete(key: Array[Byte], options: WriteOptions): Snapshot = impl.delete(key, options)
 
     def getSnapshot: Snapshot = impl.getSnapshot()
 
@@ -55,13 +54,13 @@ case class StoreRegistry(val factory : DBFactory) extends DBFactory with ScorexL
 
     def getProperty(name: String): String = impl.getProperty(name)
 
-    def suspendCompactions = impl.suspendCompactions()
+    def suspendCompactions(): Unit = impl.suspendCompactions()
 
-    def resumeCompactions = impl.resumeCompactions()
+    def resumeCompactions(): Unit = impl.resumeCompactions()
 
-    def compactRange(begin: Array[Byte], end: Array[Byte]) = impl.compactRange(begin, end)
+    def compactRange(begin: Array[Byte], end: Array[Byte]): Unit = impl.compactRange(begin, end)
 
-    override def close() = {
+    override def close(): Unit = {
       remove(path)
       impl.close()
     }
@@ -70,7 +69,7 @@ case class StoreRegistry(val factory : DBFactory) extends DBFactory with ScorexL
   private def add(file: File, create: => DB): DB = {
     lock.writeLock().lock()
     try {
-      map.getOrElseUpdate(file, new RegisteredDB(create, file))
+      map.getOrElseUpdate(file, RegisteredDB(create, file))
     } finally {
       lock.writeLock().unlock()
     }
@@ -90,21 +89,20 @@ case class StoreRegistry(val factory : DBFactory) extends DBFactory with ScorexL
     try {
       add(path, factory.open(path, options))
 	} catch {
-	  case x: Throwable => {
-        log.error(s"Failed to initialize storage: ${x}. Please check that directory ${path} exists and is not used by some other active node")
+	  case x: Throwable =>
+        log.error(s"Failed to initialize storage: $x. Please check that directory $path exists and is not used by some other active node")
         java.lang.System.exit(2)
-		null
-      }
+		    null
     } finally {
       lock.writeLock().unlock()
     }
   }
 
-  def destroy(path: File, options: Options) = {
+  def destroy(path: File, options: Options): Unit = {
     factory.destroy(path, options)
   }
 
-  def repair(path: File, options: Options) = {
+  def repair(path: File, options: Options): Unit = {
     factory.repair(path, options)
   }
 }
@@ -131,7 +129,7 @@ object LDBFactory extends ScorexLogging {
     } else {
       log.info(s"Loaded $name with $factory")
     }
-    new StoreRegistry(factory)
+    StoreRegistry(factory)
   }
 
   private def loadFactory(loader: ClassLoader, factoryName: String): Option[DBFactory] =

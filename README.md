@@ -53,7 +53,11 @@ The node could be started in a few different ways:
  - In case you have only a jar: `java -jar /path/to/ergo-<version>.jar --<networkId> -c /path/to/local.conf`
  - Using start script from sbt-native-packager: `sh /path/to/bin/ergo  --<networkId> -c /path/to/local.conf`
  
-Available `networkId` options: `mainnet`, `testnet`, `devnet`. 
+Available `networkId` options: `mainnet`, `testnet`, `devnet`.
+
+You can run special [ergo-installer.sh](ergo-installer.sh) script, that helps you to install Ergo node without a hassle on almost every Linux OS:
+
+    curl -s https://raw.githubusercontent.com/ergoplatform/ergo/master/ergo-installer.sh | sh -s -- --api-key=<YOUR_API_KEY>
 
 ## UI
 

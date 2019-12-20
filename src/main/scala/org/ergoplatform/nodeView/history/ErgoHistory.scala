@@ -209,8 +209,16 @@ object ErgoHistory extends ScorexLogging {
     dir.mkdirs()
     val options = new Options()
     options.createIfMissing(true)
-    val db = factory.open(dir, options)
-    new LDBKVStore(db)
+    try {
+      val db = factory.open(dir, options)
+      new LDBKVStore(db)
+    } catch {
+      case x: Throwable =>
+        log.error(s"Failed to initialize storage: $x. Please check that directory $path could be accessed " +
+          s"and is not used by some other active node")
+        java.lang.System.exit(2)
+        null
+    }
   }
 
   def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {

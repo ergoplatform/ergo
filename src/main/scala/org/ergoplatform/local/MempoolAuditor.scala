@@ -28,6 +28,16 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
                      networkControllerRef: ActorRef,
                      settings: ErgoSettings) extends Actor with ScorexLogging {
 
+  override def postRestart(reason: Throwable): Unit = {
+    log.warn(s"Mempool auditor actor restarted due to ${reason.getMessage}", reason)
+    super.postRestart(reason)
+  }
+
+  override def postStop(): Unit = {
+    logger.info("Mempool auditor stopped")
+    super.postStop()
+  }
+
   override val supervisorStrategy: OneForOneStrategy = OneForOneStrategy(
     maxNrOfRetries = 5,
     withinTimeRange = 1.minute) {

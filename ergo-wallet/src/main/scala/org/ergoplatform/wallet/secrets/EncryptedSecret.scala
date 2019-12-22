@@ -2,6 +2,7 @@ package org.ergoplatform.wallet.secrets
 
 import io.circe.parser._
 import io.circe.syntax._
+import cats.syntax.either._
 import io.circe.{Encoder, Decoder, HCursor, Json}
 import org.ergoplatform.wallet.settings.EncryptionSettings
 import scorex.util.encode.Base16

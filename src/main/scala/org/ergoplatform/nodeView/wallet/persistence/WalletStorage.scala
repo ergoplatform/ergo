@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.wallet.persistence
 import java.io.File
 
 import com.google.common.primitives.Ints
-import org.ergoplatform.db.LDBKVStore
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
@@ -12,6 +11,7 @@ import org.iq80.leveldb.Options
 import scorex.db.LDBFactory.factory
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.db.LDBKVStore
 
 import scala.util.Success
 

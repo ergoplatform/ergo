@@ -5,11 +5,11 @@ import cats.free.Free
 import cats.free.Free.liftF
 import cats.~>
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.db.VersionedLDBKVStore
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA._
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
+import scorex.db.LDBVersionedStore
 import scorex.util.{ModifierId, idToBytes}
 
 import scala.language.implicitConversions
@@ -25,21 +25,22 @@ object RegistryOps {
     /**
       * Applies non-versioned transaction to a given `store`.
       */
-    def transact(store: VersionedLDBKVStore): A = transact(store, None)
+    def transact(store: LDBVersionedStore): A = transact(store, None)
 
     /**
       * Applies versioned transaction to a given `store`.
       */
-    def transact(store: VersionedLDBKVStore, version: Array[Byte]): A = transact(store, Some(version))
+    def transact(store: LDBVersionedStore, version: Array[Byte]): A = transact(store, Some(version))
 
-    private def transact(store: VersionedLDBKVStore, versionOpt: Option[Array[Byte]]): A =
+    private def transact(store: LDBVersionedStore, versionOpt: Option[Array[Byte]]): A =
       ma.foldMap(interpreter(store)).run((Seq.empty, Seq.empty)).value match {
         case ((toInsert, toRemove), out: A @unchecked)
           if toInsert.nonEmpty || toRemove.nonEmpty =>
           store.update(
-            toInsert,
-            toRemove
-          )(versionOpt.getOrElse(scorex.utils.Random.randomBytes()))
+            versionOpt.getOrElse(scorex.utils.Random.randomBytes()),
+              toRemove,
+              toInsert
+            )
           out
         case (_, out: A @unchecked) =>
           out
@@ -109,7 +110,7 @@ object RegistryOps {
   def updateIndex(updateF: RegistryIndex => RegistryIndex): RegistryOp[Unit] =
     getIndex.flatMap(v => putIndex(updateF(v)))
 
-  private def interpreter(store: VersionedLDBKVStore): RegistryOpA ~> RegistryOpState =
+  private def interpreter(store: LDBVersionedStore): RegistryOpA ~> RegistryOpState =
     new (RegistryOpA ~> RegistryOpState) {
       override def apply[A](fa: RegistryOpA[A]): RegistryOpState[A] = fa match {
         case PutBox(box) =>
@@ -135,10 +136,11 @@ object RegistryOps {
           }
         case GetAllBoxes =>
           State.inspect { _ =>
-            store.getAll((_, v) => v.head == BoxPrefix)
+            store.getWithFilter((_, v) => v.head == BoxPrefix)
               .flatMap { case (_, boxBytes) =>
                 TrackedBoxSerializer.parseBytesTry(boxBytes.tail).toOption
               }
+              .toSeq
               .asInstanceOf[A]
           }
         case RemoveBoxes(ids) =>
@@ -158,10 +160,11 @@ object RegistryOps {
           }
         case GetAllTxs =>
           State.inspect { _ =>
-            store.getAll((_, v) => v.head == TxPrefix)
+            store.getWithFilter((_, v) => v.head == TxPrefix)
               .flatMap { case (_, txBytes) =>
                 WalletTransactionSerializer.parseBytesTry(txBytes.tail).toOption
               }
+              .toSeq
               .asInstanceOf[A]
           }
         case RemoveTxs(ids) =>

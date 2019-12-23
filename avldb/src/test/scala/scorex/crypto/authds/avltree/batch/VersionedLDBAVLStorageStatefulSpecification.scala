@@ -12,7 +12,7 @@ import scorex.utils.{Random => RandomBytes}
 
 import scala.util.{Failure, Random, Success, Try}
 
-class VersionedIODBAVLStorageStatefulSpecification extends PropSpec {
+class VersionedLDBAVLStorageStatefulSpecification extends PropSpec {
   val params = Parameters.default
     .withMinSize(10)
     .withMaxSize(50)

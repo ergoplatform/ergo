@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
 
-import org.ergoplatform.db.VersionedLDBKVStore
 import org.ergoplatform.db.VersionedLDBKVStore.VersionId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.WalletTransaction
@@ -12,7 +11,7 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 import org.iq80.leveldb.Options
 import scorex.db.LDBFactory.factory
 import scorex.core.VersionTag
-import scorex.util.encode.Base16
+import scorex.db.LDBVersionedStore
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.Try
@@ -21,7 +20,7 @@ import scala.util.Try
   * Provides an access to version-sensitive wallet-specific indexes.
   * (Such as on-chain UTXO's or balances)
   */
-final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
+final class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
 
   import RegistryOps._
   import org.ergoplatform.nodeView.wallet.IdUtils._
@@ -127,7 +126,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
   }
 
   def rollback(version: VersionTag): Try[Unit] =
-    store.rollbackTo(Base16.decode(version).get)
+    store.rollback(scorex.core.versionToBytes(version))
 
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.
@@ -156,13 +155,10 @@ object WalletRegistry {
     val dir = new File(s"${settings.directory}/wallet/registry")
     dir.mkdirs()
 
-    val options = new Options()
-    options.createIfMissing(true)
-    val db = factory.open(dir, options)
-    val store = new VersionedLDBKVStore(db, settings.nodeSettings.keepVersions)
+    val store = new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
 
     // Create pre-genesis state checkpoint
-    if (!store.versionIdExists(PreGenesisStateVersion)) store.update(Seq.empty, Seq.empty)(PreGenesisStateVersion)
+    if (!store.versionIdExists(PreGenesisStateVersion)) store.update(PreGenesisStateVersion, Seq.empty, Seq.empty)
 
     new WalletRegistry(store)(settings.walletSettings)
   }

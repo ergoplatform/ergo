@@ -12,9 +12,8 @@ import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
 import scorex.util.idToBytes
 import scorex.db.LDBFactory.factory
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
-
-import scorex.db.LDBVersionedStore
+import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
+import scorex.db.{LDBKVStore, LDBVersionedStore}
 
 import scala.util.Random
 
@@ -30,8 +29,8 @@ object LDBStoreBench
 
   private def storeVLDB() = new VersionedLDBKVStore(db0, keepVersions = 400)
   private def storeLDB() = new LDBKVStore(db1)
-  private def storeIODB():Store = new LSMStore(createTempDir)
-  private def storeLVDB():Store = new LDBVersionedStore(createTempDir, keepVersions = 400)
+  private def storeIODB() = new LSMStore(createTempDir)
+  private def storeLVDB() = new LDBVersionedStore(createTempDir, keepVersions = 400)
 
   private val modsNumGen = Gen.enumeration("modifiers number")(1000)
 
@@ -94,16 +93,16 @@ object LDBStoreBench
   }
 
   private def benchWriteLVDB(bts: Seq[BlockTransactions]): Unit = {
-    val toInsert = bts.map(bt => ByteArrayWrapper(idToBytes(bt.headerId)) -> ByteArrayWrapper(bt.bytes))
+    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     val db = storeLVDB()
-    db.update(ByteArrayWrapper(randomVersion), List.empty, toInsert)
+    db.update(randomVersion, List.empty, toInsert)
   }
 
   private def benchWriteReadLVDB(bts: Seq[BlockTransactions]): Unit = {
-    val toInsert = bts.map(bt => ByteArrayWrapper(idToBytes(bt.headerId)) -> ByteArrayWrapper(bt.bytes))
+    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     val db = storeLVDB()
-    db.update(ByteArrayWrapper(randomVersion), List.empty, toInsert)
-    bts.foreach { bt => db.get(ByteArrayWrapper(idToBytes(bt.headerId))) }
+    db.update(randomVersion, List.empty, toInsert)
+    bts.foreach { bt => db.get(idToBytes(bt.headerId)) }
   }
 
 

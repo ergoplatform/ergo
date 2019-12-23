@@ -17,10 +17,6 @@ object Algos extends ErgoAlgos with scorex.core.utils.ScorexEncoding {
 
   lazy val emptyMerkleTreeRoot: Digest32 = Algos.hash(LeafData @@ Array[Byte]())
 
-  @inline def versionToBAW(id: VersionTag): ByteArrayWrapper = ByteArrayWrapper(versionToBytes(id))
-
-  @inline def idToBAW(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(idToBytes(id))
-
   @inline def encode(id: ModifierId): String = encoder.encode(id)
 
   def blockIdDifficulty(id: Array[Byte]): BigInt = {

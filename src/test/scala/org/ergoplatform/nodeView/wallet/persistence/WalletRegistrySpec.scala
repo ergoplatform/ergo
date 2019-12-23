@@ -22,7 +22,7 @@ class WalletRegistrySpec
   import RegistryOps._
   import org.ergoplatform.nodeView.wallet.IdUtils._
 
-  def createStore: Store = new LDBVersionedStore(createTempDir)
+  def createStore = new LDBVersionedStore(createTempDir)
 
   it should "read certain boxes" in {
     forAll(trackedBoxGen) { box =>

@@ -20,7 +20,6 @@ class RegistryOpsSpec
 
   import RegistryOps._
 
-  def createStore: Store = new LDBVersionedStore(createTempDir)
 
   property("putBox/getBox/updateBox/removeBox") {
     forAll(trackedBoxGen) { tb =>

@@ -17,7 +17,7 @@ import scala.concurrent.{Await, Future}
 import scala.util.{Success, Try}
 import scala.language.implicitConversions
 
-class VersionedIODBAVLStorageSpecification extends PropSpec
+class VersionedLDBAVLStorageSpecification extends PropSpec
   with ScalaCheckPropertyChecks
   with ScalaCheckDrivenPropertyChecks
   with Matchers

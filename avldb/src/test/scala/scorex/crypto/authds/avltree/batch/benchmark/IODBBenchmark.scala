@@ -1,6 +1,6 @@
 package scorex.crypto.authds.avltree.batch.benchmark
 
-import io.iohk.iodb.ByteArrayWrapper
+import com.google.common.primitives.Longs
 import scorex.crypto.authds.avltree.batch.helpers.FileHelper
 import scorex.utils.Random
 import scorex.db.LDBVersionedStore
@@ -18,25 +18,25 @@ object IODBBenchmark extends App with FileHelper {
 
   (0 until(NumMods, Step)) foreach { i =>
     println(i)
-    val mod: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = mods.slice(i, i + Step)
-    val nextVersion = ByteArrayWrapper.fromLong(i)
+    val mod: Seq[(Array[Byte], Array[Byte])] = mods.slice(i, i + Step)
+    val nextVersion = Longs.toByteArray(i)
     store.update(nextVersion, Seq(), mod)
     currentVersion.foreach(v => {
-      store.rollback(ByteArrayWrapper.fromLong(v))
+      store.rollback(Longs.toByteArray(v))
       store.update(nextVersion, Seq(), mod)
     })
     currentVersion = Some(i)
 
     mods.slice(0, i + Step).foreach { m =>
-      store(m._1).data
+      store(m._1)
     }
   }
 
-  def generateModifications(): Array[(ByteArrayWrapper, ByteArrayWrapper)] = {
-    val mods = new Array[(ByteArrayWrapper, ByteArrayWrapper)](NumMods)
+  def generateModifications(): Array[(Array[Byte], Array[Byte])] = {
+    val mods = new Array[(Array[Byte], Array[Byte])](NumMods)
 
     for (i <- 0 until NumMods) {
-      mods(i) = (ByteArrayWrapper(Random.randomBytes(KL)), ByteArrayWrapper(Random.randomBytes(VL)))
+      mods(i) = (Random.randomBytes(KL), Random.randomBytes(VL))
     }
     mods
   }

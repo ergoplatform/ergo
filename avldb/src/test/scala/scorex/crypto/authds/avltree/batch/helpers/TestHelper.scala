@@ -1,6 +1,5 @@
 package scorex.crypto.authds.avltree.batch.helpers
 
-import io.iohk.iodb.{QuickStore, Store}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.util.encode.Base58
@@ -22,7 +21,7 @@ trait TestHelper extends FileHelper with ScorexLogging {
   type PROVER = BatchAVLProver[D, HF]
   type VERIFIER = BatchAVLVerifier[D, HF]
   type PERSISTENT_PROVER = PersistentBatchAVLProver[D, HF]
-  type STORAGE = VersionedIODBAVLStorage[D]
+  type STORAGE = VersionedLDBAVLStorage[D]
 
   protected val KL: Int
   protected val VL: Int
@@ -32,17 +31,13 @@ trait TestHelper extends FileHelper with ScorexLogging {
 
   case class Data(p: PERSISTENT_PROVER, s: STORAGE)
 
-  def createLSMStore(keepVersions: Int = 10): Store = {
+  def createVersionedStore(keepVersions: Int = 10): LDBVersionedStore = {
     val dir = getRandomTempDir
     new LDBVersionedStore(dir, keepVersions = keepVersions)
   }
 
-  def createQuickStore(keepVersions: Int = 0): Store = {
-    val dir = getRandomTempDir
-    new QuickStore(dir, keepVersions = keepVersions)
-  }
-
-  def createVersionedStorage(store: Store): STORAGE = new VersionedIODBAVLStorage(store, NodeParameters(KL, Some(VL), LL))
+  def createVersionedStorage(store: LDBVersionedStore): STORAGE =
+    new VersionedLDBAVLStorage(store, NodeParameters(KL, Some(VL), LL))
 
   def createPersistentProver(storage: STORAGE): PERSISTENT_PROVER = {
     val prover = new BatchAVLProver[D, HF](KL, Some(VL))
@@ -53,13 +48,7 @@ trait TestHelper extends FileHelper with ScorexLogging {
     PersistentBatchAVLProver.create[D, HF](prover, storage, paranoidChecks = true).get
 
   def createPersistentProverWithLSM(keepVersions: Int = 10): PERSISTENT_PROVER = {
-    val store = createLSMStore(keepVersions)
-    val storage = createVersionedStorage(store)
-    createPersistentProver(storage)
-  }
-
-  def createPersistentProverWithQuick(keepVersions: Int = 0): PERSISTENT_PROVER = {
-    val store = createQuickStore(keepVersions)
+    val store = createVersionedStore(keepVersions)
     val storage = createVersionedStorage(store)
     createPersistentProver(storage)
   }

@@ -1,12 +1,11 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Longs
-import io.iohk.iodb.{ByteArrayWrapper, Store}
-import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatestplus.scalacheck.{ScalaCheckDrivenPropertyChecks, ScalaCheckPropertyChecks}
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.hash.Blake2b256
+import scorex.db.LDBVersionedStore
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -20,26 +19,25 @@ class IODBStorageSpecification extends PropSpec
   override protected val VL = 8
   override protected val LL = 32
 
-  val storeTest: Store => Unit = { store =>
-    var version = store.lastVersionID.map(v => Longs.fromByteArray(v.data))
-    val keys: ArrayBuffer[(ByteArrayWrapper, ByteArrayWrapper)] = ArrayBuffer()
+  val storeTest: LDBVersionedStore => Unit = { store =>
+    var version = store.lastVersionID
+    val keys: ArrayBuffer[(Array[Byte], Array[Byte])] = ArrayBuffer()
     forAll { b: Array[Byte] =>
-      val pair = (ByteArrayWrapper(Blake2b256(0.toByte +: version.getOrElse(0L).toByte +: b)),
-        ByteArrayWrapper(Blake2b256(version.getOrElse(0L).toByte +: b)))
+      val pair = (Blake2b256(0.toByte +: version.map(_.head).getOrElse(0: Byte) +: b),
+        Blake2b256(version.map(_.head).getOrElse(0: Byte) +: b))
       keys += pair
-      val nextVersion = version.getOrElse(0L) + 1
+      val nextVersion = Longs.toByteArray(version.map(Longs.fromByteArray).getOrElse(0L) + 1)
       store.update(nextVersion, Seq(), Seq(pair))
 
       if (version.isDefined) {
-        store.rollback(ByteArrayWrapper.fromLong(version.get))
+        store.rollback(version.get)
         store.update(nextVersion, Seq(), Seq(pair))
       }
       version = Some(nextVersion)
-      keys.foreach(k => store(k._1).data shouldEqual k._2.data)
+      keys.foreach(k => store(k._1).sameElements(k._2) shouldBe true)
     }
   }
 
-  property("IODB with LSM") { storeTest(createLSMStore()) }
+  property("IODB with LSM") { storeTest(createVersionedStore()) }
 
-  property("IODB with QuickStore") { quickTest(storeTest(createQuickStore())) }
 }

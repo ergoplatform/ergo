@@ -1,7 +1,7 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
-import scorex.crypto.authds.avltree.batch.VersionedIODBAVLStorage.{InternalNodePrefix, LeafPrefix}
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{InternalNodePrefix, LeafPrefix}
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, Balance}
 import scorex.util.encode.Base58
 import scorex.crypto.hash
@@ -10,8 +10,8 @@ import scorex.db.LDBVersionedStore
 import scorex.util.ScorexLogging
 import scala.util.{Failure, Try}
 
-class VersionedIODBAVLStorage[D <: Digest](store: LDBVersionedStore, nodeParameters: NodeParameters)
-                                          (implicit val hf: CryptographicHash[D]) extends VersionedAVLStorage[D] with ScorexLogging {
+class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore, nodeParameters: NodeParameters)
+                                         (implicit val hf: CryptographicHash[D]) extends VersionedAVLStorage[D] with ScorexLogging {
 
   private lazy val labelSize = nodeParameters.labelSize
 
@@ -25,7 +25,7 @@ class VersionedIODBAVLStorage[D <: Digest](store: LDBVersionedStore, nodeParamet
   override def rollback(version: ADDigest): Try[(ProverNodes[D], Int)] = Try {
     store.rollback(version)
 
-    val top = VersionedIODBAVLStorage.fetch[D](ADKey @@ store.get(TopNodeKey).get)(hf, store, nodeParameters)
+    val top = VersionedLDBAVLStorage.fetch[D](ADKey @@ store.get(TopNodeKey).get)(hf, store, nodeParameters)
     val topHeight = Ints.fromByteArray(store.get(TopNodeHeight).get)
 
     top -> topHeight
@@ -86,7 +86,7 @@ class VersionedIODBAVLStorage[D <: Digest](store: LDBVersionedStore, nodeParamet
 }
 
 
-object VersionedIODBAVLStorage {
+object VersionedLDBAVLStorage {
   val InternalNodePrefix: Byte = 0: Byte
   val LeafPrefix: Byte = 1: Byte
 

@@ -33,11 +33,11 @@ object Helper {
     inserts ++ updates
   }
 
-  def getPersistentProverWithLSMStore(keepVersions: Int, baseOperationsCount: Int = 0): (Prover, LDBVersionedStore, VersionedIODBAVLStorage[Digest32]) = {
+  def getPersistentProverWithLSMStore(keepVersions: Int, baseOperationsCount: Int = 0): (Prover, LDBVersionedStore, VersionedLDBAVLStorage[Digest32]) = {
     val dir = java.nio.file.Files.createTempDirectory("bench_testing_" + scala.util.Random.alphanumeric.take(15)).toFile
     dir.deleteOnExit()
     val store = new LDBVersionedStore(dir, keepVersions = keepVersions)
-    val storage = new VersionedIODBAVLStorage(store, NodeParameters(kl, Some(vl), ll))
+    val storage = new VersionedLDBAVLStorage(store, NodeParameters(kl, Some(vl), ll))
     require(storage.isEmpty)
     val prover = new BatchAVLProver[Digest32, HF](kl, Some(vl))
 

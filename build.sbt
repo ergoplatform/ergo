@@ -35,7 +35,7 @@ libraryDependencies ++= Seq(
 
   "org.scorexfoundation" %% "iodb" % "0.3.2",
 
-  "org.ethereum" % "leveldbjni-all"     % "1.18.3",
+  "org.ethereum" % "leveldbjni-all" % "1.18.3",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
   "org.typelevel" %% "cats-free" % "1.6.0",

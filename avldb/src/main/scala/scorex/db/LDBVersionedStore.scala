@@ -13,27 +13,27 @@ import scala.util.Try
 
 
 /**
- * Implementation of versioned storage on top of leveldb.
- * This class implements IODB io.iohk.iodb.Store interface.
- * Only this interface is used from IODB to avoid changes in existed code which works with this interface.
- * LevelDB implementation of versioned store is based on maintaining "compensating transaction" list,
- * list of reverse operations needed to undo changes of applied transactions.
- * This list is stored in separate levedb database (undo) and size of list is limited by keepVersions parameter.
- * If keepVersions == 0, then undo list is not maintained and rollback of the committed transactions is no possible.
- */
+  * Implementation of versioned storage on top of leveldb.
+  * This class implements IODB io.iohk.iodb.Store interface.
+  * Only this interface is used from IODB to avoid changes in existed code which works with this interface.
+  * LevelDB implementation of versioned store is based on maintaining "compensating transaction" list,
+  * list of reverse operations needed to undo changes of applied transactions.
+  * This list is stored in separate levedb database (undo) and size of list is limited by keepVersions parameter.
+  * If keepVersions == 0, then undo list is not maintained and rollback of the committed transactions is no possible.
+  */
 class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends KVStore {
   type VersionID = Array[Byte]
 
   type LSN = Long // logical serial number: type used to provide order of records in undo list
-  override val db: DB = createDB(dir, "ldb_main")   // storage for main data
+  override val db: DB = createDB(dir, "ldb_main") // storage for main data
   override val lock = new ReentrantReadWriteLock()
 
   private val undo: DB = createDB(dir, "ldb_undo") // storage for undo data
-  private var lsn : LSN = getLastLSN               // last assigned logical serial number
-  private var versionLsn = ArrayBuffer.empty[LSN]  // LSNs of versions (var because we need to invert this array)
-  private val versions : ArrayBuffer[VersionID] = getAllVersions // array of all kept versions
+  private var lsn: LSN = getLastLSN // last assigned logical serial number
+  private var versionLsn = ArrayBuffer.empty[LSN] // LSNs of versions (var because we need to invert this array)
+  private val versions: ArrayBuffer[VersionID] = getAllVersions // array of all kept versions
   private val writeOptions = defaultWriteOptions
-  private var lastVersion : Option[VersionID] = versions.lastOption
+  private var lastVersion: Option[VersionID] = versions.lastOption
 
   private def createDB(dir: File, storeName: String): DB = {
     val op = new Options()
@@ -94,9 +94,9 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends KVStor
   }
 
   /**
-   * Invert word to provide descending key order.
-   * Java implementation of LevelDB org.iq80.leveldb doesn't support iteration in backward direction.
-   */
+    * Invert word to provide descending key order.
+    * Java implementation of LevelDB org.iq80.leveldb doesn't support iteration in backward direction.
+    */
   private def decodeLSN(lsn: Array[Byte]): LSN = {
     ~ByteBuffer.wrap(lsn).getLong
   }
@@ -161,12 +161,12 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends KVStor
   }
 
   /**
-	* Undo action. To implement recovery to the specified version, we store in the separate undo database
-	* sequence of undo operations corresponding to the updates done by the committed transactions.
-	*/
-  case class Undo(versionID: VersionID, key: Array[Byte], value : Array[Byte])
+    * Undo action. To implement recovery to the specified version, we store in the separate undo database
+    * sequence of undo operations corresponding to the updates done by the committed transactions.
+    */
+  case class Undo(versionID: VersionID, key: Array[Byte], value: Array[Byte])
 
-  private def serializeUndo(versionID: VersionID, key: Array[Byte], value : Array[Byte]): Array[Byte] = {
+  private def serializeUndo(versionID: VersionID, key: Array[Byte], value: Array[Byte]): Array[Byte] = {
     val valueSize = if (value != null) value.length else 0
     val versionSize = versionID.length
     val keySize = key.length
@@ -182,7 +182,7 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends KVStor
     packed
   }
 
-  private def deserializeUndo(undo : Array[Byte]): Undo = {
+  private def deserializeUndo(undo: Array[Byte]): Undo = {
     val versionSize = undo(0) & 0xFF
     val keySize = undo(1) & 0xFF
     val valueSize = undo.length - versionSize - keySize - 2
@@ -238,7 +238,7 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends KVStor
 
   def insert(versionID: VersionID, toInsert: Seq[(K, V)]): Unit = update(versionID, Seq.empty, toInsert)
 
-  def remove(versionID: VersionID,toRemove: Seq[K]): Unit = update(versionID, toRemove, Seq.empty)
+  def remove(versionID: VersionID, toRemove: Seq[K]): Unit = update(versionID, toRemove, Seq.empty)
 
 
   // Keep last "count" versions and remove undo information for older versions
@@ -296,9 +296,9 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends KVStor
       if (versionIndex >= 0) {
         val batch = db.createWriteBatch()
         val undoBatch = undo.createWriteBatch()
-        var nUndoRecords : Long = 0
+        var nUndoRecords: Long = 0
         val iterator = undo.iterator()
-        var lastLsn : LSN = 0
+        var lastLsn: LSN = 0
         try {
           var undoing = true
           iterator.seekToFirst()

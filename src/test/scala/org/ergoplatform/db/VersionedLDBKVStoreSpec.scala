@@ -1,6 +1,5 @@
 package org.ergoplatform.db
 
-import org.ergoplatform.settings.Constants
 import org.scalatest.{Matchers, PropSpec}
 
 class VersionedLDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
@@ -67,7 +66,13 @@ class VersionedLDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
       store.versionIdExists(v2) shouldBe true
       store.versionIdExists(v1) shouldBe false
 
-      store.get(keyA).isDefined shouldBe false
+      store.get(keyA).isDefined shouldBe true
+      store.get(keyB).isDefined shouldBe true
+      store.get(keyC).isDefined shouldBe true
+
+      store.rollback(v1).isSuccess shouldBe false
+
+      store.get(keyA).isDefined shouldBe true
       store.get(keyB).isDefined shouldBe true
       store.get(keyC).isDefined shouldBe true
     }

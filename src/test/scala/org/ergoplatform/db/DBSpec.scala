@@ -24,7 +24,8 @@ trait DBSpec extends FileUtils {
   protected def withDb(body: DB => Unit): Unit = {
     val options = new Options()
     options.createIfMissing(true)
-    options.maxOpenFiles(1000)
+    options.verifyChecksums(true)
+    options.maxOpenFiles(2000)
     val db = factory.open(createTempDir, options)
     try body(db) finally db.close()
   }

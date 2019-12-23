@@ -63,11 +63,13 @@ class VersionedLDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
 
       store.insert(v3, Seq(keyC -> valC))
 
-      store.get(v3).isDefined shouldBe true
-      store.get(v2).isDefined shouldBe true
-      store.get(v1) shouldBe None
-
+      store.versionIdExists(v3) shouldBe true
+      store.versionIdExists(v2) shouldBe true
       store.versionIdExists(v1) shouldBe false
+
+      store.get(keyA).isDefined shouldBe false
+      store.get(keyB).isDefined shouldBe true
+      store.get(keyC).isDefined shouldBe true
     }
   }
 

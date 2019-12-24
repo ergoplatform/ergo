@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import io.iohk.iodb.Store
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
@@ -8,7 +7,6 @@ import org.scalacheck.Gen
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import scorex.testkit.utils.FileUtils
-import scorex.db.LDBVersionedStore
 
 class RegistryOpsSpec
   extends PropSpec

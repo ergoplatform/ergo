@@ -6,6 +6,9 @@ import org.iq80.leveldb.{DB, ReadOptions}
 
 import scala.collection.mutable
 
+/**
+  * Basic interface for key-value storage. Both keys and values are var-sized byte arrays.
+  */
 trait KVStore extends AutoCloseable {
 
   type K = Array[Byte]
@@ -15,6 +18,11 @@ trait KVStore extends AutoCloseable {
 
   protected val lock = new ReentrantReadWriteLock()
 
+  /**
+    * Read database element by its key
+    * @param key - key
+    * @return element if exists, None otherwise
+    */
   def get(key: K): Option[V] = {
     lock.readLock().lock()
     val res = Option(db.get(key))
@@ -23,6 +31,11 @@ trait KVStore extends AutoCloseable {
   }
 
 
+  /**
+    * Iterate through the database to read elements according to a filter function
+    * @param cond - the filter function
+    * @return iterator over elements satisfying the filter function
+    */
   def getWithFilter(cond: (K, V) => Boolean): Iterator[(K, V)] = {
     val ro = new ReadOptions()
     ro.snapshot(db.getSnapshot)
@@ -43,6 +56,10 @@ trait KVStore extends AutoCloseable {
     }
   }
 
+  /**
+    * Read all the database elements
+    * @return iterator over database contents
+    */
   def getAll: Iterator[(K, V)] = getWithFilter((_, _) => true)
 
   /** Returns value associated with the key, or default value from user
@@ -69,7 +86,9 @@ trait KVStore extends AutoCloseable {
     ret
   }
 
-
+  /**
+    * Close the database
+    */
   def close(): Unit = {
     lock.writeLock().lock()
     try {

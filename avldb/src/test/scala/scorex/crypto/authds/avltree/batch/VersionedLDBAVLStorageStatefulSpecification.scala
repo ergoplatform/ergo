@@ -7,7 +7,7 @@ import org.scalacheck.{Gen, Prop}
 import org.scalatest.PropSpec
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.authds._
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.Digest32
 import scorex.utils.{Random => RandomBytes}
 
 import scala.util.{Failure, Random, Success, Try}

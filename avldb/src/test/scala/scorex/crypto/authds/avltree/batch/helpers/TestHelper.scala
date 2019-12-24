@@ -9,11 +9,6 @@ import scorex.util.ScorexLogging
 
 trait TestHelper extends FileHelper with ScorexLogging {
 
-  val enableQuickStore: Boolean = System.getProperty("java.specification.version").startsWith("8")
-
-  def quickTest[R](block: => R): Option[R] = if(enableQuickStore) Some(block)
-  else None
-
   type HF = Blake2b256.type
   type D = Digest32
   type AD = ADDigest
@@ -28,8 +23,6 @@ trait TestHelper extends FileHelper with ScorexLogging {
   protected val LL: Int
 
   implicit val hf: HF = Blake2b256
-
-  case class Data(p: PERSISTENT_PROVER, s: STORAGE)
 
   def createVersionedStore(keepVersions: Int = 10): LDBVersionedStore = {
     val dir = getRandomTempDir
@@ -54,7 +47,6 @@ trait TestHelper extends FileHelper with ScorexLogging {
   }
 
   def createVerifier(digest: AD, proof: P): VERIFIER = new BatchAVLVerifier[D, HF](digest, proof, KL, Some(VL))
-
 
   implicit class DigestToBase58String(d: ADDigest) {
 

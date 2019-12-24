@@ -8,7 +8,7 @@ import scorex.db.KVStore
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
-//todo: old class, now used in benchmarks only, remove it!
+//todo: old class, now used in benchmarks only, remove it after 3.2.0!
 /**
   * A LevelDB wrapper providing additional versioning layer along with a convenient db interface.
   */

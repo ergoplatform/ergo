@@ -27,7 +27,7 @@ class PrunedDigestNodeSync2Spec extends FreeSpec with IntegrationSuite {
     .withFallback(specialDataDirConfig(remoteVolume))
   val nodeForSyncingConfig: Config = minerConfig
     .withFallback(nonGeneratingPeerConfig)
-  val digestConfig: Config = digestStatePeerConfig
+  val digestConfig: Config = digestStateNodeConfig
     .withFallback(blockIntervalConfig(600))
     .withFallback(prunedHistoryConfig(blocksToKeep))
     .withFallback(nonGeneratingPeerConfig)

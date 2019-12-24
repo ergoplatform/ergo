@@ -3,7 +3,6 @@ package org.ergoplatform.modifiers.mempool
 import io.circe._
 import io.circe.syntax._
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
@@ -21,14 +20,9 @@ import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationState}
-import scorex.crypto.authds.ADKey
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.SType
-import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import sigmastate.eval.Extensions._
-import sigmastate.eval._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
@@ -140,7 +134,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost),
     )
     val maxCost = stateContext.currentParameters.maxBlockCost
-    //    val remainingCost = stateContext.currentParameters.maxBlockCost - accumulatedCost
 
     ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big

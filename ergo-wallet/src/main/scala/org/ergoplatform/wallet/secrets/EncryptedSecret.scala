@@ -2,7 +2,7 @@ package org.ergoplatform.wallet.secrets
 
 import io.circe.parser._
 import io.circe.syntax._
-import cats.syntax.either._
+import cats.syntax.either._  // don't remove, it is needed for scala 2.11
 import io.circe.{Encoder, Decoder, HCursor, Json}
 import org.ergoplatform.wallet.settings.EncryptionSettings
 import scorex.util.encode.Base16
@@ -55,13 +55,5 @@ object EncryptedSecret {
     }
 
   }
-
-//  def main(args: Array[String]): Unit = {
-//    val res = decode[EncryptedSecret](
-//      """{ "cipherText": "", "salt": "", "iv": "", "authTag": "", "cipherParams": { "prf":"abc", "c": 10, "dkLen": 100 }}""")
-//    val jsonRaw = res.right.get.asJson.noSpaces
-//    println(res.toString)
-//    println(jsonRaw)
-//  }
 
 }

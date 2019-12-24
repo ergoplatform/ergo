@@ -38,7 +38,7 @@ class VersionedLDBAVLStorageSpecification extends PropSpec
     * List of all test cases
     */
 
-  val rollbackTest: PERSISTENT_PROVER => Unit = { (prover: PERSISTENT_PROVER) =>
+  val rollbackTest: PERSISTENT_PROVER => Unit = { prover: PERSISTENT_PROVER =>
 
     def ops(s: Int, e: Int): Unit = (s until e).foreach { i =>
       prover.performOneOperation(Insert(ADKey @@ Blake2b256("k" + i).take(KL),

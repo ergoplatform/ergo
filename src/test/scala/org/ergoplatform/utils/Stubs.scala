@@ -257,7 +257,6 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
-    val monetarySettings = settings.chainSettings.monetary
     val chainSettings = settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs)
 
     val dir = createTempDir

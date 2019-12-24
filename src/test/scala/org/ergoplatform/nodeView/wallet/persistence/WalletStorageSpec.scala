@@ -7,7 +7,6 @@ import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.testkit.utils.FileUtils
-import scorex.db.LDBVersionedStore
 
 class WalletStorageSpec
   extends FlatSpec

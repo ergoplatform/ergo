@@ -10,7 +10,16 @@ import scorex.db.LDBVersionedStore
 import scorex.util.ScorexLogging
 import scala.util.{Failure, Try}
 
-class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore, nodeParameters: NodeParameters)
+/**
+  * Persistent versioned authenticated AVL+ tree implementation on top of versioned LevelDB storage
+  *
+  * @param store - level db storage to save the tree in
+  * @param nodeParameters - parameters of the tree node (key size, optional value size, label size)
+  * @param hf - hash function used to construct the tree
+  * @tparam D - type of hash function digest
+  */
+class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
+                                          nodeParameters: NodeParameters)
                                          (implicit val hf: CryptographicHash[D]) extends VersionedAVLStorage[D] with ScorexLogging {
 
   private lazy val labelSize = nodeParameters.labelSize
@@ -19,8 +28,6 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore, nodeParamete
   private val TopNodeHeight: Array[Byte] = Array.fill(labelSize)(124: Byte)
 
   private val fixedSizeValueMode = nodeParameters.valueSize.isDefined
-
-  override def update(prover: BatchAVLProver[D, _]): Try[Unit] = update(prover, Seq())
 
   override def rollback(version: ADDigest): Try[(ProverNodes[D], Int)] = Try {
     store.rollback(version)
@@ -50,12 +57,9 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore, nodeParamete
     val toUpdate = indexes ++ toInsert
     val toUpdateWithWrapped = toUpdate ++ additionalData
 
-    //log.info(s"Update storage to version $digestWrapper: ${toUpdateWithWrapped.size} elements to insert," +
-    //  s" ${toRemove.size} elements to remove")
-
     store.update(digestWrapper, toRemove, toUpdateWithWrapped)
   }.recoverWith { case e =>
-    log.warn("Failed to update tree", e)
+    log.error("Failed to update tree", e)
     Failure(e)
   }
 
@@ -71,7 +75,9 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore, nodeParamete
           pair +: (leftSubtree ++ rightSubtree)
         case _: ProverLeaf[D] => Seq(pair)
       }
-    } else Seq()
+    } else {
+      Seq()
+    }
   }
 
   //TODO label or key???
@@ -80,9 +86,15 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore, nodeParamete
   private def toBytes(node: ProverNodes[D]): Array[Byte] = node match {
     case n: InternalProverNode[D] => InternalNodePrefix +: n.balance +: (n.key ++ n.left.label ++ n.right.label)
     case n: ProverLeaf[D] =>
-      if (fixedSizeValueMode) LeafPrefix +: (n.key ++ n.value ++ n.nextLeafKey)
-      else LeafPrefix +: (n.key ++ Ints.toByteArray(n.value.length) ++ n.value ++ n.nextLeafKey)
+      if (fixedSizeValueMode){
+        LeafPrefix +: (n.key ++ n.value ++ n.nextLeafKey)
+      } else {
+        LeafPrefix +: (n.key ++ Ints.toByteArray(n.value.length) ++ n.value ++ n.nextLeafKey)
+      }
   }
+
+  //todo: this method is not used, should be removed on next scrypto update?
+  override def update(prover: BatchAVLProver[D, _]): Try[Unit] = update(prover, Seq())
 }
 
 

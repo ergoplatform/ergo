@@ -4,6 +4,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.settings.{Algos, VotingSettings}
 import scorex.core.transaction.state.StateReader
 import scorex.crypto.authds.ADDigest
+import scorex.crypto.hash.Digest32
 import scorex.db.LDBVersionedStore
 import scorex.util.ScorexLogging
 
@@ -24,7 +25,7 @@ trait ErgoStateReader extends StateReader with ScorexLogging {
 
 object ErgoStateReader {
 
-  val ContextKey = Algos.hash("current state context")
+  val ContextKey: Digest32 = Algos.hash("current state context")
 
   def storageStateContext(store: LDBVersionedStore, constants: StateConstants): ErgoStateContext = {
     store.get(ErgoStateReader.ContextKey)

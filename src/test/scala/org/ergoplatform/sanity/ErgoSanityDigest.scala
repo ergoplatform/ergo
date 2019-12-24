@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
 import scorex.core.idToBytes
 import scorex.core.network.peer.PeerInfo

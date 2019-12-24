@@ -8,8 +8,6 @@ import org.ergoplatform.nodeView.wallet.WalletTransaction
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA.RegistryOp
 import org.ergoplatform.settings.{ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.iq80.leveldb.Options
-import scorex.db.LDBFactory.factory
 import scorex.core.VersionTag
 import scorex.db.LDBVersionedStore
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}

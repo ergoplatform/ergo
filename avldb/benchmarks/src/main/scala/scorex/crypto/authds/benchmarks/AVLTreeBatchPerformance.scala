@@ -1,6 +1,6 @@
 package scorex.crypto.authds.benchmarks
 
-import java.util.concurrent.{ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.TimeUnit
 
 import org.openjdk.jmh.annotations._
 import org.slf4j.LoggerFactory

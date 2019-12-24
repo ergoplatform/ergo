@@ -88,7 +88,10 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
         _.flatten.flatMap(bx => inputs.find(_._2 == encodedBoxId(bx.box.id)).map { case (txId, _) => txId -> bx })
       )
       _ <- processHistoricalBoxes(spentBoxesWithTx, blockHeight)
-      _ <- updateIndex { case RegistryIndex(_, balance, tokensBalance, _) =>
+      _ <- updateIndex { case RegistryIndex(regHeight, balance, tokensBalance, _) =>
+        if(regHeight + 1 != blockHeight) {
+          log.error(s"Blocks were skipped during wallet scanning, from ${regHeight + 1} until $blockHeight")
+        }
         val spentCertainBoxes = spentBoxesWithTx.map(_._2).filter(_.certainty.certain)
         val spentAmt = spentCertainBoxes.map(_.box.value).sum
         val spentTokensAmt = spentCertainBoxes

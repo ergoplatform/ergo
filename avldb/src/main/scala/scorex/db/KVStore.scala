@@ -15,8 +15,13 @@ trait KVStore extends AutoCloseable {
 
   protected val lock = new ReentrantReadWriteLock()
 
-  def get(key: K): Option[V] =
-    Option(db.get(key))
+  def get(key: K): Option[V] = {
+    lock.readLock().lock()
+    val res = Option(db.get(key))
+    lock.readLock().unlock()
+    res
+  }
+
 
   def getWithFilter(cond: (K, V) => Boolean): Iterator[(K, V)] = {
     val ro = new ReadOptions()

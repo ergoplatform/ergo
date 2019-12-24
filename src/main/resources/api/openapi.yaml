@@ -442,6 +442,20 @@ components:
           type: string
           example: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
 
+    PoPowHeader:
+      type: object
+      required:
+        - header
+        - interlinks
+      properties:
+        header:
+          $ref: '#/components/schemas/BlockHeader'
+        interlinks:
+          type: array
+          description: An array of interlinks in reverse order - first element is always genesis header, then level of lowest target met etc
+          items:
+            $ref: '#/components/schemas/ModifierId'
+
     AvlTreeData:
       required:
         - digest
@@ -1481,6 +1495,72 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FullBlock'
+        '404':
+          description: Block with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blocks/popowHeaderById/{headerId}:
+    get:
+      summary: Get PoPow version of a header with the given id
+      operationId: getPoPowHeaderById
+      tags:
+        - blocks
+      parameters:
+        # todo move out after full support aos3.0 was added to swagger-codegen
+        - in: path
+          name: headerId
+          required: true
+          description: ID of a wanted header
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoPowHeader'
+        '404':
+          description: Block with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blocks/popowHeaderByHeight/{height}:
+    get:
+      summary: Get PoPow version of a header with the given id
+      operationId: getPoPowHeaderByHeight
+      tags:
+        - blocks
+      parameters:
+        - in: path
+          name: height
+          required: true
+          description: Height of a wanted header
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoPowHeader'
         '404':
           description: Block with this id doesn't exist
           content:

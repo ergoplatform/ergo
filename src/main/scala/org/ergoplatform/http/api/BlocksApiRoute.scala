@@ -6,6 +6,7 @@ import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.popow.PoPowHeader
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
@@ -32,7 +33,9 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       getBlockHeaderByHeaderIdR ~
       getBlockTransactionsByHeaderIdR ~
       getFullBlockByHeaderIdR ~
-      getModifierByIdR
+      getModifierByIdR ~
+      getPoPowHeaderByHeaderIdR ~
+      getPoPowHeaderByHeightR
   }
 
   private val maxHeadersInOneQuery = ergoSettings.chainSettings.epochLength * 2
@@ -81,6 +84,12 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       headers.toList.asJson
     }
 
+  private def getPoPowHeaderById(headerId: ModifierId): Future[Option[PoPowHeader]] =
+    getHistory.map(_.getPoPowHeader(headerId))
+
+  private def getPoPowHeaderByHeight(height: Int): Future[Option[PoPowHeader]] =
+    getHistory.map(_.getPoPowHeader(height))
+
   private val chainPagination: Directive[(Int, Int)] =
     parameters("fromHeight".as[Int] ? 0, "toHeight".as[Int] ? -1)
 
@@ -127,6 +136,14 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   def getFullBlockByHeaderIdR: Route = (modifierId & get) { id =>
     ApiResponse(getFullBlockByHeaderId(id))
+  }
+
+  def getPoPowHeaderByHeaderIdR: Route = (pathPrefix("popowHeaderById") & modifierId & get) { headerId =>
+    ApiResponse(getPoPowHeaderById(headerId))
+  }
+
+  def getPoPowHeaderByHeightR: Route = (pathPrefix("popowHeaderByHeight" / IntNumber) & get) { headerId =>
+    ApiResponse(getPoPowHeaderByHeight(headerId))
   }
 
 }

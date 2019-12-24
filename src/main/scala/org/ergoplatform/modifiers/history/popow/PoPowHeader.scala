@@ -1,6 +1,8 @@
 package org.ergoplatform.modifiers.history.popow
 
+import io.circe.Encoder
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
+import org.ergoplatform.settings.Algos
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
@@ -18,6 +20,18 @@ final case class PoPowHeader(header: Header, interlinks: Seq[ModifierId])
   def id: ModifierId = header.id
 
   def height: Int = header.height
+}
+
+object PoPowHeader {
+
+  import io.circe.syntax._
+  import io.circe.generic.semiauto._
+
+  implicit val interlinksEncoder: Encoder[Seq[ModifierId]] = { interlinksVector =>
+    interlinksVector.map(id => Algos.encode(id).asJson).asJson
+  }
+
+  implicit val jsonEncoder: Encoder[PoPowHeader] = deriveEncoder
 }
 
 object PoPowHeaderSerializer extends ScorexSerializer[PoPowHeader] {

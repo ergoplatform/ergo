@@ -297,6 +297,26 @@ trait ErgoHistoryReader
   }
 
   /**
+    * Get PoPow version of a headeer with the given `headerId`.
+    * @param headerId - identifier of the header
+    * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available
+    */
+  final def getPoPowHeader(headerId: ModifierId): Option[PoPowHeader] =
+    typedModifierById[Header](headerId).flatMap { h =>
+      typedModifierById[Extension](h.extensionId).flatMap { ext =>
+        PoPowAlgos.unpackInterlinks(ext.fields).toOption.map(PoPowHeader(h, _))
+      }
+    }
+
+  /**
+    * Constructs popow header (header + interlinks) for a best header at given height
+    * @param height - height
+    * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available
+    */
+  final def getPoPowHeader(height: Int): Option[PoPowHeader] =
+    bestHeaderIdAtHeight(height).flatMap(getPoPowHeader)
+
+  /**
     * Generate PoPow proof from current chain according to a given `params`.
     */
   final def proveSuffix(params: PoPowParams): Try[PoPowProof] =

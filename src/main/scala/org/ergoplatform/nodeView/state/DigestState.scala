@@ -128,8 +128,7 @@ class DigestState protected(override val version: VersionTag,
           log.error(s"Can't modify state context due to ${e.getMessage} ", e)
           Failure(e)
       }
-      //stateContext.appendHeader(h, votingSettings).flatMap(update(version, h.stateRoot, _))
-  }
+   }
 
   private def processOther: ModifierProcessing[DigestState] = {
     case other =>

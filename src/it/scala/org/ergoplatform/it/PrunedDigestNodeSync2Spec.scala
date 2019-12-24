@@ -4,7 +4,6 @@ import java.io.File
 
 import akka.japi.Option.Some
 import com.typesafe.config.Config
-import org.asynchttpclient.util.HttpConstants
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.scalatest.FreeSpec
 

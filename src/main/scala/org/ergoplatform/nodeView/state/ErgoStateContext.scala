@@ -14,7 +14,6 @@ import scorex.core.validation.{ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import special.collection.{Coll, CollOverArray}
 
@@ -105,7 +104,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val height = ErgoHistory.heightOf(lastHeaderOpt) + 1
     val (calculatedParams, updated) = currentParameters.update(height, forkVote, votingData.epochVotes, proposedUpdate, votingSettings)
     val calculatedValidationSettings = validationSettings.updated(updated)
-    new UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams, calculatedValidationSettings, votingData)
+    UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams, calculatedValidationSettings, votingData)
   }
 
   protected def checkForkVote(height: Height): Unit = {
@@ -188,7 +187,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   def appendHeader(header: Header, votingSettings: VotingSettings): Try[ErgoStateContext] = {
     if (lastHeaders.isEmpty) {
-      log.info("Last headers is empty!")
+      log.info("Last headers are empty!")
     }
     validateVotes(header)
       .validate(hdrHeight,

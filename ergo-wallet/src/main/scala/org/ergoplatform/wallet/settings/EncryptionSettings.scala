@@ -2,7 +2,7 @@ package org.ergoplatform.wallet.settings
 
 import io.circe.{Json, Encoder, Decoder, HCursor}
 import io.circe.syntax._
-import cats.syntax.either._
+import cats.syntax.either._  // don't remove, it is needed for scala 2.11
 
 /**
   * Encryption parameters

@@ -1,21 +1,28 @@
 import sbt.Keys.{licenses, _}
 import sbt._
 
+import scala.util.Try
+
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  version := "3.1.5-SNAPSHOT",
   scalaVersion := "2.12.10",
+  // version is set via git tag vX.Y.Z:
+  // $ git tag v3.2.0
+  // $ git push origin v3.2.0
+  // without the tag version resolves to [branch name]-[git commit hash]-SNAPSHOT
+  // don't set the version manually
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
     "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
     "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"),
   homepage := Some(url("http://ergoplatform.org/")),
-  licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode"))
+  licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode")),
+  publishTo := sonatypePublishToBundle.value
 )
 
 val scorexVersion = "4ca3e400-SNAPSHOT"
-val sigmaStateVersion = "3.1.0"
+val sigmaStateVersion = "3.1.1"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -33,8 +40,8 @@ libraryDependencies ++= Seq(
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
   "org.typelevel" %% "cats-free" % "1.6.0",
-  "javax.xml.bind" % "jaxb-api" % "2.+",
-  "com.iheart" %% "ficus" % "1.4.+",
+  "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
+  "com.iheart" %% "ficus" % "1.4.7",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
   "com.joefkelley" %% "argyle" % "1.0.0",
@@ -42,7 +49,7 @@ libraryDependencies ++= Seq(
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
-  "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.13.5" % "test",
 
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",
@@ -91,14 +98,11 @@ scalacOptions in(Compile, compile) ++= Seq("-release", "8")
 
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"
-  val versionExtractor = """(\d+)\.(\d+)\.(\d+).*""".r
-  val versionExtractor(major, minor, bugfix) = version.value
   IO.write(versionFile,
     s"""package org.ergoplatform
        |
        |object Version {
        |  val VersionString = "${version.value}"
-       |  val VersionTuple = ($major, $minor, $bugfix)
        |}
        |""".stripMargin)
   Seq(versionFile)
@@ -112,7 +116,7 @@ assemblyJarName in assembly := s"ergo-${version.value}.jar"
 
 assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first
-  case x if x.endsWith("/module-info.class") => MergeStrategy.discard
+  case x if x.endsWith("module-info.class") => MergeStrategy.discard
   case "reference.conf" => CustomMergeStrategy.concatReversed
   case PathList("org", "iq80", "leveldb", xs @ _*) => MergeStrategy.first
   case PathList("javax", "activation", xs @ _*) => MergeStrategy.last
@@ -214,10 +218,12 @@ lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
   .enablePlugins(JmhPlugin)
 
 lazy val ergoWallet = (project in file("ergo-wallet"))
+  .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
   .settings(
+    crossScalaVersions := Seq(scalaVersion.value, "2.11.12"),
     commonSettings,
     name := "ergo-wallet",
-    libraryDependencies += ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion)
+    libraryDependencies += ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion),
   )
 
 lazy val It2Test = config("it2") extend (IntegrationTest, Test)
@@ -237,3 +243,46 @@ lazy val benchmarks = (project in file("benchmarks"))
   .settings(commonSettings, name := "ergo-benchmarks")
   .dependsOn(ergo % "test->test")
   .enablePlugins(JmhPlugin)
+
+// PGP key for signing a release build published to sonatype
+// signing is done by sbt-pgp plugin
+// how to generate a key - https://central.sonatype.org/pages/working-with-pgp-signatures.html
+// how to export a key and use it with Travis - https://docs.scala-lang.org/overviews/contributors/index.html#export-your-pgp-key-pair
+pgpPublicRing := file("ci/pubring.asc")
+pgpSecretRing := file("ci/secring.asc")
+pgpPassphrase := sys.env.get("PGP_PASSPHRASE").map(_.toArray)
+usePgpKeyHex("D78982639AD538EF361DEC6BF264D529385A0333")
+
+credentials ++= (for {
+  username <- Option(System.getenv().get("SONATYPE_USERNAME"))
+  password <- Option(System.getenv().get("SONATYPE_PASSWORD"))
+} yield Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", username, password)).toSeq
+
+enablePlugins(GitVersioning)
+
+version in ThisBuild := {
+  if (git.gitCurrentTags.value.nonEmpty) {
+    git.gitDescribedVersion.value.get
+  } else {
+    if (git.gitHeadCommit.value.contains(git.gitCurrentBranch.value)) {
+      // see https://docs.travis-ci.com/user/environment-variables/#default-environment-variables
+      if (Try(sys.env("TRAVIS")).getOrElse("false") == "true") {
+        // pull request number, "false" if not a pull request
+        if (Try(sys.env("TRAVIS_PULL_REQUEST")).getOrElse("false") != "false") {
+          // build is triggered by a pull request
+          val prBranchName = Try(sys.env("TRAVIS_PULL_REQUEST_BRANCH")).get
+          val prHeadCommitSha = Try(sys.env("TRAVIS_PULL_REQUEST_SHA")).get
+          prBranchName + "-" + prHeadCommitSha.take(8) + "-SNAPSHOT"
+        } else {
+          // build is triggered by a push
+          val branchName = Try(sys.env("TRAVIS_BRANCH")).get
+          branchName + "-" + git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
+        }
+      } else {
+        git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
+      }
+    } else {
+      git.gitCurrentBranch.value + "-" + git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
+    }
+  }
+}

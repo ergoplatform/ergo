@@ -135,7 +135,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost),
     )
     val maxCost = stateContext.currentParameters.maxBlockCost
-    //    val remainingCost = stateContext.currentParameters.maxBlockCost - accumulatedCost
 
     ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big

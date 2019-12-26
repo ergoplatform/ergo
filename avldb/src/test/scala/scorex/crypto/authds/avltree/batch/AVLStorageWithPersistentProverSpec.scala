@@ -1,7 +1,7 @@
 package scorex.crypto.authds.avltree.batch
 
 import org.scalatest.{Matchers, PropSpec}
-import scorex.crypto.authds.avltree.batch.benchmark.IODBBenchmark.getRandomTempDir
+import scorex.crypto.authds.avltree.batch.benchmark.LDBVersionedStoreBenchmark.getRandomTempDir
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.utils.Random

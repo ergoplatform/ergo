@@ -25,14 +25,16 @@ trait KVStore extends AutoCloseable {
     */
   def get(key: K): Option[V] = {
     lock.readLock().lock()
-    val res = Option(db.get(key))
-    lock.readLock().unlock()
-    res
+    try {
+      Option(db.get(key.data))
+    } finally {
+      lock.readLock().unlock()
+    }
   }
 
 
   /**
-    * Iterate through the database to read elements according to a filter function
+    * Iterate through the database to read elements according to a filter function.
     * @param cond - the filter function
     * @return iterator over elements satisfying the filter function
     */
@@ -57,7 +59,7 @@ trait KVStore extends AutoCloseable {
   }
 
   /**
-    * Read all the database elements
+    * Read all the database elements.
     * @return iterator over database contents
     */
   def getAll: Iterator[(K, V)] = getWithFilter((_, _) => true)
@@ -72,7 +74,7 @@ trait KVStore extends AutoCloseable {
     *
     * Finds all keys from given iterable.
     * Result is returned in an iterable of key-value pairs.
-    * If key is not found, null value is included in result pair.
+    * If key is not found, None value is included in a resulting pair.
     *
     *
     * @param keys keys to lookup

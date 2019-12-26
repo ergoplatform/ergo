@@ -5,7 +5,7 @@ import scorex.crypto.authds.avltree.batch.helpers.FileHelper
 import scorex.utils.Random
 import scorex.db.LDBVersionedStore
 
-object IODBBenchmark extends App with FileHelper {
+object LDBVersionedStoreBenchmark extends App with FileHelper {
   val KL = 32
   val VL = 8
   val LL = 32

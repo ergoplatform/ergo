@@ -5,9 +5,8 @@ import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.util.encode.Base58
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.LDBVersionedStore
-import scorex.util.ScorexLogging
 
-trait TestHelper extends FileHelper with ScorexLogging {
+trait TestHelper extends FileHelper {
 
   type HF = Blake2b256.type
   type D = Digest32

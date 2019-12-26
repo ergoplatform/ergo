@@ -19,7 +19,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
   //A node is considering that the chain is synced if sees a block header with timestamp no more
   // than maxTimeDiffFactor blocks on average from future
-  private val maxTimeDiffFactor = if (settings.networkType.isMainNet) {
+  private lazy val maxTimeDiffFactor = if (settings.networkType.isMainNet) {
     400 //800 minutes in main network
   } else {
     2000 //4000 minutes (~2.5 days) for test and dev networks

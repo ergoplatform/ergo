@@ -9,22 +9,22 @@ import scorex.util.ScorexLogging
 import scala.collection.mutable
 
 /**
- * Registry of opened LevelDB instances.
- * LevelDB prohibit access to the same storage file from more than one DB instance.
- * And ergo application (mostly tests) quite frequently doesn't not explicitly close
- * database and tries to reopen it.
- */
-case class StoreRegistry(factory : DBFactory) extends DBFactory with ScorexLogging {
+  * Registry of opened LevelDB instances.
+  * LevelDB prohibit access to the same storage file from more than one DB instance.
+  * And ergo application (mostly tests) quite frequently doesn't not explicitly close
+  * database and tries to reopen it.
+  */
+case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLogging {
 
   val lock = new ReentrantReadWriteLock()
   val map = new mutable.HashMap[File, RegisteredDB]
 
   /**
-	* Decorator of LevelDB DB class which overrides close() methods and unlinks database from registry on close.
-	* So if database was not explicitly closed, then next attempt to open database with the same path will
-	* return existed instance instead of creating new one.
-	*/
-  case class RegisteredDB(impl:DB, path: File) extends DB {
+    * Decorator of LevelDB DB class which overrides close() methods and unlinks database from registry on close.
+    * So if database was not explicitly closed, then next attempt to open database with the same path will
+    * return existed instance instead of creating new one.
+    */
+  case class RegisteredDB(impl: DB, path: File) extends DB {
 
     def get(key: Array[Byte]): Array[Byte] = impl.get(key)
 
@@ -75,7 +75,7 @@ case class StoreRegistry(factory : DBFactory) extends DBFactory with ScorexLoggi
     }
   }
 
-  private def remove(path:File): Unit = {
+  private def remove(path: File): Unit = {
     lock.writeLock().lock()
     try {
       map.remove(path)
@@ -88,11 +88,11 @@ case class StoreRegistry(factory : DBFactory) extends DBFactory with ScorexLoggi
     lock.writeLock().lock()
     try {
       add(path, factory.open(path, options))
-	} catch {
-	  case x: Throwable =>
+    } catch {
+      case x: Throwable =>
         log.error(s"Failed to initialize storage: $x. Please check that directory $path exists and is not used by some other active node")
         java.lang.System.exit(2)
-		    null
+        null
     } finally {
       lock.writeLock().unlock()
     }
@@ -110,7 +110,7 @@ case class StoreRegistry(factory : DBFactory) extends DBFactory with ScorexLoggi
 object LDBFactory extends ScorexLogging {
 
   private val nativeFactory = "org.fusesource.leveldbjni.JniDBFactory"
-  private val javaFactory   = "org.iq80.leveldb.impl.Iq80DBFactory"
+  private val javaFactory = "org.iq80.leveldb.impl.Iq80DBFactory"
 
   lazy val factory: DBFactory = {
     val loaders = List(ClassLoader.getSystemClassLoader, this.getClass.getClassLoader)

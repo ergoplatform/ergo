@@ -64,7 +64,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
           case validator: TransactionValidation[ErgoTransaction@unchecked] =>
             validator.validate(tx)
           case _ =>
-            Try(new Exception(""))
+            Try(new Exception("Transaction validation is not supported in absence of UTXO set"))
         }
     } {
       _.fold(

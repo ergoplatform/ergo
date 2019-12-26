@@ -38,13 +38,12 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int = 0) extends KVStor
   private def createDB(dir: File, storeName: String): DB = {
     val op = new Options()
     op.createIfMissing(true)
+    op.paranoidChecks(true)
     factory.open(new File(dir, storeName), op)
   }
 
   private def defaultWriteOptions: WriteOptions = {
     val options = new WriteOptions()
-    // sync is off to make bootstrapping significantly faster. However, it makes database less stable
-    options.sync(false)
     options
   }
 

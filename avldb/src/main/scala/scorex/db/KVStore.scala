@@ -26,7 +26,7 @@ trait KVStore extends AutoCloseable {
   def get(key: K): Option[V] = {
     lock.readLock().lock()
     try {
-      Option(db.get(key.data))
+      Option(db.get(key))
     } finally {
       lock.readLock().unlock()
     }

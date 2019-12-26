@@ -45,7 +45,8 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
       ErgoHistory.GenesisHeight // keep all blocks in history
     } else if (!isHeadersChainSynced && !config.stateType.requireProofs) {
       // just synced with the headers chain - determine first full block to apply
-      ErgoHistory.GenesisHeight //TODO start with the height of UTXO snapshot applied. Start from genesis util this is implemented
+      //TODO start with the height of UTXO snapshot applied. For now we start from genesis until this is implemented
+      ErgoHistory.GenesisHeight
     } else {
       // Start from config.blocksToKeep blocks back
       val h = Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)

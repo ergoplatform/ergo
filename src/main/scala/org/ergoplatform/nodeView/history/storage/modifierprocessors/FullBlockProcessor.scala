@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import akka.util.ByteString
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}

@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import io.iohk.iodb.{LSMStore, Store}
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.utils.generators.WalletGenerators
@@ -19,8 +18,6 @@ class WalletStorageSpec
 
   private implicit val addressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
-
-  def createStore: Store = new LSMStore(createTempDir)
 
   it should "add and read tracked addresses" in {
     forAll(ergoAddressGen) { address =>

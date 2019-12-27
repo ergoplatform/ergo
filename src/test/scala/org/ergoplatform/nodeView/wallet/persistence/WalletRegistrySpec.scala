@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import io.iohk.iodb.{LSMStore, Store}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.BoxCertainty
@@ -9,6 +8,7 @@ import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.testkit.utils.FileUtils
+import scorex.db.LDBVersionedStore
 
 class WalletRegistrySpec
   extends FlatSpec
@@ -21,7 +21,7 @@ class WalletRegistrySpec
   import RegistryOps._
   import org.ergoplatform.nodeView.wallet.IdUtils._
 
-  def createStore: Store = new LSMStore(createTempDir)
+  def createStore = new LDBVersionedStore(createTempDir)
 
   it should "read certain boxes" in {
     forAll(trackedBoxGen) { box =>

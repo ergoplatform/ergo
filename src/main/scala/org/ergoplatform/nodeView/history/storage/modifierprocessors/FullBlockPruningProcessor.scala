@@ -32,8 +32,9 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
 
   /** Check if headers chain is synchronized with the network and modifier is not too old
     */
-  def shouldDownloadBlockAtHeight(height: Int): Boolean =
-    isHeadersChainSynced && minimalFullBlockHeight <= height
+  def shouldDownloadBlockAtHeight(height: Int): Boolean = {
+    isHeadersChainSynced && height >= minimalFullBlockHeight
+  }
 
   /** Update minimal full block height and header chain synced flag
     *
@@ -49,7 +50,7 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
       ErgoHistory.GenesisHeight
     } else {
       // Start from config.blocksToKeep blocks back
-      val h = Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)
+      val h = Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1 - 500)
       // ... but not later than the beginning of a voting epoch
       if (h > VotingEpochLength) {
         Math.min(h, extensionWithParametersHeight(h))

@@ -1,15 +1,14 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Longs
-import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatestplus.scalacheck.{ScalaCheckDrivenPropertyChecks, ScalaCheckPropertyChecks}
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.util.encode.Base16
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.db.LDBVersionedStore
 import scorex.utils.{Random => RandomBytes}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -18,7 +17,7 @@ import scala.concurrent.{Await, Future}
 import scala.util.{Success, Try}
 import scala.language.implicitConversions
 
-class VersionedIODBAVLStorageSpecification extends PropSpec
+class VersionedLDBAVLStorageSpecification extends PropSpec
   with ScalaCheckPropertyChecks
   with ScalaCheckDrivenPropertyChecks
   with Matchers
@@ -39,7 +38,7 @@ class VersionedIODBAVLStorageSpecification extends PropSpec
     * List of all test cases
     */
 
-  val rollbackTest: PERSISTENT_PROVER => Unit = { (prover: PERSISTENT_PROVER) =>
+  val rollbackTest: PERSISTENT_PROVER => Unit = { prover: PERSISTENT_PROVER =>
 
     def ops(s: Int, e: Int): Unit = (s until e).foreach { i =>
       prover.performOneOperation(Insert(ADKey @@ Blake2b256("k" + i).take(KL),
@@ -202,12 +201,10 @@ class VersionedIODBAVLStorageSpecification extends PropSpec
     noException should be thrownBy storage.rollbackVersions.foreach(v => prover.rollback(v).get)
   }
 
-  def testAddInfoSaving(createStore: (Int) => Store): Unit = {
+  def testAddInfoSaving(createStore: Int => LDBVersionedStore): Unit = {
     val store = createStore(1000)
     val storage = createVersionedStorage(store)
     val prover = createPersistentProver(storage)
-
-    implicit def arrayToWrapper(in: Array[Byte]): ByteArrayWrapper = ByteArrayWrapper(in)
 
     val insert1 = Insert(ADKey @@ RandomBytes.randomBytes(32), ADValue @@ Longs.toByteArray(1L))
     val insert2 = Insert(ADKey @@ RandomBytes.randomBytes(32), ADValue @@ Longs.toByteArray(2L))
@@ -248,7 +245,7 @@ class VersionedIODBAVLStorageSpecification extends PropSpec
 
   }
 
-  def removeFromLargerSetSingleRandomElementTest(createStore: (Int) => Store): Unit = {
+  def removeFromLargerSetSingleRandomElementTest(createStore: (Int) => LDBVersionedStore): Unit = {
     val minSetSize = 10000
     val maxSetSize = 200000
 
@@ -318,76 +315,32 @@ class VersionedIODBAVLStorageSpecification extends PropSpec
     blockchainWorkflowTest(prover)
   }
 
-  property("Persistence AVL batch prover (QuickStore backed) - blockchain workflow") {
-    quickTest {
-      val prover = createPersistentProverWithQuick()
-      blockchainWorkflowTest(prover)
-    }
-  }
-
   property("Persistence AVL batch prover (LSMStore backed) - rollback") {
     val prover = createPersistentProverWithLSM()
     rollbackTest(prover)
   }
 
-  property("Persistence AVL batch prover (QuickStore backed) - rollback") {
-    quickTest {
-      val prover = createPersistentProverWithQuick()
-      rollbackTest(prover)
-    }
-  }
-
 
   property("Persistence AVL batch prover (LSMStore backed) - basic test") {
-    val store = createLSMStore()
+    val store = createVersionedStore()
     val storage = createVersionedStorage(store)
     val prover = createPersistentProver(storage)
     basicTest(prover, storage)
   }
 
-  property("Persistence AVL batch prover (QuickStore backed) - basic test") {
-    quickTest {
-      val store = createQuickStore()
-      val storage = createVersionedStorage(store)
-      val prover = createPersistentProver(storage)
-      basicTest(prover, storage)
-    }
-  }
-
   property("Persistence AVL batch prover (LSMStore backed) - rollback version") {
-    val store = createLSMStore(1000)
+    val store = createVersionedStore(1000)
     val storage = createVersionedStorage(store)
     val prover = createPersistentProver(storage)
     rollbackVersionsTest(prover, storage)
   }
 
-  property("Persistence AVL batch prover (QuickStore backed) - rollback version") {
-    quickTest {
-      val store = createQuickStore(1000)
-      val storage = createVersionedStorage(store)
-      val prover = createPersistentProver(storage)
-      basicTest(prover, storage)
-    }
-  }
-
   property("Persistence AVL batch prover (LSM backed) - remove single random element from a large set") {
-    removeFromLargerSetSingleRandomElementTest(createLSMStore _)
-  }
-
-  property("Persistence AVL batch prover (QuickStore backed) - remove single random element from a large set") {
-    quickTest {
-      removeFromLargerSetSingleRandomElementTest(createQuickStore _)
-    }
+    removeFromLargerSetSingleRandomElementTest(createVersionedStore _)
   }
 
   property("Persistence AVL batch prover (LSM backed) - save additional info") {
-    testAddInfoSaving(createLSMStore _)
-  }
-
-  property("Persistence AVL batch prover (Quick Store backed) - save additional info") {
-    quickTest {
-      testAddInfoSaving(createQuickStore _)
-    }
+    testAddInfoSaving(createVersionedStore _)
   }
 
 }

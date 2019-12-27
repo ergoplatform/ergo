@@ -237,8 +237,6 @@ trait FullBlockProcessor extends HeadersProcessor {
         s"full height $fullBlockHeight")
   }
 
-  private def storageVersion(newModRow: ErgoPersistentModifier) = Algos.idToBAW(newModRow.id)
-
 }
 
 object FullBlockProcessor {

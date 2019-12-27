@@ -2,11 +2,11 @@ package org.ergoplatform.nodeView.history.storage
 
 import com.google.common.cache.CacheBuilder
 import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.db.LDBKVStore
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.utils.ScorexEncoding
+import scorex.db.LDBKVStore
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success}

@@ -19,11 +19,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
   //A node is considering that the chain is synced if sees a block header with timestamp no more
   // than maxTimeDiffFactor blocks on average from future
-  private lazy val maxTimeDiffFactor = if (settings.networkType.isMainNet) {
-    400 //800 minutes in main network
-  } else {
-    2000 //4000 minutes (~2.5 days) for test and dev networks
-  }
+  private lazy val headerChainTimeDiff = settings.nodeSettings.headerChainTimeDiff
 
   protected[history] lazy val pruningProcessor: FullBlockPruningProcessor =
     new FullBlockPruningProcessor(nodeSettings, chainSettings)
@@ -68,7 +64,6 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         continuation(fb.header.height + 1, Seq.empty)
         //if headers-chain is synced and no full blocks applied yet, find full block height to go from
       case _ =>
-        println("go sync full blocks from: " + pruningProcessor.minimalFullBlockHeight)
         continuation(pruningProcessor.minimalFullBlockHeight, Seq.empty)
     }
   }
@@ -83,7 +78,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     } else if (pruningProcessor.shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)
-    } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * maxTimeDiffFactor)) {
+    } else if (!isHeadersChainSynced && header.isNew(timeProvider, chainSettings.blockInterval * headerChainTimeDiff)) {
       // Headers chain is synced after this header. Start downloading full blocks
       pruningProcessor.updateBestFullBlock(header)
       log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")

@@ -8,12 +8,14 @@ import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
   * A class that keeps and calculates minimal height for full blocks starting from which we need to download these full
   * blocks from the network and keep them in our history.
   */
-class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings: ChainSettings) {
+class FullBlockPruningProcessor(nodeConfig: NodeConfigurationSettings, chainSettings: ChainSettings) {
 
   @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
   @volatile private[history] var minimalFullBlockHeightVar: Int = ErgoHistory.GenesisHeight
 
   private val VotingEpochLength = chainSettings.voting.votingLength
+
+  private lazy val headerChainTimeDiff = nodeConfig.headerChainTimeDiff
 
   private def extensionWithParametersHeight(height: Int): Int = {
     require(height >= VotingEpochLength)
@@ -42,15 +44,15 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
     * @return minimal height to process best full block
     */
   def updateBestFullBlock(header: Header): Int = {
-    minimalFullBlockHeightVar = if (config.blocksToKeep < 0) {
+    minimalFullBlockHeightVar = if (nodeConfig.blocksToKeep < 0) {
       ErgoHistory.GenesisHeight // keep all blocks in history
-    } else if (!isHeadersChainSynced && !config.stateType.requireProofs) {
+    } else if (!isHeadersChainSynced && !nodeConfig.stateType.requireProofs) {
       // just synced with the headers chain - determine first full block to apply
       //TODO start with the height of UTXO snapshot applied. For now we start from genesis until this is implemented
       ErgoHistory.GenesisHeight
     } else {
       // Start from config.blocksToKeep blocks back
-      val h = Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1 - 500)
+      val h = Math.max(minimalFullBlockHeight, header.height - nodeConfig.blocksToKeep + 1 - headerChainTimeDiff)
       // ... but not later than the beginning of a voting epoch
       if (h > VotingEpochLength) {
         Math.min(h, extensionWithParametersHeight(h))

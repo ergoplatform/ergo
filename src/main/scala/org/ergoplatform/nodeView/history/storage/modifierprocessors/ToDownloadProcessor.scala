@@ -17,8 +17,8 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
   protected val settings: ErgoSettings
 
-  //A node is considering that the chain is synced if sees a block header with timestamp no more
-  // than maxTimeDiffFactor blocks on average from future
+  // A node is considering that the chain is synced if sees a block header with timestamp no more
+  // than headerChainTimeDiff blocks on average from future
   private lazy val headerChainTimeDiff = settings.nodeSettings.headerChainTimeDiff
 
   protected[history] lazy val pruningProcessor: FullBlockPruningProcessor =

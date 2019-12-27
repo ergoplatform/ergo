@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
+import scorex.core.VersionTag
 
 import scala.collection.immutable.SortedMap
 
@@ -40,13 +41,13 @@ class BoxHolder(val boxes: SortedMap[ByteArrayWrapper, ErgoBox]) {
   * For tests, box holder with in-memory diffs
   */
 class VersionedInMemoryBoxHolder(override val boxes: SortedMap[ByteArrayWrapper, ErgoBox],
-                                 val versions: IndexedSeq[ByteArrayWrapper],
-                                 val diffs: Map[ByteArrayWrapper, (Seq[ErgoBox], Seq[ErgoBox])]
+                                 val versions: IndexedSeq[VersionTag],
+                                 val diffs: Map[VersionTag, (Seq[ErgoBox], Seq[ErgoBox])]
                                 ) extends BoxHolder(boxes) {
 
   //todo: this implementation assumes that all the boxes in "toAdd" are not referenced by "toRemove" elements
   //todo: (so we can not handle situation when some transaction in a block spends a box within the same block)
-  def applyChanges(version: ByteArrayWrapper,
+  def applyChanges(version: VersionTag,
                    toRemove: Seq[ByteArrayWrapper],
                    toAdd: Seq[ErgoBox]): VersionedInMemoryBoxHolder = {
     val newVersions = versions :+ version
@@ -56,7 +57,7 @@ class VersionedInMemoryBoxHolder(override val boxes: SortedMap[ByteArrayWrapper,
   }
 
   //todo: the same issue as in applyChanges()
-  def rollback(version: ByteArrayWrapper): VersionedInMemoryBoxHolder = {
+  def rollback(version: VersionTag): VersionedInMemoryBoxHolder = {
     val idx = versions.indexOf(version)
     val (remainingVersions, versionsToRollback) = versions.splitAt(idx + 1)
     val (newBoxes, newDiffs) = versionsToRollback.reverse.foldLeft(boxes -> diffs) { case ((bs, ds), ver) =>

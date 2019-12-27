@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
 
-    <logger name="scorex.crypto.authds.avltree.batch.VersionedIODBAVLStorage" level="ERROR"/>
+    <logger name="scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage" level="ERROR"/>
     <logger name="scorex.core.network.PeerConnectionHandler" level="ERROR"/>
     <logger name="org.ergoplatform.network.ErgoNodeViewSynchronizer" level="ERROR"/>
     <logger name="scorex.core.network.NetworkController " level="ERROR"/>

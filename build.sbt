@@ -282,7 +282,7 @@ version in ThisBuild := {
         git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
       }
     } else {
-      git.gitCurrentBranch.value + "-" + git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
+      git.gitCurrentBranch.value + "-" + git.gitHeadCommit.value.getOrElse("").take(8) + "-SNAPSHOT"
     }
   }
 }

@@ -264,7 +264,7 @@ minerPubKey == alice
 
 A box with this script does not require a signature because the above statement only fixes the miner's public key to \texttt{alice} and does not enforce any other spending condition. Thus, anyone can create a transaction spending this box. However the transaction is valid only if the block that includes it is mined by Alice. 
 This ensures that the box can only be spent if and when Alice mines a block.  
-Alice creates her pool transaction using this box as input and submits her shares and proofs to the pool as before. She need not even use a private channel for this purpose and can broadcast this publicly. This enables the possibility of extending the scheme to Level 3 centralization that requires public shares.
+Alice creates her pool transaction using this box as input and submits her shares and proofs to the pool as before. She need not even use a private channel for this purpose and can broadcast this publicly. This enables the possibility of L3 decentralization level that requires public shares~\cite{chesterman2018p2pool,luu2017smartpool} (see Section~\ref{pool-levels}).
 
 The above variant prevents the broadcast attack because knowing the pool transaction does not help the attacker in any way (since anyone can create that transaction without Alice's help). An attacker might try to spend Alice's collateral in a transaction paying to some address other than the pool address. However, Alice will discard such transactions when creating a candidate block and only include her pool paying transaction that spends the collateral. 
 
@@ -321,7 +321,7 @@ schemes to create mining pools, thereby `breaking' them. Our pools operates at l
 Note that both L1 and L2 carry the risk of funds loss due to operator compromise. A topic of further investigation is to have the pools operate at L3, where there is no risk of losing funds. 
 
 Only strong Type 2 schemes~(where a miner does not provide a block solution in the clear, but rather provides an encrypted solution
-along with zero-knowledge proof of its correctness) remain unbroken. However, it should also be noted that strong schemes are not very practical as they require a generic zero-knowledge proof system which imposes heavy burden on both the  prover and verifier. Thus, such schemes currently have no implementations in the real world. Additionally, we note that Type 2 schemes in their entirety have an inherent weakness that make them impractical for real world use: the high possibility of forking attacks. 
+along with zero-knowledge proof of its correctness) remain unbroken. However, it should also be noted that strong schemes are not very practical as they require a generic zero-knowledge proof system which imposes heavy burden on both the prover and verifier. Thus, such schemes currently have no implementations in the real world. Additionally, we note that Type 2 schemes in their entirety have an inherent weakness that make them impractical for real world use: the high possibility of forking attacks. 
 
 
 Both our approaches rely on smart contracts acting as decentralized escrows and require the underlying programming language to allow predicates at context level C3 or higher (i.e., access to the block solution; see Section~\ref{context}). Thus, one way to invalidate our methods would be to restrict the language context to level C2 or lower. Note that even level C2 contracts allow sophisticated applications such as non-interactive mixing, rock-paper-scissors, and even an ICO~\cite{advtutorial}.

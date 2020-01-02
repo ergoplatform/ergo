@@ -1,6 +1,5 @@
-package org.ergoplatform.db
+package scorex.db
 
-import org.ergoplatform.utils.ByteArrayUtils
 import org.iq80.leveldb.DB
 
 
@@ -25,17 +24,23 @@ class LDBKVStore(protected val db: DB) extends KVStore {
   def remove(keys: Seq[K]): Unit = update(Seq.empty, keys)
 
   /**
-    * Get last key within some range by used comparator. Could be useful for applications with sequential ids.
+    * Get last key within some range by used comparator.
+    * Could be useful for applications with sequential ids.
+    * The method iterates over all the keys so could be slow if there are many keys in the range.
     */
   def lastKeyInRange(first: Array[Byte], last: Array[Byte]): Option[K] = {
+    import util.control.Breaks._
+
     val i = db.iterator()
+    var res: Option[K] = None
     i.seek(first)
-    if (i.hasNext) {
-      val key = i.peekNext().getKey
-      if (ByteArrayUtils.compare(key, last) < 0) Some(key) else None
-    } else {
-      None
+    breakable {
+      while (i.hasNext) {
+        val key = i.next().getKey
+        if (ByteArrayUtils.compare(key, last) <= 0) res = Some(key) else break
+      }
     }
+    res
   }
 
 }

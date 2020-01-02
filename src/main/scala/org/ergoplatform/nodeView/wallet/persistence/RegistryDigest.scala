@@ -17,7 +17,7 @@ object RegistryDigest {
 
 }
 
-object RegistrySummarySerializer extends ScorexSerializer[RegistryDigest] {
+object RegistryDigestSerializer extends ScorexSerializer[RegistryDigest] {
 
   override def serialize(obj: RegistryDigest, w: Writer): Unit = {
     w.putInt(obj.height)

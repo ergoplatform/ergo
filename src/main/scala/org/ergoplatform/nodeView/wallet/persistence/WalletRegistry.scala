@@ -4,8 +4,8 @@ import java.io.File
 
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.db.LDBFactory.factory
-import org.ergoplatform.db.{HybridLDBKVStore, VersionedLDBKVStore}
+import scorex.db.LDBFactory.factory
+import org.ergoplatform.db.{HybridLDBKVStore}
 import org.ergoplatform.db.VersionedLDBKVStore.VersionId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, EncodedTokenId}
@@ -17,9 +17,9 @@ import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox, TrackedBoxSerial
 import org.iq80.leveldb.Options
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
-import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import Constants.PaymentsAppId
+import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 
@@ -107,7 +107,7 @@ final class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends 
 
   def fetchDigest(): RegistryDigest = {
     store.get(RegistrySummaryKey)
-      .flatMap(r => RegistrySummarySerializer.parseBytesTry(r).toOption)
+      .flatMap(r => RegistryDigestSerializer.parseBytesTry(r).toOption)
       .getOrElse(RegistryDigest.empty)
   }
 
@@ -168,7 +168,7 @@ final class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends 
   }
 
   def rollback(version: VersionTag): Try[Unit] =
-    store.rollbackTo(Base16.decode(version).get)
+    store.rollback(scorex.core.versionToBytes(version))
 
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.
@@ -235,13 +235,10 @@ object WalletRegistry {
     val dir = new File(s"${settings.directory}/wallet/registry")
     dir.mkdirs()
 
-    val options = new Options()
-    options.createIfMissing(true)
-    val db = factory.open(dir, options)
-    val store = new HybridLDBKVStore(db, settings.nodeSettings.keepVersions)
+    val store = new HybridLDBKVStore(dir, settings.nodeSettings.keepVersions)
 
     // Create pre-genesis state checkpoint
-    if (!store.versionIdExists(PreGenesisStateVersion)) store.update(Seq.empty, Seq.empty)(PreGenesisStateVersion)
+    if (!store.versionIdExists(PreGenesisStateVersion)) store.update(PreGenesisStateVersion, Seq.empty, Seq.empty)
 
     new WalletRegistry(store)(settings.walletSettings)
   }
@@ -358,7 +355,7 @@ object WalletRegistry {
   }
 
   def putDigest(bag: KeyValuePairsBag, index: RegistryDigest): KeyValuePairsBag = {
-    val registryBytes = RegistrySummarySerializer.toBytes(index)
+    val registryBytes = RegistryDigestSerializer.toBytes(index)
     bag.copy(toInsert = bag.toInsert :+ (RegistrySummaryKey, registryBytes))
   }
 }
@@ -369,16 +366,16 @@ case class KeyValuePairsBag(toInsert: Seq[(Array[Byte], Array[Byte])], toRemove:
     * Applies non-versioned transaction to a given `store`.
     *
     */
-  def transact(store: VersionedLDBKVStore): Unit = transact(store, None)
+  def transact(store: LDBVersionedStore): Unit = transact(store, None)
 
   /**
     * Applies versioned transaction to a given `store`.
     */
-  def transact(store: VersionedLDBKVStore, version: Array[Byte]): Unit = transact(store, Some(version))
+  def transact(store: LDBVersionedStore, version: Array[Byte]): Unit = transact(store, Some(version))
 
-  private def transact(store: VersionedLDBKVStore, versionOpt: Option[Array[Byte]]): Unit =
+  private def transact(store: LDBVersionedStore, versionOpt: Option[Array[Byte]]): Unit =
     if (toInsert.nonEmpty || toRemove.nonEmpty) {
-      store.update(toInsert, toRemove)(versionOpt.getOrElse(scorex.utils.Random.randomBytes()))
+      store.update(versionOpt.getOrElse(scorex.utils.Random.randomBytes()), toRemove, toInsert)
     }
 }
 

@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
-import org.ergoplatform.db.LDBFactory
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
@@ -16,6 +15,7 @@ import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.RecoverableModifierError
+import scorex.db.LDBFactory
 import scorex.util.{ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Try}

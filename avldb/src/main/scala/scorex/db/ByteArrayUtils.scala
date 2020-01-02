@@ -1,4 +1,4 @@
-package org.ergoplatform.utils
+package scorex.db
 
 object ByteArrayUtils {
 

@@ -16,8 +16,7 @@ libraryDependencies ++= Seq(
 )
 
 libraryDependencies ++= Seq(
-  ("org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8").exclude("org.iq80.leveldb", "leveldb"),
-  "org.iq80.leveldb" % "leveldb" % "0.12"
+  "org.ethereum" % "leveldbjni-all"     % "1.18.3"
 )
 
 testOptions in Test := Seq(Tests.Filter(t => !t.matches(".*Benchmark$")))

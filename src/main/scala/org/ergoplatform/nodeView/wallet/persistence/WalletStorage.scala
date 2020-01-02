@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import com.google.common.primitives.{Ints, Longs, Shorts}
-import org.ergoplatform.db.{LDBFactory, LDBKVStore}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication, ExternalApplicationSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
@@ -10,6 +9,7 @@ import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.PaymentsAppId
+import scorex.db.{LDBFactory, LDBKVStore}
 
 import scala.util.{Success, Try}
 

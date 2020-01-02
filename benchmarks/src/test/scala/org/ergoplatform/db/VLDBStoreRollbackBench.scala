@@ -2,11 +2,11 @@ package org.ergoplatform.db
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.Utils
-import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.settings.Algos
 import org.iq80.leveldb.Options
 import scorex.testkit.utils.FileUtils
 import scorex.util.Random
+import scorex.db.LDBFactory.factory
 
 object VLDBStoreRollbackBench
   extends App

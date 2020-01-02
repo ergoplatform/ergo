@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.secrets.DerivationPath
-import org.ergoplatform.{ErgoAddress, P2PKAddress}
+import org.ergoplatform.P2PKAddress
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.DLogProverInput

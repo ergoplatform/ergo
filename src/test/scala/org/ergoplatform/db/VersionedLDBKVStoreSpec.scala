@@ -1,6 +1,5 @@
 package org.ergoplatform.db
 
-import org.ergoplatform.settings.Constants
 import org.scalatest.{Matchers, PropSpec}
 
 class VersionedLDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
@@ -18,37 +17,40 @@ class VersionedLDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
 
   property("rollback (1 version back)") {
     withVersionedStore(10) { store =>
-      store.insert(Seq(keyA -> valA))(v1)
-      store.insert(Seq(keyB -> valB, keyC -> valC))(v2)
-      store.update(toInsert = Seq(keyA -> byteString("6"), keyD -> valD), toRemove = Seq(keyC))(v3)
+      store.insert(v1, Seq(keyA -> valA))
+      store.insert(v2, Seq(keyB -> valB, keyC -> valC))
+      store.update(v3, Seq(keyC), Seq(keyA -> byteString("6"), keyD -> valD))
 
-      store.getAll.toBs should contain allElementsOf Seq(
+      store.getAll.toSeq.toBs should contain allElementsOf Seq(
         keyA -> byteString("6"),
         keyB -> valB,
         keyD -> valD
       ).toBs
 
-      store.rollbackTo(v2) shouldBe 'success
+      store.rollback(v2) shouldBe 'success
 
-      store.getAll.toBs should contain allElementsOf Seq(keyA -> valA, keyB -> valB, keyC -> valC).toBs
+      store.getAll.toSeq.toBs should contain allElementsOf Seq(keyA -> valA, keyB -> valB, keyC -> valC).toBs
       store.get(keyD) shouldBe None
+      store.get(keyA) shouldBe Some(valA)
+
+      store.lastVersionID shouldBe Some(v2)
     }
   }
 
   property("rollback (2 versions back)") {
     withVersionedStore(10) { store =>
-      store.insert(Seq(keyA -> valA))(v1)
-      store.insert(Seq(keyB -> valB, keyC -> valC))(v2)
-      store.update(toInsert = Seq(keyA -> byteString("6"), keyD -> valD), toRemove = Seq(keyC))(v3)
-      store.update(toInsert = Seq(keyB -> byteString("7"), keyE -> valE), toRemove = Seq(keyA))(v4)
+      store.insert(v1, Seq(keyA -> valA))
+      store.insert(v2, Seq(keyB -> valB, keyC -> valC))
+      store.update(v3, Seq(keyC), Seq(keyA -> byteString("6"), keyD -> valD))
+      store.update(v4, Seq(keyA), Seq(keyB -> byteString("7"), keyE -> valE))
 
-      store.getAll.toBs should contain allElementsOf Seq(keyB -> byteString("7"), keyE -> valE, keyD -> valD).toBs
+      store.getAll.toSeq.toBs should contain allElementsOf Seq(keyB -> byteString("7"), keyE -> valE, keyD -> valD).toBs
       store.get(keyC) shouldBe None
       store.get(keyA) shouldBe None
 
-      store.rollbackTo(v2) shouldBe 'success
+      store.rollback(v2) shouldBe 'success
 
-      store.getAll.toBs should contain allElementsOf Seq(keyA -> valA, keyB -> valB, keyC -> valC).toBs
+      store.getAll.toSeq.toBs should contain allElementsOf Seq(keyA -> valA, keyB -> valB, keyC -> valC).toBs
       store.get(keyE) shouldBe None
       store.get(keyD) shouldBe None
     }
@@ -56,19 +58,26 @@ class VersionedLDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
 
   property("Outdated versions pruning") {
     withVersionedStore(2) { store =>
-      store.insert(Seq(keyA -> valA))(v1)
-      store.insert(Seq(keyB -> valB))(v2)
+      store.insert(v1, Seq(keyA -> valA))
+      store.insert(v2, Seq(keyB -> valB))
 
-      store.get(v1).isDefined shouldBe true
+      store.versionIdExists(v1) shouldBe true
 
-      store.insert(Seq(keyC -> valC))(v3)
+      store.insert(v3, Seq(keyC -> valC))
 
-      store.get(v3).isDefined shouldBe true
-      store.get(v2).isDefined shouldBe true
-      store.get(v1) shouldBe None
+      store.versionIdExists(v3) shouldBe true
+      store.versionIdExists(v2) shouldBe true
+      store.versionIdExists(v1) shouldBe false
 
-      store.get(store.VersionsKey).toSeq
-        .flatMap(_.grouped(Constants.HashLength)) should contain theSameElementsAs Seq(v2, v3)
+      store.get(keyA).isDefined shouldBe true
+      store.get(keyB).isDefined shouldBe true
+      store.get(keyC).isDefined shouldBe true
+
+      store.rollback(v1).isSuccess shouldBe false
+
+      store.get(keyA).isDefined shouldBe true
+      store.get(keyB).isDefined shouldBe true
+      store.get(keyC).isDefined shouldBe true
     }
   }
 

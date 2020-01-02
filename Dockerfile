@@ -1,4 +1,4 @@
-FROM openjdk:11-jre-slim as builder
+FROM openjdk:11-jdk-slim as builder
 ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update && \
     apt-get install -y --no-install-recommends apt-transport-https apt-utils bc dirmngr gnupg && \
@@ -9,7 +9,7 @@ RUN apt-get update && \
     apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y --no-install-recommends sbt
-COPY ["build.sbt", "lock.sbt", "/ergo/"]
+COPY ["build.sbt", "/ergo/"]
 COPY ["project", "/ergo/project"]
 RUN sbt update
 COPY . /ergo

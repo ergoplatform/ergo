@@ -99,9 +99,9 @@
 \section{Introduction}
 
 Security of Bitcoin and many other cryptocurrencies relies on so called Proof-of-Work (PoW) schemes~(also known as scratch-off puzzles), which are mechanisms to reach fast consensus and guarantee immutability of the ledger. Security of such consensus mechanisms is based on the assumption that no single entity controls a large part of the mining power. For example, if a single entity controls
-33\% then it can earn unproportionally more rewards using {\em selfish mining}~\cite{selfish}, and with more than 50\% an adversary can do double spending or filter out certain transactions. However,  individually, it is more beneficial for a miner to join a pool despite the fact that it is detrimental to the system as a whole since it causes concentration of mining power. Another threat, especially for new cryptocurrencies are potential Goldfinger attacks using hosted mining services to rent mining power in order to mine~(or attack) a cryptocurrency~\cite{goldfinger}. Non-outsourceable scratch-off puzzles have been proposed to address these issues~\cite{miller2015nonoutsourceable,daian2017short}, whose primary goal is to discourage pooled mining. Such approaches require reward spending to depend on some trapdoor information used in solution generation. A notable example of a real world implementation of this idea is Ergo~\cite{ergo}, whose PoW, \powname~\cite{autolykos}, is based on~\cite{daian2017short}. In this work, we describe how to bypass the non-outsourceability of many such schemes, including Ergo.
+33\% then it can earn unproportionally more rewards using {\em selfish mining}~\cite{selfish}, and with more than 50\% an adversary can do double spending or filter out certain transactions. However,  individually, it is more beneficial for a miner to join a pool despite the fact that it is detrimental to the system as a whole since it causes concentration of mining power. Another threat, especially for new cryptocurrencies are potential Goldfinger attacks using hosted mining services to rent mining power in order to mine~(or attack) a cryptocurrency~\cite{goldfinger}. Non-outsourceable scratch-off puzzles have been proposed to address these issues~\cite{miller2015nonoutsourceable,daian2017short}, whose primary goal is to discourage pooled mining. Such approaches require reward spending to depend on some trapdoor information used in solution generation. A notable example of a real world implementation of this idea is Ergo~\cite{ergo}, whose PoW, \powname~\cite{autolykos}, is based on~\cite{daian2017short}. In this work, we describe how to bypass the non-outsourceability of many such schemes, including Ergo. While our solution bypasses non-outsourceability, which gives the ability to form pools, we still retain a level of decentralization in our solution. In particular, our approach retains the {\em censorship resistance} property of non-outsourceable puzzles (see Section~\ref{pool-levels} for details. 
 
-The rest of the paper is organized as follows. Section~\ref{background} contains an overview of the current state of affairs in proof of work schemes and pooled mining along a high level overview of non-outsourceable puzzles. Section~\ref{bypasstype1} describes one approach for creating mining pools in many types non-outsourceable puzzles, specifically those of~\cite{daian2017short}. Section~\ref{bypasstype2} describes another approach that covers a wider range of puzzles~\cite{daian2017short,miller2015nonoutsourceable}. We conclude the paper in Section~\ref{conclusion} along with pointers for future research.
+The rest of the paper is organized as follows. Section~\ref{background} contains an overview of the current state of affairs in proof of work schemes and pooled mining along a high level overview of non-outsourceable puzzles. Section~\ref{bypasstype1} describes one approach for creating mining pools in many types of non-outsourceable puzzles, specifically those of~\cite{daian2017short}. Section~\ref{bypasstype2} describes another approach that covers a wider range of puzzles~\cite{daian2017short,miller2015nonoutsourceable}. We conclude the paper in Section~\ref{conclusion} along with pointers for future research.
 \section{Background}
 \label{background}
 \subsection{Proofs of Work} 
@@ -122,41 +122,40 @@ All PoW systems use the above idea of finding a value from a uniform distributio
 \subsection{Pooled Mining} 
 \label{pool-levels}
 Bitcoin allows mining pools, which roughly work as follows. The pool distributes work based on a some $m$ that it decides. Each miner tries to find a solution for the given $m$ and any solution found is sent to the network.
-A miner actually tries to find a {\em share}, which is like a solution but with reduced difficulty (also decided by the pool). Some of the shares may also be real solutions, which become valid blocks. A miner gets paid by the number of shares submitted. This is possible because the Bitcoin PoW puzzle is a {\em scratch-off puzzle}~\cite{miller2015nonoutsourceable}, a type of PoW puzzle that can be processed in parallel by multiple non-communicating entities with an appropriate reduction in search time. 
+A miner actually tries to find a {\em share}, which is like a solution but with reduced difficulty (also decided by the pool). Some of the shares may also be real solutions, which result in valid blocks. A miner gets paid by the number of shares submitted. This is possible because the Bitcoin PoW puzzle is a {\em scratch-off puzzle}~\cite{miller2015nonoutsourceable}, a type of PoW puzzle that can be processed in parallel by multiple non-communicating entities with an appropriate reduction in search time.
 
-The key observation with pools is that miners do work for some other entity who then distributes the rewards back to the workers.
-We define three levels of centralization in pools.
+The pool generates the potential block candidates as if it was solo mining, and then distributes that candidate to its miners for solving, which can be considered workers for the pool. The shares have no actual value and are just an accounting tool used by the pool to keep track of the work done by each worker. The key observation with pools is that miners do work for some other entity who then distributes the rewards back to the workers.
+Since the pool selects the transactions that are to be included, this gives the pool greater control over the entire blockchain network. We define this using three levels of (de)centralization that a pool may operate at. 
 
 \begin{enumerate}
-	\item {\em Level 1 (Complete centralization):} The pool operator defines both $m$ and the reward address. Thus, a pool operator has full control over which transactions are included (censorship) and also carries the risk of losing the rewards.
-	\item {\em Level 2 (Partial centralization):} The pool operator does not define $m$ but collects the rewards. This is resistant to censorship but still carries the risk of losing the rewards. % This is what we will try achieve.
-	\item {\em Level 3 (No centralization):} There is no pool operator and rewards are automatically given to the participants based on the shares they submitted (see P2Pool~\cite{chesterman2018p2pool} for Bitcoin and SmartPool~\cite{luu2017smartpool} for Ethereum).
+	\item {\em Level 1 (Centralized):} The pool operator defines both $m$ and the reward address. Thus, a pool operator has full control over which transactions are included (censorship) and also carries the risk of losing the rewards.
+	\item {\em Level 2 (Censorship Resistant):} The pool operator does not define $m$ but collects the rewards. This is resistant to censorship but still carries the risk of losing the rewards. % This is what we will try achieve.
+	\item {\em Level 3 (Decentralized):} There is no centralized pool operator but rather another decentralized oracle that emulates the pool operator and rewards are automatically given to the participants based on the shares they submitted (see P2Pool~\cite{chesterman2018p2pool} for Bitcoin and SmartPool~\cite{luu2017smartpool} for Ethereum). In P2Pool, this oracle is implemented using another blockchain, while in SmartPool, it is implemented using a smart contract.
 \end{enumerate}
 
 The following table summarizes the concepts.\\~\\
 	\begin{tabular}{|l|l|l|l|}\hline
 	Pool level	& Censorship & Reward theft risk &Example\\\hline
-	L1 (full centralization)	&Yes & Yes  & BTC.com\\
-	L2 (partial centralization)	& No & Yes &ErgoPool (this work)\\
-	L3 (no centralization)	& No & No &SmartPool\cite{luu2017smartpool}, P2Pool~\cite{chesterman2018p2pool}\\\hline
+	L1 (Centralized)	&Yes & Yes  & BTC.com\\
+	L2 (Censorship Resistant)	& No & Yes &ErgoPool (this work)\\
+	L3 (Decentralized)	& No & No &SmartPool\cite{luu2017smartpool}, P2Pool~\cite{chesterman2018p2pool}\\\hline
 	\end{tabular}
 
 ~\\
 
-The primary issue with pools is that they increase the potential of transaction censorship and 51 percent attacks. One way to address this issue is to disallow pools entirely. This is what non-outsourceable puzzles aim to achieve, and Ergo is the first practical implementation of such puzzles~\cite{ergo}. 
+The primary issue with pools is that they increase the potential of transaction censorship and 51 percent attacks. One way to address this issue is to disallow pools entirely. This is what non-outsourceable puzzles aim to achieve, and Ergo is the first practical implementation of such puzzles~\cite{ergo}. Thus, such puzzles are designed to provide the same level of security as an L3 pool.
 
 We, however, note that disallowing pools entirely comes with its own set of problems. For instance, at Ergo launch, the difficulty went up so quickly that miners with single GPUs could not find any blocks in a reasonable time. Since Ergo does not allow pools, such miners had no incentive to continue mining. In fact, this research was motivated from the need to create a mining pool for Ergo. However, we also want our solution to retain the security offered by lack of pools, that is, resistance to censorship and 51\% attacks. 
 
-Our solution is based on the observation that another way to address censorship and 51 percent attacks is to have pools to operate at levels L2 or L3, since these issues are present only at L1. Thus, not only can we have decentralization in mining but also have all the benefits of pools (such as regular income for miners and thereby, stronger network). Our solution is designed for L2 but can also operate at L1. Additionally, it may be possible to extend it to L3 using approaches similar to SmartPool or P2Pool. 
+Our solution is based on the observation that another way to address censorship and 51 percent attacks is to have pools operate at levels L2 or L3, where these issues are not present. Thus, not only can we have decentralization in mining but also have all the benefits of pools (such as regular income for miners and thereby, stronger network). Our solution is designed for L2 but can also be trivially extended to operate at L1. Additionally, it may be possible to extend it to L3 using approaches similar to SmartPool or P2Pool, which we leave as a topic for further research.
 
 \subsection{Non-Outsourceable Puzzles}
 
 We start with overviewing (non-)outsourceability definitions in existing literature expressed in different works, such as
 Non-outsourceable Scratch-Off Puzzles~\cite{miller2015nonoutsourceable}, 2-Phase Proof-of-Work (2P-PoW)~\cite{twophase},
-PieceWork~\cite{daian2017short}, Autolykos~\cite{autolykos}.
+PieceWork~\cite{daian2017short}, Autolykos~\cite{autolykos}. The details of these approaches are described in Sections~\ref{bypasstype1} and~\ref{bypasstype2}. However, at a high level, all these approaches can be broadly classified into two categories. 
 
-
-Non-outsourceability approaches can be broadly divided into two categories. In the first one~\cite{autolykos,daian2017short,twophase}, which we call \textbf{Type 1}, a scheme is considered
+In the first one~\cite{autolykos,daian2017short,twophase}, which we call \textbf{Type 1}, a scheme is considered
 non-outsourceable if it is not possible to iterate over the solution space without knowing some trapdoor information (such as a secret key) corresponding to some public information (such as a public key) contained in the block header, with block rewards locked by that trapdoor information. The reasoning here is that in order to send the reward to a pool's address, each miner must know the secret corresponding to that address. However, a pool does not trust miners and so will not give the secret away to them. 
 
 In the other category
@@ -166,7 +165,7 @@ We further classify Type 2 into {\em weak} if the identity of the miner stealing
 
 At a technical level, both Type 1 and 2 approaches rely on a miner's ability to steal the pool's rewards. The difference lies in the way this occurs. In Type 1 schemes, the miner is able to steal the reward {\em after} the block gets finalized.
 In Type 2, 
-the reward is stolen {\em before} a block is finalized into the blockchain. 
+the reward can only be stolen {\em before} a block is finalized into the blockchain. 
 
 
 We note that all Type 2 schemes have an inherent problem that allows malicious actors to flood the network with a large number of valid but distinct solutions, thereby causing network partitions and instability. This causes the network to converge very slowly or result in several forks. Hence, we don't consider Type 2 schemes to be robust in reaching consensus, thereby making them impractical in the real world. We call this the {\em forking attack}. Strong Type 2 schemes are even more prone to this attack because there is no fear of detection. % (and penalization).
@@ -209,7 +208,7 @@ Bitcoin and Ergo, we can think about following components of the execution conte
 \section{Pooled Mining in Type 1 Puzzles}
 \label{bypasstype1}
 
-In a nutshell, Type 1 puzzles use a combination of two techniques: (1) replacing the core hash function with a digital signature (i.e., using public-key cryptography) and (2) tying the public key to the rewards.
+In a nutshell, Type 1 puzzles use a combination of two approaches: (1) The first approach is to replace the hash function with a digital signature (i.e., use public-key cryptography instead of symmetric key cryptography for obtaining the final solution) and (2) The second approach is to tie the public key to the rewards.
 
 \subsection{Using Public-Key Cryptography}
 
@@ -266,7 +265,7 @@ A box with this script does not require a signature because the above statement 
 This ensures that the box can only be spent if and when Alice mines a block.  
 Alice creates her pool transaction using this box as input and submits her shares and proofs to the pool as before. She need not even use a private channel for this purpose and can broadcast this publicly. This enables the possibility of L3 decentralization level that requires public shares~\cite{chesterman2018p2pool,luu2017smartpool} (see Section~\ref{pool-levels}).
 
-The above variant prevents the broadcast attack because knowing the pool transaction does not help the attacker in any way (since anyone can create that transaction without Alice's help). An attacker might try to spend Alice's collateral in a transaction paying to some address other than the pool address. However, Alice will discard such transactions when creating a candidate block and only include her pool paying transaction that spends the collateral. 
+The above variant prevents the broadcast attack because knowing the pool transaction does not help the attacker in any way (since anyone can create that transaction without Alice's help). An attacker might try to spend Alice's collateral in a transaction paying to some address other than the pool address. However, Alice will discard such transactions when creating a candidate block and only include her pool paying transaction that spends the collateral. In the worst case, if Alice does not check for others spending her collateral, the mined block will still include her own pool-paying transaction double-spending the same collateral, thereby making the entire block invalid. 
 
 \textbf{Full variant:} Observe that the above collateral box is not spendable until Alice actually mines a block. Depending on her hardware and the global hash rate, this may take a very long time, and her funds will be stuck till then. We would like Alice to be able to withdraw her collateral at any time she decides to stop participating in the pool. This can be done as follows. Alice first sets another public key \texttt{bob} that she will use to withdraw the collateral (it is possible to keep \texttt{bob} = \texttt{alice}). The modified script is:
 
@@ -277,9 +276,15 @@ The above variant prevents the broadcast attack because knowing the pool transac
 The first condition, \texttt{minerPubKey == alice}, ensures that when used to fund the pool output, the miner must be Alice as in the enhanced variant. The second condition, \texttt{bob}, ensures that the coins are not stuck till Alice finds a block, because it allows Alice may withdraw the collateral at any time.
 Note that Alice should fund the pool transaction by satisfying only the first condition and never the second condition, otherwise the broadcast attack becomes possible. The second condition is be used only for withdrawing collateral.
 
-Note that the above broadcast attack mitigation strategy requires C3 context level (i.e., access to \texttt{minerPubKey}) and will not work in lower levels. One may envisage a hiding strategy at C2 context level, where the pool transaction is not revealed in a share (only a commitment is revealed). The actual transaction is revealed only if a block is found or when a miner later proves to the pool that the shares were correct. However, this is also insecure. First note that there are two types of broadcast attacks. The first is the ``extract from share'' attack discussed above. The second is the ``extract from orphaned block'' attack, where the transaction is extracted from a mined block that ends up getting orphaned. The hiding strategy mitigates the first attack but not the second. 
+Note that the above broadcast attack mitigation strategy requires C3 context level (i.e., access to \texttt{minerPubKey}) and will not work in lower levels. One may envisage a hiding strategy at C2 context level, where the pool transaction is not revealed in a share (only a commitment is revealed). The actual transaction is revealed only if a block is found or when a miner later proves to the pool that the shares were correct. However, this is also insecure. First note that there are two types of broadcast attacks. The first is the {\em leak-from-share} attack. The second is the {\em leak-from-orphaned-block} attack, where the transaction is extracted from a mined block that ends up getting orphaned. The hiding strategy mitigates the first attack but not the second. 
 
-\textbf{Weak Broadcast security:} We can obtain a weaker form of broadcast security for C2 context level by assuming a trusted pool as follows. A pool-paying transaction is created as before by spending some arbitrary input and paying to the pool address. The miner sends the shares along with the proofs to the pool over a trusted channel, who is trusted not to misuse the transaction.
+\textbf{Weak Broadcast security:} We can obtain a weaker form of broadcast security for C2 context level by assuming a trusted pool as follows. A pool-paying transaction is created as before by spending some arbitrary input and paying to the pool address. The miner sends the shares along with the proofs to the pool over a private channel. The pool is trusted not to misuse the transaction. This addresses the leak-from-share attack. To address the leak-from-orphaned-block attack, the following strategy is used. Assume that the box funding the pool transaction contains a unique identifier of Alice (such as her public key) and a script that enforces any spending transaction to pay the pool. Lets us call this {\em Alice's funding box}. The pool then enforces the following rules internally.
+\begin{enumerate}
+    \item Any transaction it receives from Alice's funding box that was not mined by Alice is considered {\em irregular}.
+    % , and the output of that transaction (paying the pool) as an {\em irregular} output.
+    \item Any irregular transaction using Alice's funding box is not considered for pool reward disbursement and the funds are refunded back to Alice.
+\end{enumerate}
+It is possible for everyone to verify that a given pool transaction is irregular if everyone knows Alice's public key. Thus, a pool cannot deny the existence of an irregular transaction. Refunds can also be made verifiable in many ways, such as by requiring the pool to create another funding box for Alice, which can be publicly verified. We can additionally require that the new funding box be created in a transaction that consumes the irregular transaction's output. 
 
 
 \section{Pooled Mining with Type 2 Puzzles}

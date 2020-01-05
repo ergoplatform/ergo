@@ -12,13 +12,9 @@ import org.ergoplatform.utils._
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoUnsafeProver}
 import org.scalatest.PropSpec
 import scorex.crypto.authds.ADKey
-import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
-import sigmastate.Values.ByteArrayConstant
-import sigmastate._
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
-import sigmastate.Values._
 
 import scala.concurrent.blocking
 import scala.util.Random
@@ -736,6 +732,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val confirmedAfterRollback = getConfirmedBalances
       val totalAfterRollback = getBalancesWithUnconfirmed
 
+      log.info(s"Initial balance: $initialBalance")
       log.info(s"Balance to spend: $balanceToSpend")
       log.info(s"History height: $historyHeight")
       log.info(s"Confirmed balance: $confirmedBeforeRollback")

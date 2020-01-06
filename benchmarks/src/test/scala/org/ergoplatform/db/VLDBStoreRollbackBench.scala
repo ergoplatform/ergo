@@ -2,11 +2,11 @@ package org.ergoplatform.db
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.Utils
-import org.ergoplatform.db.LDBFactory.factory
 import org.ergoplatform.settings.Algos
 import org.iq80.leveldb.Options
 import scorex.testkit.utils.FileUtils
 import scorex.util.Random
+import scorex.db.LDBFactory.factory
 
 object VLDBStoreRollbackBench
   extends App
@@ -16,7 +16,7 @@ object VLDBStoreRollbackBench
   options.createIfMissing(true)
   private val db0 = factory.open(createTempDir, options)
 
-  private val store = new VersionedLDBKVStore(db0, keepVersions = 400)
+  private val store = new OutdatedVersionedStore(db0, keepVersions = 400)
 
   private val numEpochs = 10000
   private val elemsAtStep = 500

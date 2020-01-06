@@ -2,7 +2,6 @@ package org.ergoplatform.sanity
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{BlockTransactions, HeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
@@ -10,7 +9,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.{WrappedDigestState, WrappedUtxoState}
 import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import org.scalacheck.Gen
 import scorex.core.idToBytes
 import scorex.core.network.peer.PeerInfo
@@ -60,7 +59,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val settings = ErgoSettings.read()
     val pool = ErgoMemPool.empty(settings)
     val v = h.openSurfaceIds().last
-    s.store.update(ByteArrayWrapper(idToBytes(v)), Seq(), Seq())
+    s.store.update(idToBytes(v), Seq(), Seq())
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
     val ncProbe = TestProbe("NetworkControllerProbe")

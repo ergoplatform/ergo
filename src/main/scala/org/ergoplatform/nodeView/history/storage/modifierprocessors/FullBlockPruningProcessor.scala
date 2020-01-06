@@ -52,7 +52,7 @@ class FullBlockPruningProcessor(nodeConfig: NodeConfigurationSettings, chainSett
       ErgoHistory.GenesisHeight
     } else {
       // Start from config.blocksToKeep blocks back
-      val h = Math.max(minimalFullBlockHeight, header.height - nodeConfig.blocksToKeep + 1 - headerChainTimeDiff)
+      val h = Math.max(minimalFullBlockHeight, header.height - nodeConfig.blocksToKeep + 1)
       // ... but not later than the beginning of a voting epoch
       if (h > VotingEpochLength) {
         Math.min(h, extensionWithParametersHeight(h))

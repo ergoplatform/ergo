@@ -30,7 +30,7 @@ object WithLSM extends VersionedIODBAVLStorageStatefulCommands with TestHelper {
   override protected val LL = 32
 
   override protected def createStatefulProver: PersistentBatchAVLProver[Digest32, HF] = {
-    createPersistentProverWithLSM(keepVersions)
+    createPersistentProver(keepVersions)
   }
 }
 

@@ -39,7 +39,7 @@ trait TestHelper extends FileHelper {
   def createPersistentProver(storage: STORAGE, prover: PROVER): PERSISTENT_PROVER =
     PersistentBatchAVLProver.create[D, HF](prover, storage, paranoidChecks = true).get
 
-  def createPersistentProverWithLSM(keepVersions: Int = 10): PERSISTENT_PROVER = {
+  def createPersistentProver(keepVersions: Int = 10): PERSISTENT_PROVER = {
     val store = createVersionedStore(keepVersions)
     val storage = createVersionedStorage(store)
     createPersistentProver(storage)

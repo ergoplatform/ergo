@@ -4,8 +4,7 @@ import java.io.File
 
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.ErgoBox.BoxId
-import scorex.db.LDBFactory.factory
-import org.ergoplatform.db.{HybridLDBKVStore}
+import org.ergoplatform.db.HybridLDBKVStore
 import org.ergoplatform.db.VersionedLDBKVStore.VersionId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, EncodedTokenId}
@@ -14,7 +13,6 @@ import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
 import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox, TrackedBoxSerializer}
-import org.iq80.leveldb.Options
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}

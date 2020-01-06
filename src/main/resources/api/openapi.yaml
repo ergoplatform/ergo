@@ -3203,7 +3203,7 @@ paths:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Initialize new wallet with randomly generated seed
+      summary: Mark application-related box as cartainly belonging to the application
       operationId: appMakeCertain
       tags:
         - application
@@ -3215,7 +3215,7 @@ paths:
               $ref: '#/components/schemas/ApplicationIdBoxId'
       responses:
         '200':
-          description: New wallet with randomly generated seed created successfully
+          description: The box marked as certain successfully
           content:
             application/json:
               schema:
@@ -3227,4 +3227,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-#  /application/stopTracking:
+  /application/stopTracking:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Stop application-related box tracking
+      operationId: appMakeCertain
+      tags:
+        - application
+      requestBody:
+        +
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationIdBoxId'
+      responses:
+        '200':
+          description: The box is not tracked anymore
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationIdBoxId'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'

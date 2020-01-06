@@ -1,7 +1,5 @@
 package org.ergoplatform.settings
 
-import io.iohk.iodb.ByteArrayWrapper
-import scorex.core.{VersionTag, versionToBytes}
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.Digest32
@@ -16,10 +14,6 @@ object Algos extends ErgoAlgos with scorex.core.utils.ScorexEncoding {
   override implicit val encoder: scorex.core.utils.ScorexEncoder = scorex.core.utils.ScorexEncoder.default
 
   lazy val emptyMerkleTreeRoot: Digest32 = Algos.hash(LeafData @@ Array[Byte]())
-
-  @inline def versionToBAW(id: VersionTag): ByteArrayWrapper = ByteArrayWrapper(versionToBytes(id))
-
-  @inline def idToBAW(id: ModifierId): ByteArrayWrapper = ByteArrayWrapper(idToBytes(id))
 
   @inline def encode(id: ModifierId): String = encoder.encode(id)
 

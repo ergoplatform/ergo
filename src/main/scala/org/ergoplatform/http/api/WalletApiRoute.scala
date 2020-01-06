@@ -88,14 +88,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     "maxConfirmations".as[Int] ? Int.MaxValue
   )
 
-  private val boxParams: Directive[(Int, Int)] =
-    parameters("minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)
-
-  private val boxPredicate = { (bx: WalletBox, minConfNum: Int, minHeight: Int) =>
-    bx.confirmationsNumOpt.getOrElse(0) >= minConfNum &&
-      bx.trackedBox.inclusionHeightOpt.getOrElse(-1) >= minHeight
-  }
-
   private val p2pkAddress: Directive1[P2PKAddress] = entity(as[Json])
     .flatMap {
       _.hcursor.downField("address").as[String]

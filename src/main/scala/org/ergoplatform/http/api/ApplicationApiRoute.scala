@@ -104,21 +104,19 @@ final case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: Ergo
     }
   }
 
-  //todo: paging
+  //todo: paging?
   def listR: Route = (path("listAll") & get) {
     withWallet(_.readApplications())
   }
 
-  //todo: paging
-  def uncertainR: Route = (path("uncertainBoxes" / IntNumber) & get) { appIdInt =>
+  def uncertainR: Route = (path("uncertainBoxes" / IntNumber) & get & boxParams ) { (appIdInt, minConfNum, minHeight) =>
     val appId = appIdInt.toShort
-    withWallet(_.uncertainBoxes(appId))
+    withWallet(_.uncertainBoxes(appId).map {_.filter(boxPredicate(_, minConfNum, minHeight))})
   }
 
-  //todo: paging
-  def unspentR: Route = (path("unspentBoxes" / IntNumber) & get) { appIdInt =>
+  def unspentR: Route = (path("unspentBoxes" / IntNumber) & get & boxParams) { (appIdInt, minConfNum, minHeight) =>
     val appId = appIdInt.toShort
-    withWallet(_.appBoxes(appId, unspentOnly = true))
+    withWallet(_.appBoxes(appId, unspentOnly = true).map {_.filter(boxPredicate(_, minConfNum, minHeight))})
   }
 
   def makeCertainR: Route = (path("makeCertain") & post & entity(as[ApplicationIdBoxId])) { appIdBoxId =>

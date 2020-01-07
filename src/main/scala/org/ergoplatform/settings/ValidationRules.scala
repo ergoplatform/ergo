@@ -131,7 +131,7 @@ object ValidationRules {
     hdrVotesContradictory -> RuleStatus(s => fatal(s"A header votes should contain no contradictory votes. $s"),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrVotesUnknown -> RuleStatus(s => fatal(s"A header should not contain votes for unknown parameters. $s"),
+    hdrVotesUnknown -> RuleStatus(s => fatal(s"First header of an epoch should not contain a vote for unknown parameter. $s"),
       Seq(classOf[Header]),
       mayBeDisabled = true),
 

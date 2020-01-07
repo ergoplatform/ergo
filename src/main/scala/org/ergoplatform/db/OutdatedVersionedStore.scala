@@ -3,16 +3,18 @@ package org.ergoplatform.db
 import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.settings.{Algos, Constants}
 import org.iq80.leveldb.{DB, ReadOptions}
+import scorex.db.KVStore
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
+//todo: old class, now used in benchmarks only, remove it after 3.2.0!
 /**
   * A LevelDB wrapper providing additional versioning layer along with a convenient db interface.
   */
-final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends KVStore {
+class OutdatedVersionedStore(protected val db: DB, keepVersions: Int) extends KVStore {
 
-  import VersionedLDBKVStore.VersionId
+  import OutdatedVersionedStore.VersionId
 
   val VersionsKey: Array[Byte] = Algos.hash("versions")
 
@@ -131,6 +133,6 @@ final class VersionedLDBKVStore(protected val db: DB, keepVersions: Int) extends
 
 }
 
-object VersionedLDBKVStore {
+object OutdatedVersionedStore {
   type VersionId = Array[Byte]
 }

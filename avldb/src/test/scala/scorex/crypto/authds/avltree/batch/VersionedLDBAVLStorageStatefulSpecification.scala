@@ -7,12 +7,12 @@ import org.scalacheck.{Gen, Prop}
 import org.scalatest.PropSpec
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.authds._
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.Digest32
 import scorex.utils.{Random => RandomBytes}
 
 import scala.util.{Failure, Random, Success, Try}
 
-class VersionedIODBAVLStorageStatefulSpecification extends PropSpec {
+class VersionedLDBAVLStorageStatefulSpecification extends PropSpec {
   val params = Parameters.default
     .withMinSize(10)
     .withMaxSize(50)
@@ -20,10 +20,6 @@ class VersionedIODBAVLStorageStatefulSpecification extends PropSpec {
 
   property("IODBAVLStorage: rollback in stateful environment with LSM") {
     WithLSM.property().check(params)
-  }
-
-  property("IODBAVLStorage: rollback in stateful environment with Quick") {
-    WithQuick.property().check(params)
   }
 }
 
@@ -34,18 +30,7 @@ object WithLSM extends VersionedIODBAVLStorageStatefulCommands with TestHelper {
   override protected val LL = 32
 
   override protected def createStatefulProver: PersistentBatchAVLProver[Digest32, HF] = {
-    createPersistentProverWithLSM(keepVersions)
-  }
-}
-
-object WithQuick extends VersionedIODBAVLStorageStatefulCommands with TestHelper {
-
-  override protected val KL = 32
-  override protected val VL = 8
-  override protected val LL = 32
-
-  override protected def createStatefulProver: PersistentBatchAVLProver[Digest32, HF] = {
-    createPersistentProverWithQuick(keepVersions)
+    createPersistentProver(keepVersions)
   }
 }
 

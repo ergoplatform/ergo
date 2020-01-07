@@ -1,4 +1,4 @@
-\documentclass[runningheads]{llncs}
+*\documentclass[runningheads]{llncs}
 \def\shownotes{1}
 \def\notesinmargins{0}
 
@@ -233,7 +233,7 @@ If we try to create any standard type of pool, we find that anyone having the ab
 
 We now describe a pooling strategy for bypassing any Type 1 scheme, provided that the underlying smart contract language supports context level C3 or higher (see Section~\ref{context}). Hence one way to mitigate our method would be to restrict the smart contract language to level C2 or lower. Our concrete implementation uses Ergo as the underlying platform, which supports C3 context. 
 
-We will follow the {\em pay-per-share} approach, where the reward is distributed among the miners based on the number of shares they submitted since the last payout. Our pool is designed to operate at L2 centralization level, where the pool only collects the rewards but does not select transactions (see Section~\ref{pool-levels}). Hence, it provides resistance against censorship and does not encourage 51\% attacks that are possible at L1. Note that the pool could also operate at L1 by creating miner-specific blocks using pair-wise shared public keys. However, this increases computational load on the pool and overall network usage, thereby reducing efficiency. %Hence we don't envisage a Level 1 pool. 
+We will follow the {\em pay-per-share} approach, where the reward is distributed among the miners based on the number of shares they submitted since the last payout. Our pool is designed to operate at centralization level L2, where the pool only collects the rewards but does not select transactions (see Section~\ref{pool-levels}). Hence, it provides resistance against censorship and does not encourage 51\% attacks that are possible at L1. Note that the pool could also operate at L1 by creating miner-specific blocks using pair-wise shared public keys. However, this increases computational load on the pool and overall network usage, thereby reducing efficiency. %Hence we don't envisage a Level 1 pool. 
 
 \textbf{Basic variant:} We first describe a basic version that is  insecure, and thereby does not work in practice. We then incrementally enhance this version to patch the vulnerability to obtain the full version.
 
@@ -247,7 +247,7 @@ The key observation in our approach is that in a valid share, the reward need no
 %\snote{Maybe make this section less Ergo-specific}
 
 A valid share is a solution to a block with the above structure. A miner can efficiently prove that a share is valid without having to send the entire block to the pool. It can simply send the pool transaction along with the Merkle proof that validates that the transaction~\cite{Hearn:2012:BIP}.
-A pool operator collects such shares (along with the proofs) and any funds thus received when a block is solved are distributed among the miners using the pay-per-share algorithm. 
+A pool operator collects such shares (along with the proofs) and any funds thus received when a block is solved are distributed among the miners using the pay-per-share algorithm. To ensure that miners generate valid blocks, the pool randomly asks miners to provide full blocks corresponding to some of their shares and penalize those who cannot. 
 
 One drawback of this is that each miner must have sufficient collateral to cover the reward amount at any time, even though the reward becomes spendable only after a `cooling-off period' (720 blocks in Ergo). Thus, there is a minimum period during which the collateral is spent but the reward is locked and cannot be used as further collateral. 
 Therefore, for uninterrupted mining, each miner must keep the reserved amount of at least 2 rewards (possibly more depending on the expected time to find a block).
@@ -322,7 +322,7 @@ One solution would be to allow Alice to withdraw the collateral only after some 
 Non-outsourceable puzzles have been proposed as a possible workaround for attacks that arise due to pool formation in PoW blockchains. Such solutions fall into two broad categories: Type 1, where the reward is directly bound to some trapdoor information used for generating the block solution (and thus, that information is needed while spending), and Type 2, where the reward is indirectly bound to the trapdoor information via a certificate. Type 2 schemes can be further classified into weak, where the identity of the miner is revealed, and strong, where the identity remains hidden. 
 
 In this paper we proposed two approaches to bypass non-outsourceability of Type 1 and weak Type 2
-schemes to create mining pools, thereby `breaking' them. Our pools operates at level L2 (partial centralization), where the pool does not  control transactions to be included in blocks but only collects the rewards (see Section~\ref{pool-levels}). Such pools do not pose stability threats that L1 level pools do. Although our pools are most efficient when operating at L2, they can operate at L1 simply by having the pool create miner-specific blocks using their public keys. 
+schemes to create mining pools, thereby `breaking' them. Our pools operates at level L2 (censorship resistance), where the pool does not  control transactions to be included in blocks but only collects the rewards (see Section~\ref{pool-levels}). Such pools do not pose stability threats that L1 level pools do. Although our pools are most efficient when operating at L2, they can operate at L1 simply by having the pool create miner-specific blocks using their public keys. 
 Note that both L1 and L2 carry the risk of funds loss due to operator compromise. A topic of further investigation is to have the pools operate at L3, where there is no risk of losing funds. 
 
 Only strong Type 2 schemes~(where a miner does not provide a block solution in the clear, but rather provides an encrypted solution

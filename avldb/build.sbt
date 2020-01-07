@@ -3,7 +3,7 @@ import sbt.Keys.testFrameworks
 name := "avldb"
 
 libraryDependencies ++= Seq(
-  "javax.xml.bind" % "jaxb-api" % "2.+",
+  "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "org.scorexfoundation" %% "scrypto" % "2.1.4",
   "org.scorexfoundation" %% "iodb" % "0.3.2"
@@ -16,8 +16,7 @@ libraryDependencies ++= Seq(
 )
 
 libraryDependencies ++= Seq(
-  ("org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8").exclude("org.iq80.leveldb", "leveldb"),
-  "org.iq80.leveldb" % "leveldb" % "0.12"
+  "org.ethereum" % "leveldbjni-all"     % "1.18.3"
 )
 
 testOptions in Test := Seq(Tests.Filter(t => !t.matches(".*Benchmark$")))

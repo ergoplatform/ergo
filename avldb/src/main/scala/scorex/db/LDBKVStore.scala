@@ -1,11 +1,11 @@
-package org.ergoplatform.db
+package scorex.db
 
 import org.iq80.leveldb.DB
 
 /**
   * A LevelDB wrapper providing a convenient db interface.
   */
-final class LDBKVStore(protected val db: DB) extends KVStore {
+class LDBKVStore(protected val db: DB) extends KVStore {
 
   def update(toInsert: Seq[(K, V)], toRemove: Seq[K]): Unit = {
     val batch = db.createWriteBatch()

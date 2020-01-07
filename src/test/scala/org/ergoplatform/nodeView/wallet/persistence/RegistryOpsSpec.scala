@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import io.iohk.iodb.{LSMStore, Store}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
@@ -19,7 +18,6 @@ class RegistryOpsSpec
 
   import RegistryOps._
 
-  def createStore: Store = new LSMStore(createTempDir)
 
   property("putBox/getBox/updateBox/removeBox") {
     forAll(trackedBoxGen) { tb =>

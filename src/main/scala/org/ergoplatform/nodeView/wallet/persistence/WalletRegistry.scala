@@ -2,10 +2,10 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
 
+import org.ergoplatform.db.OutdatedVersionedStore.VersionId
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.HybridLDBKVStore
-import org.ergoplatform.db.VersionedLDBKVStore.VersionId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, EncodedTokenId}
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}

@@ -20,7 +20,7 @@ import scala.util.Try
   * This list is stored in separate LevelDB database (undo) and size of list is limited by the keepVersions parameter.
   * If keepVersions == 0, then undo list is not maintained and rollback of the committed transactions is not possible.
   */
-class LDBVersionedStore(protected val dir: File, val keepVersions: Int = 0) extends KVStore {
+class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends KVStore {
   type VersionID = Array[Byte]
 
   type LSN = Long // logical serial number: type used to provide order of records in undo list

@@ -299,47 +299,45 @@ class VersionedIODBAVLStorageSpecification extends PropSpec
 
 
   /**
-    * All checks are being made with both underlying storage implementations
-    * 1 LSMStore
-    * 2 QuickStore
+    * All checks are being made with both underlying LevelDB versioned storage implementation
     */
 
-  property("Persistence AVL batch prover (LSMStore backed) - parallel read-write") {
-    val prover = createPersistentProverWithLSM()
+  property("Persistence AVL batch prover - parallel read-write") {
+    val prover = createPersistentProver()
     parallelReadTest(prover)
   }
 
 
-  property("Persistence AVL batch prover (LSMStore backed) - blockchain workflow") {
-    val prover = createPersistentProverWithLSM()
+  property("Persistence AVL batch prover - blockchain workflow") {
+    val prover = createPersistentProver()
     blockchainWorkflowTest(prover)
   }
 
-  property("Persistence AVL batch prover (LSMStore backed) - rollback") {
-    val prover = createPersistentProverWithLSM()
+  property("Persistence AVL batch prover - rollback") {
+    val prover = createPersistentProver()
     rollbackTest(prover)
   }
 
 
-  property("Persistence AVL batch prover (LSMStore backed) - basic test") {
+  property("Persistence AVL batch prover - basic test") {
     val store = createVersionedStore()
     val storage = createVersionedStorage(store)
     val prover = createPersistentProver(storage)
     basicTest(prover, storage)
   }
 
-  property("Persistence AVL batch prover (LSMStore backed) - rollback version") {
+  property("Persistence AVL batch prover - rollback version") {
     val store = createVersionedStore(1000)
     val storage = createVersionedStorage(store)
     val prover = createPersistentProver(storage)
     rollbackVersionsTest(prover, storage)
   }
 
-  property("Persistence AVL batch prover (LSM backed) - remove single random element from a large set") {
+  property("Persistence AVL batch prover - remove single random element from a large set") {
     removeFromLargerSetSingleRandomElementTest(createVersionedStore _)
   }
 
-  property("Persistence AVL batch prover (LSM backed) - save additional info") {
+  property("Persistence AVL batch prover - save additional info") {
     testAddInfoSaving(createVersionedStore _)
   }
 

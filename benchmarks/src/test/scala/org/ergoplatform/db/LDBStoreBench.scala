@@ -27,7 +27,7 @@ object LDBStoreBench
   private val db0 = factory.open(createTempDir, options)
   private val db1 = factory.open(createTempDir, options)
 
-  private def storeVLDB() = new VersionedLDBKVStore(db0, keepVersions = 400)
+  private def storeVLDB() = new OutdatedVersionedStore(db0, keepVersions = 400)
   private def storeLDB() = new LDBKVStore(db1)
   private def storeIODB() = new LSMStore(createTempDir)
   private def storeLVDB() = new LDBVersionedStore(createTempDir, keepVersions = 400)

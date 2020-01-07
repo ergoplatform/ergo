@@ -2,7 +2,7 @@ package org.ergoplatform.db
 
 import org.scalatest.{Matchers, PropSpec}
 
-class VersionedLDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
+class VersionedStoreSpec extends PropSpec with Matchers with DBSpec {
 
   private val (keyA, valA) = (byteString("A"), byteString("1"))
   private val (keyB, valB) = (byteString("B"), byteString("2"))

@@ -2,7 +2,7 @@
 
 # Initialize all the option variables.
 # This ensures we are not contaminated by variables from the environment.
-APP_DIR=~/Ergo
+APP_DIR=~/ergo
 NODE_NAME=${USER}-$(hostname)
 API_KEY=
 DEBIAN_INSTALLATION_RECOMMENDATIONS=
@@ -47,7 +47,7 @@ while :; do
             fi
             ;;
         --app-dir=?*)
-            NODE_NAME=${1#*=} # Delete everything up to "=" and assign the remainder.
+            APP_DIR=${1#*=} # Delete everything up to "=" and assign the remainder.
             ;;
         --app-dir=)         # Handle the case of an empty --app-dir=
             echo 'ERROR: "--app-dir" requires a non-empty option argument.'
@@ -107,6 +107,11 @@ while :; do
 done
 
 # Check required options
+if [ "$(echo "${APP_DIR}" | cut -c1-1)" != "/" ]; then
+  echo 'ERROR: "--app-dir" requires absolute pathes only (path must start with "/"),' "${APP_DIR} given."
+  exit 1
+fi
+
 if [ -z "${API_KEY}" ]; then
   echo 'ERROR: "--api-key" is required and requires a non-empty option argument.'
   exit 1
@@ -146,7 +151,7 @@ if [ "${TOR}" != "no" ]; then
 fi
 
 if [ -n "${DEBIAN_INSTALLATION_RECOMMENDATIONS}" ]; then
-  echo "To run Ergo node as you desired, you first need to install required software. For Ubuntu, run:${DEBIAN_INSTALLATION_RECOMMENDATIONS}"
+  echo "To run Ergo node as you desired, you first need to install required software. For Debian (or Ubuntu), run:${DEBIAN_INSTALLATION_RECOMMENDATIONS}"
   echo "After software installed, just run this script again with same parameters"
   exit 1
 fi

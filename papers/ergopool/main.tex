@@ -1,4 +1,4 @@
-*\documentclass[runningheads]{llncs}
+\documentclass[runningheads]{llncs}
 \def\shownotes{1}
 \def\notesinmargins{0}
 
@@ -106,7 +106,7 @@ The rest of the paper is organized as follows. Section~\ref{background} contains
 \label{background}
 \subsection{Proofs of Work} 
 
-We first describe the vanilla proof-of-work mechanism used in Bitcoin. A miner collects a number of unconfirmed transactions and builds a Merkle tree on top of them.
+We first describe the vanilla PoW mechanism used in Bitcoin. A miner collects a number of unconfirmed transactions and builds a Merkle tree on top of them.
 % All nodes of this tree except the leaves are 32 byte hashes computed from its children.
 The digest of this tree, denoted $t$ here, is stored in a section of the block called the {\em block header}, which also includes the hash of the previous block's header $h$ and a random string $n$ called the nonce. We use the term $m$ to denote the puzzle made of the concatenation of the Merkle tree digest and the hash of the previous block. That is, $m = t\|h$ and
 then the header is of the form $m\|n$.
@@ -155,11 +155,11 @@ We start with overviewing (non-)outsourceability definitions in existing literat
 Non-outsourceable Scratch-Off Puzzles~\cite{miller2015nonoutsourceable}, 2-Phase Proof-of-Work (2P-PoW)~\cite{twophase},
 PieceWork~\cite{daian2017short}, Autolykos~\cite{autolykos}. The details of these approaches are described in Sections~\ref{bypasstype1} and~\ref{bypasstype2}. However, at a high level, all these approaches can be broadly classified into two categories. 
 
-In the first one~\cite{autolykos,daian2017short,twophase}, which we call \textbf{Type 1}, a scheme is considered
+In the first one~\cite{autolykos,daian2017short,twophase}, which we call \textbf{Type 1}, a PoW scheme is considered
 non-outsourceable if it is not possible to iterate over the solution space without knowing some trapdoor information (such as a secret key) corresponding to some public information (such as a public key) contained in the block header, with block rewards locked by that trapdoor information. The reasoning here is that in order to send the reward to a pool's address, each miner must know the secret corresponding to that address. However, a pool does not trust miners and so will not give the secret away to them. 
 
 In the other category
-~\cite{miller2015nonoutsourceable}, called \textbf{Type 2}, a Proof-of-Work scheme is considered non-outsourceable if for any solved block, a miner can generate another block efficiently with non-negligible probability. The motivation behind this definition is that a miner can get paid for shares
+~\cite{miller2015nonoutsourceable}, called \textbf{Type 2}, a PoW scheme is considered non-outsourceable if for any solved block, a miner can generate another block efficiently with non-negligible probability. The motivation behind this definition is that a miner can get paid for shares
 by trying to generate a block that pays the reward to the pool. In case of successful block generation, however, the miner could generate and broadcast another block that sends the reward to the miner instead of the pool. 
 We further classify Type 2 into {\em weak} if the identity of the miner stealing the rewards can be ascertained and {\em strong} if the identity remains secret.
 
@@ -187,13 +187,13 @@ some minimal smart contract capability. The following table summarizes this.
 To give understanding of how a smart contract can bypass non-outsourceability, we first explain what kind of data the contract 
 can access.
 
-In Proof-of-Work currencies a block is split usually into sections, with a compact section called {\em header} which is
-enough to verify Proof-of-Work puzzle solution and also to check integrity of other sections (such as block transactions).
+In PoW currencies, a block contains a compact section called the {\em header}, which is
+enough to verify the PoW solution and check integrity of other sections (such as block transactions).
 
-Execution context is what available to a contract during execution. Considering UTXO-based cryptocurrencies, such as
+Execution context is what is available to a contract during execution. Considering UTXO-based cryptocurrencies, such as
 Bitcoin and Ergo, we can think about following components of the execution context. At the bare minimum, the first level, the smart contract 
  should have access to the contents of the UTXO it is locking (i.e., its monetary value and any other data stored in it). At the second level, the smart contract may additionally have access to the spending transaction, that is, all its inputs and outputs. At the third level, the smart contract may have access to block header data in addition to the data at the second level. For example, in Ergo, the last ten block headers and also some parts of the next block header 
- (which are known in advance before the next block is mined) are also available in the execution context. Finally, at the fourth level, the execution context may contain the entire block with all sibling transactions transactions. Note that since the execution context must fit into random-access memory of commodity hardware, accessing the full blockchain is not a realistic scenario. The following
+ (which are known in advance before the next block is mined) are also available in the execution context. Finally, at the fourth level, the execution context may contain the entire block with all sibling transactions. Note that since the execution context must fit into random-access memory of commodity hardware, accessing the full blockchain is not a realistic scenario. The following
  table summarizes possible execution context components.
 
 ~\\
@@ -223,8 +223,8 @@ One real-world implementation of this concept is \powname \cite{autolykos}, the 
 
 The second technique in making a Type 1 pool-resistant scheme is to tie the rewards to the public key $p$ contained in the block solution. That is, the platform enforces that any mining rewards are protected by the statement {\em prove knowledge of secret key corresponding to the public key $p$ (from the block solution)}
 
-We consider Ergo as an example here. Rather than enforcing this logic within the protocol, Ergo uses smart contracts to enforce it. In particular, this rule is enforced in a so called \textbf{Emission box}\footnote{A box is just fancy for a UTXO in Ergo. We will use these two terms interchangeably.}, a UTXO which contains all the ergs (Ergo's primary token) that will ever be emitted in rewards. The box is protected by a script that enforces certain conditions on how the rewards must be collected. In particular, it requires that a reward transaction has exactly two outputs, such that the first is another emission box containing the remaining ergs and the second is a box with the miners reward protected with the following script: {\em prove knowledge of the discrete logarithm (to some fixed base $g$) of group element $p$ AND height is greater than or equal to the box-creation height plus 720}.
-This is possible because Ergo's (Level C3) context includes the block solution.  
+We consider Ergo as an example here. Rather than enforcing this logic within the protocol, Ergo uses smart contracts to enforce it. In particular, this rule is enforced in a so called \textbf{Emission box}\footnote{A box is just a fancy name for a UTXO. We will use these two terms interchangeably.}, a UTXO which contains all the ergs (Ergo's primary token) that will ever be emitted in rewards. The box is protected by a script that enforces certain conditions on how the rewards must be collected. In particular, it requires that a reward transaction has exactly two outputs, such that the first is another emission box containing the remaining ergs and the second is a box with the miners reward protected with the following script: {\em prove knowledge of the discrete logarithm (to some fixed base $g$) of group element $p$ AND height is greater than or equal to the box-creation height plus 720}.
+This is possible because Ergo's (level C3) context includes the block solution.  
 
 The above approach ensures that the private key used for finding the block solution is also needed for spending the rewards. Consequently, anyone who finds a block also has the ability to spend those rewards. 
 If we try to create any standard type of pool, we find that anyone having the ability to find a solution also has the ability to spend (i.e., steal) the reward. In fact, any standard pool must share the same private key among all participants, thereby making it impossible to determine the actual spender. This restriction also applies to decentralized schemes such as P2Pool and SmartPool because they both require that rewards be sent to addresses not under the miner's control.
@@ -233,7 +233,7 @@ If we try to create any standard type of pool, we find that anyone having the ab
 
 We now describe a pooling strategy for bypassing any Type 1 scheme, provided that the underlying smart contract language supports context level C3 or higher (see Section~\ref{context}). Hence one way to mitigate our method would be to restrict the smart contract language to level C2 or lower. Our concrete implementation uses Ergo as the underlying platform, which supports C3 context. 
 
-We will follow the {\em pay-per-share} approach, where the reward is distributed among the miners based on the number of shares they submitted since the last payout. Our pool is designed to operate at centralization level L2, where the pool only collects the rewards but does not select transactions (see Section~\ref{pool-levels}). Hence, it provides resistance against censorship and does not encourage 51\% attacks that are possible at L1. Note that the pool could also operate at L1 by creating miner-specific blocks using pair-wise shared public keys. However, this increases computational load on the pool and overall network usage, thereby reducing efficiency. %Hence we don't envisage a Level 1 pool. 
+We will follow the {\em pay-per-share} approach, where the reward is distributed among the miners based on the number of shares they submitted since the last payout. Our pool is designed to operate at centralization level L2, where the pool only collects the rewards but does not select transactions (see Section~\ref{pool-levels}). Hence, it provides resistance against censorship and does not encourage 51\% attacks that are possible at L1. Note that the pool could also operate at L1 by creating miner-specific blocks using pair-wise shared public keys. However, this increases computational load on the pool and overall network usage, thereby reducing efficiency. %Hence we don't envisage a level C1 pool for Ergo. 
 
 \textbf{Basic variant:} We first describe a basic version that is  insecure, and thereby does not work in practice. We then incrementally enhance this version to patch the vulnerability to obtain the full version.
 

@@ -18,7 +18,7 @@ class VersionedLDBAVLStorageStatefulSpecification extends PropSpec {
     .withMaxSize(50)
     .withMinSuccessfulTests(15)
 
-  property("LDBAVLStorage: rollback in stateful environment with LSM") {
+  property("LDBAVLStorage: rollback in stateful environment") {
     WithLDB.property().check(params)
   }
 }

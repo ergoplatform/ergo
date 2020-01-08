@@ -77,7 +77,7 @@ object LDBStoreBench
   }
 
 
-  performance of "LDBStore vs LSMStore" in {
+  performance of "LDBStore" in {
     performance of "LDBStore write" in {
       using(txsGen) config(config: _*) in (bts => benchWriteLDB(bts))
     }

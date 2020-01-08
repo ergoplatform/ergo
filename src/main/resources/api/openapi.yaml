@@ -3232,11 +3232,10 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Stop application-related box tracking
-      operationId: appMakeCertain
+      operationId: appStopTracking
       tags:
         - application
       requestBody:
-        +
         required: true
         content:
           application/json:

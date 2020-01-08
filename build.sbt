@@ -13,6 +13,7 @@ lazy val commonSettings = Seq(
   // without the tag version resolves to [branch name]-[git commit hash]-SNAPSHOT
   // don't set the version manually
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
+    "Bintray" at "https://jcenter.bintray.com/", //for org.ethereum % leveldbjni-all 
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
     "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
     "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"),
@@ -22,7 +23,7 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "4ca3e400-SNAPSHOT"
-val sigmaStateVersion = "3.1.1-RC1"
+val sigmaStateVersion = "3.1.1"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -35,8 +36,7 @@ libraryDependencies ++= Seq(
 
   "org.scorexfoundation" %% "iodb" % "0.3.2",
 
-  ("org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8").exclude("org.iq80.leveldb", "leveldb"),
-  "org.iq80.leveldb" % "leveldb" % "0.12",
+  "org.ethereum" % "leveldbjni-all" % "1.18.3",
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
   "org.typelevel" %% "cats-free" % "1.6.0",
@@ -116,7 +116,7 @@ assemblyJarName in assembly := s"ergo-${version.value}.jar"
 
 assemblyMergeStrategy in assembly := {
   case "logback.xml" => MergeStrategy.first
-  case x if x.endsWith("/module-info.class") => MergeStrategy.discard
+  case x if x.endsWith("module-info.class") => MergeStrategy.discard
   case "reference.conf" => CustomMergeStrategy.concatReversed
   case PathList("org", "iq80", "leveldb", xs @ _*) => MergeStrategy.first
   case PathList("javax", "activation", xs @ _*) => MergeStrategy.last
@@ -282,7 +282,7 @@ version in ThisBuild := {
         git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
       }
     } else {
-      git.gitCurrentBranch.value + "-" + git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
+      git.gitCurrentBranch.value + "-" + git.gitHeadCommit.value.getOrElse("").take(8) + "-SNAPSHOT"
     }
   }
 }

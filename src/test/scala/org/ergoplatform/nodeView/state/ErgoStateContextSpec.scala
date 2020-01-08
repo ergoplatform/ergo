@@ -29,13 +29,20 @@ class ErgoStateContextSpec extends HistoryTestHelpers {
     val wrongVotes3 = Array(StorageFeeFactorIncrease, MaxBlockCostIncrease, MaxBlockSizeDecrease)
     emptyStateContext.appendFullBlock(fbWithVotes(wrongVotes3), votingSettings) shouldBe 'failure
 
-    //a vote proposed on non-existing parameter
+    //a vote proposed on non-existing parameter - breaks rule #215
+    //voting epoch length is 1024 blocks long
     val wrongVotes4 = Array((-50).toByte, NoParameter, MaxBlockSizeDecrease)
-    emptyStateContext.appendFullBlock(fbWithVotes(wrongVotes4, 2), votingSettings) shouldBe 'failure
+    emptyStateContext.appendFullBlock(fbWithVotes(wrongVotes4, 1024), votingSettings) shouldBe 'failure
 
     //correct votes
     val correctVotes = Array(StorageFeeFactorIncrease, MaxBlockSizeDecrease, NoParameter)
     emptyStateContext.appendFullBlock(fbWithVotes(correctVotes), votingSettings) shouldBe 'success
+
+
+    //a vote for non-existing parameter in the middle of epoch - does not break rule #215
+    //voting epoch length is 1024 blocks long
+    val correctVotes2 = Array((-50).toByte, NoParameter, MaxBlockSizeDecrease)
+    emptyStateContext.appendFullBlock(fbWithVotes(correctVotes2, 2), votingSettings) shouldBe 'success
 
   }
 

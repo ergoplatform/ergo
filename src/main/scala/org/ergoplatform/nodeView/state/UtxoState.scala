@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import cats.Traverse
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore, Store}
+import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -20,6 +20,7 @@ import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
+import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 
@@ -33,7 +34,7 @@ import scala.util.{Failure, Success, Try}
   */
 class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32, HF],
                 override val version: VersionTag,
-                override val store: Store,
+                override val store: LDBVersionedStore,
                 override val constants: StateConstants)
   extends ErgoState[UtxoState]
     with TransactionValidation[ErgoTransaction]
@@ -56,9 +57,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
     log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
-    store.get(Algos.versionToBAW(version)) match {
+    store.get(scorex.core.versionToBytes(version)) match {
       case Some(hash) =>
-        val rootHash: ADDigest = ADDigest @@ hash.data
+        val rootHash: ADDigest = ADDigest @@ hash
         val rollbackResult = p.rollback(rootHash).map { _ =>
           new UtxoState(p, version, store, constants)
         }
@@ -114,7 +115,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             val proofHash = ADProofs.proofDigest(proofBytes)
             if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
-            if (!store.get(Algos.idToBAW(fb.id)).exists(w => java.util.Arrays.equals(w.data, fb.header.stateRoot))) {
+            if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
               throw new Error("Storage kept roothash is not equal to the declared one")
             } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
               throw new Error("Calculated proofHash is not equal to the declared one")
@@ -151,7 +152,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   @SuppressWarnings(Array("OptionGet"))
   override def rollbackVersions: Iterable[VersionTag] = persistentProver.synchronized {
     persistentProver.storage.rollbackVersions.map { v =>
-      bytesToVersion(store.get(ByteArrayWrapper(Algos.hash(v))).get.data)
+      bytesToVersion(store.get(Algos.hash(v)).get)
     }
   }
 }
@@ -176,13 +177,13 @@ object UtxoState {
   }
 
   def create(dir: File, constants: StateConstants): UtxoState = {
-    val store = new LSMStore(dir, keepVersions = constants.keepVersions)
-    val version = store.get(ByteArrayWrapper(bestVersionKey)).map(w => bytesToVersion(w.data))
+    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
       val bp = new BatchAVLProver[Digest32, HF](keyLength = 32, valueLengthOpt = None)
       val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-      val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
+      val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
       PersistentBatchAVLProver.create(bp, storage).get
     }
     new UtxoState(persistentProver, version, store, constants)
@@ -198,13 +199,13 @@ object UtxoState {
       p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess)
     }
 
-    val store = new LSMStore(dir, keepVersions = constants.keepVersions)
+    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
 
     implicit val votingSettings: VotingSettings = constants.votingSettings
 
     val defaultStateContext = ErgoStateContext.empty(constants)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-    val storage: VersionedIODBAVLStorage[Digest32] = new VersionedIODBAVLStorage(store, np)(Algos.hash)
+    val storage: VersionedLDBAVLStorage[Digest32] = new VersionedLDBAVLStorage(store, np)(Algos.hash)
     val persistentProver = PersistentBatchAVLProver.create(
       p,
       storage,

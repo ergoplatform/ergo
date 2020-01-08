@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
 
-import org.ergoplatform.db.OutdatedVersionedStore.VersionId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.WalletTransaction
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA.RegistryOp
@@ -147,7 +146,7 @@ final class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends
 
 object WalletRegistry {
 
-  val PreGenesisStateVersion: VersionId = idToBytes(PreGenesisHeader.id)
+  val PreGenesisStateVersion: Array[Byte] = idToBytes(PreGenesisHeader.id)
 
   def readOrCreate(settings: ErgoSettings): WalletRegistry = {
     val dir = new File(s"${settings.directory}/wallet/registry")

@@ -12,7 +12,6 @@ import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
 import scorex.util.idToBytes
 import scorex.db.LDBFactory.factory
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 
 import scala.util.Random
@@ -27,9 +26,7 @@ object LDBStoreBench
   private val db0 = factory.open(createTempDir, options)
   private val db1 = factory.open(createTempDir, options)
 
-  private def storeVLDB() = new OutdatedVersionedStore(db0, keepVersions = 400)
   private def storeLDB() = new LDBKVStore(db1)
-  private def storeIODB() = new LSMStore(createTempDir)
   private def storeLVDB() = new LDBVersionedStore(createTempDir, keepVersions = 400)
 
   private val modsNumGen = Gen.enumeration("modifiers number")(1000)
@@ -66,32 +63,6 @@ object LDBStoreBench
     bts.foreach { bt => db.get(idToBytes(bt.headerId)) }
   }
 
-  private def benchWriteVLDB(bts: Seq[BlockTransactions]): Unit = {
-    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
-    val db = storeVLDB()
-    db.insert(toInsert)(randomVersion)
-  }
-
-  private def benchWriteReadVLDB(bts: Seq[BlockTransactions]): Unit = {
-    val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
-    val db = storeVLDB()
-    db.insert(toInsert)(randomVersion)
-    bts.foreach { bt => db.get(idToBytes(bt.headerId)) }
-  }
-
-  private def benchWriteIODB(bts: Seq[BlockTransactions]): Unit = {
-    val toInsert = bts.map(bt => ByteArrayWrapper(idToBytes(bt.headerId)) -> ByteArrayWrapper(bt.bytes))
-    val db = storeIODB()
-    db.update(ByteArrayWrapper(randomVersion), List.empty, toInsert)
-  }
-
-  private def benchWriteReadIODB(bts: Seq[BlockTransactions]): Unit = {
-    val toInsert = bts.map(bt => ByteArrayWrapper(idToBytes(bt.headerId)) -> ByteArrayWrapper(bt.bytes))
-    val db = storeIODB()
-    db.update(ByteArrayWrapper(randomVersion), List.empty, toInsert)
-    bts.foreach { bt => db.get(ByteArrayWrapper(idToBytes(bt.headerId))) }
-  }
-
   private def benchWriteLVDB(bts: Seq[BlockTransactions]): Unit = {
     val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     val db = storeLVDB()
@@ -112,21 +83,6 @@ object LDBStoreBench
     }
     performance of "LDBStore read" in {
       using(txsWithDbGen) config(config: _*) in { case (bts, db) => benchReadLDB(bts, db) }
-    }
-
-    performance of "VLDBStore write" in {
-      using(txsGen) config(config: _*) in (bts => benchWriteVLDB(bts))
-    }
-    performance of "VLDBStore write/read" in {
-      using(txsGen) config(config: _*) in (bts => benchWriteReadVLDB(bts))
-    }
-
-    performance of "IODBStore write" in {
-      using(txsGen) config(config: _*) in (bts => benchWriteIODB(bts))
-    }
-
-    performance of "IODBStore write/read" in {
-      using(txsGen) config(config: _*) in (bts => benchWriteReadIODB(bts))
     }
 
     performance of "LVDBStore write" in {

@@ -1,7 +1,6 @@
 package org.ergoplatform.modifiers.mempool
 
 import io.circe.syntax._
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext, VotingData}
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
@@ -14,6 +13,7 @@ import org.scalacheck.Gen
 import scalan.util.BenchmarkUtil
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArrayConstant, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol.ProveDlog

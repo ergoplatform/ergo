@@ -1,10 +1,8 @@
 package org.ergoplatform.nodeView.history
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.util.ModifierId
@@ -58,8 +56,6 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     history.append(section).get
     history.applicableTry(section) shouldBe 'failure
   }
-
-  private def randomKey: ByteArrayWrapper = ByteArrayWrapper(Algos.hash(scorex.utils.Random.randomBytes(32)))
 
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)

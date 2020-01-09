@@ -3,6 +3,7 @@ package org.ergoplatform.db
 import akka.util.ByteString
 import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
 import org.scalatest.{Matchers, PropSpec}
+import scorex.db.LDBVersionedStore
 
 /**
   * LSMStore and VersionedLDBKVStore ops equality checks
@@ -31,7 +32,7 @@ class LegacyDbEqualitySpec extends PropSpec with DBSpec with Matchers {
     def toBaw: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = xs.map(x => ByteArrayWrapper(x._1) -> ByteArrayWrapper(x._2))
   }
 
-  private def withDbs(body: (VersionedLDBKVStore, LSMStore) => Unit): Unit =
+  private def withDbs(body: (LDBVersionedStore, LSMStore) => Unit): Unit =
     withVersionedStore(100) {
       body(_, new LSMStore(createTempDir))
     }
@@ -41,11 +42,12 @@ class LegacyDbEqualitySpec extends PropSpec with DBSpec with Matchers {
       val toInsert0 = Seq(keyA -> valA, keyB -> valB)
       val toInsert1 = Seq(keyA -> valC)
 
-      ldb.insert(toInsert0)(v1)
+      ldb.insert(v1, toInsert0)
       iodb.update(v1.toBaw, Seq.empty, toInsert0.toBaw)
 
       val ldbContents = ldb.get(toInsert0.map(_._1))
         .collect { case (k, Some(v)) => k -> v }
+        .toSeq
         .toBs
       val iodbContents = iodb.get(toInsert0.toBaw.map(_._1))
         .collect { case (k, Some(v)) => k -> v }
@@ -53,7 +55,7 @@ class LegacyDbEqualitySpec extends PropSpec with DBSpec with Matchers {
 
       iodbContents should contain theSameElementsAs ldbContents
 
-      ldb.insert(toInsert1)(v2)
+      ldb.insert(v2, toInsert1)
       iodb.update(v2.toBaw, Seq.empty, toInsert1.toBaw)
 
       val ldbUpdatedValue = ldb.get(keyA)
@@ -70,13 +72,14 @@ class LegacyDbEqualitySpec extends PropSpec with DBSpec with Matchers {
       val toInsert2 = Seq(keyC -> valC, keyE -> valE)
 
       Seq(v1 -> toInsert0, v2 -> toInsert1, v3 -> toInsert2).foreach { case (v, toInsert) =>
-        ldb.insert(toInsert)(v)
+        ldb.insert(v, toInsert)
         iodb.update(v.toBaw, Seq.empty, toInsert.toBaw)
       }
 
       val finalState = toInsert0.tail ++ toInsert1 ++ toInsert2
       val ldbContents = ldb.get(finalState.map(_._1))
         .collect { case (k, Some(v)) => k -> v }
+        .toSeq
         .toBs
       val iodbContents = iodb.get(finalState.toBaw.map(_._1))
         .collect { case (k, Some(v)) => k -> v }
@@ -84,11 +87,12 @@ class LegacyDbEqualitySpec extends PropSpec with DBSpec with Matchers {
 
       iodbContents should contain theSameElementsAs ldbContents
 
-      ldb.rollbackTo(v1)
+      ldb.rollback(v1)
       iodb.rollback(v1.toBaw)
 
       val ldbContentsRolledBack = ldb.get(toInsert0.map(_._1))
         .collect { case (k, Some(v)) => k -> v }
+        .toSeq
         .toBs
       val iodbContentsRolledBack = iodb.get(toInsert0.toBaw.map(_._1))
         .collect { case (k, Some(v)) => k -> v }

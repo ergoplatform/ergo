@@ -1754,6 +1754,8 @@ paths:
   /peers/connect:
     post:
       summary: Add address to peers list
+      security:
+        - ApiKeyAuth: [api_key]
       operationId: connectToPeer
       tags:
       - peers

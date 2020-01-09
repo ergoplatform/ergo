@@ -1,17 +1,12 @@
 package scorex.crypto.authds.avltree.batch.helpers
 
-import io.iohk.iodb.{LSMStore, QuickStore, Store}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.util.encode.Base58
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.db.LDBVersionedStore
 
 trait TestHelper extends FileHelper {
-
-  val enableQuickStore: Boolean = System.getProperty("java.specification.version").startsWith("8")
-
-  def quickTest[R](block: => R): Option[R] = if(enableQuickStore) Some(block)
-  else None
 
   type HF = Blake2b256.type
   type D = Digest32
@@ -20,7 +15,7 @@ trait TestHelper extends FileHelper {
   type PROVER = BatchAVLProver[D, HF]
   type VERIFIER = BatchAVLVerifier[D, HF]
   type PERSISTENT_PROVER = PersistentBatchAVLProver[D, HF]
-  type STORAGE = VersionedIODBAVLStorage[D]
+  type STORAGE = VersionedLDBAVLStorage[D]
 
   protected val KL: Int
   protected val VL: Int
@@ -28,19 +23,13 @@ trait TestHelper extends FileHelper {
 
   implicit val hf: HF = Blake2b256
 
-  case class Data(p: PERSISTENT_PROVER, s: STORAGE)
-
-  def createLSMStore(keepVersions: Int = 0): Store = {
+  def createVersionedStore(keepVersions: Int = 10): LDBVersionedStore = {
     val dir = getRandomTempDir
-    new LSMStore(dir, keepVersions = keepVersions)
+    new LDBVersionedStore(dir, keepVersions = keepVersions)
   }
 
-  def createQuickStore(keepVersions: Int = 0): Store = {
-    val dir = getRandomTempDir
-    new QuickStore(dir, keepVersions = keepVersions)
-  }
-
-  def createVersionedStorage(store: Store): STORAGE = new VersionedIODBAVLStorage(store, NodeParameters(KL, Some(VL), LL))
+  def createVersionedStorage(store: LDBVersionedStore): STORAGE =
+    new VersionedLDBAVLStorage(store, NodeParameters(KL, Some(VL), LL))
 
   def createPersistentProver(storage: STORAGE): PERSISTENT_PROVER = {
     val prover = new BatchAVLProver[D, HF](KL, Some(VL))
@@ -50,20 +39,13 @@ trait TestHelper extends FileHelper {
   def createPersistentProver(storage: STORAGE, prover: PROVER): PERSISTENT_PROVER =
     PersistentBatchAVLProver.create[D, HF](prover, storage, paranoidChecks = true).get
 
-  def createPersistentProverWithLSM(keepVersions: Int = 0): PERSISTENT_PROVER = {
-    val store = createLSMStore(keepVersions)
-    val storage = createVersionedStorage(store)
-    createPersistentProver(storage)
-  }
-
-  def createPersistentProverWithQuick(keepVersions: Int = 0): PERSISTENT_PROVER = {
-    val store = createQuickStore(keepVersions)
+  def createPersistentProver(keepVersions: Int = 10): PERSISTENT_PROVER = {
+    val store = createVersionedStore(keepVersions)
     val storage = createVersionedStorage(store)
     createPersistentProver(storage)
   }
 
   def createVerifier(digest: AD, proof: P): VERIFIER = new BatchAVLVerifier[D, HF](digest, proof, KL, Some(VL))
-
 
   implicit class DigestToBase58String(d: ADDigest) {
 

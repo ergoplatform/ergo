@@ -162,7 +162,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     new UtxoState(persistentProver, version, store, constants) {
       override def boxById(id: ADKey): Option[ErgoBox] = {
         super.boxById(id).orElse(ErgoState.boxChanges(txns)._2.find(box => ByteArray.compare(box.id, id) == 0))
-    }
+      }
     }
   }
 }

@@ -39,16 +39,16 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
   }
 
   def put(tx: ErgoTransaction): OrderedTxPool = {
-    val (txs, ws, outs) = if (orderedTransactions.size >= mempoolCapacity) {
-      val txnToThrow = orderedTransactions.head._2
-      val keyToThrow = orderedTransactions.firstKey
-      log.debug(s"Memory pool overflow - throwing out transaction with id = ${keyToThrow.id}")
-      (orderedTransactions - keyToThrow, transactionsRegistry - keyToThrow.id, outputs -- txnToThrow.outputs.map(_.id))
-    } else {
-      (orderedTransactions, transactionsRegistry, outputs)
-    }
     val wtx = weighted(tx)
-    OrderedTxPool(txs.updated(wtx, tx), ws.updated(wtx.id, wtx), invalidated, outs ++ tx.outputs.map(_.id -> wtx)).updateFamily(tx, wtx.weight)
+    val newPool = OrderedTxPool(orderedTransactions.updated(wtx, tx),
+      transactionsRegistry.updated(wtx.id, wtx), invalidated,
+      outputs ++ tx.outputs.map(_.id -> wtx)).updateFamily(tx, wtx.weight)
+    if (newPool.orderedTransactions.size > mempoolCapacity) {
+      val victim = newPool.orderedTransactions.head._2
+      newPool.remove(victim)
+    } else {
+      newPool
+    }
   }
 
   def remove(tx: ErgoTransaction): OrderedTxPool = {

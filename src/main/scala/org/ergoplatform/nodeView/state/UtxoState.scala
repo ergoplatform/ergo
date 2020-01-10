@@ -156,6 +156,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
+  // Take in account outputs of transactions from mempool
   def withTransactions(txns : Seq[ErgoTransaction]) : UtxoState = {
     new UtxoState(persistentProver, version, store, constants) {
       override def boxById(id: ADKey): Option[ErgoBox] = {

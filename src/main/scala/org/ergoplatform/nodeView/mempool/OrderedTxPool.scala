@@ -72,9 +72,10 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
   }
 
   def canAccept(tx: ErgoTransaction): Boolean = {
+    val weight = weighted(tx).weight
     !isInvalidated(tx.id) && !contains(tx.id) &&
       (size < settings.nodeSettings.mempoolCapacity ||
-        weighted(tx).weight > orderedTransactions.firstKey.weight)
+        weight > updateFamily(tx, weight).orderedTransactions.firstKey.weight)
   }
 
   def contains(id: ModifierId): Boolean = transactionsRegistry.contains(id)

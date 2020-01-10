@@ -121,7 +121,7 @@ class ErgoMemPoolSpec extends FlatSpec
     txs.foreach { tx =>
       val spendingBox = tx.outputs.head
       pool.process(tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
-        outputCandidates = IndexedSeq(new ErgoBoxCandidate(spendingBox.value, spendingBox.ergoTree, spendingBox.creationHeight, spendingBox.additionalTokens, spendingBox.additionalRegisters))), us)._2 shouldBe ProcessingOutcome.Accepted
+        outputCandidates = IndexedSeq(spendingBox)), us)._2 shouldBe ProcessingOutcome.Accepted
     }
   }
 }

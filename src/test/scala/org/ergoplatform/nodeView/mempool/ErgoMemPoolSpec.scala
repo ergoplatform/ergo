@@ -8,7 +8,6 @@ import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ErgoGenerators
 import org.scalatest.FlatSpec
 import org.scalatest.prop.PropertyChecks
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.util.Random
 
@@ -121,7 +120,8 @@ class ErgoMemPoolSpec extends FlatSpec
     }
     txs.foreach { tx =>
       val spendingBox = tx.outputs.head
-      pool.process(tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, new ProverResult(spendingBox.bytes, new ContextExtension(Map()))))), us)._2 shouldBe ProcessingOutcome.Accepted
+      pool.process(tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
+        outputCandidates = IndexedSeq(new ErgoBoxCandidate(spendingBox.value, spendingBox.ergoTree, spendingBox.creationHeight, spendingBox.additionalTokens, spendingBox.additionalRegisters))), us)._2 shouldBe ProcessingOutcome.Accepted
     }
   }
 }

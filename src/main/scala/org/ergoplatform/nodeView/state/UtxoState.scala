@@ -21,7 +21,6 @@ import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.LDBVersionedStore
-import scorex.utils.ByteArray
 
 import scala.util.{Failure, Success, Try}
 
@@ -157,11 +156,14 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  // Take in account outputs of transactions from mempool
-  def withTransactions(txns : Seq[ErgoTransaction]) : UtxoState = {
+  /**
+    * Producing a copy of the state which takes into account outputs of given transactions.
+    * Useful when checking mempool transactions.
+    */
+  def withTransactions(txns : Seq[ErgoTransaction]): UtxoState = {
     new UtxoState(persistentProver, version, store, constants) {
       override def boxById(id: ADKey): Option[ErgoBox] = {
-        super.boxById(id).orElse(ErgoState.boxChanges(txns)._2.find(box => ByteArray.compare(box.id, id) == 0))
+        super.boxById(id).orElse(ErgoState.boxChanges(txns)._2.find(box => box.id.sameElements(id)))
       }
     }
   }

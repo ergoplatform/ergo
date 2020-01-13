@@ -38,17 +38,23 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     transactionsRegistry.get(id).flatMap(orderedTransactions.get(_))
   }
 
+  // Add new transaction to the pool and throw away from the pool transaction with the smallest weight
+  // if pool is overflown. We should first add transaction and only after it find victim for replacement
+  // because new transaction may affect weights of existed transaction in mempool (see updateFamily).
+  // So candidate for replacement (transaction with minimal weight) can be changed after adding new transaction.
+  // put() is preceded by canAccept method which enforces that newly added transaction will not be immediately
+  // thrown from the pool.
   def put(tx: ErgoTransaction): OrderedTxPool = {
-    val (txs, ws, outs) = if (orderedTransactions.size >= mempoolCapacity) {
-      val txnToThrow = orderedTransactions.head._2
-      val keyToThrow = orderedTransactions.firstKey
-      log.debug(s"Memory pool overflow - throwing out transaction with id = ${keyToThrow.id}")
-      (orderedTransactions - keyToThrow, transactionsRegistry - keyToThrow.id, outputs -- txnToThrow.outputs.map(_.id))
-    } else {
-      (orderedTransactions, transactionsRegistry, outputs)
-    }
     val wtx = weighted(tx)
-    OrderedTxPool(txs.updated(wtx, tx), ws.updated(wtx.id, wtx), invalidated, outs ++ tx.outputs.map(_.id -> wtx)).updateFamily(tx, wtx.weight)
+    val newPool = OrderedTxPool(orderedTransactions.updated(wtx, tx),
+      transactionsRegistry.updated(wtx.id, wtx), invalidated,
+      outputs ++ tx.outputs.map(_.id -> wtx)).updateFamily(tx, wtx.weight)
+    if (newPool.orderedTransactions.size > mempoolCapacity) {
+      val victim = newPool.orderedTransactions.head._2
+      newPool.remove(victim)
+    } else {
+      newPool
+    }
   }
 
   def remove(tx: ErgoTransaction): OrderedTxPool = {
@@ -59,9 +65,9 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
   def invalidate(tx: ErgoTransaction): OrderedTxPool = {
     val inv = if (invalidated.size >= blacklistCapacity) invalidated - invalidated.firstKey else invalidated
     val ts = System.currentTimeMillis()
-    transactionsRegistry.get(tx.id).fold(this)(wtx =>
-      OrderedTxPool(orderedTransactions - wtx,
-        transactionsRegistry - tx.id, inv.updated(tx.id, ts), outputs -- tx.outputs.map(_.id)).updateFamily(tx, -wtx.weight))
+    transactionsRegistry.get(tx.id).fold(OrderedTxPool(orderedTransactions, transactionsRegistry, inv.updated(tx.id, ts), outputs))(wtx =>
+      OrderedTxPool(orderedTransactions - wtx, transactionsRegistry - tx.id, inv.updated(tx.id, ts),
+        outputs -- tx.outputs.map(_.id)).updateFamily(tx, -wtx.weight))
   }
 
   def filter(condition: ErgoTransaction => Boolean): OrderedTxPool = {
@@ -71,16 +77,27 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     })
   }
 
+  // Do not place transaction in the pool if its weight is smaller than smallest weight of transaction in the pool
+  // and pool limit is reached. We need to take in account relationship between transactions: if candidate transaction
+  // is pending output of one of transactions in mempool, we should adjust their weights by adding weight of this
+  // transaction (see updateFamily). Otherwise we will do waste job of validating transaction which will be then
+  // thrown from the pool.
   def canAccept(tx: ErgoTransaction): Boolean = {
+    val weight = weighted(tx).weight
     !isInvalidated(tx.id) && !contains(tx.id) &&
       (size < settings.nodeSettings.mempoolCapacity ||
-        weighted(tx).weight > orderedTransactions.firstKey.weight)
+        weight > updateFamily(tx, weight).orderedTransactions.firstKey.weight)
   }
 
   def contains(id: ModifierId): Boolean = transactionsRegistry.contains(id)
 
   def isInvalidated(id: ModifierId): Boolean = invalidated.contains(id)
 
+  // Form families of transactions: take in account relations between transaction when perform ordering.
+  // If transaction X is spending output of transaction Y, then X weight should be greater than of Y.
+  // Y should be proceeded prior to X or swapped out of mempool after X.
+  // To achieve this goal we recursively add weight of new transaction to all transactions which
+  // outputs it directly or indirectly spending.
   private def updateFamily(tx : ErgoTransaction, weight : Double) : OrderedTxPool = {
     tx.inputs.foldLeft(this)((pool,box) =>
       outputs.get(box.boxId).fold(pool)(wtx => {

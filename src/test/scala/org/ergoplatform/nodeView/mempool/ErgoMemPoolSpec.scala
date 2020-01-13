@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.ErgoBoxCandidate
+import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -108,4 +108,20 @@ class ErgoMemPoolSpec extends FlatSpec
     pool.getAll should contain only (mostPrioritizedTx +: lessPrioritizedTxs.tail: _*)
   }
 
+
+  it should "Accept output of pooled transactions" in {
+    val (us, bh) = createUtxoState()
+    val genesis = validFullBlock(None, us, bh, Random)
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val txs = validTransactionsFromUtxoState(wus, Random)
+    var pool = ErgoMemPool.empty(settings)
+    txs.foreach { tx =>
+      pool = pool.putWithoutCheck(Seq(tx))
+    }
+    txs.foreach { tx =>
+      val spendingBox = tx.outputs.head
+      pool.process(tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
+        outputCandidates = IndexedSeq(spendingBox)), us)._2 shouldBe ProcessingOutcome.Accepted
+    }
+  }
 }

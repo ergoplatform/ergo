@@ -58,7 +58,7 @@ voting via soft forks, while new rules may also be added at the same time.
     \hline
     120 & Box size should not exceed 4096. & \cmark & \cmark & ErgoTransaction \\
     \hline
-    121 & Box proposition size should not exceed 3892. & \cmark & \cmark & ErgoTransaction \\
+    121 & Box proposition size should not exceed 4096. & \cmark & \cmark & ErgoTransaction \\
     \hline
 \end{tabular}
 
@@ -94,7 +94,7 @@ voting via soft forks, while new rules may also be added at the same time.
     \hline
     214 & A header votes should contain no contradictory votes. & \xmark & \cmark & Header \\
     \hline
-    215 & A header should not contain votes for unknown parameters. & \cmark & \cmark & Header \\
+    215 & First header of an epoch should not contain a vote for unknown parameter. & \cmark & \cmark & Header \\
     \hline
 \end{tabular}
 

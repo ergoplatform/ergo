@@ -38,12 +38,18 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     transactionsRegistry.get(id).flatMap(orderedTransactions.get(_))
   }
 
-  // Add new transaction to the pool and throw away from the pool transaction with the smallest weight
-  // if pool is overflown. We should first add transaction and only after it find victim for replacement
-  // because new transaction may affect weights of existed transaction in mempool (see updateFamily).
-  // So candidate for replacement (transaction with minimal weight) can be changed after adding new transaction.
-  // put() is preceded by canAccept method which enforces that newly added transaction will not be immediately
-  // thrown from the pool.
+
+  /**
+    * Add new transaction to the pool and throw away from the pool transaction with the smallest weight
+    * if pool is overflown. We should first add transaction and only after it find candidate for replacement
+    * because new transaction may affect weights of existed transaction in mempool (see updateFamily).
+    * So candidate for replacement (transaction with minimal weight) can be changed after adding new transaction.
+    * put() is preceded by canAccept method which enforces that newly added transaction will not be immediately
+    * thrown from the pool.
+    *
+    * @param tx - transaction to add
+    * @return - modified pool
+    */
   def put(tx: ErgoTransaction): OrderedTxPool = {
     val wtx = weighted(tx)
     val newPool = OrderedTxPool(orderedTransactions.updated(wtx, tx),
@@ -77,11 +83,16 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     })
   }
 
-  // Do not place transaction in the pool if its weight is smaller than smallest weight of transaction in the pool
-  // and pool limit is reached. We need to take in account relationship between transactions: if candidate transaction
-  // is pending output of one of transactions in mempool, we should adjust their weights by adding weight of this
-  // transaction (see updateFamily). Otherwise we will do waste job of validating transaction which will be then
-  // thrown from the pool.
+  /**
+    * Do not place transaction in the pool if its weight is smaller than smallest weight of transaction in the pool
+    * and pool limit is reached. We need to take in account relationship between transactions: if candidate transaction
+    * is pending output of one of transactions in mempool, we should adjust their weights by adding weight of this
+    * transaction (see updateFamily). Otherwise we will do waste job of validating transaction which will be then
+    * thrown from the pool.
+    *
+    * @param tx
+    * @return
+    */
   def canAccept(tx: ErgoTransaction): Boolean = {
     val weight = weighted(tx).weight
     !isInvalidated(tx.id) && !contains(tx.id) &&
@@ -93,11 +104,19 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
 
   def isInvalidated(id: ModifierId): Boolean = invalidated.contains(id)
 
-  // Form families of transactions: take in account relations between transaction when perform ordering.
-  // If transaction X is spending output of transaction Y, then X weight should be greater than of Y.
-  // Y should be proceeded prior to X or swapped out of mempool after X.
-  // To achieve this goal we recursively add weight of new transaction to all transactions which
-  // outputs it directly or indirectly spending.
+
+  /**
+    *
+    * Form families of transactions: take in account relations between transaction when perform ordering.
+    * If transaction X is spending output of transaction Y, then X weight should be greater than of Y.
+    * Y should be proceeded prior to X or swapped out of mempool after X.
+    * To achieve this goal we recursively add weight of new transaction to all transactions which
+    * outputs it directly or indirectly spending.
+    *
+    * @param tx
+    * @param weight
+    * @return
+    */
   private def updateFamily(tx : ErgoTransaction, weight : Double) : OrderedTxPool = {
     tx.inputs.foldLeft(this)((pool,box) =>
       outputs.get(box.boxId).fold(pool)(wtx => {

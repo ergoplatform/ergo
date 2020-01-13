@@ -67,6 +67,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     if (fee >= minFee) {
       state match {
         case utxo: UtxoState if pool.canAccept(tx) =>
+          // Allow proceeded transaction to spend outputs of pooled transactions.
           utxo.withTransactions(getAll).validate(tx).fold(
             new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
             _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted

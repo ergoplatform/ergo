@@ -59,8 +59,6 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     history.applicableTry(section) shouldBe 'failure
   }
 
-  private def randomKey: ByteArrayWrapper = ByteArrayWrapper(Algos.hash(scorex.utils.Random.randomBytes(32)))
-
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
 

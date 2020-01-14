@@ -15,8 +15,6 @@ class FullBlockPruningProcessor(nodeConfig: NodeConfigurationSettings, chainSett
 
   private val VotingEpochLength = chainSettings.voting.votingLength
 
-  private lazy val headerChainTimeDiff = nodeConfig.headerChainTimeDiff
-
   private def extensionWithParametersHeight(height: Int): Int = {
     require(height >= VotingEpochLength)
     height - (height % VotingEpochLength)

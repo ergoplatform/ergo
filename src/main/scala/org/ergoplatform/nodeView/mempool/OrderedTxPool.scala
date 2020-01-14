@@ -16,6 +16,7 @@ import scala.collection.immutable.TreeMap
   * @param transactionsRegistry - mapping `tx.id` -> `tx.weight` required for fast access to transaction by its `id`
   * @param invalidated          - collection containing invalidated transaction ids as keys
   *                             ordered by invalidation timestamp (values)
+  * @param outputs              - mapping `box.id` -> `tx.weight` required locate transaction by its output box
   */
 final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
                                transactionsRegistry: TreeMap[ModifierId, WeightedTxId],

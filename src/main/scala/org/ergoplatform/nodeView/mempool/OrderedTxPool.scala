@@ -77,7 +77,7 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
   }
 
   def filter(condition: ErgoTransaction => Boolean): OrderedTxPool = {
-    orderedTransactions.foldLeft(this)((pool,entry) => {
+    orderedTransactions.foldLeft(this)((pool, entry) => {
       val tx = entry._2
       if (condition(tx)) pool else pool.remove(tx)
     })
@@ -117,8 +117,8 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     * @param weight
     * @return
     */
-  private def updateFamily(tx : ErgoTransaction, weight : Double) : OrderedTxPool = {
-    tx.inputs.foldLeft(this)((pool,box) =>
+  private def updateFamily(tx: ErgoTransaction, weight: Double): OrderedTxPool = {
+    tx.inputs.foldLeft(this)((pool, box) =>
       outputs.get(box.boxId).fold(pool)(wtx => {
         val parent = orderedTransactions(wtx)
         val newWtx = WeightedTxId(wtx.id, wtx.weight + weight)
@@ -144,7 +144,7 @@ object OrderedTxPool {
   }
 
   private implicit val ordWeight: Ordering[WeightedTxId] = Ordering[(Double, ModifierId)].on(x => (x.weight, x.id))
-  private implicit val ordBoxId: Ordering[BoxId] = Ordering[String].on(b =>  Algos.encode(b))
+  private implicit val ordBoxId: Ordering[BoxId] = Ordering[String].on(b => Algos.encode(b))
 
   def empty(settings: ErgoSettings): OrderedTxPool = {
     OrderedTxPool(TreeMap.empty[WeightedTxId, ErgoTransaction], TreeMap.empty[ModifierId, WeightedTxId],

@@ -120,8 +120,40 @@ class ErgoMemPoolSpec extends FlatSpec
     }
     txs.foreach { tx =>
       val spendingBox = tx.outputs.head
-      pool.process(tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
-        outputCandidates = IndexedSeq(spendingBox)), us)._2 shouldBe ProcessingOutcome.Accepted
+      val (newPool, outcome) = pool.process(tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
+        outputCandidates = IndexedSeq(spendingBox)), us)
+      outcome shouldBe ProcessingOutcome.Accepted
+      pool = newPool
+    }
+  }
+
+  it should "consider families for replacement policy" in {
+    val (us, bh) = createUtxoState()
+    val genesis = validFullBlock(None, us, bh, Random)
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    var txs = validTransactionsFromUtxoState(wus, Random)
+    val family_depth = 10
+    val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
+    var pool = ErgoMemPool.empty(limitedPoolSettings)
+    txs.foreach { tx =>
+      pool = pool.putWithoutCheck(Seq(tx))
+    }
+    for (i <- 1 to family_depth) {
+      txs = txs.map(tx => {
+        val spendingBox = tx.outputs.head
+        val newTx = tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
+          outputCandidates = IndexedSeq(spendingBox))
+        val (newPool, outcome) = pool.process(newTx, us)
+        outcome shouldBe ProcessingOutcome.Accepted
+        pool = newPool
+        newTx
+      })
+    }
+    pool.size shouldBe (family_depth + 1) * txs.size
+    txs.foreach { tx =>
+      val sb = tx.outputs.head
+      pool.process(tx.copy(inputs = IndexedSeq(new Input(sb.id, emptyProverResult)),
+        outputCandidates = IndexedSeq(new ErgoBoxCandidate(sb.value+1, sb.ergoTree, sb.creationHeight, sb.additionalTokens, sb.additionalRegisters))), us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
     }
   }
 }

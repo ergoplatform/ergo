@@ -236,6 +236,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       .ensuring(headersHeight >= fullBlockHeight, s"Headers height $headersHeight should be >= " +
         s"full height $fullBlockHeight")
   }
+
 }
 
 object FullBlockProcessor {

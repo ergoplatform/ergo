@@ -98,7 +98,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
 
   private def broadcastRandomTransactions(): Unit = {
     poolReaderOpt.foreach { pr =>
-      val txs = pr.randomSlice(settings.nodeSettings.rebroadcastCount)
+      val txs = pr.take(1).toSeq
       val msg = Message(
         new InvSpec(settings.scorexSettings.network.maxInvObjects),
         Right(InvData(Transaction.ModifierTypeId, txs.map(_.id))),

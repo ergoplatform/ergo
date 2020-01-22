@@ -23,7 +23,7 @@ class MemoryFootprint extends Bench[Double] {
       using(sizes) config(
         exec.benchRuns -> 4,
         exec.independentSamples -> 2
-      ) in { prover }
+      ) in { createProver }
     }
   }
 }

@@ -65,7 +65,7 @@ object Helper {
     }
   }
 
-  def prover(baseOperationsCount: Int = 0): BatchAVLProver[Digest32, HF] = {
+  def createProver(baseOperationsCount: Int = 0): BatchAVLProver[Digest32, HF] = {
     val prover = new BatchAVLProver[Digest32, HF](kl, Some(vl))
     if (baseOperationsCount > 0) {
       val step = 5000

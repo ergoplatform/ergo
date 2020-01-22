@@ -123,7 +123,7 @@ final class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends
   }
 
   def rollback(version: VersionTag): Try[Unit] =
-    store.rollback(scorex.core.versionToBytes(version))
+    store.rollbackTo(scorex.core.versionToBytes(version))
 
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.

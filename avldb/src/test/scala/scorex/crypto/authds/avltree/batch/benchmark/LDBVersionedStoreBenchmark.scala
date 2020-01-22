@@ -22,7 +22,7 @@ object LDBVersionedStoreBenchmark extends App with FileHelper {
     val nextVersion = Longs.toByteArray(i)
     store.update(nextVersion, Seq(), mod)
     currentVersion.foreach(v => {
-      store.rollback(Longs.toByteArray(v))
+      store.rollbackTo(Longs.toByteArray(v))
       store.update(nextVersion, Seq(), mod)
     })
     currentVersion = Some(i)

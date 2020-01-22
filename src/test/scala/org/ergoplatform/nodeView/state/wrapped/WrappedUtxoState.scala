@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.state.wrapped
 import java.io.File
 
 import akka.actor.ActorRef
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -13,7 +12,7 @@ import org.ergoplatform.settings.Algos.HF
 import scorex.core.{TransactionsCarryingPersistentNodeViewModifier, VersionTag, idToVersion}
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.Digest32
-import scorex.db.LDBVersionedStore
+import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 
 import scala.util.{Failure, Success, Try}
 

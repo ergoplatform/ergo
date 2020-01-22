@@ -118,7 +118,7 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     */
   private def updateFamily(tx: ErgoTransaction, weight: Long): OrderedTxPool = {
     tx.inputs.foldLeft(this)((pool, input) =>
-      outputs.get(input.boxId).fold(pool)(wtx => {
+      pool.outputs.get(input.boxId).fold(pool)(wtx => {
         val parent = pool.orderedTransactions(wtx)
         val newWtx = WeightedTxId(wtx.id, wtx.weight + weight)
         val newPool = OrderedTxPool(pool.orderedTransactions - wtx + (newWtx -> parent),

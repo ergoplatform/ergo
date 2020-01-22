@@ -3,20 +3,13 @@ package org.ergoplatform.db
 import com.google.common.primitives.Ints
 import org.ergoplatform.Utils
 import org.ergoplatform.settings.Algos
-import org.iq80.leveldb.Options
 import scorex.testkit.utils.FileUtils
 import scorex.util.Random
-import scorex.db.LDBFactory.factory
+import scorex.db.LDBVersionedStore
 
-object VLDBStoreRollbackBench
-  extends App
-    with FileUtils {
+object LDBVersionedStoreRollbackBench extends App with FileUtils {
 
-  private val options = new Options()
-  options.createIfMissing(true)
-  private val db0 = factory.open(createTempDir, options)
-
-  private val store = new OutdatedVersionedStore(db0, keepVersions = 400)
+  private val store = new LDBVersionedStore(createTempDir, keepVersions = 400)
 
   private val numEpochs = 10000
   private val elemsAtStep = 500
@@ -30,16 +23,16 @@ object VLDBStoreRollbackBench
     val toRemove =
       if (i > 1) (0 to (elemsAtStep / 2)).map(_ => key(scala.util.Random.nextInt((i - 1) * elemsAtStep))) else Seq.empty
     val version = Algos.hash(key(i))
-    store.update(toInsert, toRemove)(version)
+    store.update(version, toRemove, toInsert)
   }
 
-  private val version = store.versions.last
+  private val version = store.rollbackVersions().head
 
   val et = Utils.time {
     val result = store.rollbackTo(version)
     require(result.isSuccess)
   }
 
-  println(s"Performance of `VersionedLDB.rollback (max depth)` ($numEpochs epochs): $et ms")
+  println(s"Performance of `LDBVersionedStore.rollback (max depth)` ($numEpochs epochs): $et ms")
 
 }

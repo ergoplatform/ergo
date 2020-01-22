@@ -29,7 +29,7 @@ object LDBVersionedStoreRollbackBench extends App with FileUtils {
   private val version = store.rollbackVersions().head
 
   val et = Utils.time {
-    val result = store.rollback(version)
+    val result = store.rollbackTo(version)
     require(result.isSuccess)
   }
 

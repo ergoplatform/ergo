@@ -30,7 +30,7 @@ class VersionedStorageSpecification extends PropSpec
       store.update(nextVersion, Seq(), Seq(pair))
 
       if (version.isDefined) {
-        store.rollback(version.get)
+        store.rollbackTo(version.get)
         store.update(nextVersion, Seq(), Seq(pair))
       }
       version = Some(nextVersion)

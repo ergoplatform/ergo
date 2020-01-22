@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.mempool
 
-import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
@@ -21,8 +20,7 @@ import scala.collection.immutable.TreeMap
 final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
                                transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
                                invalidated: TreeMap[ModifierId, Long],
-                               outputs: TreeMap[BoxId, WeightedTxId]
-                              )
+                               outputs: TreeMap[BoxId, WeightedTxId])
                               (implicit settings: ErgoSettings) extends ScorexLogging {
 
   import OrderedTxPool.weighted
@@ -119,8 +117,8 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     * @return
     */
   private def updateFamily(tx: ErgoTransaction, weight: Double): OrderedTxPool = {
-    tx.inputs.foldLeft(this)((pool, box) =>
-      outputs.get(box.boxId).fold(pool)(wtx => {
+    tx.inputs.foldLeft(this)((pool, input) =>
+      outputs.get(input.boxId).fold(pool)(wtx => {
         val parent = pool.orderedTransactions(wtx)
         val newWtx = WeightedTxId(wtx.id, wtx.weight + weight)
         val newPool = OrderedTxPool(pool.orderedTransactions - wtx + (newWtx -> parent),
@@ -141,7 +139,7 @@ object OrderedTxPool {
       case _ => false
     }
 
-    override def hashCode(): Int = Ints.fromByteArray(Algos.decodeUnsafe(id.take(8)))
+    override def hashCode(): Int = id.hashCode()
   }
 
   private implicit val ordWeight: Ordering[WeightedTxId] = Ordering[(Double, ModifierId)].on(x => (x.weight, x.id))

@@ -13,10 +13,10 @@ import scala.collection.immutable.TreeMap
   * An immutable pool of transactions of limited size with priority management and blacklisting support.
   *
   * @param orderedTransactions  - collection containing transactions ordered by `tx.weight`
-  * @param transactionsRegistry - mapping `tx.id` -> `tx.weight` required for fast access to transaction by its `id`
+  * @param transactionsRegistry - mapping `tx.id` -> `WeightedTxId(tx.id,tx.weight)` required for fast access to transaction by its `id`
   * @param invalidated          - collection containing invalidated transaction ids as keys
   *                             ordered by invalidation timestamp (values)
-  * @param outputs              - mapping `box.id` -> `tx.weight` required locate transaction by its output box
+  * @param outputs              - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required locate transaction by its output box
   */
 final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
                                transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
@@ -120,13 +120,13 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     */
   private def updateFamily(tx: ErgoTransaction, weight: Double): OrderedTxPool = {
     tx.inputs.foldLeft(this)((pool, box) =>
-      outputs.get(box.boxId).fold(pool)(wtx => {
-        val parent = orderedTransactions(wtx)
+      pool.outputs.get(box.boxId).fold(pool)(wtx => {
+        val parent = pool.orderedTransactions(wtx)
         val newWtx = WeightedTxId(wtx.id, wtx.weight + weight)
         val newPool = OrderedTxPool(pool.orderedTransactions - wtx + (newWtx -> parent),
           pool.transactionsRegistry.updated(parent.id, newWtx),
           invalidated,
-          outputs)
+          parent.outputs.foldLeft(pool.outputs)((newOutputs,box) => newOutputs.updated(box.id, newWtx)))
         newPool.updateFamily(parent, weight)
       }))
   }

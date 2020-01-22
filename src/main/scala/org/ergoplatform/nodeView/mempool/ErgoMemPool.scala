@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.state.{ErgoState, UtxoState, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation

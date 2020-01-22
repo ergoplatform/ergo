@@ -116,7 +116,7 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     * @param weight
     * @return
     */
-  private def updateFamily(tx: ErgoTransaction, weight: Double): OrderedTxPool = {
+  private def updateFamily(tx: ErgoTransaction, weight: Long): OrderedTxPool = {
     tx.inputs.foldLeft(this)((pool, input) =>
       outputs.get(input.boxId).fold(pool)(wtx => {
         val parent = pool.orderedTransactions(wtx)
@@ -132,7 +132,7 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
 
 object OrderedTxPool {
 
-  case class WeightedTxId(id: ModifierId, weight: Double) {
+  case class WeightedTxId(id: ModifierId, weight: Long) {
     // `id` depends on `weight` so we can use only the former for comparison.
     override def equals(obj: Any): Boolean = obj match {
       case that: WeightedTxId => that.id == id
@@ -155,7 +155,7 @@ object OrderedTxPool {
       .filter(b => java.util.Arrays.equals(b.propositionBytes, ms.feePropositionBytes))
       .map(_.value)
       .sum
-    WeightedTxId(tx.id, fee.toDouble / tx.size)
+    WeightedTxId(tx.id, fee * 1024 / tx.size)
   }
 
 }

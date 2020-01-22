@@ -18,12 +18,12 @@ class VersionedLDBAVLStorageStatefulSpecification extends PropSpec {
     .withMaxSize(50)
     .withMinSuccessfulTests(15)
 
-  property("IODBAVLStorage: rollback in stateful environment with LSM") {
-    WithLSM.property().check(params)
+  property("LDBAVLStorage: rollback in stateful environment") {
+    WithLDB.property().check(params)
   }
 }
 
-object WithLSM extends VersionedIODBAVLStorageStatefulCommands with TestHelper {
+object WithLDB extends VersionedLDBAVLStorageStatefulCommands with TestHelper {
 
   override protected val KL = 32
   override protected val VL = 8
@@ -34,7 +34,7 @@ object WithLSM extends VersionedIODBAVLStorageStatefulCommands with TestHelper {
   }
 }
 
-trait VersionedIODBAVLStorageStatefulCommands extends Commands { this: TestHelper =>
+trait VersionedLDBAVLStorageStatefulCommands extends Commands { this: TestHelper =>
 
   override type State = Operations
   override type Sut = PersistentBatchAVLProver[Digest32, HF]

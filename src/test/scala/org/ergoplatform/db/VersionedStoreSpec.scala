@@ -27,7 +27,7 @@ class VersionedStoreSpec extends PropSpec with Matchers with DBSpec {
         keyD -> valD
       ).toBs
 
-      store.rollback(v2) shouldBe 'success
+      store.rollbackTo(v2) shouldBe 'success
 
       store.getAll.toSeq.toBs should contain allElementsOf Seq(keyA -> valA, keyB -> valB, keyC -> valC).toBs
       store.get(keyD) shouldBe None
@@ -45,7 +45,7 @@ class VersionedStoreSpec extends PropSpec with Matchers with DBSpec {
       store.get(keyC) shouldBe None
       store.get(keyA) shouldBe None
 
-      store.rollback(v2) shouldBe 'success
+      store.rollbackTo(v2) shouldBe 'success
 
       store.getAll.toSeq.toBs should contain allElementsOf Seq(keyA -> valA, keyB -> valB, keyC -> valC).toBs
       store.get(keyE) shouldBe None
@@ -70,7 +70,7 @@ class VersionedStoreSpec extends PropSpec with Matchers with DBSpec {
       store.get(keyB).isDefined shouldBe true
       store.get(keyC).isDefined shouldBe true
 
-      store.rollback(v1).isSuccess shouldBe false
+      store.rollbackTo(v1).isSuccess shouldBe false
 
       store.get(keyA).isDefined shouldBe true
       store.get(keyB).isDefined shouldBe true

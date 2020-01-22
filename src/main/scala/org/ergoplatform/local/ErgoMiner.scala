@@ -4,7 +4,6 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import akka.pattern.ask
 import akka.util.Timeout
 import com.google.common.primitives.Longs
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
 import org.ergoplatform.mining._
@@ -26,6 +25,7 @@ import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, Get
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.ValidationSettings
+import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.SType.ErgoBoxRType

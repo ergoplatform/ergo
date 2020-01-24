@@ -94,7 +94,11 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   }
 
   def randomBox(): Option[ErgoBox] = persistentProver.synchronized {
-    persistentProver.avlProver.randomWalk().map(_._1).flatMap(boxById)
+    var candidate : Option[ErgoBox] = Option.empty[ErgoBox]
+    do {
+      candidate = persistentProver.avlProver.randomWalk().map(_._1).flatMap(boxById)
+    } while (candidate.nonEmpty && candidate.get.value > 1000000)
+    candidate
   }
 
   /**

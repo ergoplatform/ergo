@@ -50,10 +50,15 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     * @return - modified pool
     */
   def put(tx: ErgoTransaction): OrderedTxPool = {
+    println("inputs: " + tx.inputs.map(_.boxId).map(Algos.encode))
+    println("outputs: "  + tx.outputs.map(_.id).map(Algos.encode))
     val wtx = weighted(tx)
     val newPool = OrderedTxPool(orderedTransactions.updated(wtx, tx),
       transactionsRegistry.updated(wtx.id, wtx), invalidated,
       outputs ++ tx.outputs.map(_.id -> wtx)).updateFamily(tx, wtx.weight)
+
+    println("ordered tx weights: " + newPool.orderedTransactions.map(_._1.weight))
+    println("===")
     if (newPool.orderedTransactions.size > mempoolCapacity) {
       val victim = newPool.orderedTransactions.head._2
       newPool.remove(victim)
@@ -142,7 +147,7 @@ object OrderedTxPool {
     override def hashCode(): Int = id.hashCode()
   }
 
-  private implicit val ordWeight: Ordering[WeightedTxId] = Ordering[(Double, ModifierId)].on(x => (x.weight, x.id))
+  private implicit val ordWeight: Ordering[WeightedTxId] = Ordering[(Long, ModifierId)].on(x => (-x.weight, x.id))
   private implicit val ordBoxId: Ordering[BoxId] = Ordering[String].on(b => Algos.encode(b))
 
   def empty(settings: ErgoSettings): OrderedTxPool = {

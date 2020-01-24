@@ -98,11 +98,20 @@ object PoPowAlgos {
     */
   private def maxLevelOf(header: Header): Int = {
     if (!header.isGenesis) {
-      def log2(x: Double) = math.log(x) / math.log(2)
+      def log2(x: BigInt) : Double = {
+        val MaxDigits2 = 977; // ~ MAX_DIGITS_10 * LN(10)/LN(2)
+        val Log2 = math.log(2.0)
+        if (x.signum < 1) {
+          if (x.signum < 0) Double.NaN else Double.NegativeInfinity
+        } else {
+          var blex = x.bitLength - MaxDigits2; // any value in 60..1023 works here
+          if (blex > 0) Math.log((x >> blex).doubleValue()) / Log2 + blex else math.log(x.doubleValue()) / Log2
+        }
+      }
 
       val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
       val realTarget = header.powSolution.d
-      val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
+      val level = log2(requiredTarget) - log2(realTarget)
       level.toInt
     } else {
       Int.MaxValue

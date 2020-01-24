@@ -5,6 +5,7 @@ import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.settings.NodeConfigurationSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.EliminateTransactions
 import scorex.core.transaction.state.TransactionValidation
@@ -49,14 +50,21 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     */
   private def validatePool(validator: TransactionValidation[ErgoTransaction],
                            mempool: ErgoMemPoolReader): Seq[ModifierId] = {
+
     @tailrec
     def validationLoop(txs: List[ErgoTransaction],
                        invalidated: Seq[ModifierId],
                        etAcc: Long): Seq[ModifierId] = txs match {
       case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos
         && !validatedIndex.contains(head.id) =>
+
+        val state = validator match {
+          case u: UtxoState => u.withTransactions(txs)
+          case _ => validator
+        }
+
         val t0 = System.nanoTime()
-        val validationResult = validator.validate(head)
+        val validationResult = state.validate(head)
         val t1 = System.nanoTime()
         val accumulatedTime = etAcc + (t1 - t0)
         validationResult match {
@@ -74,13 +82,14 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
     val mempoolTxs = mempool.getAll.toList
     val txsToValidate = Random.shuffle(mempoolTxs)
+
     val invalidatedIds = validationLoop(txsToValidate, Seq.empty, 0L)
     val validatedIds = txsToValidate.map(_.id).filterNot(invalidatedIds.contains)
 
     epochNr += 1
     if (epochNr % CleanupWorker.IndexRevisionInterval == 0) {
       // drop old index in order to check potentially outdated transactions again.
-      validatedIndex = TreeSet(validatedIds:_*)
+      validatedIndex = TreeSet(validatedIds: _*)
     } else {
       validatedIndex ++= validatedIds
     }
@@ -91,6 +100,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 }
 
 object CleanupWorker {
+
   case class RunCleanup(validator: TransactionValidation[ErgoTransaction],
                         mempool: ErgoMemPoolReader)
 

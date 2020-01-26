@@ -3,6 +3,7 @@ package org.ergoplatform.bench
 import java.io.File
 
 import akka.actor.{ActorRef, ActorSystem}
+import org.ergoplatform.bench.misc.TempDir
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}

@@ -161,7 +161,6 @@ trait VersionedLDBAVLStorageStatefulCommands extends Commands { this: TestHelper
       require(digest1.sameElements(updatedDigest))
       ops.foreach(sut.performOneOperation)
       sut.checkTree(postProof = false)
-      val sameProof = sut.generateProofAndUpdateStorage()
       sut.checkTree(postProof = true)
       val updatedPostDigest = sut.digest
 

@@ -110,7 +110,7 @@ class ErgoStateSpecification extends ErgoPropertyTest {
   }
 
   property("ErgoState.stateChanges()") {
-    val (us: UtxoState, bh) = createUtxoState()
+    val bh = createUtxoState()._2
     val emissionBox = genesisBoxes.head
 
     forAll { seed: Int =>

@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
@@ -17,6 +16,7 @@ import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationState}
+import scorex.db.ByteArrayWrapper
 import scorex.util._
 
 import scala.annotation.tailrec

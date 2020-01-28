@@ -146,10 +146,6 @@ paths:
     path_parameters:
       - headerId: @headerId
 
-  /peers/connect:
-    post:
-      - '"127.0.0.1:5673"'
-
   /transactions:
     post:
       - |

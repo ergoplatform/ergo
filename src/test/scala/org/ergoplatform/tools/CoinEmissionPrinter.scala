@@ -22,7 +22,7 @@ object CoinEmissionPrinter extends App {
   lazy val FirstYearSupply: Long = (1 to blocksPerYear).map(h => emissionCurve.emissionAtHeight(h)).sum
 
   println(s"BlocksTotal = ${emissionCurve.blocksTotal}")
-  println(s"BlocksPerYear = ${blocksPerYear}")
+  println(s"BlocksPerYear = $blocksPerYear")
   //  println(s"SlowStartPeriod = ${emissionCurve.SlowStartPeriod}")
   //  println(s"SlowStartFinalSupply = ${SlowStartFinalSupply / Constants.CoinsInOneErgo}")
   //  println(s"SlowStartFinalRate = ${emissionCurve.emissionAtHeight(emissionCurve.SlowStartPeriod) / Constants.CoinsInOneErgo}")

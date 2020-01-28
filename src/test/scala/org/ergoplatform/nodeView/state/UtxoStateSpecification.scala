@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.state
 
 import java.util.concurrent.Executors
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, R4}
 import org.ergoplatform._
 import org.ergoplatform.mining._
@@ -17,6 +16,7 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.core._
 import scorex.crypto.authds.ADKey
+import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}

@@ -6,7 +6,11 @@ import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
-/** Header with unpacked interlinks.
+/**
+  * Header with unpacked interlinks
+  *
+  * Interlinks are stored in reverse order: first element is always genesis header, then level of lowest target met etc
+  *
   */
 final case class PoPowHeader(header: Header, interlinks: Seq[ModifierId])
   extends BytesSerializable {

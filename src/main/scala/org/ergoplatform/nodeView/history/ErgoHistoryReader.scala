@@ -203,7 +203,7 @@ trait ErgoHistoryReader
     .map(bestHeader => headerChainBack(count, bestHeader, _ => false).drop(offset)).getOrElse(HeaderChain.empty)
 
   /**
-    * @return ids of count headers starting from offset
+    * @return ids of headers starting from offset, no more than limit
     */
   def headerIdsAt(offset: Int = 0, limit: Int): Seq[ModifierId] = (offset until (limit + offset))
     .flatMap(h => headerIdsAtHeight(h).headOption)

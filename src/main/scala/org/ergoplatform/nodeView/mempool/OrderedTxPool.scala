@@ -68,11 +68,13 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
   }
 
   def remove(tx: ErgoTransaction): OrderedTxPool = {
+    println(s"removing $tx")
     transactionsRegistry.get(tx.id).fold(this)(wtx =>
       OrderedTxPool(orderedTransactions - wtx, transactionsRegistry - tx.id, invalidated, outputs -- tx.outputs.map(_.id)).updateFamily(tx, -wtx.weight))
   }
 
   def invalidate(tx: ErgoTransaction): OrderedTxPool = {
+    println(s"invalidating $tx")
     val inv = if (invalidated.size >= blacklistCapacity) invalidated - invalidated.firstKey else invalidated
     val ts = System.currentTimeMillis()
     transactionsRegistry.get(tx.id).fold(OrderedTxPool(orderedTransactions, transactionsRegistry, inv.updated(tx.id, ts), outputs))(wtx =>

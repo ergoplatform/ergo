@@ -5,7 +5,7 @@ import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.UtxoState
+import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.settings.NodeConfigurationSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.EliminateTransactions
 import scorex.core.transaction.state.TransactionValidation
@@ -13,7 +13,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeSet
-import scala.util.{Failure, Random, Success}
+import scala.util.{Failure, Success}
 
 /**
   * Performs mempool validation task on demand.
@@ -52,14 +52,14 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
                            mempool: ErgoMemPoolReader): Seq[ModifierId] = {
 
     @tailrec
-    def validationLoop(txs: List[ErgoTransaction],
+    def validationLoop(txs: Seq[ErgoTransaction],
                        invalidated: Seq[ModifierId],
                        etAcc: Long): Seq[ModifierId] = txs match {
       case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos
         && !validatedIndex.contains(head.id) =>
 
         val state = validator match {
-          case u: UtxoState => u.withTransactions(txs)
+          case u: UtxoStateReader => u.withTransactions(txs)
           case _ => validator
         }
 
@@ -80,8 +80,8 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
         invalidated
     }
 
-    val mempoolTxs = mempool.getAll.toList
-    val txsToValidate = Random.shuffle(mempoolTxs)
+    val txsToValidate = mempool.getAll
+   // val txsToValidate = Random.shuffle(mempoolTxs)
 
     val invalidatedIds = validationLoop(txsToValidate, Seq.empty, 0L)
     val validatedIds = txsToValidate.map(_.id).filterNot(invalidatedIds.contains)

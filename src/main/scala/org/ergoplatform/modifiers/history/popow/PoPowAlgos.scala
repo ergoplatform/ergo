@@ -8,32 +8,41 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.util.{Failure, Success, Try}
 
-
-final case class PoPowParams(m: Int,
-                             k: Int,
-                             k1: Int,
-                             d: Double)
+/**
+  *
+  * @param m
+  * @param k
+  * @param k1
+  * @param d
+  */
+case class PoPowParams(m: Int, k: Int, k1: Int, d: Double)
 
 
 /**
-  * A set of utilities for working with PoPoW security protocol.
+  * A set of utilities for working with NiPoPoW protocol.
+  *
+  * Based on papers:
+  *
+  * [KMZ17] Non-Interactive Proofs of Proof-of-Work https://eprint.iacr.org/2017/963.pdf
+  *
+  * [KLS16] Proofs of Proofs of Work with Sublinear Complexity http://fc16.ifca.ai/bitcoin/papers/KLS16.pdf
   */
 object PoPowAlgos {
 
   /**
-    * Computes interlinks vector for the next level after `prevHeader`.
+    * Computes interlinks vector for a header next to `prevHeader`.
     */
   @inline def updateInterlinks(prevHeaderOpt: Option[Header], prevExtensionOpt: Option[Extension]): Seq[ModifierId] =
     prevHeaderOpt
-      .flatMap { h =>
+      .flatMap { prevHeader =>
         prevExtensionOpt
           .flatMap(ext => unpackInterlinks(ext.fields).toOption)
-          .map(updateInterlinks(h, _))
+          .map(updateInterlinks(prevHeader, _))
       }
       .getOrElse(Seq.empty)
 
   /**
-    * Computes interlinks vector for the next level after `prevHeader`.
+    * Computes interlinks vector for a header next to `prevHeader`.
     */
   @inline def updateInterlinks(prevHeader: Header, prevInterlinks: Seq[ModifierId]): Seq[ModifierId] =
     if (!prevHeader.isGenesis) {
@@ -51,7 +60,7 @@ object PoPowAlgos {
     }
 
   /**
-    * Packs interlinks into extension key-value format.
+    * Packs interlinks into key-value format of the block extension.
     */
   @inline def packInterlinks(links: Seq[ModifierId]): Seq[(Array[Byte], Array[Byte])] = {
     @scala.annotation.tailrec
@@ -60,8 +69,8 @@ object PoPowAlgos {
       rem match {
         case (headLink, idx) :: _ =>
           val duplicatesQty = links.count(_ == headLink)
-          val filed = Array(InterlinksVectorPrefix, idx.toByte) -> (duplicatesQty.toByte +: idToBytes(headLink))
-          loop(rem.drop(duplicatesQty), acc :+ filed)
+          val filled = Array(InterlinksVectorPrefix, idx.toByte) -> (duplicatesQty.toByte +: idToBytes(headLink))
+          loop(rem.drop(duplicatesQty), acc :+ filled)
         case Nil =>
           acc
       }
@@ -73,7 +82,7 @@ object PoPowAlgos {
     ExtensionCandidate(packInterlinks(links))
 
   /**
-    * Unpacks interlinks from key-value format of extension.
+    * Unpacks interlinks from key-value format of block extension.
     */
   @inline def unpackInterlinks(fields: Seq[(Array[Byte], Array[Byte])]): Try[Seq[ModifierId]] = {
     @scala.annotation.tailrec
@@ -125,6 +134,22 @@ object PoPowAlgos {
   /**
     * Computes best score of a given chain.
     * The score value depends on number of µ-superblocks in the given chain.
+    *
+    * see [KMZ17], Algorithm 4
+    *
+    * [KMZ17]:
+    * "To find the best argument of a proof π given b, best-arg_m collects all the μ
+    * indices which point to superblock levels that contain valid arguments after block b.
+    * Argument validity requires that there are at least m μ-superblocks following block b,
+    * which is captured by the comparison|π↑μ{b:}|≥m. 0 is always considered a valid level,
+    * regardless of how many blocks are present there. These level indices are collected into set M.
+    * For each of these levels, the score of their respective argument is evaluated by weighting the
+    * number of blocks by the level as 2μ|π↑μ{b:}|. The highest possible score across all levels is returned."
+    *
+    * function best-arg_m(π, b)
+    *   M←{μ:|π↑μ{b:}|≥m}∪{0}
+    *   return max_{μ∈M} {2μ·|π↑μ{b:}|}
+    * end function
     */
   def bestArg(chain: Seq[Header])(m: Int): Int = {
     @scala.annotation.tailrec
@@ -212,6 +237,7 @@ object PoPowAlgos {
                        (params: PoPowParams): Boolean = {
     val downChain = chain
       .filter(h => h.height >= superChain.head.height && h.height <= superChain.last.height) // C[C↑µ[0]:C↑µ[−1]] or C'↓
+
     @scala.annotation.tailrec
     def checkLocalGoodnessAt(mValue: Int): Boolean = {
       val superChainSuffixSize = superChain.takeRight(mValue).size

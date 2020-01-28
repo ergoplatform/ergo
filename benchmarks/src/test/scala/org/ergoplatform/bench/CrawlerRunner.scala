@@ -3,7 +3,7 @@ package org.ergoplatform.bench
 import java.io.File
 
 import akka.actor.ActorRef
-import org.ergoplatform.bench.misc.CrawlerConfig
+import org.ergoplatform.bench.misc.{CrawlerConfig, TempDir}
 import org.ergoplatform.http.api.{BlocksApiRoute, ErgoUtilsApiRoute, InfoApiRoute, TransactionsApiRoute}
 import org.ergoplatform.local.{ErgoMinerRef, ErgoStatsCollectorRef}
 import org.ergoplatform.mining.emission.EmissionRules

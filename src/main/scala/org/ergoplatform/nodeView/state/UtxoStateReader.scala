@@ -115,4 +115,16 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       persistentProver.avlProver.generateProofForOperations(ErgoState.stateChanges(txs).operations.map(ADProofs.changeToMod))
     }
   }
+
+  /**
+    * Producing a copy of the state reader which takes into account outputs of given transactions.
+    * Useful when checking mempool transactions.
+    */
+  def withTransactions(txns : Seq[ErgoTransaction]): UtxoState = {
+    new UtxoState(persistentProver, version, store, constants) {
+      override def boxById(id: ADKey): Option[ErgoBox] = {
+        super.boxById(id).orElse(ErgoState.boxChanges(txns)._2.find(box => box.id.sameElements(id)))
+      }
+    }
+  }
 }

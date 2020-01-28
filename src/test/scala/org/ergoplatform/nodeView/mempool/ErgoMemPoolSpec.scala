@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.ErgoBoxCandidate
+import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -108,4 +108,83 @@ class ErgoMemPoolSpec extends FlatSpec
     pool.getAll should contain only (mostPrioritizedTx +: lessPrioritizedTxs.tail: _*)
   }
 
+
+  it should "Accept output of pooled transactions" in {
+    val (us, bh) = createUtxoState()
+    val genesis = validFullBlock(None, us, bh, Random)
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val txs = validTransactionsFromUtxoState(wus, Random)
+    var pool = ErgoMemPool.empty(settings)
+    txs.foreach { tx =>
+      pool = pool.putWithoutCheck(Seq(tx))
+    }
+    txs.foreach { tx =>
+      val spendingBox = tx.outputs.head
+      val (newPool, outcome) = pool.process(tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
+        outputCandidates = IndexedSeq(spendingBox)), us)
+      outcome shouldBe ProcessingOutcome.Accepted
+      pool = newPool
+    }
+  }
+
+  it should "consider families for replacement policy" in {
+    val (us, bh) = createUtxoState()
+    val genesis = validFullBlock(None, us, bh, Random)
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    var txs = validTransactionsFromUtxoState(wus, Random)
+    val family_depth = 10
+    val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
+    var pool = ErgoMemPool.empty(limitedPoolSettings)
+    txs.foreach { tx =>
+      pool = pool.putWithoutCheck(Seq(tx))
+    }
+    for (i <- 1 to family_depth) {
+      txs = txs.map(tx => {
+        val spendingBox = tx.outputs.head
+        val newTx = tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
+          outputCandidates = IndexedSeq(spendingBox))
+        val (newPool, outcome) = pool.process(newTx, us)
+        outcome shouldBe ProcessingOutcome.Accepted
+        pool = newPool
+        newTx
+      })
+    }
+    pool.size shouldBe (family_depth + 1) * txs.size
+    txs.foreach { tx =>
+      val sb = tx.outputs.head
+      pool.process(tx.copy(inputs = IndexedSeq(new Input(sb.id, emptyProverResult)),
+        outputCandidates = IndexedSeq(new ErgoBoxCandidate(sb.value+1, sb.ergoTree, sb.creationHeight, sb.additionalTokens, sb.additionalRegisters))), us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
+    }
+  }
+
+  it should "correctly remove transaction from pool and rebuild families" in {
+    val (us, bh) = createUtxoState()
+    val genesis = validFullBlock(None, us, bh, Random)
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    var txs = validTransactionsFromUtxoState(wus, Random)
+    var allTxs = txs
+    val family_depth = 10
+    val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
+    var pool = ErgoMemPool.empty(limitedPoolSettings)
+    txs.foreach { tx =>
+      pool = pool.putWithoutCheck(Seq(tx))
+    }
+    for (i <- 1 to family_depth) {
+      txs = txs.map(tx => {
+        val spendingBox = tx.outputs.head
+        val newTx = tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
+          outputCandidates = IndexedSeq(spendingBox))
+        val (newPool, outcome) = pool.process(newTx, us)
+        outcome shouldBe ProcessingOutcome.Accepted
+        pool = newPool
+        allTxs = allTxs :+ newTx
+        newTx
+      })
+    }
+    pool.size shouldBe (family_depth + 1) * txs.size
+    allTxs.foreach { tx =>
+      pool = pool.remove(tx)
+    }
+    pool.size shouldBe 0
+  }
 }

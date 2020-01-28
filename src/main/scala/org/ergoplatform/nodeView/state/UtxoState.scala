@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import cats.Traverse
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -20,7 +19,7 @@ import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.crypto.hash.Digest32
-import scorex.db.LDBVersionedStore
+import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 
 import scala.util.{Failure, Success, Try}
 

@@ -19,14 +19,14 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
   * @param certainty          - Whether the box is definitely belongs to the user or not
   * @param applicationId      - Identifier of the application the box refers to
   */
-final case class TrackedBox(creationTxId: ModifierId,
-                            creationOutIndex: Short,
-                            inclusionHeightOpt: Option[Int],
-                            spendingTxIdOpt: Option[ModifierId],
-                            spendingHeightOpt: Option[Int],
-                            box: ErgoBox,
-                            certainty: BoxCertainty,
-                            applicationId: Short) {
+case class TrackedBox(creationTxId: ModifierId,
+                      creationOutIndex: Short,
+                      inclusionHeightOpt: Option[Int],
+                      spendingTxIdOpt: Option[ModifierId],
+                      spendingHeightOpt: Option[Int],
+                      box: ErgoBox,
+                      certainty: BoxCertainty,
+                      applicationId: Short) {
 
   /**
     * Whether the box is spent or not
@@ -68,6 +68,12 @@ final case class TrackedBox(creationTxId: ModifierId,
     case (id, amt) => bytesToId(id) -> amt
   }.toMap
 
+  override def equals(obj: Any): Boolean = obj match {
+    case tb: TrackedBox => tb.creationTxId == creationTxId && tb.creationOutIndex == creationOutIndex
+    case _ => false
+  }
+
+  override def hashCode(): Int = (creationTxId, creationOutIndex).hashCode()
 }
 
 object TrackedBox {

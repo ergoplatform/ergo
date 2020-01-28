@@ -305,19 +305,12 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def trackedAddresses: Seq[ErgoAddress] = storage.readTrackedAddresses
 
   private type FilterFn = TrackedBox => Boolean
-
   /**
-    * This filter is selecting boxes which are onchain and not spent offchain yet or created offchain
-    * (and not spent offchain, but that is ensured by offChainRegistry).
-    * This filter is used when the wallet is looking through its boxes to assemble a transaction.
+    * This filter is selecting boxes which are onchain and not spent offchain yet.
+    * This filter is used when wallet is looking through its boxes to assemble a transaction.
     */
-  private val onChainFilter: FilterFn = (trackedBox: TrackedBox) => {
-    if(trackedBox.chainStatus.onChain) {
-      offChainRegistry.onChainBalances.exists(_.id == trackedBox.boxId)
-    } else {
-      true
-    }
-  }
+  private val onChainFilter: FilterFn = (trackedBox: TrackedBox) => trackedBox.chainStatus.onChain &&
+    offChainRegistry.onChainBalances.exists(_.id == encodedBoxId(trackedBox.box.id))
 
   /**
     * This filter is not filtering out anything, used when the wallet works with externally provided boxes.
@@ -460,8 +453,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                 (boxesToFakeTracked(inputs), noFilter)
               } else {
                 //inputs are to be selected by the wallet
-                val boxesToSpend = registry.readCertainUnspentBoxes ++ offChainRegistry.offChainBoxes
-                (boxesToSpend.toIterator, onChainFilter)
+                (registry.readCertainUnspentBoxes.toIterator, onChainFilter)
               }
 
               val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)

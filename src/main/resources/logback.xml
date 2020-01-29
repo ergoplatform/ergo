@@ -8,7 +8,7 @@
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <target>System.out</target>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>${logback.stdout.level:-DEBUG}</level>
+            <level>${logback.stdout.level:-INFO}</level>
         </filter>
         <encoder>
             <pattern>${logback.pattern:-${default.pattern}}</pattern>

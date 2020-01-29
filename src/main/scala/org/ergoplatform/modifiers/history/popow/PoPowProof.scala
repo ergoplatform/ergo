@@ -12,6 +12,11 @@ import scorex.util.Extensions.LongOps
 
 /**
   * A structure representing NiPoPow proof as a persistent modifier.
+  *
+  * For details, see the foundational paper:
+  *
+  * [KMZ17] Non-Interactive Proofs of Proof-of-Work https://eprint.iacr.org/2017/963.pdf
+  *
   * @param m        - security parameter (min μ-level superchain length)
   * @param k        - security parameter (min suffix length)
   * @param prefix   - proof prefix headers
@@ -42,6 +47,11 @@ case class PoPowProof(m: Int, k: Int, prefix: Seq[PoPowHeader], suffix: Seq[PoPo
 
   def chainOfLevel(l: Int): Seq[PoPowHeader] = prefix.filter(x => maxLevelOf(x.header) >= l)
 
+  /**
+    * Implementation of the ≥ algorithm from [KMZ17], see Algorithm 4
+    * @param that - PoPoW proof to compare with
+    * @return whether this PoPoW proof is better than "that"
+    */
   def isBetterThan(that: PoPowProof): Boolean = {
     val (thisDivergingChain, thatDivergingChain) = lowestCommonAncestor(headersChain, that.headersChain)
       .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))

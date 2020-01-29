@@ -443,17 +443,19 @@ object ErgoMiner extends ScorexLogging {
       // transactions from mempool and fee txs from the previous step
       def current: Seq[ErgoTransaction] = (acc ++ lastFeeTx).map(_._1)
 
+      val stateWithTxs = us.withTransactions(current)
+
       mempoolTxs.headOption match {
         case Some(tx) =>
           implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)
           // check validity and calculate transaction cost
-          us.validateWithCost(tx, Some(upcomingContext), maxTransactionComplexity) match {
+          stateWithTxs.validateWithCost(tx, Some(upcomingContext), maxTransactionComplexity) match {
             case Success(costConsumed) =>
               val newTxs = fixTxsConflicts((tx, costConsumed) +: acc)
               val newBoxes = newTxs.flatMap(_._1.outputs)
-              val emissionRules = us.constants.settings.chainSettings.emissionRules
+              val emissionRules = stateWithTxs.constants.settings.chainSettings.emissionRules
 
-              ErgoMiner.collectFees(us.stateContext.currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
+              ErgoMiner.collectFees(stateWithTxs.stateContext.currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
                 case Some(feeTx) =>
                   val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
                   feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext) match {
@@ -465,7 +467,7 @@ object ErgoMiner extends ScorexLogging {
                         current -> invalidTxs
                       }
                     case Failure(e) =>
-                      log.debug(s"Fee collecting tx is invalid, return current: ${e.getMessage} from ${us.stateContext}")
+                      log.debug(s"Fee collecting tx is invalid, return current: ${e.getMessage} from ${stateWithTxs.stateContext}")
                       current -> invalidTxs
                   }
                 case None =>

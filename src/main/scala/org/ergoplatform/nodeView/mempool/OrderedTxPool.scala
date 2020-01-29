@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.mempool
 
-import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
@@ -21,8 +20,7 @@ import scala.collection.immutable.TreeMap
 final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
                                transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
                                invalidated: TreeMap[ModifierId, Long],
-                               outputs: TreeMap[BoxId, WeightedTxId]
-                              )
+                               outputs: TreeMap[BoxId, WeightedTxId])
                               (implicit settings: ErgoSettings) extends ScorexLogging {
 
   import OrderedTxPool.weighted
@@ -52,10 +50,15 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     * @return - modified pool
     */
   def put(tx: ErgoTransaction): OrderedTxPool = {
+    println("inputs: " + tx.inputs.map(_.boxId).map(Algos.encode))
+    println("outputs: "  + tx.outputs.map(_.id).map(Algos.encode))
     val wtx = weighted(tx)
     val newPool = OrderedTxPool(orderedTransactions.updated(wtx, tx),
       transactionsRegistry.updated(wtx.id, wtx), invalidated,
       outputs ++ tx.outputs.map(_.id -> wtx)).updateFamily(tx, wtx.weight)
+
+    println("ordered tx weights: " + newPool.orderedTransactions.map(_._1.weight))
+    println("===")
     if (newPool.orderedTransactions.size > mempoolCapacity) {
       val victim = newPool.orderedTransactions.head._2
       newPool.remove(victim)
@@ -65,11 +68,13 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
   }
 
   def remove(tx: ErgoTransaction): OrderedTxPool = {
+    println(s"removing $tx")
     transactionsRegistry.get(tx.id).fold(this)(wtx =>
       OrderedTxPool(orderedTransactions - wtx, transactionsRegistry - tx.id, invalidated, outputs -- tx.outputs.map(_.id)).updateFamily(tx, -wtx.weight))
   }
 
   def invalidate(tx: ErgoTransaction): OrderedTxPool = {
+    println(s"invalidating $tx")
     val inv = if (invalidated.size >= blacklistCapacity) invalidated - invalidated.firstKey else invalidated
     val ts = System.currentTimeMillis()
     transactionsRegistry.get(tx.id).fold(OrderedTxPool(orderedTransactions, transactionsRegistry, inv.updated(tx.id, ts), outputs))(wtx =>
@@ -118,9 +123,9 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     * @param weight
     * @return
     */
-  private def updateFamily(tx: ErgoTransaction, weight: Double): OrderedTxPool = {
-    tx.inputs.foldLeft(this)((pool, box) =>
-      pool.outputs.get(box.boxId).fold(pool)(wtx => {
+  private def updateFamily(tx: ErgoTransaction, weight: Long): OrderedTxPool = {
+    tx.inputs.foldLeft(this)((pool, input) =>
+      pool.outputs.get(input.boxId).fold(pool)(wtx => {
         pool.orderedTransactions.get(wtx) match {
           case Some(parent) =>
             val newWtx = WeightedTxId(wtx.id, wtx.weight + weight)
@@ -140,17 +145,17 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
 
 object OrderedTxPool {
 
-  case class WeightedTxId(id: ModifierId, weight: Double) {
+  case class WeightedTxId(id: ModifierId, weight: Long) {
     // `id` depends on `weight` so we can use only the former for comparison.
     override def equals(obj: Any): Boolean = obj match {
       case that: WeightedTxId => that.id == id
       case _ => false
     }
 
-    override def hashCode(): Int = Ints.fromByteArray(Algos.decodeUnsafe(id.take(8)))
+    override def hashCode(): Int = id.hashCode()
   }
 
-  private implicit val ordWeight: Ordering[WeightedTxId] = Ordering[(Double, ModifierId)].on(x => (x.weight, x.id))
+  private implicit val ordWeight: Ordering[WeightedTxId] = Ordering[(Long, ModifierId)].on(x => (-x.weight, x.id))
   private implicit val ordBoxId: Ordering[BoxId] = Ordering[String].on(b => Algos.encode(b))
 
   def empty(settings: ErgoSettings): OrderedTxPool = {
@@ -163,7 +168,7 @@ object OrderedTxPool {
       .filter(b => java.util.Arrays.equals(b.propositionBytes, ms.feePropositionBytes))
       .map(_.value)
       .sum
-    WeightedTxId(tx.id, fee.toDouble / tx.size)
+    WeightedTxId(tx.id, fee * 1024 / tx.size)
   }
 
 }

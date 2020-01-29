@@ -71,10 +71,12 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       nodeViewHolderRef ! GetNodeViewChanges(history = false, state = true, mempool = true, vault = false)
 
     case ChangedMempool(mp: ErgoMemPoolReader) =>
-      stateReaderOpt.fold[Any](poolReaderOpt = Some(mp))(initiateCleanup(_, mp))
+      poolReaderOpt = Some(mp)
+      stateReaderOpt.foreach(st => initiateCleanup(st, mp))
 
     case ChangedState(st: TransactionValidation[ErgoTransaction@unchecked]) =>
-      poolReaderOpt.fold[Any](stateReaderOpt = Some(st))(initiateCleanup(st, _))
+      stateReaderOpt = Some(st)
+      poolReaderOpt.foreach(mp => initiateCleanup(st, mp))
 
     case ChangedState(_) | ChangedMempool(_) => // do nothing
   }
@@ -82,7 +84,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private def working: Receive = {
     case CleanupDone =>
       log.info("Cleanup done. Switching to awaiting mode")
-      //rebroadcast random transactions
+      //rebroadcast transactions
       broadcastRandomTransactions()
       context become awaiting
 
@@ -97,21 +99,35 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   }
 
   private def broadcastRandomTransactions(): Unit = {
-    poolReaderOpt.foreach { pr =>
-      val txs = pr.randomSlice(settings.nodeSettings.rebroadcastCount)
-      val msg = Message(
-        new InvSpec(settings.scorexSettings.network.maxInvObjects),
-        Right(InvData(Transaction.ModifierTypeId, txs.map(_.id))),
-        None
-      )
-      networkControllerRef ! SendToNetwork(msg, Broadcast)
+    log.debug("Rebroadcasting transactions")
+    stateReaderOpt.foreach { st =>
+      poolReaderOpt.foreach { pr =>
+        pr.take(3).foreach { tx =>
+          st match {
+            case utxo: UtxoState =>
+              if (tx.inputs.forall(i => utxo.boxById(i.boxId).isDefined)) {
+                log.info(s"Rebroadcasting $tx")
+                val msg = Message(
+                  new InvSpec(settings.scorexSettings.network.maxInvObjects),
+                  Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
+                  None
+                )
+                networkControllerRef ! SendToNetwork(msg, Broadcast)
+              } else {
+                log.info(s"Not all the inputs of $tx is in UTXO set")
+              }
+          }
+        }
+      }
     }
   }
 
 }
 
 object MempoolAuditor {
+
   case object CleanupDone
+
 }
 
 object MempoolAuditorRef {
@@ -126,4 +142,5 @@ object MempoolAuditorRef {
             settings: ErgoSettings)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(nodeViewHolderRef, networkControllerRef, settings))
+
 }

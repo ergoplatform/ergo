@@ -66,12 +66,15 @@ class PoPowAlgosSpec
     chain.foreach(x => maxLevelOf(x.header) >= 0 shouldBe true)
   }
 
-  property("lowestCommonAncestor") {
-    val chain0 = genChain(10)
-    val branchPoint = chain0(5)
-    val chain1 = chain0.take(5) ++ genChain(5, branchPoint)
+  property("lowestCommonAncestor - diverging") {
+    val sizes = Seq(10, 100, 1000)
+    sizes.foreach { size =>
+      val chain0 = genChain(size)
+      val branchPoint = chain0(size / 2)
+      val chain1 = chain0.take(size / 2) ++ genChain(size / 2, branchPoint)
 
-    lowestCommonAncestor(chain0.map(_.header), chain1.map(_.header)) shouldBe Some(branchPoint.header)
+      lowestCommonAncestor(chain0.map(_.header), chain1.map(_.header)) shouldBe Some(branchPoint.header)
+    }
   }
 
   property("bestArg - always equal for equal proofs") {

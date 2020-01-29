@@ -8,29 +8,10 @@
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <target>System.out</target>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>${logback.stdout.level:-INFO}</level>
+            <level>${logback.stdout.level:-WARN}</level>
         </filter>
         <encoder>
             <pattern>${logback.pattern:-${default.pattern}}</pattern>
-        </encoder>
-    </appender>
-
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>${logback.file.level:-DEBUG}</level>
-        </filter>
-        <file>ergo.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <!-- daily rollover -->
-            <fileNamePattern>ergo.%d{yyyy-MM-dd}.log.gz</fileNamePattern>
-
-            <!-- keep 30 days' worth of history capped at 1GB total size -->
-            <maxHistory>30</maxHistory>
-            <totalSizeCap>1GB</totalSizeCap>
-        </rollingPolicy>
-
-        <encoder>
-            <pattern>${default.pattern}</pattern>
         </encoder>
     </appender>
 

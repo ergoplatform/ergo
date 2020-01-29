@@ -155,19 +155,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  /**
-    * Producing a copy of the state which takes into account outputs of given transactions.
-    * Useful when checking mempool transactions.
-    */
-  def withTransactions(txns: Seq[ErgoTransaction]): UtxoState = {
-    new UtxoState(persistentProver, version, store, constants) {
-      val createdBoxes = ErgoState.boxChanges(txns)._2
-
-      override def boxById(id: ADKey): Option[ErgoBox] = {
-        super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
-      }
-    }
-  }
 }
 
 object UtxoState {

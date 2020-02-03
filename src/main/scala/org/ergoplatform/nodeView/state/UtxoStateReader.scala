@@ -122,7 +122,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     */
   def withTransactions(txns: Seq[ErgoTransaction]): UtxoState = {
     new UtxoState(persistentProver, version, store, constants) {
-      val createdBoxes = ErgoState.boxChanges(txns)._2
+      val createdBoxes = txns.flatMap(_.outputs)
 
       override def boxById(id: ADKey): Option[ErgoBox] = {
         super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))

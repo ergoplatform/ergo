@@ -17,11 +17,11 @@ import scala.collection.immutable.TreeMap
   *                             ordered by invalidation timestamp (values)
   * @param outputs              - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required locate transaction by its output box
   */
-final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
-                               transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
-                               invalidated: TreeMap[ModifierId, Long],
-                               outputs: TreeMap[BoxId, WeightedTxId])
-                              (implicit settings: ErgoSettings) extends ScorexLogging {
+case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
+                         transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
+                         invalidated: TreeMap[ModifierId, Long],
+                         outputs: TreeMap[BoxId, WeightedTxId])
+                        (implicit settings: ErgoSettings) extends ScorexLogging {
 
   import OrderedTxPool.weighted
 
@@ -51,7 +51,7 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     */
   def put(tx: ErgoTransaction): OrderedTxPool = {
     println("inputs: " + tx.inputs.map(_.boxId).map(Algos.encode))
-    println("outputs: "  + tx.outputs.map(_.id).map(Algos.encode))
+    println("outputs: " + tx.outputs.map(_.id).map(Algos.encode))
     val wtx = weighted(tx)
     val newPool = OrderedTxPool(orderedTransactions.updated(wtx, tx),
       transactionsRegistry.updated(wtx.id, wtx), invalidated,

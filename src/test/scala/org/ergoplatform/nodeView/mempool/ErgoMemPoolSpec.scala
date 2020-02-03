@@ -109,21 +109,6 @@ class ErgoMemPoolSpec extends FlatSpec
     pool.getAll should contain only (mostPrioritizedTx +: lessPrioritizedTxs.tail: _*)
   }
 
-  it should "return results take / getAll / getAllPrioritized sorted by priority" in {
-    var pool = ErgoMemPool.empty(settings)
-    val masterTx = invalidErgoTransactionGen.sample.get
-    val proposition = settings.chainSettings.monetary.feeProposition
-    val txsWithAscendingPriority = (0 to 4).foldLeft(Seq.empty[ErgoTransaction]) { case (acc, idx) =>
-      val c = masterTx.outputCandidates.head
-      acc :+ masterTx.copy(outputCandidates = IndexedSeq(
-        new ErgoBoxCandidate(idx * 10000 + 1, proposition, c.creationHeight, c.additionalTokens, c.additionalRegisters)))
-    }
-    pool = pool.putWithoutCheck(txsWithAscendingPriority)
-    pool.take(5).toSeq.map(_.id) shouldBe txsWithAscendingPriority.reverse.map(_.id)
-    pool.getAll.map(_.id) shouldBe txsWithAscendingPriority.reverse.map(_.id)
-    pool.getAllPrioritized.map(_.id) shouldBe txsWithAscendingPriority.reverse.map(_.id)
-  }
-
   it should "Accept output of pooled transactions" in {
     val (us, bh) = createUtxoState()
     val genesis = validFullBlock(None, us, bh, Random)
@@ -201,5 +186,48 @@ class ErgoMemPoolSpec extends FlatSpec
       pool = pool.remove(tx)
     }
     pool.size shouldBe 0
+  }
+
+  it should "return results take / getAll / getAllPrioritized sorted by priority" in {
+    val feeProp = settings.chainSettings.monetary.feeProposition
+
+    val (us, bh) = createUtxoState()
+    val genesis = validFullBlock(None, us, bh, Random)
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    var txs = validTransactionsFromUtxoState(wus, Random)
+    val family_depth = 10
+    val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
+    var pool = ErgoMemPool.empty(limitedPoolSettings)
+    txs.foreach { tx =>
+      pool = pool.putWithoutCheck(Seq(tx))
+    }
+    for (i <- 1 to family_depth) {
+      txs = txs.map(tx => {
+        val spendingBox = tx.outputs.head
+
+        val sc = spendingBox.toCandidate
+        val out0 = new ErgoBoxCandidate(sc.value - 55000, sc.ergoTree, sc.creationHeight)
+        val out1 = new ErgoBoxCandidate(55000, feeProp, sc.creationHeight)
+
+        val newTx = tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
+          outputCandidates = IndexedSeq(out0, out1))
+        val (newPool, outcome) = pool.process(newTx, us)
+        outcome shouldBe ProcessingOutcome.Accepted
+        pool = newPool
+        newTx
+      })
+    }
+
+    val weights = pool.weightedTransactions(11)
+    val ids = weights.map(_.id)
+
+    pool.take(11).toSeq.map(_.id) shouldBe ids
+    pool.getAll.map(_.id) shouldBe ids
+    pool.getAllPrioritized.map(_.id) shouldBe ids
+
+    val conformingTxs = pool.take(3).toSeq
+    val stateWithTxs = wus.withTransactions(conformingTxs)
+
+    conformingTxs.flatMap(_.inputs).map(_.boxId).forall(bIb => stateWithTxs.boxById(bIb).isDefined) shouldBe true
   }
 }

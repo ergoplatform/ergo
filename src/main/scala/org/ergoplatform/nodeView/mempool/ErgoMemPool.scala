@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.MemoryPool
@@ -90,6 +91,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
       )
     }
   }
+
+  def weightedTransactions(limit: Int): Seq[WeightedTxId] = pool.orderedTransactions.keysIterator.take(limit).toSeq
 
   private def extractFee(tx: ErgoTransaction): Long =
     ErgoState.boxChanges(Seq(tx))._2

@@ -109,6 +109,19 @@ class ErgoMemPoolSpec extends FlatSpec
     pool.getAll should contain only (mostPrioritizedTx +: lessPrioritizedTxs.tail: _*)
   }
 
+  it should "return results take and getAll sorted by priority" in {
+    var pool = ErgoMemPool.empty(settings)
+    val masterTx = invalidErgoTransactionGen.sample.get
+    val proposition = settings.chainSettings.monetary.feeProposition
+    val txsWithAscendingPriority = (0 to 4).foldLeft(Seq.empty[ErgoTransaction]) { case (acc, idx) =>
+      val c = masterTx.outputCandidates.head
+      acc :+ masterTx.copy(outputCandidates = IndexedSeq(
+        new ErgoBoxCandidate(idx * 10000 + 1, proposition, c.creationHeight, c.additionalTokens, c.additionalRegisters)))
+    }
+    pool = pool.putWithoutCheck(txsWithAscendingPriority)
+    pool.take(5).toSeq.map(_.id) shouldBe txsWithAscendingPriority.reverse.map(_.id)
+    pool.getAll.map(_.id) shouldBe txsWithAscendingPriority.reverse.map(_.id)
+  }
 
   it should "Accept output of pooled transactions" in {
     val (us, bh) = createUtxoState()

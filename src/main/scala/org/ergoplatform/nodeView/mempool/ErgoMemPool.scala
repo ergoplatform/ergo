@@ -8,7 +8,7 @@ import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.ModifierId
 
-import scala.util.{Random, Try}
+import scala.util.Try
 
 /**
   * Immutable memory pool implementation.

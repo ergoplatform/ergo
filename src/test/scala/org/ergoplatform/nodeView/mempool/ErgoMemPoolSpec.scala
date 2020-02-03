@@ -109,7 +109,7 @@ class ErgoMemPoolSpec extends FlatSpec
     pool.getAll should contain only (mostPrioritizedTx +: lessPrioritizedTxs.tail: _*)
   }
 
-  it should "return results take and getAll sorted by priority" in {
+  it should "return results take / getAll / getAllPrioritized sorted by priority" in {
     var pool = ErgoMemPool.empty(settings)
     val masterTx = invalidErgoTransactionGen.sample.get
     val proposition = settings.chainSettings.monetary.feeProposition
@@ -121,6 +121,7 @@ class ErgoMemPoolSpec extends FlatSpec
     pool = pool.putWithoutCheck(txsWithAscendingPriority)
     pool.take(5).toSeq.map(_.id) shouldBe txsWithAscendingPriority.reverse.map(_.id)
     pool.getAll.map(_.id) shouldBe txsWithAscendingPriority.reverse.map(_.id)
+    pool.getAllPrioritized.map(_.id) shouldBe txsWithAscendingPriority.reverse.map(_.id)
   }
 
   it should "Accept output of pooled transactions" in {

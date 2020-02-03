@@ -56,12 +56,6 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     new ErgoMemPool(pool.filter(condition))
   }
 
-  override def randomSlice(txsNum: Int): Seq[ErgoTransaction] = {
-    val txs = pool.orderedTransactions.values.toArray
-    val maxTxs = txs.length
-    if (maxTxs <= txsNum) txs else randSliceIndexes(txsNum, txs.length).map(txs)
-  }
-
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {
     new ErgoMemPool(pool.invalidate(tx))
   }
@@ -100,12 +94,6 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
       .filter(_.ergoTree == settings.chainSettings.monetary.feeProposition)
       .map(_.value)
       .sum
-
-  private def randSliceIndexes(qty: Int, max: Int): Seq[Int] = {
-    require(qty <= max)
-    val idx = Random.nextInt(max)
-    (idx until (idx + qty)).map( _ % max)
-  }
 
 }
 

@@ -22,9 +22,4 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
   def modifierById(modifierId: ModifierId): Option[ErgoTransaction]
 
-  /** Returns a sequence of randomly selected transactions.
-    * @param txsNum - number of transactions in the digest
-    */
-  def randomSlice(txsNum: Int): Seq[ErgoTransaction]
-
 }

@@ -60,7 +60,7 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     println("ordered tx weights: " + newPool.orderedTransactions.map(_._1.weight))
     println("===")
     if (newPool.orderedTransactions.size > mempoolCapacity) {
-      val victim = newPool.orderedTransactions.head._2
+      val victim = newPool.orderedTransactions.last._2
       newPool.remove(victim)
     } else {
       newPool
@@ -68,6 +68,7 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
   }
 
   def remove(tx: ErgoTransaction): OrderedTxPool = {
+    println(s"pool: " + orderedTransactions.keySet)
     println(s"removing $tx")
     transactionsRegistry.get(tx.id).fold(this)(wtx =>
       OrderedTxPool(orderedTransactions - wtx, transactionsRegistry - tx.id, invalidated, outputs -- tx.outputs.map(_.id)).updateFamily(tx, -wtx.weight))

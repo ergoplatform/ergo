@@ -105,6 +105,7 @@ class ErgoMemPoolSpec extends FlatSpec
     pool.size shouldBe 4
     pool.getAll should contain only (lessPrioritizedTxs: _*)
     pool = pool.putWithoutCheck(Seq(mostPrioritizedTx))
+    pool.size shouldBe 4
     pool.getAll should contain only (mostPrioritizedTx +: lessPrioritizedTxs.tail: _*)
   }
 

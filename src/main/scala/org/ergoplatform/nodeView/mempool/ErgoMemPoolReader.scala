@@ -22,11 +22,18 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
 
   /**
-    * Returns given transactions resided in pool sorted by weight
+    * Returns given number of transactions resided in pool sorted by weight
     */
   def take(limit: Int): Iterable[ErgoTransaction]
 
   def modifierById(modifierId: ModifierId): Option[ErgoTransaction]
 
-  def weightedTransactions(limit: Int): Seq[WeightedTxId]
+  /**
+    * Returns transaction ids with weights. Weight depends on a fee a transaction is paying.
+    * Resulting transactions are sorted by weight in descending order.
+    *
+    * @param limit - number of weighted transactions to return
+    * @return an ordered sequence of transaction ids with weights
+    */
+  def weightedTransactionIds(limit: Int): Seq[WeightedTxId]
 }

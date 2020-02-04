@@ -322,9 +322,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       tx -> cost
     }
 
-    val weighted = pool.weightedTransactions(100)
-    println("wids: " + weighted.map(_.id).toList)
-
     val poolTxs = pool.getAllPrioritized
 
     val (txs, toEliminate) = ErgoMiner.collectTxs(minerPk,
@@ -345,13 +342,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       case Failure(t: Throwable) =>
         emissionTxOpt match {
           case Some(emissionTx) =>
-            log.error("Failed to produce candidate block, but emission box is found: ", t)
+            log.error("Failed to produce proofs for transactions, but emission box is found: ", t)
             val fallbackTxs = Seq(emissionTx._1)
             state.proofsForTransactions(fallbackTxs).map { case (adProof, adDigest) =>
               CandidateBlock(bestHeaderOpt, version, nBits, adDigest, adProof, fallbackTxs, timestamp, extensionCandidate, votes)
             }
           case None =>
-            log.error("Failed to produce candidate block, and no emission box available: ", t)
+            log.error("Failed to produce proofs for transactions and no emission box available: ", t)
             Failure(t)
         }
     }

@@ -86,7 +86,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     case CleanupDone =>
       log.info("Cleanup done. Switching to awaiting mode")
       //rebroadcast transactions
-      broadcastRandomTransactions()
+      rebroadcastTransactions()
       context become awaiting
 
     case _ => // ignore other triggers until work is done
@@ -99,13 +99,16 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     context become working // ignore other triggers until work is done
   }
 
-  private def broadcastRandomTransactions(): Unit = {
+  private def rebroadcastTransactions(): Unit = {
     log.debug("Rebroadcasting transactions")
     stateReaderOpt.foreach { st =>
       poolReaderOpt.foreach { pr =>
-        pr.take(3).foreach { tx =>
+        pr.take(settings.nodeSettings.rebroadcastCount).foreach { tx =>
           st match {
             case utxo: UtxoState =>
+              //todo: currently we're rebroadcasting transactions which are spending on-chain outputs only
+              //todo: this is to be changed when most of the nodes on the network will support transactions spending
+              //todo: offchain outputs in the mempool (versions 3.2.1 and further)
               if (tx.inputs.forall(i => utxo.boxById(i.boxId).isDefined)) {
                 log.info(s"Rebroadcasting $tx")
                 val msg = Message(

@@ -27,12 +27,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
 
   override def take(limit: Int): Iterable[ErgoTransaction] = pool.orderedTransactions.values.take(limit)
 
-  override def getAll: Seq[ErgoTransaction] = {
-    println("ot: " + pool.orderedTransactions)
-    val vs = pool.orderedTransactions.values.toSeq
-    println("vs: " + vs)
-    vs
-  }
+  override def getAll: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq
 
   override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(pool.get)
 
@@ -92,7 +87,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     }
   }
 
-  def weightedTransactions(limit: Int): Seq[WeightedTxId] = pool.orderedTransactions.keysIterator.take(limit).toSeq
+  def weightedTransactionIds(limit: Int): Seq[WeightedTxId] = pool.orderedTransactions.keysIterator.take(limit).toSeq
 
   private def extractFee(tx: ErgoTransaction): Long =
     ErgoState.boxChanges(Seq(tx))._2

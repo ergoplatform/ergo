@@ -25,7 +25,6 @@ import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, Get
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.ValidationSettings
-import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.SType.ErgoBoxRType
@@ -463,14 +462,16 @@ object ErgoMiner extends ScorexLogging {
       mempoolTxs.headOption match {
         case Some(tx) =>
 
-          if(!tx.inputs.forall(inp => stateWithTxs.boxById(inp.boxId).isDefined)){
-            current -> invalidTxs
+          if (!tx.inputs.forall(inp => stateWithTxs.boxById(inp.boxId).isDefined) || doublespend(current, tx)) {
+            //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
+            //do these checks before validating the scripts
+            current -> (invalidTxs :+ tx.id)
           } else {
             implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(tx, Some(upcomingContext), maxTransactionComplexity) match {
               case Success(costConsumed) =>
-                val newTxs = fixTxsConflicts(acc :+ (tx, costConsumed))
+                val newTxs = acc :+ (tx, costConsumed)
                 val newBoxes = newTxs.flatMap(_._1.outputs)
                 val emissionRules = stateWithTxs.constants.settings.chainSettings.emissionRules
 
@@ -511,16 +512,10 @@ object ErgoMiner extends ScorexLogging {
     loop(mempoolTxsIn, startTransactions, None, Seq.empty)
   }
 
-  //Filter out double spending transactions
-  def fixTxsConflicts(txs: Seq[(ErgoTransaction, Long)]): Seq[(ErgoTransaction, Long)] = {
-    txs.foldLeft((Seq.empty[(ErgoTransaction, Long)], Set.empty[ByteArrayWrapper])) { case ((s, keys), (tx, cost)) =>
-      val bxsBaw = tx.inputs.map(_.boxId).map(ByteArrayWrapper.apply)
-      if (bxsBaw.forall(k => !keys.contains(k)) && bxsBaw.size == bxsBaw.toSet.size) {
-        (s :+ (tx, cost)) -> (keys ++ bxsBaw)
-      } else {
-        (s, keys)
-      }
-    }._1
+  //Checks that transaction "tx" is not spending outputs spent already by transactions "txs"
+  def doublespend(txs: Seq[ErgoTransaction], tx: ErgoTransaction): Boolean = {
+    val txsInputs = txs.flatMap(_.inputs.map(_.boxId))
+    tx.inputs.exists(i => txsInputs.exists(_.sameElements(i.boxId)))
   }
 
   case object StartMining

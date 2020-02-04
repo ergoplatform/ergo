@@ -218,7 +218,7 @@ class ErgoMemPoolSpec extends FlatSpec
       })
     }
 
-    val weights = pool.weightedTransactions(11)
+    val weights = pool.weightedTransactionIds(11)
     val ids = weights.map(_.id)
 
     pool.take(11).toSeq.map(_.id) shouldBe ids

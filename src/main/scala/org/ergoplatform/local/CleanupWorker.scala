@@ -58,6 +58,8 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
       case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos
         && !validatedIndex.contains(head.id) =>
 
+        // Take into account previously validated transactions from the pool.
+        // This provides possibility to validate transactions which are spending off-chain outputs.
         val state = validator match {
           case u: UtxoStateReader => u.withTransactions(txs)
           case _ => validator
@@ -80,8 +82,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
         invalidated
     }
 
-    val txsToValidate = mempool.getAll
-   // val txsToValidate = Random.shuffle(mempoolTxs)
+    val txsToValidate = mempool.getAllPrioritized
 
     val invalidatedIds = validationLoop(txsToValidate, Seq.empty, 0L)
     val validatedIds = txsToValidate.map(_.id).filterNot(invalidatedIds.contains)

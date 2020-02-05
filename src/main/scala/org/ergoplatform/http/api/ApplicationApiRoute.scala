@@ -3,75 +3,24 @@ package org.ergoplatform.http.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, HCursor, Json}
-import org.ergoplatform.ErgoBox.BoxId
+import io.circe.Encoder
 import org.ergoplatform._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.scanning.ExternalAppRequest
-import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
-import scorex.crypto.authds.ADKey
-
 import scala.util.{Failure, Success}
+import ApplicationEntities._
 
 /**
   * This class contains methods to register / deregister and list external applications.
-  * See EIP-0001 (https://github.com/ergoplatform/eips/blob/master/eip-0001.md)
+  * See EIP-0001 (https://github.com/ergoplatform/eips/blob/master/eip-0001.md) for motivation behind this API.
   */
 
-
-case class ApplicationId(appId: AppId)
-
-object ApplicationId {
-
-  implicit val applicationIdEncoder: Encoder[ApplicationId] = { appStatus =>
-    Json.obj("appId" -> appStatus.appId.asJson)
-  }
-
-  implicit val applicationIdDecoder: Decoder[ApplicationId] = { c: HCursor =>
-    for {
-      appId <- c.downField("appId").as[Short]
-    } yield ApplicationId(appId)
-  }
-
-}
-
-case class ApplicationIdBoxId(appId: AppId, boxId: BoxId)
-
-object ApplicationIdBoxId extends JsonCodecs {
-
-  implicit val applicationIdBoxIdEncoder: Encoder[ApplicationIdBoxId] = { appStatus =>
-    Json.obj("appId" -> appStatus.appId.asJson, "boxId" -> Algos.encode(appStatus.boxId).asJson)
-  }
-
-  implicit val applicationIdDecoder: Decoder[ApplicationIdBoxId] = { c: HCursor =>
-    for {
-      appId <- c.downField("appId").as[Short]
-      boxId <- c.downField("boxId").as[ADKey]
-    } yield ApplicationIdBoxId(appId, boxId)
-  }
-
-}
-
-case class ApplicationIdBox(appId: AppId, boxBytes: Array[Byte])
-
-object ApplicationIdBox extends JsonCodecs {
-
-  implicit val applicationIdDecoder: Decoder[ApplicationIdBox] = { c: HCursor =>
-    for {
-      appId <- c.downField("appId").as[Short]
-      boxBytes <- c.downField("boxBytes").as[Array[Byte]]
-    } yield ApplicationIdBox(appId, boxBytes)
-  }
-
-}
-
-
-final case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
-                                    (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
+case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
+                              (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
 
   import org.ergoplatform.nodeView.wallet.scanning.ExternalApplicationJsonCodecs._
 
@@ -109,14 +58,18 @@ final case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: Ergo
     withWallet(_.readApplications())
   }
 
-  def uncertainR: Route = (path("uncertainBoxes" / IntNumber) & get & boxParams ) { (appIdInt, minConfNum, minHeight) =>
+  def uncertainR: Route = (path("uncertainBoxes" / IntNumber) & get & boxParams) { (appIdInt, minConfNum, minHeight) =>
     val appId = appIdInt.toShort
-    withWallet(_.uncertainBoxes(appId).map {_.filter(boxPredicate(_, minConfNum, minHeight))})
+    withWallet(_.uncertainBoxes(appId).map {
+      _.filter(boxPredicate(_, minConfNum, minHeight))
+    })
   }
 
   def unspentR: Route = (path("unspentBoxes" / IntNumber) & get & boxParams) { (appIdInt, minConfNum, minHeight) =>
     val appId = appIdInt.toShort
-    withWallet(_.appBoxes(appId, unspentOnly = true).map {_.filter(boxPredicate(_, minConfNum, minHeight))})
+    withWallet(_.appBoxes(appId, unspentOnly = true).map {
+      _.filter(boxPredicate(_, minConfNum, minHeight))
+    })
   }
 
   def makeCertainR: Route = (path("makeCertain") & post & entity(as[ApplicationIdBoxId])) { appIdBoxId =>

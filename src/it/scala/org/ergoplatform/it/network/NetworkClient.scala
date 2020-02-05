@@ -18,7 +18,6 @@ class NetworkClient(chainId: Char,
                     allChannels: ChannelGroup) extends ScorexLogging {
 
   private val workerGroup = new NioEventLoopGroup()
-  private val handshake = ??? // Handshake(Constants.ApplicationName + chainId, Version.VersionTuple, nodeName, nonce, None)
 
   def connect(remoteAddress: InetSocketAddress): Future[Channel] = {
     val p = Promise[Channel]
@@ -35,7 +34,7 @@ class NetworkClient(chainId: Char,
 
     val channel = channelFuture.channel()
     allChannels.add(channel)
-    channel.closeFuture().addListener { (chf: ChannelFuture) =>
+    channel.closeFuture().addListener { chf: ChannelFuture =>
       if (!p.isCompleted) {
         val cause = Option(chf.cause()).getOrElse(new IllegalStateException("The connection is closed before handshake"))
         p.failure(new IOException(cause))

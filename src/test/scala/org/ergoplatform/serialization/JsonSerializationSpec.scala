@@ -118,18 +118,4 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     decodedRegs should contain theSameElementsAs registers
   }
 
-  private def checkTransaction(c: ACursor, txOpt: Option[ErgoTransaction]) = {
-    import ErgoTransaction.transactionDecoder
-    val Right(decodedTxOpt) = c.as[Option[ErgoTransaction]]
-    if (txOpt.isEmpty) {
-      decodedTxOpt shouldBe empty
-    } else {
-      val decoded = decodedTxOpt.get
-      val tx = txOpt.get
-      decoded.id shouldEqual tx.id
-      decoded.inputs should contain theSameElementsInOrderAs tx.inputs
-      decoded.outputs should contain theSameElementsInOrderAs tx.outputs
-    }
-  }
-
 }

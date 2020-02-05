@@ -286,7 +286,7 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
   }
 
   // Rollback to the specified version: undo all changes done after specified version
-  def rollback(versionID: VersionID): Try[Unit] = Try {
+  def rollbackTo(versionID: VersionID): Try[Unit] = Try {
     lock.writeLock().lock()
     try {
       val versionIndex = versions.indexWhere(_.sameElements(versionID))

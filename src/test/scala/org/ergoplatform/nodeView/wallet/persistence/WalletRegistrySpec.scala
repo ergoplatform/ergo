@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import org.ergoplatform.wallet.Constants.PaymentsAppId
-import io.iohk.iodb.{LSMStore, Store}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}

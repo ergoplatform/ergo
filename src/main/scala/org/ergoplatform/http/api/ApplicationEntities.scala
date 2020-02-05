@@ -1,5 +1,6 @@
 package org.ergoplatform.http.api
 
+import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.JsonCodecs

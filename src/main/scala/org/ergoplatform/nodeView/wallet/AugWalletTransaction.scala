@@ -6,7 +6,6 @@ import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 
-
 /**
   * A wallet transaction augmented with confirmations number.
   */

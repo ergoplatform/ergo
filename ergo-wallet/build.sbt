@@ -1,5 +1,3 @@
-import scala.util.Try
-
 val circeVersion = "0.10.0"
 
 libraryDependencies ++= Seq(

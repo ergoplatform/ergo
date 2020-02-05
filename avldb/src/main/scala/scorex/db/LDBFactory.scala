@@ -48,7 +48,7 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
 
     def delete(key: Array[Byte], options: WriteOptions): Snapshot = impl.delete(key, options)
 
-    def getSnapshot: Snapshot = impl.getSnapshot()
+    def getSnapshot: Snapshot = impl.getSnapshot
 
     def getApproximateSizes(ranges: Range*): Array[Long] = impl.getApproximateSizes(ranges: _*)
 

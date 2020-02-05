@@ -1,7 +1,6 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Longs
-import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
@@ -18,7 +17,7 @@ import scala.concurrent.{Await, Future}
 import scala.util.{Success, Try}
 import scala.language.implicitConversions
 
-class VersionedIODBAVLStorageSpecification extends PropSpec
+class VersionedLDBAVLStorageSpecification extends PropSpec
   with GeneratorDrivenPropertyChecks
   with Matchers
   with TestHelper {
@@ -245,7 +244,7 @@ class VersionedIODBAVLStorageSpecification extends PropSpec
 
   }
 
-  def removeFromLargerSetSingleRandomElementTest(createStore: (Int) => LDBVersionedStore): Unit = {
+  def removeFromLargerSetSingleRandomElementTest(createStore: Int => LDBVersionedStore): Unit = {
     val minSetSize = 10000
     val maxSetSize = 200000
 

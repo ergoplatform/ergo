@@ -1,6 +1,5 @@
 package org.ergoplatform.utils.generators
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
@@ -16,6 +15,8 @@ import org.ergoplatform.wallet.utils.Generators
 import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.db.ByteArrayWrapper
+import scorex.util._
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
@@ -48,7 +49,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     tokens <- additionalTokensGen
     value <- validValueGen(prop, tokens, ar)
   } yield new ErgoBoxCandidate(value, prop, h, tokens.toColl, ar)
-
 
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = ergoBoxGen(propGen = trueLeafGen)
 

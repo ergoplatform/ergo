@@ -71,6 +71,12 @@ final case class TrackedBox(creationTxId: ModifierId,
     case (id, amt) => bytesToId(id) -> amt
   }.toMap
 
+  override def equals(obj: Any): Boolean = obj match {
+    case tb: TrackedBox => tb.creationTxId == creationTxId && tb.creationOutIndex == creationOutIndex
+    case _ => false
+  }
+
+  override def hashCode(): Int = (creationTxId, creationOutIndex).hashCode()
 }
 
 object TrackedBox {

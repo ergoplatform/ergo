@@ -16,7 +16,7 @@ import scala.concurrent.duration._
 
 class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelpers {
 
-  val cleanupDuration: FiniteDuration = 5.seconds
+  val cleanupDuration: FiniteDuration = 2.seconds
   val settingsToTest: ErgoSettings = settings.copy(
     nodeSettings = settings.nodeSettings.copy(mempoolCleanupDuration = cleanupDuration))
   val fixture = new NodeViewFixture(settingsToTest)

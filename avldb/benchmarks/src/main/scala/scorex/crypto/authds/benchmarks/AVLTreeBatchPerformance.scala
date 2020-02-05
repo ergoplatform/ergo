@@ -1,12 +1,12 @@
 package scorex.crypto.authds.benchmarks
 
-import java.util.concurrent.{ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.TimeUnit
 
-import io.iohk.iodb.LSMStore
 import org.openjdk.jmh.annotations._
 import org.slf4j.LoggerFactory
-import scorex.crypto.authds.avltree.batch.{Operation, PersistentBatchAVLProver, VersionedIODBAVLStorage}
+import scorex.crypto.authds.avltree.batch.{Operation, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.db.LDBVersionedStore
 
 object AVLTreeBatchPerformance extends {
 
@@ -20,13 +20,13 @@ object AVLTreeBatchPerformance extends {
 
     val logger = LoggerFactory.getLogger("TEST")
     var prover: Prover = _
-    var store: LSMStore = _
-    var storage: VersionedIODBAVLStorage[Digest32] = _
+    var store: LDBVersionedStore = _
+    var storage: VersionedLDBAVLStorage[Digest32] = _
     var operations: Array[Operation] = _
 
     @Setup(Level.Iteration)
     def up: Unit = {
-      val (p, s, _) = getPersistentProverWithLSMStore(1000, proverCnt)
+      val (p, s, _) = persistentProverWithVersionedStore(1000, proverCnt)
       store = s
       prover = p
       operations = generateOps(proverCnt until (proverCnt + opsCnt))
@@ -34,7 +34,6 @@ object AVLTreeBatchPerformance extends {
 
     @TearDown(Level.Iteration)
     def down: Unit = {
-      store.executor.asInstanceOf[ThreadPoolExecutor].shutdownNow()
       prover = null
       operations = Array.empty
     }

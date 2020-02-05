@@ -13,9 +13,13 @@ case class RequestsHolder(requests: Seq[TransactionRequest],
                          (implicit val addressEncoder: ErgoAddressEncoder) {
 
   // Add separate payment request with fee.
-  def withFee: Seq[TransactionRequest] = requests ++ feeOpt
-    .map(PaymentRequest(Pay2SAddress(ErgoScriptPredef.feeProposition()), _, Seq.empty, Map.empty))
-    .toSeq
+  def withFee: Seq[TransactionRequest] = {
+    val address = Pay2SAddress(ErgoScriptPredef.feeProposition())
+    val feeRequests = feeOpt
+        .map(PaymentRequest(address, _, assets = Seq.empty, registers = Map.empty))
+        .toSeq
+    requests ++ feeRequests
+  }
 
 }
 

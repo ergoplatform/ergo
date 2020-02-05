@@ -94,7 +94,8 @@ class ErgoUnsafeProverSpec
     override def sigmaLastHeaders: Coll[Header] = Colls.emptyColl
 
     override def previousStateDigest: ADDigest = Base16.decode("a5df145d41ab15a01e0cd3ffbab046f0d029e5412293072ad0f5827428589b9302")
-      .fold(_ => throw new Error(s"Failed to parse genesisStateDigest"), ADDigest @@ _)
+      .map(ADDigest @@ _)
+      .getOrElse(throw new Error(s"Failed to parse genesisStateDigest"))
 
     override def sigmaPreHeader: PreHeader = CPreHeader(
       version = 0,

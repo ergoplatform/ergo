@@ -6,6 +6,8 @@ import scorex.util.encode.Base16
 import sigmastate.interpreter.CryptoConstants
 import sigmastate.serialization.GroupElementSerializer
 
+import scala.annotation.tailrec
+
 /**
   * Schnorr signature scheme implementation.
   */
@@ -44,11 +46,13 @@ object ErgoSignature {
     java.util.Arrays.equals(hf(s), cBytes)
   }
 
+  @tailrec
   private[crypto] def genSecret: BigInt = {
     val y = BigInt(BigIntegers.fromUnsignedByteArray(secureRandomBytes(32)))
     if (y == 0 || y >= groupOrder) genSecret else y
   }
 
+  // TODO optimize: replace `take` with unboxed implementation
   private def hf(x: Array[Byte]): Array[Byte] = Blake2b256.hash(x).take(24)
 
   // Assembles a commitment of equivalent to `SigmaTree` form

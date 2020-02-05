@@ -1,11 +1,11 @@
 package scorex.crypto.authds.avltree.batch
 
-import io.iohk.iodb.{LSMStore, Store}
 import org.scalatest.{Matchers, PropSpec}
-import scorex.crypto.authds.avltree.batch.benchmark.IODBBenchmark.getRandomTempDir
+import scorex.crypto.authds.avltree.batch.benchmark.LDBVersionedStoreBenchmark.getRandomTempDir
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.utils.Random
+import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 
@@ -14,12 +14,12 @@ class AVLStorageWithPersistentProverSpec extends PropSpec with Matchers {
   type HF = Blake2b256.type
   implicit val hf: HF = Blake2b256
 
-  val stateStore: Store = new LSMStore(getRandomTempDir)
+  val stateStore = new LDBVersionedStore(getRandomTempDir, 10)
 
   private lazy val np =
     NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
 
-  protected lazy val storage = new VersionedIODBAVLStorage(stateStore, np)
+  protected lazy val storage = new VersionedLDBAVLStorage(stateStore, np)
 
   protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, HF] =
     PersistentBatchAVLProver.create(
@@ -35,7 +35,7 @@ class AVLStorageWithPersistentProverSpec extends PropSpec with Matchers {
     Try {
       if (!(persistentProver.digest.sameElements(rollBackTo) &&
         storage.version.get.sameElements(rollBackTo) &&
-        stateStore.lastVersionID.get.data.sameElements(rollBackTo))) Failure(new Error("Bad state version."))
+        stateStore.lastVersionID.get.sameElements(rollBackTo))) Failure(new Error("Bad state version."))
 
       mods.foldLeft[Try[Option[ADValue]]](Success(None)) { case (t, m) =>
         t.flatMap(_ => {
@@ -61,9 +61,6 @@ class AVLStorageWithPersistentProverSpec extends PropSpec with Matchers {
 
   private val iMods32 = (0 until 100)
     .map(i => Insert(ADKey @@ Random.randomBytes(), ADValue @@ Array.fill(32)(i.toByte)))
-
-  private val iMods64 = (0 until 100)
-    .map(i => Insert(ADKey @@ Random.randomBytes(), ADValue @@ Array.fill(64)(i.toByte)))
 
   private val iMods128 = (0 until 100)
     .map(i => Insert(ADKey @@ Random.randomBytes(), ADValue @@ Array.fill(128)(i.toByte)))

@@ -28,10 +28,16 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
   // count validation sessions in order to perform index cleanup.
   private var epochNr: Int = 0
 
+  override def preStart(): Unit = {
+    log.info("Cleanup worker started")
+  }
+
   override def receive: Receive = {
     case RunCleanup(validator, mempool) =>
       runCleanup(validator, mempool)
       sender() ! CleanupDone
+
+    case a: Any => log.warn(s"Strange input: $a")
   }
 
   private def runCleanup(validator: TransactionValidation[ErgoTransaction],
@@ -54,35 +60,36 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     @tailrec
     def validationLoop(txs: Seq[ErgoTransaction],
                        invalidated: Seq[ModifierId],
-                       etAcc: Long): Seq[ModifierId] = txs match {
-      case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos
-        && !validatedIndex.contains(head.id) =>
+                       etAcc: Long): Seq[ModifierId] = {
+      txs match {
+        case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos && !validatedIndex.contains(head.id) =>
 
-        // Take into account previously validated transactions from the pool.
-        // This provides possibility to validate transactions which are spending off-chain outputs.
-        val state = validator match {
-          case u: UtxoStateReader => u.withTransactions(txs)
-          case _ => validator
-        }
+          // Take into account previously validated transactions from the pool.
+          // This provides possibility to validate transactions which are spending off-chain outputs.
+          val state = validator match {
+            case u: UtxoStateReader => u.withTransactions(txs)
+            case _ => validator
+          }
 
-        val t0 = System.nanoTime()
-        val validationResult = state.validate(head)
-        val t1 = System.nanoTime()
-        val accumulatedTime = etAcc + (t1 - t0)
-        validationResult match {
-          case Success(_) => validationLoop(tail, invalidated, accumulatedTime)
-          case Failure(e) =>
-            log.debug(s"Transaction ${head.id} invalidated: ${e.getMessage}")
-            validationLoop(tail, invalidated :+ head.id, accumulatedTime)
-        }
-      case _ :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos =>
-        // this transaction was validated earlier, skip it
-        validationLoop(tail, invalidated, etAcc)
-      case _ =>
-        invalidated
+          val t0 = System.nanoTime()
+          val validationResult = state.validate(head)
+          val t1 = System.nanoTime()
+          val accumulatedTime = etAcc + (t1 - t0)
+          validationResult match {
+            case Success(_) => validationLoop(tail, invalidated, accumulatedTime)
+            case Failure(e) =>
+              log.debug(s"Transaction ${head.id} invalidated: ${e.getMessage}")
+              validationLoop(tail, invalidated :+ head.id, accumulatedTime)
+          }
+        case _ :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos =>
+          // this transaction was validated earlier, skip it
+          validationLoop(tail, invalidated, etAcc)
+        case _ =>
+          invalidated
+      }
     }
 
-    val txsToValidate = mempool.getAllPrioritized
+    val txsToValidate = mempool.getAllPrioritized.toList
 
     val invalidatedIds = validationLoop(txsToValidate, Seq.empty, 0L)
     val validatedIds = txsToValidate.map(_.id).filterNot(invalidatedIds.contains)

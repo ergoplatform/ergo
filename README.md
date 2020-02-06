@@ -6,13 +6,17 @@ the [Bitcoin protocol](https://bitcoin.org/bitcoin.pdf).
 
 Ergo Platform website: [https://ergoplatform.org/](https://ergoplatform.org/)
 
+Discord chat: [https://discordapp.com/invite/kj7s7nb](https://discordapp.com/invite/kj7s7nb)
+
+Telegram: [https://t.me/ergoplatform](https://t.me/ergoplatform)
+
 ## Differences from Bitcoin
 
-* Memory-hard non-outsourceable Proof-of-Work function [Autolykos](https://github.com/ergoplatform/autoleakus)
-* New modes of operation: [light-fullnode](https://eprint.iacr.org/2016/994),
-[light-SPV](http://fc16.ifca.ai/bitcoin/papers/KLS16.pdf), hybrid modes
 * [Alternative transactional language](https://github.com/ScorexFoundation/sigmastate-interpreter), which is more powerful that Bitcoin Script but also safe against
 heavy validation attacks
+* New modes of operation: [light-fullnode](https://eprint.iacr.org/2016/994),
+[light-SPV](http://fc16.ifca.ai/bitcoin/papers/KLS16.pdf), hybrid modes
+* Memory-hard non-outsourceable Proof-of-Work function [Autolykos](https://github.com/ergoplatform/autoleakus)
 * Alternative fee model with [mandatory storage-rent component](https://fc18.ifca.ai/bitcoin/papers/bitcoin18-final18.pdf )
 
 ## Specifications

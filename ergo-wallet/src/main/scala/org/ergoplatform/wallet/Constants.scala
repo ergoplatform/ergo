@@ -14,5 +14,6 @@ object Constants {
   // SimplePayments application identifier
   val PaymentsAppId: Short = 10
 
+  // Application which is checking mining rewards
   val MiningRewardsQueueId: Short = 9
 }

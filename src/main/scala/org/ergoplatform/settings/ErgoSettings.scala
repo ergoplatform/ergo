@@ -39,9 +39,6 @@ case class ErgoSettings(directory: String,
         .orElse(addressEncoder.fromString(str).collect { case p2pk: P2PKAddress => p2pk.pubkey })
         .toOption
     }
-
-  lazy val walletStorage: WalletStorage = WalletStorage.readOrCreate(this)(addressEncoder)
-  lazy val walletRegistry: WalletRegistry = WalletRegistry.readOrCreate(this)
 }
 
 object ErgoSettings extends ScorexLogging

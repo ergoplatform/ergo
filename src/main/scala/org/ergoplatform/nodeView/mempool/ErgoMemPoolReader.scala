@@ -16,13 +16,13 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
   def getAll: Seq[ErgoTransaction]
 
   /**
-    * Returns all transactions resided in pool sorted by weight
+    * Returns all transactions resided in pool sorted by weight in descending order
     */
   def getAllPrioritized: Seq[ErgoTransaction]
 
 
   /**
-    * Returns given number of transactions resided in pool sorted by weight
+    * Returns given number of transactions resided in pool sorted by weight in descending order
     */
   def take(limit: Int): Iterable[ErgoTransaction]
 

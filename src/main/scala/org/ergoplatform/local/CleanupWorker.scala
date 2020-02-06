@@ -37,6 +37,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
       runCleanup(validator, mempool)
       sender() ! CleanupDone
 
+    //Should not be here, if non-expected signal comes, check logic
     case a: Any => log.warn(s"Strange input: $a")
   }
 
@@ -89,6 +90,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
       }
     }
 
+    // Check transactions sorted by priority. Parent transaction comes before its children.
     val txsToValidate = mempool.getAllPrioritized.toList
 
     val invalidatedIds = validationLoop(txsToValidate, Seq.empty, 0L)

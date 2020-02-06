@@ -339,6 +339,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       case Success((adProof, adDigest)) =>
         Success(CandidateBlock(bestHeaderOpt, version, nBits, adDigest, adProof, txs, timestamp, extensionCandidate, votes))
       case Failure(t: Throwable) =>
+        // We can not produce a block for some reason, so print out an error
+        // and collect only emission transaction if it exists.
+        // We consider that emission transaction is always valid.
         emissionTxOpt match {
           case Some(emissionTx) =>
             log.error("Failed to produce proofs for transactions, but emission box is found: ", t)

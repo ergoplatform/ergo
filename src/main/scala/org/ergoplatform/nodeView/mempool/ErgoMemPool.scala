@@ -67,6 +67,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
             new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
             _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
           )
+
         // transaction validation currently works only for UtxoState, so this branch currently
         // will not be triggered probably
         case validator: TransactionValidation[ErgoTransaction@unchecked] if pool.canAccept(tx) =>

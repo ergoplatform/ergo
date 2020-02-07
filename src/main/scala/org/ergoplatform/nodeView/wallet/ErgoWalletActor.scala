@@ -9,10 +9,7 @@ import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletVars
-import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, decodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.persistence._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication}
@@ -22,7 +19,6 @@ import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.protocol.context.TransactionContext
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage}
 import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
@@ -33,9 +29,7 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import sigmastate.interpreter.ContextExtension
-import sigmastate.utxo.CostTable
-import org.ergoplatform.wallet.Constants.{MiningRewardsQueueId, PaymentsAppId}
+import org.ergoplatform.wallet.Constants.PaymentsAppId
 
 import scala.util.{Failure, Random, Success, Try}
 
@@ -115,7 +109,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     //scan block transactions
     case ScanOnChain(block) =>
-      val (reg, offReg) = WalletScanLogic.scanBlockTransactions(registry, offChainRegistry, stateContext, walletVars, height, block.id, block.transactions)
+      val (reg, offReg) = WalletScanLogic.scanBlockTransactions(registry, offChainRegistry, stateContext, walletVars,
+        height, block.id, block.transactions)
       registry = reg
       offChainRegistry= offReg
 

@@ -68,14 +68,6 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def balanceAmount(boxes: Seq[ErgoBox]): Long = boxes.map(_.value).sum
 
-  def boxesAvailable(block: ErgoFullBlock, bytes: Array[Byte]): Seq[ErgoBox] = {
-    block.transactions.flatMap(boxesAvailable(_, bytes))
-  }
-
-  def boxesAvailable(tx: ErgoTransaction, bytes: Array[Byte]): Seq[ErgoBox] = {
-    tx.outputs.filter(_.propositionBytes.containsSlice(bytes))
-  }
-
   def boxesAvailable(block: ErgoFullBlock, pk: ProveDlog): Seq[ErgoBox] = {
     block.transactions.flatMap(boxesAvailable(_, pk))
   }
@@ -153,6 +145,5 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def randomNewAsset: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> randomLong())
   def assetsWithRandom(boxes: Seq[ErgoBox]): Seq[(TokenId, Long)] = randomNewAsset ++ assetsByTokenId(boxes)
-  def badAssets: Seq[(TokenId, Long)] = additionalTokensGen.sample.value
 
 }

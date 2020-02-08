@@ -105,7 +105,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case ScanOffChain(tx) =>
       val resolvedTrackedBoxes = WalletScanLogic.extractWalletOutputs(tx, None, walletVars)
       val inputs = extractAllInputs(tx)
-      offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
+      offChainRegistry = offChainRegistry.updateOnTransaction(resolvedTrackedBoxes, inputs)
 
     //scan block transactions
     case ScanOnChain(block) =>

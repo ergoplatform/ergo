@@ -32,8 +32,8 @@ final case class OffChainRegistry(height: Int,
   /**
     * Update on receiving new off-chain transaction.
     */
-  def updated(certainBoxes: Seq[TrackedBox],
-              spentIds: Seq[EncodedBoxId]): OffChainRegistry = {
+  def updateOnTransaction(certainBoxes: Seq[TrackedBox],
+                          spentIds: Seq[EncodedBoxId]): OffChainRegistry = {
     val unspentCertain = offChainBalances.filterNot(x => spentIds.contains(x.id)) ++
       certainBoxes.map { tb =>
         Balance(encodedBoxId(tb.box.id), tb.box.value,

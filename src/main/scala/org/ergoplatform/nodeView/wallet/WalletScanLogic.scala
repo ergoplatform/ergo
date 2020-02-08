@@ -28,7 +28,7 @@ object WalletScanLogic extends ScorexLogging {
     *
     * todo: currently used only to decide that a box with mining rewards could be spent, do special method for that?
     */
-  def resolve(box: ErgoBox,
+  private def resolve(box: ErgoBox,
               proverOpt: Option[ErgoProvingInterpreter],
               stateContext: ErgoStateContext,
               height: Int): Boolean = {

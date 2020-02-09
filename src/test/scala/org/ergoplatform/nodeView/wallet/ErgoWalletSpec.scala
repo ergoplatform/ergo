@@ -239,7 +239,6 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
   property("off-chain scan") {
     withFixture { implicit w =>
       val pubKey = getPublicKeys.head.script
-      val fakeInput = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), emptyProverResult))
 
       val bs0 = getBalancesWithUnconfirmed
       bs0.walletBalance shouldBe 0
@@ -247,7 +246,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val balance1 = Random.nextInt(1000) + 1
       val box1 = IndexedSeq(new ErgoBoxCandidate(balance1, pubKey, startHeight, randomNewAsset.toColl))
-      wallet.scanOffchain(ErgoTransaction(fakeInput, box1))
+      wallet.scanOffchain(ErgoTransaction(fakeInputs, box1))
 
       blocking(Thread.sleep(1000))
 
@@ -257,7 +256,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val balance2 = Random.nextInt(1000) + 1
       val box2 = IndexedSeq(new ErgoBoxCandidate(balance2, pubKey, startHeight, randomNewAsset.toColl))
-      wallet.scanOffchain(ErgoTransaction(fakeInput, IndexedSeq(), box2))
+      wallet.scanOffchain(ErgoTransaction(fakeInputs, IndexedSeq(), box2))
 
       blocking(Thread.sleep(1000))
 

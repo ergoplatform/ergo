@@ -12,6 +12,7 @@ import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.fixtures.WalletFixture
+import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
@@ -145,5 +146,7 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def randomNewAsset: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> randomLong())
   def assetsWithRandom(boxes: Seq[ErgoBox]): Seq[(TokenId, Long)] = randomNewAsset ++ assetsByTokenId(boxes)
+
+  val fakeInputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), emptyProverResult))
 
 }

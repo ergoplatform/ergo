@@ -115,7 +115,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   /**
     * Updates indexes according to a data extracted from a block and performs versioned update.
     */
-  def updateOnBlock(outputs: Seq[TrackedBox],
+  def updateOnBlock(newOutputs: Seq[TrackedBox],
                     inputs: Seq[(ModifierId, EncodedBoxId, TrackedBox)],
                     txs: Seq[WalletTransaction])
                    (blockId: ModifierId, blockHeight: Int): Unit = {
@@ -123,7 +123,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     val spentBoxesWithTx = inputs.map(t => t._1 -> t._3)
 
     val bag0 = KeyValuePairsBag.empty
-    val bag1 = putBoxes(bag0, outputs)
+    val bag1 = putBoxes(bag0, newOutputs)
     val bag2 = putTxs(bag1, txs)
 
     val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
@@ -136,7 +136,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
-      val receivedTokensAmt = outputs.filter(_.applicationStatuses.contains(PaymentsAppId))
+      val receivedTokensAmt = newOutputs.filter(_.applicationStatuses.contains(PaymentsAppId))
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
@@ -152,7 +152,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
           if (decreasedAmt > 0) acc.updated(encodedId, decreasedAmt) else acc - encodedId
         }
 
-      val receivedAmt = outputs.filter(_.applicationStatuses.contains(PaymentsAppId)).map(_.box.value).sum
+      val receivedAmt = newOutputs.filter(_.applicationStatuses.contains(PaymentsAppId)).map(_.box.value).sum
       val newBalance = wBalance + receivedAmt - spentAmt
       require(
         (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,

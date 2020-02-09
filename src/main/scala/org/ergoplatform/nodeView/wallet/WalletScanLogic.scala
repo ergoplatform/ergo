@@ -92,6 +92,8 @@ object WalletScanLogic extends ScorexLogging {
     val inputs = scanRes._2
     val affectedTransactions = scanRes._3
 
+    println("os: " + outputs.map(_.value))
+
     // function effects: updating registry and offchainRegistry datasets
     registry.updateOnBlock(outputs, inputs, affectedTransactions)(blockId, height)
 

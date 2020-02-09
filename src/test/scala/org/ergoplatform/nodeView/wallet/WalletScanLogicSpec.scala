@@ -83,13 +83,13 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
   property("scanBlockTransactions") {
     withHybridStore(10) { store =>
-      val registry = new WalletRegistry(store)(settings.walletSettings)
+      val emptyReg = new WalletRegistry(store)(settings.walletSettings)
       val offchainRegistry = OffChainRegistry.empty
       val blockId = modIdGen.sample.get
 
       val height0 = 5
       //simplest case - we're scanning an empty block
-      val (r0, o0) = scanBlockTransactions(registry, offchainRegistry, emptyStateContext, walletVars, height0, blockId, Seq.empty)
+      val (r0, o0) = scanBlockTransactions(emptyReg, offchainRegistry, emptyStateContext, walletVars, height0, blockId, Seq.empty)
       val r0digest = r0.fetchDigest()
       r0digest.walletBalance shouldBe 0
       r0digest.walletAssetBalances.size shouldBe 0
@@ -99,6 +99,32 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
       o0digest.walletBalance shouldBe 0
       o0digest.walletAssetBalances.size shouldBe 0
       o0digest.height shouldBe height0
+
+      var registry = r0
+      var off = o0
+
+      //block with one transaction
+      forAll(trackedTransactionGen){trackedTransaction =>
+        val txs = Seq(trackedTransaction.tx)
+        val height1 = 5
+
+        val regDigestBefore = registry.fetchDigest().walletBalance
+        val offDigestBefore = off.digest.walletBalance
+
+        val (r1, o1) = scanBlockTransactions(registry, offchainRegistry, emptyStateContext, walletVars, height1, blockId, txs)
+        val r1digest = r1.fetchDigest()
+        r1digest.walletBalance shouldBe (regDigestBefore + trackedTransaction.paymentValues.sum)
+        r1digest.walletAssetBalances.size shouldBe 0
+        r1digest.height shouldBe height1
+
+        val o1digest = o1.digest
+        o1digest.walletBalance shouldBe (offDigestBefore + trackedTransaction.paymentValues.sum)
+        o1digest.walletAssetBalances.size shouldBe 0
+        o1digest.height shouldBe height1
+
+        registry = r1
+        off = o1
+      }
     }
   }
 

@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletReg
 import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication
 import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
 import org.ergoplatform.settings.{Constants, LaunchParameters}
-import org.ergoplatform.wallet.Constants.{MiningRewardsQueueId, PaymentsAppId}
+import org.ergoplatform.wallet.Constants.{MiningRewardsAppId, PaymentsAppId}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
@@ -55,7 +55,7 @@ object WalletScanLogic extends ScorexLogging {
     //todo: replace with Bloom filter?
     val previousBoxIds = registry.walletUnspentBoxes().map(tb => encodedBoxId(tb.box.id))
 
-    val resolvedBoxes = registry.uncertainBoxes(MiningRewardsQueueId).flatMap { tb =>
+    val resolvedBoxes = registry.uncertainBoxes(MiningRewardsAppId).flatMap { tb =>
       //todo: more efficient resolving, just by using height
       val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)
       if (spendable) Some(tb.copy(applicationStatuses = Map(PaymentsAppId -> BoxCertainty.Certain))) else None
@@ -123,7 +123,7 @@ object WalletScanLogic extends ScorexLogging {
 
       //tweak for tests
       lazy val miningStatus: (AppId, BoxCertainty) = if (walletVars.minerRewardDelay > 0) {
-        MiningRewardsQueueId -> BoxCertainty.Certain
+        MiningRewardsAppId -> BoxCertainty.Certain
       } else {
         PaymentsAppId -> BoxCertainty.Certain
       }

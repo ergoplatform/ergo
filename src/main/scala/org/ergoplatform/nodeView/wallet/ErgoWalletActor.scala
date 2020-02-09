@@ -30,6 +30,8 @@ import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import org.ergoplatform.wallet.Constants.PaymentsAppId
+import sigmastate.Values
+import sigmastate.basics.DLogProtocol
 
 import scala.util.{Failure, Random, Success, Try}
 
@@ -571,11 +573,15 @@ object ErgoWalletActor {
 
     val publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
 
-    val miningScriptsBytes: Seq[Array[Byte]] = proverOpt.toSeq.flatMap(_.pubKeys).map(pk =>
-      ErgoScriptPredef.rewardOutputScript(settings.chainSettings.monetary.minerRewardDelay, pk)
-    ).map(_.bytes)
+    val trackedPubKeys: Seq[DLogProtocol.ProveDlog] = proverOpt.toSeq.flatMap(_.pubKeys)
 
-    val trackedBytes: Seq[Array[Byte]] = proverOpt.toSeq.flatMap(_.pubKeys).map(_.propBytes.toArray)
+    val trackedBytes: Seq[Array[Byte]] = trackedPubKeys.map(_.propBytes.toArray)
+
+    val miningScripts: Seq[Values.ErgoTree] = trackedPubKeys.map(pk =>
+      ErgoScriptPredef.rewardOutputScript(settings.chainSettings.monetary.minerRewardDelay, pk)
+    )
+
+    val miningScriptsBytes: Seq[Array[Byte]] = miningScripts.map(_.bytes)
 
     def resetProver(): WalletVars = this.copy(proverOpt = None)
 

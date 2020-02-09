@@ -27,7 +27,7 @@ import scala.util.{Failure, Success, Try}
   * * certain boxes, spent or not
   *
   */
-final class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
+class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
   import org.ergoplatform.nodeView.wallet.IdUtils.{encodedBoxId, encodedTokenId}

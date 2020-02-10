@@ -27,9 +27,8 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def newAssetIdStub: TokenId = Blake2b256.hash("new_asset")
 
-  def withFixture[T](test: WalletFixture => T): T = {
+  def withFixture[T](test: WalletFixture => T): T =
     new WalletFixture(settings, getCurrentView(_).vault).apply(test)
-  }
 
   def wallet(implicit w: WalletFixture): ErgoWallet = w.wallet
 
@@ -47,9 +46,7 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def scanningInterval(implicit ctx: Ctx): Long = ctx.settings.walletSettings.scanningInterval.toMillis
 
-  def waitForScanning(block: ErgoFullBlock)(implicit ctx: Ctx): Unit = {
-    blocking(Thread.sleep(scanTime(block)))
-  }
+  def waitForScanning(block: ErgoFullBlock)(implicit ctx: Ctx): Unit = blocking(Thread.sleep(scanTime(block)))
 
   def scanTime(block: ErgoFullBlock)(implicit ctx: Ctx): Long = {
     val boxes = block.transactions.flatMap(_.outputs)
@@ -57,35 +54,26 @@ trait WalletTestOps extends NodeViewBaseOps {
     scanTime(boxes.size, tokens.size)
   }
 
-  def scanTime(boxCount: Int, tokenCount: Int)(implicit ctx: Ctx): Long = {
+  def scanTime(boxCount: Int, tokenCount: Int)(implicit ctx: Ctx): Long =
     boxCount * scanningInterval + tokenCount * scanningInterval * 2 + 5000
-  }
 
-  def waitForOffchainScanning(tx: ErgoTransaction): Unit = {
-    blocking(Thread.sleep(offchainScanTime(tx)))
-  }
+  def waitForOffchainScanning(tx: ErgoTransaction): Unit = blocking(Thread.sleep(offchainScanTime(tx)))
 
   def offchainScanTime(tx: ErgoTransaction): Long = tx.outputs.size * 100 + 300
 
   def balanceAmount(boxes: Seq[ErgoBox]): Long = boxes.map(_.value).sum
 
-  def boxesAvailable(block: ErgoFullBlock, pk: ProveDlog): Seq[ErgoBox] = {
+  def boxesAvailable(block: ErgoFullBlock, pk: ProveDlog): Seq[ErgoBox] =
     block.transactions.flatMap(boxesAvailable(_, pk))
-  }
 
-  def boxesAvailable(tx: ErgoTransaction, pk: ProveDlog): Seq[ErgoBox] = {
+  def boxesAvailable(tx: ErgoTransaction, pk: ProveDlog): Seq[ErgoBox] =
     tx.outputs.filter(_.propositionBytes.containsSlice(org.ergoplatform.mining.groupElemToBytes(pk.value)))
-  }
 
-  def assetAmount(boxes: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = {
+  def assetAmount(boxes: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] =
     assetsByTokenId(boxes).map { case (tokenId, sum) => (bytesToId(tokenId), sum) }
-  }
 
-  def toAssetMap(assetSeq: Seq[(TokenId, Long)]): Map[ModifierId, Long] = {
-    assetSeq
-      .map { case (tokenId, sum) => (bytesToId(tokenId), sum) }
-      .toMap
-  }
+  def toAssetMap(assetSeq: Seq[(TokenId, Long)]): Map[ModifierId, Long] =
+    assetSeq.map { case (tokenId, sum) => (bytesToId(tokenId), sum) }.toMap
 
   def assetsByTokenId(boxes: Seq[ErgoBoxCandidate]): Map[TokenId, Long] = {
     boxes
@@ -98,9 +86,8 @@ trait WalletTestOps extends NodeViewBaseOps {
 
   def getUtxoState(implicit ctx: Ctx): UtxoState = getCurrentState.asInstanceOf[UtxoState]
 
-  def getHeightOf(state: ErgoState[_])(implicit ctx: Ctx): Option[Int] = {
+  def getHeightOf(state: ErgoState[_])(implicit ctx: Ctx): Option[Int] =
     getHistory.heightOf(scorex.core.versionToId(state.version))
-  }
 
   def makeGenesisBlock(script: ProveDlog, assets: Seq[(TokenId, Long)] = Seq.empty)
                       (implicit ctx: Ctx): ErgoFullBlock = {

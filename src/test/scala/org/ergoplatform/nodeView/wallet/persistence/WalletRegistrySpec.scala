@@ -89,18 +89,21 @@ class WalletRegistrySpec
     }
   }
 
-  it should "updateOnBlock() in correct way - outputs spent" in {
-    forAll(Gen.nonEmptyListOf(trackedBoxGen)) { boxes =>
-      withHybridStore(10) { store =>
-        val fakeTxId = modifierIdGen.sample.get
-        val registry = new WalletRegistry(store)(settings.walletSettings)
-        val blockId = modifierIdGen.sample.get
-        val outs = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applicationStatuses = walletBoxStatus))
-        val inputs = outs.map(tb => (fakeTxId, EncodedBoxId @@ tb.boxId, tb))
-        registry.updateOnBlock(outs, inputs, Seq.empty)(blockId, 100)
-        registry.walletUnspentBoxes() shouldBe Seq.empty
-      }
+  private def outputsSpentTest(keepSpent: Boolean) = forAll(Gen.nonEmptyListOf(trackedBoxGen)) { boxes =>
+    withHybridStore(10) { store =>
+      val fakeTxId = modifierIdGen.sample.get
+      val registry = new WalletRegistry(store)(settings.walletSettings.copy(keepSpentBoxes = keepSpent))
+      val blockId = modifierIdGen.sample.get
+      val outs = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applicationStatuses = walletBoxStatus))
+      val inputs = outs.map(tb => (fakeTxId, EncodedBoxId @@ tb.boxId, tb))
+      registry.updateOnBlock(outs, inputs, Seq.empty)(blockId, 100)
+      registry.walletUnspentBoxes() shouldBe Seq.empty
     }
+  }
+
+  it should "updateOnBlock() in correct way - outputs spent" in {
+    outputsSpentTest(keepSpent = false)
+    outputsSpentTest(keepSpent = true)
   }
 
   it should "putBox/getBox/removeBox" in {

@@ -30,7 +30,7 @@ import scala.util.{Failure, Success, Try}
 class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
-  import org.ergoplatform.nodeView.wallet.IdUtils.{encodedBoxId, encodedTokenId}
+  import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
 
   private val keepHistory = ws.keepSpentBoxes
 
@@ -126,8 +126,12 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     val bag1 = putBoxes(bag0, newOutputs)
     val bag2 = putTxs(bag1, txs)
 
+    println("bag2 inserts: " + bag2.toInsert.length + " bag2 removals: " + bag2.toRemove.length)
+
     val spentBoxesWithTx = inputs.map(t => t._1 -> t._3)
     val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
+
+    println(bag3.toInsert.map(_._1).map(Algos.encode))
 
     println("bag3 inserts: " + bag3.toInsert.length + " bag3 removals: " + bag3.toRemove.length)
 
@@ -176,7 +180,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
                                                   spentBoxes: Seq[(ModifierId, TrackedBox)],
                                                   spendingHeight: Int): KeyValuePairsBag = {
     if (keepHistory) {
-      val outSpent: Seq[TrackedBox] = spentBoxes.flatMap { case(_, tb) =>
+      val outSpent: Seq[TrackedBox] = spentBoxes.flatMap { case (_, tb) =>
         (getBox(tb.box.id).orElse {
           bag.toInsert.find(_._1.sameElements(key(tb))).flatMap { case (_, tbBytes) =>
             TrackedBoxSerializer.parseBytesTry(tbBytes).toOption
@@ -192,7 +196,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
       val updatedBoxes = outSpent.map { tb =>
         val spendingTxIdOpt = spentBoxes
-          .find { case (_, x) => encodedBoxId(x.box.id) == encodedBoxId(tb.box.id) }
+          .find { case (_, x) => x.box.id.sameElements(tb.box.id) }
           .map(_._1)
         tb.copy(spendingHeightOpt = Some(spendingHeight), spendingTxIdOpt = spendingTxIdOpt)
       }

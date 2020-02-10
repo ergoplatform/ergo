@@ -11,7 +11,6 @@ import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils._
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoUnsafeProver}
 import org.scalatest.PropSpec
-import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import sigmastate.eval._
 import sigmastate.eval.Extensions._

@@ -62,27 +62,27 @@ object WalletScanLogic extends ScorexLogging {
     }
 
     //outputs, input ids, related transactions
-    type ScanResults = (Seq[TrackedBox], Seq[(ModifierId, EncodedBoxId, TrackedBox)], Seq[WalletTransaction])
+    type InputData = Seq[(ModifierId, EncodedBoxId, TrackedBox)]
+    type ScanResults = (Seq[TrackedBox], InputData, Seq[WalletTransaction])
     val initialScanResults: ScanResults = (resolvedBoxes, Seq.empty, Seq.empty)
 
     val scanRes = transactions.foldLeft((initialScanResults, previousBoxIds)) { case ((scanResults, accBoxIds), tx) =>
       val txInputIds = tx.inputs.map(x => encodedBoxId(x.boxId))
-      val outputs = extractWalletOutputs(tx, Some(height), walletVars)
+      val myOutputs = extractWalletOutputs(tx, Some(height), walletVars)
 
-      val boxIds: Seq[EncodedBoxId] = accBoxIds ++ outputs.map(x => EncodedBoxId @@ x.boxId)
-      val relatedInputIds = txInputIds.filter(x => boxIds.contains(x))
+      val boxIds: Seq[EncodedBoxId] = accBoxIds ++ myOutputs.map(x => EncodedBoxId @@ x.boxId)
+      val spendingInputIds = txInputIds.filter(x => boxIds.contains(x))
 
-      if (outputs.nonEmpty || relatedInputIds.nonEmpty) {
-        val spentBoxes = relatedInputIds.map { inpId =>
+      if (myOutputs.nonEmpty || spendingInputIds.nonEmpty) {
+        val spentBoxes = spendingInputIds.map { inpId =>
           registry.getBox(decodedBoxId(inpId))
             .orElse(scanResults._1.find(tb => tb.box.id.sameElements(decodedBoxId(inpId)))).get //todo: .get
         }
-        val walletAppIds = (spentBoxes ++ outputs).flatMap(_.applicationStatuses.keys).toSet
+        val walletAppIds = (spentBoxes ++ myOutputs).flatMap(_.applicationStatuses.keys).toSet
         val wtx = WalletTransaction(tx, height, walletAppIds.toSeq)
 
-        val newRel = (scanResults._2: Seq[(ModifierId, EncodedBoxId, TrackedBox)]) ++
-          relatedInputIds.zip(spentBoxes).map(t => (tx.id, t._1, t._2))
-        (scanResults._1 ++ outputs, newRel, scanResults._3 :+ wtx) -> boxIds
+        val newRel = (scanResults._2: InputData) ++ spendingInputIds.zip(spentBoxes).map(t => (tx.id, t._1, t._2))
+        (scanResults._1 ++ myOutputs, newRel, scanResults._3 :+ wtx) -> boxIds
       } else {
         scanResults -> accBoxIds
       }
@@ -91,8 +91,6 @@ object WalletScanLogic extends ScorexLogging {
     val outputs = scanRes._1
     val inputs = scanRes._2
     val affectedTransactions = scanRes._3
-
-    println("os: " + outputs.map(_.value))
 
     // function effects: updating registry and offchainRegistry datasets
     registry.updateOnBlock(outputs, inputs, affectedTransactions)(blockId, height)

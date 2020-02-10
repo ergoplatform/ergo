@@ -61,8 +61,9 @@ object WalletScanLogic extends ScorexLogging {
       if (spendable) Some(tb.copy(applicationStatuses = Map(PaymentsAppId -> BoxCertainty.Certain))) else None
     }
 
-    //outputs, input ids, related transactions
+    //tx id, input id, tracked box
     type InputData = Seq[(ModifierId, EncodedBoxId, TrackedBox)]
+    //outputs, input ids, related transactions
     type ScanResults = (Seq[TrackedBox], InputData, Seq[WalletTransaction])
     val initialScanResults: ScanResults = (resolvedBoxes, Seq.empty, Seq.empty)
 
@@ -78,6 +79,8 @@ object WalletScanLogic extends ScorexLogging {
           registry.getBox(decodedBoxId(inpId))
             .orElse(scanResults._1.find(tb => tb.box.id.sameElements(decodedBoxId(inpId)))).get //todo: .get
         }
+
+        // Applications related to the transaction
         val walletAppIds = (spentBoxes ++ myOutputs).flatMap(_.applicationStatuses.keys).toSet
         val wtx = WalletTransaction(tx, height, walletAppIds.toSeq)
 
@@ -98,8 +101,9 @@ object WalletScanLogic extends ScorexLogging {
     //data needed to update the offchain-registry
     val walletUnspent = registry.walletUnspentBoxes()
     val newOnChainIds = outputs.map(x => encodedBoxId(x.box.id))
+    val updatedOffchainRegistry = offChainRegistry.updateOnBlock(height, walletUnspent, newOnChainIds)
 
-    registry -> offChainRegistry.updateOnBlock(height, walletUnspent, newOnChainIds)
+    registry -> updatedOffchainRegistry
   }
 
 

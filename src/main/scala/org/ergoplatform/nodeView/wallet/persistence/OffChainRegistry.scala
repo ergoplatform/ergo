@@ -49,14 +49,16 @@ final case class OffChainRegistry(height: Int,
   /**
     * Update balances snapshot according to a new block applied
     * @param newHeight - processed block height
-    * @param allCertainBoxes - all unspent boxes
+    * @param allCertainBoxes - all the unspent boxes to the moment
     * @param onChainIds - ids of all boxes which became on-chain in result of current block application
     */
   def updateOnBlock(newHeight: Int,
                     allCertainBoxes: Seq[TrackedBox],
                     onChainIds: Seq[EncodedBoxId]): OffChainRegistry = {
     val updatedOnChainBalances = allCertainBoxes.map { tb =>
-      Balance(encodedBoxId(tb.box.id), tb.box.value,
+      Balance(
+        encodedBoxId(tb.box.id),
+        tb.box.value,
         tb.box.additionalTokens.toArray.map(x => encodedTokenId(x._1) -> x._2).toMap)
     }
     val cleanedOffChainBalances = offChainBalances.filterNot(b => onChainIds.contains(b.id))

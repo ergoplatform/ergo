@@ -103,9 +103,10 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
       var registry = r0
       var off = o0
 
-      //blocks with one transaction, one creates boxes, another fully spends them
       forAll(trackedTransactionGen){trackedTransaction =>
-        val txs = Seq(trackedTransaction.tx)
+        //applying one transaction creating boxes
+        val creatingTx = trackedTransaction.tx
+        val txs = Seq(creatingTx)
         val height1 = 5
 
         val regDigestBefore = registry.fetchDigest().walletBalance
@@ -125,7 +126,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
         registry = r1
         off = o1
 
-        //tx spending outputs of previous transaction but creates identical ones
+        //applying a transaction spending outputs of previous transaction and creating new one with the same outputs
         val tx = trackedTransaction.tx
         val inputs = tx.outputs.map(_.id).map(id => Input(id, emptyProverResult))
         val spendingTx = ErgoTransaction(inputs, IndexedSeq.empty, tx.outputCandidates)
@@ -145,6 +146,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
         registry = r2
         off = o2
 
+        //applying a transaction spending outputs of the previous transaction
         val inputs2 = spendingTx.outputs.map(_.id).map(id => Input(id, emptyProverResult))
         val outputs2 = IndexedSeq(new ErgoBoxCandidate(spendingTx.outputs.map(_.value).sum, FalseLeaf.toSigmaProp, height1))
         val spendingTx2 = new ErgoTransaction(inputs2, IndexedSeq.empty, outputs2)
@@ -163,6 +165,25 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
         registry = r3
         off = o3
+
+        //applying all the three previous transactions
+        val threeTxs = Seq(creatingTx, spendingTx, spendingTx2)
+
+        val (r4, o4) = scanBlockTransactions(registry, off, emptyStateContext, walletVars, height1 + 1, blockId, threeTxs)
+
+        val r4digest = r4.fetchDigest()
+        r4digest.walletBalance shouldBe regDigestBefore
+        r4digest.walletAssetBalances.size shouldBe 0
+        r4digest.height shouldBe height1 + 1
+        r4.walletUnspentBoxes() shouldBe Seq.empty
+
+        val o4digest = o4.digest
+        o4digest.walletBalance shouldBe offDigestBefore
+        o4digest.walletAssetBalances.size shouldBe 0
+        o4digest.height shouldBe height1 + 1
+
+        registry = r4
+        off = o4
       }
     }
   }

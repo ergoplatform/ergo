@@ -21,8 +21,7 @@ import scala.collection.immutable.TreeMap
 final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
                                transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
                                invalidated: TreeMap[ModifierId, Long],
-                               outputs: TreeMap[BoxId, WeightedTxId]
-                              )
+                               outputs: TreeMap[BoxId, WeightedTxId])
                               (implicit settings: ErgoSettings) extends ScorexLogging {
 
   import OrderedTxPool.weighted

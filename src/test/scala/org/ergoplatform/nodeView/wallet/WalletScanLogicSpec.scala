@@ -80,7 +80,6 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
     }
   }
 
-
   property("scanBlockTransactions") {
     withHybridStore(10) { store =>
       val emptyReg = new WalletRegistry(store)(settings.walletSettings)

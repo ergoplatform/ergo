@@ -61,7 +61,7 @@ object WalletScanLogic extends ScorexLogging {
       if (spendable) Some(tb.copy(applicationStatuses = Map(PaymentsAppId -> BoxCertainty.Certain))) else None
     }
 
-    //tx id, input id, tracked box
+    //input tx id, input box id, tracked box
     type InputData = Seq[(ModifierId, EncodedBoxId, TrackedBox)]
     //outputs, input ids, related transactions
     type ScanResults = (Seq[TrackedBox], InputData, Seq[WalletTransaction])

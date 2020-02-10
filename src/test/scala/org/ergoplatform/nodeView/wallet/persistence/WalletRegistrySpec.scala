@@ -119,6 +119,21 @@ class WalletRegistrySpec
     }
   }
 
+  it should "putBox - 2 versions" in {
+    forAll(trackedBoxGen) { tb =>
+      withHybridStore(10) { store =>
+        val reg = new WalletRegistry(store)(ws)
+
+        val tb1 = tb.copy(spendingHeightOpt = None, spendingTxIdOpt = None)
+        val bag1 = WalletRegistry.putBox(emptyBag, tb1)
+
+        val tb2 = tb.copy(spendingHeightOpt = Some(5000), spendingTxIdOpt = Some(modifierIdGen.sample.get))
+        WalletRegistry.putBox(bag1, tb2).transact(store)
+        reg.getBox(tb.box.id) shouldBe Some(tb2)
+      }
+    }
+  }
+
   it should "putBoxes/getBoxes/removeBoxes" in {
     forAll(Gen.listOf(trackedBoxGen)) { tbs =>
       withHybridStore(10) { store =>

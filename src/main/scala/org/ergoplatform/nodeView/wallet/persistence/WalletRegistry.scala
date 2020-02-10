@@ -34,11 +34,6 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   private val keepHistory = ws.keepSpentBoxes
 
-  def updateBoxes(bag: KeyValuePairsBag,
-                  ids: Seq[BoxId])(updateF: TrackedBox => TrackedBox): KeyValuePairsBag = {
-    putBoxes(bag, getBoxes(ids).flatten.map(updateF))
-  }
-
   def getBox(id: BoxId): Option[TrackedBox] = {
     store.get(key(id)).flatMap(r => TrackedBoxSerializer.parseBytesTry(r).toOption)
   }
@@ -50,8 +45,8 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   def unspentBoxes(appId: AppId): Seq[TrackedBox] = {
     store.getRange(firstAppBoxSpaceKey(appId), lastAppBoxSpaceKey(appId))
       .flatMap { case (_, boxId) =>
-        getBox(ADKey @@ boxId).flatMap{b =>
-          if(b.applicationStatuses(appId).certain) Some(b) else None
+        getBox(ADKey @@ boxId).flatMap { b =>
+          if (b.applicationStatuses(appId).certain) Some(b) else None
         }
       }
   }
@@ -116,10 +111,10 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     *
     * Updates indexes according to data extracted from a block and performs versioned update.
     *
-    * @param newOutputs - newly created outputs (but could be spent by inputs)
-    * @param inputs - Sequence of (input tx id, input box id, tracked box)
-    * @param txs - transactions affected
-    * @param blockId - block identifier
+    * @param newOutputs  - newly created outputs (but could be spent by inputs)
+    * @param inputs      - Sequence of (input tx id, input box id, tracked box)
+    * @param txs         - transactions affected
+    * @param blockId     - block identifier
     * @param blockHeight - block height
     */
   def updateOnBlock(newOutputs: Seq[TrackedBox],
@@ -127,13 +122,14 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
                     txs: Seq[WalletTransaction])
                    (blockId: ModifierId, blockHeight: Int): Unit = {
 
-    val spentBoxesWithTx = inputs.map(t => t._1 -> t._3)
-
     val bag0 = KeyValuePairsBag.empty
     val bag1 = putBoxes(bag0, newOutputs)
     val bag2 = putTxs(bag1, txs)
 
+    val spentBoxesWithTx = inputs.map(t => t._1 -> t._3)
     val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
+
+    println("bag3 inserts: " + bag3.toInsert.length + " bag3 removals: " + bag3.toRemove.length)
 
     val bag4 = updateDigest(bag3) { case RegistryDigest(height, wBalance, wTokens) =>
       val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.contains(PaymentsAppId))
@@ -180,12 +176,27 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
                                                   spentBoxes: Seq[(ModifierId, TrackedBox)],
                                                   spendingHeight: Int): KeyValuePairsBag = {
     if (keepHistory) {
-      updateBoxes(bag, spentBoxes.map(_._2.box.id)) { tb =>
+      val outSpent: Seq[TrackedBox] = spentBoxes.flatMap { case(_, tb) =>
+        (getBox(tb.box.id).orElse {
+          bag.toInsert.find(_._1.sameElements(key(tb))).flatMap { case (_, tbBytes) =>
+            TrackedBoxSerializer.parseBytesTry(tbBytes).toOption
+          } match {
+            case s@Some(_) => s
+            case None =>
+              log.warn(s"Output spent hasn't found in the wallet: ${Algos.encode(tb.box.id)}, " +
+                s"could be okay if it was created before wallet init")
+              None
+          }
+        }): Option[TrackedBox]
+      }
+
+      val updatedBoxes = outSpent.map { tb =>
         val spendingTxIdOpt = spentBoxes
           .find { case (_, x) => encodedBoxId(x.box.id) == encodedBoxId(tb.box.id) }
           .map(_._1)
         tb.copy(spendingHeightOpt = Some(spendingHeight), spendingTxIdOpt = spendingTxIdOpt)
       }
+      putBoxes(bag, updatedBoxes)
     } else {
       removeBoxes(bag, spentBoxes.map(_._2))
     }
@@ -195,7 +206,6 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     getBox(boxId) match {
       case Some(tb) => tb.applicationStatuses.get(appId).map { _ =>
         val updTb = tb.copy(applicationStatuses = tb.applicationStatuses.updated(appId, BoxCertainty.Certain))
-
         store.cachePut(Seq(boxToKvPair(updTb), certaintyKey(appId, updTb) -> boxId))
         Success((): Unit)
       }.getOrElse(Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId")))
@@ -245,7 +255,6 @@ object WalletRegistry {
 
     new WalletRegistry(store)(settings.walletSettings)
   }
-
 
   private val BoxKeyPrefix: Byte = 0x01
   private val TxKeyPrefix: Byte = 0x02
@@ -333,12 +342,16 @@ object WalletRegistry {
   }
 
   def removeBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
-    val appIndexUpdates = box.applicationStatuses.toSeq.flatMap { case (appId, _) =>
-      Seq(spentIndexKey(appId, box), certaintyKey(appId, box), inclusionHeightAppBoxIndexKey(appId, box))
+    bag.toInsert.find(_._1.sameElements(key(box))) match {
+      case Some((id, _)) =>
+        bag.copy(toInsert = bag.toInsert.filterNot(_._1.sameElements(key(box))))
+      case None =>
+        val appIndexUpdates = box.applicationStatuses.toSeq.flatMap { case (appId, _) =>
+          Seq(spentIndexKey(appId, box), certaintyKey(appId, box), inclusionHeightAppBoxIndexKey(appId, box))
+        }
+        val ids = appIndexUpdates :+ key(box)
+        bag.copy(toRemove = bag.toRemove ++ ids)
     }
-    val ids = appIndexUpdates :+ key(box)
-
-    bag.copy(toRemove = bag.toRemove ++ ids)
   }
 
   def removeBoxes(bag: KeyValuePairsBag, boxes: Seq[TrackedBox]): KeyValuePairsBag = {
@@ -363,7 +376,8 @@ object WalletRegistry {
   }
 }
 
-case class KeyValuePairsBag(toInsert: Seq[(Array[Byte], Array[Byte])], toRemove: Seq[Array[Byte]]) {
+case class KeyValuePairsBag(toInsert: Seq[(Array[Byte], Array[Byte])],
+                            toRemove: Seq[Array[Byte]]) {
 
   /**
     * Applies non-versioned transaction to a given `store`.
@@ -380,6 +394,7 @@ case class KeyValuePairsBag(toInsert: Seq[(Array[Byte], Array[Byte])], toRemove:
     if (toInsert.nonEmpty || toRemove.nonEmpty) {
       store.update(versionOpt.getOrElse(scorex.utils.Random.randomBytes()), toRemove, toInsert)
     }
+
 }
 
 object KeyValuePairsBag {

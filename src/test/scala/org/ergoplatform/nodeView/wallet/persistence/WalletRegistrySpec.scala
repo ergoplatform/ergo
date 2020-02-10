@@ -98,7 +98,7 @@ class WalletRegistrySpec
         val outs = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applicationStatuses = walletBoxStatus))
         val inputs = outs.map(tb => (fakeTxId, EncodedBoxId @@ tb.boxId, tb))
         registry.updateOnBlock(outs, inputs, Seq.empty)(blockId, 100)
-        registry.walletUnspentBoxes()  shouldBe Seq.empty
+        registry.walletUnspentBoxes() shouldBe Seq.empty
       }
     }
   }
@@ -116,7 +116,7 @@ class WalletRegistrySpec
     }
   }
 
-  it should "putBoxes/getBoxes/updateBoxes/removeBoxes" in {
+  it should "putBoxes/getBoxes/removeBoxes" in {
     forAll(Gen.listOf(trackedBoxGen)) { tbs =>
       withHybridStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
@@ -126,7 +126,6 @@ class WalletRegistrySpec
         val updateFn = (tb: TrackedBox) => tb.copy(spendingHeightOpt = Some(0),
           applicationStatuses = Map(PaymentsAppId -> BoxCertainty.Certain, 2.toShort -> BoxCertainty.Uncertain))
         val updatedBoxes = tbs.map(updateFn)
-        reg.updateBoxes(emptyBag, tbs.map(_.box.id))(updateFn).transact(store)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs updatedBoxes.map(Some.apply)
         WalletRegistry.removeBoxes(emptyBag, tbs).transact(store)
         reg.getBoxes(tbs.map(_.box.id)).flatten shouldBe Seq()

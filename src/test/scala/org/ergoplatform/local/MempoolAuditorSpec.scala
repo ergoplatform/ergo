@@ -1,7 +1,7 @@
 package org.ergoplatform.local
 
-import akka.actor.{Actor, ActorRef}
-import akka.testkit.TestProbe
+import akka.actor.{ActorRef, ActorSystem}
+import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, OrderedTxPool}
 import org.ergoplatform.nodeView.state.ErgoState
@@ -14,15 +14,20 @@ import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, FailedTransaction, SuccessfulTransaction}
 import scorex.util.ModifierId
+import scorex.util.encode.Base16
 
 import scala.concurrent.duration._
-import scala.util.{Random, Success, Try}
+import scala.util.Random
+
 
 class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelpers {
 
   val cleanupDuration: FiniteDuration = 2.seconds
   val settingsToTest: ErgoSettings = settings.copy(
-    nodeSettings = settings.nodeSettings.copy(mempoolCleanupDuration = cleanupDuration))
+    nodeSettings = settings.nodeSettings.copy(
+      mempoolCleanupDuration = cleanupDuration,
+      rebroadcastCount = 1
+    ))
   val fixture = new NodeViewFixture(settingsToTest)
   val newTx: Class[SuccessfulTransaction[_]] = classOf[SuccessfulTransaction[_]]
 
@@ -68,21 +73,15 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
   }
 
   it should "rebroadcast transactions correctly" in {
-    import fixture._
 
-    //networking layer stub which is not doing anything
-    class NetworkControllerStub extends Actor {
-      def receive: Receive = {
-        case _ =>
-      }
-    }
+    val (us0, bh0) = createUtxoState(None)
+    val (txs0, bh1) = validTransactionsFromBoxHolder(bh0)
+    val b1 = validFullBlock(None, us0, txs0)
 
-    val testProbe = new TestProbe(actorSystem)
-    actorSystem.eventStream.subscribe(testProbe.ref, newTx)
+    val us = us0.applyModifier(b1).get
 
-    val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
-
-    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val bxs = bh1.boxes.values.toList.filter(_.proposition != genesisEmissionBox.proposition)
+    val txs = validTransactionsFromBoxes(200000, bxs, new Random())._1
 
     // mempool reader stub specifically for this test
     // only take is defined as only this method is used in rebroadcasting
@@ -99,14 +98,15 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
 
       override def getAll: Seq[ErgoTransaction] = ???
 
-      override def getAllPrioritized: Seq[ErgoTransaction] = genesis.transactions
+      override def getAllPrioritized: Seq[ErgoTransaction] = txs
 
-      override def take(limit: Int): Iterable[ErgoTransaction] = genesis.transactions.take(limit)
+      override def take(limit: Int): Iterable[ErgoTransaction] = txs.take(limit)
     }
 
-    implicit val defaultSender: ActorRef = testProbe.testActor
+    implicit val system = ActorSystem()
+    val probe = TestProbe()
 
-    val auditor: ActorRef = MempoolAuditorRef(nodeViewHolderRef, defaultSender, settingsToTest)
+    val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, settingsToTest))
 
     val coin = Random.nextBoolean()
 
@@ -121,6 +121,6 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
       sendPool()
     }
 
-    expectMsgType[SendToNetwork]
+    probe.expectMsgType[SendToNetwork]
   }
 }

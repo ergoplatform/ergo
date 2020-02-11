@@ -58,10 +58,12 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
   private def validatePool(validator: TransactionValidation[ErgoTransaction],
                            mempool: ErgoMemPoolReader): Seq[ModifierId] = {
 
+    //internal loop function validating transactions, returns validated and invalidated transaction ids
     @tailrec
     def validationLoop(txs: Seq[ErgoTransaction],
+                       validated: Seq[ModifierId],
                        invalidated: Seq[ModifierId],
-                       etAcc: Long): Seq[ModifierId] = {
+                       etAcc: Long): (Seq[ModifierId], Seq[ModifierId]) = {
       txs match {
         case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos && !validatedIndex.contains(head.id) =>
 
@@ -76,25 +78,27 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
           val validationResult = state.validate(head)
           val t1 = System.nanoTime()
           val accumulatedTime = etAcc + (t1 - t0)
+
+          val txId = head.id
           validationResult match {
-            case Success(_) => validationLoop(tail, invalidated, accumulatedTime)
+            case Success(_) =>
+              validationLoop(tail, validated :+ txId, invalidated, accumulatedTime)
             case Failure(e) =>
-              log.debug(s"Transaction ${head.id} invalidated: ${e.getMessage}")
-              validationLoop(tail, invalidated :+ head.id, accumulatedTime)
+              log.debug(s"Transaction $txId invalidated: ${e.getMessage}")
+              validationLoop(tail, validated, invalidated :+ txId, accumulatedTime)
           }
         case _ :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos =>
           // this transaction was validated earlier, skip it
-          validationLoop(tail, invalidated, etAcc)
+          validationLoop(tail, validated, invalidated, etAcc)
         case _ =>
-          invalidated
+          validated -> invalidated
       }
     }
 
     // Check transactions sorted by priority. Parent transaction comes before its children.
     val txsToValidate = mempool.getAllPrioritized.toList
 
-    val invalidatedIds = validationLoop(txsToValidate, Seq.empty, 0L)
-    val validatedIds = txsToValidate.map(_.id).filterNot(invalidatedIds.contains)
+    val (validatedIds, invalidatedIds) = validationLoop(txsToValidate, Seq.empty, Seq.empty, 0L)
 
     epochNr += 1
     if (epochNr % CleanupWorker.IndexRevisionInterval == 0) {

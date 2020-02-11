@@ -87,6 +87,8 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       log.info("Cleanup done. Switching to awaiting mode")
       //rebroadcast transactions
       rebroadcastTransactions()
+      stateReaderOpt = None
+      poolReaderOpt = None
       context become awaiting
 
     case _ => // ignore other triggers until work is done

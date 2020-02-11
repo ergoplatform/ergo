@@ -126,14 +126,8 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     val bag1 = putBoxes(bag0, newOutputs)
     val bag2 = putTxs(bag1, txs)
 
-    println("bag2 inserts: " + bag2.toInsert.length + " bag2 removals: " + bag2.toRemove.length)
-
     val spentBoxesWithTx = inputs.map(t => t._1 -> t._3)
     val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
-
-    println(bag3.toInsert.map(_._1).map(Algos.encode))
-
-    println("bag3 inserts: " + bag3.toInsert.length + " bag3 removals: " + bag3.toRemove.length)
 
     val bag4 = updateDigest(bag3) { case RegistryDigest(height, wBalance, wTokens) =>
       val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.contains(PaymentsAppId))
@@ -200,7 +194,9 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
           .map(_._1)
         tb.copy(spendingHeightOpt = Some(spendingHeight), spendingTxIdOpt = spendingTxIdOpt)
       }
-      putBoxes(bag, updatedBoxes)
+
+      val bagBeforePut = removeBoxes(bag, spentBoxes.map(_._2))
+      putBoxes(bagBeforePut, updatedBoxes)
     } else {
       removeBoxes(bag, spentBoxes.map(_._2))
     }
@@ -328,15 +324,22 @@ object WalletRegistry {
     InclusionHeightAppBoxPrefix +: (Shorts.toByteArray(appId) ++ inclusionHeightBytes ++ trackedBox.box.id)
   }
 
-
-  def putBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
-    val appIndexUpdates = box.applicationStatuses.toSeq.flatMap { case (appId, _) =>
+  def boxIndexKeys(box: TrackedBox): Seq[Array[Byte]] = {
+    box.applicationStatuses.toSeq.flatMap { case (appId, _) =>
       Seq(
-        spentIndexKey(appId, box) -> box.box.id,
-        certaintyKey(appId, box) -> box.box.id, //todo: avoid for simple payments app
-        inclusionHeightAppBoxIndexKey(appId, box) -> box.box.id
+        spentIndexKey(appId, box),
+        certaintyKey(appId, box), //todo: avoid for simple payments app
+        inclusionHeightAppBoxIndexKey(appId, box)
       )
     }
+  }
+
+  def boxIndexes(box: TrackedBox): Seq[(Array[Byte], Array[Byte])] = {
+    boxIndexKeys(box).map(k => k -> box.box.id)
+  }
+
+  def putBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
+    val appIndexUpdates = boxIndexes(box)
     val newKvPairs = appIndexUpdates :+ boxToKvPair(box)
     bag.copy(toInsert = bag.toInsert ++ newKvPairs)
   }
@@ -346,15 +349,16 @@ object WalletRegistry {
   }
 
   def removeBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
+    val appIndexKeys = boxIndexKeys(box)
+    val boxKeys = appIndexKeys :+ key(box)
+
     bag.toInsert.find(_._1.sameElements(key(box))) match {
       case Some((id, _)) =>
-        bag.copy(toInsert = bag.toInsert.filterNot(_._1.sameElements(key(box))))
+        bag.copy(toInsert = bag.toInsert.filterNot { case (k, _) =>
+          boxKeys.exists(_.sameElements(k))
+        })
       case None =>
-        val appIndexUpdates = box.applicationStatuses.toSeq.flatMap { case (appId, _) =>
-          Seq(spentIndexKey(appId, box), certaintyKey(appId, box), inclusionHeightAppBoxIndexKey(appId, box))
-        }
-        val ids = appIndexUpdates :+ key(box)
-        bag.copy(toRemove = bag.toRemove ++ ids)
+        bag.copy(toRemove = bag.toRemove ++ boxKeys)
     }
   }
 

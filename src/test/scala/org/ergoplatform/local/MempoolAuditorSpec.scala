@@ -14,7 +14,6 @@ import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, FailedTransaction, SuccessfulTransaction}
 import scorex.util.ModifierId
-import scorex.util.encode.Base16
 
 import scala.concurrent.duration._
 import scala.util.Random

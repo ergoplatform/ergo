@@ -58,6 +58,10 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
   private def validatePool(validator: TransactionValidation[ErgoTransaction],
                            mempool: ErgoMemPoolReader): Seq[ModifierId] = {
 
+
+    // Check transactions sorted by priority. Parent transaction comes before its children.
+    val txsToValidate = mempool.getAllPrioritized.toList
+
     //internal loop function validating transactions, returns validated and invalidated transaction ids
     @tailrec
     def validationLoop(txs: Seq[ErgoTransaction],
@@ -70,7 +74,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
           // Take into account previously validated transactions from the pool.
           // This provides possibility to validate transactions which are spending off-chain outputs.
           val state = validator match {
-            case u: UtxoStateReader => u.withTransactions(txs)
+            case u: UtxoStateReader => u.withTransactions(txsToValidate)
             case _ => validator
           }
 
@@ -84,7 +88,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
             case Success(_) =>
               validationLoop(tail, validated :+ txId, invalidated, accumulatedTime)
             case Failure(e) =>
-              log.debug(s"Transaction $txId invalidated: ${e.getMessage}")
+              log.info(s"Transaction $txId invalidated: ${e.getMessage}")
               validationLoop(tail, validated, invalidated :+ txId, accumulatedTime)
           }
         case _ :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos =>
@@ -94,9 +98,6 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
           validated -> invalidated
       }
     }
-
-    // Check transactions sorted by priority. Parent transaction comes before its children.
-    val txsToValidate = mempool.getAllPrioritized.toList
 
     val (validatedIds, invalidatedIds) = validationLoop(txsToValidate, Seq.empty, Seq.empty, 0L)
 

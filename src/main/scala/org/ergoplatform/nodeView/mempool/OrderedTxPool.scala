@@ -12,10 +12,10 @@ import scala.collection.immutable.TreeMap
   * An immutable pool of transactions of limited size with priority management and blacklisting support.
   *
   * @param orderedTransactions  - collection containing transactions ordered by `tx.weight`
-  * @param transactionsRegistry - mapping `tx.id` -> `WeightedTxId(tx.id,tx.weight)` required for fast access to transaction by its `id`
+  * @param transactionsRegistry - mapping `tx.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting transaction by its `id`
   * @param invalidated          - collection containing invalidated transaction ids as keys
   *                             ordered by invalidation timestamp (values)
-  * @param outputs              - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required locate transaction by its output box
+  * @param outputs              - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting a transaction by its output box
   */
 case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
                          transactionsRegistry: TreeMap[ModifierId, WeightedTxId],

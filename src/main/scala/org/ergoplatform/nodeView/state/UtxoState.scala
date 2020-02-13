@@ -17,7 +17,7 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
-import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
+import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 
@@ -155,19 +155,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  /**
-    * Producing a copy of the state which takes into account outputs of given transactions.
-    * Useful when checking mempool transactions.
-    */
-  def withTransactions(txns: Seq[ErgoTransaction]): UtxoState = {
-    new UtxoState(persistentProver, version, store, constants) {
-      val createdBoxes = ErgoState.boxChanges(txns)._2
-
-      override def boxById(id: ADKey): Option[ErgoBox] = {
-        super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
-      }
-    }
-  }
 }
 
 object UtxoState {
@@ -227,7 +214,6 @@ object UtxoState {
     ).get
 
     new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
-
   }
 
 }

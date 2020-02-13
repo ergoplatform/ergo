@@ -2,13 +2,14 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.state.{ErgoState, UtxoState, UtxoStateReader}
+import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
+import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.ModifierId
 
-import scala.util.{Random, Try}
+import scala.util.Try
 
 /**
   * Immutable memory pool implementation.
@@ -30,7 +31,10 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
 
   override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(pool.get)
 
-  override def getAllPrioritized: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq.reverse
+  /**
+    * Returns all transactions resided in pool sorted by weight in descending order
+    */
+  override def getAllPrioritized: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq
 
   override def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
 
@@ -51,12 +55,6 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     new ErgoMemPool(pool.filter(condition))
   }
 
-  override def randomSlice(txsNum: Int): Seq[ErgoTransaction] = {
-    val txs = pool.orderedTransactions.values.toArray
-    val maxTxs = txs.length
-    if (maxTxs <= txsNum) txs else randSliceIndexes(txsNum, txs.length).map(txs)
-  }
-
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {
     new ErgoMemPool(pool.invalidate(tx))
   }
@@ -72,7 +70,10 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
             new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
             _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
           )
+
         case validator: TransactionValidation[ErgoTransaction@unchecked] if pool.canAccept(tx) =>
+          // transaction validation currently works only for UtxoState, so this branch currently
+          // will not be triggered probably
           validator.validate(tx).fold(
             new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
             _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
@@ -90,17 +91,13 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     }
   }
 
+  def weightedTransactionIds(limit: Int): Seq[WeightedTxId] = pool.orderedTransactions.keysIterator.take(limit).toSeq
+
   private def extractFee(tx: ErgoTransaction): Long =
     ErgoState.boxChanges(Seq(tx))._2
       .filter(_.ergoTree == settings.chainSettings.monetary.feeProposition)
       .map(_.value)
       .sum
-
-  private def randSliceIndexes(qty: Int, max: Int): Seq[Int] = {
-    require(qty <= max)
-    val idx = Random.nextInt(max)
-    (idx until (idx + qty)).map( _ % max)
-  }
 
 }
 

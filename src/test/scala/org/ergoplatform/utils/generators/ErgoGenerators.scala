@@ -132,7 +132,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     adRoot <- digest32Gen
     transactionsRoot <- digest32Gen
     requiredDifficulty <- requiredDifficultyGen
-    height <- Gen.choose(1, Int.MaxValue)
+    height <- Gen.choose(1, Int.MaxValue).retryUntil(_ % settings.chainSettings.voting.votingLength != 0)
     powSolution <- powSolutionGen
     timestamp <- positiveLongGen
     extensionHash <- digest32Gen
@@ -150,6 +150,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     Array.fill(3)(0: Byte),
     None
   )
+
   lazy val randomADProofsGen: Gen[ADProofs] = for {
     headerId <- modifierIdGen
     proof <- serializedAdProofGen

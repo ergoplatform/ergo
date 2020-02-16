@@ -30,7 +30,9 @@ class ExpirationSpecification extends ErgoPropertyTest {
                     heightDelta: Int,
                     outsConstructor: Height => IndexedSeq[ErgoBoxCandidate],
                     expectedValidity: Boolean): Assertion = {
-    whenever((from.creationHeight + Constants.StoragePeriod + heightDelta) % votingSettings.votingLength != 0 ) {
+    // We are filtering out certain heights to avoid problems with improperly generated extension
+    // at the beginning of a voting epoch
+    whenever((from.creationHeight + Constants.StoragePeriod + heightDelta) % votingSettings.votingLength != 0) {
       val in = Input(from.id,
         ProverResult(Array.emptyByteArray, ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(0)))))
 

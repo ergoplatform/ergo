@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import cats.Traverse
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -18,9 +17,9 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
-import scorex.crypto.authds.{ADDigest, ADValue}
+import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.crypto.hash.Digest32
-import scorex.db.LDBVersionedStore
+import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 
 import scala.util.{Failure, Success, Try}
 
@@ -153,6 +152,20 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   override def rollbackVersions: Iterable[VersionTag] = persistentProver.synchronized {
     persistentProver.storage.rollbackVersions.map { v =>
       bytesToVersion(store.get(Algos.hash(v)).get)
+    }
+  }
+
+  /**
+    * Producing a copy of the state which takes into account outputs of given transactions.
+    * Useful when checking mempool transactions.
+    */
+  def withTransactions(txns: Seq[ErgoTransaction]): UtxoState = {
+    new UtxoState(persistentProver, version, store, constants) {
+      val createdBoxes = ErgoState.boxChanges(txns)._2
+
+      override def boxById(id: ADKey): Option[ErgoBox] = {
+        super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
+      }
     }
   }
 }

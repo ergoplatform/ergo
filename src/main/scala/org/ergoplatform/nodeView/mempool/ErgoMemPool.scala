@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.nodeView.state.{ErgoState, UtxoState, UtxoStateReader}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
@@ -67,6 +67,12 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     val minFee = settings.nodeSettings.minimalFeeAmount
     if (fee >= minFee) {
       state match {
+        case utxo: UtxoState if pool.canAccept(tx) =>
+          // Allow proceeded transaction to spend outputs of pooled transactions.
+          utxo.withTransactions(getAll).validate(tx).fold(
+            new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
+            _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+          )
         case validator: TransactionValidation[ErgoTransaction@unchecked] if pool.canAccept(tx) =>
           validator.validate(tx).fold(
             new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),

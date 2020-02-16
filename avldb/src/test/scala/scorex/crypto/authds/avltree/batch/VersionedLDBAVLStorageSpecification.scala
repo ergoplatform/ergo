@@ -245,7 +245,7 @@ class VersionedLDBAVLStorageSpecification extends PropSpec
 
   }
 
-  def removeFromLargerSetSingleRandomElementTest(createStore: (Int) => LDBVersionedStore): Unit = {
+  def removeFromLargerSetSingleRandomElementTest(createStore: Int => LDBVersionedStore): Unit = {
     val minSetSize = 10000
     val maxSetSize = 200000
 

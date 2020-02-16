@@ -27,7 +27,8 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      blacklistCapacity: Int,
                                      mempoolCleanupDuration: FiniteDuration,
                                      rebroadcastCount: Int,
-                                     minimalFeeAmount: Long)
+                                     minimalFeeAmount: Long,
+                                     headerChainDiff: Int)
 
 trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
 
@@ -51,7 +52,8 @@ trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
       cfg.as[Int](s"$path.blacklistCapacity"),
       cfg.as[FiniteDuration](s"$path.mempoolCleanupDuration"),
       cfg.as[Int](s"$path.rebroadcastCount"),
-      cfg.as[Long](s"$path.minimalFeeAmount")
+      cfg.as[Long](s"$path.minimalFeeAmount"),
+      cfg.as[Int](s"$path.headerChainDiff")
     )
   }
 

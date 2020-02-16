@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "3.1.2"
+  version: "3.2.1"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -1765,7 +1765,7 @@ paths:
           application/json:
             schema:
               type: string
-              example: '127.0.0.1:5673'
+              example: '"127.0.0.1:5673"'
       responses:
         '200':
           description: Attempt to connect to the peer

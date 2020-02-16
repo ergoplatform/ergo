@@ -114,17 +114,16 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   } yield AutolykosSolution(pk, w, n, d)
 
   /**
-    * Header generator with default miner pk in pow solution
-    */
-  lazy val defaultHeaderGen: Gen[Header] = invalidHeaderGen.map { h =>
-    h.copy(powSolution = h.powSolution.copy(pk = defaultMinerPkPoint))
-  }
-
-  /**
-    * Generates required difficulty in interval [1, 2^255]
+    * Generates required difficulty in interval [1, 2^^255]
     **/
   lazy val requiredDifficultyGen: Gen[BigInt] = Arbitrary.arbitrary[BigInt].map(_.mod(BigInt(2).pow(255)).abs + 1)
 
+  /*
+    TODO: this generator is used sometimes to construct a full block. A generator for the latter is not generating
+     a proper extension section for a beginning of a voting epoch (network parameter values should be in the  extension
+     in this case. Currently we're fixing it here with filtering out heights corresponding to the beginning of voting
+     epochs. A more careful solution would be to implement proper generators.
+   */
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
     parentId <- modifierIdGen
@@ -150,6 +149,13 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     Array.fill(3)(0: Byte),
     None
   )
+
+  /**
+    * Header generator with default miner pk in pow solution
+    */
+  lazy val defaultHeaderGen: Gen[Header] = invalidHeaderGen.map { h =>
+    h.copy(powSolution = h.powSolution.copy(pk = defaultMinerPkPoint))
+  }
 
   lazy val randomADProofsGen: Gen[ADProofs] = for {
     headerId <- modifierIdGen

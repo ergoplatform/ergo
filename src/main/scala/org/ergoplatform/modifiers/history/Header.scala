@@ -93,7 +93,7 @@ case class Header(override val version: Version,
   def isCorrespondingModifier(m: ErgoPersistentModifier): Boolean = sectionIds.exists(_._2 == m.id)
 
   /**
-    * Estimate that this Header is new enough to possibly be the best header
+    * Estimate that this header is recent enough to possibly be the best header
     */
   def isNew(timeProvider: NetworkTimeProvider, timeDiff: FiniteDuration): Boolean = {
     timeProvider.time() - timestamp < timeDiff.toMillis

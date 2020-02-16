@@ -74,4 +74,11 @@ object OffChainRegistry {
   def empty: OffChainRegistry =
     OffChainRegistry(ErgoHistory.EmptyHistoryHeight, Seq.empty, Seq.empty)
 
+  def init(walletRegistry: WalletRegistry):OffChainRegistry = {
+    val idx = walletRegistry.readIndex
+    val unspent = walletRegistry.readCertainUnspentBoxes
+    val h = idx.height
+    OffChainRegistry(h, Seq.empty, unspent.map(Balance.apply))
+  }
+
 }

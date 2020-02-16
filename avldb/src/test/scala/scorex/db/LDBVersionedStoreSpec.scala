@@ -76,7 +76,7 @@ class LDBVersionedStoreSpec extends PropSpec with Matchers {
     store.getWithFilter((_, _) => true).toSeq.length shouldBe 0
 
     var cnt = 0
-    store.processAll({ case (k, v) =>
+    store.processAll({ case (_, _) =>
       cnt = cnt + 1
     })
     cnt shouldBe 0

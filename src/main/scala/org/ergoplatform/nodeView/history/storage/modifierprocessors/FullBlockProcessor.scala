@@ -1,11 +1,11 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
+import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
@@ -236,6 +236,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       .ensuring(headersHeight >= fullBlockHeight, s"Headers height $headersHeight should be >= " +
         s"full height $fullBlockHeight")
   }
+
 }
 
 object FullBlockProcessor {

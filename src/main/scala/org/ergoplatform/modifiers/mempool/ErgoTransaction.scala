@@ -2,7 +2,6 @@ package org.ergoplatform.modifiers.mempool
 
 import io.circe._
 import io.circe.syntax._
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
@@ -20,6 +19,7 @@ import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationState}
+import scorex.db.ByteArrayWrapper
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.eval.Extensions._

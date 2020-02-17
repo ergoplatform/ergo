@@ -208,7 +208,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
         val poPowH = PoPowHeader(h, links)
         (acc :+ poPowH, Some(poPowH))
     }._1
-    val params = PoPowParams(m, k, k, .45)
+    val params = PoPowParams(m, k)
     PoPowAlgos.prove(poPowChain)(params)
   }
 

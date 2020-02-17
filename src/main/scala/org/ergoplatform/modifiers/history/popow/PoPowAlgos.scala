@@ -12,10 +12,8 @@ import scala.util.{Failure, Success, Try}
   *
   * @param m
   * @param k
-  * @param k1
-  * @param d - goodness security parameter (δ in the [KMZ17])
   */
-case class PoPowParams(m: Int, k: Int, k1: Int, d: Double)
+case class PoPowParams(m: Int, k: Int)
 
 
 /**
@@ -23,9 +21,12 @@ case class PoPowParams(m: Int, k: Int, k1: Int, d: Double)
   *
   * Based on papers:
   *
-  * [KMZ17] Non-Interactive Proofs of Proof-of-Work https://eprint.iacr.org/2017/963.pdf
+  * [KMZ17] Non-Interactive Proofs of Proof-of-Work https://fc20.ifca.ai/preproceedings/74.pdf
   *
   * [KLS16] Proofs of Proofs of Work with Sublinear Complexity http://fc16.ifca.ai/bitcoin/papers/KLS16.pdf
+  *
+  * Please note that for [KMZ17] we're using the version published @ Financial Cryptography 2020, which is different
+  * from previously published versions on IACR eprint.
   */
 object PoPowAlgos {
 
@@ -172,97 +173,14 @@ object PoPowAlgos {
   }
 
   /**
-    * Checks μ-local goodness of μ-superchain of size `superChainSize` with respect to the underlying
-    * chain of size `underlyingChainSize` and security parameter `d`.
-    *
-    * From [KMZ17]: "A superchain C′ of level μ with underlying chain C is said to be μ-locally-good with respect to
-    * security  parameter δ ... if |C′| > |C| * (1−δ)2^^−μ."
-    */
-  def locallyGood(superChainSize: Int, underlyingChainSize: Int, level: Int, d: Double): Boolean =
-    superChainSize > ((1 - d) * math.pow(2, -level) * underlyingChainSize)
-
-  /**
-    * Checks whether a given `superChain` is qualified against a given full `chain` at a given `level`.
-    *
-    * From [KMZ17]: "The (δ,m) superquality  property Q^^{μ}_{scq} of  a  chain C pertaining  to  level μ with
-    * security parameters δ ∈ R and m ∈ N states that for all m′≥m, it holds that local-good_δ(C↑μ[−m′:],C↑μ[−m′:]↓,μ).
-    * That is, all sufficiently large suffixes are locally good."
-    *
-    * @param chain      - Full chain (C)
-    * @param superChain - Super-chain of level µ (C↑µ)
-    * @param level      - Level of super-chain (µ)
-    */
-  def superChainQuality(chain: Seq[Header], superChain: Seq[Header], level: Int)
-                       (params: PoPowParams): Boolean = {
-
-    @scala.annotation.tailrec
-    def checkLocalGoodnessAt(mValue: Int): Boolean = {
-      val superChainSuffix = superChain.takeRight(mValue)
-      val superChainSuffixSize = superChainSuffix.size
-
-      // C↑μ[−m′:]↓
-      val downChainSuffix = chain
-        .filter(h => h.height >= superChainSuffix.head.height && h.height <= superChainSuffix.last.height)
-      val downChainSuffixSize = downChainSuffix.size
-
-      def isLocallyGood(m: Int): Boolean = locallyGood(
-        math.min(superChainSuffixSize, m), math.min(downChainSuffixSize, m), level, params.d)
-
-      (mValue < superChainSuffix.size, isLocallyGood(mValue)) match {
-        case (true, true) => checkLocalGoodnessAt(mValue + 1)
-        case (true, false) => false
-        case (false, _) => true
-      }
-    }
-
-    checkLocalGoodnessAt(params.m)
-  }
-
-  /**
-    * "Goodness" bounds the deviation of superblocks of a certain level from their expected mean.
-    */
-  def goodSuperChain(chain: Seq[Header], superChain: Seq[Header], level: Int)(params: PoPowParams): Boolean =
-    superChainQuality(chain, superChain, level)(params) && multiLevelQuality(chain, superChain, level)(params)
-
-  /**
-    * Checks whether a given `superChain` is qualified against a given full `chain` at all levels.
-    *
-    * @param chain      - Full chain (C)
-    * @param superChain - Super-chain of level µ (C↑µ)
-    * @param level      - Level of super-chain (µ)
-    */
-  def multiLevelQuality(chain: Seq[Header], superChain: Seq[Header], level: Int)
-                       (params: PoPowParams): Boolean = {
-    val downChain = chain.dropWhile(_ == superChain.head).takeWhile(_ == superChain.last) // C'↓
-    @scala.annotation.tailrec
-    def checkQualityAt(levelToCheck: Int): Boolean =
-      if (levelToCheck > 0) {
-        val subChain = downChain.filter(maxLevelOf(_) >= levelToCheck - 1) // C* = C'↓↑µ'−1
-        if (subChain.nonEmpty) {
-          val upperSubChainSize = subChain.count(maxLevelOf(_) >= levelToCheck) // |C*↑µ'|
-          if (upperSubChainSize >= params.k1 &&
-            !(subChain.count(maxLevelOf(_) >= level) >=
-              (1 - params.d) * math.pow(2, level - levelToCheck) * upperSubChainSize)) {
-            false
-          } else {
-            checkQualityAt(levelToCheck - 1)
-          }
-        } else {
-          checkQualityAt(levelToCheck - 1)
-        }
-      } else {
-        true
-      }
-
-    checkQualityAt(level)
-  }
-
-  /**
     * Computes NiPoPow proof for the given `chain` according to a given `params`.
     */
   def prove(chain: Seq[PoPowHeader])(params: PoPowParams): PoPowProof = {
-    require(chain.lengthCompare(params.k + params.m) >= 0,
-      s"Can not prove chain of size < ${params.k + params.m}")
+    val k = params.k
+    val m = params.m
+
+    require(params.k >= 0, s"$k < 0")
+    require(chain.lengthCompare(k + m) >= 0, s"Can not prove chain of size < ${k + m}")
     require(chain.head.header.isGenesis, "Can not prove non-anchored chain")
 
     @scala.annotation.tailrec
@@ -272,8 +190,7 @@ object PoPowAlgos {
       if (level >= 0) {
         val subChain = chain.dropRight(params.k)
           .filter(h => maxLevelOf(h.header) >= level && h.height >= anchoringPoint.height) // C[:−k]{B:}↑µ
-        val goodChain = goodSuperChain(chain.map(_.header), subChain.map(_.header), level)(params)
-        if (subChain.size >= params.m && goodChain) {
+        if (m < subChain.size) {
           provePrefix(subChain(subChain.size - params.m), level - 1, acc ++ subChain)
         } else {
           provePrefix(anchoringPoint, level - 1, acc ++ subChain)
@@ -283,7 +200,7 @@ object PoPowAlgos {
       }
 
     val suffix = chain.takeRight(params.k)
-    val maxLevel = suffix.head.interlinks.size - 1
+    val maxLevel = chain.dropRight(params.k).last.interlinks.size - 1
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height)
     PoPowProof(params.m, params.k, prefix, suffix)
   }

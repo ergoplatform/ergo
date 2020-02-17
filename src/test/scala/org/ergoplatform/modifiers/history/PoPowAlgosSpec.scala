@@ -17,7 +17,7 @@ class PoPowAlgosSpec
   import org.ergoplatform.modifiers.history.popow.PoPowAlgos
   import PoPowAlgos._
 
-  private val poPowParams = PoPowParams(30, 30, 30, .45)
+  private val poPowParams = PoPowParams(30, 30)
   private val ChainLength = 10
 
   property("updateInterlinks") {
@@ -99,16 +99,6 @@ class PoPowAlgosSpec
     proof0.prefix.size > proof1.prefix.size shouldBe true
 
     bestArg(proof0.prefix.map(_.header))(m) > bestArg(proof1.prefix.map(_.header))(m) shouldBe true
-  }
-
-  property("goodSuperChain") {
-    val chain0 = genChain(100).map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
-    val proof0 = prove(chain0)(poPowParams)
-    val goodSuperChain = proof0.chain
-    val maxLevel = goodSuperChain.last.interlinks.size - 1
-
-    PoPowAlgos.goodSuperChain(
-      goodSuperChain.map(_.header), chain0.map(_.header), maxLevel)(poPowParams) shouldBe true
   }
 
 }

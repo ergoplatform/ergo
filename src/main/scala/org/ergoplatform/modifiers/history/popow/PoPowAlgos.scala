@@ -163,7 +163,7 @@ object PoPowAlgos {
   def lowestCommonAncestor(leftChain: Seq[Header], rightChain: Seq[Header]): Option[Header] = {
     @scala.annotation.tailrec
     def lcaIndex(startIdx: Int): Int =
-      if (leftChain.lengthCompare(startIdx) >= 0 && rightChain.lengthCompare(startIdx) >= 0 &&
+      if (leftChain.lengthCompare(startIdx) > 0 && rightChain.lengthCompare(startIdx) > 0 &&
         leftChain(startIdx) == rightChain(startIdx)) {
         lcaIndex(startIdx + 1)
       } else {

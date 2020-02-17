@@ -3,6 +3,7 @@ package org.ergoplatform.modifiers.history
 import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.HistoryTestHelpers
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -122,7 +123,6 @@ class PoPowAlgosSpec
     proof0.prefix.map(_.id).sorted.toList shouldBe proof1.prefix.map(_.id).sorted.toList
   }
 
-
   property("proof(histReader) for a header in the past") {
     val poPowParams = PoPowParams(5, 6)
     val blocksChain = genChain(300)
@@ -147,4 +147,20 @@ class PoPowAlgosSpec
     proof0.prefix.map(_.id).sorted.toList shouldBe proof1.prefix.map(_.id).sorted.toList
   }
 
+  property("isBetterThan - marginally longer chain should be better") {
+    val sizes = Seq(1000)
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
+      c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    sizes.foreach { size =>
+      val baseChain = genChain(size)
+      val branchPoint = baseChain(baseChain.length - 1)
+      val shortChain = toPoPoWChain(baseChain)
+      val longChain = toPoPoWChain(baseChain ++ genChain(1, branchPoint).takeRight(1))
+
+      val shortProof = prove(shortChain)(poPowParams)
+      val longProof = prove(longChain)(poPowParams)
+
+      shortProof.isBetterThan(longProof) shouldBe false
+    }
+  }
 }

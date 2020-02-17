@@ -121,19 +121,6 @@ object PoPowAlgos {
     }
 
   /**
-    * Computes absolute level (μ_abs) of the given [[Header]], such that μ_abs = 256 − log(id(B))
-    */
-  def absoluteLevelOf(header: Header): Int =
-    if (!header.isGenesis) {
-      val requiredTarget = org.ergoplatform.mining.q
-      val realTarget = header.powSolution.d
-      val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
-      level.toInt
-    } else {
-      Int.MaxValue
-    }
-
-  /**
     * Computes best score of a given chain.
     * The score value depends on number of µ-superblocks in the given chain.
     *
@@ -159,7 +146,7 @@ object PoPowAlgos {
       if (level == 0) {
         loop(level + 1, (0, chain.size) +: acc) // Supposing each header is at least of level 0.
       } else {
-        val args = chain.filter(absoluteLevelOf(_) >= level)
+        val args = chain.filter(maxLevelOf(_) >= level)
         if (args.lengthCompare(m) >= 0) loop(level + 1, (level, args.size) +: acc) else acc
       }
 

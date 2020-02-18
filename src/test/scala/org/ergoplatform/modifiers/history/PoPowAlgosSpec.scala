@@ -1,8 +1,6 @@
 package org.ergoplatform.modifiers.history
 
-import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams}
-import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.utils.HistoryTestHelpers
+import org.ergoplatform.modifiers.history.popow.{PoPowProof, PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
@@ -161,6 +159,38 @@ class PoPowAlgosSpec
       val longProof = prove(longChain)(poPowParams)
 
       shortProof.isBetterThan(longProof) shouldBe false
+    }
+  }
+
+  property("isConnected - ensures a connected prefix chain") {
+    val smallPoPowParams = PoPowParams(5, 5)
+    val sizes = Seq(100, 200)
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
+      c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    sizes.foreach { size =>
+      val chain = toPoPoWChain(genChain(size))
+      val randomBlock = toPoPoWChain(genChain(1)).head
+      val proof = prove(chain)(smallPoPowParams)
+      val disconnectedProofPrefix = proof.prefix.updated(proof.prefix.length/2, randomBlock)
+      val disconnectedProof = PoPowProof(proof.m, proof.k, disconnectedProofPrefix, proof.suffix)
+      proof.isConnected() shouldBe true
+      disconnectedProof.isConnected() shouldBe false
+    }
+  }
+
+  property("isConnected - ensures a connected suffix chain") {
+    val smallPoPowParams = PoPowParams(5, 5)
+    val sizes = Seq(100, 200)
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
+      c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    sizes.foreach { size =>
+      val chain = toPoPoWChain(genChain(size))
+      val randomBlock = toPoPoWChain(genChain(1)).head
+      val proof = prove(chain)(smallPoPowParams)
+      val disconnectedProofSuffix = proof.suffix.updated(proof.suffix.length/2, randomBlock)
+      val disconnectedProof = PoPowProof(proof.m, proof.k, proof.prefix, disconnectedProofSuffix)
+      proof.isConnected() shouldBe true
+      disconnectedProof.isConnected() shouldBe false
     }
   }
 }

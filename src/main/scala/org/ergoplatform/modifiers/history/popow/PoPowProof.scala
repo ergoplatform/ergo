@@ -50,6 +50,33 @@ case class PoPowProof(m: Int,
     bestArg(thisDivergingChain)(m) > bestArg(thatDivergingChain)(m)
   }
 
+  def isConnected(): Boolean = {
+    @scala.annotation.tailrec
+    def prefixConnected(i: Int): Boolean = {
+      if (prefix.length > i) {
+        if (prefix(i).interlinks.contains(prefix(i-1).id)) {
+          prefixConnected(i+1)
+        } else {
+          false
+        }
+      } else {
+        true
+      }
+    }
+    @scala.annotation.tailrec
+    def suffixConnected(i: Int): Boolean = {
+      if (suffix.length > i) {
+        if (suffix(i).header.parentId == suffix(i-1).id) {
+          suffixConnected(i+1)
+        } else {
+          false
+        }
+      } else {
+        true
+      }
+    }
+    prefixConnected(1) && suffixConnected(1)
+  }
 }
 
 object PoPowProof {

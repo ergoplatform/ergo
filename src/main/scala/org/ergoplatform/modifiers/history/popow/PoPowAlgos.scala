@@ -3,6 +3,7 @@ package org.ergoplatform.modifiers.history.popow
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.Extension.InterlinksVectorPrefix
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.Constants
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
@@ -137,8 +138,8 @@ object PoPowAlgos {
     * number of blocks by the level as 2μ|π↑μ{b:}|. The highest possible score across all levels is returned."
     *
     * function best-arg_m(π, b)
-    *   M←{μ:|π↑μ{b:}|≥m}∪{0}
-    *   return max_{μ∈M} {2μ·|π↑μ{b:}|}
+    * M←{μ:|π↑μ{b:}|≥m}∪{0}
+    * return max_{μ∈M} {2μ·|π↑μ{b:}|}
     * end function
     */
   def bestArg(chain: Seq[Header])(m: Int): Int = {
@@ -204,5 +205,18 @@ object PoPowAlgos {
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height)
     PoPowProof(params.m, params.k, prefix, suffix)
   }
+
+  def prove(histReader: ErgoHistoryReader)(params: PoPowParams): PoPowProof = {
+    val k = params.k
+    val m = params.m
+
+    require(params.k >= 0, s"$k < 0")
+    require(histReader.headersHeight >= k + m, s"Can not prove chain of size < ${k + m}")
+
+    val suffix = histReader.lastHeaders(k)
+    val kMinusOneHeader = histReader.typedModifierById[Header](suffix.head.parentId)
+    // val kMinusOneExtension =
+  }
+
 
 }

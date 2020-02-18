@@ -85,7 +85,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @param h - height
     * @return header if exists, None otherwise
     */
-  private def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
+  def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
 
   /**
     * @param h - header to process

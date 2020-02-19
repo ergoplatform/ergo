@@ -44,7 +44,7 @@ case class PoPowProof(m: Int,
     * @return whether this PoPoW proof is better than "that"
     */
   def isBetterThan(that: PoPowProof): Boolean = {
-    if (that.isConnected()) {
+    if (that.hasValidConnections()) {
       val result = lowestCommonAncestor(headersChain, that.headersChain)
         .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
         .map({ case (thisDivergingChain, thatDivergingChain) =>
@@ -62,7 +62,7 @@ case class PoPowProof(m: Int,
     })
   }
 
-  def isConnected(): Boolean = {
+  def hasValidConnections(): Boolean = {
     prefix.zip(prefix.tail ++ suffix.headOption).forall({
       case (prev, next) => next.interlinks.contains(prev.id)
     }) && suffix.zip(suffix.tail).forall({

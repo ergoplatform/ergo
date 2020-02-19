@@ -179,7 +179,7 @@ class PoPowAlgosSpec
   }
 
 
-  property("isConnected - ensures a connected prefix chain") {
+  property("hasValidConnections - ensures a connected prefix chain") {
     val smallPoPowParams = PoPowParams(5, 5)
     val sizes = Seq(100, 200)
     val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
@@ -190,12 +190,12 @@ class PoPowAlgosSpec
       val proof = prove(chain)(smallPoPowParams)
       val disconnectedProofPrefix = proof.prefix.updated(proof.prefix.length/2, randomBlock)
       val disconnectedProof = PoPowProof(proof.m, proof.k, disconnectedProofPrefix, proof.suffix)
-      proof.isConnected() shouldBe true
-      disconnectedProof.isConnected() shouldBe false
+      proof.hasValidConnections() shouldBe true
+      disconnectedProof.hasValidConnections() shouldBe false
     }
   }
 
-  property("isConnected - ensures a connected suffix chain") {
+  property("hasValidConnections - ensures a connected suffix chain") {
     val smallPoPowParams = PoPowParams(5, 5)
     val sizes = Seq(100, 200)
     val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
@@ -206,16 +206,16 @@ class PoPowAlgosSpec
       val proof = prove(chain)(smallPoPowParams)
       val disconnectedProofSuffix = proof.suffix.updated(proof.suffix.length/2, randomBlock)
       val disconnectedProof = PoPowProof(proof.m, proof.k, proof.prefix, disconnectedProofSuffix)
-      proof.isConnected() shouldBe true
-      disconnectedProof.isConnected() shouldBe false
+      proof.hasValidConnections() shouldBe true
+      disconnectedProof.hasValidConnections() shouldBe false
     }
   }
 
-  property("isConnected - ensures prefix.last & suffix.head are linked") {
+  property("hasValidConnections - ensures prefix.last & suffix.head are linked") {
     val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
       c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
     val prefix = toPoPoWChain(genChain(1))
     val suffix = toPoPoWChain(genChain(1))
-    PoPowProof(0, 0, prefix, suffix).isConnected() shouldBe false
+    PoPowProof(0, 0, prefix, suffix).hasValidConnections() shouldBe false
   }
 }

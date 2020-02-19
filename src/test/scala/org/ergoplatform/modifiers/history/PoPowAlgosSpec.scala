@@ -162,6 +162,23 @@ class PoPowAlgosSpec
     }
   }
 
+  property("isBetterThan - a disconnected prefix chain should not win") {
+    val smallPoPowParams = PoPowParams(50, 1)
+    val size = 100
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
+      c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val chain = toPoPoWChain(genChain(size))
+    val proof = prove(chain)(smallPoPowParams)
+
+    val longerChain = toPoPoWChain(genChain(size*2))
+    val longerProof = prove(longerChain)(smallPoPowParams)
+
+    val disconnectedProofPrefix = proof.prefix.take(proof.prefix.length/2) ++ longerProof.prefix
+    val disconnectedProof = PoPowProof(proof.m, proof.k, disconnectedProofPrefix, proof.suffix)
+    disconnectedProof.isBetterThan(proof) shouldBe false
+  }
+
+
   property("isConnected - ensures a connected prefix chain") {
     val smallPoPowParams = PoPowParams(5, 5)
     val sizes = Seq(100, 200)

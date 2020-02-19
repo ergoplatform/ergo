@@ -210,4 +210,12 @@ class PoPowAlgosSpec
       disconnectedProof.isConnected() shouldBe false
     }
   }
+
+  property("isConnected - ensures prefix.last & suffix.head are linked") {
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
+      c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val prefix = toPoPoWChain(genChain(1))
+    val suffix = toPoPoWChain(genChain(1))
+    PoPowProof(0, 0, prefix, suffix).isConnected() shouldBe false
+  }
 }

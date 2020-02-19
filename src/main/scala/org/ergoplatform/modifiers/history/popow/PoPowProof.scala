@@ -56,8 +56,8 @@ case class PoPowProof(m: Int,
   }
 
   def isConnected(): Boolean = {
-    prefix.zip(prefix.tail).forall({
-      case (prev, cur) => cur.interlinks.contains(prev.id)
+    prefix.zip(prefix.tail ++ suffix.headOption).forall({
+      case (prev, next) => next.interlinks.contains(prev.id)
     }) && suffix.zip(suffix.tail).forall({
       case (prev, cur) => cur.header.parentId == prev.id
     })

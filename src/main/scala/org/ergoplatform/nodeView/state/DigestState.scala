@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
@@ -10,7 +9,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.state.ErgoState.ModifierProcessing
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
-import scorex.db.LDBVersionedStore
+import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.core._
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexEncoding
@@ -87,7 +86,7 @@ class DigestState protected(override val version: VersionTag,
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
     log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
     val versionBytes = scorex.core.versionToBytes(version)
-    Try(store.rollback(versionBytes)).map { _ =>
+    Try(store.rollbackTo(versionBytes)).map { _ =>
       store.clean(nodeSettings.keepVersions)
       val rootHash = ADDigest @@ store.get(versionBytes).get
       log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")

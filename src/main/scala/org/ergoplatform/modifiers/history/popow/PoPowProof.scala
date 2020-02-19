@@ -45,11 +45,11 @@ case class PoPowProof(m: Int,
     */
   def isBetterThan(that: PoPowProof): Boolean = {
     if (that.isValid()) {
-      val result = lowestCommonAncestor(headersChain, that.headersChain)
+      lowestCommonAncestor(headersChain, that.headersChain)
         .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
         .map({ case (thisDivergingChain, thatDivergingChain) =>
           bestArg(thisDivergingChain)(m) > bestArg(thatDivergingChain)(m) })
-      result.getOrElse(false)
+        .getOrElse(false)
     } else {
       true
     }

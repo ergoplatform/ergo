@@ -55,17 +55,19 @@ case class PoPowProof(m: Int,
     }
   }
 
+  def hasValidHeights(): Boolean = {
+    val all = prefix ++ suffix
+    all.zip(all.tail).forall({
+      case (prev, next) => prev.height < next.height
+    })
+  }
+
   def isConnected(): Boolean = {
     prefix.zip(prefix.tail ++ suffix.headOption).forall({
       case (prev, next) => next.interlinks.contains(prev.id)
     }) && suffix.zip(suffix.tail).forall({
       case (prev, next) => next.header.parentId == prev.id
-    }) && {
-      val all = prefix ++ suffix
-      all.zip(all.tail).forall({
-        case (prev, next) => prev.height < next.height
-      })
-    }
+    })
   }
 }
 

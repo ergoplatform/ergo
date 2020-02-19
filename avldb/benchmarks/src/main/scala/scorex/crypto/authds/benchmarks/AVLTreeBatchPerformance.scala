@@ -26,7 +26,7 @@ object AVLTreeBatchPerformance extends {
 
     @Setup(Level.Iteration)
     def up: Unit = {
-      val (p, s, _) = getPersistentProverWithLSMStore(1000, proverCnt)
+      val (p, s, _) = persistentProverWithVersionedStore(1000, proverCnt)
       store = s
       prover = p
       operations = generateOps(proverCnt until (proverCnt + opsCnt))

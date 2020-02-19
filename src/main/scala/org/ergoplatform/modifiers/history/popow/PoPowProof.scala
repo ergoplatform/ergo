@@ -60,8 +60,7 @@ case class PoPowProof(m: Int,
   }
 
   def hasValidHeights(): Boolean = {
-    val all = prefix ++ suffix
-    all.zip(all.tail).forall({
+    chain.zip(chain.tail).forall({
       case (prev, next) => prev.height < next.height
     })
   }

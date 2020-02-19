@@ -175,7 +175,7 @@ class PoPowAlgosSpec
 
     val disconnectedProofPrefix = proof.prefix.take(proof.prefix.length/2) ++ longerProof.prefix
     val disconnectedProof = PoPowProof(proof.m, proof.k, disconnectedProofPrefix, proof.suffix)
-    disconnectedProof.isBetterThan(proof) shouldBe false
+    proof.isBetterThan(disconnectedProof) shouldBe true
   }
 
 

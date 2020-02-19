@@ -161,16 +161,11 @@ object PoPowAlgos {
     * Finds the last common header (branching point) between `leftChain` and `rightChain`.
     */
   def lowestCommonAncestor(leftChain: Seq[Header], rightChain: Seq[Header]): Option[Header] = {
-    @scala.annotation.tailrec
-    def lcaIndex(startIdx: Int): Int =
-      if (leftChain.lengthCompare(startIdx) > 0 && rightChain.lengthCompare(startIdx) > 0 &&
-        leftChain(startIdx) == rightChain(startIdx)) {
-        lcaIndex(startIdx + 1)
-      } else {
-        startIdx - 1
-      }
-
-    if (leftChain.headOption.exists(rightChain.headOption.contains(_))) Some(leftChain(lcaIndex(1))) else None
+    if (leftChain.headOption.exists(rightChain.headOption.contains(_))) {
+      Some(leftChain.intersect(rightChain).last)
+    } else {
+      None
+    }
   }
 
   /**

@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.network.Broadcast
@@ -71,10 +72,12 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       nodeViewHolderRef ! GetNodeViewChanges(history = false, state = true, mempool = true, vault = false)
 
     case ChangedMempool(mp: ErgoMemPoolReader) =>
-      stateReaderOpt.fold[Any](poolReaderOpt = Some(mp))(initiateCleanup(_, mp))
+      poolReaderOpt = Some(mp)
+      stateReaderOpt.foreach(st => initiateCleanup(st, mp))
 
     case ChangedState(st: TransactionValidation[ErgoTransaction@unchecked]) =>
-      poolReaderOpt.fold[Any](stateReaderOpt = Some(st))(initiateCleanup(st, _))
+      stateReaderOpt = Some(st)
+      poolReaderOpt.foreach(mp => initiateCleanup(st, mp))
 
     case ChangedState(_) | ChangedMempool(_) => // do nothing
   }
@@ -82,8 +85,10 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private def working: Receive = {
     case CleanupDone =>
       log.info("Cleanup done. Switching to awaiting mode")
-      //rebroadcast random transactions
-      broadcastRandomTransactions()
+      //rebroadcast transactions
+      rebroadcastTransactions()
+      stateReaderOpt = None
+      poolReaderOpt = None
       context become awaiting
 
     case _ => // ignore other triggers until work is done
@@ -96,22 +101,39 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     context become working // ignore other triggers until work is done
   }
 
-  private def broadcastRandomTransactions(): Unit = {
-    poolReaderOpt.foreach { pr =>
-      val txs = pr.randomSlice(settings.nodeSettings.rebroadcastCount)
-      val msg = Message(
-        new InvSpec(settings.scorexSettings.network.maxInvObjects),
-        Right(InvData(Transaction.ModifierTypeId, txs.map(_.id))),
-        None
-      )
-      networkControllerRef ! SendToNetwork(msg, Broadcast)
+  private def rebroadcastTransactions(): Unit = {
+    log.debug("Rebroadcasting transactions")
+    stateReaderOpt.foreach { st =>
+      poolReaderOpt.foreach { pr =>
+        pr.take(settings.nodeSettings.rebroadcastCount).foreach { tx =>
+          st match {
+            case utxo: UtxoState =>
+              //todo: currently we're rebroadcasting transactions which are spending on-chain outputs only
+              //todo: this is to be changed when most of the nodes on the network will support transactions spending
+              //todo: offchain outputs in the mempool (versions 3.2.1 and further)
+              if (tx.inputs.forall(i => utxo.boxById(i.boxId).isDefined)) {
+                log.info(s"Rebroadcasting $tx")
+                val msg = Message(
+                  new InvSpec(settings.scorexSettings.network.maxInvObjects),
+                  Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
+                  None
+                )
+                networkControllerRef ! SendToNetwork(msg, Broadcast)
+              } else {
+                log.info(s"Not all the inputs of $tx is in UTXO set")
+              }
+          }
+        }
+      }
     }
   }
 
 }
 
 object MempoolAuditor {
+
   case object CleanupDone
+
 }
 
 object MempoolAuditorRef {
@@ -126,4 +148,5 @@ object MempoolAuditorRef {
             settings: ErgoSettings)
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(nodeViewHolderRef, networkControllerRef, settings))
+
 }

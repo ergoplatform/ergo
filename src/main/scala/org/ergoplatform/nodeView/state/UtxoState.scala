@@ -154,6 +154,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       bytesToVersion(store.get(Algos.hash(v)).get)
     }
   }
+
 }
 
 object UtxoState {
@@ -213,7 +214,6 @@ object UtxoState {
     ).get
 
     new UtxoState(persistentProver, ErgoState.genesisStateVersion, store, constants)
-
   }
 
 }

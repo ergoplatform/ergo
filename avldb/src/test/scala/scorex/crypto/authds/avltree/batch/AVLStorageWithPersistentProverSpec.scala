@@ -62,9 +62,6 @@ class AVLStorageWithPersistentProverSpec extends PropSpec with Matchers {
   private val iMods32 = (0 until 100)
     .map(i => Insert(ADKey @@ Random.randomBytes(), ADValue @@ Array.fill(32)(i.toByte)))
 
-  private val iMods64 = (0 until 100)
-    .map(i => Insert(ADKey @@ Random.randomBytes(), ADValue @@ Array.fill(64)(i.toByte)))
-
   private val iMods128 = (0 until 100)
     .map(i => Insert(ADKey @@ Random.randomBytes(), ADValue @@ Array.fill(128)(i.toByte)))
 

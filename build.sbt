@@ -22,7 +22,7 @@ lazy val commonSettings = Seq(
   publishTo := sonatypePublishToBundle.value
 )
 
-val scorexVersion = "4ca3e400-SNAPSHOT"
+val scorexVersion = "master-3946bdb5-SNAPSHOT"
 val sigmaStateVersion = "3.1.1"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -32,9 +32,13 @@ libraryDependencies ++= Seq(
   ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion).force()
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
-  "org.scala-lang.modules" %% "scala-async" % "0.9.7",
 
   "org.ethereum" % "leveldbjni-all" % "1.18.3",
+  //the following pure-java leveldb implementation is needed only on specific platforms, such as 32-bit Raspberry Pi
+  //in future, it could be reasonable to have special builds with this Java db only, and for most of platforms use
+  //jni wrapper over native library included in leveldbjni-all
+  "org.iq80.leveldb" % "leveldb" % "0.12",
+  
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
 
   "org.typelevel" %% "cats-free" % "1.6.0",
@@ -44,6 +48,7 @@ libraryDependencies ++= Seq(
   "com.google.guava" % "guava" % "21.0",
   "com.joefkelley" %% "argyle" % "1.0.0",
 
+  "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",

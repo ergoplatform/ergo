@@ -27,7 +27,7 @@ class NetworkSender(chainId: Char, networkNodeName: String, nonce: Long) extends
       val counter = new AtomicLong(messages.size)
 
       messages.foreach { msg =>
-        channel.write(msg).addListener { (f: io.netty.util.concurrent.Future[Void]) =>
+        channel.write(msg).addListener { f: io.netty.util.concurrent.Future[Void] =>
           if (!f.isSuccess) {
             val cause = Option(f.cause()).getOrElse(new IOException("Can't send a message to the channel"))
             log.error(s"Can't send a message to the channel: $msg", cause)

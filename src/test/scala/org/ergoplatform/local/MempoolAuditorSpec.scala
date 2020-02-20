@@ -1,8 +1,9 @@
 package org.ergoplatform.local
 
-import akka.actor.ActorRef
-import akka.testkit.TestProbe
+import akka.actor.{ActorRef, ActorSystem}
+import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, OrderedTxPool}
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
@@ -10,15 +11,22 @@ import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoTestHelpers, NodeViewTestOps}
 import org.scalatest.FlatSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
+import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, FailedTransaction, SuccessfulTransaction}
+import scorex.util.ModifierId
 
 import scala.concurrent.duration._
+import scala.util.Random
+
 
 class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelpers {
 
-  val cleanupDuration: FiniteDuration = 5.seconds
+  val cleanupDuration: FiniteDuration = 2.seconds
   val settingsToTest: ErgoSettings = settings.copy(
-    nodeSettings = settings.nodeSettings.copy(mempoolCleanupDuration = cleanupDuration))
+    nodeSettings = settings.nodeSettings.copy(
+      mempoolCleanupDuration = cleanupDuration,
+      rebroadcastCount = 1
+    ))
   val fixture = new NodeViewFixture(settingsToTest)
   val newTx: Class[SuccessfulTransaction[_]] = classOf[SuccessfulTransaction[_]]
 
@@ -63,4 +71,55 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
 
   }
 
+  it should "rebroadcast transactions correctly" in {
+
+    val (us0, bh0) = createUtxoState(None)
+    val (txs0, bh1) = validTransactionsFromBoxHolder(bh0)
+    val b1 = validFullBlock(None, us0, txs0)
+
+    val us = us0.applyModifier(b1).get
+
+    val bxs = bh1.boxes.values.toList.filter(_.proposition != genesisEmissionBox.proposition)
+    val txs = validTransactionsFromBoxes(200000, bxs, new Random())._1
+
+    // mempool reader stub specifically for this test
+    // only take is defined as only this method is used in rebroadcasting
+    object fakeMempool extends ErgoMemPoolReader {
+      override type NVCT = this.type
+
+      override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = ???
+
+      override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ???
+
+      override def size: Int = ???
+
+      override def weightedTransactionIds(limit: Int): Seq[OrderedTxPool.WeightedTxId] = ???
+
+      override def getAll: Seq[ErgoTransaction] = ???
+
+      override def getAllPrioritized: Seq[ErgoTransaction] = txs
+
+      override def take(limit: Int): Iterable[ErgoTransaction] = txs.take(limit)
+    }
+
+    implicit val system = ActorSystem()
+    val probe = TestProbe()
+
+    val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, settingsToTest))
+
+    val coin = Random.nextBoolean()
+
+    def sendState(): Unit = auditor ! ChangedState(us)
+    def sendPool(): Unit = auditor ! ChangedMempool(fakeMempool)
+
+    if (coin) {
+      sendPool()
+      sendState()
+    } else {
+      sendState()
+      sendPool()
+    }
+
+    probe.expectMsgType[SendToNetwork]
+  }
 }

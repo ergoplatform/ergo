@@ -6,13 +6,14 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 
 /**
   * Holds version-agnostic off-chain data (such as off-chain boxes) in runtime memory.
-  * @param height - latest processed block height
-  * @param offChainBalances - balances from off-chain transactions
-  * @param onChainBalances - on-chain balances snapshot (required to calculate off-chain indexes)
+  *
+  * @param height           - latest processed block height
+  * @param offChainBoxes    - boxes from off-chain transactions
+  * @param onChainBalances  - on-chain balances snapshot (required to calculate off-chain indexes)
   */
-final case class OffChainRegistry(height: Int,
-                                  offChainBalances: Seq[Balance],
-                                  onChainBalances: Seq[Balance]) {
+case class OffChainRegistry(height: Int,
+                            offChainBoxes: Seq[TrackedBox],
+                            onChainBalances: Seq[Balance]) {
 
   import org.ergoplatform.nodeView.wallet.IdUtils._
 
@@ -20,6 +21,7 @@ final case class OffChainRegistry(height: Int,
     * Off-chain index considering on-chain balances.
     */
   val digest: RegistryDigest = {
+    val offChainBalances = offChainBoxes.map(Balance.apply)
     val balance = offChainBalances.map(_.value).sum + onChainBalances.map(_.value).sum
     val tokensBalance = (offChainBalances ++ onChainBalances)
       .flatMap(_.assets)
@@ -33,38 +35,30 @@ final case class OffChainRegistry(height: Int,
     * Update on receiving new off-chain transaction.
     */
   def updateOnTransaction(certainBoxes: Seq[TrackedBox],
-                          spentIds: Seq[EncodedBoxId]): OffChainRegistry = {
-    val unspentCertain = offChainBalances.filterNot(x => spentIds.contains(x.id)) ++
-      certainBoxes.map { tb =>
-        Balance(encodedBoxId(tb.box.id), tb.box.value,
-          tb.box.additionalTokens.toArray.map(x => encodedTokenId(x._1) -> x._2).toMap)
-      }
+              spentIds: Seq[EncodedBoxId]): OffChainRegistry = {
+    val unspentCertain = offChainBoxes.filterNot(x => spentIds.contains(x.boxId)) ++ certainBoxes
     val onChainBalancesUpdated = onChainBalances.filterNot(x => spentIds.contains(x.id))
     this.copy(
-      offChainBalances = unspentCertain.distinct,
+      offChainBoxes = unspentCertain.distinct,
       onChainBalances = onChainBalancesUpdated
     )
   }
 
   /**
     * Update balances snapshot according to a new block applied
-    * @param newHeight - processed block height
-    * @param allCertainBoxes - all the unspent boxes to the moment
-    * @param onChainIds - ids of all boxes which became on-chain in result of current block application
+    *
+    * @param newHeight       - processed block height
+    * @param allCertainBoxes -  all the unspent boxes to the moment
+    * @param onChainIds      - ids of all boxes which became on-chain in result of a current block application
     */
   def updateOnBlock(newHeight: Int,
                     allCertainBoxes: Seq[TrackedBox],
                     onChainIds: Seq[EncodedBoxId]): OffChainRegistry = {
-    val updatedOnChainBalances = allCertainBoxes.map { tb =>
-      Balance(
-        encodedBoxId(tb.box.id),
-        tb.box.value,
-        tb.box.additionalTokens.toArray.map(x => encodedTokenId(x._1) -> x._2).toMap)
-    }
-    val cleanedOffChainBalances = offChainBalances.filterNot(b => onChainIds.contains(b.id))
+    val updatedOnChainBalances = allCertainBoxes.map(Balance.apply)
+    val cleanedOffChainBoxes = offChainBoxes.filterNot(b => onChainIds.contains(b.boxId))
     this.copy(
       height = newHeight,
-      offChainBalances = cleanedOffChainBalances,
+      offChainBoxes = cleanedOffChainBoxes,
       onChainBalances = updatedOnChainBalances
     )
   }

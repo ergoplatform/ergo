@@ -28,10 +28,17 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
   // count validation sessions in order to perform index cleanup.
   private var epochNr: Int = 0
 
+  override def preStart(): Unit = {
+    log.info("Cleanup worker started")
+  }
+
   override def receive: Receive = {
     case RunCleanup(validator, mempool) =>
       runCleanup(validator, mempool)
       sender() ! CleanupDone
+
+    //Should not be here, if non-expected signal comes, check logic
+    case a: Any => log.warn(s"Strange input: $a")
   }
 
   private def runCleanup(validator: TransactionValidation[ErgoTransaction],
@@ -51,40 +58,48 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
   private def validatePool(validator: TransactionValidation[ErgoTransaction],
                            mempool: ErgoMemPoolReader): Seq[ModifierId] = {
 
+
+    // Check transactions sorted by priority. Parent transaction comes before its children.
+    val txsToValidate = mempool.getAllPrioritized.toList
+
+    //internal loop function validating transactions, returns validated and invalidated transaction ids
     @tailrec
     def validationLoop(txs: Seq[ErgoTransaction],
+                       validated: Seq[ModifierId],
                        invalidated: Seq[ModifierId],
-                       etAcc: Long): Seq[ModifierId] = txs match {
-      case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos
-        && !validatedIndex.contains(head.id) =>
+                       etAcc: Long): (Seq[ModifierId], Seq[ModifierId]) = {
+      txs match {
+        case head :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos && !validatedIndex.contains(head.id) =>
 
-        val state = validator match {
-          case u: UtxoStateReader => u.withTransactions(txs)
-          case _ => validator
-        }
+          // Take into account previously validated transactions from the pool.
+          // This provides possibility to validate transactions which are spending off-chain outputs.
+          val state = validator match {
+            case u: UtxoStateReader => u.withTransactions(txsToValidate)
+            case _ => validator
+          }
 
-        val t0 = System.nanoTime()
-        val validationResult = state.validate(head)
-        val t1 = System.nanoTime()
-        val accumulatedTime = etAcc + (t1 - t0)
-        validationResult match {
-          case Success(_) => validationLoop(tail, invalidated, accumulatedTime)
-          case Failure(e) =>
-            log.debug(s"Transaction ${head.id} invalidated: ${e.getMessage}")
-            validationLoop(tail, invalidated :+ head.id, accumulatedTime)
-        }
-      case _ :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos =>
-        // this transaction was validated earlier, skip it
-        validationLoop(tail, invalidated, etAcc)
-      case _ =>
-        invalidated
+          val t0 = System.nanoTime()
+          val validationResult = state.validate(head)
+          val t1 = System.nanoTime()
+          val accumulatedTime = etAcc + (t1 - t0)
+
+          val txId = head.id
+          validationResult match {
+            case Success(_) =>
+              validationLoop(tail, validated :+ txId, invalidated, accumulatedTime)
+            case Failure(e) =>
+              log.info(s"Transaction $txId invalidated: ${e.getMessage}")
+              validationLoop(tail, validated, invalidated :+ txId, accumulatedTime)
+          }
+        case _ :: tail if etAcc < nodeSettings.mempoolCleanupDuration.toNanos =>
+          // this transaction was validated earlier, skip it
+          validationLoop(tail, validated, invalidated, etAcc)
+        case _ =>
+          validated -> invalidated
+      }
     }
 
-    val txsToValidate = mempool.getAll
-   // val txsToValidate = Random.shuffle(mempoolTxs)
-
-    val invalidatedIds = validationLoop(txsToValidate, Seq.empty, 0L)
-    val validatedIds = txsToValidate.map(_.id).filterNot(invalidatedIds.contains)
+    val (validatedIds, invalidatedIds) = validationLoop(txsToValidate, Seq.empty, Seq.empty, 0L)
 
     epochNr += 1
     if (epochNr % CleanupWorker.IndexRevisionInterval == 0) {
@@ -105,4 +120,5 @@ object CleanupWorker {
                         mempool: ErgoMemPoolReader)
 
   val IndexRevisionInterval: Int = 16
+
 }

@@ -12,16 +12,16 @@ import scala.collection.immutable.TreeMap
   * An immutable pool of transactions of limited size with priority management and blacklisting support.
   *
   * @param orderedTransactions  - collection containing transactions ordered by `tx.weight`
-  * @param transactionsRegistry - mapping `tx.id` -> `WeightedTxId(tx.id,tx.weight)` required for fast access to transaction by its `id`
+  * @param transactionsRegistry - mapping `tx.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting transaction by its `id`
   * @param invalidated          - collection containing invalidated transaction ids as keys
   *                             ordered by invalidation timestamp (values)
-  * @param outputs              - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required locate transaction by its output box
+  * @param outputs              - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting a transaction by its output box
   */
-final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
-                               transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
-                               invalidated: TreeMap[ModifierId, Long],
-                               outputs: TreeMap[BoxId, WeightedTxId])
-                              (implicit settings: ErgoSettings) extends ScorexLogging {
+case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
+                         transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
+                         invalidated: TreeMap[ModifierId, Long],
+                         outputs: TreeMap[BoxId, WeightedTxId])
+                        (implicit settings: ErgoSettings) extends ScorexLogging {
 
   import OrderedTxPool.weighted
 
@@ -50,17 +50,12 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
     * @return - modified pool
     */
   def put(tx: ErgoTransaction): OrderedTxPool = {
-    println("inputs: " + tx.inputs.map(_.boxId).map(Algos.encode))
-    println("outputs: "  + tx.outputs.map(_.id).map(Algos.encode))
     val wtx = weighted(tx)
     val newPool = OrderedTxPool(orderedTransactions.updated(wtx, tx),
       transactionsRegistry.updated(wtx.id, wtx), invalidated,
       outputs ++ tx.outputs.map(_.id -> wtx)).updateFamily(tx, wtx.weight)
-
-    println("ordered tx weights: " + newPool.orderedTransactions.map(_._1.weight))
-    println("===")
     if (newPool.orderedTransactions.size > mempoolCapacity) {
-      val victim = newPool.orderedTransactions.head._2
+      val victim = newPool.orderedTransactions.last._2
       newPool.remove(victim)
     } else {
       newPool
@@ -68,13 +63,11 @@ final case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTr
   }
 
   def remove(tx: ErgoTransaction): OrderedTxPool = {
-    println(s"removing $tx")
     transactionsRegistry.get(tx.id).fold(this)(wtx =>
       OrderedTxPool(orderedTransactions - wtx, transactionsRegistry - tx.id, invalidated, outputs -- tx.outputs.map(_.id)).updateFamily(tx, -wtx.weight))
   }
 
   def invalidate(tx: ErgoTransaction): OrderedTxPool = {
-    println(s"invalidating $tx")
     val inv = if (invalidated.size >= blacklistCapacity) invalidated - invalidated.firstKey else invalidated
     val ts = System.currentTimeMillis()
     transactionsRegistry.get(tx.id).fold(OrderedTxPool(orderedTransactions, transactionsRegistry, inv.updated(tx.id, ts), outputs))(wtx =>
@@ -168,6 +161,7 @@ object OrderedTxPool {
       .filter(b => java.util.Arrays.equals(b.propositionBytes, ms.feePropositionBytes))
       .map(_.value)
       .sum
+    // We multiply by 1024 for better precision
     WeightedTxId(tx.id, fee * 1024 / tx.size)
   }
 

@@ -15,7 +15,14 @@ import scala.util.{Failure, Success}
 import ApplicationEntities._
 
 /**
-  * This class contains methods to register / deregister and list external applications.
+  * This class contains methods to register / deregister and list external applications, and also to serve them.
+  * For serving external applications, this class has following methods:
+  *   * list boxes which can belong to an application but that is not certain
+  *   * a method to mark a box as certainly belongs to an application
+  *   * a method to stop tracking some box
+  *   * a method to list certain boxes not spent yet
+  * Please note that there's a flag which makes all the new boxes certain by default.
+  *
   * See EIP-0001 (https://github.com/ergoplatform/eips/blob/master/eip-0001.md) for motivation behind this API.
   */
 

@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "3.2.1"
+  version: "3.3.0"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -3038,9 +3038,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-
-
-
 
   /application/register:
     post:

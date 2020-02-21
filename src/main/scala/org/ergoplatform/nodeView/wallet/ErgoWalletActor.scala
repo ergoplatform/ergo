@@ -51,19 +51,19 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private var secretStorageOpt: Option[JsonSecretStorage] = None
 
-  private var offChainRegistry: OffChainRegistry = OffChainRegistry.empty
-
   private val walletSettings: WalletSettings = settings.walletSettings
 
   private val storage: WalletStorage = WalletStorage.readOrCreate(settings)
 
   private val registry: WalletRegistry = WalletRegistry.readOrCreate(settings)
 
+  private var offChainRegistry: OffChainRegistry = OffChainRegistry.init(registry)
+
   private val parameters: Parameters = LaunchParameters
 
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
-  // to the wallet (by executing testing transactions against them). The state context is being updated by listening
-  // to state updates.
+  // to the wallet (by executing testing transactions against them).
+  // The state context is being updated by listening to state updates.
   private def stateContext: ErgoStateContext = storage.readStateContext
 
   private def height: Int = stateContext.currentHeight
@@ -75,7 +75,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         log.warn("Initializing wallet in test mode. Switch to secure mode for production usage.")
         val seed = Mnemonic.toSeed(testMnemonic)
         val rootSk = ExtendedSecretKey.deriveMasterKey(seed)
-        val childSks = walletSettings.testKeysQty.toIndexedSeq.flatMap(x => (0 until x).map(rootSk.child))
+        val childSks = walletSettings
+          .testKeysQty.toIndexedSeq
+          .flatMap(qty => (0 until qty).map(rootSk.child))
         proverOpt = Some(ErgoProvingInterpreter(rootSk +: childSks, parameters))
         storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
       case None =>
@@ -92,7 +94,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   override def receive: Receive =
-    walletCommands orElse
+    walletInit orElse
+      walletCommands orElse
       onStateChanged orElse
       scanLogic orElse
       readers
@@ -181,8 +184,12 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       storage.updateStateContext(s.stateContext)
   }
 
-  private def walletCommands: Receive = {
-    case InitWallet(pass, mnemonicPassOpt) if secretStorageOpt.isEmpty =>
+  //Secret is set in form of keystore file of testMnemonic in the config
+  private def secretIsSet: Boolean = secretStorageOpt.nonEmpty || walletSettings.testMnemonic.nonEmpty
+
+  private def walletInit: Receive = {
+    //Init wallet (w. mnemonic generation) if secret is not set yet
+    case InitWallet(pass, mnemonicPassOpt) if !secretIsSet =>
       //Read high-quality random bits from Java's SecureRandom
       val entropy = scorex.utils.Random.randomBytes(settings.walletSettings.seedStrengthBits / 8)
       val mnemonicTry = new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
@@ -192,25 +199,44 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
             .init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), pass)(settings.walletSettings.secretStorage)
           secretStorageOpt = Some(secretStorage)
           mnemonic
-        }
-        .fold(catchLegalExc, res => Success(res))
-
-      util.Arrays.fill(entropy, 0: Byte)
+        } match {
+        case s: Success[String] =>
+          self ! UnlockWallet(pass)
+          util.Arrays.fill(entropy, 0: Byte)
+          log.info("Wallet is initialized")
+          s
+        case Failure(t) =>
+          val f = wrapLegalExc(t) //getting nicer message for illegal key size exception
+          log.error(s"Wallet initialization is failed, details: ${f.exception.getMessage}")
+          f
+      }
       sender() ! mnemonicTry
-      self ! UnlockWallet(pass)
-      log.info("Wallet is initialized")
 
-    case RestoreWallet(mnemonic, passOpt, encryptionPass) if secretStorageOpt.isEmpty =>
-      val secretStorage = JsonSecretStorage
-        .restore(mnemonic, passOpt, encryptionPass)(settings.walletSettings.secretStorage)
-      secretStorageOpt = Some(secretStorage)
-      sender() ! Success(())
-      self ! UnlockWallet(encryptionPass)
-      log.info("Wallet is restored")
 
+    //Restore wallet with mnemonic if secret is not set yet
+    case RestoreWallet(mnemonic, passOpt, encryptionPass) if !secretIsSet =>
+      val res = Try {
+        JsonSecretStorage.restore(mnemonic, passOpt, encryptionPass)(settings.walletSettings.secretStorage)
+      }.map { secretStorage =>
+        secretStorageOpt = Some(secretStorage)
+      } match {
+        case s: Success[Unit] =>
+          self ! UnlockWallet(encryptionPass)
+          log.info("Wallet is restored")
+          s
+        case Failure(t) =>
+          val f = wrapLegalExc(t) //getting nicer message for illegal key size exception
+          log.error(s"Wallet restoration is failed, details: ${f.exception.getMessage}")
+          f
+      }
+      sender() ! res
+
+    // branch for key already being set
     case _: RestoreWallet | _: InitWallet =>
-      sender() ! Failure(new Exception("Wallet is already initialized. Clear keystore to re-init it."))
+      sender() ! Failure(new Exception("Wallet is already initialized or testMnemonic is set. Clear current secret to re-init it."))
+  }
 
+  private def walletCommands: Receive = {
     case UnlockWallet(pass) =>
       secretStorageOpt match {
         case Some(secretStorage) =>
@@ -225,7 +251,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       secretStorageOpt.foreach(_.lock())
 
     case GetLockStatus =>
-      sender() ! (secretStorageOpt.isDefined -> proverOpt.isDefined)
+      sender() ! (secretIsSet -> proverOpt.isDefined)
 
     case WatchFor(address) =>
       storage.addTrackedAddress(address)
@@ -292,7 +318,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private val noFilter: FilterFn = (_: TrackedBox) => true
 
   /**
-    * Tries to prove given box in order to define whether it could be spent by this wallet.
+    * Tries to prove the given box in order to define whether it could be spent by this wallet.
     */
   private def resolve(box: ErgoBox): Boolean = {
     val testingTx = UnsignedErgoLikeTransaction(
@@ -442,7 +468,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           }
 
       case None =>
-        Failure(new Exception("Wallet is locked"))
+        Failure(new Exception(s"Cannot generateTransactionWithOutputs($requests, $inputsRaw): Wallet is locked"))
     }
 
   private def prepareTransaction(prover: ErgoProvingInterpreter, payTo: Seq[ErgoBoxCandidate])
@@ -468,7 +494,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     )
 
     prover.sign(unsignedTx, inputs, IndexedSeq(), stateContext)
-      .fold(e => Failure(new Exception(s"Failed to sign boxes: $inputs", e)), tx => Success(tx))
+      .fold(e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputs", e)), tx => Success(tx))
   }
 
   /**
@@ -494,7 +520,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     log.info(
       s"Processing ${resolved.size} resolved boxes: [${resolved.map(_._2.id).mkString(", ")}], " +
-      s"${unresolved.size} unresolved boxes: [${unresolved.map(_._2.id).mkString(", ")}]."
+        s"${unresolved.size} unresolved boxes: [${unresolved.map(_._2.id).mkString(", ")}]."
     )
 
     val walletTxs = txs.map(WalletTransaction(_, height, Constants.DefaultAppId))
@@ -527,10 +553,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def processUnlock(secretStorage: JsonSecretStorage): Unit = {
     val secrets = secretStorage.secret.toIndexedSeq ++ storage.readPaths.flatMap { path =>
-      secretStorage.secret.toSeq.map(_.derive(path).asInstanceOf[ExtendedSecretKey])
+      secretStorage.secret.toSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
     }
-    proverOpt = Some(ErgoProvingInterpreter(secrets, parameters))
-    storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
+    val prover = ErgoProvingInterpreter(secrets, parameters)
+    proverOpt = Some(prover)
+    storage.addTrackedAddresses(prover.pubKeys.map(pk => P2PKAddress(pk)))
     // process postponed blocks when prover is available.
     val lastProcessedHeight = registry.readIndex.height
     storage.readLatestPostponedBlockHeight.foreach { lastPostponedHeight =>
@@ -555,18 +582,18 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     if (dir.exists()) {
       dir.listFiles().toList match {
         case files if files.size > 1 =>
-          Failure(new Exception("Ambiguous secret files"))
+          Failure(new Exception(s"Ambiguous secret files in dir '$dir'"))
         case headFile :: _ =>
           Success(new JsonSecretStorage(headFile, settings.walletSettings.secretStorage.encryption))
         case Nil =>
-          Failure(new Exception("Secret file not found"))
+          Failure(new Exception(s"Cannot readSecretStorage: Secret file not found in dir '$dir'"))
       }
     } else {
-      Failure(new Exception("Secret dir does not exist"))
+      Failure(new Exception(s"Cannot readSecretStorage: Secret dir '$dir' doesn't exist"))
     }
   }
 
-  private def catchLegalExc[T](e: Throwable): Failure[T] =
+  private def wrapLegalExc[T](e: Throwable): Failure[T] =
     if (e.getMessage.startsWith("Illegal key size")) {
       val dkLen = settings.walletSettings.secretStorage.encryption.dkLen
       Failure[T](new Exception(s"Key of length $dkLen is not allowed on your JVM version." +
@@ -598,7 +625,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     if (secrets.size == 1) {
       Success(DerivationPath(Array(0, 1), publicBranch = false))
     } else {
-      nextPath(List.empty, secrets.map(_.path.decodedPath.tail))
+      nextPath(List.empty, secrets.map(_.path.decodedPath.tail.toList))
     }
   }
 

@@ -1,7 +1,7 @@
-openapi: "3.0.1"
+openapi: "3.0.2"
 
 info:
-  version: "0.1"
+  version: "3.2.1"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -31,6 +31,12 @@ components:
           $ref: '#/components/schemas/TransactionBoxId'
         spendingProof:
           $ref: '#/components/schemas/SpendingProof'
+        extension:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SValue'
+          example:
+            '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
     ErgoTransactionDataInput:
       type: object
@@ -39,6 +45,12 @@ components:
       properties:
         boxId:
           $ref: '#/components/schemas/TransactionBoxId'
+        extension:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SValue'
+          example:
+            '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
     SpendingProof:
       description: Spending proof for transaction input
@@ -302,6 +314,311 @@ components:
         source:
           description: Sigma source to be compiled
           type: string
+
+    ErgoLikeTransaction:
+      type: object
+      required:
+        - id
+        - inputs
+        - dataInputs
+        - outputs
+      properties:
+        id:
+          type: object
+          $ref: '#/components/schemas/ModifierId'
+        inputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionInput'
+        dataInputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
+        outputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+
+    SigmaHeader:
+      type: object
+      description: Block header format used for sigma ErgoLikeContext
+      required:
+        - timestamp
+        - version
+        - adProofsRoot
+        - stateRoot
+        - transactionsRoot
+        - nBits
+        - extensionHash
+        - height
+        - parentId
+        - votes
+      properties:
+        id:
+          $ref: '#/components/schemas/ModifierId'
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        version:
+          $ref: '#/components/schemas/Version'
+        adProofsRoot:
+          $ref: '#/components/schemas/Digest32'
+        adProofsId:
+          $ref: '#/components/schemas/ModifierId'
+        stateRoot:
+          $ref: '#/components/schemas/AvlTreeData'
+        transactionsRoot:
+          $ref: '#/components/schemas/Digest32'
+        transactionsId:
+          $ref: '#/components/schemas/ModifierId'
+        nBits:
+          type: integer
+          format: int64
+          minimum: 0
+          example: 19857408
+        extensionHash:
+          $ref: '#/components/schemas/Digest32'
+        extensionRoot:
+          $ref: '#/components/schemas/Digest32'
+        extensionId:
+          $ref: '#/components/schemas/ModifierId'
+        height:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 667
+        size:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 667
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+        powSolutions:
+          $ref: '#/components/schemas/PowSolutions'
+        votes:
+          $ref: '#/components/schemas/Votes'
+        minerPk:
+          type: string
+          example: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        powOnetimePk:
+          type: string
+          example: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        powNonce:
+          $ref: '#/components/schemas/Digest32'
+        powDistance:
+          type: number
+          description: sigma.BigInt
+          example: 123456789
+
+    PreHeader:
+      type: object
+      required:
+        - timestamp
+        - version
+        - nBits
+        - height
+        - parentId
+        - votes
+      properties:
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        version:
+          $ref: '#/components/schemas/Version'
+        nBits:
+          type: integer
+          format: int64
+          minimum: 0
+          example: 19857408
+        height:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 667
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+        votes:
+          $ref: '#/components/schemas/Votes'
+        minerPk:
+          type: string
+          example: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+
+    AvlTreeData:
+      required:
+        - digest
+      properties:
+        digest:
+          $ref: '#/components/schemas/Digest32'
+        treeFlags:
+          type: integer
+          format: int32
+        keyLength:
+          type: integer
+          format: int32
+        valueLength:
+          type: integer
+          format: int32
+          nullable: true
+
+
+    ErgoLikeContext:
+      required:
+       - lastBlockUtxoRoot
+       - headers
+       - preHeader
+       - dataBoxes
+       - boxesToSpend
+       - spendingTransaction
+       - selfIndex
+       - extension
+       - validationSettings
+       - costLimit
+       - initCost
+      properties:
+        lastBlockUtxoRoot:
+          type: object
+          description: state root before current block application
+          $ref: '#/components/schemas/AvlTreeData'
+        headers:
+          type: array
+          description: fixed number of last block headers in descending order (first header is the newest one)
+          items:
+            $ref: '#/components/schemas/SigmaHeader'
+        preHeader:
+          type: object
+          description: fields of block header with the current `spendingTransaction`, that can be predicted by a miner before it's formation
+          $ref: '#/components/schemas/PreHeader'
+        dataBoxes:
+          type: array
+          description: boxes, that corresponds to id's of `spendingTransaction.dataInputs`
+          items:
+            type: ErgoBox
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+        boxesToSpend:
+          type: array
+          description: boxes, that corresponds to id's of `spendingTransaction.inputs`
+          items:
+            type: ErgoBox
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+        spendingTransaction:
+          type: object
+          description: transaction that contains `self` box
+          $ref: '#/components/schemas/ErgoLikeTransaction'
+        selfIndex:
+          type: integer
+          format: int64
+          description: index of the box in `boxesToSpend` that contains the script we're evaluating
+        extension:
+          type: object
+          description: prover-defined key-value pairs, that may be used inside a script
+        validationSettings:
+          type: string
+          description: validataion parameters passed to Interpreter.verify to detect soft-fork conditions
+          example: "10e8070001e9070001ea070001eb070001ec070001ed070001ee070001ef070001f0070001f1070001f2070001f3070001f4070001f5070001f6070001f7070001"
+        costLimit:
+          type: integer
+          format: int64
+          description: hard limit on accumulated execution cost, if exceeded lead to CostLimitException to be thrown
+        initCost:
+          type: integer
+          format: int64
+          description: initial value of execution cost already accumulated before Interpreter.verify is called
+
+
+    ExecuteScript:
+      type: object
+      required:
+      - script
+      - namedConstants
+      - context
+      properties:
+        script:
+          description: Sigma script to be executed
+          type: string
+        namedConstants:
+          description: Environment for compiler
+          type: object
+          nullable: true
+        context:
+          description: Interpretator context
+          type: object
+          nullable: true
+          $ref: '#/components/schemas/ErgoLikeContext'
+
+    SigmaBoolean:
+      description: Algebraic data type of sigma proposition expressions
+      required:
+        - op
+      properties:
+        op:
+          type: integer
+          description: Sigma opCode
+          format: int8
+        h:
+          $ref: '#/components/schemas/HexString'
+        g:
+          $ref: '#/components/schemas/HexString'
+        u:
+          $ref: '#/components/schemas/HexString'
+        v:
+          $ref: '#/components/schemas/HexString'
+        condition:
+          type: boolean
+
+    SigmaBooleanAndPredicate:
+      allOf:
+        - $ref: '#/components/schemas/SigmaBoolean'
+        - type: object
+        - required:
+            - args
+        - properties:
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/SigmaBoolean'
+
+    SigmaBooleanOrPredicate:
+      allOf:
+        - $ref: '#/components/schemas/SigmaBoolean'
+        - type: object
+        - required:
+            - args
+        - properties:
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/SigmaBoolean'
+
+    SigmaBooleanThresholdPredicate:
+      allOf:
+        - $ref: '#/components/schemas/SigmaBoolean'
+        - type: object
+        - required:
+            - args
+        - properties:
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/SigmaBoolean'
+
+    CryptoResult:
+      description: Result of executeWithContext request (reduceToCrypto)
+      type: object
+      required:
+      - value
+      - cost
+      properties:
+        value:
+          description: value of SigmaProp type which represents a statement verifiable via sigma protocol
+          $ref: '#/components/schemas/SigmaBoolean'
+        cost:
+          description: Estimated cost of contract execution
+          type: integer
+          format: int64
+      example:
+        value:
+          op: -45
+          condition: true
+        cost: 10
 
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
@@ -1437,6 +1754,8 @@ paths:
   /peers/connect:
     post:
       summary: Add address to peers list
+      security:
+        - ApiKeyAuth: [api_key]
       operationId: connectToPeer
       tags:
       - peers
@@ -1446,7 +1765,7 @@ paths:
           application/json:
             schema:
               type: string
-              example: '127.0.0.1:5673'
+              example: '"127.0.0.1:5673"'
       responses:
         '200':
           description: Attempt to connect to the peer
@@ -2567,3 +2886,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
+  /script/executeWithContext:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Execute script with context
+      operationId: executeWithContext
+      tags:
+        - script
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteScript'
+      responses:
+        '200':
+          description: Result of reduceToCrypto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CryptoResult'
+        '400':
+          description: Compiler error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+

@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.state
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
@@ -9,7 +8,7 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
-import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedIODBAVLStorage}
+import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
@@ -22,7 +21,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   val constants: StateConstants
 
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-  protected lazy val storage = new VersionedIODBAVLStorage(store, np)
+  protected lazy val storage = new VersionedLDBAVLStorage(store, np)
 
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 
@@ -78,8 +77,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       None
   }
 
-  protected def emissionBoxIdOpt: Option[ADKey] = store.get(ByteArrayWrapper(UtxoState.EmissionBoxIdKey))
-    .map(s => ADKey @@ s.data)
+  protected def emissionBoxIdOpt: Option[ADKey] = store.get(UtxoState.EmissionBoxIdKey).map(s => ADKey @@ s)
 
   def emissionBoxOpt: Option[ErgoBox] = emissionBoxIdOpt.flatMap(boxById)
 
@@ -117,4 +115,19 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       persistentProver.avlProver.generateProofForOperations(ErgoState.stateChanges(txs).operations.map(ADProofs.changeToMod))
     }
   }
+
+  /**
+    * Producing a copy of the state which takes into account outputs of given transactions.
+    * Useful when checking mempool transactions.
+    */
+  def withTransactions(txns: Seq[ErgoTransaction]): UtxoState = {
+    new UtxoState(persistentProver, version, store, constants) {
+      val createdBoxes = txns.flatMap(_.outputs)
+
+      override def boxById(id: ADKey): Option[ErgoBox] = {
+        super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
+      }
+    }
+  }
+
 }

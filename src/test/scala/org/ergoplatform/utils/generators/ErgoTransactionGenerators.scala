@@ -1,6 +1,5 @@
 package org.ergoplatform.utils.generators
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
@@ -16,6 +15,7 @@ import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, Er
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.db.ByteArrayWrapper
 import scorex.util._
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate._
@@ -68,7 +68,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     value <- valueGenOpt.getOrElse(validValueGen(prop, tokens, ar, transactionId.toModifierId, boxId))
   } yield {
     val box = ErgoBox(value, prop, h, tokens, ar, transactionId.toModifierId, boxId)
-    if (box.bytes.size < ErgoBox.MaxBoxSize) {
+    if (box.bytes.length < ErgoBox.MaxBoxSize) {
       box
     } else {
       // is size limit is reached, generate box without registers and tokens

@@ -1,9 +1,6 @@
 package org.ergoplatform.modifiers.mempool
 
 import io.circe.syntax._
-import io.circe._
-import io.circe.parser._
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext, VotingData}
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
@@ -16,6 +13,7 @@ import org.scalacheck.Gen
 import scalan.util.BenchmarkUtil
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArrayConstant, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol.ProveDlog
@@ -280,17 +278,16 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
   property("transaction with too many inputs should be rejected") {
 
-    //we assume that verifier must finish verification of any script in less time than 500K hash calculations
+    //we assume that verifier must finish verification of any script in less time than 250K hash calculations
     // (for the Blake2b256 hash function over a single block input)
     val Timeout: Long = {
-      val block = Array.fill(16)(0: Byte)
       val hf = Blake2b256
 
       //just in case to heat up JVM
-      (1 to 5000000).foreach(_ => hf(block))
+      (1 to 5000000).foreach(i => hf(s"$i-$i"))
 
       val t0 = System.currentTimeMillis()
-      (1 to 500000).foreach(_ => hf(block))
+      (1 to 250000).foreach(i => hf(s"$i"))
       val t = System.currentTimeMillis()
       t - t0
     }
@@ -328,7 +325,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
   property("transaction cost") {
     def stateContextWithMaxCost(manualCost: Int): UpcomingStateContext = {
-      val table2: Map[Byte, Int] = Parameters.DefaultParameters + (MaxBlockCostIncrease -> (manualCost))
+      val table2: Map[Byte, Int] = Parameters.DefaultParameters + (MaxBlockCostIncrease -> manualCost)
       val params2 = new Parameters(height = 0,
         parametersTable = table2,
         proposedUpdate = ErgoValidationSettingsUpdate.empty)

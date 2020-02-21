@@ -12,12 +12,12 @@ import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, ValidationState}
 import scorex.crypto.authds.ADDigest
+import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import special.collection.{Coll, CollOverArray}
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * State context with predicted header.
@@ -60,7 +60,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                       (implicit val votingSettings: VotingSettings)
   extends ErgoLikeStateContext
     with BytesSerializable
-    with ScorexEncoding {
+    with ScorexEncoding
+    with ScorexLogging
+{
 
   override type M = ErgoStateContext
 
@@ -102,7 +104,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val height = ErgoHistory.heightOf(lastHeaderOpt) + 1
     val (calculatedParams, updated) = currentParameters.update(height, forkVote, votingData.epochVotes, proposedUpdate, votingSettings)
     val calculatedValidationSettings = validationSettings.updated(updated)
-    new UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams, calculatedValidationSettings, votingData)
+    UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams, calculatedValidationSettings, votingData)
   }
 
   protected def checkForkVote(height: Height): Unit = {
@@ -183,13 +185,32 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }.flatten
   }
 
+  /**
+    * Checks that header is coming in order.
+    *
+    * If no last headers collected yet, header is always applicable. It could be genesis header if no pruning, or
+    * header at non-genesis height if pruning.
+    *
+    * @param header - header to be applied to this state context
+    * @return Success if header is coming in order, Failure otherwise
+    */
+  private def checkHeaderHeight(header: Header): Try[Unit] = {
+    if (lastHeaders.isEmpty) {
+      log.info(s"Last headers are empty, starting assembling state context with $header")
+    }
+    if(lastHeaders.isEmpty || lastHeaders.head.height + 1 == header.height) {
+      Success(())
+    } else {
+      Failure(new Exception(s"Improper application of $header (last applied header is $lastHeaderOpt: " +
+        s"${header.id} => ${lastHeaderOpt.map(_.height + 1)} != ${header.height}"))
+    }
+  }
+
   def appendHeader(header: Header, votingSettings: VotingSettings): Try[ErgoStateContext] = {
     validateVotes(header)
-      .validate(hdrHeight,
-        lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight) == header.height,
-        s"${header.id} => ${lastHeaderOpt.map(_.height)} == ${header.height}")
       .result
       .toTry
+      .flatMap(_ => checkHeaderHeight(header))
       .flatMap { _ =>
         process(header, None)
       }
@@ -207,9 +228,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val votesValidationState = validateVotes(fb.header)
     new ExtensionValidator(votesValidationState)
       .validateExtension(fb.extension, fb.header, lastExtensionOpt, lastHeaderOpt)
-      .validate(hdrHeight,
-        lastHeaderOpt.map(_.height + 1).getOrElse(ErgoHistory.GenesisHeight) == fb.header.height,
-        s"${fb.id} => ${lastHeaderOpt.map(_.height)} == ${fb.header.height}")
       .validate(bsBlockTransactionsSize,
         fb.blockTransactions.size <= currentParameters.maxBlockSize,
         s"${fb.id} => ${fb.blockTransactions.size} == ${currentParameters.maxBlockSize}")
@@ -218,6 +236,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
         s"${fb.id} => ${fb.extension.size} == ${Constants.MaxExtensionSize}")
       .result
       .toTry
+      .flatMap(_ => checkHeaderHeight(fb.header))
       .flatMap { _ =>
         process(fb.header, Some(fb.extension))
       }

@@ -3,15 +3,15 @@ package org.ergoplatform.nodeView.wallet.persistence
 import java.io.File
 
 import com.google.common.primitives.Ints
-import org.ergoplatform.db.LDBFactory.factory
-import org.ergoplatform.db.LDBKVStore
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, P2PKAddress}
 import org.iq80.leveldb.Options
+import scorex.db.LDBFactory.factory
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.db.LDBKVStore
 
 import scala.util.Success
 
@@ -61,11 +61,14 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     .get(SecretPathsKey)
     .toSeq
     .flatMap { r =>
+      // TODO refactor: read using Reader
       val qty = Ints.fromByteArray(r.take(4))
-      (0 until qty).foldLeft(Seq.empty[DerivationPath], r.drop(4)) { case ((acc, bytes), _) =>
+      (0 until qty).foldLeft((Seq.empty[DerivationPath], r.drop(4))) { case ((acc, bytes), _) =>
         val length = Ints.fromByteArray(bytes.take(4))
         val pathTry = DerivationPathSerializer.parseBytesTry(bytes.slice(4, 4 + length))
-        pathTry.map(acc :+ _).getOrElse(acc) -> bytes.drop(4 + length)
+        val newAcc = pathTry.map(acc :+ _).getOrElse(acc)
+        val bytesTail = bytes.drop(4 + length)
+        newAcc -> bytesTail
       }._1
     }
 

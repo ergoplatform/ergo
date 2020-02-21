@@ -2,17 +2,13 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
 
-import org.ergoplatform.db.LDBFactory.factory
-import org.ergoplatform.db.VersionedLDBKVStore
-import org.ergoplatform.db.VersionedLDBKVStore.VersionId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.WalletTransaction
 import org.ergoplatform.nodeView.wallet.persistence.RegistryOpA.RegistryOp
 import org.ergoplatform.settings.{ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.iq80.leveldb.Options
 import scorex.core.VersionTag
-import scorex.util.encode.Base16
+import scorex.db.LDBVersionedStore
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.Try
@@ -21,7 +17,7 @@ import scala.util.Try
   * Provides an access to version-sensitive wallet-specific indexes.
   * (Such as on-chain UTXO's or balances)
   */
-final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
+final class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
 
   import RegistryOps._
   import org.ergoplatform.nodeView.wallet.IdUtils._
@@ -88,7 +84,10 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
         _.flatten.flatMap(bx => inputs.find(_._2 == encodedBoxId(bx.box.id)).map { case (txId, _) => txId -> bx })
       )
       _ <- processHistoricalBoxes(spentBoxesWithTx, blockHeight)
-      _ <- updateIndex { case RegistryIndex(_, balance, tokensBalance, _) =>
+      _ <- updateIndex { case RegistryIndex(regHeight, balance, tokensBalance, _) =>
+        if(regHeight + 1 != blockHeight) {
+          log.error(s"Blocks were skipped during wallet scanning, from ${regHeight + 1} until $blockHeight")
+        }
         val spentCertainBoxes = spentBoxesWithTx.map(_._2).filter(_.certainty.certain)
         val spentAmt = spentCertainBoxes.map(_.box.value).sum
         val spentTokensAmt = spentCertainBoxes
@@ -124,7 +123,7 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
   }
 
   def rollback(version: VersionTag): Try[Unit] =
-    store.rollbackTo(Base16.decode(version).get)
+    store.rollbackTo(scorex.core.versionToBytes(version))
 
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.
@@ -147,19 +146,16 @@ final class WalletRegistry(store: VersionedLDBKVStore)(ws: WalletSettings) exten
 
 object WalletRegistry {
 
-  val PreGenesisStateVersion: VersionId = idToBytes(PreGenesisHeader.id)
+  val PreGenesisStateVersion: Array[Byte] = idToBytes(PreGenesisHeader.id)
 
   def readOrCreate(settings: ErgoSettings): WalletRegistry = {
     val dir = new File(s"${settings.directory}/wallet/registry")
     dir.mkdirs()
 
-    val options = new Options()
-    options.createIfMissing(true)
-    val db = factory.open(dir, options)
-    val store = new VersionedLDBKVStore(db, settings.nodeSettings.keepVersions)
+    val store = new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
 
     // Create pre-genesis state checkpoint
-    if (!store.versionIdExists(PreGenesisStateVersion)) store.update(Seq.empty, Seq.empty)(PreGenesisStateVersion)
+    if (!store.versionIdExists(PreGenesisStateVersion)) store.update(PreGenesisStateVersion, Seq.empty, Seq.empty)
 
     new WalletRegistry(store)(settings.walletSettings)
   }

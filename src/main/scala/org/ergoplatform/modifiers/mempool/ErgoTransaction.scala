@@ -2,8 +2,6 @@ package org.ergoplatform.modifiers.mempool
 
 import io.circe._
 import io.circe.syntax._
-import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
@@ -21,14 +19,10 @@ import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationState}
-import scorex.crypto.authds.ADKey
+import scorex.db.ByteArrayWrapper
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.SType
-import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import sigmastate.eval.Extensions._
-import sigmastate.eval._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
@@ -140,7 +134,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost),
     )
     val maxCost = stateContext.currentParameters.maxBlockCost
-    //    val remainingCost = stateContext.currentParameters.maxBlockCost - accumulatedCost
 
     ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big
@@ -154,7 +147,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validateSeq(outputs) { case (validationState, out) =>
       validationState
         .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}")
-        .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s"$id: output $out")
+        .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out")
         .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
         .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
     }

@@ -2,8 +2,6 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
-import org.ergoplatform.db.LDBFactory.factory
-import org.ergoplatform.db.LDBKVStore
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
@@ -14,10 +12,12 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{Empty
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import org.iq80.leveldb.Options
+import scorex.db.LDBFactory.factory
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.RecoverableModifierError
+import scorex.db.LDBKVStore
 import scorex.util.{ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Try}
@@ -209,8 +209,16 @@ object ErgoHistory extends ScorexLogging {
     dir.mkdirs()
     val options = new Options()
     options.createIfMissing(true)
-    val db = factory.open(dir, options)
-    new LDBKVStore(db)
+    try {
+      val db = factory.open(dir, options)
+      new LDBKVStore(db)
+    } catch {
+      case x: Throwable =>
+        log.error(s"Failed to initialize storage: $x. Please check that directory $path could be accessed " +
+          s"and is not used by some other active node")
+        java.lang.System.exit(2)
+        null
+    }
   }
 
   def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {

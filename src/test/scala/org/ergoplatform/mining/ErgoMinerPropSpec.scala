@@ -57,19 +57,21 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     us.applyModifier(validFullBlock(None, us, blockTx +: txs)) shouldBe 'success
   }
 
-
   property("filter out double spend txs") {
-    val cost = 1L
-    val tx = validErgoTransactionGen.sample.get._2 -> cost
-    ErgoMiner.fixTxsConflicts(Seq(tx, tx, tx)) should have length 1
+    val tx = validErgoTransactionGen.sample.get._2
+    ErgoMiner.doublespend(Seq(tx), tx) shouldBe true
 
     val inputs = validErgoTransactionGenTemplate(0, -1, 100).sample.get._1
     val (l, r) = inputs.splitAt(50)
-    val tx_1 = validTransactionFromBoxes(l) -> cost
-    val tx_2 = validTransactionFromBoxes(r :+ l.last) -> cost
+    val tx_1 = validTransactionFromBoxes(l)
+    val tx_2 = validTransactionFromBoxes(r :+ l.last) //conflicting with tx_1
+    val tx_3 = validTransactionFromBoxes(r) //conflicting with tx_2, not conflicting with tx_1
 
-    ErgoMiner.fixTxsConflicts(Seq(tx_1, tx_2, tx)) should contain theSameElementsAs Seq(tx_1, tx)
-    ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
+    ErgoMiner.doublespend(Seq(tx_1), tx_2) shouldBe true
+    ErgoMiner.doublespend(Seq(tx_1), tx_3) shouldBe false
+    ErgoMiner.doublespend(Seq(tx_1, tx_2), tx_1) shouldBe true
+    ErgoMiner.doublespend(Seq(tx_1, tx_2), tx_2) shouldBe true
+    ErgoMiner.doublespend(Seq(tx_1, tx_3), tx) shouldBe false
   }
 
   property("should only collect valid transactions") {

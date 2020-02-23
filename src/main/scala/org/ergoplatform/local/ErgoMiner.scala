@@ -440,6 +440,16 @@ object ErgoMiner extends ScorexLogging {
   }
 
   /**
+    * Helper function which decides whether transactions can fit into a block with given cost and size limits
+    */
+  def correctLimits(blockTxs: Seq[CostedTransaction],
+                    maxBlockCost: Long,
+                    maxBlockSize: Long): Boolean = {
+    blockTxs.map(_.cost).sum < maxBlockCost && blockTxs.map(_.tx.size).sum < maxBlockSize
+  }
+
+
+  /**
     * Collects valid non-conflicting transactions from `mempoolTxsIn` and adds a transaction collecting fees from
     * them to `minerPk`.
     *
@@ -457,10 +467,6 @@ object ErgoMiner extends ScorexLogging {
                  mempoolTxsIn: Iterable[ErgoTransaction],
                  mandatoryTxs: Seq[CostedTransaction])
                 (implicit vs: ValidationSettings): (Seq[ErgoTransaction], Seq[ModifierId]) = {
-
-    def correctLimits(blockTxs: Seq[CostedTransaction]): Boolean = {
-      blockTxs.map(_.cost).sum < maxBlockCost && blockTxs.map(_.tx.size).sum < maxBlockSize
-    }
 
     @tailrec
     def loop(mempoolTxs: Iterable[ErgoTransaction],
@@ -494,7 +500,7 @@ object ErgoMiner extends ScorexLogging {
                     feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext) match {
                       case Success(cost) =>
                         val blockTxs: Seq[CostedTransaction] = CostedTransaction(feeTx, cost) +: newTxs
-                        if (correctLimits(blockTxs)) {
+                        if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
                           loop(mempoolTxs.tail, newTxs, Some(CostedTransaction(feeTx, cost)), invalidTxs)
                         } else {
                           current -> invalidTxs
@@ -506,7 +512,7 @@ object ErgoMiner extends ScorexLogging {
                   case None =>
                     log.debug(s"No fee proposition found in txs ${newTxs.map(_.tx.id)} ")
                     val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
-                    if (correctLimits(blockTxs)) {
+                    if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
                       loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs)
                     } else {
                       current -> invalidTxs

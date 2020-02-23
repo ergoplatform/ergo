@@ -19,10 +19,9 @@ import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
 import sigmastate.Values._
-import special.sigma._
-
 import scala.concurrent.blocking
 import scala.util.Random
+
 
 class ErgoWalletSpec extends PropSpec with WalletTestOps {
 

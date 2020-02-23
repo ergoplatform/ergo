@@ -1,10 +1,8 @@
 package org.ergoplatform.nodeView.history
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.util.ModifierId

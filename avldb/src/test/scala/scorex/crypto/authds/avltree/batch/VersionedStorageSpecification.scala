@@ -9,7 +9,7 @@ import scorex.db.LDBVersionedStore
 
 import scala.collection.mutable.ArrayBuffer
 
-class IODBStorageSpecification extends PropSpec
+class VersionedStorageSpecification extends PropSpec
   with ScalaCheckPropertyChecks
   with ScalaCheckDrivenPropertyChecks
   with Matchers
@@ -30,7 +30,7 @@ class IODBStorageSpecification extends PropSpec
       store.update(nextVersion, Seq(), Seq(pair))
 
       if (version.isDefined) {
-        store.rollback(version.get)
+        store.rollbackTo(version.get)
         store.update(nextVersion, Seq(), Seq(pair))
       }
       version = Some(nextVersion)
@@ -38,6 +38,6 @@ class IODBStorageSpecification extends PropSpec
     }
   }
 
-  property("IODB with LSM") { storeTest(createVersionedStore()) }
+  property("LevelDB-based versioned storage") { storeTest(createVersionedStore()) }
 
 }

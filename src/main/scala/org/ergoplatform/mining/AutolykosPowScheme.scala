@@ -177,7 +177,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val b = getB(candidate.nBits)
 
     val proofs = if(mandatoryTxIds.nonEmpty) {
-      val fakeHeaderId = scorex.util.bytesToId(Array.fill(32)(0: Byte))
+      val fakeHeaderId = scorex.util.bytesToId(Array.fill(org.ergoplatform.wallet.Constants.ModifierIdLength)(0: Byte))
       val bt = BlockTransactions(fakeHeaderId, candidate.transactions)
       val ps = mandatoryTxIds.flatMap { txId => bt.proofFor(txId).map(mp => TransactionMembershipProof(txId, mp)) }
       Some(ProofForMandatoryTransactions(h, ps))

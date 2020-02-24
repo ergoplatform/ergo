@@ -7,6 +7,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.Constants
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -174,7 +175,7 @@ object PoPowAlgos {
   }
 
   /**
-    * Computes NiPoPow proof for the given `chain` according to a given `params`.
+    * Computes NiPoPow proof for the given `chain` according to given `params`.
     */
   def prove(chain: Seq[PoPowHeader])(params: PoPowParams): PoPowProof = {
     val k = params.k
@@ -200,23 +201,66 @@ object PoPowAlgos {
         acc
       }
 
-    val suffix = chain.takeRight(params.k)
+    val suffix = chain.takeRight(params.k).map(_.header)
     val maxLevel = chain.dropRight(params.k).last.interlinks.size - 1
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height)
-    PoPowProof(params.m, params.k, prefix, suffix)
+    PoPowProof(m, k, prefix, suffix)
   }
 
   def prove(histReader: ErgoHistoryReader)(params: PoPowParams): PoPowProof = {
+    type Height = Int
+
     val k = params.k
     val m = params.m
 
     require(params.k >= 0, s"$k < 0")
     require(histReader.headersHeight >= k + m, s"Can not prove chain of size < ${k + m}")
 
-    val suffix = histReader.lastHeaders(k)
-    val kMinusOneHeader = histReader.typedModifierById[Header](suffix.head.parentId)
-    // val kMinusOneExtension =
-  }
+    def linksWithIndexes(header: PoPowHeader): Seq[(ModifierId, Int)] = header.interlinks.tail.reverse.zipWithIndex
 
+    def previousHeaderIdAtLevel(level: Int, currentHeader: PoPowHeader): Option[ModifierId] = {
+      linksWithIndexes(currentHeader).find(_._2 == level).map(_._1)
+    }
+
+    @scala.annotation.tailrec
+    def collectLevel(nextHeaderId: ModifierId,
+                     level: Int,
+                     anchoringHeight: Height,
+                     acc: Seq[PoPowHeader] = Seq.empty): Seq[PoPowHeader] = {
+      val nextHeader = histReader.popowHeader(nextHeaderId).get
+      if (nextHeader.height < anchoringHeight) {
+        acc
+      } else {
+        val newAcc = nextHeader +: acc
+        previousHeaderIdAtLevel(level, nextHeader) match {
+          case Some(newPrevHeaderId) => collectLevel(newPrevHeaderId, level, anchoringHeight, newAcc)
+          case None => newAcc
+        }
+      }
+    }
+
+    def provePrefix(initAnchoringHeight: Height,
+                    lastHeader: PoPowHeader): Seq[PoPowHeader] = {
+
+      val collected = mutable.TreeMap[ModifierId, PoPowHeader]()
+
+      val levels = linksWithIndexes(lastHeader)
+      levels.foldRight(initAnchoringHeight) { case ((prevHeaderId, levelIdx), anchoringHeight) =>
+        val levelHeaders = collectLevel(prevHeaderId, levelIdx, anchoringHeight)
+        levelHeaders.foreach(ph => collected.update(ph.id, ph))
+        if (m < levelHeaders.length) levelHeaders(levelHeaders.length - m).height
+        else anchoringHeight
+      }
+      collected.values.toSeq
+    }
+
+    val suffix = histReader.lastHeaders(k).headers
+    val kMinusOnePopowHeader = histReader.popowHeader(suffix.head.parentId).get
+
+    val genesisHeight = 1
+    val prefix = provePrefix(genesisHeight, kMinusOnePopowHeader)
+
+    PoPowProof(m, k, prefix, suffix)
+  }
 
 }

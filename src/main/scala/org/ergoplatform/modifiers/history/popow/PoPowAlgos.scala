@@ -11,9 +11,8 @@ import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
-  *
-  * @param m
-  * @param k
+  * @param m - minimal superchain length
+  * @param k - suffix length
   */
 case class PoPowParams(m: Int, k: Int)
 
@@ -223,16 +222,16 @@ object PoPowAlgos {
     }
 
     @scala.annotation.tailrec
-    def collectLevel(nextHeaderId: ModifierId,
+    def collectLevel(prevHeaderId: ModifierId,
                      level: Int,
                      anchoringHeight: Height,
                      acc: Seq[PoPowHeader] = Seq.empty): Seq[PoPowHeader] = {
-      val nextHeader = histReader.popowHeader(nextHeaderId).get
-      if (nextHeader.height < anchoringHeight) {
+      val prevHeader = histReader.popowHeader(prevHeaderId).get
+      if (prevHeader.height < anchoringHeight) {
         acc
       } else {
-        val newAcc = nextHeader +: acc
-        previousHeaderIdAtLevel(level, nextHeader) match {
+        val newAcc = prevHeader +: acc
+        previousHeaderIdAtLevel(level, prevHeader) match {
           case Some(newPrevHeaderId) => collectLevel(newPrevHeaderId, level, anchoringHeight, newAcc)
           case None => newAcc
         }
@@ -255,10 +254,11 @@ object PoPowAlgos {
     }
 
     val suffix = histReader.lastHeaders(k).headers
-    val kMinusOnePopowHeader = histReader.popowHeader(suffix.head.parentId).get
+    val kMinusOnePopowHeader = histReader.popowHeader(suffix.head.id).get
 
+    val genesisPopowHeader = histReader.popowHeader(1).get
     val genesisHeight = 1
-    val prefix = provePrefix(genesisHeight, kMinusOnePopowHeader)
+    val prefix = genesisPopowHeader +: provePrefix(genesisHeight, kMinusOnePopowHeader)
 
     PoPowProof(m, k, prefix, suffix)
   }

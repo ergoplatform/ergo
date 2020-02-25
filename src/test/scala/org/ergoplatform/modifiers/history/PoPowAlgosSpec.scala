@@ -1,6 +1,8 @@
 package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams}
+import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.utils.HistoryTestHelpers
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -10,6 +12,7 @@ import scorex.util.ModifierId
 class PoPowAlgosSpec
   extends PropSpec
     with Matchers
+    with HistoryTestHelpers
     with ChainGenerator
     with ErgoGenerators
     with GeneratorDrivenPropertyChecks {
@@ -99,6 +102,26 @@ class PoPowAlgosSpec
     proof0.prefix.size > proof1.prefix.size shouldBe true
 
     bestArg(proof0.prefix.map(_.header))(m) > bestArg(proof1.prefix.map(_.header))(m) shouldBe true
+  }
+
+  property("proof(chain) is equivalent to proof(histReader)") {
+    val poPowParams = PoPowParams(5, 6)
+    val blocksChain = genChain(300)
+    val pchain = blocksChain.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val proof0 = prove(pchain)(poPowParams)
+
+    val h = generateHistory(true, StateType.Digest, false,
+      10000, 10000, 10, None)
+    val hr = applyChain(h, blocksChain)
+    val proof1 = prove(hr)(poPowParams)
+
+    proof0.suffix.map(_.id) shouldBe proof1.suffix.map(_.id)
+
+    println("proof0 len: " + proof0.prefix.map(_.id).length)
+    println("proof1 len: " + proof1.prefix.map(_.id).length)
+    proof0.prefix.map(_.id).length shouldBe proof1.prefix.map(_.id).length
+
+    proof0.prefix.map(_.id).sorted.toList shouldBe proof1.prefix.map(_.id).sorted.toList
   }
 
 }

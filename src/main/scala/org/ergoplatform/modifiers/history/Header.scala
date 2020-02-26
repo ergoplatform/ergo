@@ -24,9 +24,7 @@ import scala.concurrent.duration.FiniteDuration
 import scorex.util.Extensions._
 import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement, CHeader}
 import sigmastate.eval.Extensions._
-import special.collection.{Coll, CollOverArray}
-import special.sigma
-import special.sigma.{AvlTree,GroupElement}
+
 
 case class Header(version: Version,
                   override val parentId: ModifierId,

@@ -3,6 +3,7 @@ package org.ergoplatform.modifiers.history.popow
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.Extension.InterlinksVectorPrefix
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.Constants
 import scorex.util.{ModifierId, bytesToId, idToBytes}

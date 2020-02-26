@@ -105,7 +105,7 @@ class PoPowAlgosSpec
   }
 
   property("proof(chain) is equivalent to proof(histReader)") {
-    val poPowParams = PoPowParams(5, 6)
+    val poPowParams = PoPowParams(6, 6)
     val blocksChain = genChain(300)
     val pchain = blocksChain.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
     val proof0 = prove(pchain)(poPowParams)
@@ -117,10 +117,9 @@ class PoPowAlgosSpec
 
     proof0.suffix.map(_.id) shouldBe proof1.suffix.map(_.id)
 
-    println("proof0 len: " + proof0.prefix.map(_.id).length)
-    println("proof1 len: " + proof1.prefix.map(_.id).length)
-    proof0.prefix.map(_.id).length shouldBe proof1.prefix.map(_.id).length
+    println("proof len: " + proof1.prefix.map(_.id).length)
 
+    proof0.prefix.map(_.id).length shouldBe proof1.prefix.map(_.id).length
     proof0.prefix.map(_.id).sorted.toList shouldBe proof1.prefix.map(_.id).sorted.toList
   }
 

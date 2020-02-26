@@ -22,7 +22,7 @@ trait ApiCodecs extends JsonCodecs {
   }
 
   implicit val bigIntEncoder: Encoder[BigInt] = { bigInt =>
-    JsonNumber.fromDecimalStringUnsafe(bigInt.toString).asJson
+    bigInt.toString.asJson
   }
 
   implicit val difficultyEncoder: Encoder[Difficulty] = bigIntEncoder

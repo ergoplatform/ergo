@@ -36,7 +36,7 @@ class PoPoWVerifierSpec
       verifier.process(shortProof)
       verifier.bestChain.length should be > 0
       verifier.process(longProof)
-      verifier.bestChain.last.id shouldBe longProof.chain.last.id
+      verifier.bestChain.last.id shouldBe longProof.headersChain.last.id
     }
   }
 }

@@ -1,12 +1,14 @@
 package org.ergoplatform.modifiers.history
 
-import org.ergoplatform.modifiers.history.popow.{PoPowProof, PoPowHeader, PoPowParams}
+import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams, PoPowProof}
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
 import scorex.util.ModifierId
+import org.ergoplatform.utils.HistoryTestHelpers
 
 class PoPowAlgosSpec
   extends PropSpec
@@ -174,7 +176,7 @@ class PoPowAlgosSpec
     val longerProof = prove(longerChain)(smallPoPowParams)
 
     val disconnectedProofPrefix = proof.prefix.take(proof.prefix.length/2) ++ longerProof.prefix
-    val disconnectedProof = PoPowProof(proof.m, proof.k, disconnectedProofPrefix, proof.suffix)
+    val disconnectedProof = PoPowProof(proof.m, proof.k, disconnectedProofPrefix, proof.suffixHead, proof.suffixTail)
     proof.isBetterThan(disconnectedProof) shouldBe true
   }
 
@@ -189,7 +191,7 @@ class PoPowAlgosSpec
       val randomBlock = toPoPoWChain(genChain(1)).head
       val proof = prove(chain)(smallPoPowParams)
       val disconnectedProofPrefix = proof.prefix.updated(proof.prefix.length/2, randomBlock)
-      val disconnectedProof = PoPowProof(proof.m, proof.k, disconnectedProofPrefix, proof.suffix)
+      val disconnectedProof = PoPowProof(proof.m, proof.k, disconnectedProofPrefix, proof.suffixHead, proof.suffixTail)
       proof.hasValidConnections() shouldBe true
       disconnectedProof.hasValidConnections() shouldBe false
     }
@@ -202,10 +204,10 @@ class PoPowAlgosSpec
       c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
     sizes.foreach { size =>
       val chain = toPoPoWChain(genChain(size))
-      val randomBlock = toPoPoWChain(genChain(1)).head
+      val randomBlock = genChain(1).head.header
       val proof = prove(chain)(smallPoPowParams)
-      val disconnectedProofSuffix = proof.suffix.updated(proof.suffix.length/2, randomBlock)
-      val disconnectedProof = PoPowProof(proof.m, proof.k, proof.prefix, disconnectedProofSuffix)
+      val disconnectedProofSuffixTail = proof.suffixTail.updated(proof.suffixTail.length/2, randomBlock)
+      val disconnectedProof = PoPowProof(proof.m, proof.k, proof.prefix, proof.suffixHead, disconnectedProofSuffixTail)
       proof.hasValidConnections() shouldBe true
       disconnectedProof.hasValidConnections() shouldBe false
     }
@@ -216,6 +218,6 @@ class PoPowAlgosSpec
       c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
     val prefix = toPoPoWChain(genChain(1))
     val suffix = toPoPoWChain(genChain(1))
-    PoPowProof(0, 0, prefix, suffix).hasValidConnections() shouldBe false
+    PoPowProof(0, 0, prefix, suffix.head, suffix.tail.map(_.header)).hasValidConnections() shouldBe false
   }
 }

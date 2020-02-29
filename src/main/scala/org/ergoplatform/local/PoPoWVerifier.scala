@@ -1,24 +1,23 @@
 package org.ergoplatform.local
 
-import org.ergoplatform.modifiers.history.popow.{PoPowProof, PoPowHeader, PoPowParams}
+import org.ergoplatform.modifiers.history.popow.{PoPowProof, PoPowParams}
+import org.ergoplatform.modifiers.history.Header
 import scorex.util.ModifierId
-import org.ergoplatform.modifiers.history.popow.PoPowParams
 
 class PoPoWVerifier(poPoWParams: PoPowParams, genesisId: ModifierId) {
     // TODO: ideally prefix would have the actual genesis but may just not have it
-    var bestProof = PoPowProof(poPoWParams.m, poPoWParams.k, Seq(), Seq())
+    var bestProof: Option[PoPowProof] = None
 
-    def bestChain(): Seq[PoPowHeader] = {
-        bestProof.chain
+    def bestChain(): Seq[Header] = {
+        bestProof.map(_.headersChain).getOrElse(Seq())
     }
 
     def process(newProof: PoPowProof) {
-        if (newProof.chain.head.id == genesisId) {
+        if (newProof.headersChain.head.id == genesisId) {
             // TODO: order matters here and it shouldn't
             // only the isBetterThan's `this` is checked for validity
-            if (!bestProof.isBetterThan(newProof) ||
-                (bestProof.chain.length == 0 && newProof.isValid())) {
-                bestProof = newProof
+            if (!bestProof.map(_.isBetterThan(newProof)).getOrElse(false)) {
+                bestProof = Some(newProof)
             }
         }
     }

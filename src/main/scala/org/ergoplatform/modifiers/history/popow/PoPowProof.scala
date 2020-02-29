@@ -60,16 +60,16 @@ case class PoPowProof(m: Int,
   }
 
   def hasValidHeights(): Boolean = {
-    chain.zip(chain.tail).forall({
+    headersChain.zip(headersChain.tail).forall({
       case (prev, next) => prev.height < next.height
     })
   }
 
   def hasValidConnections(): Boolean = {
-    prefix.zip(prefix.tail ++ suffix.headOption).forall({
+    prefix.zip(prefix.tail :+ suffixHead).forall({
       case (prev, next) => next.interlinks.contains(prev.id)
-    }) && suffix.zip(suffix.tail).forall({
-      case (prev, next) => next.header.parentId == prev.id
+    }) && (suffixHead.header +: suffixTail).zip(suffixTail).forall({
+      case (prev, next) => next.parentId == prev.id
     })
   }
 }

@@ -1,10 +1,12 @@
 package org.ergoplatform.modifiers.history.popow
 
+import io.circe.Encoder
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.popow.PoPowAlgos.{bestArg, lowestCommonAncestor, maxLevelOf}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions.LongOps
+
 
 /**
   * A structure representing NiPoPow proof as a persistent modifier.
@@ -47,6 +49,23 @@ case class PoPowProof(m: Int,
       .getOrElse(headersChain -> that.headersChain)
     bestArg(thisDivergingChain)(m) > bestArg(thatDivergingChain)(m)
   }
+
+}
+
+object PoPowProof {
+  import io.circe.syntax._
+  import PoPowHeader._
+
+  implicit val popowProofEncoder: Encoder[PoPowProof] = { proof: PoPowProof =>
+    Map(
+      "m" -> proof.m.asJson,
+      "k" -> proof.k.asJson,
+      "prefix" -> proof.prefix.asJson,
+      "suffixTail" -> proof.suffixHead.asJson,
+      "suffixHead" -> proof.suffixTail.asJson
+    ).asJson
+  }
+
 }
 
 object PoPowProofSerializer extends ScorexSerializer[PoPowProof] {
@@ -62,7 +81,7 @@ object PoPowProofSerializer extends ScorexSerializer[PoPowProof] {
     }
     val suffixHeadBytes = obj.suffixHead.bytes
     w.putUInt(suffixHeadBytes.length)
-    w.putBytes(obj.suffixHead.bytes)
+    w.putBytes(suffixHeadBytes)
     w.putUInt(obj.suffixTail.size)
     obj.suffixTail.foreach { h =>
       val hBytes = h.bytes

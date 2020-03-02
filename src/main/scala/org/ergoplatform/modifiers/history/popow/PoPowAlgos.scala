@@ -3,7 +3,6 @@ package org.ergoplatform.modifiers.history.popow
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.Extension.InterlinksVectorPrefix
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.Constants
 import scorex.util.{ModifierId, bytesToId, idToBytes}
@@ -201,10 +200,12 @@ object PoPowAlgos {
         acc
       }
 
-    val suffix = chain.takeRight(params.k).map(_.header)
+    val suffix = chain.takeRight(params.k)
+    val suffixHead = suffix.head
+    val suffixTail = suffix.tail.map(_.header)
     val maxLevel = chain.dropRight(params.k).last.interlinks.size - 1
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height)
-    PoPowProof(m, k, prefix, suffix)
+    PoPowProof(m, k, prefix, suffixHead, suffixTail)
   }
 
   def prove(histReader: ErgoHistoryReader)(params: PoPowParams): PoPowProof = {
@@ -255,13 +256,14 @@ object PoPowAlgos {
     }
 
     val suffix = histReader.lastHeaders(k).headers
-    val kMinusOnePopowHeader = histReader.popowHeader(suffix.head.id).get
+    val suffixHead = histReader.popowHeader(suffix.head.id).get
+    val suffixTail = suffix.tail
 
     val genesisPopowHeader = histReader.popowHeader(1).get
     val genesisHeight = 1
-    val prefix = genesisPopowHeader +: provePrefix(genesisHeight, kMinusOnePopowHeader)
+    val prefix = genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)
 
-    PoPowProof(m, k, prefix, suffix)
+    PoPowProof(m, k, prefix, suffixHead, suffixTail)
   }
 
 }

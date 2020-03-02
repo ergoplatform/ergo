@@ -115,7 +115,8 @@ class PoPowAlgosSpec
     val hr = applyChain(h, blocksChain)
     val proof1 = prove(hr)(poPowParams)
 
-    proof0.suffix.map(_.id) shouldBe proof1.suffix.map(_.id)
+    proof0.suffixHead.id shouldBe proof1.suffixHead.id
+    proof0.suffixTail.map(_.id) shouldBe proof1.suffixTail.map(_.id)
 
     println("proof len: " + proof1.prefix.map(_.id).length)
 

@@ -61,8 +61,8 @@ object PoPowProof {
       "m" -> proof.m.asJson,
       "k" -> proof.k.asJson,
       "prefix" -> proof.prefix.asJson,
-      "suffixTail" -> proof.suffixHead.asJson,
-      "suffixHead" -> proof.suffixTail.asJson
+      "suffixHead" -> proof.suffixHead.asJson,
+      "suffixTail" -> proof.suffixTail.asJson
     ).asJson
   }
 

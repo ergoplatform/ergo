@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader}
+import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader, PoPowParams, PoPowProof}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage._
@@ -329,4 +329,10 @@ trait ErgoHistoryReader
     bestHeaderIdAtHeight(height).flatMap(popowHeader)
   }
 
+  def popowProof(): Try[PoPowProof] = Try {
+    val m = 5
+    val k = 6
+    val proofParams = PoPowParams(m, k)
+    PoPowAlgos.prove(this)(proofParams)
+  }
 }

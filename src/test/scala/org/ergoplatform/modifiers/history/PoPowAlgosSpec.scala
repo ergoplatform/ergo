@@ -118,8 +118,6 @@ class PoPowAlgosSpec
     proof0.suffixHead.id shouldBe proof1.suffixHead.id
     proof0.suffixTail.map(_.id) shouldBe proof1.suffixTail.map(_.id)
 
-    println("proof len: " + proof1.prefix.map(_.id).length)
-
     proof0.prefix.map(_.id).length shouldBe proof1.prefix.map(_.id).length
     proof0.prefix.map(_.id).sorted.toList shouldBe proof1.prefix.map(_.id).sorted.toList
   }

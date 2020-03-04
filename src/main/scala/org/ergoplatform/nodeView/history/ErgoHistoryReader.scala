@@ -329,9 +329,7 @@ trait ErgoHistoryReader
     bestHeaderIdAtHeight(height).flatMap(popowHeader)
   }
 
-  def popowProof(): Try[PoPowProof] = Try {
-    val m = 5
-    val k = 6
+  def popowProof(m: Int, k: Int): Try[PoPowProof] = Try {
     val proofParams = PoPowParams(m, k)
     PoPowAlgos.prove(this)(proofParams)
   }

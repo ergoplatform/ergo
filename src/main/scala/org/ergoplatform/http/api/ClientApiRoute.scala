@@ -42,9 +42,9 @@ case class ClientApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       history.popowHeader(height)
     }
 
-  private def getPopowProof(): Future[Try[PoPowProof]] =
+  private def getPopowProof(m: Int, k: Int): Future[Try[PoPowProof]] =
     getHistory.map { history =>
-      history.popowProof()
+      history.popowProof(m, k)
     }
 
   def getPopowHeaderByHeaderIdR: Route = (pathPrefix("popowHeaderById") & modifierId & get) { headerId =>
@@ -55,10 +55,10 @@ case class ClientApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     ApiResponse(getPopowHeaderByHeight(headerId))
   }
 
-  def getPopowProofR: Route = (pathPrefix("popowProof") & get) {
+  def getPopowProofR: Route = (pathPrefix("popowProof" / IntNumber / IntNumber) & get) { case (m, k) =>
     implicit val popowProofEncoder: Encoder[PoPowProof] = PoPowProof.popowProofEncoder
 
-    onSuccess(getPopowProof()){_.fold(
+    onSuccess(getPopowProof(m, k)){_.fold(
       e => BadRequest(e.getMessage),
       proof => ApiResponse(proof.asJson)
     )}

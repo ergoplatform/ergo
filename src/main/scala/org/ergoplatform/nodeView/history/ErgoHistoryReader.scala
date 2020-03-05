@@ -351,10 +351,11 @@ trait ErgoHistoryReader
     * See PoPowAlgos.prove.
     * @param m - min superchain length
     * @param k - suffix length
+    * @param headerIdOpt - optional header to start suffix from
     * @return PoPow proof if success, Failure instance otherwise
     */
-  def popowProof(m: Int, k: Int): Try[PoPowProof] = Try {
+  def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[PoPowProof] = Try {
     val proofParams = PoPowParams(m, k)
-    PoPowAlgos.prove(this)(proofParams)
+    PoPowAlgos.prove(this, headerIdOpt)(proofParams)
   }
 }

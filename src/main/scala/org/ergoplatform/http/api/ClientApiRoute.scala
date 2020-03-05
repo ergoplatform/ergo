@@ -21,12 +21,15 @@ import scala.util.Try
 case class ClientApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
-  val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
+  override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
+
+  private implicit val popowProofEncoder: Encoder[PoPowProof] = PoPowProof.popowProofEncoder
 
   override val route: Route = pathPrefix("client") {
     getPopowHeaderByHeaderIdR ~
       getPopowHeaderByHeightR ~
-      getPopowProofR
+      getPopowProofR ~
+      getPopowProofForIdR
   }
 
   private def getHistory: Future[ErgoHistoryReader] =
@@ -42,9 +45,9 @@ case class ClientApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       history.popowHeader(height)
     }
 
-  private def getPopowProof(m: Int, k: Int): Future[Try[PoPowProof]] =
+  private def getPopowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Future[Try[PoPowProof]] =
     getHistory.map { history =>
-      history.popowProof(m, k)
+      history.popowProof(m, k, headerIdOpt)
     }
 
   def getPopowHeaderByHeaderIdR: Route = (pathPrefix("popowHeaderById") & modifierId & get) { headerId =>
@@ -56,9 +59,14 @@ case class ClientApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   }
 
   def getPopowProofR: Route = (pathPrefix("popowProof" / IntNumber / IntNumber) & get) { case (m, k) =>
-    implicit val popowProofEncoder: Encoder[PoPowProof] = PoPowProof.popowProofEncoder
+    onSuccess(getPopowProof(m, k, None)){_.fold(
+      e => BadRequest(e.getMessage),
+      proof => ApiResponse(proof.asJson)
+    )}
+  }
 
-    onSuccess(getPopowProof(m, k)){_.fold(
+  def getPopowProofForIdR: Route = (pathPrefix("popowProof" / IntNumber / IntNumber) & modifierId & get) { case (m, k, headerId) =>
+    onSuccess(getPopowProof(m, k, Some(headerId))){_.fold(
       e => BadRequest(e.getMessage),
       proof => ApiResponse(proof.asJson)
     )}

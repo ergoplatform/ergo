@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.history.Header
 import scorex.util.ModifierId
 
 class PoPoWVerifier(poPoWParams: PoPowParams, genesisId: ModifierId) {
-    // TODO: ideally prefix would have the actual genesis but may just not have it
+    // TODO: ideally prefix would have the actual genesis but we may just not have it
     var bestProof: Option[PoPowProof] = None
 
     def bestChain(): Seq[Header] = {

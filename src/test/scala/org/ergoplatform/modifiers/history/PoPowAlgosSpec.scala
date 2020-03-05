@@ -105,7 +105,7 @@ class PoPowAlgosSpec
   }
 
   property("proof(chain) is equivalent to proof(histReader)") {
-    val poPowParams = PoPowParams(6, 6)
+    val poPowParams = PoPowParams(5, 6)
     val blocksChain = genChain(300)
     val pchain = blocksChain.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
     val proof0 = prove(pchain)(poPowParams)
@@ -114,6 +114,31 @@ class PoPowAlgosSpec
       10000, 10000, 10, None)
     val hr = applyChain(h, blocksChain)
     val proof1 = prove(hr)(poPowParams)
+
+    proof0.suffixHead.id shouldBe proof1.suffixHead.id
+    proof0.suffixTail.map(_.id) shouldBe proof1.suffixTail.map(_.id)
+
+    proof0.prefix.map(_.id).length shouldBe proof1.prefix.map(_.id).length
+    proof0.prefix.map(_.id).sorted.toList shouldBe proof1.prefix.map(_.id).sorted.toList
+  }
+
+
+  property("proof(histReader) for a header in the past") {
+    val poPowParams = PoPowParams(5, 6)
+    val blocksChain = genChain(300)
+
+    val at = 200
+
+    val h = generateHistory(true, StateType.Digest, false,
+      10000, 10000, 10, None)
+    val hr = applyChain(h, blocksChain.take(at))
+    val proof0 = prove(hr, None)(poPowParams)
+
+    val id = proof0.suffixHead.header.id
+
+    val hrf = applyChain(hr, blocksChain.drop(at))
+    val proof1 = prove(hrf, Some(id))(poPowParams)
+
 
     proof0.suffixHead.id shouldBe proof1.suffixHead.id
     proof0.suffixTail.map(_.id) shouldBe proof1.suffixTail.map(_.id)

@@ -180,7 +180,7 @@ object PoPowAlgos {
     val k = params.k
     val m = params.m
 
-    require(params.k >= 0, s"$k < 0")
+    require(params.k >= 1, s"$k < 1")
     require(chain.lengthCompare(k + m) >= 0, s"Can not prove chain of size < ${k + m}")
     require(chain.head.header.isGenesis, "Can not prove non-anchored chain")
 
@@ -208,13 +208,14 @@ object PoPowAlgos {
     PoPowProof(m, k, prefix, suffixHead, suffixTail)
   }
 
-  def prove(histReader: ErgoHistoryReader)(params: PoPowParams): PoPowProof = {
+  def prove(histReader: ErgoHistoryReader,
+            headerIdOpt: Option[ModifierId] = None)(params: PoPowParams): PoPowProof = {
     type Height = Int
 
     val k = params.k
     val m = params.m
 
-    require(params.k >= 0, s"$k < 0")
+    require(params.k >= 1, s"$k < 1")
     require(histReader.headersHeight >= k + m, s"Can not prove chain of size < ${k + m}")
 
     def linksWithIndexes(header: PoPowHeader): Seq[(ModifierId, Int)] = header.interlinks.tail.reverse.zipWithIndex
@@ -255,9 +256,15 @@ object PoPowAlgos {
       collected.values.toSeq
     }
 
-    val suffix = histReader.lastHeaders(k).headers
-    val suffixHead = histReader.popowHeader(suffix.head.id).get
-    val suffixTail = suffix.tail
+    val (suffixHead, suffixTail) = headerIdOpt match {
+      case Some(headerId) =>
+        val suffixHead = histReader.popowHeader(headerId).get
+        val suffixTail = histReader.bestHeadersAfter(suffixHead.header, k - 1)
+        suffixHead -> suffixTail
+      case None =>
+        val suffix = histReader.lastHeaders(k).headers
+        histReader.popowHeader(suffix.head.id).get -> suffix.tail
+    }
 
     val genesisPopowHeader = histReader.popowHeader(1).get
     val genesisHeight = 1

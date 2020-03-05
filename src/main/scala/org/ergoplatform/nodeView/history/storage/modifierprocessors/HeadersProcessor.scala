@@ -82,10 +82,15 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   /**
     * Get header from the longest chain at given height
+    *
     * @param h - height
     * @return header if exists, None otherwise
     */
   def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
+
+  def bestHeaderAtHeight(h: Int): Option[Header] = bestHeaderIdAtHeight(h).flatMap { id =>
+    typedModifierById[Header](id)
+  }
 
   /**
     * @param h - header to process
@@ -239,7 +244,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   /**
     * Calculate difficulty for the next block
     *
-    * @param parent - latest block
+    * @param parent                - latest block
     * @param nextBlockTimestampOpt - timestamp of the next block, used in testnets only, see acomment withing the method
     * @return - difficulty for the next block
     */

@@ -320,6 +320,23 @@ trait ErgoHistoryReader
     )
   }
 
+  def bestHeadersAfter(header: Header, howMany: Int): Seq[Header] = {
+    @tailrec
+    def accumulateHeaders(height: Int, accumulator: Seq[Header], left: Int): Seq[Header] = {
+      if(left == 0){
+        accumulator
+      } else {
+        bestHeaderAtHeight(height) match {
+          case Some(hdr) => accumulateHeaders(height + 1, accumulator :+ hdr, left - 1)
+          case None => accumulator
+        }
+      }
+    }
+
+    val height = header.height
+    accumulateHeaders(height + 1, Seq.empty, howMany)
+  }
+
   /**
     * Constructs popow header (header + interlinks) for a best header at given height
     * @param height - height
@@ -329,6 +346,13 @@ trait ErgoHistoryReader
     bestHeaderIdAtHeight(height).flatMap(popowHeader)
   }
 
+  /**
+    * Constructs PoPoW proof for given m and k according to KMZ17 (FC20) version.
+    * See PoPowAlgos.prove.
+    * @param m - min superchain length
+    * @param k - suffix length
+    * @return PoPow proof if success, Failure instance otherwise
+    */
   def popowProof(m: Int, k: Int): Try[PoPowProof] = Try {
     val proofParams = PoPowParams(m, k)
     PoPowAlgos.prove(this)(proofParams)

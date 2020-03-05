@@ -64,13 +64,13 @@ class InfoApiRoutesSpec extends FlatSpec
       status shouldBe StatusCodes.OK
       val res = responseEntity.toString
       log.info(s"Received node info: $res")
-      res should include regex """\"difficulty\" : \d+,"""
+      res should include regex """\"difficulty\" : \"\d+\","""
     }
   }
 
   "difficulty" should "be encoded with non-exponential form " in {
     val res = difficultyEncoder(requiredDifficulty)
-    res.toString shouldEqual requiredDifficulty.toString
+    res.toString shouldEqual "\"" + requiredDifficulty.toString + "\""
   }
 
   private def initDifficulty(difficulty: Difficulty): Future[Option[Difficulty]] = {

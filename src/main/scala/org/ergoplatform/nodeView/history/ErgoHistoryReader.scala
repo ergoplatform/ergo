@@ -348,10 +348,11 @@ trait ErgoHistoryReader
 
   /**
     * Constructs PoPoW proof for given m and k according to KMZ17 (FC20) version.
-    * See PoPowAlgos.prove.
+    * See PoPowAlgos.prove for construction details.
     * @param m - min superchain length
     * @param k - suffix length
-    * @param headerIdOpt - optional header to start suffix from
+    * @param headerIdOpt - optional header to start suffix from.
+    *                    Please note that k-1 headers will be provided after the header.
     * @return PoPow proof if success, Failure instance otherwise
     */
   def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[PoPowProof] = Try {

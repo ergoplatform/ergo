@@ -208,6 +208,11 @@ object PoPowAlgos {
     PoPowProof(m, k, prefix, suffixHead, suffixTail)
   }
 
+  /**
+    * Computes NiPoPow proof for the a chain stored in `histReader`'s database,
+    * or a prefix of the chain which contains a specific header (if `headerIdOpt` is specified).
+    * In the latter case, header will be the first header of the suffix of max length `k`.
+    */
   def prove(histReader: ErgoHistoryReader,
             headerIdOpt: Option[ModifierId] = None)(params: PoPowParams): PoPowProof = {
     type Height = Int

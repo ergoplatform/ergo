@@ -29,7 +29,7 @@ case class ClientApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     getPopowHeaderByHeaderIdR ~
       getPopowHeaderByHeightR ~
       getPopowProofR ~
-      getPopowProofForIdR
+      getPopowProofByHeaderIdR
   }
 
   private def getHistory: Future[ErgoHistoryReader] =
@@ -59,17 +59,23 @@ case class ClientApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   }
 
   def getPopowProofR: Route = (pathPrefix("popowProof" / IntNumber / IntNumber) & get) { case (m, k) =>
-    onSuccess(getPopowProof(m, k, None)){_.fold(
-      e => BadRequest(e.getMessage),
-      proof => ApiResponse(proof.asJson)
-    )}
+    onSuccess(getPopowProof(m, k, None)) {
+      _.fold(
+        e => BadRequest(e.getMessage),
+        proof => ApiResponse(proof.asJson)
+      )
+    }
   }
 
-  def getPopowProofForIdR: Route = (pathPrefix("popowProof" / IntNumber / IntNumber) & modifierId & get) { case (m, k, headerId) =>
-    onSuccess(getPopowProof(m, k, Some(headerId))){_.fold(
-      e => BadRequest(e.getMessage),
-      proof => ApiResponse(proof.asJson)
-    )}
+  def getPopowProofByHeaderIdR: Route = (pathPrefix("popowProof" / IntNumber / IntNumber) & modifierId & get) {
+    case (m, k, headerId) =>
+
+      onSuccess(getPopowProof(m, k, Some(headerId))) {
+        _.fold(
+          e => BadRequest(e.getMessage),
+          proof => ApiResponse(proof.asJson)
+        )
+      }
   }
 
 }

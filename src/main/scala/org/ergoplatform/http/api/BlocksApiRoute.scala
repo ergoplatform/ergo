@@ -84,8 +84,6 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   private val chainPagination: Directive[(Int, Int)] =
     parameters("fromHeight".as[Int] ? 0, "toHeight".as[Int] ? -1)
 
-  //routes
-
   def getBlocksR: Route = (pathEndOrSingleSlash & get & paging) { (offset, limit) =>
     ApiResponse(getHeaderIds(offset, limit))
   }

@@ -5,12 +5,11 @@ import org.ergoplatform.modifiers.history.popow.PoPowAlgos
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.History._
 import scorex.crypto.hash.Digest32
 
-import scala.concurrent.duration._
 import scala.util.Random
 
 class NonVerifyADHistorySpecification extends HistoryTestHelpers {
@@ -272,6 +271,10 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     val hdr = chain.headers.takeRight(suffixLength).head
     val count = Random.nextInt(suffixLength)
     history.bestHeadersAfter(hdr, count).length shouldBe count
+
+    history.bestHeadersAfter(chain.last, 0).length shouldBe 0
+    history.bestHeadersAfter(chain.last, 1).length shouldBe 0
+    history.bestHeadersAfter(chain.last, Int.MaxValue).length shouldBe 0
   }
 
 }

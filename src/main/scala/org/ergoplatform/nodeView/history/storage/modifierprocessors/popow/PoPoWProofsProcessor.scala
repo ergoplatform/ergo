@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.{Header, HeaderChain, PoPoWProof}
+import org.ergoplatform.modifiers.history.{Header, HeaderChain, PoPowProofModifier}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
 import scorex.core.consensus.History.ProgressInfo
 import scorex.util.ScorexLogging
@@ -14,9 +14,9 @@ import scala.util.Try
   */
 trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
 
-  def validate(m: PoPoWProof): Try[Unit]
+  def validate(m: PoPowProofModifier): Try[Unit]
 
-  def process(m: PoPoWProof): ProgressInfo[ErgoPersistentModifier]
+  def process(m: PoPowProofModifier): ProgressInfo[ErgoPersistentModifier]
 
   def lastHeaders(count: Int, offset: Int = 0): HeaderChain
 }

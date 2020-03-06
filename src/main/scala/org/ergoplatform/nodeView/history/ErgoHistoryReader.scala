@@ -217,7 +217,7 @@ trait ErgoHistoryReader
         validate(header)
       case m: BlockSection =>
         validate(m)
-      case m: PoPoWProof =>
+      case m: PoPowProofModifier =>
         validate(m)
       case chunk: UTXOSnapshotChunk =>
         validate(chunk)
@@ -359,4 +359,5 @@ trait ErgoHistoryReader
     val proofParams = PoPowParams(m, k)
     PoPowAlgos.prove(this, headerIdOpt)(proofParams)
   }
+
 }

@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.PoPoWProof
+import org.ergoplatform.modifiers.history.PoPowProofModifier
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.HeadersProcessor
 import scorex.core.consensus.History.ProgressInfo
 
@@ -12,8 +12,8 @@ import scala.util.Try
   */
 trait FullPoPoWProofsProcessor extends PoPoWProofsProcessor with HeadersProcessor {
 
-  def validate(m: PoPoWProof): Try[Unit] = throw new Error("PoPow not yet supported")
+  def validate(m: PoPowProofModifier): Try[Unit] = throw new Error("PoPow not yet supported")
 
-  def process(m: PoPoWProof): ProgressInfo[ErgoPersistentModifier] = ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+  def process(m: PoPowProofModifier): ProgressInfo[ErgoPersistentModifier] = ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
 }
 

@@ -11,6 +11,7 @@ import scorex.core.consensus.History._
 import scorex.crypto.hash.Digest32
 
 import scala.concurrent.duration._
+import scala.util.Random
 
 class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
@@ -257,6 +258,20 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
       history.openSurfaceIds() shouldEqual Seq(header.id)
       history.heightOf(header.id).get shouldBe (inHeight + 1)
     }
+  }
+
+  property("bestHeadersAfter returns correct number of headers") {
+    val chainLength = 50
+
+    var history = genHistory()
+    val chain = genHeaderChain(chainLength, history, diffBitsOpt = None, useRealTs = false)
+
+    history = applyHeaderChain(history, chain)
+
+    val suffixLength = Random.nextInt(chainLength - 1) + 1
+    val hdr = chain.headers.takeRight(suffixLength).head
+    val count = Random.nextInt(suffixLength)
+    history.bestHeadersAfter(hdr, count).length shouldBe count
   }
 
 }

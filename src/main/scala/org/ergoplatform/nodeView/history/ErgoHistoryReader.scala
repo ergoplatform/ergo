@@ -305,21 +305,6 @@ trait ErgoHistoryReader
     }
   }
 
-  /**
-    * Constructs popow header against given header identifier
-    * @param headerId - identifier of the header
-    * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available
-    */
-  def popowHeader(headerId: ModifierId): Option[PoPowHeader] = {
-    this.typedModifierById[Header](headerId).flatMap(h =>
-      typedModifierById[Extension](h.extensionId).flatMap{ext =>
-        PoPowAlgos.unpackInterlinks(ext.fields).toOption.map{interlinks =>
-          PoPowHeader(h, interlinks)
-        }
-      }
-    )
-  }
-
   def bestHeadersAfter(header: Header, howMany: Int): Seq[Header] = {
     @tailrec
     def accumulateHeaders(height: Int, accumulator: Seq[Header], left: Int): Seq[Header] = {
@@ -335,6 +320,21 @@ trait ErgoHistoryReader
 
     val height = header.height
     accumulateHeaders(height + 1, Seq.empty, howMany)
+  }
+
+  /**
+    * Constructs popow header against given header identifier
+    * @param headerId - identifier of the header
+    * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available
+    */
+  def popowHeader(headerId: ModifierId): Option[PoPowHeader] = {
+    this.typedModifierById[Header](headerId).flatMap(h =>
+      typedModifierById[Extension](h.extensionId).flatMap{ext =>
+        PoPowAlgos.unpackInterlinks(ext.fields).toOption.map{interlinks =>
+          PoPowHeader(h, interlinks)
+        }
+      }
+    )
   }
 
   /**

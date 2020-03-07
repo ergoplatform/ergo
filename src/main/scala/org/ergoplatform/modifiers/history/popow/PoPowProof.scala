@@ -44,13 +44,13 @@ case class PoPowProof(m: Int,
     * @return whether this PoPoW proof is better than "that"
     */
   def isBetterThan(that: PoPowProof): Boolean = {
-    if (that.isValid()) {
+    if (this.isValid() && that.isValid()) {
       lowestCommonAncestor(headersChain, that.headersChain)
         .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
         .exists({ case (thisDivergingChain, thatDivergingChain) =>
           bestArg(thisDivergingChain)(m) > bestArg(thatDivergingChain)(m) })
     } else {
-      true
+      this.isValid()
     }
   }
 

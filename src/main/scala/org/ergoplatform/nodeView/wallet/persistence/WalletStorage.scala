@@ -59,12 +59,6 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     .flatMap(r => ErgoStateContextSerializer(settings.chainSettings.voting).parseBytesTry(r).toOption)
     .getOrElse(ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte), settings))
 
-  def removeBlock(height: Int): Unit =
-    store.remove(Seq(heightPrefixKey(height)))
-
-  def removeBlocks(fromHeight: Int, toHeight: Int): Unit =
-    store.remove((fromHeight to toHeight).map(heightPrefixKey))
-
   def updateChangeAddress(address: P2PKAddress): Unit = {
     val bytes = addressEncoder.toString(address).getBytes(Constants.StringEncoding)
     store.insert(Seq(ChangeAddressKey -> bytes))

@@ -13,12 +13,9 @@ class PoPoWVerifier(poPoWParams: PoPowParams, genesisId: ModifierId) {
     }
 
     def process(newProof: PoPowProof) {
-        if (newProof.headersChain.head.id == genesisId) {
-            // TODO: order matters here and it shouldn't
-            // only isBetterThan's argument is checked for validity
-            if (!bestProof.exists(_.isBetterThan(newProof))) {
-                bestProof = Some(newProof)
-            }
+        if (newProof.headersChain.head.id == genesisId &&
+          !bestProof.exists(_.isBetterThan(newProof))) {
+          bestProof = Some(newProof)
         }
     }
 }

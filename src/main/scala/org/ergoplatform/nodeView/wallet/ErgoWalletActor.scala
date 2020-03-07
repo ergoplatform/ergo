@@ -279,7 +279,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case DeriveNextKey =>
       withWalletLockHandler(sender()) {
         _.secret.foreach { rootSecret =>
-          sender() ! nextPath.map { path =>
+          sender() ! nextPath().map { path =>
             val secret = rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
             processSecretAddition(secret)
             path -> P2PKAddress(secret.publicKey.key)
@@ -532,7 +532,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   /**
     * Finds next available path index for a new key.
     */
-  private def nextPath: Try[DerivationPath] = {
+  private def nextPath(): Try[DerivationPath] = {
     @scala.annotation.tailrec
     def nextPath(accPath: List[Int], rem: Seq[Seq[Int]]): Try[DerivationPath] = {
       if (!rem.forall(_.isEmpty)) {
@@ -547,6 +547,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           new Exception("Out of non-hardened index space. Try to derive hardened key specifying path manually"))
       }
     }
+
+    val secrets: IndexedSeq[ExtendedSecretKey] = walletVars.proverOpt.toIndexedSeq.flatMap(_.secretKeys)
 
     if (secrets.size == 1) {
       Success(DerivationPath(Array(0, 1), publicBranch = false))

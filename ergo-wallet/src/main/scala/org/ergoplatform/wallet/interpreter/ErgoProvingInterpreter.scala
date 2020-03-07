@@ -6,11 +6,12 @@ import org.ergoplatform._
 import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext, TransactionContext}
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
-import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
-import sigmastate.eval.{IRContext, CompiletimeIRContext}
+import scorex.util.encode.Base16
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.eval.{CompiletimeIRContext, IRContext}
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * A class which is holding secrets and signing transactions.
@@ -20,16 +21,36 @@ import scala.util.{Success, Failure, Try}
   * blockchain state) by using the secrets (no additional inputs, e.g. hash function preimages required in scripts,
   * are supported. Here, signing a transaction means spending proofs generation for all of its input boxes.
   *
-  * @param secretKeys - secrets in extended form to be used by prover
-  * @param params     - ergo network parameters
+  * @param secretKeys       - secrets in extended form to be used by prover
+  * @param params           - ergo network parameters
+  * @param cachedPubKeysOpt - optionally, public keys corresponding to the secrets (to not to recompute them)
   */
-class ErgoProvingInterpreter(val secretKeys: IndexedSeq[ExtendedSecretKey], params: ErgoLikeParameters)
+class ErgoProvingInterpreter(val secretKeys: IndexedSeq[ExtendedSecretKey],
+                             params: ErgoLikeParameters,
+                             val cachedPubKeysOpt: Option[IndexedSeq[ProveDlog]] = None)
                             (implicit IR: IRContext)
   extends ErgoInterpreter(params) with ProverInterpreter {
 
   val secrets: IndexedSeq[DLogProverInput] = secretKeys.map(_.key)
 
-  val pubKeys: IndexedSeq[ProveDlog] = secrets.map(_.publicImage)
+  val pubKeys: IndexedSeq[ProveDlog] = cachedPubKeysOpt match {
+    case Some(cachedPubKeys) =>
+      if (cachedPubKeys.length != secrets.length) {
+        log.error(s"ErgoProverInterpreter: pubkeys and secrets of different sizes: ${cachedPubKeys.length} and ${secrets.length}")
+      }
+      cachedPubKeys
+    case None =>
+      secrets.map(_.publicImage) // costly operation if there are many secret keys
+  }
+
+  def withNewSecret(secret: ExtendedSecretKey): (ErgoProvingInterpreter, ProveDlog) = {
+    val newPk = secret.key.publicImage
+    val sks = secretKeys :+ secret
+    val pks = pubKeys :+ newPk
+    log.info(s"New secret created, public image: ${Base16.encode(newPk.pkBytes)}")
+    new ErgoProvingInterpreter(sks, params, Some(pks)) -> newPk
+  }
+
 
   /**
     * @note requires `unsignedTx` and `boxesToSpend` have the same boxIds in the same order.
@@ -53,8 +74,8 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[ExtendedSecretKey], para
           // Cost of transaction initialization: we should read and parse all inputs and data inputs,
           // and also iterate through all outputs to check rules
           val initialCost: Long = boxesToSpend.size * params.inputCost +
-          dataBoxes.size * params.dataInputCost +
-          unsignedTx.outputCandidates.size * params.outputCost
+            dataBoxes.size * params.dataInputCost +
+            unsignedTx.outputCandidates.size * params.outputCost
 
           val context = new ErgoLikeContext(ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
             stateContext.sigmaLastHeaders,
@@ -92,4 +113,5 @@ object ErgoProvingInterpreter {
 
   def apply(rootSecret: ExtendedSecretKey, params: ErgoLikeParameters): ErgoProvingInterpreter =
     new ErgoProvingInterpreter(IndexedSeq(rootSecret), params)(new CompiletimeIRContext)
+
 }

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import com.google.common.primitives.{Ints, Longs, Shorts}
+import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication, ExternalApplicationSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
@@ -93,30 +93,24 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
 object WalletStorage {
   val ZeroCount = 16
   val ZeroArray = Array.fill(ZeroCount)(0: Byte)
-  val AppendixCount = 32 - ZeroCount
 
-  val HeightPrefixByte = 1: Byte
-  val ApplicationPrefixByte = 2: Byte
+  val ApplicationPrefixByte = 1: Byte
 
-  val HeightPrefixArray = (Array.fill(ZeroCount - 1)(0: Byte) :+ HeightPrefixByte) ++ Array.fill(12)(0: Byte)
   val ApplicationPrefixArray = (Array.fill(ZeroCount - 1)(0: Byte) :+ ApplicationPrefixByte) ++ Array.fill(14)(0: Byte)
 
   val SmallestPossibleApplicationId = ApplicationPrefixArray ++ Shorts.toByteArray(0)
   val BiggestPossibleApplicationId = ApplicationPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
 
 
-  def generalPrefixKey(keyString: String): Array[Byte] =
-    ZeroArray ++ Blake2b256.hash(keyString).takeRight(AppendixCount)
+  def noPrefixKey(keyString: String): Array[Byte] =
+    Blake2b256.hash(keyString)
 
-  def heightPrefixKey(height: Int): Array[Byte] = HeightPrefixArray ++ Ints.toByteArray(height)
+  def appPrefixKey(appId: Short): Array[Byte] = ApplicationPrefixArray ++ Shorts.toByteArray(appId)
 
-  def appPrefixKey(appId: Long): Array[Byte] = ApplicationPrefixArray ++ Longs.toByteArray(appId)
-
-  val StateContextKey: Array[Byte] = generalPrefixKey("state_ctx")
-
-  val SecretPathsKey: Array[Byte] = generalPrefixKey("secret_paths")
-
-  val ChangeAddressKey: Array[Byte] = generalPrefixKey("change_address")
+  //following keys do not start with zeroed prefix
+  val StateContextKey: Array[Byte] = noPrefixKey("state_ctx")
+  val SecretPathsKey: Array[Byte] = noPrefixKey("secret_paths")
+  val ChangeAddressKey: Array[Byte] = noPrefixKey("change_address")
 
   def readOrCreate(settings: ErgoSettings)
                   (implicit addressEncoder: ErgoAddressEncoder): WalletStorage = {

@@ -29,9 +29,9 @@ object WalletScanLogic extends ScorexLogging {
     * todo: currently used only to decide that a box with mining rewards could be spent, do special method for that?
     */
   private def resolve(box: ErgoBox,
-              proverOpt: Option[ErgoProvingInterpreter],
-              stateContext: ErgoStateContext,
-              height: Int): Boolean = {
+                      proverOpt: Option[ErgoProvingInterpreter],
+                      stateContext: ErgoStateContext,
+                      height: Int): Boolean = {
     val testingTx = UnsignedErgoLikeTransaction(
       IndexedSeq(new UnsignedInput(box.id)),
       IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
@@ -123,27 +123,35 @@ object WalletScanLogic extends ScorexLogging {
         .map(app => app.appId -> app.initialCertainty)
         .toMap
 
-      val miningIncomeTriggered = miningScriptsBytes.exists(ms => bx.propositionBytes.sameElements(ms))
+      val boxScript = bx.propositionBytes
 
-      //tweak for tests
-      lazy val miningStatus: (AppId, BoxCertainty) = if (walletVars.minerRewardDelay > 0) {
-        MiningRewardsAppId -> BoxCertainty.Certain
-      } else {
-        PaymentsAppId -> BoxCertainty.Certain
-      }
+      val statuses: Map[AppId, BoxCertainty] = if (walletVars.filter.lookup(boxScript)) {
 
-      val prePaymentStatuses = if (miningIncomeTriggered) appsTriggered + miningStatus else appsTriggered
+        val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
 
-      val statuses: Map[AppId, BoxCertainty] = if (prePaymentStatuses.nonEmpty) {
-        prePaymentStatuses
-      } else {
-        val paymentsTriggered = trackedBytes.exists(bs => bx.propositionBytes.sameElements(bs))
-
-        if (paymentsTriggered) {
-          Map(PaymentsAppId -> BoxCertainty.Certain)
+        //tweak for tests
+        lazy val miningStatus: (AppId, BoxCertainty) = if (walletVars.minerRewardDelay > 0) {
+          MiningRewardsAppId -> BoxCertainty.Certain
         } else {
-          Map.empty
+          PaymentsAppId -> BoxCertainty.Certain
         }
+
+        val prePaymentStatuses = if (miningIncomeTriggered) appsTriggered + miningStatus else appsTriggered
+
+        if (prePaymentStatuses.nonEmpty) {
+          //if other applications intercept the box, it is not being tracked by the payments app
+          prePaymentStatuses
+        } else {
+          val paymentsTriggered = trackedBytes.exists(bs => boxScript.sameElements(bs))
+
+          if (paymentsTriggered) {
+            Map(PaymentsAppId -> BoxCertainty.Certain)
+          } else {
+            Map.empty
+          }
+        }
+      } else {
+        Map.empty
       }
 
       if (statuses.nonEmpty) {

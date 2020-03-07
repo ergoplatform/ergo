@@ -58,12 +58,24 @@ case class PoPowProof(m: Int,
     this.hasValidConnections() && this.hasValidHeights()
   }
 
+  /**
+    * Checks if the heights of the header-chain provided are consistent, meaning that for any two blocks b1 and b2,
+    * if b1 precedes b2 then b1's height should be smaller.
+    *
+    * @return true if the heights of the header-chain are consistent
+    */
   def hasValidHeights(): Boolean = {
     headersChain.zip(headersChain.tail).forall({
       case (prev, next) => prev.height < next.height
     })
   }
 
+  /**
+    * Checks the connections of the blocks in the proof. Adjacent blocks should be linked either via interlink
+    * or previd.
+    *
+    * @return true if all adjacent blocks are correctly connected
+    */
   def hasValidConnections(): Boolean = {
     prefix.zip(prefix.tail :+ suffixHead).forall({
       case (prev, next) => next.interlinks.contains(prev.id)

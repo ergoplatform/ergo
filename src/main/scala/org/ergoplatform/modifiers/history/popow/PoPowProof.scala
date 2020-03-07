@@ -47,9 +47,8 @@ case class PoPowProof(m: Int,
     if (that.isValid()) {
       lowestCommonAncestor(headersChain, that.headersChain)
         .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
-        .map({ case (thisDivergingChain, thatDivergingChain) =>
+        .exists({ case (thisDivergingChain, thatDivergingChain) =>
           bestArg(thisDivergingChain)(m) > bestArg(thatDivergingChain)(m) })
-        .getOrElse(false)
     } else {
       true
     }

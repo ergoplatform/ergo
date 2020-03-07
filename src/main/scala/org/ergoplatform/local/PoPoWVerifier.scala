@@ -16,7 +16,7 @@ class PoPoWVerifier(poPoWParams: PoPowParams, genesisId: ModifierId) {
         if (newProof.headersChain.head.id == genesisId) {
             // TODO: order matters here and it shouldn't
             // only isBetterThan's argument is checked for validity
-            if (!bestProof.map(_.isBetterThan(newProof)).getOrElse(false)) {
+            if (!bestProof.exists(_.isBetterThan(newProof))) {
                 bestProof = Some(newProof)
             }
         }

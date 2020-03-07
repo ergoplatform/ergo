@@ -54,6 +54,10 @@ case class PoPowProof(m: Int,
     }
   }
 
+  /**
+    * Checks if the proof is valid: if the heights are consistent and the connections are valid.
+    * @return true if the proof is valid
+    */
   def isValid(): Boolean = {
     this.hasValidConnections() && this.hasValidHeights()
   }

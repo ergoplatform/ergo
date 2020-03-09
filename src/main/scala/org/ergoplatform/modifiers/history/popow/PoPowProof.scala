@@ -44,12 +44,49 @@ case class PoPowProof(m: Int,
     * @return whether this PoPoW proof is better than "that"
     */
   def isBetterThan(that: PoPowProof): Boolean = {
-    val (thisDivergingChain, thatDivergingChain) = lowestCommonAncestor(headersChain, that.headersChain)
-      .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
-      .getOrElse(headersChain -> that.headersChain)
-    bestArg(thisDivergingChain)(m) > bestArg(thatDivergingChain)(m)
+    if (this.isValid() && that.isValid()) {
+      lowestCommonAncestor(headersChain, that.headersChain)
+        .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
+        .exists({ case (thisDivergingChain, thatDivergingChain) =>
+          bestArg(thisDivergingChain)(m) > bestArg(thatDivergingChain)(m) })
+    } else {
+      this.isValid()
+    }
   }
 
+  /**
+    * Checks if the proof is valid: if the heights are consistent and the connections are valid.
+    * @return true if the proof is valid
+    */
+  def isValid(): Boolean = {
+    this.hasValidConnections() && this.hasValidHeights()
+  }
+
+  /**
+    * Checks if the heights of the header-chain provided are consistent, meaning that for any two blocks b1 and b2,
+    * if b1 precedes b2 then b1's height should be smaller.
+    *
+    * @return true if the heights of the header-chain are consistent
+    */
+  def hasValidHeights(): Boolean = {
+    headersChain.zip(headersChain.tail).forall({
+      case (prev, next) => prev.height < next.height
+    })
+  }
+
+  /**
+    * Checks the connections of the blocks in the proof. Adjacent blocks should be linked either via interlink
+    * or previd.
+    *
+    * @return true if all adjacent blocks are correctly connected
+    */
+  def hasValidConnections(): Boolean = {
+    prefix.zip(prefix.tail :+ suffixHead).forall({
+      case (prev, next) => next.interlinks.contains(prev.id)
+    }) && (suffixHead.header +: suffixTail).zip(suffixTail).forall({
+      case (prev, next) => next.parentId == prev.id
+    })
+  }
 }
 
 object PoPowProof {

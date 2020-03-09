@@ -1,13 +1,14 @@
 package org.ergoplatform.modifiers.history
 
-import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams}
+import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams, PoPowProof}
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.utils.HistoryTestHelpers
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
 import scorex.util.ModifierId
+import org.ergoplatform.utils.HistoryTestHelpers
 
 class PoPowAlgosSpec
   extends PropSpec
@@ -122,7 +123,6 @@ class PoPowAlgosSpec
     proof0.prefix.map(_.id).sorted.toList shouldBe proof1.prefix.map(_.id).sorted.toList
   }
 
-
   property("proof(histReader) for a header in the past") {
     val poPowParams = PoPowParams(5, 6)
     val blocksChain = genChain(300)
@@ -147,4 +147,77 @@ class PoPowAlgosSpec
     proof0.prefix.map(_.id).sorted.toList shouldBe proof1.prefix.map(_.id).sorted.toList
   }
 
+  property("isBetterThan - marginally longer chain should be better") {
+    val sizes = Seq(1000)
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
+      c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    sizes.foreach { size =>
+      val baseChain = genChain(size)
+      val branchPoint = baseChain(baseChain.length - 1)
+      val shortChain = toPoPoWChain(baseChain)
+      val longChain = toPoPoWChain(baseChain ++ genChain(1, branchPoint).takeRight(1))
+
+      val shortProof = prove(shortChain)(poPowParams)
+      val longProof = prove(longChain)(poPowParams)
+
+      shortProof.isBetterThan(longProof) shouldBe false
+    }
+  }
+
+  property("isBetterThan - a disconnected prefix chain should not win") {
+    val smallPoPowParams = PoPowParams(50, 1)
+    val size = 100
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
+      c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val chain = toPoPoWChain(genChain(size))
+    val proof = prove(chain)(smallPoPowParams)
+
+    val longerChain = toPoPoWChain(genChain(size*2))
+    val longerProof = prove(longerChain)(smallPoPowParams)
+
+    val disconnectedProofPrefix = proof.prefix.take(proof.prefix.length/2) ++ longerProof.prefix
+    val disconnectedProof = PoPowProof(proof.m, proof.k, disconnectedProofPrefix, proof.suffixHead, proof.suffixTail)
+    proof.isBetterThan(disconnectedProof) shouldBe true
+  }
+
+
+  property("hasValidConnections - ensures a connected prefix chain") {
+    val smallPoPowParams = PoPowParams(5, 5)
+    val sizes = Seq(100, 200)
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
+      c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    sizes.foreach { size =>
+      val chain = toPoPoWChain(genChain(size))
+      val randomBlock = toPoPoWChain(genChain(1)).head
+      val proof = prove(chain)(smallPoPowParams)
+      val disconnectedProofPrefix = proof.prefix.updated(proof.prefix.length/2, randomBlock)
+      val disconnectedProof = PoPowProof(proof.m, proof.k, disconnectedProofPrefix, proof.suffixHead, proof.suffixTail)
+      proof.hasValidConnections() shouldBe true
+      disconnectedProof.hasValidConnections() shouldBe false
+    }
+  }
+
+  property("hasValidConnections - ensures a connected suffix chain") {
+    val smallPoPowParams = PoPowParams(5, 5)
+    val sizes = Seq(100, 200)
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
+      c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    sizes.foreach { size =>
+      val chain = toPoPoWChain(genChain(size))
+      val randomBlock = genChain(1).head.header
+      val proof = prove(chain)(smallPoPowParams)
+      val disconnectedProofSuffixTail = proof.suffixTail.updated(proof.suffixTail.length/2, randomBlock)
+      val disconnectedProof = PoPowProof(proof.m, proof.k, proof.prefix, proof.suffixHead, disconnectedProofSuffixTail)
+      proof.hasValidConnections() shouldBe true
+      disconnectedProof.hasValidConnections() shouldBe false
+    }
+  }
+
+  property("hasValidConnections - ensures prefix.last & suffix.head are linked") {
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
+      c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    val prefix = toPoPoWChain(genChain(1))
+    val suffix = toPoPoWChain(genChain(1))
+    PoPowProof(0, 0, prefix, suffix.head, suffix.tail.map(_.header)).hasValidConnections() shouldBe false
+  }
 }

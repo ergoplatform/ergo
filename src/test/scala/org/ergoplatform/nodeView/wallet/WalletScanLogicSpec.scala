@@ -6,9 +6,10 @@ import org.ergoplatform.utils.{ErgoPropertyTest, WalletTestOps}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
 import org.ergoplatform.db.DBSpec
-import org.ergoplatform.{ErgoBoxCandidate, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
+import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ExternalAppRequest}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.BoxCertainty
 import org.scalacheck.Gen
@@ -21,14 +22,26 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
   private case class TrackedTransaction(tx: ErgoTransaction,
                                         payments: List[ErgoTree],
                                         paymentValues: List[Int],
+                                        appPayments: List[ErgoTree],
+                                        appPaymentValues: List[Int],
                                         miningRewards: List[ErgoTree],
-                                        miningRewardValues: List[Int])
+                                        miningRewardValues: List[Int]) {
+    def scriptsCount = payments.size + appPayments.size + miningRewards.size
+    def valuesSum: Long = (paymentValues ++ appPaymentValues ++ miningRewardValues).sum
+  }
+
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
   private val prover = defaultProver
   private val monetarySettings = initSettings.chainSettings.monetary.copy(minerRewardDelay = 720)
   private val s = initSettings.copy(chainSettings = initSettings.chainSettings.copy(monetary = monetarySettings))
-  private val walletVars = WalletVars(Some(prover), Seq.empty)(settings = s)
+
+  private val uncertainProp = org.ergoplatform.settings.Constants.TrueLeaf
+  private val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, uncertainProp.bytes)
+  private val appReq = ExternalAppRequest("True detector", scanningPredicate, alwaysCertain = false)
+  private val appId: Short = 50
+
+  private val walletVars = WalletVars(Some(prover), Seq(appReq.toApp(appId).get))(settings = s)
 
   private val pubkeys = walletVars.trackedPubKeys
   private val miningScripts = walletVars.miningScripts
@@ -39,25 +52,29 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
   private def nonTrackablePaymentsGen: Gen[List[ErgoTree]] = Gen.nonEmptyListOf(Gen.const(FalseLeaf.toSigmaProp))
 
+  private def appPaymentsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.const(uncertainProp))
+
   private def trackedTransactionGen: Gen[TrackedTransaction] = {
     for {
       payments <- paymentsGen
+      appPayments <- appPaymentsGen
       miningRewards <- miningRewardsGen
       nonTrackablePayments <- nonTrackablePaymentsGen
     } yield {
       def valueGen(): Int = Random.nextInt(1000) + 100
 
+      val appPaymentValues = appPayments.map(_ => valueGen())
       val paymentValues = payments.map(_ => valueGen())
       val miningRewardValues = miningRewards.map(_ => valueGen())
       val nonTrackableValues = nonTrackablePayments.map(_ => valueGen())
-      val outs = (payments ++ miningRewards ++ nonTrackablePayments)
-        .zip(paymentValues ++ miningRewardValues ++ nonTrackableValues)
+      val outs = (payments ++ appPayments ++ miningRewards ++ nonTrackablePayments)
+        .zip(paymentValues ++ appPaymentValues ++ miningRewardValues ++ nonTrackableValues)
         .map { case (script, value) => new ErgoBoxCandidate(value, script, creationHeight = 1) }
         .toIndexedSeq
 
       val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, outs)
 
-      TrackedTransaction(tx, payments, paymentValues, miningRewards, miningRewardValues)
+      TrackedTransaction(tx, payments, paymentValues, appPayments, appPaymentValues, miningRewards, miningRewardValues)
     }
   }
 
@@ -67,15 +84,18 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
     forAll(trackedTransactionGen) { trackedTransaction =>
       val foundBoxes = extractWalletOutputs(trackedTransaction.tx, inclusionHeightOpt, walletVars)
-      foundBoxes.length shouldBe (trackedTransaction.payments.length + trackedTransaction.miningRewards.length)
+      foundBoxes.length shouldBe trackedTransaction.scriptsCount
       foundBoxes.map(_.inclusionHeightOpt).forall(_ == inclusionHeightOpt) shouldBe true
-      foundBoxes.map(_.value).sum shouldBe (trackedTransaction.paymentValues ++ trackedTransaction.miningRewardValues).sum
+      foundBoxes.map(_.value).sum shouldBe trackedTransaction.valuesSum
       foundBoxes.forall(tb => if (trackedTransaction.payments.contains(tb.box.ergoTree)) {
         tb.certain(Constants.PaymentsAppId).get == BoxCertainty.Certain &&
           tb.applicationStatuses == Map(Constants.PaymentsAppId -> BoxCertainty.Certain)
-      } else {
+      } else if(trackedTransaction.miningRewards.contains(tb.box.ergoTree)) {
         tb.certain(Constants.MiningRewardsAppId).get == BoxCertainty.Certain &&
           tb.applicationStatuses == Map(Constants.MiningRewardsAppId -> BoxCertainty.Certain)
+      } else {
+        tb.certain(appId).get == BoxCertainty.Uncertain &&
+          tb.applicationStatuses == Map(appId -> BoxCertainty.Uncertain)
       }) shouldBe true
     }
   }

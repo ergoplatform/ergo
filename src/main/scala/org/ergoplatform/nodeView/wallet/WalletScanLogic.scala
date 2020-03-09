@@ -151,7 +151,7 @@ object WalletScanLogic extends ScorexLogging {
           }
         }
       } else {
-        Map.empty
+        appsTriggered
       }
 
       if (statuses.nonEmpty) {

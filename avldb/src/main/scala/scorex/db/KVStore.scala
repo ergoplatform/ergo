@@ -114,7 +114,7 @@ trait KVStore extends AutoCloseable {
         val value = next.getValue
         bf += (key -> value)
       }
-      bf.toList
+      bf.toArray[(K,V)]
     } finally {
       iter.close()
       ro.snapshot().close()

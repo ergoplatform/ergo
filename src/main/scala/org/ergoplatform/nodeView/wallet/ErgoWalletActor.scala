@@ -616,7 +616,9 @@ object ErgoWalletActor {
       * Cuckoo filter for scan the boxes efficiently
       */
     val filter: CuckooFilter[Array[Byte]] = stateCacheOpt.map(_.filter).getOrElse {
-      val f = com.github.oskin1.scakoo.mutable.CuckooFilter[Array[Byte]](512, 1024)
+      val entriesPerBucket = settings.walletSettings.keysFilter.entriesPerBucket
+      val bucketsQty = settings.walletSettings.keysFilter.bucketsQty
+      val f = com.github.oskin1.scakoo.mutable.CuckooFilter[Array[Byte]](entriesPerBucket, bucketsQty)
       trackedBytes.foreach(bs => f.insert(bs))
       miningScriptsBytes.foreach(msb => f.insert(msb))
       CuckooFilter.recover(f.memTable, f.entriesCount, f.entriesPerBucket)

@@ -11,4 +11,5 @@ case class WalletSettings(secretStorage: SecretStorageSettings,
                           keepSpentBoxes: Boolean = false,
                           defaultTransactionFee: Long = 1000000L,
                           testMnemonic: Option[String] = None,
-                          testKeysQty: Option[Int] = None)
+                          testKeysQty: Option[Int] = None,
+                          keysFilter: CuckooFilterSettings)

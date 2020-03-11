@@ -22,7 +22,7 @@ jobs:
       jdk: oraclejdk8
       script: sbt +ergoWallet/publish
 
-script: sbt -Denv=test clean coverage test coverageReport && sbt -Denv=test benchmarks/compile && sbt +ergoWallet/test
+script: sbt clean test && sbt -Denv=test benchmarks/compile && sbt +ergoWallet/test
 
 cache:
   directories:

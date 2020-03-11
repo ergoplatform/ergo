@@ -19,7 +19,13 @@ lazy val commonSettings = Seq(
     "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"),
   homepage := Some(url("http://ergoplatform.org/")),
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode")),
-  publishTo := sonatypePublishToBundle.value
+  publishTo := sonatypePublishToBundle.value,
+  // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
+  // see https://github.com/eclipse/jetty.project/issues/3244
+  // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
+  // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
+  scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
+  javacOptions in(Compile, compile) ++= Seq("--release", "8")
 )
 
 val scorexVersion = "master-3946bdb5-SNAPSHOT"
@@ -92,12 +98,6 @@ val opts = Seq(
 // -J prefix is required by the bash script
 javaOptions in run ++= opts
 scalacOptions ++= Seq("-Xfatal-warnings", "-feature", "-deprecation")
-
-// set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
-// see https://github.com/eclipse/jetty.project/issues/3244
-// these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
-// see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
-scalacOptions in(Compile, compile) ++= Seq("-release", "8")
 
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"
@@ -172,7 +172,7 @@ dockerfile in docker := {
   val configMainNet = (resourceDirectory in IntegrationTest).value / "mainnetTemplate.conf"
 
   new Dockerfile {
-    from("openjdk:11-jre-slim")
+    from("openjdk:9-jre-slim")
     label("ergo-integration-tests", "ergo-integration-tests")
     add(assembly.value, "/opt/ergo/ergo.jar")
     add(Seq(configDevNet), "/opt/ergo")

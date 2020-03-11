@@ -6,31 +6,29 @@ jdk:
 scala:
   - 2.12.8
 stages:
-  - testErgo
-  - testWallet
+  - test
   - name: release
     if: tag =~ ^v
   - name: snapshot
     if: "(NOT tag IS present) AND (type = push)"
 jobs:
   include:
-    - stage: testErgo
-      jdk:
-        - openjdk9
-        - oraclejdk8
-      script: sbt -Denv=test clean coverage test coverageReport && sbt -Denv=test benchmarks/compile
-    - stage: testWallet
-      jdk:
-        - openjdk9
-        - oraclejdk8
-      script: sbt +ergoWallet/test
+    - stage: test
+      name: "ergo"
+      env: SCRIPT_CMD="sbt -Denv=test clean coverage test coverageReport && sbt -Denv=test benchmarks/compile"
+    - stage: test
+      name: "wallet"
+      env: SCRIPT_CMD="sbt +ergoWallet/test"
     - stage: release
+      jdk: openjdk9
       script:
         openssl aes-256-cbc -K $encrypted_394e5a7bea7c_key -iv $encrypted_394e5a7bea7c_iv
         -in ci/secring.asc.enc -out ci/secring.asc -d && gpg --import ci/secring.asc
         && sbt +ergoWallet/publishSigned sonatypeBundleRelease
     - stage: snapshot
+      jdk: openjdk9
       script: sbt +ergoWallet/publish
+script: $SCRIPT_CMD
 cache:
   directories:
     - "$HOME/.ivy2/cache"

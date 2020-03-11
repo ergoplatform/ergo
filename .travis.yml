@@ -1,8 +1,10 @@
+os: linux
+dist: bionic
 language: scala
-sudo: required
 jdk:
+  - openjdk11
   - openjdk9
-  - oraclejdk8
+  - openjdk8
 scala:
   - 2.12.8
 stages:
@@ -16,13 +18,14 @@ jobs:
     - stage: test
       name: "ergo"
       script: sbt -Denv=test clean coverage test coverageReport && sbt -Denv=test benchmarks/compile
-    - script: sbt +ergoWallet/test
+    - stage: test
       name: "wallet"
+      script: sbt +ergoWallet/test
     - stage: release
-      jdk: openjdk9
+      jdk: openjdk8
       script: openssl aes-256-cbc -K $encrypted_394e5a7bea7c_key -iv $encrypted_394e5a7bea7c_iv -in ci/secring.asc.enc -out ci/secring.asc -d && gpg --import ci/secring.asc && sbt +ergoWallet/publishSigned sonatypeBundleRelease
     - stage: snapshot
-      jdk: openjdk9
+      jdk: openjdk8
       script: sbt +ergoWallet/publish
 cache:
   directories:

@@ -21,13 +21,10 @@ jobs:
       env: SCRIPT_CMD="sbt +ergoWallet/test"
     - stage: release
       jdk: openjdk9
-      script:
-        openssl aes-256-cbc -K $encrypted_394e5a7bea7c_key -iv $encrypted_394e5a7bea7c_iv
-        -in ci/secring.asc.enc -out ci/secring.asc -d && gpg --import ci/secring.asc
-        && sbt +ergoWallet/publishSigned sonatypeBundleRelease
+      env: SCRIPT_CMD="openssl aes-256-cbc -K $encrypted_394e5a7bea7c_key -iv $encrypted_394e5a7bea7c_iv -in ci/secring.asc.enc -out ci/secring.asc -d && gpg --import ci/secring.asc && sbt +ergoWallet/publishSigned sonatypeBundleRelease"
     - stage: snapshot
       jdk: openjdk9
-      script: sbt +ergoWallet/publish
+      env: SCRIPT_CMD="sbt +ergoWallet/publish"
 script: $SCRIPT_CMD
 cache:
   directories:

@@ -227,6 +227,12 @@ lazy val ergoWallet = (project in file("ergo-wallet"))
     commonSettings,
     name := "ergo-wallet",
     libraryDependencies += ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion),
+    scalacOptions in(Compile, compile) ++= (if(scalaBinaryVersion.value == "2.11")
+        Seq.empty
+      else
+        Seq("-release", "8") 
+      ) 
+  
   )
 
 lazy val It2Test = config("it2") extend (IntegrationTest, Test)

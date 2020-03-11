@@ -20,12 +20,6 @@ lazy val commonSettings = Seq(
   homepage := Some(url("http://ergoplatform.org/")),
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode")),
   publishTo := sonatypePublishToBundle.value,
-  // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
-  // see https://github.com/eclipse/jetty.project/issues/3244
-  // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
-  // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
-  scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
-  javacOptions in(Compile, compile) ++= Seq("--release", "8")
 )
 
 val scorexVersion = "master-3946bdb5-SNAPSHOT"
@@ -201,7 +195,13 @@ Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 lazy val avldb = (project in file("avldb"))
   .settings(
     commonSettings,
-    name := "avldb"
+    name := "avldb",
+    // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
+    // see https://github.com/eclipse/jetty.project/issues/3244
+    // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
+    // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
+    scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
+    javacOptions in(Compile, compile) ++= Seq("--release", "8")
   )
 
 lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
@@ -237,7 +237,16 @@ inConfig(It2Test)(Defaults.testSettings ++ Seq(
 ))
 
 lazy val ergo = (project in file("."))
-  .settings(commonSettings, name := "ergo")
+  .settings(
+    commonSettings, 
+    name := "ergo",
+    // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
+    // see https://github.com/eclipse/jetty.project/issues/3244
+    // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
+    // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
+    scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
+    javacOptions in(Compile, compile) ++= Seq("--release", "8")
+  )
   .dependsOn(ergoWallet % "compile->compile")
   .dependsOn(avldb % "compile->compile")
   .configs(It2Test)

@@ -1,38 +1,44 @@
 language: scala
 sudo: required
 jdk:
-- openjdk9
-- oraclejdk8
+  - openjdk9
 scala:
-- 2.12.8
+  - 2.12.8
 stages:
-- testErgo
-- testWallet
-- name: release
-  if: tag =~ ^v
-- name: snapshot
-  if: "(NOT tag IS present) AND (type = push)"
+  - testErgo
+  - testWallet
+  - name: release
+    if: tag =~ ^v
+  - name: snapshot
+    if: "(NOT tag IS present) AND (type = push)"
 jobs:
   include:
-  - stage: testErgo
-    script: sbt -Denv=test clean coverage test coverageReport && sbt -Denv=test benchmarks/compile
-  - stage: testWallet
-    script: sbt +ergoWallet/test
-  - stage: release
-    script: openssl aes-256-cbc -K $encrypted_394e5a7bea7c_key -iv $encrypted_394e5a7bea7c_iv
-      -in ci/secring.asc.enc -out ci/secring.asc -d && gpg --import ci/secring.asc
-      && sbt +ergoWallet/publishSigned sonatypeBundleRelease
-  - stage: snapshot
-    script: sbt +ergoWallet/publish
+    - stage: testErgo
+      jdk:
+        - openjdk9
+        - oraclejdk8
+      script: sbt -Denv=test clean coverage test coverageReport && sbt -Denv=test benchmarks/compile
+    - stage: testWallet
+      jdk:
+        - openjdk9
+        - oraclejdk8
+      script: sbt +ergoWallet/test
+    - stage: release
+      script:
+        openssl aes-256-cbc -K $encrypted_394e5a7bea7c_key -iv $encrypted_394e5a7bea7c_iv
+        -in ci/secring.asc.enc -out ci/secring.asc -d && gpg --import ci/secring.asc
+        && sbt +ergoWallet/publishSigned sonatypeBundleRelease
+    - stage: snapshot
+      script: sbt +ergoWallet/publish
 cache:
   directories:
-  - "$HOME/.ivy2/cache"
-  - "$HOME/.sbt"
+    - "$HOME/.ivy2/cache"
+    - "$HOME/.sbt"
 before_cache:
-- find $HOME/.ivy2/cache -name "ivydata-*.properties" -print -delete
-- find $HOME/.sbt        -name "*.lock"               -print -delete
+  - find $HOME/.ivy2/cache -name "ivydata-*.properties" -print -delete
+  - find $HOME/.sbt        -name "*.lock"               -print -delete
 env:
   global:
-  - secure: QwU82HMVqkEEM3yVKZ32PrPezo47hhZC8zKxq51NZEMjqrI7kz1F1Jdh9d9kdqwoCoJEFRF++HdhA3zdCofl/E4hR6S7q+XlofhYu0KZUbx358aQ8IpSPsxJC1zK+R0Uaj8CBzgXEcqQ75uRpyQ08V17v7T2jC16InxU+cdVfClgI3O45QKIdF9qd/UiCVhJEtZFASnmVpvqnXtJxLyHlTzKthXCaByQbbjtJljndino4sR9uHfb21dtNu1uTd0fsUUcii4Ho+mrbcrDZ8iyLGD1mblXHAwFgYB5JenvhhAxBDbD1AgnpMaN6XC1VC0Eu8C5ET3wXxSMu90cIIeeeVgrqUb2NoZOfnw4EAZ8OcyzJZ9h/ULaTIEQWAnn80XImxBXRxWEXy+PkKcybr8wDoeno8qqPyMtl/keMU/PzqHbqAi+xExyZreKTztHWgu1UkQZpGdvRi7RCKxQe/qqxTcshGUvjq2nNy33ZBZogXhhwZ0Axo/stJtq4+armFOdhF/dBCir00JUfOfGFIr5hOGLeqyvFRjWFyZFEJ53+jY87FtF9bv/pgMcw/afMlvM/uZZN8CL3/O7kmtZlm12eX+3rWhXfDNS8JuXycApdSPMIT9EoALYxQouo6jO5jaSlXkB1lTApKkPrZg+Yc2t6Jgl2k06ZphFM27GfJezD7k=
-  - secure: iW39PQ8QZOQVqkauqJlPJBykb5+S933wWn8WtYnwugDELYa7j9lbKxmxX6oDrrElXCC4PP95HZVV3IgRWLFAV/BfSTFw4yB9SOOimVKT+U1w3oO7MEhvyzWG9Vb9Eu2kNxqnyasmJZ72vWPxlAgYXmbDEpD3gq5XhOZF+mYwqEiS+iPVy35ICKTjtxkynEelgjs99OEet8u/WkWhql+/181ItPnq2ktBH5hb50Vok2LKqbHxXehrbtkh/ELdxGAG5aT4Ru5C/HYbbCw85TcDZxqrf0XrvTPa3aEH0WXmI1TL2jyFy+/0FAbQ/RuB7BvJIO0E9BRnHXG3tZyXSQepEKoGMWEglIs5mpTlj9f0L+ddVFQPRy6shV2nmcx9uXzkTInw/U3RZhEMJHKm3zt2cvvc1VQ4zNaL4xK+FCoZudqxqmey3t6390X3L5aV/eU9wD6+8/0EXVN6hGQ03mMjR6Wg7yqFXxBDNk07yh68PN/2OAetqZEKEhpMV1QYbkRM98it56neejtDy8jsIePjQfZvRPbZXjJIhIO5dHxlGVwKq7DrxUoPSunu/IoxLP78kc1JJgAqFKCDoenIEi4ylcgyqiKY47dp/orgDnlCqN5Xf7XGDGUcQTi/Usc6IEvqDstovvAasJMRavY0DKlekWK3fdfXqIY4iRNBVy5Ly2g=
-  - secure: X0baLkPR+UCBcZLSMfbH94+2Qdm/fXp4PFdxg3hoBKzXBpA/mFjkeMX/dLJCv9D4m+L+1NvlM1U6K4Px3FBPFZANxP9ONazSEUVVnN9283GTk+SNkM+oBXIfnSA1iByVl+qpuZM/5Z4kmuH8WUuYfYS0MjhRN0+2yqv4OzWaj7sk10krlhRAq7VENcPbFdSl489SaLRIHc3Ims58UBS84OjvXQhr3lOW0X5wnJiWRMyoEAK4/VfDs+Ol9MXVJyYyjp8TxTAjA35O4FKD6da5ef9ILFi6eWY6O4hRSEsFU7ehWPxCbZgWsfzHpU80xs4wAhA66VHUtHRljH74IUfCDAAizNvq7QzIwwuHuCZZK8Xf42w8CJBYmSpH4IAN5iA9Ozd4MJjjjk+XGYSSG1MVcvmFDMYD2dyM1eLTP8jRBEZ63NUUZMh7bFGmTYvXXt97K79GgYdOQAYqZgguvHos2rtOL7CnF+FFEXvj2c8202cPUhBK5bzqBSKW8HybbTItlBusZBzq3P7CRre+myGw0N8jn1Rj3aqV4qjURLl4rUzUrLqRwA7KSdN2zM7YA3bzqYKRdKcMe3rwv2uoXqVCCEGDoE8acqbcf6YoZwd2aXDkZ5/86Udmq3WVN6i0ZsMMdOTQjzM/JwQNXrosk1HPt6DKNqr/Gw5Zie5JBY6ElZc=
+    - secure: QwU82HMVqkEEM3yVKZ32PrPezo47hhZC8zKxq51NZEMjqrI7kz1F1Jdh9d9kdqwoCoJEFRF++HdhA3zdCofl/E4hR6S7q+XlofhYu0KZUbx358aQ8IpSPsxJC1zK+R0Uaj8CBzgXEcqQ75uRpyQ08V17v7T2jC16InxU+cdVfClgI3O45QKIdF9qd/UiCVhJEtZFASnmVpvqnXtJxLyHlTzKthXCaByQbbjtJljndino4sR9uHfb21dtNu1uTd0fsUUcii4Ho+mrbcrDZ8iyLGD1mblXHAwFgYB5JenvhhAxBDbD1AgnpMaN6XC1VC0Eu8C5ET3wXxSMu90cIIeeeVgrqUb2NoZOfnw4EAZ8OcyzJZ9h/ULaTIEQWAnn80XImxBXRxWEXy+PkKcybr8wDoeno8qqPyMtl/keMU/PzqHbqAi+xExyZreKTztHWgu1UkQZpGdvRi7RCKxQe/qqxTcshGUvjq2nNy33ZBZogXhhwZ0Axo/stJtq4+armFOdhF/dBCir00JUfOfGFIr5hOGLeqyvFRjWFyZFEJ53+jY87FtF9bv/pgMcw/afMlvM/uZZN8CL3/O7kmtZlm12eX+3rWhXfDNS8JuXycApdSPMIT9EoALYxQouo6jO5jaSlXkB1lTApKkPrZg+Yc2t6Jgl2k06ZphFM27GfJezD7k=
+    - secure: iW39PQ8QZOQVqkauqJlPJBykb5+S933wWn8WtYnwugDELYa7j9lbKxmxX6oDrrElXCC4PP95HZVV3IgRWLFAV/BfSTFw4yB9SOOimVKT+U1w3oO7MEhvyzWG9Vb9Eu2kNxqnyasmJZ72vWPxlAgYXmbDEpD3gq5XhOZF+mYwqEiS+iPVy35ICKTjtxkynEelgjs99OEet8u/WkWhql+/181ItPnq2ktBH5hb50Vok2LKqbHxXehrbtkh/ELdxGAG5aT4Ru5C/HYbbCw85TcDZxqrf0XrvTPa3aEH0WXmI1TL2jyFy+/0FAbQ/RuB7BvJIO0E9BRnHXG3tZyXSQepEKoGMWEglIs5mpTlj9f0L+ddVFQPRy6shV2nmcx9uXzkTInw/U3RZhEMJHKm3zt2cvvc1VQ4zNaL4xK+FCoZudqxqmey3t6390X3L5aV/eU9wD6+8/0EXVN6hGQ03mMjR6Wg7yqFXxBDNk07yh68PN/2OAetqZEKEhpMV1QYbkRM98it56neejtDy8jsIePjQfZvRPbZXjJIhIO5dHxlGVwKq7DrxUoPSunu/IoxLP78kc1JJgAqFKCDoenIEi4ylcgyqiKY47dp/orgDnlCqN5Xf7XGDGUcQTi/Usc6IEvqDstovvAasJMRavY0DKlekWK3fdfXqIY4iRNBVy5Ly2g=
+    - secure: X0baLkPR+UCBcZLSMfbH94+2Qdm/fXp4PFdxg3hoBKzXBpA/mFjkeMX/dLJCv9D4m+L+1NvlM1U6K4Px3FBPFZANxP9ONazSEUVVnN9283GTk+SNkM+oBXIfnSA1iByVl+qpuZM/5Z4kmuH8WUuYfYS0MjhRN0+2yqv4OzWaj7sk10krlhRAq7VENcPbFdSl489SaLRIHc3Ims58UBS84OjvXQhr3lOW0X5wnJiWRMyoEAK4/VfDs+Ol9MXVJyYyjp8TxTAjA35O4FKD6da5ef9ILFi6eWY6O4hRSEsFU7ehWPxCbZgWsfzHpU80xs4wAhA66VHUtHRljH74IUfCDAAizNvq7QzIwwuHuCZZK8Xf42w8CJBYmSpH4IAN5iA9Ozd4MJjjjk+XGYSSG1MVcvmFDMYD2dyM1eLTP8jRBEZ63NUUZMh7bFGmTYvXXt97K79GgYdOQAYqZgguvHos2rtOL7CnF+FFEXvj2c8202cPUhBK5bzqBSKW8HybbTItlBusZBzq3P7CRre+myGw0N8jn1Rj3aqV4qjURLl4rUzUrLqRwA7KSdN2zM7YA3bzqYKRdKcMe3rwv2uoXqVCCEGDoE8acqbcf6YoZwd2aXDkZ5/86Udmq3WVN6i0ZsMMdOTQjzM/JwQNXrosk1HPt6DKNqr/Gw5Zie5JBY6ElZc=

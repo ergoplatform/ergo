@@ -1,10 +1,11 @@
 os: linux
-dist: bionic
+dist: trusty
 language: scala
 jdk:
-  - openjdk11
-  - openjdk9
-  - openjdk8
+  - oraclejdk8
+  # - openjdk11
+  # - openjdk9
+  # - openjdk8
 scala:
   - 2.12.8
 stages:

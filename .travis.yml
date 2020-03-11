@@ -16,7 +16,7 @@ jobs:
     - stage: test
       name: "ergo"
       script:
-        - jdk_switcher use oraclejdk11
+        - jdk_switcher use oraclejdk10
         - sbt -Denv=test clean coverage compile
         - jdk_switcher use oraclejdk8
         - sbt -Denv=test coverage test coverageReport

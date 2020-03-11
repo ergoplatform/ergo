@@ -15,17 +15,16 @@ jobs:
   include:
     - stage: test
       name: "ergo"
-      env: SCRIPT_CMD="sbt -Denv=test clean coverage test coverageReport && sbt -Denv=test benchmarks/compile"
+      script: sbt -Denv=test clean coverage test coverageReport && sbt -Denv=test benchmarks/compile
     - stage: test
       name: "wallet"
-      env: SCRIPT_CMD="sbt +ergoWallet/test"
+      script: sbt +ergoWallet/test
     - stage: release
       jdk: openjdk9
-      env: SCRIPT_CMD="openssl aes-256-cbc -K $encrypted_394e5a7bea7c_key -iv $encrypted_394e5a7bea7c_iv -in ci/secring.asc.enc -out ci/secring.asc -d && gpg --import ci/secring.asc && sbt +ergoWallet/publishSigned sonatypeBundleRelease"
+      script: openssl aes-256-cbc -K $encrypted_394e5a7bea7c_key -iv $encrypted_394e5a7bea7c_iv -in ci/secring.asc.enc -out ci/secring.asc -d && gpg --import ci/secring.asc && sbt +ergoWallet/publishSigned sonatypeBundleRelease
     - stage: snapshot
       jdk: openjdk9
-      env: SCRIPT_CMD="sbt +ergoWallet/publish"
-script: $SCRIPT_CMD
+      script: sbt +ergoWallet/publish
 cache:
   directories:
     - "$HOME/.ivy2/cache"

@@ -8,18 +8,16 @@ jdk:
 scala:
   - 2.12.8
 stages:
-  - test
+  - name: test
   - name: release
     if: tag =~ ^v
   - name: snapshot
     if: "(NOT tag IS present) AND (type = push)"
 jobs:
   include:
-    - stage: test
-      name: "ergo"
+    - env: TEST="ergo"
       script: sbt -Denv=test clean coverage test coverageReport && sbt -Denv=test benchmarks/compile
-    - stage: test
-      name: "wallet"
+    - env: TEST="wallet"
       script: sbt +ergoWallet/test
     - stage: release
       jdk: openjdk8

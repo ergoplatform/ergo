@@ -1,8 +1,8 @@
 os: linux
-dist: trusty
+dist: bionic
 language: scala
 jdk:
-  - oraclejdk11
+  - openjdk11
 scala:
   - 2.12.10
 stages:
@@ -15,11 +15,7 @@ jobs:
   include:
     - stage: test
       name: "ergo"
-      script:
-        - jdk_switcher use oraclejdk10
-        - sbt -Denv=test clean coverage compile
-        - jdk_switcher use oraclejdk8
-        - sbt -Denv=test coverage test coverageReport
+      script: sbt -Denv=test clean coverage test coverageReport
     - stage: test
       name: "benchmarks"
       script: sbt -Denv=test clean benchmarks/compile

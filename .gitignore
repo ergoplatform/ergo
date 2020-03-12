@@ -55,3 +55,9 @@ local.conf
 
 # osx files
 .DS_Store
+
+# metals, bloop, vscode
+.bloop/
+.metals/
+.vscode/
+project/metals.sbt

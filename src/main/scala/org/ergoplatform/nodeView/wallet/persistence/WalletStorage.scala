@@ -4,14 +4,14 @@ import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication, ExternalApplicationSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedSecretKey}
+import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer, ExtendedSecretKey}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.PaymentsAppId
 import scorex.db.{LDBFactory, LDBKVStore}
 
-import scala.util.{Random, Success, Try}
+import scala.util.{Success, Try}
 
 /**
   * Persists version-agnostic wallet actor's mutable state:
@@ -37,11 +37,14 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
   }
 
   def addKey(publicKey: ExtendedPublicKey): Unit = {
-    val derivationPath = publicKey.path
-    addPath(derivationPath)
+    store.insert(Seq(pubKeyPrefixKey(publicKey) -> ExtendedPublicKeySerializer.toBytes(publicKey)))
   }
 
-  def readPaths: Seq[DerivationPath] = store
+  def readAllKeys(): Seq[ExtendedPublicKey] = store.getRange(FirstPublicKeyId, LastPublicKeyId).map { case (_, v) =>
+    ExtendedPublicKeySerializer.parseBytes(v)
+  }
+
+  def readPaths(): Seq[DerivationPath] = store
     .get(SecretPathsKey)
     .toSeq
     .flatMap { r =>
@@ -94,7 +97,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
   def lastUsedId: Short = store.lastKeyInRange(SmallestPossibleApplicationId, BiggestPossibleApplicationId)
     .map(bs => Shorts.fromByteArray(bs.takeRight(2)))
     .getOrElse(PaymentsAppId)
-  
+
 }
 
 object WalletStorage {
@@ -116,6 +119,8 @@ object WalletStorage {
   def noPrefixKey(keyString: String): Array[Byte] = Blake2b256.hash(keyString)
 
   def appPrefixKey(appId: Short): Array[Byte] = ApplicationPrefixArray ++ Shorts.toByteArray(appId)
+
+  def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = PublicKeyPrefixArray ++ pk.keyBytes
 
   //following keys do not start with ranged key prefix, i.e. with 8 zero bits
   val StateContextKey: Array[Byte] = noPrefixKey("state_ctx")

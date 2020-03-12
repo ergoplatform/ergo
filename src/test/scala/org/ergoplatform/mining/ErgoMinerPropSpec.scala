@@ -57,19 +57,21 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     us.applyModifier(validFullBlock(None, us, blockTx +: txs)) shouldBe 'success
   }
 
-
   property("filter out double spend txs") {
-    val cost = 1L
-    val tx = validErgoTransactionGen.sample.get._2 -> cost
-    ErgoMiner.fixTxsConflicts(Seq(tx, tx, tx)) should have length 1
+    val tx = validErgoTransactionGen.sample.get._2
+    ErgoMiner.doublespend(Seq(tx), tx) shouldBe true
 
     val inputs = validErgoTransactionGenTemplate(0, -1, 100).sample.get._1
     val (l, r) = inputs.splitAt(50)
-    val tx_1 = validTransactionFromBoxes(l) -> cost
-    val tx_2 = validTransactionFromBoxes(r :+ l.last) -> cost
+    val tx_1 = validTransactionFromBoxes(l)
+    val tx_2 = validTransactionFromBoxes(r :+ l.last) //conflicting with tx_1
+    val tx_3 = validTransactionFromBoxes(r) //conflicting with tx_2, not conflicting with tx_1
 
-    ErgoMiner.fixTxsConflicts(Seq(tx_1, tx_2, tx)) should contain theSameElementsAs Seq(tx_1, tx)
-    ErgoMiner.fixTxsConflicts(Seq(tx_2, tx_1, tx)) should contain theSameElementsAs Seq(tx_2, tx)
+    ErgoMiner.doublespend(Seq(tx_1), tx_2) shouldBe true
+    ErgoMiner.doublespend(Seq(tx_1), tx_3) shouldBe false
+    ErgoMiner.doublespend(Seq(tx_1, tx_2), tx_1) shouldBe true
+    ErgoMiner.doublespend(Seq(tx_1, tx_2), tx_2) shouldBe true
+    ErgoMiner.doublespend(Seq(tx_1, tx_3), tx) shouldBe false
   }
 
   property("should only collect valid transactions") {
@@ -86,15 +88,15 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       val upcomingContext = us.stateContext.upcoming(h.minerPk, h.timestamp, h.nBits, h.votes, emptyVSUpdate, h.version)
       upcomingContext.currentHeight shouldBe (us.stateContext.currentHeight + 1)
 
-      val fromSmallMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, us, upcomingContext, Seq(head), Seq())(validationSettingsNoIl)._1
+      val fromSmallMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, Int.MaxValue, us, upcomingContext, Seq(head), Seq())(validationSettingsNoIl)._1
       fromSmallMempool.size shouldBe 2
       fromSmallMempool.contains(head) shouldBe true
 
-      val fromBigMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, us, upcomingContext, txsWithFees, Seq())(validationSettingsNoIl)._1
+      val fromBigMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, Int.MaxValue, us, upcomingContext, txsWithFees, Seq())(validationSettingsNoIl)._1
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
       val costs: Seq[Long] = fromBigMempool.map { tx =>
-        us.validateWithCost(tx, Some(upcomingContext)).getOrElse {
+        us.validateWithCost(tx, Some(upcomingContext), Int.MaxValue).getOrElse {
           val boxesToSpend = tx.inputs.map(i => newBoxes.find(b => b.id sameElements i.boxId).get)
           tx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext).get
         }

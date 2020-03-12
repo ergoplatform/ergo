@@ -9,8 +9,8 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
-import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.boxes.ChainStatus
+import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.{ErgoAddress, P2PKAddress}
 import scorex.core.transaction.wallet.VaultReader
@@ -26,6 +26,11 @@ trait ErgoWalletReader extends VaultReader {
 
   private implicit val timeout: Timeout = Timeout(60, TimeUnit.SECONDS)
 
+  /** Returns the Future generated mnemonic phrase.
+    * @param pass   storage encription password
+    * @param mnemonicPassOpt  mnemonic encription password
+    * @return  menmonic phrase for the new wallet
+    */
   def initWallet(pass: String, mnemonicPassOpt: Option[String]): Future[Try[String]] =
     (walletActor ? InitWallet(pass, mnemonicPassOpt)).mapTo[Try[String]]
 
@@ -37,6 +42,9 @@ trait ErgoWalletReader extends VaultReader {
     (walletActor ? UnlockWallet(pass)).mapTo[Try[Unit]]
 
   def lockWallet(): Unit = walletActor ! LockWallet
+
+  def getLockStatus: Future[(Boolean, Boolean)] =
+    (walletActor ? GetLockStatus).mapTo[(Boolean, Boolean)]
 
   def deriveKey(path: String): Future[Try[P2PKAddress]] =
     (walletActor ? DeriveKey(path)).mapTo[Try[P2PKAddress]]
@@ -75,7 +83,8 @@ trait ErgoWalletReader extends VaultReader {
   def trackedAddresses: Future[Seq[ErgoAddress]] =
     (walletActor ? ReadTrackedAddresses).mapTo[Seq[ErgoAddress]]
 
-  def generateTransaction(requests: Seq[TransactionRequest]): Future[Try[ErgoTransaction]] =
-    (walletActor ? GenerateTransaction(requests)).mapTo[Try[ErgoTransaction]]
+  def generateTransaction(requests: Seq[TransactionRequest],
+                          inputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
+    (walletActor ? GenerateTransaction(requests, inputsRaw)).mapTo[Try[ErgoTransaction]]
 
 }

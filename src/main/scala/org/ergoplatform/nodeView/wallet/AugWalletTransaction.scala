@@ -1,9 +1,9 @@
 package org.ergoplatform.nodeView.wallet
 
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, Json}
-import org.ergoplatform.ErgoBox.BoxId
+import io.circe._
 import org.ergoplatform._
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 
 /**
@@ -11,9 +11,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
   */
 final case class AugWalletTransaction(wtx: WalletTransaction, numConfirmations: Int)
 
-object AugWalletTransaction {
-
-  import ErgoTransaction._
+object AugWalletTransaction extends ApiCodecs {
 
   def boxEncoder(e: ErgoAddressEncoder): Encoder[ErgoBox] = { box =>
     Json.obj(
@@ -23,7 +21,7 @@ object AugWalletTransaction {
       "address" -> e.fromProposition(box.ergoTree).toOption.map(_.toString).asJson,
       "assets" -> box.additionalTokens.toArray.toSeq.asJson,
       "creationHeight" -> box.creationHeight.asJson,
-      "additionalRegisters" -> registersEncoder(box.additionalRegisters)
+      "additionalRegisters" -> box.additionalRegisters.asJson
     )
   }
 
@@ -33,24 +31,21 @@ object AugWalletTransaction {
       "id" -> obj.wtx.tx.id.asJson,
       "inputs" -> obj.wtx.tx.inputs.asJson,
       "dataInputs" -> obj.wtx.tx.dataInputs.asJson,
-      "outputs" -> obj.wtx.tx.outputs.asJson,
+      // explicitly use custom ErgoBox encoder defined above
+      "outputs" -> obj.wtx.tx.outputs.toSeq.asJson(Encoder.encodeSeq(enc)),
       "size" -> obj.wtx.tx.size.asJson,
       "inclusionHeight" -> obj.wtx.inclusionHeight.asJson,
+      "applicationId" -> obj.wtx.applicationId.asJson,
       "numConfirmations" -> obj.numConfirmations.asJson
     )
   }
 
   implicit val jsonDecoder: Decoder[AugWalletTransaction] = { c =>
     for {
-      inputs <- c.downField("inputs").as[IndexedSeq[Input]]
-      dataInputs <- c.downField("dataInputs").as[IndexedSeq[DataInput]]
-      outputsWithIndex <- c.downField("outputs").as[IndexedSeq[(ErgoBoxCandidate, Option[BoxId])]]
+      ergoTx <- c.as[ErgoTransaction]
       inclusionHeight <- c.downField("inclusionHeight").as[Int]
       numConfirmations <- c.downField("numConfirmations").as[Int]
-    } yield AugWalletTransaction(
-      WalletTransaction(new ErgoTransaction(inputs, dataInputs, outputsWithIndex.map(_._1)), inclusionHeight),
-      numConfirmations
-    )
+      appId <- c.downField("applicationId").as[Short]} yield AugWalletTransaction(WalletTransaction(ergoTx, inclusionHeight, appId), numConfirmations)
   }
 
 }

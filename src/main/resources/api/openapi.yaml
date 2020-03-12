@@ -1,7 +1,7 @@
-openapi: "3.0.1"
+openapi: "3.0.2"
 
 info:
-  version: "0.1"
+  version: "3.2.1"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -31,6 +31,12 @@ components:
           $ref: '#/components/schemas/TransactionBoxId'
         spendingProof:
           $ref: '#/components/schemas/SpendingProof'
+        extension:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SValue'
+          example:
+            '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
     ErgoTransactionDataInput:
       type: object
@@ -39,6 +45,12 @@ components:
       properties:
         boxId:
           $ref: '#/components/schemas/TransactionBoxId'
+        extension:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SValue'
+          example:
+            '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
     SpendingProof:
       description: Spending proof for transaction input
@@ -98,6 +110,12 @@ components:
             $ref: '#/components/schemas/Asset'
         additionalRegisters:
           $ref: '#/components/schemas/Registers'
+        transactionId:
+          $ref: '#/components/schemas/TransactionId'
+        index:
+          description: Index in the transaction outputs
+          type: integer
+          format: int32
 
     WalletBox:
       type: object
@@ -113,6 +131,7 @@ components:
         - spendingHeight
         - inclusionHeight
         - spent
+        - applicationId
       properties:
         box:
           $ref: '#/components/schemas/ErgoTransactionOutput'
@@ -162,10 +181,16 @@ components:
           type: integer
           format: int32
           example: 2
+        applicationId:
+          description: Application identifier a box relates to
+          type: integer
+          format: int16
+          example: 1
+          default: 1
 
     ErgoTransaction:
       type: object
-      description: Transaction without any lockers and unlockers
+      description: Ergo transaction
       required:
       - inputs
       - dataInputs
@@ -195,13 +220,14 @@ components:
 
     WalletTransaction:
       type: object
-      description: Transaction without any lockers and unlockers
+      description: Transaction augmented with some useful information
       required:
         - inputs
         - dataInputs
         - outputs
         - inclusionHeight
         - numConfirmations
+        - applicationId
       properties:
         id:
           $ref: '#/components/schemas/TransactionId'
@@ -230,6 +256,12 @@ components:
           type: integer
           format: int32
           example: 20998
+        applicationId:
+          description: Application identifier a transaction relates to
+          type: integer
+          format: int16
+          example: 1
+          default: 1
         size:
           description: Size in bytes
           type: integer
@@ -254,7 +286,6 @@ components:
       type: object
       required:
       - requests
-      - fee
       properties:
         requests:
           description: Sequence of transaction requests
@@ -268,6 +299,12 @@ components:
           type: integer
           format: int64
           example: 1000000
+        inputsRaw:
+          description: List of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
 
     SourceHolder:
       type: object
@@ -277,6 +314,311 @@ components:
         source:
           description: Sigma source to be compiled
           type: string
+
+    ErgoLikeTransaction:
+      type: object
+      required:
+        - id
+        - inputs
+        - dataInputs
+        - outputs
+      properties:
+        id:
+          type: object
+          $ref: '#/components/schemas/ModifierId'
+        inputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionInput'
+        dataInputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
+        outputs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+
+    SigmaHeader:
+      type: object
+      description: Block header format used for sigma ErgoLikeContext
+      required:
+        - timestamp
+        - version
+        - adProofsRoot
+        - stateRoot
+        - transactionsRoot
+        - nBits
+        - extensionHash
+        - height
+        - parentId
+        - votes
+      properties:
+        id:
+          $ref: '#/components/schemas/ModifierId'
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        version:
+          $ref: '#/components/schemas/Version'
+        adProofsRoot:
+          $ref: '#/components/schemas/Digest32'
+        adProofsId:
+          $ref: '#/components/schemas/ModifierId'
+        stateRoot:
+          $ref: '#/components/schemas/AvlTreeData'
+        transactionsRoot:
+          $ref: '#/components/schemas/Digest32'
+        transactionsId:
+          $ref: '#/components/schemas/ModifierId'
+        nBits:
+          type: integer
+          format: int64
+          minimum: 0
+          example: 19857408
+        extensionHash:
+          $ref: '#/components/schemas/Digest32'
+        extensionRoot:
+          $ref: '#/components/schemas/Digest32'
+        extensionId:
+          $ref: '#/components/schemas/ModifierId'
+        height:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 667
+        size:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 667
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+        powSolutions:
+          $ref: '#/components/schemas/PowSolutions'
+        votes:
+          $ref: '#/components/schemas/Votes'
+        minerPk:
+          type: string
+          example: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        powOnetimePk:
+          type: string
+          example: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        powNonce:
+          $ref: '#/components/schemas/Digest32'
+        powDistance:
+          type: number
+          description: sigma.BigInt
+          example: 123456789
+
+    PreHeader:
+      type: object
+      required:
+        - timestamp
+        - version
+        - nBits
+        - height
+        - parentId
+        - votes
+      properties:
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        version:
+          $ref: '#/components/schemas/Version'
+        nBits:
+          type: integer
+          format: int64
+          minimum: 0
+          example: 19857408
+        height:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 667
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+        votes:
+          $ref: '#/components/schemas/Votes'
+        minerPk:
+          type: string
+          example: "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+
+    AvlTreeData:
+      required:
+        - digest
+      properties:
+        digest:
+          $ref: '#/components/schemas/Digest32'
+        treeFlags:
+          type: integer
+          format: int32
+        keyLength:
+          type: integer
+          format: int32
+        valueLength:
+          type: integer
+          format: int32
+          nullable: true
+
+
+    ErgoLikeContext:
+      required:
+       - lastBlockUtxoRoot
+       - headers
+       - preHeader
+       - dataBoxes
+       - boxesToSpend
+       - spendingTransaction
+       - selfIndex
+       - extension
+       - validationSettings
+       - costLimit
+       - initCost
+      properties:
+        lastBlockUtxoRoot:
+          type: object
+          description: state root before current block application
+          $ref: '#/components/schemas/AvlTreeData'
+        headers:
+          type: array
+          description: fixed number of last block headers in descending order (first header is the newest one)
+          items:
+            $ref: '#/components/schemas/SigmaHeader'
+        preHeader:
+          type: object
+          description: fields of block header with the current `spendingTransaction`, that can be predicted by a miner before it's formation
+          $ref: '#/components/schemas/PreHeader'
+        dataBoxes:
+          type: array
+          description: boxes, that corresponds to id's of `spendingTransaction.dataInputs`
+          items:
+            type: ErgoBox
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+        boxesToSpend:
+          type: array
+          description: boxes, that corresponds to id's of `spendingTransaction.inputs`
+          items:
+            type: ErgoBox
+            $ref: '#/components/schemas/ErgoTransactionOutput'
+        spendingTransaction:
+          type: object
+          description: transaction that contains `self` box
+          $ref: '#/components/schemas/ErgoLikeTransaction'
+        selfIndex:
+          type: integer
+          format: int64
+          description: index of the box in `boxesToSpend` that contains the script we're evaluating
+        extension:
+          type: object
+          description: prover-defined key-value pairs, that may be used inside a script
+        validationSettings:
+          type: string
+          description: validataion parameters passed to Interpreter.verify to detect soft-fork conditions
+          example: "10e8070001e9070001ea070001eb070001ec070001ed070001ee070001ef070001f0070001f1070001f2070001f3070001f4070001f5070001f6070001f7070001"
+        costLimit:
+          type: integer
+          format: int64
+          description: hard limit on accumulated execution cost, if exceeded lead to CostLimitException to be thrown
+        initCost:
+          type: integer
+          format: int64
+          description: initial value of execution cost already accumulated before Interpreter.verify is called
+
+
+    ExecuteScript:
+      type: object
+      required:
+      - script
+      - namedConstants
+      - context
+      properties:
+        script:
+          description: Sigma script to be executed
+          type: string
+        namedConstants:
+          description: Environment for compiler
+          type: object
+          nullable: true
+        context:
+          description: Interpretator context
+          type: object
+          nullable: true
+          $ref: '#/components/schemas/ErgoLikeContext'
+
+    SigmaBoolean:
+      description: Algebraic data type of sigma proposition expressions
+      required:
+        - op
+      properties:
+        op:
+          type: integer
+          description: Sigma opCode
+          format: int8
+        h:
+          $ref: '#/components/schemas/HexString'
+        g:
+          $ref: '#/components/schemas/HexString'
+        u:
+          $ref: '#/components/schemas/HexString'
+        v:
+          $ref: '#/components/schemas/HexString'
+        condition:
+          type: boolean
+
+    SigmaBooleanAndPredicate:
+      allOf:
+        - $ref: '#/components/schemas/SigmaBoolean'
+        - type: object
+        - required:
+            - args
+        - properties:
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/SigmaBoolean'
+
+    SigmaBooleanOrPredicate:
+      allOf:
+        - $ref: '#/components/schemas/SigmaBoolean'
+        - type: object
+        - required:
+            - args
+        - properties:
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/SigmaBoolean'
+
+    SigmaBooleanThresholdPredicate:
+      allOf:
+        - $ref: '#/components/schemas/SigmaBoolean'
+        - type: object
+        - required:
+            - args
+        - properties:
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/SigmaBoolean'
+
+    CryptoResult:
+      description: Result of executeWithContext request (reduceToCrypto)
+      type: object
+      required:
+      - value
+      - cost
+      properties:
+        value:
+          description: value of SigmaProp type which represents a statement verifiable via sigma protocol
+          $ref: '#/components/schemas/SigmaBoolean'
+        cost:
+          description: Estimated cost of contract execution
+          type: integer
+          format: int64
+      example:
+        value:
+          op: -45
+          condition: true
+        cost: 10
 
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
@@ -299,11 +641,6 @@ components:
             $ref: '#/components/schemas/Asset'
         registers:
           $ref: '#/components/schemas/Registers'
-        fee:
-          description: Optional, default transaction fee from settings will be used if not defined
-          type: integer
-          format: int64
-          example: 1000000
 
     AssetIssueRequest:
       description: Request for generation of asset issue transaction
@@ -1417,6 +1754,8 @@ paths:
   /peers/connect:
     post:
       summary: Add address to peers list
+      security:
+        - ApiKeyAuth: [api_key]
       operationId: connectToPeer
       tags:
       - peers
@@ -1426,7 +1765,7 @@ paths:
           application/json:
             schema:
               type: string
-              example: '127.0.0.1:5673'
+              example: '"127.0.0.1:5673"'
       responses:
         '200':
           description: Attempt to connect to the peer
@@ -1473,7 +1812,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: '7e1e79dd4936bdc7d09f4ba9212849136b589fba4bcf4263a0961a95b65d08cb16'
+                example: '"7e1e79dd4936bdc7d09f4ba9212849136b589fba4bcf4263a0961a95b65d08cb16"'
         default:
           description: Error
           content:
@@ -1564,6 +1903,34 @@ paths:
             schema:
               $ref: '#/components/schemas/ApiError'
 
+  /utils/ergoTreeToAddress/{ergoTreeHex}:
+    get:
+      summary: Generate Ergo address from hex-encoded ErgoTree
+      operationId: ErgoTreeToAddress
+      tags:
+        - utils
+      parameters:
+        - in: path
+          name: ergoTreeHex
+          required: true
+          description: ErgoTree to derive an address from
+          schema:
+            type: string
+            example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
+      responses:
+        '200':
+          description: Ergo address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoAddress'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /utils/seed/{length}:
     get:
       summary: Generate random seed of specified length in bytes
@@ -1584,7 +1951,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: '83375fd213cfd7dfd984ce1901d62c302a1db53160b416674c8da1a393a6bbc316'
+                example: '"83375fd213cfd7dfd984ce1901d62c302a1db53160b416674c8da1a393a6bbc316"'
         default:
           description: Error
           content:
@@ -1604,7 +1971,7 @@ paths:
           application/json:
             schema:
               type: string
-              example: '7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV'
+              example: '"7yaASMijGEGTbttYHg1MrXnWB8EbzjJnFLSWvmNoHrXV"'
       responses:
         '200':
           description: Base16-encoded 32 byte hash
@@ -1612,7 +1979,7 @@ paths:
             application/json:
               schema:
                 type: string
-                example: '7e1e79dd4936bdc7d09f4ba9212849136b589fba4bcf4263a0961a95b65d08cb16'
+                example: '"6ed54addddaf10fe8fcda330bd443a57914fbce38a9fa27248b07e361cc76a41"'
         default:
           description: Error
           content:
@@ -1741,6 +2108,38 @@ paths:
       responses:
         '200':
           description: Wallet locked successfully
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/status:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get wallet status
+      operationId: getWalletStatus
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Wallet status
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - isInitialized
+                  - isUnlocked
+                properties:
+                  isInitialized:
+                    type: boolean
+                    description: true if wallet is initialized, false otherwise
+                  isUnlocked:
+                    type: boolean
+                    description: true if wallet is unlocked, false otherwise
         default:
           description: Error
           content:
@@ -2053,7 +2452,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /wallet/balances/with_unconfirmed:
+  /wallet/balances/withUnconfirmed:
     get:
       security:
       - ApiKeyAuth: [api_key]
@@ -2099,83 +2498,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /wallet/p2s_address:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Create P2SAddress from Sigma source
-      operationId: walletP2SAddress
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SourceHolder'
-      responses:
-        '200':
-          description: Ergo address derived from source
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AddressHolder'
-        '400':
-          description: Bad source
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-  /wallet/p2sh_address:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Create P2SHAddress from Sigma source
-      operationId: walletP2SAddress
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SourceHolder'
-      responses:
-        '200':
-          description: Ergo address derived from source
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AddressHolder'
-        '400':
-          description: Bad source
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
   /wallet/transaction/generate:
     post:
       security:
       - ApiKeyAuth: [api_key]
-      summary: Generate arbitrary transaction
+      summary: Generate arbitrary transaction from array of requests.
       operationId: walletTransactionGenerate
       tags:
       - wallet
       requestBody:
+        description: This API method receives a sequence of requests as an input. Each request will produce an output
+          of the resulting transaction (with fee output created automatically). Currently supported types of requests are
+          payment and asset issuance requests. An example for a transaction with requests of both kinds is provided below.
+          Please note that for the payment request "assets" and "registers" fields are not needed.
+          For asset issuance request, "registers" field is not needed.
+
+          You may specify boxes to spend by providing them in "inputsRaw". Please note you need to have strict equality between
+          input and output total amounts of Ergs in this case. If you want wallet to pick up the boxes,
+          leave "inputsRaw" empty.
         required: true
         content:
           application/json:
@@ -2210,6 +2550,7 @@ paths:
       tags:
       - wallet
       requestBody:
+        description: See description of /wallet/transaction/generate
         required: true
         content:
           application/json:
@@ -2235,50 +2576,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /wallet/payment/generate:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Generate payment transaction
-      operationId: walletPaymentTransactionGenerate
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/PaymentRequest'
-      responses:
-        '200':
-          description: Generated Ergo transaction
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErgoTransaction'
-        '400':
-          description: Bad payment request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
   /wallet/payment/send:
     post:
       security:
-      - ApiKeyAuth: [api_key]
-      summary: Generate and send payment transaction
+        - ApiKeyAuth: [api_key]
+      summary: Generate and send payment transaction (default fee of 0.001 Erg is used)
       operationId: walletPaymentTransactionGenerateAndSend
       tags:
-      - wallet
+        - wallet
       requestBody:
         required: true
         content:
@@ -2296,78 +2601,6 @@ paths:
                 $ref: '#/components/schemas/TransactionId'
         '400':
           description: Bad payment request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-  /wallet/assets/generate:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Generate asset issue transaction
-      operationId: walletAssetIssueTransactionGenerate
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/AssetIssueRequest'
-      responses:
-        '200':
-          description: Generated Ergo transaction
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErgoTransaction'
-        '400':
-          description: Bad asset issue request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-  /wallet/assets/issue:
-    post:
-      security:
-      - ApiKeyAuth: [api_key]
-      summary: Generate and send asset issue transaction
-      operationId: walletAssetIssueTransactionGenerateAndSend
-      tags:
-      - wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/AssetIssueRequest'
-      responses:
-        '200':
-          description: Identifier of an Ergo transaction generated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransactionId'
-        '400':
-          description: Bad asset issue request
           content:
             application/json:
               schema:
@@ -2551,3 +2784,141 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
+
+  /script/p2sAddress:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Create P2SAddress from Sigma source
+      operationId: scriptP2SAddress
+      tags:
+        - script
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceHolder'
+      responses:
+        '200':
+          description: Ergo address derived from source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressHolder'
+        '400':
+          description: Bad source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /script/p2shAddress:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Create P2SHAddress from Sigma source
+      operationId: scriptP2SAddress
+      tags:
+        - script
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceHolder'
+      responses:
+        '200':
+          description: Ergo address derived from source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressHolder'
+        '400':
+          description: Bad source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+
+  /script/addressToTree/{address}:
+    get:
+      summary: Convert an address to hex-encoded serialized ErgoTree (script)
+      operationId: addressToTree
+      tags:
+        - script
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to get a script from
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: Base16-encoded ErgoTree (script)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tree:
+                    type: string
+                    description: serialized Ergo tree
+                    example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /script/executeWithContext:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Execute script with context
+      operationId: executeWithContext
+      tags:
+        - script
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteScript'
+      responses:
+        '200':
+          description: Result of reduceToCrypto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CryptoResult'
+        '400':
+          description: Compiler error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+

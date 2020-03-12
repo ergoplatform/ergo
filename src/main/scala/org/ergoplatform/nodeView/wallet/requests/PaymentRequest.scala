@@ -11,12 +11,12 @@ import sigmastate.SType
 import sigmastate.Values.EvaluatedValue
 
 /**
-  * A payment request contains a script, value, assets, additional registers.
+  * A payment request contains an address (probably containing script), value, assets, additional registers.
   */
 case class PaymentRequest(address: ErgoAddress,
                           value: Long,
-                          assets: Option[Seq[(ErgoBox.TokenId, Long)]],
-                          registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]])
+                          assets: Seq[(ErgoBox.TokenId, Long)],
+                          registers: Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]])
   extends TransactionRequest
 
 class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentRequest] {
@@ -46,7 +46,7 @@ class PaymentRequestDecoder(settings: ErgoSettings) extends Decoder[PaymentReque
       value <- cursor.downField("value").as[Long]
       assets <- cursor.downField("assets").as[Option[Seq[(ErgoBox.TokenId, Long)]]]
       registers <- cursor.downField("registers").as[Option[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]]
-    } yield PaymentRequest(address, value, assets, registers)
+    } yield PaymentRequest(address, value, assets.toSeq.flatten, registers.getOrElse(Map.empty))
   }
 
 }

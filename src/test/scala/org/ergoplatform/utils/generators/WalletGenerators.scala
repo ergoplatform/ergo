@@ -1,22 +1,16 @@
 package org.ergoplatform.utils.generators
 
+import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlock, RegistryIndex}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
-import org.ergoplatform._
+import org.ergoplatform.wallet.secrets.{DerivationPath, Index}
 import org.scalacheck.Gen
-import scorex.crypto.authds.ADKey
-import scorex.util.{ModifierId, idToBytes}
 
 trait WalletGenerators extends ErgoTransactionGenerators {
-
-  private val ergoSettings = ErgoSettings.read()
-  private implicit val ergoAddressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
-
-  def trackedAddressGen: Gen[ErgoAddress] = proveDlogGen.map(P2PKAddress.apply)
 
   def trackedBoxGen: Gen[TrackedBox] = {
     Gen.oneOf(
@@ -34,7 +28,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       outIndex <- outIndexGen(tx)
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield TrackedBox(tx, outIndex, None, ergoBox, certainty)
+      appId <- Gen.posNum[Short]
+    } yield TrackedBox(tx, outIndex, None, ergoBox, certainty, appId)
   }
 
   def unspentOnchainBoxGen: Gen[TrackedBox] = {
@@ -44,7 +39,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       height <- heightGen()
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield TrackedBox(tx, outIndex, Some(height), ergoBox, certainty)
+      appId <- Gen.posNum[Short]
+    } yield TrackedBox(tx, outIndex, Some(height), ergoBox, certainty, appId)
   }
 
   def spentOffchainBoxGen: Gen[TrackedBox] = {
@@ -54,7 +50,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       outIndex <- outIndexGen(tx)
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield TrackedBox(tx.id, outIndex, None, Some(spendingTx.id), None, ergoBox, certainty)
+      appId <- Gen.posNum[Short]
+    } yield TrackedBox(tx.id, outIndex, None, Some(spendingTx.id), None, ergoBox, certainty, appId)
   }
 
   def spentPartiallyOffchainBoxGen: Gen[TrackedBox] = {
@@ -65,7 +62,8 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       height <- heightGen()
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield TrackedBox(tx.id, outIndex, Some(height), Some(spendingTx.id), None, ergoBox, certainty)
+      appId <- Gen.posNum[Short]
+    } yield TrackedBox(tx.id, outIndex, Some(height), Some(spendingTx.id), None, ergoBox, certainty, appId)
   }
 
   def spentOnchainBoxGen: Gen[TrackedBox] = {
@@ -77,14 +75,16 @@ trait WalletGenerators extends ErgoTransactionGenerators {
       spendingHeight <- heightGen(height)
       ergoBox <- Gen.oneOf(boxes)
       certainty <- Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)
-    } yield TrackedBox(tx.id, outIndex, Some(height), Some(spendingTx.id), Some(spendingHeight), ergoBox, certainty)
+      appId <- Gen.posNum[Short]
+    } yield TrackedBox(
+      tx.id, outIndex, Some(height), Some(spendingTx.id), Some(spendingHeight), ergoBox, certainty, appId)
   }
 
   def paymentRequestGen: Gen[PaymentRequest] = {
     for {
       value <- Gen.choose(1L, 100000L)
-      assets <- Gen.option(additionalTokensGen)
-      registers <- Gen.option(additionalRegistersGen)
+      assets <- additionalTokensGen
+      registers <- additionalRegistersGen
     } yield PaymentRequest(Pay2SAddress(Constants.FalseLeaf), value, assets, registers)
   }
 
@@ -114,6 +114,12 @@ trait WalletGenerators extends ErgoTransactionGenerators {
     id <- modifierIdGen
     txs <- Gen.listOf(invalidErgoTransactionGen)
   } yield PostponedBlock(id, height, txs)
+
+  def derivationPathGen: Gen[DerivationPath] = for {
+    isPublic <- Gen.oneOf(Seq(true, false))
+    indices <- Gen.listOf(Gen.oneOf(Seq(true, false))
+      .flatMap(x => Gen.posNum[Int].map(i => if (x) Index.hardIndex(i) else i)))
+  } yield DerivationPath(0 +: indices, isPublic)
 
   private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)
 

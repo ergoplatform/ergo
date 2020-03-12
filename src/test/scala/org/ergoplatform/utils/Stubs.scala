@@ -22,7 +22,7 @@ import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTr
 import org.ergoplatform.wallet.boxes.{BoxCertainty, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.DerivationPath
-import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
+import org.ergoplatform.P2PKAddress
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
@@ -30,7 +30,6 @@ import scorex.core.network.{Handshake, PeerSpec}
 import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
-import scorex.testkit.utils.FileUtils
 import scorex.util.Random
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
@@ -38,7 +37,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Success
 
-trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with FileUtils {
+trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with scorex.testkit.utils.FileUtils {
 
   implicit val system: ActorSystem
 
@@ -50,7 +49,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
       DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
     }
-  }.sample.value
+    }.sample.value
 
   lazy val wallet = new WalletStub
 
@@ -97,7 +96,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   class NodeViewStub extends Actor {
-    def receive:Receive = {
+    def receive: Receive = {
       case _ =>
     }
   }
@@ -131,7 +130,6 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     import WalletActorStub.{walletBox10_10, walletBox20_30, walletBoxSpent21_31, walletTxs}
 
-    private implicit val addressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
     private val prover: ErgoProvingInterpreter = defaultProver
     private val trackedAddresses: Seq[P2PKAddress] = prover.pubKeys.map(P2PKAddress.apply)
 
@@ -144,6 +142,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case _: UnlockWallet => sender() ! Success(())
 
       case LockWallet => ()
+
+      case GetLockStatus => sender() ! (true, true)
 
       case GetBoxes(unspentOnly) =>
         val boxes = if (unspentOnly) {
@@ -169,7 +169,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case ReadTrackedAddresses =>
         sender ! trackedAddresses
 
-      case GenerateTransaction(_) =>
+      case GenerateTransaction(_, _) =>
         val input = ErgoTransactionGenerators.inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
         sender ! Success(tx)
@@ -177,9 +177,6 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
   object WalletActorStub {
-
-    private implicit val addressEncoder: ErgoAddressEncoder =
-      ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
     val seed: String = "walletstub"
     val mnemonic: String = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
@@ -194,7 +191,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         spendingTxIdOpt = Some(modifierIdGen.sample.get),
         spendingHeightOpt = None,
         box = ergoBoxGen.sample.get,
-        certainty = BoxCertainty.Certain
+        certainty = BoxCertainty.Certain,
+        applicationId = Constants.DefaultAppId
       ),
       confirmationsNumOpt = Some(10)
     )
@@ -213,8 +211,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val walletTxs: Seq[AugWalletTransaction] = Seq(augWalletTransactionGen.sample.get, augWalletTransactionGen.sample.get)
 
     def props(): Props = Props(new WalletActorStub)
+
     def balance(chainStatus: ChainStatus): Long = if (chainStatus.onChain) confirmedBalance else unconfirmedBalance
+
     def confirmedBalance: Long = 1L
+
     def unconfirmedBalance: Long = 2L
   }
 
@@ -251,16 +252,15 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val miningDelay = 1.second
     val minimalSuffix = 2
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
-      offlineGeneration = false, 200, 100000, 100000, 1.minute, 1000000)
+      PoPoWBootstrap, minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
+      offlineGeneration = false, 200, 100000, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
     val scorexSettings: ScorexSettings = null
     val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
-    val monetarySettings = settings.chainSettings.monetary
     val chainSettings = settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs)
 
     val dir = createTempDir
-    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, chainSettings, testingSettings,
+    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings, testingSettings,
       nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)

@@ -8,7 +8,7 @@ import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{ErgoTestHelpers, WalletTestOps}
 import org.scalatest.FlatSpec
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SuccessfulTransaction

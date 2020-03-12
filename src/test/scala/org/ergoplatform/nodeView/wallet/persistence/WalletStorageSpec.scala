@@ -25,7 +25,17 @@ class WalletStorageSpec
       withStore { store =>
         val storage = new WalletStorage(store, settings)
         paths.foreach(storage.addPath)
-        storage.readPaths should contain theSameElementsAs paths.toSet
+        storage.readPaths() should contain theSameElementsAs paths.toSet
+      }
+    }
+  }
+
+  it should "add and read public keys" in {
+    forAll(Gen.nonEmptyListOf(extendedPubKeyGen)) { pubKeys =>
+      withStore { store =>
+        val storage = new WalletStorage(store, settings)
+        pubKeys.foreach(storage.addKey)
+        storage.readAllKeys() should contain theSameElementsAs pubKeys.toSet
       }
     }
   }

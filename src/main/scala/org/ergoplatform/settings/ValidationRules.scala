@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.ErgoConstants.{MaxBoxSize, MaxPropositionBytes}
+import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -56,7 +56,7 @@ object ValidationRules {
     txDust -> RuleStatus(s => fatal(s"Every output of the transaction should contain at least <minValuePerByte * outputSize> nanoErgs. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
-    txFuture -> RuleStatus(s => fatal(s"Transaction outputs should have creationHeight the does not exceed the block height. $s"),
+    txFuture -> RuleStatus(s => fatal(s"Transaction outputs should have creationHeight not exceeding block height. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
     txBoxesToSpend -> RuleStatus(s => fatal(s"Every input of the transaction should be in UTXO. $s"),
@@ -131,7 +131,7 @@ object ValidationRules {
     hdrVotesContradictory -> RuleStatus(s => fatal(s"A header votes should contain no contradictory votes. $s"),
       Seq(classOf[Header]),
       mayBeDisabled = false),
-    hdrVotesUnknown -> RuleStatus(s => fatal(s"A header should not contain votes for unknown parameters. $s"),
+    hdrVotesUnknown -> RuleStatus(s => fatal(s"First header of an epoch should not contain a vote for unknown parameter. $s"),
       Seq(classOf[Header]),
       mayBeDisabled = true),
 

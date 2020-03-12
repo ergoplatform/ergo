@@ -2,7 +2,8 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
+import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
@@ -30,7 +31,10 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
 
   override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ids.flatMap(pool.get)
 
-  override def getAllPrioritized: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq.reverse
+  /**
+    * Returns all transactions resided in pool sorted by weight in descending order
+    */
+  override def getAllPrioritized: Seq[ErgoTransaction] = pool.orderedTransactions.values.toSeq
 
   override def put(tx: ErgoTransaction): Try[ErgoMemPool] = put(Seq(tx))
 
@@ -60,7 +64,16 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     val minFee = settings.nodeSettings.minimalFeeAmount
     if (fee >= minFee) {
       state match {
+        case utxo: UtxoState if pool.canAccept(tx) =>
+          // Allow proceeded transaction to spend outputs of pooled transactions.
+          utxo.withTransactions(getAll).validate(tx).fold(
+            new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
+            _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+          )
+
         case validator: TransactionValidation[ErgoTransaction@unchecked] if pool.canAccept(tx) =>
+          // transaction validation currently works only for UtxoState, so this branch currently
+          // will not be triggered probably
           validator.validate(tx).fold(
             new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
             _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
@@ -78,13 +91,13 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     }
   }
 
-  private def extractFee(tx: ErgoTransaction): Long = {
-    val propositionBytes = settings.chainSettings.monetary.feePropositionBytes
+  def weightedTransactionIds(limit: Int): Seq[WeightedTxId] = pool.orderedTransactions.keysIterator.take(limit).toSeq
+
+  private def extractFee(tx: ErgoTransaction): Long =
     ErgoState.boxChanges(Seq(tx))._2
       .filter(_.ergoTree == settings.chainSettings.monetary.feeProposition)
       .map(_.value)
       .sum
-  }
 
 }
 
@@ -93,9 +106,13 @@ object ErgoMemPool {
   sealed trait ProcessingOutcome
 
   object ProcessingOutcome {
+
     case object Accepted extends ProcessingOutcome
+
     case class Declined(e: Throwable) extends ProcessingOutcome
+
     case class Invalidated(e: Throwable) extends ProcessingOutcome
+
   }
 
   type MemPoolRequest = Seq[ModifierId]

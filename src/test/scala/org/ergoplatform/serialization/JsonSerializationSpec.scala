@@ -4,9 +4,9 @@ import io.circe.syntax._
 import io.circe.{ACursor, Decoder, Encoder, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
-import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.api.ApiEncoderOption.HideDetails.implicitValue
-import org.ergoplatform.api.ApiEncoderOption.{Detalization, ShowDetails}
+import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
+import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._
@@ -57,7 +57,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
       restored.address shouldEqual request.address
       restored.value shouldEqual request.value
       restored.registers shouldEqual request.registers
-      Inspectors.forAll(restored.assets.getOrElse(Seq.empty).zip(request.assets.getOrElse(Seq.empty))) {
+      Inspectors.forAll(restored.assets.zip(request.assets)) {
         case ((restoredToken, restoredValue), (requestToken, requestValue)) =>
           restoredToken shouldEqual requestToken
           restoredValue shouldEqual requestValue
@@ -109,7 +109,6 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     def stringify(assets: Seq[(ErgoBox.TokenId, Long)]) = {
       assets map { case (tokenId, amount) => (Algos.encode(tokenId), amount) }
     }
-    import ErgoTransaction.assetDecoder
     val Right(decodedAssets) = c.as[Seq[(ErgoBox.TokenId, Long)]]
     stringify(decodedAssets) should contain theSameElementsAs stringify(assets)
   }
@@ -117,20 +116,6 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   private def checkRegisters(c: ACursor, registers: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]]) = {
     val Right(decodedRegs) = c.as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
     decodedRegs should contain theSameElementsAs registers
-  }
-
-  private def checkTransaction(c: ACursor, txOpt: Option[ErgoTransaction]) = {
-    import ErgoTransaction.transactionDecoder
-    val Right(decodedTxOpt) = c.as[Option[ErgoTransaction]]
-    if (txOpt.isEmpty) {
-      decodedTxOpt shouldBe empty
-    } else {
-      val decoded = decodedTxOpt.get
-      val tx = txOpt.get
-      decoded.id shouldEqual tx.id
-      decoded.inputs should contain theSameElementsInOrderAs tx.inputs
-      decoded.outputs should contain theSameElementsInOrderAs tx.outputs
-    }
   }
 
 }

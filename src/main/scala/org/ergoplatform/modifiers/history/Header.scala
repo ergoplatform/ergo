@@ -2,7 +2,7 @@ package org.ergoplatform.modifiers.history
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
-import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosSolution, AutolykosSolutionSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoPersistentModifier}
@@ -22,10 +22,11 @@ import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
 
 import scala.concurrent.duration.FiniteDuration
 import scorex.util.Extensions._
-import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement}
+import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement, CHeader}
+import sigmastate.eval.Extensions._
 import special.collection.{Coll, CollOverArray}
 import special.sigma
-import special.sigma.{AvlTree, GroupElement}
+import special.sigma.{AvlTree,GroupElement}
 
 case class Header(version: Version,
                   override val parentId: ModifierId,
@@ -71,7 +72,7 @@ case class Header(version: Version,
   def isCorrespondingModifier(m: ErgoPersistentModifier): Boolean = sectionIds.exists(_._2 == m.id)
 
   /**
-    * Estimate that this Header is new enough to possibly be the best header
+    * Estimate that this header is recent enough to possibly be the best header
     */
   def isNew(timeProvider: NetworkTimeProvider, timeDiff: FiniteDuration): Boolean = {
     timeProvider.time() - timestamp < timeDiff.toMillis
@@ -107,37 +108,24 @@ object PreGenesisHeader extends Header(
 
 object Header extends ApiCodecs {
 
-  def toSigma(header: Header): special.sigma.Header = new special.sigma.Header {
-    override def id: Coll[Byte] = new CollOverArray(idToBytes(header.id))
-
-    override def version: Version = header.version
-
-    override def parentId: Coll[Byte] = new CollOverArray(idToBytes(header.parentId))
-
-    override def ADProofsRoot: Coll[Byte] = new CollOverArray(header.ADProofsRoot)
-
-    override def stateRoot: AvlTree = CAvlTree(ErgoInterpreter.avlTreeFromDigest(header.stateRoot))
-
-    override def transactionsRoot: Coll[Byte] = new CollOverArray(header.transactionsRoot)
-
-    override def timestamp: Timestamp = header.timestamp
-
-    override def nBits: Timestamp = header.nBits
-
-    override def height: Int = header.height
-
-    override def extensionRoot: Coll[Version] = new CollOverArray(header.extensionRoot)
-
-    override def minerPk: GroupElement = CGroupElement(header.powSolution.pk)
-
-    override def powOnetimePk: GroupElement = CGroupElement(header.powSolution.w)
-
-    override def powNonce: Coll[Byte] = new CollOverArray(header.powSolution.n)
-
-    override def powDistance: sigma.BigInt = CBigInt(header.powSolution.d.bigInteger)
-
-    override def votes: Coll[Byte] = new CollOverArray(header.votes)
-  }
+  def toSigma(header: Header): special.sigma.Header =
+    CHeader(
+      id = header.id.toBytes.toColl,
+      version = header.version,
+      parentId = header.parentId.toBytes.toColl,
+      ADProofsRoot = header.ADProofsRoot.asInstanceOf[Array[Byte]].toColl,
+      stateRoot = CAvlTree(ErgoInterpreter.avlTreeFromDigest(header.stateRoot)),
+      transactionsRoot = header.transactionsRoot.asInstanceOf[Array[Byte]].toColl,
+      timestamp = header.timestamp,
+      nBits = header.nBits,
+      height = header.height,
+      extensionRoot = header.extensionRoot.asInstanceOf[Array[Byte]].toColl,
+      minerPk = CGroupElement(header.powSolution.pk),
+      powOnetimePk = CGroupElement(header.powSolution.w),
+      powNonce = header.powSolution.n.toColl,
+      powDistance = CBigInt(header.powSolution.d.bigInteger),
+      votes = header.votes.toColl
+    )
 
   val CurrentVersion: Byte = 1
 

@@ -4,9 +4,10 @@ import java.net.InetSocketAddress
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler, Route}
+import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler}
 import akka.stream.ActorMaterializer
-import org.ergoplatform.api._
+import org.ergoplatform.http._
+import org.ergoplatform.http.api._
 import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local._
@@ -14,7 +15,7 @@ import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Args, ErgoSettings, NetworkId}
+import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
 import scorex.core.app.{Application, ScorexContext}
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
@@ -119,16 +120,19 @@ class ErgoApp(args: Args) extends ScorexLogging {
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
     PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
-    InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
+    InfoApiRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
     MiningApiRoute(minerRef, ergoSettings),
-    UtxoApiRoute(readersHolderRef, settings.restApi)
+    UtxoApiRoute(readersHolderRef, settings.restApi),
+    ScriptApiRoute(readersHolderRef, ergoSettings)
   )
 
-  private val combinedRoute: Route =
-    CompositeHttpService(actorSystem, apiRoutes, settings.restApi, swaggerConfig).compositeRoute
+  private val swaggerRoute = SwaggerRoute(settings.restApi, swaggerConfig)
+  private val panelRoute = NodePanelRoute()
+
+  private val httpService = ErgoHttpService(apiRoutes, swaggerRoute, panelRoute)
 
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     minerRef ! StartMining
@@ -151,7 +155,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   }
 
   if (!ergoSettings.nodeSettings.stateType.requireProofs) {
-    MempoolAuditorRef(nodeViewHolderRef, ergoSettings.nodeSettings)
+    MempoolAuditorRef(nodeViewHolderRef, networkControllerRef, ergoSettings)
   }
 
   private def swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
@@ -166,7 +170,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     implicit val mat: ActorMaterializer = ActorMaterializer()
     val bindAddress = settings.restApi.bindAddress
 
-    Http().bindAndHandle(combinedRoute, bindAddress.getAddress.getHostAddress, bindAddress.getPort)
+    Http().bindAndHandle(httpService.compositeRoute, bindAddress.getAddress.getHostAddress, bindAddress.getPort)
 
     //on unexpected shutdown
     Runtime.getRuntime.addShutdownHook(new Thread() {
@@ -202,7 +206,7 @@ object ErgoApp extends ScorexLogging {
 
   val argParser: Arg[Args] = (
     optional[String]("--config", "-c") and
-      optionalOneOf[NetworkId](NetworkId.all.map(x => s"--${x.verboseName}" -> x): _*)
+      optionalOneOf[NetworkType](NetworkType.all.map(x => s"--${x.verboseName}" -> x): _*)
     ).to[Args]
 
   def main(args: Array[String]): Unit = argParser.parse(args) match {

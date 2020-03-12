@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.state
 
 import java.util.concurrent.Executors
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox.{BoxId, R4}
 import org.ergoplatform._
 import org.ergoplatform.mining._
@@ -17,6 +16,7 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.core._
 import scorex.crypto.authds.ADKey
+import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
@@ -44,7 +44,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val newBoxes = IndexedSeq(newFoundersBox, rewardBox)
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx: ErgoTransaction = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
-      us.validateWithCost(tx, None).get should be <= 100000L
+      us.validateWithCost(tx, None, Constants.DefaultComplexityLimit).get should be <= 100000L
       val block1 = validFullBlock(Some(lastBlock), us, Seq(ErgoTransaction(tx)))
       us = us.applyModifier(block1).get
       foundersBox = tx.outputs.head

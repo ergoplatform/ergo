@@ -1,11 +1,11 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
+import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
@@ -23,13 +23,14 @@ trait FullBlockProcessor extends HeadersProcessor {
   private var nonBestChainsCache = FullBlockProcessor.emptyCache
 
   def isInBestFullChain(id: ModifierId): Boolean = historyStorage.getIndex(chainStatusKey(id))
-    .contains(FullBlockProcessor.BestChainMarker)
+    .map(ByteArrayWrapper.apply)
+    .contains(ByteArrayWrapper(FullBlockProcessor.BestChainMarker))
 
   /**
     * Id of header that contains transactions and proofs
     */
   override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.getIndex(BestFullBlockKey)
-    .map(w => bytesToId(w.data))
+    .map(bytesToId)
 
   // todo: `getFullBlock` is frequently used to define whether some`header` have enough
   // todo: related sections - it would be far more efficient to keep such information in the indexes.
@@ -47,7 +48,7 @@ trait FullBlockProcessor extends HeadersProcessor {
                                  newMod: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
     val bestFullChainAfter = calculateBestChain(fullBlock.header)
     val newBestBlockHeader = typedModifierById[Header](bestFullChainAfter.last).ensuring(_.isDefined)
-    processing(ToProcess(fullBlock, newMod, newBestBlockHeader, config.blocksToKeep, bestFullChainAfter))
+    processing(ToProcess(fullBlock, newMod, newBestBlockHeader, nodeSettings.blocksToKeep, bestFullChainAfter))
   }
 
   private def processing: BlockProcessing =
@@ -89,7 +90,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       logStatus(toRemove, toApply, fullBlock, Some(prevBest))
       val branchPoint = toRemove.headOption.map(_ => prevChain.head.id)
 
-      val minForkRootHeight = newBestBlockHeader.height - config.blocksToKeep
+      val minForkRootHeight = newBestBlockHeader.height - nodeSettings.blocksToKeep
       // remove block ids which have no chance to be applied
       if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
 
@@ -122,12 +123,12 @@ trait FullBlockProcessor extends HeadersProcessor {
   private def nonBestBlock: BlockProcessing = {
     case params =>
       val block = params.fullBlock
-      if (block.header.height > fullBlockHeight - config.keepVersions) {
+      if (block.header.height > fullBlockHeight - nodeSettings.keepVersions) {
         nonBestChainsCache = nonBestChainsCache.add(block.id, block.parentId, block.header.height)
       }
       //Orphaned block or full chain is not initialized yet
       logStatus(Seq(), Seq(), params.fullBlock, None)
-      historyStorage.insert(storageVersion(params.newModRow), Seq.empty, Seq(params.newModRow))
+      historyStorage.insert(Seq.empty, Seq(params.newModRow))
       ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
   }
 
@@ -229,14 +230,12 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   private def updateStorage(newModRow: ErgoPersistentModifier,
                             bestFullHeaderId: ModifierId,
-                            additionalIndexes: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = Seq.empty): Unit = {
-    val indicesToInsert = Seq(BestFullBlockKey -> Algos.idToBAW(bestFullHeaderId)) ++ additionalIndexes
-    historyStorage.insert(storageVersion(newModRow), indicesToInsert, Seq(newModRow))
+                            additionalIndexes: Seq[(ByteArrayWrapper, Array[Byte])] = Seq.empty): Unit = {
+    val indicesToInsert = Seq(BestFullBlockKey -> idToBytes(bestFullHeaderId)) ++ additionalIndexes
+    historyStorage.insert(indicesToInsert, Seq(newModRow))
       .ensuring(headersHeight >= fullBlockHeight, s"Headers height $headersHeight should be >= " +
         s"full height $fullBlockHeight")
   }
-
-  private def storageVersion(newModRow: ErgoPersistentModifier) = Algos.idToBAW(newModRow.id)
 
 }
 
@@ -268,8 +267,8 @@ object FullBlockProcessor {
       IncompleteFullChainCache(cache.dropWhile(_._1.height < height))
   }
 
-  val BestChainMarker: ByteArrayWrapper = ByteArrayWrapper(Array(1: Byte))
-  val NonBestChainMarker: ByteArrayWrapper = ByteArrayWrapper(Array(0: Byte))
+  val BestChainMarker: Array[Byte] = Array(1: Byte)
+  val NonBestChainMarker: Array[Byte] = Array(0: Byte)
 
   private implicit val ord: Ordering[CacheBlock] = Ordering[(Int, ModifierId)].on(x => (x.height, x.id))
 

@@ -17,6 +17,7 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      poPoWBootstrap: Boolean,
                                      minimalSuffix: Int,
                                      mining: Boolean,
+                                     maxTransactionComplexity: Int,
                                      miningDelay: FiniteDuration,
                                      useExternalMiner: Boolean,
                                      miningPubKeyHex: Option[String],
@@ -25,7 +26,9 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      mempoolCapacity: Int,
                                      blacklistCapacity: Int,
                                      mempoolCleanupDuration: FiniteDuration,
-                                     minimalFeeAmount: Long)
+                                     rebroadcastCount: Int,
+                                     minimalFeeAmount: Long,
+                                     headerChainDiff: Int)
 
 trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
 
@@ -39,6 +42,7 @@ trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
       cfg.as[Boolean](s"$path.PoPoWBootstrap"),
       cfg.as[Int](s"$path.minimalSuffix"),
       cfg.as[Boolean](s"$path.mining"),
+      cfg.as[Int](s"$path.maxTransactionComplexity"),
       cfg.as[FiniteDuration](s"$path.miningDelay"),
       cfg.as[Boolean](s"$path.useExternalMiner"),
       cfg.as[Option[String]](s"$path.miningPubKeyHex"),
@@ -47,7 +51,9 @@ trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {
       cfg.as[Int](s"$path.mempoolCapacity"),
       cfg.as[Int](s"$path.blacklistCapacity"),
       cfg.as[FiniteDuration](s"$path.mempoolCleanupDuration"),
-      cfg.as[Long](s"$path.minimalFeeAmount")
+      cfg.as[Int](s"$path.rebroadcastCount"),
+      cfg.as[Long](s"$path.minimalFeeAmount"),
+      cfg.as[Int](s"$path.headerChainDiff")
     )
   }
 

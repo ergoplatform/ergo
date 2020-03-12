@@ -26,7 +26,7 @@ object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark wit
              (applicator: (Seq[ErgoPersistentModifier], ErgoHistory) => Any,
               mods: Seq[ErgoPersistentModifier]): (String, Long) = {
       val preparedHistory = applyModifiers(headers.take(mods.size / 2), unlockedHistory())._1
-      val et = time(applicator(mods, preparedHistory)).toLong
+      val et = Utils.time(applicator(mods, preparedHistory)).toLong
       assert(preparedHistory.fullBlockHeight == mods.size / 2)
       s"Performance of `$benchCase`: $et ms" -> et
     }

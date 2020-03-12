@@ -36,6 +36,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val parameters: Parameters = LaunchParameters
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(Args(Some("src/test/resources/application.conf"), None))
+
   val settings: ErgoSettings = initSettings
   val emission: EmissionRules = settings.chainSettings.emissionRules
   val coinsTotal: Long = emission.coinsTotal
@@ -77,7 +78,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val emptyExtension: ExtensionCandidate = ExtensionCandidate(Seq())
   val emptyDataInputs: IndexedSeq[DataInput] = IndexedSeq()
   val emptyDataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()
-  lazy val emptyVerifier: ErgoInterpreter = ErgoInterpreter(emptyStateContext.currentParameters)
+  def emptyVerifier: ErgoInterpreter = ErgoInterpreter(emptyStateContext.currentParameters)
 
   val defaultTimeout: Timeout = Timeout(14.seconds)
   val defaultAwaitDuration: FiniteDuration = defaultTimeout.duration + 1.second

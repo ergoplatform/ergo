@@ -30,26 +30,30 @@ class ExpirationSpecification extends ErgoPropertyTest {
                     heightDelta: Int,
                     outsConstructor: Height => IndexedSeq[ErgoBoxCandidate],
                     expectedValidity: Boolean): Assertion = {
-    val in = Input(from.id,
-      ProverResult(Array.emptyByteArray, ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(0)))))
+    // We are filtering out certain heights to avoid problems with improperly generated extension
+    // at the beginning of a voting epoch
+    whenever((from.creationHeight + Constants.StoragePeriod + heightDelta) % votingSettings.votingLength != 0) {
+      val in = Input(from.id,
+        ProverResult(Array.emptyByteArray, ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(0)))))
 
-    val h: Int = from.creationHeight + Constants.StoragePeriod + heightDelta
+      val h: Int = from.creationHeight + Constants.StoragePeriod + heightDelta
 
-    val oc = outsConstructor(h).map(c => updateHeight(c, h))
-    val tx = ErgoTransaction(inputs = IndexedSeq(in), dataInputs = IndexedSeq(), outputCandidates = oc)
+      val oc = outsConstructor(h).map(c => updateHeight(c, h))
+      val tx = ErgoTransaction(inputs = IndexedSeq(in), dataInputs = IndexedSeq(), outputCandidates = oc)
 
-    val fb0 = invalidErgoFullBlockGen.sample.get
-    val fakeHeader = fb0.header.copy(height = h - 1)
-    val fb = fb0.copy(fb0.header.copy(height = h, parentId = fakeHeader.id))
+      val fb0 = invalidErgoFullBlockGen.sample.get
+      val fakeHeader = fb0.header.copy(height = h - 1)
+      val fb = fb0.copy(fb0.header.copy(height = h, parentId = fakeHeader.id))
 
-    val updContext = {
-      val inContext = new ErgoStateContext(Seq(fakeHeader), None, genesisStateDigest, LaunchParameters, validationSettingsNoIl,
-        VotingData.empty)(votingSettings)
-      inContext.appendFullBlock(fb, votingSettings).get
+      val updContext = {
+        val inContext = new ErgoStateContext(Seq(fakeHeader), None, genesisStateDigest, LaunchParameters, validationSettingsNoIl,
+          VotingData.empty)(votingSettings)
+        inContext.appendFullBlock(fb, votingSettings).get
+      }
+
+      tx.statelessValidity.isSuccess shouldBe true
+      tx.statefulValidity(IndexedSeq(from), emptyDataBoxes, updContext).isSuccess shouldBe expectedValidity
     }
-
-    tx.statelessValidity.isSuccess shouldBe true
-    tx.statefulValidity(IndexedSeq(from), emptyDataBoxes, updContext).isSuccess shouldBe expectedValidity
   }
 
   property("successful spending w. same value") {

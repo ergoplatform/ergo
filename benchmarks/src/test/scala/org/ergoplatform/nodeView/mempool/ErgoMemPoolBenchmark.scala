@@ -15,7 +15,7 @@ object ErgoMemPoolBenchmark
   private val blockSizes = Gen.enumeration("txs in block")(50, 500, 1000)
   private val waitingSizes = Gen.enumeration("waitings")(1, 10)
 
-  private def waitForTransactionsInSequence(txIncomeOrder: Seq[Seq[ErgoTransaction]] => Seq[ErgoTransaction]) = for {
+  private def waitForTransactionsInSequence(txIncomeOrder: Seq[Seq[ErgoTransaction]] => Seq[ErgoTransaction]): Gen[Seq[ErgoTransaction]] = for {
     waitingSize <- waitingSizes
     transactionsPerBlock <- blockSizes
   } yield {

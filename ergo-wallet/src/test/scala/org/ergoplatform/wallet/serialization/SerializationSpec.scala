@@ -1,7 +1,7 @@
 package org.ergoplatform.wallet.serialization
 
 import org.ergoplatform.wallet.boxes.TrackedBoxSerializer
-import org.ergoplatform.wallet.secrets.{DerivationPathSerializer, ExtendedSecretKeySerializer}
+import org.ergoplatform.wallet.secrets.{DerivationPathSerializer, ExtendedPublicKeySerializer, ExtendedSecretKeySerializer}
 import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -33,6 +33,10 @@ class SerializationSpec
 
   property("ExtendedSecretKey serialization") {
     checkSerializationRoundtrip(extendedSecretGen, ExtendedSecretKeySerializer)
+  }
+
+  property("ExtendedPublicKey serialization") {
+    checkSerializationRoundtrip(extendedPubKeyGen, ExtendedPublicKeySerializer)
   }
 
 }

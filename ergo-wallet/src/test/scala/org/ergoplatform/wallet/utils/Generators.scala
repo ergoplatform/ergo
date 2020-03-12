@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import org.ergoplatform.wallet.mnemonic.{Mnemonic, WordList}
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index}
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey, Index}
 import org.ergoplatform.wallet.settings.EncryptionSettings
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -139,6 +139,8 @@ trait Generators {
   def extendedSecretGen: Gen[ExtendedSecretKey] = for {
     seed <- Gen.const(Constants.KeyLen).map(scorex.utils.Random.randomBytes)
   } yield ExtendedSecretKey.deriveMasterKey(seed)
+
+  def extendedPubKeyGen: Gen[ExtendedPublicKey] = extendedSecretGen.map(_.publicKey)
 
   def appStatusesGen: Gen[Map[Short, BoxCertainty]] = {
     Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.toSet.toSeq).flatMap { appIds =>

@@ -4,22 +4,22 @@ import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication, ExternalApplicationSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey}
+import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedSecretKey}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.PaymentsAppId
 import scorex.db.{LDBFactory, LDBKVStore}
 
-import scala.util.{Success, Try}
+import scala.util.{Random, Success, Try}
 
 /**
   * Persists version-agnostic wallet actor's mutable state:
-  *   * tracked addresses
-  *   * derivation paths
-  *   * changed addresses
-  *   * ErgoStateContext (is it version-agnostic?)
-  *   * external applications
+  * * tracked addresses
+  * * derivation paths
+  * * changed addresses
+  * * ErgoStateContext (is it version-agnostic?)
+  * * external applications
   */
 final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
                          (implicit val addressEncoder: ErgoAddressEncoder) {
@@ -90,25 +90,30 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     store.getRange(SmallestPossibleApplicationId, BiggestPossibleApplicationId)
       .map { case (_, v) => ExternalApplicationSerializer.parseBytes(v) }
   }
+
   def lastUsedId: Short = store.lastKeyInRange(SmallestPossibleApplicationId, BiggestPossibleApplicationId)
     .map(bs => Shorts.fromByteArray(bs.takeRight(2)))
     .getOrElse(PaymentsAppId)
+  
 }
 
 object WalletStorage {
-  val RangedKeyPrefix = 0: Byte
+  val RangedKeyPrefix: Byte = 0: Byte
 
-  val ApplicationPrefixByte = 1: Byte
-  val PublicKeyPrefixBye = 2: Byte
+  val ApplicationPrefixByte: Byte = 1: Byte
+  val PublicKeyPrefixByte: Byte = 2: Byte
 
   val ApplicationPrefixArray: Array[Byte] = Array(RangedKeyPrefix, ApplicationPrefixByte)
+  val PublicKeyPrefixArray: Array[Byte] = Array(RangedKeyPrefix, PublicKeyPrefixByte)
 
   val SmallestPossibleApplicationId = ApplicationPrefixArray ++ Shorts.toByteArray(0)
   val BiggestPossibleApplicationId = ApplicationPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
 
 
-  def noPrefixKey(keyString: String): Array[Byte] =
-    Blake2b256.hash(keyString)
+  val FirstPublicKeyId = PublicKeyPrefixArray ++ Array.fill(33)(0: Byte)
+  val LastPublicKeyId = PublicKeyPrefixArray ++ Array.fill(33)(-1: Byte)
+
+  def noPrefixKey(keyString: String): Array[Byte] = Blake2b256.hash(keyString)
 
   def appPrefixKey(appId: Short): Array[Byte] = ApplicationPrefixArray ++ Shorts.toByteArray(appId)
 

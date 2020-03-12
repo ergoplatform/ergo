@@ -201,13 +201,7 @@ lazy val avldb = (project in file("avldb"))
     // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
     // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
     scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
-    javacOptions in(Compile, compile) ++= (
-      if (System.getProperty("java.version").startsWith("1.")) 
-        // java <9 "--release" is not supported
-        Seq()
-      else
-        Seq("--release", "8")
-    )
+    javacOptions in(Compile, compile) ++= javacReleaseOption,
   )
 
 lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
@@ -257,13 +251,7 @@ lazy val ergo = (project in file("."))
     // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
     // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
     scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
-    javacOptions in(Compile, compile) ++= (
-      if (System.getProperty("java.version").startsWith("1.")) 
-        // java <9 "--release" is not supported
-        Seq()
-      else
-        Seq("--release", "8")
-    )
+    javacOptions in(Compile, compile) ++= javacReleaseOption
   )
   .dependsOn(ergoWallet % "compile->compile")
   .dependsOn(avldb % "compile->compile")
@@ -315,4 +303,12 @@ version in ThisBuild := {
       git.gitCurrentBranch.value + "-" + git.gitHeadCommit.value.getOrElse("").take(8) + "-SNAPSHOT"
     }
   }
+}
+
+def javacReleaseOption = {
+  if (System.getProperty("java.version").startsWith("1.")) 
+    // java <9 "--release" is not supported
+    Seq()
+  else
+    Seq("--release", "8")
 }

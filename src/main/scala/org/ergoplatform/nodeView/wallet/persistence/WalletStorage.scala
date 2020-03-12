@@ -4,7 +4,7 @@ import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication, ExternalApplicationSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
+import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
@@ -26,7 +26,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
 
   import WalletStorage._
 
-  def addPath(derivationPath: DerivationPath): Unit = {
+  private[persistence] def addPath(derivationPath: DerivationPath) = {
     val updatedPaths = (readPaths :+ derivationPath).toSet
     val toInsert = Ints.toByteArray(updatedPaths.size) ++ updatedPaths
       .foldLeft(Array.empty[Byte]) { case (acc, path) =>
@@ -34,6 +34,11 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
         acc ++ Ints.toByteArray(bytes.length) ++ bytes
       }
     store.insert(Seq(SecretPathsKey -> toInsert))
+  }
+
+  def addKey(publicKey: ExtendedPublicKey): Unit = {
+    val derivationPath = publicKey.path
+    addPath(derivationPath)
   }
 
   def readPaths: Seq[DerivationPath] = store
@@ -91,12 +96,12 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
 }
 
 object WalletStorage {
-  val ZeroCount = 16
-  val ZeroArray = Array.fill(ZeroCount)(0: Byte)
+  val RangedKeyPrefix = 0: Byte
 
   val ApplicationPrefixByte = 1: Byte
+  val PublicKeyPrefixBye = 2: Byte
 
-  val ApplicationPrefixArray = (Array.fill(ZeroCount - 1)(0: Byte) :+ ApplicationPrefixByte) ++ Array.fill(14)(0: Byte)
+  val ApplicationPrefixArray: Array[Byte] = Array(RangedKeyPrefix, ApplicationPrefixByte)
 
   val SmallestPossibleApplicationId = ApplicationPrefixArray ++ Shorts.toByteArray(0)
   val BiggestPossibleApplicationId = ApplicationPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
@@ -107,7 +112,7 @@ object WalletStorage {
 
   def appPrefixKey(appId: Short): Array[Byte] = ApplicationPrefixArray ++ Shorts.toByteArray(appId)
 
-  //following keys do not start with zeroed prefix
+  //following keys do not start with ranged key prefix, i.e. with 8 zero bits
   val StateContextKey: Array[Byte] = noPrefixKey("state_ctx")
   val SecretPathsKey: Array[Byte] = noPrefixKey("secret_paths")
   val ChangeAddressKey: Array[Byte] = noPrefixKey("change_address")

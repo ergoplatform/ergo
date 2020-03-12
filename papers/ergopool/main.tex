@@ -105,7 +105,7 @@ Security of Bitcoin and many other cryptocurrencies relies on so called Proof-of
 33\% then it can earn unproportionally more rewards using {\em selfish mining}~\cite{selfish}, and with more than 50\% an adversary can do double spending or filter out certain transactions. Mining pools are the primary cause of such concentration of mining power. 
 However,  individually, it is more beneficial for miners to join pools despite the fact that they are detrimental to the system. Another threat, especially for new cryptocurrencies are potential Goldfinger attacks using hosted mining services to rent mining power in order to mine~(or attack) a cryptocurrency~\cite{goldfinger}.
 
-Non-outsourceable scratch-off puzzles have been proposed to address these issues~\cite{miller2015nonoutsourceable,daian2017short}. A notable example of a real world implementation of this idea is Ergo~\cite{ergo}, whose PoW, \powname~\cite{autolykos}, is based on~\cite{daian2017short}. The primary technique in such approaches is to discourage pooled mining by tying the rewards to some trapdoor information needed for solution generation. In this work, we describe how to bypass the non-outsourceability of many such schemes, including Ergo. 
+Non-outsourceable scratch-off puzzles have been proposed to address these issues~\cite{miller2015nonoutsourceable,daian2017short}. A notable example of a real world implementation of this idea is Ergo~\cite{ergo}, whose PoW, \powname~\cite{autolykos}, is based on~\cite{daian2017short}. The primary technique in such approaches is to discourage pooled mining by tying the rewards to some trapdoor information needed for solution generation. In this work, we describe how to bypass the non-outsourceability of many such schemes, including Ergo's. 
 More importantly, while our solution bypasses non-outsourceability, which gives the ability to form pools, it retains the {\em censorship resistance} property of non-outsourceable puzzles. That is, a pool cannot conduct 51\% attacks even if it handles more than 51\% of the mining power (see Section~\ref{pool-levels} for details). 
 
 The rest of the paper is organized as follows. Section~\ref{background} contains an overview of the current state of affairs in proof-of-work schemes and pooled mining along a high level overview of non-outsourceable puzzles. Section~\ref{bypasstype1} describes one approach for creating mining pools in many types of non-outsourceable puzzles, specifically those of~\cite{daian2017short}. Section~\ref{bypasstype2} describes another approach that covers a wider range of puzzles~\cite{daian2017short,miller2015nonoutsourceable}. We conclude the paper in Section~\ref{conclusion} along with pointers for future research.
@@ -348,6 +348,11 @@ along with zero-knowledge proof of its correctness) remain unbroken. However, it
 Both our approaches rely on smart contracts acting as decentralized escrows and require the underlying programming language to allow predicates at context level C3 or higher (i.e., access to the block solution; see Section~\ref{context}). Thus, one way to invalidate our methods would be to restrict the language context to level C2 or lower. Note that even level C2 contracts allow sophisticated applications such as non-interactive mixing, rock-paper-scissors, and even an ICO~\cite{advtutorial}.
 
 Another open issue in mining pools is that of block withholding~\cite{courtois2014subversive}, where the miner tries to attack the pool by submitting valid shares but discarding actual solutions. The need for collateral in our schemes may possibly affect the attacker's strategy. This will be considered in a follow-up work.
+
+\section*{Acknowledgements}
+\label{*acknowledgements}
+
+We would like to thank Mohammad Hasan Samadani and the ergopool.io team for building a pool based on this paper and highlighting real-world issues in regards with high-level scheme descriptions.   
 
 \bibliographystyle{unsrt}
 \bibliography{main}

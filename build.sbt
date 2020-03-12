@@ -19,7 +19,7 @@ lazy val commonSettings = Seq(
     "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"),
   homepage := Some(url("http://ergoplatform.org/")),
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode")),
-  publishTo := sonatypePublishToBundle.value
+  publishTo := sonatypePublishToBundle.value,
 )
 
 val scorexVersion = "master-3946bdb5-SNAPSHOT"
@@ -92,12 +92,6 @@ val opts = Seq(
 // -J prefix is required by the bash script
 javaOptions in run ++= opts
 scalacOptions ++= Seq("-Xfatal-warnings", "-feature", "-deprecation")
-
-// set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
-// see https://github.com/eclipse/jetty.project/issues/3244
-// these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
-// see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
-scalacOptions in(Compile, compile) ++= Seq("-release", "8")
 
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"
@@ -201,7 +195,13 @@ Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 lazy val avldb = (project in file("avldb"))
   .settings(
     commonSettings,
-    name := "avldb"
+    name := "avldb",
+    // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
+    // see https://github.com/eclipse/jetty.project/issues/3244
+    // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
+    // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
+    scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
+    javacOptions in(Compile, compile) ++= javacReleaseOption,
   )
 
 lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
@@ -227,6 +227,12 @@ lazy val ergoWallet = (project in file("ergo-wallet"))
     commonSettings,
     name := "ergo-wallet",
     libraryDependencies += ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion),
+    scalacOptions in(Compile, compile) ++= (if(scalaBinaryVersion.value == "2.11")
+        Seq.empty
+      else
+        Seq("-release", "8") 
+      ) 
+  
   )
 
 lazy val It2Test = config("it2") extend (IntegrationTest, Test)
@@ -237,7 +243,16 @@ inConfig(It2Test)(Defaults.testSettings ++ Seq(
 ))
 
 lazy val ergo = (project in file("."))
-  .settings(commonSettings, name := "ergo")
+  .settings(
+    commonSettings, 
+    name := "ergo",
+    // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
+    // see https://github.com/eclipse/jetty.project/issues/3244
+    // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
+    // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
+    scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
+    javacOptions in(Compile, compile) ++= javacReleaseOption
+  )
   .dependsOn(ergoWallet % "compile->compile")
   .dependsOn(avldb % "compile->compile")
   .configs(It2Test)
@@ -288,4 +303,12 @@ version in ThisBuild := {
       git.gitCurrentBranch.value + "-" + git.gitHeadCommit.value.getOrElse("").take(8) + "-SNAPSHOT"
     }
   }
+}
+
+def javacReleaseOption = {
+  if (System.getProperty("java.version").startsWith("1.")) 
+    // java <9 "--release" is not supported
+    Seq()
+  else
+    Seq("--release", "8")
 }

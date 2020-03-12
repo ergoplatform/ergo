@@ -485,7 +485,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def processSecretAddition(secret: ExtendedSecretKey): Unit = {
     walletVars = walletVars.withNewSecret(secret)
-    storage.addPath(secret.path)
+    val pubKey = secret.publicKey
+    storage.addKey(pubKey)
   }
 
   private def processUnlock(secretStorage: JsonSecretStorage): Unit = {

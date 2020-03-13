@@ -490,7 +490,24 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   private def processUnlock(secretStorage: JsonSecretStorage): Unit = {
-    val secrets = secretStorage.secret.toIndexedSeq ++ storage.readPaths.flatMap { path =>
+    val rootSecretOpt = secretStorage.secret
+
+    // first, we're trying to find in the database paths written by clients prior 3.3.0 and convert them
+    // into a new format (pubkeys with paths stored instead of paths)
+    val oldPaths = storage.readPaths()
+    if (oldPaths.nonEmpty) {
+      val oldDerivedSecrets = oldPaths.flatMap { path =>
+        rootSecretOpt.toSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
+      }
+      val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
+      oldPubKeys.foreach(storage.addKey)
+      storage.removePaths()
+    }
+
+    val pubKeys = storage.readAllKeys()
+
+    val secrets = secretStorage.secret.toIndexedSeq ++ pubKeys.flatMap { pk =>
+      val path = pk.path
       secretStorage.secret.toSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
     }
     walletVars = walletVars.withProver(ErgoProvingInterpreter(secrets, parameters))

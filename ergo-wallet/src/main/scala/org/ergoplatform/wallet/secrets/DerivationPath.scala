@@ -22,8 +22,8 @@ final case class DerivationPath(decodedPath: Seq[Int], publicBranch: Boolean) {
   def encoded: String = {
     val masterPrefix = if (publicBranch) s"$PublicBranchMasterId/" else s"$PrivateBranchMasterId/"
     val tailPath = decodedPath.tail
-        .map(x => if (Index.isHardened(x)) s"${x - Index.HardRangeStart}'" else x.toString)
-        .mkString("/")
+      .map(x => if (Index.isHardened(x)) s"${x - Index.HardRangeStart}'" else x.toString)
+      .mkString("/")
     masterPrefix + tailPath
   }
 
@@ -32,6 +32,8 @@ final case class DerivationPath(decodedPath: Seq[Int], publicBranch: Boolean) {
   def toPublic: DerivationPath = this.copy(publicBranch = true)
 
   override def toString: String = encoded
+
+  def bytes: Array[Byte] = DerivationPathSerializer.toBytes(this)
 }
 
 object DerivationPath {

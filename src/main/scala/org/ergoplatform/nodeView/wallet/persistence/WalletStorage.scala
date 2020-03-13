@@ -4,7 +4,7 @@ import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication, ExternalApplicationSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer, ExtendedSecretKey}
+import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
@@ -26,7 +26,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
 
   import WalletStorage._
 
-  private[persistence] def addPath(derivationPath: DerivationPath) = {
+  private[persistence] def addPath(derivationPath: DerivationPath): Unit = {
     val updatedPaths = (readPaths :+ derivationPath).toSet
     val toInsert = Ints.toByteArray(updatedPaths.size) ++ updatedPaths
       .foldLeft(Array.empty[Byte]) { case (acc, path) =>
@@ -122,7 +122,7 @@ object WalletStorage {
 
   def appPrefixKey(appId: Short): Array[Byte] = ApplicationPrefixArray ++ Shorts.toByteArray(appId)
 
-  def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = PublicKeyPrefixArray ++ pk.keyBytes
+  def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = PublicKeyPrefixArray ++ pk.path.bytes
 
   //following keys do not start with ranged key prefix, i.e. with 8 zero bits
   val StateContextKey: Array[Byte] = noPrefixKey("state_ctx")

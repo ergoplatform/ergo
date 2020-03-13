@@ -59,6 +59,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
       }._1
     }
 
+  def removePaths(): Unit = store.remove(Seq(SecretPathsKey))
+
   def updateStateContext(ctx: ErgoStateContext): Unit = store
     .insert(Seq(StateContextKey -> ctx.bytes))
 

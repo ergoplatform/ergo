@@ -46,7 +46,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
   private val pubkeys = walletVars.trackedPubKeys
   private val miningScripts = walletVars.miningScripts
 
-  private def paymentsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.oneOf(pubkeys.map(_.toSigmaProp: ErgoTree)))
+  private def paymentsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.oneOf(pubkeys.map(_.key.toSigmaProp: ErgoTree)))
 
   private def miningRewardsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.oneOf(miningScripts))
 

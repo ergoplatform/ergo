@@ -40,6 +40,7 @@ final class ExtendedPublicKey(val keyBytes: Array[Byte],
     h
   }
 
+  override def toString: String = s"ExtendedPublicKey($path : $key)"
 }
 
 object ExtendedPublicKey {

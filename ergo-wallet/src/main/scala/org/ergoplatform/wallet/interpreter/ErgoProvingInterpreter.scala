@@ -5,7 +5,7 @@ import java.util
 import org.ergoplatform._
 import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext, TransactionContext}
-import org.ergoplatform.wallet.secrets.ExtendedSecretKey
+import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import scorex.util.encode.Base16
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.eval.{CompiletimeIRContext, IRContext}
@@ -27,27 +27,27 @@ import scala.util.{Failure, Success, Try}
   */
 class ErgoProvingInterpreter(val secretKeys: IndexedSeq[ExtendedSecretKey],
                              params: ErgoLikeParameters,
-                             val cachedPubKeysOpt: Option[IndexedSeq[ProveDlog]] = None)
+                             val cachedPubKeysOpt: Option[IndexedSeq[ExtendedPublicKey]] = None)
                             (implicit IR: IRContext)
   extends ErgoInterpreter(params) with ProverInterpreter {
 
   val secrets: IndexedSeq[DLogProverInput] = secretKeys.map(_.key)
 
-  val pubKeys: IndexedSeq[ProveDlog] = cachedPubKeysOpt match {
+  val pubKeys: IndexedSeq[ExtendedPublicKey] = cachedPubKeysOpt match {
     case Some(cachedPubKeys) =>
       if (cachedPubKeys.length != secrets.length) {
         log.error(s"ErgoProverInterpreter: pubkeys and secrets of different sizes: ${cachedPubKeys.length} and ${secrets.length}")
       }
       cachedPubKeys
     case None =>
-      secrets.map(_.publicImage) // costly operation if there are many secret keys
+      secretKeys.map(_.publicKey) // costly operation if there are many secret keys
   }
 
-  def withNewSecret(secret: ExtendedSecretKey): (ErgoProvingInterpreter, ProveDlog) = {
-    val newPk = secret.key.publicImage
+  def withNewSecret(secret: ExtendedSecretKey): (ErgoProvingInterpreter, ExtendedPublicKey) = {
+    val newPk = secret.publicKey
     val sks = secretKeys :+ secret
     val pks = pubKeys :+ newPk
-    log.info(s"New secret created, public image: ${Base16.encode(newPk.pkBytes)}")
+    log.info(s"New secret created, public image: ${Base16.encode(newPk.key.pkBytes)}")
     new ErgoProvingInterpreter(sks, params, Some(pks)) -> newPk
   }
 

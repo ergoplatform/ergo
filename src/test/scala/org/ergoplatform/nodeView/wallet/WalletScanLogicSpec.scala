@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.wallet
 
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletVars
 import org.ergoplatform.settings.LaunchParameters
 import org.ergoplatform.utils.{ErgoPropertyTest, WalletTestOps}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -8,6 +7,7 @@ import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletVars
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ExternalAppRequest}
 import org.ergoplatform.wallet.Constants
@@ -41,7 +41,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
   private val appReq = ExternalAppRequest("True detector", scanningPredicate, alwaysCertain = false)
   private val appId: Short = 50
 
-  private val walletVars = WalletVars(Some(prover), Seq(appReq.toApp(appId).get))(settings = s)
+  private val walletVars = WalletVars(Some(prover), Seq(appReq.toApp(appId).get), s)
 
   private val pubkeys = walletVars.trackedPubKeys
   private val miningScripts = walletVars.miningScripts

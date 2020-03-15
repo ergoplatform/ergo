@@ -20,7 +20,7 @@ import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey, Index, JsonSecretStorage}
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey, JsonSecretStorage}
 import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
@@ -32,10 +32,9 @@ import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import org.ergoplatform.wallet.Constants.PaymentsAppId
 import sigmastate.Values
-import sigmastate.basics.DLogProtocol
-
 import scala.concurrent.Future
 import scala.util.{Failure, Random, Success, Try}
+
 
 class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   extends Actor
@@ -207,7 +206,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           f
       }
       sender() ! mnemonicTry
-
 
     //Restore wallet with mnemonic if secret is not set yet
     case RestoreWallet(mnemonic, passOpt, encryptionPass) if !secretIsSet =>
@@ -556,9 +554,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
 object ErgoWalletActor {
 
-  //fields of WalletVars which are potentially costly to compute
+  //Fields of WalletVars which are potentially costly to compute if there are many keys
   case class MutableStateCache(publicKeyAddresses: Seq[P2PKAddress],
-                               trackedPubKeys: Seq[ExtendedPublicKey],
                                trackedBytes: Seq[Array[Byte]],
                                filter: CuckooFilter[Array[Byte]])
 
@@ -573,6 +570,7 @@ object ErgoWalletActor {
     * @param settings
     */
   case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
+                        trackedPubKeys: Seq[ExtendedPublicKey],
                         externalApplications: Seq[ExternalApplication],
                         stateCacheOpt: Option[MutableStateCache] = None)
                        (implicit val settings: ErgoSettings) extends ScorexLogging {
@@ -585,10 +583,6 @@ object ErgoWalletActor {
 
     //this is constant actually, it is here to avoid passing settings to resolving methods
     val minerRewardDelay: Int = settings.chainSettings.monetary.minerRewardDelay
-
-    val trackedPubKeys: Seq[ExtendedPublicKey] = stateCacheOpt.map(_.trackedPubKeys).getOrElse {
-      proverOpt.toSeq.flatMap(_.pubKeys)
-    }
 
     val publicKeyAddresses: Seq[P2PKAddress] = stateCacheOpt.map(_.publicKeyAddresses).getOrElse {
       trackedPubKeys.map(pk => P2PKAddress(pk.key))
@@ -626,7 +620,8 @@ object ErgoWalletActor {
       **/
     def resetProver(): WalletVars = this.copy(proverOpt = None)
 
-    def withProver(prover: ErgoProvingInterpreter): WalletVars = this.copy(proverOpt = Some(prover))
+    def withProver(prover: ErgoProvingInterpreter): WalletVars =
+      this.copy(proverOpt = Some(prover), trackedPubKeys = proverOpt.toSeq.flatMap(_.pubKeys))
 
     /**
       * Add new secret to the prover
@@ -644,9 +639,9 @@ object ErgoWalletActor {
           val updTrackedBytes: Seq[Array[Byte]] = trackedBytes :+ newPkBytes
           val updFilter: CuckooFilter[Array[Byte]] = filter.insert(newPkBytes).get
 
-          val updCache = MutableStateCache(updAddresses, updTrackedPubKeys, updTrackedBytes, updFilter)
+          val updCache = MutableStateCache(updAddresses, updTrackedBytes, updFilter)
 
-          this.copy(proverOpt = Some(updProver), stateCacheOpt = Some(updCache))
+          this.copy(proverOpt = Some(updProver), trackedPubKeys = updTrackedPubKeys, stateCacheOpt = Some(updCache))
         case None =>
           log.warn(s"Trying to add new secret, but prover is not initialized")
           this
@@ -661,8 +656,14 @@ object ErgoWalletActor {
   }
 
   object WalletVars {
+
+    def apply(proverOpt: Option[ErgoProvingInterpreter],
+              externalApplications: Seq[ExternalApplication],
+              settings: ErgoSettings): WalletVars =
+      WalletVars(proverOpt, Seq.empty, externalApplications)(settings)
+
     def initial(storage: WalletStorage, settings: ErgoSettings): WalletVars =
-      WalletVars(None, storage.allApplications)(settings)
+      WalletVars(None, storage.readAllKeys(), storage.allApplications)(settings)
   }
 
   final case class WatchFor(address: ErgoAddress)

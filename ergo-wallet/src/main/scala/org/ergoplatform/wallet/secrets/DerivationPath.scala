@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.secrets
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import scorex.util.serialization.{Reader, Writer}
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * HD key derivation path (see: https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)
@@ -56,6 +56,32 @@ object DerivationPath {
       }
       val isPublicBranch = split.head == PublicBranchMasterId
       pathTry.map(DerivationPath(_, isPublicBranch))
+    }
+  }
+
+  /**
+    * Finds next available path index for a new key.
+    */
+  def nextPath(secrets: IndexedSeq[ExtendedSecretKey]): Try[DerivationPath] = {
+    @scala.annotation.tailrec
+    def nextPath(accPath: List[Int], rem: Seq[Seq[Int]]): Try[DerivationPath] = {
+      if (!rem.forall(_.isEmpty)) {
+        val maxChildIdx = rem.flatMap(_.headOption).max
+        if (!Index.isHardened(maxChildIdx)) {
+          Success(DerivationPath(0 +: (accPath :+ maxChildIdx + 1), publicBranch = false))
+        } else {
+          nextPath(accPath :+ maxChildIdx, rem.map(_.drop(1)))
+        }
+      } else {
+        Failure(
+          new Exception("Out of non-hardened index space. Try to derive hardened key specifying path manually"))
+      }
+    }
+
+    if (secrets.size == 1) {
+      Success(DerivationPath(Array(0, 1), publicBranch = false))
+    } else {
+      nextPath(List.empty, secrets.map(_.path.decodedPath.tail.toList))
     }
   }
 

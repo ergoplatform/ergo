@@ -31,11 +31,13 @@ class WalletStorageSpec
   }
 
   it should "add and read public keys" in {
-    forAll(Gen.nonEmptyListOf(extendedPubKeyGen)) { pubKeys =>
+    forAll(extendedPubKeyListGen) { pubKeys =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
         pubKeys.foreach(storage.addKey)
-        storage.readAllKeys() should contain theSameElementsAs pubKeys.toSet
+        val keysRead = storage.readAllKeys()
+        keysRead.length shouldBe pubKeys.length
+        keysRead should contain theSameElementsAs pubKeys.toSet
       }
     }
   }

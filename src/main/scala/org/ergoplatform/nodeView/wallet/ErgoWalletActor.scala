@@ -20,7 +20,7 @@ import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage}
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey, Index, JsonSecretStorage}
 import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
@@ -465,7 +465,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       .map(_.pubkey)
       .getOrElse {
         log.warn("Change address not specified. Using root address from wallet.")
-        prover.pubKeys.head
+        prover.pubKeys.head.key
       }
 
     val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>
@@ -547,32 +547,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       Failure[T](e)
     }
 
-  /**
-    * Finds next available path index for a new key.
-    */
   private def nextPath(): Try[DerivationPath] = {
-    @scala.annotation.tailrec
-    def nextPath(accPath: List[Int], rem: Seq[Seq[Int]]): Try[DerivationPath] = {
-      if (!rem.forall(_.isEmpty)) {
-        val maxChildIdx = rem.flatMap(_.headOption).max
-        if (!Index.isHardened(maxChildIdx)) {
-          Success(DerivationPath(0 +: (accPath :+ maxChildIdx + 1), publicBranch = false))
-        } else {
-          nextPath(accPath :+ maxChildIdx, rem.map(_.drop(1)))
-        }
-      } else {
-        Failure(
-          new Exception("Out of non-hardened index space. Try to derive hardened key specifying path manually"))
-      }
-    }
-
     val secrets: IndexedSeq[ExtendedSecretKey] = walletVars.proverOpt.toIndexedSeq.flatMap(_.secretKeys)
-
-    if (secrets.size == 1) {
-      Success(DerivationPath(Array(0, 1), publicBranch = false))
-    } else {
-      nextPath(List.empty, secrets.map(_.path.decodedPath.tail.toList))
-    }
+    DerivationPath.nextPath(secrets)
   }
 
 }
@@ -581,7 +558,7 @@ object ErgoWalletActor {
 
   //fields of WalletVars which are potentially costly to compute
   case class MutableStateCache(publicKeyAddresses: Seq[P2PKAddress],
-                               trackedPubKeys: Seq[DLogProtocol.ProveDlog],
+                               trackedPubKeys: Seq[ExtendedPublicKey],
                                trackedBytes: Seq[Array[Byte]],
                                filter: CuckooFilter[Array[Byte]])
 
@@ -609,22 +586,22 @@ object ErgoWalletActor {
     //this is constant actually, it is here to avoid passing settings to resolving methods
     val minerRewardDelay: Int = settings.chainSettings.monetary.minerRewardDelay
 
-    val trackedPubKeys: Seq[DLogProtocol.ProveDlog] = stateCacheOpt.map(_.trackedPubKeys).getOrElse {
+    val trackedPubKeys: Seq[ExtendedPublicKey] = stateCacheOpt.map(_.trackedPubKeys).getOrElse {
       proverOpt.toSeq.flatMap(_.pubKeys)
     }
 
     val publicKeyAddresses: Seq[P2PKAddress] = stateCacheOpt.map(_.publicKeyAddresses).getOrElse {
-      trackedPubKeys.map(P2PKAddress.apply)
+      trackedPubKeys.map(pk => P2PKAddress(pk.key))
     }
 
     val trackedBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.trackedBytes).getOrElse {
-      trackedPubKeys.map(_.propBytes.toArray)
+      trackedPubKeys.map(_.key.propBytes.toArray)
     }
 
     // currently only one mining key supported
     val miningScripts: Seq[Values.ErgoTree] = proverOpt.toSeq.flatMap { prover =>
       prover.pubKeys.headOption.map { pk =>
-        ErgoScriptPredef.rewardOutputScript(settings.chainSettings.monetary.minerRewardDelay, pk)
+        ErgoScriptPredef.rewardOutputScript(settings.chainSettings.monetary.minerRewardDelay, pk.key)
       }
     }
 
@@ -661,9 +638,9 @@ object ErgoWalletActor {
       proverOpt match {
         case Some(prover) =>
           val (updProver, newPk) = prover.withNewSecret(secret)
-          val updAddresses: Seq[P2PKAddress] = publicKeyAddresses :+ P2PKAddress(newPk)
-          val updTrackedPubKeys: Seq[DLogProtocol.ProveDlog] = trackedPubKeys :+ newPk
-          val newPkBytes = newPk.propBytes.toArray
+          val updAddresses: Seq[P2PKAddress] = publicKeyAddresses :+ P2PKAddress(newPk.key)
+          val updTrackedPubKeys: Seq[ExtendedPublicKey] = trackedPubKeys :+ newPk
+          val newPkBytes = newPk.key.propBytes.toArray
           val updTrackedBytes: Seq[Array[Byte]] = trackedBytes :+ newPkBytes
           val updFilter: CuckooFilter[Array[Byte]] = filter.insert(newPkBytes).get
 

@@ -142,6 +142,16 @@ trait Generators {
 
   def extendedPubKeyGen: Gen[ExtendedPublicKey] = extendedSecretGen.map(_.publicKey)
 
+  def extendedPubKeyListGen: Gen[Seq[ExtendedPublicKey]] = extendedSecretGen.flatMap { sk =>
+    Gen.choose(1, 100).map { cnt =>
+      (1 to cnt).foldLeft(IndexedSeq(sk)) { case (keys, _) =>
+        val dp = DerivationPath.nextPath(keys).get
+        val newSk = sk.derive(dp).asInstanceOf[ExtendedSecretKey]
+        keys :+ newSk
+      }.map(_.publicKey)
+    }
+  }
+
   def appStatusesGen: Gen[Map[Short, BoxCertainty]] = {
     Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.toSet.toSeq).flatMap { appIds =>
       Gen.listOfN(appIds.length, Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)).map { certainities =>
@@ -151,7 +161,6 @@ trait Generators {
       appId -> (if (appId == PaymentsAppId) BoxCertainty.Certain else certainty)
     }.toMap)
   }
-
 
   def trackedBoxGen: Gen[TrackedBox] = for {
     creationTxId <- modIdGen

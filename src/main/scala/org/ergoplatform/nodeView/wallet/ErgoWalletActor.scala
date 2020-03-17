@@ -318,6 +318,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     }
 
   private type FilterFn = TrackedBox => Boolean
+
   /**
     * This filter is selecting boxes which are onchain and not spent offchain yet.
     * This filter is used when wallet is looking through its boxes to assemble a transaction.
@@ -463,7 +464,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       .map(_.pubkey)
       .getOrElse {
         log.warn("Change address not specified. Using root address from wallet.")
-        prover.pubKeys.head.key
+        prover.pubKeys.head
       }
 
     val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>
@@ -555,9 +556,76 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 object ErgoWalletActor {
 
   //Fields of WalletVars which are potentially costly to compute if there are many keys
-  case class MutableStateCache(publicKeyAddresses: Seq[P2PKAddress],
-                               trackedBytes: Seq[Array[Byte]],
-                               filter: CuckooFilter[Array[Byte]])
+  final case class MutableStateCache(publicKeyAddresses: Seq[P2PKAddress],
+                                     trackedPubKeys: Seq[ExtendedPublicKey],
+                                     trackedBytes: Seq[Array[Byte]],
+                                     filter: CuckooFilter[Array[Byte]]
+                                    )(implicit val settings: ErgoSettings) {
+
+    implicit val addressEncoder = settings.addressEncoder
+
+    val miningScripts: Seq[Values.ErgoTree] = MutableStateCache.miningScripts(trackedPubKeys, settings)
+
+    val miningScriptsBytes: Seq[Array[Byte]] = miningScripts.map(_.bytes)
+
+    def withNewPubkey(newPk: ExtendedPublicKey): MutableStateCache = {
+      val updAddresses: Seq[P2PKAddress] = publicKeyAddresses :+ P2PKAddress(newPk.key)
+      val updTrackedPubKeys: Seq[ExtendedPublicKey] = trackedPubKeys :+ newPk
+      val newPkBytes = newPk.key.propBytes.toArray
+      val updTrackedBytes: Seq[Array[Byte]] = trackedBytes :+ newPkBytes
+      val updFilter: CuckooFilter[Array[Byte]] = filter.insert(newPkBytes).get
+
+      MutableStateCache(updAddresses, updTrackedPubKeys, updTrackedBytes, updFilter)
+    }
+  }
+
+  object MutableStateCache {
+    //strategy for Cuckoo filter
+    import com.github.oskin1.scakoo.TaggingStrategy.MurmurHash3Strategy
+
+    // currently only one mining key supported
+    def miningScripts(trackedPubKeys: Seq[ExtendedPublicKey],
+                      settings: ErgoSettings): Seq[Values.ErgoTree] = {
+      trackedPubKeys.headOption.map { pk =>
+        ErgoScriptPredef.rewardOutputScript(settings.miningRewardDelay, pk.key)
+      }.toSeq
+    }
+
+    def emptyFilter(settings: ErgoSettings): com.github.oskin1.scakoo.mutable.CuckooFilter[Array[Byte]] = {
+      val entriesPerBucket = settings.walletSettings.keysFilter.entriesPerBucket
+      val bucketsQty = settings.walletSettings.keysFilter.bucketsQty
+      com.github.oskin1.scakoo.mutable.CuckooFilter[Array[Byte]](entriesPerBucket, bucketsQty)
+    }
+
+    /**
+      * Construction a Cuckoo filter for scanning the boxes efficiently
+      */
+    def filter(trackedBytes: Seq[Array[Byte]],
+               miningScriptsBytes: Seq[Array[Byte]],
+               settings: ErgoSettings): CuckooFilter[Array[Byte]] = {
+      val f = emptyFilter(settings)
+      trackedBytes.foreach(bs => f.insert(bs))
+      miningScriptsBytes.foreach(msb => f.insert(msb))
+      CuckooFilter.recover(f.memTable, f.entriesCount, f.entriesPerBucket)
+    }
+
+    def trackedBytes(trackedPubKeys: Seq[ExtendedPublicKey]): Seq[Array[Byte]] =
+      trackedPubKeys.map(_.key.propBytes.toArray)
+
+    def trackedAddresses(trackedPubKeys: Seq[ExtendedPublicKey],
+                         addressEncoder: ErgoAddressEncoder): Seq[P2PKAddress] =
+      trackedPubKeys.map(pk => P2PKAddress(pk.key)(addressEncoder))
+
+    def apply(trackedPubKeys: Seq[ExtendedPublicKey], settings: ErgoSettings): MutableStateCache = {
+      val tbs = trackedBytes(trackedPubKeys)
+      val msbs = miningScripts(trackedPubKeys, settings).map(_.bytes)
+      val f = filter(tbs, msbs, settings)
+      val tas = trackedAddresses(trackedPubKeys, settings.addressEncoder)
+
+      MutableStateCache(tas, trackedPubKeys, tbs, f)(settings)
+    }
+
+  }
 
   /**
     * Inner class of the wallet actor which it encapsulating its mutable state (aside of the databases
@@ -566,52 +634,30 @@ object ErgoWalletActor {
     *
     * @param proverOpt
     * @param externalApplications
-    * @param stateCacheOpt
+    * @param stateCacheProvided
     * @param settings
     */
   case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
-                        trackedPubKeys: Seq[ExtendedPublicKey],
                         externalApplications: Seq[ExternalApplication],
-                        stateCacheOpt: Option[MutableStateCache] = None)
+                        stateCacheProvided: Option[MutableStateCache] = None)
                        (implicit val settings: ErgoSettings) extends ScorexLogging {
 
-    //strategy for Cuckoo filter
-    import com.github.oskin1.scakoo.TaggingStrategy.MurmurHash3Strategy
+    private[wallet] implicit val addressEncoder = settings.addressEncoder
 
-    private[wallet] implicit val addressEncoder: ErgoAddressEncoder =
-      ErgoAddressEncoder(settings.chainSettings.addressPrefix)
+    val stateCacheOpt: Option[MutableStateCache] =
+      stateCacheProvided.orElse(proverOpt.map(p => MutableStateCache(p.extendedPublicKeys, settings)))
 
-    //this is constant actually, it is here to avoid passing settings to resolving methods
-    val minerRewardDelay: Int = settings.chainSettings.monetary.minerRewardDelay
+    val trackedPubKeys: Seq[ExtendedPublicKey] = stateCacheOpt.map(_.trackedPubKeys).getOrElse(Seq.empty)
 
-    val publicKeyAddresses: Seq[P2PKAddress] = stateCacheOpt.map(_.publicKeyAddresses).getOrElse {
-      trackedPubKeys.map(pk => P2PKAddress(pk.key))
-    }
+    val publicKeyAddresses: Seq[P2PKAddress] = stateCacheOpt.map(_.publicKeyAddresses).getOrElse(Seq.empty)
 
-    val trackedBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.trackedBytes).getOrElse {
-      trackedPubKeys.map(_.key.propBytes.toArray)
-    }
+    val trackedBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.trackedBytes).getOrElse(Seq.empty)
 
-    // currently only one mining key supported
-    val miningScripts: Seq[Values.ErgoTree] = proverOpt.toSeq.flatMap { prover =>
-      prover.pubKeys.headOption.map { pk =>
-        ErgoScriptPredef.rewardOutputScript(settings.chainSettings.monetary.minerRewardDelay, pk.key)
-      }
-    }
+    val miningScripts = stateCacheOpt.map(_.miningScripts).getOrElse(Seq.empty)
 
-    val miningScriptsBytes: Seq[Array[Byte]] = miningScripts.map(_.bytes)
+    val miningScriptsBytes = stateCacheOpt.map(_.miningScriptsBytes).getOrElse(Seq.empty)
 
-    /**
-      * Cuckoo filter for scan the boxes efficiently
-      */
-    val filter: CuckooFilter[Array[Byte]] = stateCacheOpt.map(_.filter).getOrElse {
-      val entriesPerBucket = settings.walletSettings.keysFilter.entriesPerBucket
-      val bucketsQty = settings.walletSettings.keysFilter.bucketsQty
-      val f = com.github.oskin1.scakoo.mutable.CuckooFilter[Array[Byte]](entriesPerBucket, bucketsQty)
-      trackedBytes.foreach(bs => f.insert(bs))
-      miningScriptsBytes.foreach(msb => f.insert(msb))
-      CuckooFilter.recover(f.memTable, f.entriesCount, f.entriesPerBucket)
-    }
+    val filter = stateCacheOpt.map(_.filter).getOrElse(MutableStateCache.emptyFilter(settings))
 
     /**
       * Clear the prover along with its secrets
@@ -620,8 +666,7 @@ object ErgoWalletActor {
       **/
     def resetProver(): WalletVars = this.copy(proverOpt = None)
 
-    def withProver(prover: ErgoProvingInterpreter): WalletVars =
-      this.copy(proverOpt = Some(prover), trackedPubKeys = proverOpt.toSeq.flatMap(_.pubKeys))
+    def withProver(prover: ErgoProvingInterpreter): WalletVars = this.copy(proverOpt = Some(prover))
 
     /**
       * Add new secret to the prover
@@ -633,15 +678,8 @@ object ErgoWalletActor {
       proverOpt match {
         case Some(prover) =>
           val (updProver, newPk) = prover.withNewSecret(secret)
-          val updAddresses: Seq[P2PKAddress] = publicKeyAddresses :+ P2PKAddress(newPk.key)
-          val updTrackedPubKeys: Seq[ExtendedPublicKey] = trackedPubKeys :+ newPk
-          val newPkBytes = newPk.key.propBytes.toArray
-          val updTrackedBytes: Seq[Array[Byte]] = trackedBytes :+ newPkBytes
-          val updFilter: CuckooFilter[Array[Byte]] = filter.insert(newPkBytes).get
-
-          val updCache = MutableStateCache(updAddresses, updTrackedBytes, updFilter)
-
-          this.copy(proverOpt = Some(updProver), trackedPubKeys = updTrackedPubKeys, stateCacheOpt = Some(updCache))
+          val updCache = stateCacheProvided.get.withNewPubkey(newPk)
+          this.copy(proverOpt = Some(updProver), stateCacheProvided = Some(updCache))
         case None =>
           log.warn(s"Trying to add new secret, but prover is not initialized")
           this
@@ -656,14 +694,10 @@ object ErgoWalletActor {
   }
 
   object WalletVars {
-
-    def apply(proverOpt: Option[ErgoProvingInterpreter],
-              externalApplications: Seq[ExternalApplication],
-              settings: ErgoSettings): WalletVars =
-      WalletVars(proverOpt, Seq.empty, externalApplications)(settings)
-
-    def initial(storage: WalletStorage, settings: ErgoSettings): WalletVars =
-      WalletVars(None, storage.readAllKeys(), storage.allApplications)(settings)
+    def initial(storage: WalletStorage, settings: ErgoSettings): WalletVars = {
+      val keysRead = storage.readAllKeys()
+      WalletVars(None, storage.allApplications)(settings)
+    }
   }
 
   final case class WatchFor(address: ErgoAddress)

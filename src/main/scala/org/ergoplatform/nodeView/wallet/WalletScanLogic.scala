@@ -130,7 +130,7 @@ object WalletScanLogic extends ScorexLogging {
         val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
 
         //tweak for tests
-        lazy val miningStatus: (AppId, BoxCertainty) = if (walletVars.minerRewardDelay > 0) {
+        lazy val miningStatus: (AppId, BoxCertainty) = if (walletVars.settings.miningRewardDelay > 0) {
           MiningRewardsAppId -> BoxCertainty.Certain
         } else {
           PaymentsAppId -> BoxCertainty.Certain

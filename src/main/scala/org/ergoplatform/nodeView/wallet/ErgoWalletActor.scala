@@ -562,7 +562,7 @@ object ErgoWalletActor {
                                      filter: CuckooFilter[Array[Byte]]
                                     )(implicit val settings: ErgoSettings) {
 
-    implicit val addressEncoder = settings.addressEncoder
+    implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
     val miningScripts: Seq[Values.ErgoTree] = MutableStateCache.miningScripts(trackedPubKeys, settings)
 
@@ -577,6 +577,7 @@ object ErgoWalletActor {
 
       MutableStateCache(updAddresses, updTrackedPubKeys, updTrackedBytes, updFilter)
     }
+
   }
 
   object MutableStateCache {
@@ -686,17 +687,25 @@ object ErgoWalletActor {
       }
     }
 
-    def removeApplication(appId: AppId): WalletVars =
+    def removeApplication(appId: AppId): WalletVars = {
       this.copy(externalApplications = this.externalApplications.filter(_.appId != appId))
+    }
 
-    def addApplication(app: ExternalApplication): WalletVars =
+    def addApplication(app: ExternalApplication): WalletVars = {
       this.copy(externalApplications = this.externalApplications :+ app)
+    }
+
   }
 
   object WalletVars {
     def initial(storage: WalletStorage, settings: ErgoSettings): WalletVars = {
       val keysRead = storage.readAllKeys()
-      WalletVars(None, storage.allApplications)(settings)
+      val cacheOpt = if (keysRead.nonEmpty) {
+        Some(MutableStateCache(keysRead, settings))
+      } else {
+        None
+      }
+      WalletVars(None, storage.allApplications, cacheOpt)(settings)
     }
   }
 

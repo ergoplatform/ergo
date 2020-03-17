@@ -1,12 +1,13 @@
 package scorex.db
 
 import org.iq80.leveldb.DB
+import scorex.util.ScorexLogging
 
 
 /**
   * A LevelDB wrapper providing a convenient db interface.
   */
-class LDBKVStore(protected val db: DB) extends KVStore {
+class LDBKVStore(protected val db: DB) extends KVStore with ScorexLogging {
 
   def update(toInsert: Seq[(K, V)], toRemove: Seq[K]): Unit = {
     val batch = db.createWriteBatch()
@@ -14,6 +15,8 @@ class LDBKVStore(protected val db: DB) extends KVStore {
       toInsert.foreach { case (k, v) => batch.put(k, v) }
       toRemove.foreach(batch.delete)
       db.write(batch)
+    } catch {
+      case t: Throwable => log.error("DB error: ", t)
     } finally {
       batch.close()
     }

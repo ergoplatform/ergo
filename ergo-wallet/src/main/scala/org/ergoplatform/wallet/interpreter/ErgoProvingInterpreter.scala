@@ -7,7 +7,8 @@ import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext, TransactionContext}
 import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import scorex.util.encode.Base16
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.basics.DLogProtocol
+import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.eval.{CompiletimeIRContext, IRContext}
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
@@ -33,7 +34,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[ExtendedSecretKey],
 
   val secrets: IndexedSeq[DLogProverInput] = secretKeys.map(_.key)
 
-  val pubKeys: IndexedSeq[ExtendedPublicKey] = cachedPubKeysOpt match {
+  val extendedPublicKeys: IndexedSeq[ExtendedPublicKey] = cachedPubKeysOpt match {
     case Some(cachedPubKeys) =>
       if (cachedPubKeys.length != secrets.length) {
         log.error(s"ErgoProverInterpreter: pubkeys and secrets of different sizes: ${cachedPubKeys.length} and ${secrets.length}")
@@ -43,10 +44,12 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[ExtendedSecretKey],
       secretKeys.map(_.publicKey) // costly operation if there are many secret keys
   }
 
+  val pubKeys: IndexedSeq[DLogProtocol.ProveDlog] = extendedPublicKeys.map(_.key)
+
   def withNewSecret(secret: ExtendedSecretKey): (ErgoProvingInterpreter, ExtendedPublicKey) = {
     val newPk = secret.publicKey
     val sks = secretKeys :+ secret
-    val pks = pubKeys :+ newPk
+    val pks = extendedPublicKeys :+ newPk
     log.info(s"New secret created, public image: ${Base16.encode(newPk.key.pkBytes)}")
     new ErgoProvingInterpreter(sks, params, Some(pks)) -> newPk
   }

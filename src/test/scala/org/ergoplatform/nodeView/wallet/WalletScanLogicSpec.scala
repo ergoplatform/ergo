@@ -26,7 +26,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
                                         appPaymentValues: List[Int],
                                         miningRewards: List[ErgoTree],
                                         miningRewardValues: List[Int]) {
-    def scriptsCount = payments.size + appPayments.size + miningRewards.size
+    def scriptsCount: Int = payments.size + appPayments.size + miningRewards.size
     def valuesSum: Long = (paymentValues ++ appPaymentValues ++ miningRewardValues).sum
   }
 
@@ -41,7 +41,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
   private val appReq = ExternalAppRequest("True detector", scanningPredicate, alwaysCertain = false)
   private val appId: Short = 50
 
-  private val walletVars = WalletVars(Some(prover), Seq(appReq.toApp(appId).get), s)
+  private val walletVars = WalletVars(Some(prover), Seq(appReq.toApp(appId).get), None)(s)
 
   private val pubkeys = walletVars.trackedPubKeys
   private val miningScripts = walletVars.miningScripts
@@ -69,7 +69,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
       val nonTrackableValues = nonTrackablePayments.map(_ => valueGen())
       val outs = (payments ++ appPayments ++ miningRewards ++ nonTrackablePayments)
         .zip(paymentValues ++ appPaymentValues ++ miningRewardValues ++ nonTrackableValues)
-        .map { case (script, value) => new ErgoBoxCandidate(value, script, creationHeight = 1) }
+        .map { case (script, vl) => new ErgoBoxCandidate(vl, script, creationHeight = 1) }
         .toIndexedSeq
 
       val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, outs)

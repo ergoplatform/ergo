@@ -31,6 +31,8 @@ case class ErgoSettings(directory: String,
 
   val addressEncoder = ErgoAddressEncoder(chainSettings.addressPrefix)
 
+  val miningRewardDelay: Int = chainSettings.monetary.minerRewardDelay
+
   val miningPubKey: Option[ProveDlog] = nodeSettings.miningPubKeyHex
     .flatMap { str =>
       val keyBytes = Base16.decode(str)

@@ -265,8 +265,10 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           DerivationPath.fromEncoded(encodedPath).foreach {
             case path if !path.publicBranch =>
               val secret = rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
-              processSecretAddition(secret)
-              sender() ! Success(P2PKAddress(secret.publicKey.key))
+              processSecretAddition(secret) match {
+                case Success(_) => sender() ! Success(P2PKAddress(secret.publicKey.key))
+                case f: Failure[Unit] => sender() ! f
+              }
             case path =>
               sender() ! Failure(new Exception(
                 s"A private path is expected, but the public one given: $path"))
@@ -277,10 +279,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case DeriveNextKey =>
       withWalletLockHandler(sender()) {
         _.secret.foreach { rootSecret =>
-          sender() ! nextPath().map { path =>
+          sender() ! nextPath().flatMap { path =>
             val secret = rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
-            processSecretAddition(secret)
-            path -> P2PKAddress(secret.publicKey.key)
+            processSecretAddition(secret).map { _ =>
+              path -> P2PKAddress(secret.publicKey.key)
+            }
           }
         }
       }
@@ -482,10 +485,14 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       .fold(e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputs", e)), tx => Success(tx))
   }
 
-  private def processSecretAddition(secret: ExtendedSecretKey): Unit = {
-    walletVars = walletVars.withNewSecret(secret)
-    val pubKey = secret.publicKey
-    storage.addKey(pubKey)
+  private def processSecretAddition(secret: ExtendedSecretKey): Try[Unit] = {
+    walletVars.withNewSecret(secret) match {
+      case Success(newWalletVars) =>
+        walletVars = newWalletVars
+        val pubKey = secret.publicKey
+        Success(storage.addKey(pubKey))
+      case Failure(t) => Failure(t)
+    }
   }
 
   private def processUnlock(secretStorage: JsonSecretStorage): Unit = {
@@ -568,7 +575,7 @@ object ErgoWalletActor {
 
     val miningScriptsBytes: Seq[Array[Byte]] = miningScripts.map(_.bytes)
 
-    def withNewPubkey(newPk: ExtendedPublicKey): MutableStateCache = {
+    def withNewPubkey(newPk: ExtendedPublicKey): Try[MutableStateCache] = Try {
       val updAddresses: Seq[P2PKAddress] = publicKeyAddresses :+ P2PKAddress(newPk.key)
       val updTrackedPubKeys: Seq[ExtendedPublicKey] = trackedPubKeys :+ newPk
       val newPkBytes = newPk.key.propBytes.toArray
@@ -639,9 +646,9 @@ object ErgoWalletActor {
     * @param settings
     */
   final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
-                        externalApplications: Seq[ExternalApplication],
-                        stateCacheProvided: Option[MutableStateCache] = None)
-                       (implicit val settings: ErgoSettings) extends ScorexLogging {
+                              externalApplications: Seq[ExternalApplication],
+                              stateCacheProvided: Option[MutableStateCache] = None)
+                             (implicit val settings: ErgoSettings) extends ScorexLogging {
 
     private[wallet] implicit val addressEncoder = settings.addressEncoder
 
@@ -687,11 +694,11 @@ object ErgoWalletActor {
       * @param secret - secret to add to existing ones
       * @return
       */
-    def withNewSecret(secret: ExtendedSecretKey): WalletVars = {
+    def withNewSecret(secret: ExtendedSecretKey): Try[WalletVars] = Try {
       proverOpt match {
         case Some(prover) =>
           val (updProver, newPk) = prover.withNewSecret(secret)
-          val updCache = stateCacheProvided.get.withNewPubkey(newPk)
+          val updCache = stateCacheProvided.get.withNewPubkey(newPk).get
           this.copy(proverOpt = Some(updProver), stateCacheProvided = Some(updCache))
         case None =>
           log.warn(s"Trying to add new secret, but prover is not initialized")

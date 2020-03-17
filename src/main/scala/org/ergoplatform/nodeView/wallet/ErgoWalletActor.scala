@@ -60,7 +60,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private var registry: WalletRegistry = WalletRegistry.readOrCreate(settings)
   private var offChainRegistry: OffChainRegistry = OffChainRegistry.init(registry)
 
-  private var walletVars = WalletVars.initial(storage, settings)
+  private var walletVars = WalletVars.apply(storage, settings)
 
 
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
@@ -638,7 +638,7 @@ object ErgoWalletActor {
     * @param stateCacheProvided
     * @param settings
     */
-  case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
+  final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
                         externalApplications: Seq[ExternalApplication],
                         stateCacheProvided: Option[MutableStateCache] = None)
                        (implicit val settings: ErgoSettings) extends ScorexLogging {
@@ -660,14 +660,26 @@ object ErgoWalletActor {
 
     val filter = stateCacheOpt.map(_.filter).getOrElse(MutableStateCache.emptyFilter(settings))
 
+    def removeApplication(appId: AppId): WalletVars = {
+      this.copy(externalApplications = this.externalApplications.filter(_.appId != appId))
+    }
+
+    def addApplication(app: ExternalApplication): WalletVars = {
+      this.copy(externalApplications = this.externalApplications :+ app)
+    }
+
     /**
-      * Clear the prover along with its secrets
+      * Clear the prover along with its secrets.
+      *
+      * Public keys and applications still live in the new instance.
       *
       * @return updated WalletVars instance
       **/
     def resetProver(): WalletVars = this.copy(proverOpt = None)
 
-    def withProver(prover: ErgoProvingInterpreter): WalletVars = this.copy(proverOpt = Some(prover))
+    def withProver(prover: ErgoProvingInterpreter): WalletVars = {
+      this.copy(proverOpt = Some(prover), stateCacheProvided = None)
+    }
 
     /**
       * Add new secret to the prover
@@ -687,18 +699,11 @@ object ErgoWalletActor {
       }
     }
 
-    def removeApplication(appId: AppId): WalletVars = {
-      this.copy(externalApplications = this.externalApplications.filter(_.appId != appId))
-    }
-
-    def addApplication(app: ExternalApplication): WalletVars = {
-      this.copy(externalApplications = this.externalApplications :+ app)
-    }
-
   }
 
   object WalletVars {
-    def initial(storage: WalletStorage, settings: ErgoSettings): WalletVars = {
+
+    def apply(storage: WalletStorage, settings: ErgoSettings): WalletVars = {
       val keysRead = storage.readAllKeys()
       val cacheOpt = if (keysRead.nonEmpty) {
         Some(MutableStateCache(keysRead, settings))

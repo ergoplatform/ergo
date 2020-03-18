@@ -61,9 +61,9 @@ final case class TrackedBox(creationTxId: ModifierId,
 
   lazy val boxId: ModifierId = bytesToId(box.id)
 
-  lazy val value: Long = box.value
+  def value: Long = box.value
 
-  lazy val spent: Boolean = spendingHeightOpt.isDefined
+  def spent: Boolean = spendingHeightOpt.isDefined
 
   def certain(appId: Short): Option[BoxCertainty] = applicationStatuses.find(_._1 == appId).map(_._2)
 
@@ -77,6 +77,7 @@ final case class TrackedBox(creationTxId: ModifierId,
   }
 
   override def hashCode(): Int = (creationTxId, creationOutIndex).hashCode()
+
 }
 
 object TrackedBox {
@@ -84,6 +85,7 @@ object TrackedBox {
   def apply(creationTx: ErgoLikeTransaction, creationOutIndex: Short, creationHeight: Option[Int],
             box: ErgoBox, appStatuses: Map[Short, BoxCertainty]): TrackedBox =
     apply(creationTx.id, creationOutIndex, creationHeight, None, None, box, appStatuses)
+
 }
 
 object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {

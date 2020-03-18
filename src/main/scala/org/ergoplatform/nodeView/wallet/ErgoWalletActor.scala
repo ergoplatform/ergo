@@ -5,6 +5,7 @@ import java.util
 
 import akka.actor.{Actor, ActorRef}
 import cats.Traverse
+import com.github.oskin1.scakoo.BaseCuckooFilter
 import com.github.oskin1.scakoo.immutable.CuckooFilter
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
@@ -32,6 +33,7 @@ import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import org.ergoplatform.wallet.Constants.PaymentsAppId
 import sigmastate.Values
+
 import scala.concurrent.Future
 import scala.util.{Failure, Random, Success, Try}
 
@@ -237,12 +239,13 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           val unlockResult = secretStorage.unlock(pass)
           unlockResult match {
             case Success(_) =>
-              log.info("Starting wallet unlock")
               Future {
+                log.info("Starting wallet unlock")
                 processUnlock(secretStorage)
                 log.info("Wallet unlock finished")
               }
-            case Failure(t) => log.warn("Wallet unlock failed with: ", t)
+            case Failure(t) =>
+              log.warn("Wallet unlock failed with: ", t)
           }
           sender() ! unlockResult
         case None =>
@@ -495,7 +498,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     }
   }
 
-  private def processUnlock(secretStorage: JsonSecretStorage): Unit = {
+  private def processUnlock(secretStorage: JsonSecretStorage): Unit = Try {
     val rootSecretOpt = secretStorage.secret
 
     // first, we're trying to find in the database paths written by clients prior 3.3.0 and convert them
@@ -517,7 +520,13 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       secretStorage.secret.toSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
     }
     walletVars = walletVars.withProver(ErgoProvingInterpreter(secrets, parameters))
+  } match {
+    case Success(_) =>
+    case Failure(t) =>
+      log.error("Unlock failed: ", t)
   }
+
+
 
   private def inputsFor(targetAmount: Long,
                         targetAssets: Map[ModifierId, Long] = Map.empty): Seq[ErgoBox] = {
@@ -650,7 +659,7 @@ object ErgoWalletActor {
                               stateCacheProvided: Option[MutableStateCache] = None)
                              (implicit val settings: ErgoSettings) extends ScorexLogging {
 
-    private[wallet] implicit val addressEncoder = settings.addressEncoder
+    private[wallet] implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
     val stateCacheOpt: Option[MutableStateCache] =
       stateCacheProvided.orElse(proverOpt.map(p => MutableStateCache(p.extendedPublicKeys, settings)))
@@ -661,11 +670,12 @@ object ErgoWalletActor {
 
     val trackedBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.trackedBytes).getOrElse(Seq.empty)
 
-    val miningScripts = stateCacheOpt.map(_.miningScripts).getOrElse(Seq.empty)
+    val miningScripts: Seq[Values.ErgoTree] = stateCacheOpt.map(_.miningScripts).getOrElse(Seq.empty)
 
-    val miningScriptsBytes = stateCacheOpt.map(_.miningScriptsBytes).getOrElse(Seq.empty)
+    val miningScriptsBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.miningScriptsBytes).getOrElse(Seq.empty)
 
-    val filter = stateCacheOpt.map(_.filter).getOrElse(MutableStateCache.emptyFilter(settings))
+    val filter: BaseCuckooFilter[Array[Byte]] =
+      stateCacheOpt.map(_.filter).getOrElse(MutableStateCache.emptyFilter(settings))
 
     def removeApplication(appId: AppId): WalletVars = {
       this.copy(externalApplications = this.externalApplications.filter(_.appId != appId))

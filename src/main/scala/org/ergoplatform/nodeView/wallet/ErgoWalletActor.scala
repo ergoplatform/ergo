@@ -312,15 +312,15 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! registry.removeApp(appId, boxId)
   }
 
-  private def withWalletLockHandler(callback: ActorRef)
+  private def withWalletLockHandler(callbackActor: ActorRef)
                                    (body: JsonSecretStorage => Unit): Unit =
     secretStorageOpt match {
       case Some(secretStorage) if !secretStorage.isLocked =>
         body(secretStorage)
       case Some(_) =>
-        callback ! Failure(new Exception("Wallet is locked"))
+        callbackActor ! Failure(new Exception("Wallet is locked"))
       case None =>
-        callback ! Failure(new Exception("Wallet is not initialized"))
+        callbackActor ! Failure(new Exception("Wallet is not initialized"))
     }
 
   private type FilterFn = TrackedBox => Boolean
@@ -712,7 +712,7 @@ object ErgoWalletActor {
       proverOpt match {
         case Some(prover) =>
           val (updProver, newPk) = prover.withNewSecret(secret)
-          val updCache = stateCacheProvided.get.withNewPubkey(newPk).get
+          val updCache = stateCacheOpt.get.withNewPubkey(newPk).get
           this.copy(proverOpt = Some(updProver), stateCacheProvided = Some(updCache))
         case None =>
           log.warn(s"Trying to add new secret, but prover is not initialized")

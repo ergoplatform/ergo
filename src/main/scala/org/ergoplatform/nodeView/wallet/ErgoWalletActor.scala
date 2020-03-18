@@ -515,6 +515,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     val pubKeys = storage.readAllKeys()
 
+    //If no public keys in the database yet, add master's public key into it
+    if (pubKeys.isEmpty) {
+      rootSecretOpt.foreach(s => storage.addKey(s.publicKey))
+    }
+
     val secrets = rootSecretOpt.toIndexedSeq ++ pubKeys.flatMap { pk =>
       val path = pk.path.toPrivateBranch
       secretStorage.secret.toSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
@@ -525,7 +530,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case Failure(t) =>
       log.error("Unlock failed: ", t)
   }
-
 
 
   private def inputsFor(targetAmount: Long,

@@ -515,8 +515,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     val pubKeys = storage.readAllKeys()
 
-    val secrets = secretStorage.secret.toIndexedSeq ++ pubKeys.flatMap { pk =>
-      val path = pk.path
+    val secrets = rootSecretOpt.toIndexedSeq ++ pubKeys.flatMap { pk =>
+      val path = pk.path.toPrivateBranch
       secretStorage.secret.toSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
     }
     walletVars = walletVars.withProver(ErgoProvingInterpreter(secrets, parameters))
@@ -692,7 +692,7 @@ object ErgoWalletActor {
       *
       * @return updated WalletVars instance
       **/
-    def resetProver(): WalletVars = this.copy(proverOpt = None)
+    def resetProver(): WalletVars = this.copy(proverOpt = None, stateCacheProvided = stateCacheOpt)
 
     def withProver(prover: ErgoProvingInterpreter): WalletVars = {
       this.copy(proverOpt = Some(prover), stateCacheProvided = None)

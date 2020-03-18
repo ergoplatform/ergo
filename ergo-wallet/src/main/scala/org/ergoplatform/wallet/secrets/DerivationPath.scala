@@ -31,6 +31,8 @@ final case class DerivationPath(decodedPath: Seq[Int], publicBranch: Boolean) {
 
   def toPublic: DerivationPath = this.copy(publicBranch = true)
 
+  def toPrivateBranch: DerivationPath = this.copy(publicBranch = false)
+
   override def toString: String = encoded
 
   def bytes: Array[Byte] = DerivationPathSerializer.toBytes(this)

@@ -96,8 +96,8 @@ trait ErgoWalletReader extends VaultReader {
   def addApplication(appRequest: ExternalAppRequest): Future[AddApplicationResponse] =
     (walletActor ? AddApplication(appRequest)).mapTo[AddApplicationResponse]
 
-  def removeApplication(appId: AppId): Future[Try[Unit]] =
-    (walletActor ? RemoveApplication(appId)).mapTo[Try[Unit]]
+  def removeApplication(appId: AppId): Future[RemoveApplicationResponse] =
+    (walletActor ? RemoveApplication(appId)).mapTo[RemoveApplicationResponse]
 
   def readApplications(): Future[Seq[ExternalApplication]] =
     (walletActor ? ReadApplications).mapTo[Seq[ExternalApplication]]

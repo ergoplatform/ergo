@@ -295,8 +295,13 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       storage.updateChangeAddress(address)
 
     case RemoveApplication(appId) =>
-      val res: Try[Unit] = Try(storage.removeApplication(appId))
-      res.foreach(app => walletVars = walletVars.removeApplication(appId))
+      val res: Try[Unit] = {
+        storage.getApplication(appId) match {
+          case None => Failure(new Exception(s"Application #$appId not found"))
+          case Some(_) => Try(storage.removeApplication(appId))
+        }
+      }
+      res.foreach(_ => walletVars = walletVars.removeApplication(appId))
       sender() ! RemoveApplicationResponse(res)
 
     case AddApplication(appRequest) =>

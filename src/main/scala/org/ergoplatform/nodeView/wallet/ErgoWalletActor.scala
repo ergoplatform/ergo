@@ -499,30 +499,29 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   private def processUnlock(secretStorage: JsonSecretStorage): Unit = Try {
-    val rootSecretOpt = secretStorage.secret
+    val rootSecretSeq = secretStorage.secret.toSeq
 
     // first, we're trying to find in the database paths written by clients prior 3.3.0 and convert them
     // into a new format (pubkeys with paths stored instead of paths)
     val oldPaths = storage.readPaths()
     if (oldPaths.nonEmpty) {
-      val oldDerivedSecrets = oldPaths.flatMap { path =>
-        rootSecretOpt.toSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
+      val oldDerivedSecrets = rootSecretSeq ++ oldPaths.flatMap { path =>
+        rootSecretSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
       }
       val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
       oldPubKeys.foreach(storage.addKey)
       storage.removePaths()
     }
-
-    val pubKeys = storage.readAllKeys()
+    val pubKeys = storage.readAllKeys().toIndexedSeq
 
     //If no public keys in the database yet, add master's public key into it
     if (pubKeys.isEmpty) {
-      rootSecretOpt.foreach(s => storage.addKey(s.publicKey))
+      rootSecretSeq.foreach(s => storage.addKey(s.publicKey))
     }
 
-    val secrets = rootSecretOpt.toIndexedSeq ++ pubKeys.flatMap { pk =>
+    val secrets = pubKeys.flatMap { pk =>
       val path = pk.path.toPrivateBranch
-      secretStorage.secret.toSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
+      rootSecretSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
     }
     walletVars = walletVars.withProver(ErgoProvingInterpreter(secrets, parameters))
   } match {

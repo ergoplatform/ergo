@@ -25,4 +25,8 @@ object WalletBox extends ApiCodecs {
     )
   }
 
+  def apply(trackedBox: TrackedBox, currentHeight: Int): WalletBox = {
+    WalletBox(trackedBox, trackedBox.inclusionHeightOpt.map(currentHeight - _))
+  }
+
 }

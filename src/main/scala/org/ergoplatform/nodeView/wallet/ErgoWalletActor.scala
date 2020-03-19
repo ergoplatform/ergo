@@ -144,19 +144,19 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case GetWalletBoxes(unspent) =>
       val currentHeight = height
       sender() ! (if (unspent) registry.walletUnspentBoxes() else registry.walletConfirmedBoxes(0))
-        .map(tb => WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _)))
+        .map(tb => WalletBox(tb, currentHeight))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
     case GetAppBoxes(appId, unspent) =>
       val currentHeight = height
       sender() ! (if (unspent) registry.unspentBoxes(appId) else registry.confirmedBoxes(appId, 0))
-        .map(tb => WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _)))
+        .map(tb => WalletBox(tb, currentHeight))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
     case GetUncertainBoxes(appId) =>
       val currentHeight = height
       sender() ! registry.uncertainBoxes(appId)
-        .map(tb => WalletBox(tb, tb.inclusionHeightOpt.map(currentHeight - _)))
+        .map(tb => WalletBox(tb, currentHeight))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
     case GetTransactions =>

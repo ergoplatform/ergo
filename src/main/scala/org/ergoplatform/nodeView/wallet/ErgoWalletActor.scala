@@ -295,9 +295,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       storage.updateChangeAddress(address)
 
     case RemoveApplication(appId) =>
-      val res = Try(storage.removeApplication(appId))
+      val res: Try[Unit] = Try(storage.removeApplication(appId))
       res.foreach(app => walletVars = walletVars.removeApplication(appId))
-      sender() ! res
+      sender() ! RemoveApplicationResponse(res)
 
     case AddApplication(appRequest) =>
       val res: Try[ExternalApplication] = storage.addApplication(appRequest)
@@ -769,6 +769,8 @@ object ErgoWalletActor {
   final case class AddApplicationResponse(response: Try[ExternalApplication])
 
   final case class RemoveApplication(appId: AppId)
+
+  final case class RemoveApplicationResponse(response: Try[Unit])
 
   final case class GetTransaction(id: ModifierId)
 

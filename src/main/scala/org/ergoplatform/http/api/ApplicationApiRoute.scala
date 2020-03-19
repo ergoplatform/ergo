@@ -47,7 +47,7 @@ case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettin
   }
 
   def deregisterR: Route = (path("deregister") & post & entity(as[ApplicationId])) { appId =>
-    withWalletOp(_.removeApplication(appId.appId)) {
+    withWalletOp(_.removeApplication(appId.appId).map(_.response)) {
       case Failure(e) => BadRequest(s"No application exists or db error: ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(_) => ApiResponse(appId.asJson)
     }

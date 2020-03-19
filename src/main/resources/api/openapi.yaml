@@ -700,7 +700,7 @@ components:
         trackingRule:
           predicate: containsAsset
           assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
-          alwaysCertain: true
+        alwaysCertain: true
 
     ExternalApplication:
       type: object
@@ -712,7 +712,7 @@ components:
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
         alwaysCertain:
-            type: boolea
+            type: boolean
       example:
         appId: 2
         appName: Assets Tracker
@@ -721,7 +721,7 @@ components:
           assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
         alwaysCertain: true
 
-    ApplicationIdResponse:
+    ApplicationId:
       type: object
       properties:
         appId:
@@ -3059,7 +3059,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApplicationIdResponse'
+                $ref: '#/components/schemas/ApplicationId'
         '400':
           description: Bad request
           content:
@@ -3073,29 +3073,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /application/deregister/{appId}:
-    get:
+  /application/deregister:
+    post:
       security:
         - ApiKeyAuth: [api_key]
       summary: Stop tracking and deregister application
       operationId: deregisterApplication
       tags:
         - application
-      parameters:
-        - in: path
-          name: appId
-          required: true
-          description: identifier of an application to remove
-          schema:
-            type: integer
-            format: int32
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationId'
       responses:
         '200':
           description: Identifier of an application removed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApplicationIdResponse'
+                $ref: '#/components/schemas/ApplicationId'
         '400':
           description: No application found
           content:

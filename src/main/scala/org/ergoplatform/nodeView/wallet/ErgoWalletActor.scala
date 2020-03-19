@@ -300,9 +300,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! res
 
     case AddApplication(appRequest) =>
-      val res = storage.addApplication(appRequest)
+      val res: Try[ExternalApplication] = storage.addApplication(appRequest)
       res.foreach(app => walletVars = walletVars.addApplication(app))
-      sender() ! res
+      sender() ! AddApplicationResponse(res)
 
 
     case MakeCertain(appId: AppId, boxId: BoxId) =>
@@ -765,6 +765,8 @@ object ErgoWalletActor {
   final case class UpdateChangeAddress(address: P2PKAddress)
 
   final case class AddApplication(appRequest: ExternalAppRequest)
+
+  final case class AddApplicationResponse(response: Try[ExternalApplication])
 
   final case class RemoveApplication(appId: AppId)
 

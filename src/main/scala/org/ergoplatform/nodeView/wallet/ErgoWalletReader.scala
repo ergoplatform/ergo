@@ -93,8 +93,8 @@ trait ErgoWalletReader extends VaultReader {
                           inputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
     (walletActor ? GenerateTransaction(requests, inputsRaw)).mapTo[Try[ErgoTransaction]]
 
-  def addApplication(appRequest: ExternalAppRequest): Future[Try[ExternalApplication]] =
-    (walletActor ? AddApplication(appRequest)).mapTo[Try[ExternalApplication]]
+  def addApplication(appRequest: ExternalAppRequest): Future[AddApplicationResponse] =
+    (walletActor ? AddApplication(appRequest)).mapTo[AddApplicationResponse]
 
   def removeApplication(appId: AppId): Future[Try[Unit]] =
     (walletActor ? RemoveApplication(appId)).mapTo[Try[Unit]]

@@ -89,7 +89,11 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     }
   }
 
-  def removeApplication(id: Short): Unit = store.remove(Seq(appPrefixKey(id)))
+  def removeApplication(id: Short): Unit =
+    store.remove(Seq(appPrefixKey(id)))
+
+  def getApplication(id: Short): Option[ExternalApplication] =
+    store.get(appPrefixKey(id)).map(bytes => ExternalApplicationSerializer.parseBytes(bytes))
 
   def allApplications: Seq[ExternalApplication] = {
     store.getRange(SmallestPossibleApplicationId, BiggestPossibleApplicationId)

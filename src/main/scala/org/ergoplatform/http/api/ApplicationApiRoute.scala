@@ -2,7 +2,6 @@ package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
-import io.circe.syntax._
 import io.circe.Encoder
 import org.ergoplatform._
 import org.ergoplatform.nodeView.wallet._
@@ -49,7 +48,7 @@ case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettin
   def deregisterR: Route = (path("deregister") & post & entity(as[ApplicationId])) { appId =>
     withWalletOp(_.removeApplication(appId.appId).map(_.response)) {
       case Failure(e) => BadRequest(s"No application exists or db error: ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(_) => ApiResponse(ApplicationId(appId))
+      case Success(_) => ApiResponse(ApplicationId(appId.appId))
     }
   }
 

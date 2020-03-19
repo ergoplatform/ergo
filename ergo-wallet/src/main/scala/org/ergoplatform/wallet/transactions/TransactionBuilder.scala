@@ -27,7 +27,21 @@ object TransactionBuild {
     minChangeValue: Long,
     minerRewardDelay: Int
   ): Try[UnsignedErgoLikeTransaction] = Try {
-    // TODO: implement all appropriate checks from ErgoTransaction.validateStateless and validateStatefull
+
+    // from ErgoTransaction.validateStateless
+    require(inputs.nonEmpty, "inputs cannot be empty")
+    require(outputCandidates.nonEmpty, "outputCandidates cannot be empty")
+    require(inputs.size <= Short.MaxValue, s"too many inputs - ${inputs.size} (max ${Short.MaxValue})")
+    require(dataInputs.size <= Short.MaxValue, s"too many dataInputs - ${dataInputs.size} (max ${Short.MaxValue})")
+    require(outputCandidates.size <= Short.MaxValue, 
+      s"too many outputCandidates - ${outputCandidates.size} (max ${Short.MaxValue})")
+    require(outputCandidates.forall(_.value >= 0), s"outputCandidate.value must be >= 0")
+    val outputSumTry = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
+    require(outputSumTry.isSuccess, s"Sum of transaction output values should not exceed ${Long.MaxValue}")
+    require(inputs.distinct.size == inputs.size, s"There should be no duplicate inputs")
+
+    // TODO: implement all appropriate checks from ErgoTransaction.validateStatefull
+
     require(feeAmount > 0, "Fee amount should be defined")
     val inputTotal  = inputs.map(_.value).sum
     val outputSum   = outputCandidates.map(_.value).sum

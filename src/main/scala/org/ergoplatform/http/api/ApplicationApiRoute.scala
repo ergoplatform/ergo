@@ -54,7 +54,7 @@ case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettin
   }
 
   def registerR: Route = (path("register") & post & entity(as[ExternalAppRequest])) { request =>
-    withWalletOp(_.addApplication(request)) {
+    withWalletOp(_.addApplication(request).map(_.response)) {
       case Failure(e) => BadRequest(s"Bad request $request. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(app) => ApiResponse(ApplicationId(app.appId))
     }

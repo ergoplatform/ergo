@@ -51,6 +51,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private implicit val ec = scala.concurrent.ExecutionContext.global
 
   private val walletSettings: WalletSettings = settings.walletSettings
+
   //todo: update parameters
   private val parameters: Parameters = LaunchParameters
 

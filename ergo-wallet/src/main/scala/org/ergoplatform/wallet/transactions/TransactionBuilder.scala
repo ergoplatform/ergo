@@ -28,7 +28,7 @@ object TransactionBuild {
     minerRewardDelay: Int
   ): Try[UnsignedErgoLikeTransaction] = Try {
 
-    // from ErgoTransaction.validateStateless
+    // checks from ErgoTransaction.validateStateless
     require(inputs.nonEmpty, "inputs cannot be empty")
     require(outputCandidates.nonEmpty, "outputCandidates cannot be empty")
     require(inputs.size <= Short.MaxValue, s"too many inputs - ${inputs.size} (max ${Short.MaxValue})")

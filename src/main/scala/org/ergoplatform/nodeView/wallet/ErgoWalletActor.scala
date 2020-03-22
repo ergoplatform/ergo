@@ -477,7 +477,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def prepareTransaction(prover: ErgoProvingInterpreter, payTo: Seq[ErgoBoxCandidate])
                                 (r: BoxSelector.BoxSelectionResult): Try[ErgoLikeTransaction] = {
-    val inputs = r.boxes.toIndexedSeq
+    val inputs = r.boxes.map(_.box).toIndexedSeq
 
     val changeAddress = storage.readChangeAddress
       .map(_.pubkey)
@@ -580,6 +580,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       .select(registry.readCertainUnspentBoxes.toIterator, onChainFilter, targetAmount, targetAssets)
       .toSeq
       .flatMap(_.boxes)
+      .map(_.box)
 
   private def readSecretStorage: Try[JsonSecretStorage] = {
     val dir = new File(settings.walletSettings.secretStorage.secretDir)

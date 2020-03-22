@@ -2,6 +2,7 @@ package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
+import org.ergoplatform.wallet.boxes.BoxSelectors.calcChange
 import scorex.util.ModifierId
 
 import scala.annotation.tailrec
@@ -63,10 +64,10 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
                   targetBalance: Long,
                   targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
     val diff = optimalInputs - bsr.boxes.length
-    val afterCompactionIds = bsr.boxes.map(_.id).map(scorex.util.bytesToId)
+    val afterCompactionIds = bsr.boxes.map(_.boxId)
     val dust = tail.sortBy(_.value).take(diff).filter(b => !afterCompactionIds.contains(b.boxId))
 
-    val boxes = bsr.boxes ++ dust.map(_.box)
+    val boxes = bsr.boxes ++ dust
     calcChange(boxes, targetBalance, targetAssets).map(changeBoxes => BoxSelectionResult(boxes, changeBoxes))
   }
 
@@ -76,7 +77,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     val boxes = bsr.boxes
     val diff = boxes.map(_.value).sum - targetBalance
 
-    val boxesToThrowAway = boxes.filter(!_.additionalTokens.toArray.map(_._1).exists(tid => targetAssets.keySet.contains(scorex.util.bytesToId(tid))))
+    val boxesToThrowAway = boxes.filter(!_.box.additionalTokens.toArray.map(_._1).exists(tid => targetAssets.keySet.contains(scorex.util.bytesToId(tid))))
     val sorted = boxesToThrowAway.sortBy(_.value)
 
     if (diff >= sorted.head.value) {
@@ -95,16 +96,16 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
               tail: Seq[TrackedBox],
               targetBalance: Long,
               targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
-    val bigBoxes = tail.sortBy(-_.value).map(_.box)
-    val boxesToThrowAway = bsr.boxes.filter(!_.additionalTokens.toArray.map(_._1).exists(tid => targetAssets.keySet.contains(scorex.util.bytesToId(tid))))
+    val bigBoxes = tail.sortBy(-_.value)
+    val boxesToThrowAway = bsr.boxes.filter(!_.box.additionalTokens.toArray.map(_._1).exists(tid => targetAssets.keySet.contains(scorex.util.bytesToId(tid))))
     val sorted = boxesToThrowAway.sortBy(_.value)
 
-    type BoxesToAdd = Seq[ErgoBox]
-    type BoxesToDrop = Seq[ErgoBox]
+    type BoxesToAdd = Seq[TrackedBox]
+    type BoxesToDrop = Seq[TrackedBox]
     type Operations = (BoxesToAdd, BoxesToDrop)
 
     @tailrec
-    def replaceStep(candidates: Seq[ErgoBox], toDrop: Seq[ErgoBox], currentOps: Operations): Operations = {
+    def replaceStep(candidates: Seq[TrackedBox], toDrop: Seq[TrackedBox], currentOps: Operations): Operations = {
       candidates match {
         case Seq() => currentOps
         case Seq(cand) if cand.value <= toDrop.headOption.map(_.value).getOrElse(Long.MaxValue) => currentOps

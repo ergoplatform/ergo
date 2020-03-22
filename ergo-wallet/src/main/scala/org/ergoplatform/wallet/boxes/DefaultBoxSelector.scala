@@ -21,7 +21,7 @@ object DefaultBoxSelector extends BoxSelector {
                       targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
     BoxSelectors.select(inputBoxes, externalFilter, targetBalance, targetAssets)
       .map { res =>
-        BoxSelectionResult(res.boxes.map(_.box), res.changeBoxes)
+        BoxSelectionResult(res.boxes, res.changeBoxes)
        }
   }
 

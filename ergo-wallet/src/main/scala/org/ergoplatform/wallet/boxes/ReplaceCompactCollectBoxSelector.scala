@@ -67,7 +67,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     val dust = tail.sortBy(_.value).take(diff).filter(b => !afterCompactionIds.contains(b.boxId))
 
     val boxes = bsr.boxes ++ dust.map(_.box)
-    calcChange(boxes, targetBalance, targetAssets)
+    calcChange(boxes, targetBalance, targetAssets).map(changeBoxes => BoxSelectionResult(boxes, changeBoxes))
   }
 
   protected[boxes] def compress(bsr: BoxSelectionResult,
@@ -87,6 +87,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
       }
       val compactedBoxes = boxes.filter(b => !thrownBoxes.contains(b))
       calcChange(compactedBoxes, targetBalance, targetAssets)
+        .map(changeBoxes => BoxSelectionResult(compactedBoxes, changeBoxes))
     } else Some(bsr)
   }
 
@@ -121,6 +122,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     if (toAdd.nonEmpty) {
       val compactedBoxes = bsr.boxes.filter(b => !toDrop.contains(b)) ++ toAdd
       calcChange(compactedBoxes, targetBalance, targetAssets)
+        .map(changeBoxes => BoxSelectionResult(compactedBoxes, changeBoxes))
     } else Some(bsr)
   }
 

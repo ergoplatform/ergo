@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import org.ergoplatform.wallet.Constants.PaymentsAppId
+import org.ergoplatform.wallet.Constants.{ApplicationId, PaymentsAppId}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedBoxId
 import org.ergoplatform.utils.generators.WalletGenerators
@@ -146,7 +146,9 @@ class WalletRegistrySpec
         WalletRegistry.putBoxes(emptyBag, tbs).transact(store)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs tbs.map(Some.apply)
         val updateFn = (tb: TrackedBox) => tb.copy(spendingHeightOpt = Some(0),
-          applicationStatuses = Map(PaymentsAppId -> BoxCertainty.Certain, 2.toShort -> BoxCertainty.Uncertain))
+          applicationStatuses = Map(
+            PaymentsAppId -> BoxCertainty.Certain,
+            ApplicationId @@ 2.toShort -> BoxCertainty.Uncertain))
         val updatedBoxes = tbs.map(updateFn)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs updatedBoxes.map(Some.apply)
         WalletRegistry.removeBoxes(emptyBag, tbs).transact(store)

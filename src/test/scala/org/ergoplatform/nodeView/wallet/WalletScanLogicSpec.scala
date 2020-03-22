@@ -11,6 +11,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletVars
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ExternalAppRequest}
 import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.Constants.ApplicationId
 import org.ergoplatform.wallet.boxes.BoxCertainty
 import org.scalacheck.Gen
 import sigmastate.Values.{ErgoTree, FalseLeaf}
@@ -39,7 +40,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
   private val uncertainProp = org.ergoplatform.settings.Constants.TrueLeaf
   private val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, uncertainProp.bytes)
   private val appReq = ExternalAppRequest("True detector", scanningPredicate, alwaysCertain = false)
-  private val appId: Short = 50
+  private val appId: ApplicationId = ApplicationId @@ 50.toShort
 
   private val walletVars = WalletVars(Some(prover), Seq(appReq.toApp(appId).get), None)(s)
 

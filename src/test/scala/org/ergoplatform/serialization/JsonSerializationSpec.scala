@@ -8,11 +8,11 @@ import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
+import org.ergoplatform.wallet.Constants.ApplicationId
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import org.scalatest.Inspectors
 import sigmastate.SType
@@ -85,7 +85,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   private def checkTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {
     c.downField("spent").as[Boolean] shouldBe Right(b.spendingStatus.spent)
     c.downField("onchain").as[Boolean] shouldBe Right(b.chainStatus.onChain)
-    c.downField("applications").as[Seq[(Short, BoxCertainty)]].map(_.toMap) shouldBe Right(b.applicationStatuses)
+    c.downField("applications").as[Seq[(ApplicationId, BoxCertainty)]].map(_.toMap) shouldBe Right(b.applicationStatuses)
     c.downField("creationOutIndex").as[Short] shouldBe Right(b.creationOutIndex)
     c.downField("inclusionHeight").as[Option[Int]] shouldBe Right(b.inclusionHeightOpt)
     c.downField("spendingHeight").as[Option[Int]] shouldBe Right(b.spendingHeightOpt)

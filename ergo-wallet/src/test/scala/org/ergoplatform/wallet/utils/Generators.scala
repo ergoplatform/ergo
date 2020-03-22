@@ -14,7 +14,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate.{SByte, SType}
-import org.ergoplatform.wallet.Constants.PaymentsAppId
+import org.ergoplatform.wallet.Constants.{ApplicationId, PaymentsAppId}
 import scorex.util._
 
 trait Generators {
@@ -152,8 +152,8 @@ trait Generators {
     }
   }
 
-  def appStatusesGen: Gen[Map[Short, BoxCertainty]] = {
-    Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.toSet.toSeq).flatMap { appIds =>
+  def appStatusesGen: Gen[Map[ApplicationId, BoxCertainty]] = {
+    Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.toSet.toSeq.map{id: Short => ApplicationId @@ id}).flatMap { appIds =>
       Gen.listOfN(appIds.length, Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)).map { certainities =>
         appIds.zip(certainities)
       }

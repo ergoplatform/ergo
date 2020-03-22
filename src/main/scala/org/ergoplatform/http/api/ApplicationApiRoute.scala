@@ -10,8 +10,10 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
+
 import scala.util.{Failure, Success}
 import ApplicationEntities._
+import org.ergoplatform.wallet.Constants.ApplicationId
 
 /**
   * This class contains methods to register / deregister and list external applications, and also to serve them.
@@ -45,17 +47,17 @@ case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettin
       stopTrackingR
   }
 
-  def deregisterR: Route = (path("deregister") & post & entity(as[ApplicationId])) { appId =>
+  def deregisterR: Route = (path("deregister") & post & entity(as[ApplicationIdWrapper])) { appId =>
     withWalletOp(_.removeApplication(appId.appId).map(_.response)) {
       case Failure(e) => BadRequest(s"No application exists or db error: ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(_) => ApiResponse(ApplicationId(appId.appId))
+      case Success(_) => ApiResponse(ApplicationIdWrapper(appId.appId))
     }
   }
 
   def registerR: Route = (path("register") & post & entity(as[ExternalAppRequest])) { request =>
     withWalletOp(_.addApplication(request).map(_.response)) {
       case Failure(e) => BadRequest(s"Bad request $request. ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(app) => ApiResponse(ApplicationId(app.appId))
+      case Success(app) => ApiResponse(ApplicationIdWrapper(app.appId))
     }
   }
 
@@ -65,14 +67,14 @@ case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettin
   }
 
   def uncertainR: Route = (path("uncertainBoxes" / IntNumber) & get & boxParams) { (appIdInt, minConfNum, minHeight) =>
-    val appId = appIdInt.toShort
+    val appId = ApplicationId @@ appIdInt.toShort
     withWallet(_.uncertainBoxes(appId).map {
       _.filter(boxPredicate(_, minConfNum, minHeight))
     })
   }
 
   def unspentR: Route = (path("unspentBoxes" / IntNumber) & get & boxParams) { (appIdInt, minConfNum, minHeight) =>
-    val appId = appIdInt.toShort
+    val appId = ApplicationId @@ appIdInt.toShort
     withWallet(_.appBoxes(appId, unspentOnly = true).map {
       _.filter(boxPredicate(_, minConfNum, minHeight))
     })

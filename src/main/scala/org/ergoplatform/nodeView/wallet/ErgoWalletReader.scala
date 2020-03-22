@@ -11,11 +11,11 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication}
-import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.P2PKAddress
+import org.ergoplatform.wallet.Constants.ApplicationId
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.DLogProverInput
@@ -71,10 +71,10 @@ trait ErgoWalletReader extends VaultReader {
   def walletBoxes(unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
     (walletActor ? GetWalletBoxes(unspentOnly)).mapTo[Seq[WalletBox]]
 
-  def appBoxes(appId: AppId, unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
+  def appBoxes(appId: ApplicationId, unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
     (walletActor ? GetAppBoxes(appId, unspentOnly)).mapTo[Seq[WalletBox]]
 
-  def uncertainBoxes(appId: AppId): Future[Seq[WalletBox]] =
+  def uncertainBoxes(appId: ApplicationId): Future[Seq[WalletBox]] =
     (walletActor ? GetUncertainBoxes(appId)).mapTo[Seq[WalletBox]]
 
   def updateChangeAddress(address: P2PKAddress): Unit =
@@ -96,16 +96,16 @@ trait ErgoWalletReader extends VaultReader {
   def addApplication(appRequest: ExternalAppRequest): Future[AddApplicationResponse] =
     (walletActor ? AddApplication(appRequest)).mapTo[AddApplicationResponse]
 
-  def removeApplication(appId: AppId): Future[RemoveApplicationResponse] =
+  def removeApplication(appId: ApplicationId): Future[RemoveApplicationResponse] =
     (walletActor ? RemoveApplication(appId)).mapTo[RemoveApplicationResponse]
 
   def readApplications(): Future[Seq[ExternalApplication]] =
     (walletActor ? ReadApplications).mapTo[Seq[ExternalApplication]]
 
-  def makeCertain(appId: AppId, boxId: BoxId): Future[Try[Unit]] =
+  def makeCertain(appId: ApplicationId, boxId: BoxId): Future[Try[Unit]] =
     (walletActor ? MakeCertain(appId, boxId)).mapTo[Try[Unit]]
 
-  def stopTracking(appId: AppId, boxId: BoxId): Future[Try[Unit]] =
+  def stopTracking(appId: ApplicationId, boxId: BoxId): Future[Try[Unit]] =
     (walletActor ? StopTracking(appId, boxId)).mapTo[Try[Unit]]
 
 }

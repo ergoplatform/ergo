@@ -11,6 +11,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
 import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.wallet.Constants.ApplicationId
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import scorex.core.validation.ValidationResult
 import sigmastate.basics.DLogProtocol.ProveDlog
@@ -68,13 +69,21 @@ trait ApiCodecs extends JsonCodecs {
     } yield reg
   }
 
-  implicit val applicationBoxStatusEncoder: Encoder[(Short, BoxCertainty)] = { appStatus =>
+  implicit val applicationIdEncoder: Encoder[ApplicationId] = {appId =>
+    appId.toShort.asJson
+  }
+
+  implicit val applicationDecoder: Decoder[ApplicationId] = {c: HCursor =>
+    ApplicationId @@ c.as[Short]
+  }
+
+  implicit val applicationBoxStatusEncoder: Encoder[(ApplicationId, BoxCertainty)] = { appStatus =>
     Json.obj("appId" -> appStatus._1.asJson, "certainty" -> appStatus._2.certain.asJson)
   }
 
-  implicit val applicationBoxStatusDecoder: Decoder[(Short, BoxCertainty)] = { c: HCursor =>
+  implicit val applicationBoxStatusDecoder: Decoder[(ApplicationId, BoxCertainty)] = { c: HCursor =>
     for {
-      appId <- c.downField("appId").as[Short]
+      appId <- ApplicationId @@ c.downField("appId").as[Short]
       certain <- c.downField("certainty").as[Boolean].map(BoxCertainty.fromBoolean)
     } yield (appId, certain)
   }

@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
+import org.ergoplatform.http.api.ApplicationEntities.ApplicationIdWrapper
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
@@ -7,9 +8,8 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletVars
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, decodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication
-import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
 import org.ergoplatform.settings.{Constants, LaunchParameters}
-import org.ergoplatform.wallet.Constants.{MiningRewardsAppId, PaymentsAppId}
+import org.ergoplatform.wallet.Constants.{ApplicationId, MiningRewardsAppId, PaymentsAppId}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
@@ -125,12 +125,12 @@ object WalletScanLogic extends ScorexLogging {
 
       val boxScript = bx.propositionBytes
 
-      val statuses: Map[AppId, BoxCertainty] = if (walletVars.filter.lookup(boxScript)) {
+      val statuses: Map[ApplicationId, BoxCertainty] = if (walletVars.filter.lookup(boxScript)) {
 
         val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
 
         //tweak for tests
-        lazy val miningStatus: (AppId, BoxCertainty) = if (walletVars.settings.miningRewardDelay > 0) {
+        lazy val miningStatus: (ApplicationId, BoxCertainty) = if (walletVars.settings.miningRewardDelay > 0) {
           MiningRewardsAppId -> BoxCertainty.Certain
         } else {
           PaymentsAppId -> BoxCertainty.Certain

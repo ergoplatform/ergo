@@ -1,19 +1,26 @@
 package org.ergoplatform.wallet
 
-object Constants {
+import supertagged.TaggedType
 
-  // part of protocol, do not change
+object Constants {
+  object ApplicationId extends TaggedType[Short]
+  type ApplicationId = ApplicationId.Type
+
+  // part of the protocol, do not change
   val KeyLen = 32
-  // part of protocol, do not change
+  // part of the protocol, do not change
   val ModifierIdLength = 32
 
   val Encoding = "UTF-8"
 
   val BitcoinSeed: Array[Byte] = "Bitcoin seed".getBytes(Encoding)
 
+  // Ids below 9 are reserved. Ids from 11 (inclusive) are for applications
+
   // SimplePayments application identifier
-  val PaymentsAppId: Short = 10
+  val PaymentsAppId: ApplicationId = ApplicationId @@ 10.toShort
 
   // Application which is checking mining rewards
-  val MiningRewardsAppId: Short = 9
+  val MiningRewardsAppId: ApplicationId = ApplicationId @@ 9.toShort
+
 }

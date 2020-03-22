@@ -7,6 +7,7 @@ import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning._
 import org.ergoplatform.settings.Constants
+import org.ergoplatform.wallet.Constants.ApplicationId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Gen
@@ -144,7 +145,7 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
   def externalAppGen: Gen[ExternalApplication] = for {
     appId <- Gen.posNum[Short]
     req <- externalAppReqGen
-  } yield req.toApp(appId).get
+  } yield req.toApp(ApplicationId @@ appId).get
 
   private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)
 

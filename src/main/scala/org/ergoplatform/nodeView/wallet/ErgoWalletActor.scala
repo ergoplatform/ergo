@@ -9,13 +9,13 @@ import com.github.oskin1.scakoo.BaseCuckooFilter
 import com.github.oskin1.scakoo.immutable.CuckooFilter
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
+import org.ergoplatform.http.api.ApplicationEntities.ApplicationIdWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication}
-import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication.AppId
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
@@ -31,7 +31,7 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import org.ergoplatform.wallet.Constants.PaymentsAppId
+import org.ergoplatform.wallet.Constants.{ApplicationId, PaymentsAppId}
 import sigmastate.Values
 
 import scala.concurrent.Future
@@ -311,10 +311,10 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! AddApplicationResponse(res)
 
 
-    case MakeCertain(appId: AppId, boxId: BoxId) =>
+    case MakeCertain(appId: ApplicationId, boxId: BoxId) =>
       sender() ! registry.makeCertain(appId, boxId)
 
-    case StopTracking(appId: AppId, boxId: BoxId) =>
+    case StopTracking(appId: ApplicationId, boxId: BoxId) =>
       sender() ! registry.removeApp(appId, boxId)
   }
 
@@ -686,7 +686,7 @@ object ErgoWalletActor {
     val filter: BaseCuckooFilter[Array[Byte]] =
       stateCacheOpt.map(_.filter).getOrElse(MutableStateCache.emptyFilter(settings))
 
-    def removeApplication(appId: AppId): WalletVars = {
+    def removeApplication(appId: ApplicationId): WalletVars = {
       this.copy(externalApplications = this.externalApplications.filter(_.appId != appId))
     }
 
@@ -764,9 +764,9 @@ object ErgoWalletActor {
 
   final case class GetWalletBoxes(unspentOnly: Boolean)
 
-  final case class GetAppBoxes(appId: AppId, unspentOnly: Boolean)
+  final case class GetAppBoxes(appId: ApplicationId, unspentOnly: Boolean)
 
-  final case class GetUncertainBoxes(appId: AppId)
+  final case class GetUncertainBoxes(appId: ApplicationId)
 
   final case class UpdateChangeAddress(address: P2PKAddress)
 
@@ -774,7 +774,7 @@ object ErgoWalletActor {
 
   final case class AddApplicationResponse(response: Try[ExternalApplication])
 
-  final case class RemoveApplication(appId: AppId)
+  final case class RemoveApplication(appId: ApplicationId)
 
   final case class RemoveApplicationResponse(response: Try[Unit])
 
@@ -794,8 +794,8 @@ object ErgoWalletActor {
 
   case object ReadApplications
 
-  case class MakeCertain(appId: AppId, boxId: BoxId)
+  case class MakeCertain(appId: ApplicationId, boxId: BoxId)
 
-  case class StopTracking(appId: AppId, boxId: BoxId)
+  case class StopTracking(appId: ApplicationId, boxId: BoxId)
 
 }

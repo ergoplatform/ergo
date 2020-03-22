@@ -8,7 +8,7 @@ import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
-import org.ergoplatform.wallet.Constants.PaymentsAppId
+import org.ergoplatform.wallet.Constants.{ApplicationId, PaymentsAppId}
 import scorex.db.{LDBFactory, LDBKVStore}
 
 import scala.util.{Success, Try}
@@ -83,7 +83,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     }
 
   def addApplication(appReq: ExternalAppRequest): Try[ExternalApplication] = {
-    val id = (lastUsedId + 1).toShort
+    val id = ApplicationId @@ (lastUsedId + 1).toShort
     appReq.toApp(id).flatMap { app =>
       Try(store.insert(Seq(appPrefixKey(id) -> ExternalApplicationSerializer.toBytes(app)))).map(_ => app)
     }

@@ -1,6 +1,7 @@
 package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.Constants.ApplicationId
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
 import scorex.util.serialization.{Reader, Writer}
@@ -25,7 +26,7 @@ final case class TrackedBox(creationTxId: ModifierId,
                             spendingTxIdOpt: Option[ModifierId],
                             spendingHeightOpt: Option[Int],
                             box: ErgoBox,
-                            applicationStatuses: Map[Short, BoxCertainty]) {
+                            applicationStatuses: Map[ApplicationId, BoxCertainty]) {
 
   /**
     * Whether the box is spent or not
@@ -83,13 +84,13 @@ final case class TrackedBox(creationTxId: ModifierId,
 object TrackedBox {
 
   def apply(creationTx: ErgoLikeTransaction, creationOutIndex: Short, creationHeight: Option[Int],
-            box: ErgoBox, appStatuses: Map[Short, BoxCertainty]): TrackedBox =
+            box: ErgoBox, appStatuses: Map[ApplicationId, BoxCertainty]): TrackedBox =
     apply(creationTx.id, creationOutIndex, creationHeight, None, None, box, appStatuses)
 
 }
 
 object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
-  val walletAppId: Short = Constants.PaymentsAppId
+  val walletAppId: ApplicationId = Constants.PaymentsAppId
 
   override def serialize(obj: TrackedBox, w: Writer): Unit = {
     w.putBytes(idToBytes(obj.creationTxId))
@@ -120,11 +121,13 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
     val spendingHeightOpt = r.getOption(r.getInt())
 
     val appsCount = r.getShort()
-    val appStatuses: Seq[(Short, BoxCertainty)] = if (appsCount == 0){
+    val appStatuses: Seq[(ApplicationId, BoxCertainty)] = if (appsCount == 0){
       Seq((walletAppId, BoxCertainty.Certain))
     } else {
       (0 until appsCount)
-        .map(_ => (r.getShort(), if (r.getByte() == 0x01) BoxCertainty.Certain else BoxCertainty.Uncertain))
+        .map(_ =>
+          (ApplicationId @@ r.getShort(), if (r.getByte() == 0x01) BoxCertainty.Certain else BoxCertainty.Uncertain)
+        )
     }
     val box = ErgoBoxSerializer.parse(r)
     TrackedBox(

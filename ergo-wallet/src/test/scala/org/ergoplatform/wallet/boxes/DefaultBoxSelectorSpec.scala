@@ -47,31 +47,31 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers {
     val s1 = select(uBoxes.toIterator, noFilter, 1, Map())
     s1.isDefined shouldBe true
     s1.get.changeBoxes.isEmpty shouldBe true
-    s1.get.boxes.head shouldBe uBox1
+    s1.get.trackedBoxes.head shouldBe uBox1
 
     val s2 = select(uBoxes.toIterator, noFilter, 10, Map())
     s2.isDefined shouldBe true
     s2.get.changeBoxes.size == 1
     s2.get.changeBoxes.head.value shouldBe 1
-    s2.get.boxes shouldBe Seq(uBox1, uBox2)
+    s2.get.trackedBoxes shouldBe Seq(uBox1, uBox2)
 
     val s3 = select(uBoxes.toIterator, noFilter, 11, Map())
     s3.isDefined shouldBe true
     s3.get.changeBoxes.isEmpty shouldBe true
-    s3.get.boxes shouldBe Seq(uBox1, uBox2)
+    s3.get.trackedBoxes shouldBe Seq(uBox1, uBox2)
 
     //box2 should be filtered out
     val s4 = select(uBoxes.toIterator, box => box.chainStatus.onChain, 11, Map())
     s4.isDefined shouldBe true
     s4.get.changeBoxes.size == 1
     s4.get.changeBoxes.head.value shouldBe 90
-    s4.get.boxes shouldBe Seq(uBox1, uBox3)
+    s4.get.trackedBoxes shouldBe Seq(uBox1, uBox3)
 
     val s5 = select(uBoxes.toIterator, noFilter, 61, Map())
     s5.isDefined shouldBe true
     s5.get.changeBoxes.size == 1
     s5.get.changeBoxes.head.value shouldBe 50
-    s5.get.boxes shouldBe Seq(uBox1, uBox2, uBox3)
+    s5.get.trackedBoxes shouldBe Seq(uBox1, uBox2, uBox3)
   }
 
   property("properly selects coins - assets w. 1 change box") {
@@ -93,14 +93,14 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers {
     val s1 = select(uBoxes.toIterator, noFilter, 1, Map(assetId1 -> 1))
     s1.isDefined shouldBe true
     s1.get.changeBoxes.isEmpty shouldBe true
-    s1.get.boxes.head shouldBe uBox1
+    s1.get.trackedBoxes.head shouldBe uBox1
 
     val s2 = select(uBoxes.toIterator, noFilter, 1, Map(assetId1 -> 11))
     s2.isDefined shouldBe true
     s2.get.changeBoxes.size == 1
     s2.get.changeBoxes.head.value shouldBe 100
     s2.get.changeBoxes.head.assets(assetId1) shouldBe 90
-    s2.get.boxes shouldBe Seq(uBox1, uBox3)
+    s2.get.trackedBoxes shouldBe Seq(uBox1, uBox3)
 
     select(uBoxes.toIterator, box => box.chainStatus.onChain, 1, Map(assetId2 -> 1)) shouldBe None
     select(uBoxes.toIterator, noFilter, 1, Map(assetId2 -> 11)) shouldBe None
@@ -112,7 +112,7 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers {
     s3.get.changeBoxes.head.value shouldBe 110
     s3.get.changeBoxes.head.assets(assetId1) shouldBe 90
     s3.get.changeBoxes.head.assets(assetId2) shouldBe 9
-    s3.get.boxes shouldBe Seq(uBox1, uBox2, uBox3)
+    s3.get.trackedBoxes shouldBe Seq(uBox1, uBox2, uBox3)
 
     select(uBoxes.toIterator, box => box.chainStatus.onChain, 1, Map(assetId1 -> 11, assetId2 -> 1)) shouldBe None
   }
@@ -155,7 +155,7 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers {
     s1.get.changeBoxes(0).assets(assetId3) shouldBe 90
     s1.get.changeBoxes(0).assets(assetId4) shouldBe 101
 
-    s1.get.boxes shouldBe Seq(uBox1, uBox3)
+    s1.get.trackedBoxes shouldBe Seq(uBox1, uBox3)
 
     val s2 = select(uBoxes.toIterator, noFilter, 10,
       Map(assetId1 -> 1, assetId2 -> 1, assetId3 -> 1, assetId4 -> 1))

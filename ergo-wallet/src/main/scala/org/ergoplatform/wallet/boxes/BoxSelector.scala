@@ -34,6 +34,6 @@ trait BoxSelector {
 
 object BoxSelector {
 
-  final case class BoxSelectionResult(boxes: Seq[TrackedBox], changeBoxes: Seq[Box])
+  final case class BoxSelectionResult(trackedBoxes: Seq[TrackedBox], changeBoxes: Seq[Box])
 
 }

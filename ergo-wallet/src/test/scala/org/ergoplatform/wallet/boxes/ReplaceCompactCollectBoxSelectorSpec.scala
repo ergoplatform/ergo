@@ -23,7 +23,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers {
     val targetBalance = 1300
 
     val boxSelectionResult = BoxSelectionResult(
-      inputValues.map(box), Seq()
+      inputValues.map(trackedBox), Seq()
     )
     val res = selector.compress(boxSelectionResult, targetBalance, Map()).get
     res.boxes.length shouldBe 3
@@ -38,7 +38,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers {
     val selector = new ReplaceCompactCollectBoxSelector(3, 2)
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
     val targetBalance = 1303
-    val boxSelectionResult = BoxSelectionResult(inputValues.map(box), Seq())
+    val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), Seq())
     val res = selector.replace(boxSelectionResult, Seq(), targetBalance, Map()).get
     res.boxes.map(_.value) shouldBe inputValues
   }
@@ -47,7 +47,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers {
     val selector = new ReplaceCompactCollectBoxSelector(3, 2)
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
     val targetBalance = 1303
-    val boxSelectionResult = BoxSelectionResult(inputValues.map(box), Seq())
+    val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), Seq())
     val res = selector.replace(boxSelectionResult, Seq(trackedBox(300), trackedBox(200)), targetBalance, Map()).get
     res.boxes.length shouldBe 3
     res.boxes.map(_.value) shouldBe Seq(200L, 1000L, 300L)
@@ -57,7 +57,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers {
     val selector = new ReplaceCompactCollectBoxSelector(3, 2)
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
     val targetBalance = 1303
-    val boxSelectionResult = BoxSelectionResult(inputValues.map(box), Seq())
+    val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), Seq())
     val res = selector.replace(boxSelectionResult, Seq(trackedBox(2000)), targetBalance, Map()).get
     res.boxes.length shouldBe 1
     res.boxes.map(_.value) shouldBe Seq(2000L)

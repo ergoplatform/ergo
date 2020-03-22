@@ -29,17 +29,11 @@ trait BoxSelector {
              filterFn: TrackedBox => Boolean,
              targetBalance: Long,
              targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult]
-
-  protected def calcChange(boxes: Seq[ErgoBox],
-                 targetBalance: Long,
-                 targetAssets: Map[ModifierId, Long]): Option[Seq[Box]] = 
-    BoxSelectors.calcChange(boxes.map(b => GenericBox(b)), targetBalance, targetAssets)
   
 }
 
 object BoxSelector {
 
-  final case class BoxSelectionResult(boxes: Seq[ErgoBox],
-                                      changeBoxes: Seq[Box])
+  final case class BoxSelectionResult(boxes: Seq[TrackedBox], changeBoxes: Seq[Box])
 
 }

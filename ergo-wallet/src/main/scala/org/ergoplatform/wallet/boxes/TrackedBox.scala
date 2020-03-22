@@ -69,7 +69,7 @@ case class TrackedBox(creationTxId: ModifierId,
   }.toMap
 
   override def equals(obj: Any): Boolean = obj match {
-    case tb: TrackedBox => tb.creationTxId == creationTxId && tb.creationOutIndex == creationOutIndex
+    case tb: TrackedBox => tb.creationTxId == creationTxId && tb.creationOutIndex == creationOutIndex && box == tb.box
     case _ => false
   }
 

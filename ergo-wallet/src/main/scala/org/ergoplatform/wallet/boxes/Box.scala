@@ -18,14 +18,5 @@ final case class GenericBox(
 
 object GenericBox {
 
-  private def assets(box: ErgoBox): Map[ModifierId, Long] =
-    box.additionalTokens.toArray.map {
-      case (id, amt) => bytesToId(id) -> amt
-    }.toMap
-
-  // TODO: remove
-  def apply(ergoBox: ErgoBox): GenericBox =
-    GenericBox(ergoBox.value, assets(ergoBox))
-
   def apply(value: Long): GenericBox = GenericBox(value, Map())
 }

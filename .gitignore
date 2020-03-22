@@ -7,9 +7,6 @@ scorex.yaml
 # scala build folders
 target
 
-# dotfiles
-.editorconfig
-
 # standalone docker
 !Dockerfile
 

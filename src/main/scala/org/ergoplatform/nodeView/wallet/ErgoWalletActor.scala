@@ -486,9 +486,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         prover.pubKeys.head
       }
 
-    val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>
-      val assets = tokensChange.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
-      new ErgoBoxCandidate(ergChange, changeAddress, height, assets.toColl)
+    val changeBoxCandidates = r.changeBoxes.map { changeBox => 
+      val assets = changeBox.assets.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
+      new ErgoBoxCandidate(changeBox.value, changeAddress, height, assets.toColl)
     }
 
     val unsignedTx = new UnsignedErgoTransaction(

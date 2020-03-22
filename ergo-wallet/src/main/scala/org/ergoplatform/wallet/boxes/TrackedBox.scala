@@ -26,7 +26,7 @@ case class TrackedBox(creationTxId: ModifierId,
                       spendingHeightOpt: Option[Int],
                       box: ErgoBox,
                       certainty: BoxCertainty,
-                      applicationId: Short) {
+                      applicationId: Short) extends Box {
 
   /**
     * Whether the box is spent or not
@@ -62,9 +62,9 @@ case class TrackedBox(creationTxId: ModifierId,
 
   def boxId: ModifierId = bytesToId(box.id)
 
-  def value: Long = box.value
+  override def value: Long = box.value
 
-  def assets: Map[ModifierId, Long] = box.additionalTokens.toArray.map {
+  override def assets: Map[ModifierId, Long] = box.additionalTokens.toArray.map {
     case (id, amt) => bytesToId(id) -> amt
   }.toMap
 

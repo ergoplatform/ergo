@@ -139,8 +139,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
             case (currentValidationState, parsedSettings) =>
 
               /*
-               Calculating params for parameters and validation rules based on local blockchain state, to compare them
-               with parsed ones then.
+               Calculating blockchain parameters and validation rules based on the locally stored blockchain,
+               to compare them then with announced ones.
                If current parameters height is equal to 0, it means that whether it is first epoch after genesis,
                or node is starting in light regime with validating suffix only. For the former case, we assume that
                parameters and validation settings were not changed, which is true for both Ergo mainnet and testnet.

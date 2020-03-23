@@ -175,7 +175,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
                                                   spendingHeight: Int): KeyValuePairsBag = {
     if (keepHistory) {
       val outSpent: Seq[TrackedBox] = spentBoxes.flatMap { case (_, tb) =>
-        (getBox(tb.box.id).orElse {
+        getBox(tb.box.id).orElse {
           bag.toInsert.find(_._1.sameElements(key(tb))).flatMap { case (_, tbBytes) =>
             TrackedBoxSerializer.parseBytesTry(tbBytes).toOption
           } match {
@@ -185,7 +185,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
                 s"could be okay if it was created before wallet init")
               None
           }
-        }): Option[TrackedBox]
+        }: Option[TrackedBox]
       }
 
       val updatedBoxes = outSpent.map { tb =>

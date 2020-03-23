@@ -58,7 +58,7 @@ object ExternalApplicationSerializer extends ScorexSerializer[ExternalApplicatio
   override def parse(r: Reader): ExternalApplication = {
     val appId = ApplicationId @@ r.getShort()
     val appName = r.getShortString()
-    val alwaysCertain = if (r.getByte() == 1) true else false
+    val alwaysCertain = r.getByte() == 1
     val sp = ScanningPredicateSerializer.parse(r)
     ExternalApplication(appId, appName, sp, alwaysCertain)
   }

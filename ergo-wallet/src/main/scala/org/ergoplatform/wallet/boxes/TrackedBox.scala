@@ -66,7 +66,7 @@ final case class TrackedBox(creationTxId: ModifierId,
 
   def spent: Boolean = spendingHeightOpt.isDefined
 
-  def certain(appId: Short): Option[BoxCertainty] = applicationStatuses.find(_._1 == appId).map(_._2)
+  def certain(appId: Short): Option[BoxCertainty] = applicationStatuses.get(appId)
 
   lazy val assets: Map[ModifierId, Long] = box.additionalTokens.toArray.map {
     case (id, amt) => bytesToId(id) -> amt

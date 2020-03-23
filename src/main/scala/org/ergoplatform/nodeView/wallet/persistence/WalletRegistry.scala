@@ -131,7 +131,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
     val bag4 = updateDigest(bag3) { case RegistryDigest(height, wBalance, wTokens) =>
       if (height + 1 != blockHeight) {
-        log.error(s"Blocks were skipped during wallet scanning, from ${regHeight + 1} until $blockHeight")
+        log.error(s"Blocks were skipped during wallet scanning, from ${height + 1} until $blockHeight")
       }
       val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.contains(PaymentsAppId))
       val spentAmt = spentWalletBoxes.map(_.box.value).sum

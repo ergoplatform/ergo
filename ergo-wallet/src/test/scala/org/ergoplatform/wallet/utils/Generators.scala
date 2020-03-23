@@ -153,13 +153,19 @@ trait Generators {
   }
 
   def appStatusesGen: Gen[Map[ApplicationId, BoxCertainty]] = {
-    Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.toSet.toSeq.map{id: Short => ApplicationId @@ id}).flatMap { appIds =>
-      Gen.listOfN(appIds.length, Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)).map { certainities =>
-        appIds.zip(certainities)
-      }
-    }.map(_.map { case (appId, certainty) =>
-      appId -> (if (appId == PaymentsAppId) BoxCertainty.Certain else certainty)
-    }.toMap)
+    if(scala.util.Random.nextBoolean()) {
+      // simulate complex usage scenario
+      Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.toSet.toSeq.map { id: Short => ApplicationId @@ id }).flatMap { appIds =>
+        Gen.listOfN(appIds.length, Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)).map { certainities =>
+          appIds.zip(certainities)
+        }
+      }.map(_.map { case (appId, certainty) =>
+        appId -> (if (appId == PaymentsAppId) BoxCertainty.Certain else certainty)
+      }.toMap)
+    } else {
+      // simulate simple payment
+      Map(PaymentsAppId -> BoxCertainty.Certain)
+    }
   }
 
   def trackedBoxGen: Gen[TrackedBox] = for {

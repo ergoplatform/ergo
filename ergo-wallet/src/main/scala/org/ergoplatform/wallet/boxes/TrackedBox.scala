@@ -90,7 +90,6 @@ object TrackedBox {
 }
 
 object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
-  val walletAppId: ApplicationId = Constants.PaymentsAppId
 
   override def serialize(obj: TrackedBox, w: Writer): Unit = {
     w.putBytes(idToBytes(obj.creationTxId))
@@ -101,7 +100,7 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
 
     val appsCount = obj.applicationStatuses.size.toShort
 
-    if (appsCount == 1 && obj.applicationStatuses.head._1 == walletAppId) {
+    if (appsCount == 1 && obj.applicationStatuses.head._1 == Constants.PaymentsAppId) {
       w.putShort(0)
     } else {
       w.putShort(appsCount)
@@ -122,7 +121,7 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
 
     val appsCount = r.getShort()
     val appStatuses: Seq[(ApplicationId, BoxCertainty)] = if (appsCount == 0){
-      Seq((walletAppId, BoxCertainty.Certain))
+      Seq((Constants.PaymentsAppId, BoxCertainty.Certain))
     } else {
       (0 until appsCount)
         .map(_ =>

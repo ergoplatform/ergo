@@ -9,7 +9,6 @@ import com.github.oskin1.scakoo.BaseCuckooFilter
 import com.github.oskin1.scakoo.immutable.CuckooFilter
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
-import org.ergoplatform.http.api.ApplicationEntities.ApplicationIdWrapper
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}

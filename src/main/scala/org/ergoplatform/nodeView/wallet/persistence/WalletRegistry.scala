@@ -205,6 +205,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   def makeCertain(appId: ApplicationId, boxId: BoxId): Try[Unit] = {
     getBox(boxId) match {
       case Some(tb) => tb.applicationStatuses.get(appId).map { _ =>
+        store.cacheRemove(Seq(certaintyKey(appId, tb)))
         val updTb = tb.copy(applicationStatuses = tb.applicationStatuses.updated(appId, BoxCertainty.Certain))
         store.cachePut(Seq(boxToKvPair(updTb), certaintyKey(appId, updTb) -> boxId))
         Success((): Unit)

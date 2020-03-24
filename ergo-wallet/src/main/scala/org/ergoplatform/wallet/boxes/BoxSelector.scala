@@ -5,6 +5,7 @@ import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionResult}//, subtrac
 import scorex.util.ModifierId
 
 import scala.collection.mutable
+import org.ergoplatform.ErgoBoxAssets
 
 /**
   * An interface which is exposing a method to select unspent boxes according to target amounts in Ergo tokens and
@@ -34,6 +35,6 @@ trait BoxSelector {
 
 object BoxSelector {
 
-  final case class BoxSelectionResult(trackedBoxes: Seq[TrackedBox], changeBoxes: Seq[Box])
+  final case class BoxSelectionResult(trackedBoxes: Seq[TrackedBox], changeBoxes: Seq[ErgoBoxAssets])
 
 }

@@ -99,7 +99,7 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers {
     s2.isDefined shouldBe true
     s2.get.changeBoxes.size == 1
     s2.get.changeBoxes.head.value shouldBe 100
-    s2.get.changeBoxes.head.assets(assetId1) shouldBe 90
+    s2.get.changeBoxes.head.tokens(assetId1) shouldBe 90
     s2.get.trackedBoxes shouldBe Seq(uBox1, uBox3)
 
     select(uBoxes.toIterator, box => box.chainStatus.onChain, 1, Map(assetId2 -> 1)) shouldBe None
@@ -110,8 +110,8 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers {
     s3.isDefined shouldBe true
     s3.get.changeBoxes.size == 1
     s3.get.changeBoxes.head.value shouldBe 110
-    s3.get.changeBoxes.head.assets(assetId1) shouldBe 90
-    s3.get.changeBoxes.head.assets(assetId2) shouldBe 9
+    s3.get.changeBoxes.head.tokens(assetId1) shouldBe 90
+    s3.get.changeBoxes.head.tokens(assetId2) shouldBe 9
     s3.get.trackedBoxes shouldBe Seq(uBox1, uBox2, uBox3)
 
     select(uBoxes.toIterator, box => box.chainStatus.onChain, 1, Map(assetId1 -> 11, assetId2 -> 1)) shouldBe None
@@ -153,12 +153,12 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers {
 
     s1.get.changeBoxes.size shouldBe 1
     s1.get.changeBoxes(0).value shouldBe 100
-    s1.get.changeBoxes(0).assets(assetId1) shouldBe 1
-    s1.get.changeBoxes(0).assets(assetId2) shouldBe 1
-    s1.get.changeBoxes(0).assets(assetId3) shouldBe 90
-    s1.get.changeBoxes(0).assets(assetId4) shouldBe 101
-    s1.get.changeBoxes(0).assets(assetId5) shouldBe 100
-    s1.get.changeBoxes(0).assets(assetId6) shouldBe 100
+    s1.get.changeBoxes(0).tokens(assetId1) shouldBe 1
+    s1.get.changeBoxes(0).tokens(assetId2) shouldBe 1
+    s1.get.changeBoxes(0).tokens(assetId3) shouldBe 90
+    s1.get.changeBoxes(0).tokens(assetId4) shouldBe 101
+    s1.get.changeBoxes(0).tokens(assetId5) shouldBe 100
+    s1.get.changeBoxes(0).tokens(assetId6) shouldBe 100
 
     s1.get.trackedBoxes shouldBe Seq(uBox1, uBox3)
 
@@ -166,10 +166,10 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers {
       Map(assetId1 -> 1, assetId2 -> 1, assetId3 -> 1, assetId4 -> 1))
     s2.isDefined shouldBe true
     s2.get.changeBoxes.size == 1
-    s2.get.changeBoxes(0).assets(assetId5) shouldBe 10
-    s2.get.changeBoxes(0).assets(assetId6) shouldBe 10
-    s2.get.changeBoxes(0).assets(assetId7) shouldBe 10
-    s2.get.changeBoxes(0).assets(assetId8) shouldBe 10
+    s2.get.changeBoxes(0).tokens(assetId5) shouldBe 10
+    s2.get.changeBoxes(0).tokens(assetId6) shouldBe 10
+    s2.get.changeBoxes(0).tokens(assetId7) shouldBe 10
+    s2.get.changeBoxes(0).tokens(assetId8) shouldBe 10
 
     //todo: should selector fail in this case (if there's no monetary value to create a new box w. assets) ?
     select(uBoxes.toIterator, noFilter, 1, Map(assetId1 -> 1)) shouldBe None

@@ -487,7 +487,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       }
 
     val changeBoxCandidates = r.changeBoxes.map { changeBox => 
-      val assets = changeBox.assets.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
+      val assets = changeBox.tokens.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
       new ErgoBoxCandidate(changeBox.value, changeAddress, height, assets.toColl)
     }
 

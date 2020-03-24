@@ -240,8 +240,12 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case UnlockWallet(pass) =>
       secretStorageOpt match {
         case Some(secretStorage) =>
-          sender() ! secretStorage.unlock(pass)
-          processUnlock(secretStorage)
+          val unlockResult = secretStorage.unlock(pass)
+          unlockResult match {
+            case Success(_) => processUnlock(secretStorage)
+            case Failure(t) => log.warn("Wallet unlock failed with: ", t)
+          }
+          sender() ! unlockResult
         case None =>
           sender() ! Failure(new Exception("Wallet not initialized"))
       }

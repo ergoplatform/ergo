@@ -12,8 +12,17 @@ import org.ergoplatform.ErgoScriptPredef
 import org.ergoplatform.UnsignedErgoLikeTransaction
 import org.ergoplatform.UnsignedInput
 import scala.util.Try
+import scorex.util.ModifierId
+import org.ergoplatform.wallet.boxes.BoxSelectors
+import org.ergoplatform.ErgoBoxAssets
+import special.collection.Coll
+import org.ergoplatform.ErgoBox.TokenId
 
 object TransactionBuild {
+
+  private def calcTokenOutput(outputCandidates: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = ???
+
+  private def tokensToColl(tokens: Map[ModifierId, Long]): Coll[(TokenId, Long)] = ???
 
   // TODO: scaladoc
   def buildUnsignedTx(
@@ -51,7 +60,20 @@ object TransactionBuild {
       changeAmt >= 0,
       s"total inputs $inputTotal is less then total outputs $outputTotal"
     )
-    val noChange = changeAmt < minChangeValue
+
+    // TODO: calc token change
+    val tokensOut = calcTokenOutput(outputCandidates)
+    val noFilter = { b: ErgoBoxAssets => true}
+    val selection = BoxSelectors.select(inputs.toIterator, noFilter, outputTotal, tokensOut).getOrElse(
+      throw new IllegalArgumentException(s"failed to calculate change for $inputs, $outputTotal, $tokensOut")
+    )
+    // although we're only interested in change boxes, make sure selection contains exact inputs
+    assert(selection.boxes == inputs, s"unexpected selected boxes, expected: $inputs, got ${selection.boxes}")
+    val changeBoxes = selection.changeBoxes
+    val changeBoxesHaveTokens = changeBoxes.exists(_.tokens.nonEmpty) 
+
+    val noChange = changeAmt < minChangeValue && !changeBoxesHaveTokens
+
     // if computed changeAmt is too small give it to miner as tips
     val actualFee = if (noChange) feeAmount + changeAmt else feeAmount
     require(
@@ -66,9 +88,9 @@ object TransactionBuild {
 
     val addedChangeOut = if (!noChange) {
       require(changeAddress.isDefined, s"change address is required for $changeAmt")
-      val changeOut =
-        new ErgoBoxCandidate(changeAmt, changeAddress.get.script, currentHeight)
-      Seq(changeOut)
+      changeBoxes.map { cb =>
+        new ErgoBoxCandidate(cb.value, changeAddress.get.script, currentHeight, tokensToColl(cb.tokens))
+      }
     } else Seq()
 
     val finalOutputCandidates = outputCandidates ++ Seq(feeOut) ++ addedChangeOut

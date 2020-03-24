@@ -4,12 +4,21 @@ import scorex.util.ModifierId
 import scala.annotation.tailrec
 import scala.collection.mutable
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoBoxAssets
+import org.ergoplatform.ErgoBoxAssetsHolder
 
 object BoxSelectors {
 
-  final case class SelectionResult[T <: Box](boxes: Seq[T], changeBoxes: Seq[Box])
+  final case class SelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
 
-  def select[T <: Box](
+  def select[T <: ErgoBoxAssets](
+    inputBoxes: Iterator[T],
+    targetBalance: Long,
+    targetAssets: Map[ModifierId, Long]
+  ): Option[SelectionResult[T]] = 
+    select(inputBoxes, _ => true, targetBalance, targetAssets)
+
+  def select[T <: ErgoBoxAssets](
     inputBoxes: Iterator[T],
     externalFilter: T => Boolean,
     targetBalance: Long,
@@ -22,7 +31,7 @@ object BoxSelectors {
 
     def pickUp(unspentBox: T) = {
       currentBalance = currentBalance + unspentBox.value
-      mergeAssetsMut(currentAssets, unspentBox.assets)
+      mergeAssetsMut(currentAssets, unspentBox.tokens)
       res += unspentBox
     }
 
@@ -55,7 +64,7 @@ object BoxSelectors {
       if (pickBoxes(
             inputBoxes,
             bc =>
-              externalFilter(bc) && bc.assets.exists {
+              externalFilter(bc) && bc.tokens.exists {
                 case (id, _) =>
                   val targetAmt       = targetAssets.getOrElse(id, 0L)
                   lazy val currentAmt = currentAssets.getOrElse(id, 0L)
@@ -79,14 +88,14 @@ object BoxSelectors {
 
   }
 
-  def calcChange[T <: Box](
+  def calcChange[T <: ErgoBoxAssets](
     boxes: Seq[T],
     targetBalance: Long,
     targetAssets: Map[ModifierId, Long]
-  ): Option[Seq[Box]] = {
+  ): Option[Seq[ErgoBoxAssets]] = {
     val compactedBalance = boxes.map(_.value).sum
     val compactedAssets  = mutable.Map[ModifierId, Long]()
-    mergeAssetsMut(compactedAssets, boxes.map(_.assets): _*)
+    mergeAssetsMut(compactedAssets, boxes.map(_.tokens): _*)
 
     subtractAssetsMut(compactedAssets, targetAssets)
     val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] =
@@ -98,7 +107,7 @@ object BoxSelectors {
   def formChangeBoxes(
     changeBalance: Long,
     changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]]
-  ): Option[Seq[Box]] = {
+  ): Option[Seq[ErgoBoxAssets]] = {
     //at least 1 ergo token should be assigned per a created box
     if (changeBoxesAssets.size > changeBalance) {
       None
@@ -107,19 +116,19 @@ object BoxSelectors {
         val baseChangeBalance = changeBalance / changeBoxesAssets.size
 
         val changeBoxesNoBalanceAdjusted = changeBoxesAssets.map { a =>
-          GenericBox(baseChangeBalance, a.toMap)
+          ErgoBoxAssetsHolder(baseChangeBalance, a.toMap)
         }
 
         val modifiedBoxOpt = changeBoxesNoBalanceAdjusted.headOption.map { firstBox =>
-          GenericBox(
+          ErgoBoxAssetsHolder(
             changeBalance - baseChangeBalance * (changeBoxesAssets.size - 1),
-            firstBox.assets
+            firstBox.tokens
           )
         }
 
         modifiedBoxOpt.toSeq ++ changeBoxesNoBalanceAdjusted.tail
       } else if (changeBalance > 0) {
-        Seq(GenericBox(changeBalance))
+        Seq(ErgoBoxAssetsHolder(changeBalance))
       } else {
         Seq.empty
       }

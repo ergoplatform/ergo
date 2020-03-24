@@ -5,6 +5,7 @@ import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
+import org.ergoplatform.ErgoBoxAssets
 
 /**
   * A box tracked by a wallet that contains Ergo box itself as well as
@@ -26,7 +27,7 @@ case class TrackedBox(creationTxId: ModifierId,
                       spendingHeightOpt: Option[Int],
                       box: ErgoBox,
                       certainty: BoxCertainty,
-                      applicationId: Short) extends Box {
+                      applicationId: Short) extends ErgoBoxAssets {
 
   /**
     * Whether the box is spent or not
@@ -64,7 +65,7 @@ case class TrackedBox(creationTxId: ModifierId,
 
   override def value: Long = box.value
 
-  override def assets: Map[ModifierId, Long] = box.additionalTokens.toArray.map {
+  override def tokens: Map[ModifierId, Long] = box.additionalTokens.toArray.map {
     case (id, amt) => bytesToId(id) -> amt
   }.toMap
 

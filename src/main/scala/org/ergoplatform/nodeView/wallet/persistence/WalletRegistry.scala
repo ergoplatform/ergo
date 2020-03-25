@@ -112,7 +112,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * Updates indexes according to data extracted from a block and performs versioned update.
     *
     * @param newOutputs  - newly created outputs (but could be spent by inputs)
-    * @param inputs      - Sequence of (input tx id, input box id, tracked box)
+    * @param inputs      - spent inputs as a sequence of (input tx id, input box id, tracked box)
     * @param txs         - transactions affected
     * @param blockId     - block identifier
     * @param blockHeight - block height

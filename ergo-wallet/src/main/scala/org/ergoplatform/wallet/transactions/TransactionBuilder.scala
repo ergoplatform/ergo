@@ -11,18 +11,30 @@ import org.ergoplatform.ErgoAddress
 import org.ergoplatform.ErgoScriptPredef
 import org.ergoplatform.UnsignedErgoLikeTransaction
 import org.ergoplatform.UnsignedInput
+import sigmastate.eval.Extensions._
 import scala.util.Try
-import scorex.util.ModifierId
+import scorex.util.{ModifierId, idToBytes, bytesToId}
 import org.ergoplatform.wallet.boxes.BoxSelectors
 import org.ergoplatform.ErgoBoxAssets
 import special.collection.Coll
+import sigmastate.eval._
 import org.ergoplatform.ErgoBox.TokenId
+import scorex.crypto.hash.Digest32
+import cats.implicits._
 
 object TransactionBuild {
 
-  private def calcTokenOutput(outputCandidates: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = ???
+  private def calcTokenOutput(outputCandidates: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = 
+    outputCandidates
+      .map(b => collTokensToMap(b.additionalTokens))
+      .foldLeft(Map[ModifierId, Long]()){case (a, e) => a.combine(e) }
 
-  private def tokensToColl(tokens: Map[ModifierId, Long]): Coll[(TokenId, Long)] = ???
+  // TODO: extract into Iso
+  private def collTokensToMap(tokens: Coll[(TokenId, Long)]): Map[ModifierId, Long] = 
+    tokens.toArray.toSeq.map(t => bytesToId(t._1) -> t._2).toMap
+
+  private def tokensMapToColl(tokens: Map[ModifierId, Long]): Coll[(TokenId, Long)] = 
+    tokens.toSeq.map {t => (Digest32 @@ idToBytes(t._1)) -> t._2}.toArray.toColl
 
   // TODO: scaladoc
   def buildUnsignedTx(
@@ -61,7 +73,6 @@ object TransactionBuild {
       s"total inputs $inputTotal is less then total outputs $outputTotal"
     )
 
-    // TODO: calc token change
     val tokensOut = calcTokenOutput(outputCandidates)
     val noFilter = { b: ErgoBoxAssets => true}
     val selection = BoxSelectors.select(inputs.toIterator, noFilter, outputTotal, tokensOut).getOrElse(
@@ -89,7 +100,7 @@ object TransactionBuild {
     val addedChangeOut = if (!noChange) {
       require(changeAddress.isDefined, s"change address is required for $changeAmt")
       changeBoxes.map { cb =>
-        new ErgoBoxCandidate(cb.value, changeAddress.get.script, currentHeight, tokensToColl(cb.tokens))
+        new ErgoBoxCandidate(cb.value, changeAddress.get.script, currentHeight, tokensMapToColl(cb.tokens))
       }
     } else Seq()
 

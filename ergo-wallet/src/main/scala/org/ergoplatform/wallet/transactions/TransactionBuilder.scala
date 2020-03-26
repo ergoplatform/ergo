@@ -29,26 +29,15 @@ object TransactionBuilder {
       .map(b => collTokensToMap(b.additionalTokens))
       .foldLeft(Map[ModifierId, Long]()){case (a, e) => a.combine(e) }
 
-  // TODO: extract into Iso
+  // TODO: extract into an Iso
   private def collTokensToMap(tokens: Coll[(TokenId, Long)]): Map[ModifierId, Long] = 
     tokens.toArray.toSeq.map(t => bytesToId(t._1) -> t._2).toMap
 
   private def tokensMapToColl(tokens: Map[ModifierId, Long]): Coll[(TokenId, Long)] = 
     tokens.toSeq.map {t => (Digest32 @@ idToBytes(t._1)) -> t._2}.toArray.toColl
 
-  // TODO: scaladoc
-  def buildUnsignedTx(
-    inputs: IndexedSeq[ErgoBox],
-    dataInputs: IndexedSeq[DataInput],
-    outputCandidates: Seq[ErgoBoxCandidate],
-    feeAmount: Long,
-    changeAddress: Option[ErgoAddress],
-    currentHeight: Int,
-    minFee: Long,
-    minChangeValue: Long,
-    minerRewardDelay: Int
-  ): Try[UnsignedErgoLikeTransaction] = Try {
-
+  private def validateStatelessChecks(inputs: IndexedSeq[ErgoBox], dataInputs: IndexedSeq[DataInput],
+    outputCandidates: Seq[ErgoBoxCandidate]): Unit = {
     // checks from ErgoTransaction.validateStateless
     require(inputs.nonEmpty, "inputs cannot be empty")
     require(outputCandidates.nonEmpty, "outputCandidates cannot be empty")
@@ -60,6 +49,23 @@ object TransactionBuilder {
     val outputSumTry = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
     require(outputSumTry.isSuccess, s"Sum of transaction output values should not exceed ${Long.MaxValue}")
     require(inputs.distinct.size == inputs.size, s"There should be no duplicate inputs")
+  }
+
+
+  // TODO: scaladoc
+  def buildUnsignedTx(
+    inputs: IndexedSeq[ErgoBox],
+    dataInputs: IndexedSeq[DataInput],
+    outputCandidates: Seq[ErgoBoxCandidate],
+    currentHeight: Int,
+    feeAmount: Long,
+    minFee: Long,
+    changeAddress: ErgoAddress,
+    minChangeValue: Long,
+    minerRewardDelay: Int
+  ): Try[UnsignedErgoLikeTransaction] = Try {
+
+    validateStatelessChecks(inputs, dataInputs, outputCandidates)
 
     // TODO: implement all appropriate checks from ErgoTransaction.validateStatefull
 
@@ -72,7 +78,7 @@ object TransactionBuilder {
 
     val firstInputBoxId = bytesToId(inputs(0).id)
     val tokensOut = calcTokenOutput(outputCandidates)
-    // remove minted token if any
+    // remove minted tokens if any
     val tokensOutNoMinted = tokensOut.filterKeys(_ != firstInputBoxId)
     val mintedTokensNum = tokensOut.size - tokensOutNoMinted.size
     require(mintedTokensNum <= 1, s"Only one token can be minted, but found $mintedTokensNum")
@@ -100,8 +106,7 @@ object TransactionBuilder {
     )
 
     val addedChangeOut = if (!noChange) {
-      require(changeAddress.isDefined, s"change address is required for $changeAmt")
-      val script = changeAddress.get.script
+      val script = changeAddress.script
       changeBoxes.map { cb =>
         new ErgoBoxCandidate(cb.value, script, currentHeight, tokensMapToColl(cb.tokens))
       }

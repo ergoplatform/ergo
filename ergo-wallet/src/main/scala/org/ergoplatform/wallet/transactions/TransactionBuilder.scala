@@ -52,14 +52,25 @@ object TransactionBuilder {
   }
 
 
-  // TODO: scaladoc
+  /** Creates unsigned transaction from given inputs and outputs adding outputs with miner's fee and change
+    * Runs required checks ensuring that resulted transaction will be successfully validated by a node.
+    * 
+    * @param inputs - input boxes
+    * @param dataInputs - data inputs
+    * @param outputCandidates - output candidate boxes
+    * @param currentHeight - current height (used in miner's fee box and change box)
+    * @param feeAmount - fee amount to put in miner's fee box
+    * @param changeAddress - address where to send change from the input boxes
+    * @param minChangeValue - minimum change value to send, otherwise add to miner's fee
+    * @param minerRewardDelay - reward delay to encode in miner's fee box
+    * @return unsigned transaction 
+    */
   def buildUnsignedTx(
     inputs: IndexedSeq[ErgoBox],
     dataInputs: IndexedSeq[DataInput],
     outputCandidates: Seq[ErgoBoxCandidate],
     currentHeight: Int,
     feeAmount: Long,
-    minFee: Long,
     changeAddress: ErgoAddress,
     minChangeValue: Long,
     minerRewardDelay: Int
@@ -69,7 +80,7 @@ object TransactionBuilder {
 
     // TODO: implement all appropriate checks from ErgoTransaction.validateStatefull
 
-    require(feeAmount > 0, "Fee amount should be defined")
+    require(feeAmount > 0, s"expected fee amount > 0, got $feeAmount")
     val inputTotal  = inputs.map(_.value).sum
     val outputSum   = outputCandidates.map(_.value).sum
     val outputTotal = outputSum + feeAmount
@@ -95,10 +106,6 @@ object TransactionBuilder {
 
     // if computed changeAmt is too small give it to miner as tips
     val actualFee = if (noChange) feeAmount + changeAmt else feeAmount
-    require(
-      actualFee >= minFee,
-      s"Fee ($actualFee) must be greater then minimum amount ($minFee NanoErg)"
-    )
     val feeOut = new ErgoBoxCandidate(
       actualFee,
       ErgoScriptPredef.feeProposition(minerRewardDelay),

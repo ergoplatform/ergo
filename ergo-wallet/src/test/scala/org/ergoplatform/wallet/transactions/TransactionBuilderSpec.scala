@@ -60,7 +60,6 @@ class TransactionBuilderSpec extends PropSpec with Matchers {
       outputCandidates = outs,
       currentHeight    = currentHeight,
       feeAmount        = fee,
-      minFee           = minFee,
       changeAddress    = changeAddress,
       minChangeValue   = minChangeValue,
       minerRewardDelay = minerRewardDelay

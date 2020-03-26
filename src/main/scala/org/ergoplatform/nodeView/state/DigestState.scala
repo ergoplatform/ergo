@@ -111,8 +111,7 @@ class DigestState protected(override val version: VersionTag,
               log.error(s"Can't modify state context due to ${e.getMessage} ", e)
               Failure(e)
           }
-        }
-        .recoverWith { case e =>
+        }.recoverWith { case e =>
           log.warn(s"Invalid block ${fb.encodedId}, reason: ${LoggingUtil.getReasonMsg(e)}")
           Failure(e)
         }

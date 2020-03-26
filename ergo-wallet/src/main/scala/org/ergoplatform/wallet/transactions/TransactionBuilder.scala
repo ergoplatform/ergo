@@ -68,15 +68,15 @@ object TransactionBuilder {
     val outputSum   = outputCandidates.map(_.value).sum
     val outputTotal = outputSum + feeAmount
     val changeAmt   = inputTotal - outputTotal
-    require(
-      changeAmt >= 0,
-      s"total inputs $inputTotal is less then total outputs $outputTotal"
-    )
+    require(changeAmt >= 0, s"total inputs $inputTotal is less then total outputs $outputTotal")
 
     val firstInputBoxId = bytesToId(inputs(0).id)
     val tokensOut = calcTokenOutput(outputCandidates)
     // remove minted token if any
     val tokensOutNoMinted = tokensOut.filterKeys(_ != firstInputBoxId)
+    val mintedTokensNum = tokensOut.size - tokensOutNoMinted.size
+    require(mintedTokensNum <= 1, s"Only one token can be minted, but found $mintedTokensNum")
+
     val selection = BoxSelectors.select(inputs.toIterator, outputTotal, tokensOutNoMinted).getOrElse(
       throw new IllegalArgumentException(s"failed to calculate change for outputTotal: $outputTotal, \ntokens: $tokensOut, \ninputs: $inputs, ")
     )
@@ -101,21 +101,13 @@ object TransactionBuilder {
 
     val addedChangeOut = if (!noChange) {
       require(changeAddress.isDefined, s"change address is required for $changeAmt")
+      val script = changeAddress.get.script
       changeBoxes.map { cb =>
-        new ErgoBoxCandidate(cb.value, changeAddress.get.script, currentHeight, tokensMapToColl(cb.tokens))
+        new ErgoBoxCandidate(cb.value, script, currentHeight, tokensMapToColl(cb.tokens))
       }
     } else Seq()
 
     val finalOutputCandidates = outputCandidates ++ Seq(feeOut) ++ addedChangeOut
-
-    val mintedTokensNum = finalOutputCandidates
-      .flatMap(_.additionalTokens.toArray)
-      .count(t => util.Arrays.equals(t._1, inputs.head.id))
-
-    require(
-      mintedTokensNum <= 1,
-      s"Only one token can be minted, but found $mintedTokensNum"
-    )
 
     new UnsignedErgoLikeTransaction(
       inputs.map(b => new UnsignedInput(b.id)),

@@ -58,16 +58,17 @@ class TransactionBuilderSpec extends PropSpec with Matchers {
       inputs           = ins,
       dataInputs       = IndexedSeq(),
       outputCandidates = outs,
-      feeAmount        = fee,
-      changeAddress    = Some(changeAddress),
       currentHeight    = currentHeight,
+      feeAmount        = fee,
       minFee           = minFee,
+      changeAddress    = changeAddress,
       minChangeValue   = minChangeValue,
       minerRewardDelay = minerRewardDelay
     )
 
     res shouldBe a[Success[_]]
     val tx = res.get
+    //  added miner fee
     tx.outputCandidates.size shouldBe 2
     tx.outputCandidates(0) shouldEqual outBox
   }

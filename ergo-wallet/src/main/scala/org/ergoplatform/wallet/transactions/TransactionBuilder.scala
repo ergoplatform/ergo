@@ -22,7 +22,7 @@ import org.ergoplatform.ErgoBox.TokenId
 import scorex.crypto.hash.Digest32
 import cats.implicits._
 
-object TransactionBuild {
+object TransactionBuilder {
 
   private def calcTokenOutput(outputCandidates: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = 
     outputCandidates
@@ -73,10 +73,12 @@ object TransactionBuild {
       s"total inputs $inputTotal is less then total outputs $outputTotal"
     )
 
+    val firstInputBoxId = bytesToId(inputs(0).id)
     val tokensOut = calcTokenOutput(outputCandidates)
-    val noFilter = { b: ErgoBoxAssets => true}
-    val selection = BoxSelectors.select(inputs.toIterator, noFilter, outputTotal, tokensOut).getOrElse(
-      throw new IllegalArgumentException(s"failed to calculate change for $inputs, $outputTotal, $tokensOut")
+    // remove minted token if any
+    val tokensOutNoMinted = tokensOut.filterKeys(_ != firstInputBoxId)
+    val selection = BoxSelectors.select(inputs.toIterator, outputTotal, tokensOutNoMinted).getOrElse(
+      throw new IllegalArgumentException(s"failed to calculate change for outputTotal: $outputTotal, \ntokens: $tokensOut, \ninputs: $inputs, ")
     )
     // although we're only interested in change boxes, make sure selection contains exact inputs
     assert(selection.boxes == inputs, s"unexpected selected boxes, expected: $inputs, got ${selection.boxes}")

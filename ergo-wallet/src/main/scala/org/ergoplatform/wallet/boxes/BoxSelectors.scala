@@ -15,7 +15,7 @@ object BoxSelectors {
     inputBoxes: Iterator[T],
     targetBalance: Long,
     targetAssets: Map[ModifierId, Long]
-  ): Option[SelectionResult[T]] = 
+  ): Option[SelectionResult[T]] =
     select(inputBoxes, _ => true, targetBalance, targetAssets)
 
   def select[T <: ErgoBoxAssets](
@@ -145,12 +145,6 @@ object BoxSelectors {
         into.put(id, into.getOrElse(id, 0L) + amount)
     })
   }
-
-  // def mergeAssets(from: Map[ModifierId, Long], to: Map[ModifierId, Long] = Map.empty): Map[ModifierId, Long] = {
-  //   from.foldLeft(to) { case (acc, (id, amount)) =>
-  //     acc.updated(id, acc.getOrElse(id, 0L) + amount)
-  //   }
-  // }
 
   private def subtractAssetsMut(
     from: mutable.Map[ModifierId, Long],

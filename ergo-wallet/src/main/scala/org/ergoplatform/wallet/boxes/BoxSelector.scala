@@ -1,11 +1,9 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.ErgoBox
-import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionResult}//, subtractAssetsMut}
+import org.ergoplatform.ErgoBoxAssets
+import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import scorex.util.ModifierId
 
-import scala.collection.mutable
-import org.ergoplatform.ErgoBoxAssets
 
 /**
   * An interface which is exposing a method to select unspent boxes according to target amounts in Ergo tokens and

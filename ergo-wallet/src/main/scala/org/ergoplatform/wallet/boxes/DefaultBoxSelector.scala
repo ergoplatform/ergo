@@ -1,10 +1,6 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.ErgoBox
 import scorex.util.ModifierId
-
-import scala.annotation.tailrec
-import scala.collection.mutable
 
 /**
   * Default implementation of the box selector. It simply picks boxes till sum of their monetary values

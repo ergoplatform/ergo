@@ -1,7 +1,5 @@
 package org.ergoplatform.wallet.transactions
 
-import java.util
-
 import scala.collection.IndexedSeq
 import scala.language.postfixOps
 import org.ergoplatform.ErgoBox
@@ -15,7 +13,6 @@ import sigmastate.eval.Extensions._
 import scala.util.Try
 import scorex.util.{ModifierId, idToBytes, bytesToId}
 import org.ergoplatform.wallet.boxes.BoxSelectors
-import org.ergoplatform.ErgoBoxAssets
 import special.collection.Coll
 import sigmastate.eval._
 import org.ergoplatform.ErgoBox.TokenId
@@ -24,7 +21,7 @@ import cats.implicits._
 
 object TransactionBuilder {
 
-  private def calcTokenOutput(outputCandidates: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] = 
+  private def calcTokenOutput(outputCandidates: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] =
     outputCandidates
       .map(b => collTokensToMap(b.additionalTokens))
       .foldLeft(Map[ModifierId, Long]()){case (a, e) => a.combine(e) }
@@ -33,7 +30,7 @@ object TransactionBuilder {
   private def collTokensToMap(tokens: Coll[(TokenId, Long)]): Map[ModifierId, Long] = 
     tokens.toArray.toSeq.map(t => bytesToId(t._1) -> t._2).toMap
 
-  private def tokensMapToColl(tokens: Map[ModifierId, Long]): Coll[(TokenId, Long)] = 
+  private def tokensMapToColl(tokens: Map[ModifierId, Long]): Coll[(TokenId, Long)] =
     tokens.toSeq.map {t => (Digest32 @@ idToBytes(t._1)) -> t._2}.toArray.toColl
 
   private def validateStatelessChecks(inputs: IndexedSeq[ErgoBox], dataInputs: IndexedSeq[DataInput],
@@ -43,7 +40,7 @@ object TransactionBuilder {
     require(outputCandidates.nonEmpty, "outputCandidates cannot be empty")
     require(inputs.size <= Short.MaxValue, s"too many inputs - ${inputs.size} (max ${Short.MaxValue})")
     require(dataInputs.size <= Short.MaxValue, s"too many dataInputs - ${dataInputs.size} (max ${Short.MaxValue})")
-    require(outputCandidates.size <= Short.MaxValue, 
+    require(outputCandidates.size <= Short.MaxValue,
       s"too many outputCandidates - ${outputCandidates.size} (max ${Short.MaxValue})")
     require(outputCandidates.forall(_.value >= 0), s"outputCandidate.value must be >= 0")
     val outputSumTry = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
@@ -54,7 +51,7 @@ object TransactionBuilder {
 
   /** Creates unsigned transaction from given inputs and outputs adding outputs with miner's fee and change
     * Runs required checks ensuring that resulted transaction will be successfully validated by a node.
-    * 
+    *
     * @param inputs - input boxes
     * @param dataInputs - data inputs
     * @param outputCandidates - output candidate boxes
@@ -63,7 +60,7 @@ object TransactionBuilder {
     * @param changeAddress - address where to send change from the input boxes
     * @param minChangeValue - minimum change value to send, otherwise add to miner's fee
     * @param minerRewardDelay - reward delay to encode in miner's fee box
-    * @return unsigned transaction 
+    * @return unsigned transaction
     */
   def buildUnsignedTx(
     inputs: IndexedSeq[ErgoBox],
@@ -100,7 +97,7 @@ object TransactionBuilder {
     // although we're only interested in change boxes, make sure selection contains exact inputs
     assert(selection.boxes == inputs, s"unexpected selected boxes, expected: $inputs, got ${selection.boxes}")
     val changeBoxes = selection.changeBoxes
-    val changeBoxesHaveTokens = changeBoxes.exists(_.tokens.nonEmpty) 
+    val changeBoxesHaveTokens = changeBoxes.exists(_.tokens.nonEmpty)
 
     val noChange = changeAmt < minChangeValue && !changeBoxesHaveTokens
 
@@ -117,7 +114,9 @@ object TransactionBuilder {
       changeBoxes.map { cb =>
         new ErgoBoxCandidate(cb.value, script, currentHeight, tokensMapToColl(cb.tokens))
       }
-    } else Seq()
+    } else {
+      Seq()
+    }
 
     val finalOutputCandidates = outputCandidates ++ Seq(feeOut) ++ addedChangeOut
 
@@ -127,4 +126,5 @@ object TransactionBuilder {
       finalOutputCandidates.toIndexedSeq
     )
   }
+
 }

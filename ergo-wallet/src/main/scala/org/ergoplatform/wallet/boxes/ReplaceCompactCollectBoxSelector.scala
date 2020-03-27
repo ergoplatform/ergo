@@ -1,6 +1,5 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.BoxSelectors.calcChange
 import scorex.util.ModifierId
@@ -45,16 +44,22 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
       val tail = inputBoxes.take(maxInputs * ScanDepthFactor).filter(filterFn).toSeq
       (if (initialSelection.trackedBoxes.length > maxInputs) {
         replace(initialSelection, tail, targetBalance, targetAssets)
-      } else Some(initialSelection)).flatMap { afterReplacement =>
+      } else {
+        Some(initialSelection)
+      }).flatMap { afterReplacement =>
         if (afterReplacement.trackedBoxes.length > maxInputs) {
           compress(afterReplacement, targetBalance, targetAssets)
-        } else Some(afterReplacement)
+        } else {
+          Some(afterReplacement)
+        }
       }.flatMap { afterCompaction =>
         if (afterCompaction.trackedBoxes.length > maxInputs) {
           None
         } else if (afterCompaction.trackedBoxes.length < optimalInputs) {
           collectDust(afterCompaction, tail, targetBalance, targetAssets)
-        } else Some(afterCompaction)
+        } else {
+          Some(afterCompaction)
+        }
       }
     }
   }
@@ -89,7 +94,9 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
       val compactedBoxes = boxes.filter(b => !thrownBoxes.contains(b))
       calcChange(compactedBoxes, targetBalance, targetAssets)
         .map(changeBoxes => BoxSelectionResult(compactedBoxes, changeBoxes))
-    } else Some(bsr)
+    } else {
+      Some(bsr)
+    }
   }
 
   protected[boxes] def replace(bsr: BoxSelectionResult,
@@ -124,7 +131,9 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
       val compactedBoxes = bsr.trackedBoxes.filter(b => !toDrop.contains(b)) ++ toAdd
       calcChange(compactedBoxes, targetBalance, targetAssets)
         .map(changeBoxes => BoxSelectionResult(compactedBoxes, changeBoxes))
-    } else Some(bsr)
+    } else {
+      Some(bsr)
+    }
   }
 
 }

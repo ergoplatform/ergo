@@ -2,6 +2,7 @@ package org.ergoplatform.wallet.boxes
 
 import scorex.util.ModifierId
 import org.ergoplatform.ErgoBoxAssets
+import org.ergoplatform.ErgoBoxAssetsHolder
 import org.ergoplatform.ErgoBox.MaxTokens
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -79,6 +80,38 @@ object DefaultBoxSelector extends BoxSelector {
       }
     } else {
       None
+    }
+  }
+
+  def formChangeBoxes(
+    changeBalance: Long,
+    changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]]
+  ): Option[Seq[ErgoBoxAssets]] = {
+    //at least 1 ergo token should be assigned per a created box
+    if (changeBoxesAssets.size > changeBalance) {
+      None
+    } else {
+      val changeBoxes = if (changeBoxesAssets.nonEmpty) {
+        val baseChangeBalance = changeBalance / changeBoxesAssets.size
+
+        val changeBoxesNoBalanceAdjusted = changeBoxesAssets.map { a =>
+          ErgoBoxAssetsHolder(baseChangeBalance, a.toMap)
+        }
+
+        val modifiedBoxOpt = changeBoxesNoBalanceAdjusted.headOption.map { firstBox =>
+          ErgoBoxAssetsHolder(
+            changeBalance - baseChangeBalance * (changeBoxesAssets.size - 1),
+            firstBox.tokens
+          )
+        }
+
+        modifiedBoxOpt.toSeq ++ changeBoxesNoBalanceAdjusted.tail
+      } else if (changeBalance > 0) {
+        Seq(ErgoBoxAssetsHolder(changeBalance))
+      } else {
+        Seq.empty
+      }
+      Some(changeBoxes)
     }
   }
 

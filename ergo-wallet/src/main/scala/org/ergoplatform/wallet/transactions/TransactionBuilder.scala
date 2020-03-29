@@ -12,7 +12,6 @@ import org.ergoplatform.UnsignedInput
 import sigmastate.eval.Extensions._
 import scala.util.Try
 import scorex.util.{ModifierId, idToBytes, bytesToId}
-import org.ergoplatform.wallet.boxes.BoxSelectors
 import special.collection.Coll
 import sigmastate.eval._
 import org.ergoplatform.ErgoBox.TokenId

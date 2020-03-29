@@ -825,7 +825,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       val uncertainTxTry = await(wallet.generateTransaction(Seq(requestWithTotalAmount)))
       uncertainTxTry shouldBe 'failure
-      uncertainTxTry.failed.get.getMessage.startsWith("No enough boxes to assemble a transaction") shouldBe true
+      uncertainTxTry.failed.get.getMessage.startsWith("Failed to find boxes to assemble a transaction") shouldBe true
       await(wallet.generateTransaction(Seq(requestWithCertainAmount))) shouldBe 'success
     }
   }

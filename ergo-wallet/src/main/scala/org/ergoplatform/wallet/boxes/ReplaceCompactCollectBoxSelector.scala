@@ -5,6 +5,7 @@ import org.ergoplatform.wallet.boxes.BoxSelectors.calcChange
 import scorex.util.ModifierId
 
 import scala.annotation.tailrec
+import org.ergoplatform.ErgoBoxAssets
 
 /**
   * A box selector which is parameterized by maximum number of inputs a transaction can have, and optimal number of inputs.
@@ -36,10 +37,10 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     *         to spend as well as monetary values and assets for boxes containing change
     *         (wrapped in a special BoxSelectionResult class).
     */
-  override def select(inputBoxes: Iterator[TrackedBox],
-                      filterFn: TrackedBox => Boolean,
+  override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
+                      filterFn: T => Boolean,
                       targetBalance: Long,
-                      targetAssets: Map[ModifierId, Long]): Option[BoxSelector.BoxSelectionResult] = {
+                      targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult[T]] = {
     DefaultBoxSelector.select(inputBoxes, filterFn, targetBalance, targetAssets).flatMap { initialSelection =>
       val tail = inputBoxes.take(maxInputs * ScanDepthFactor).filter(filterFn).toSeq
       (if (initialSelection.trackedBoxes.length > maxInputs) {
@@ -64,25 +65,24 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     }
   }
 
-  protected[boxes] def collectDust(bsr: BoxSelectionResult,
-                  tail: Seq[TrackedBox],
+  protected[boxes] def collectDust[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
+                  tail: Seq[T],
                   targetBalance: Long,
-                  targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
+                  targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult[T]] = {
     val diff = optimalInputs - bsr.trackedBoxes.length
-    val afterCompactionIds = bsr.trackedBoxes.map(_.boxId)
-    val dust = tail.sortBy(_.value).take(diff).filter(b => !afterCompactionIds.contains(b.boxId))
+    val dust = tail.sortBy(_.value).take(diff).filter(b => !bsr.trackedBoxes.contains(b))
 
     val boxes = bsr.trackedBoxes ++ dust
     calcChange(boxes, targetBalance, targetAssets).map(changeBoxes => BoxSelectionResult(boxes, changeBoxes))
   }
 
-  protected[boxes] def compress(bsr: BoxSelectionResult,
+  protected[boxes] def compress[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
                targetBalance: Long,
-               targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
+               targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult[T]] = {
     val boxes = bsr.trackedBoxes
     val diff = boxes.map(_.value).sum - targetBalance
 
-    val boxesToThrowAway = boxes.filter(!_.box.additionalTokens.toArray.map(_._1).exists(tid => targetAssets.keySet.contains(scorex.util.bytesToId(tid))))
+    val boxesToThrowAway = boxes.filter(!_.tokens.keySet.exists(tid => targetAssets.keySet.contains(tid)))
     val sorted = boxesToThrowAway.sortBy(_.value)
 
     if (diff >= sorted.head.value) {
@@ -99,20 +99,20 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     }
   }
 
-  protected[boxes] def replace(bsr: BoxSelectionResult,
-              tail: Seq[TrackedBox],
+  protected[boxes] def replace[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
+              tail: Seq[T],
               targetBalance: Long,
-              targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
+              targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult[T]] = {
     val bigBoxes = tail.sortBy(-_.value)
-    val boxesToThrowAway = bsr.trackedBoxes.filter(!_.box.additionalTokens.toArray.map(_._1).exists(tid => targetAssets.keySet.contains(scorex.util.bytesToId(tid))))
+    val boxesToThrowAway = bsr.trackedBoxes.filter(!_.tokens.keySet.exists(tid => targetAssets.keySet.contains(tid)))
     val sorted = boxesToThrowAway.sortBy(_.value)
 
-    type BoxesToAdd = Seq[TrackedBox]
-    type BoxesToDrop = Seq[TrackedBox]
+    type BoxesToAdd = Seq[T]
+    type BoxesToDrop = Seq[T]
     type Operations = (BoxesToAdd, BoxesToDrop)
 
     @tailrec
-    def replaceStep(candidates: Seq[TrackedBox], toDrop: Seq[TrackedBox], currentOps: Operations): Operations = {
+    def replaceStep(candidates: Seq[T], toDrop: Seq[T], currentOps: Operations): Operations = {
       candidates match {
         case Seq() => currentOps
         case Seq(cand) if cand.value <= toDrop.headOption.map(_.value).getOrElse(Long.MaxValue) => currentOps

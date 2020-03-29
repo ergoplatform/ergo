@@ -11,6 +11,7 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers {
   import DefaultBoxSelector.select
 
   private val noFilter: TrackedBox => Boolean = _ => true
+  private val onChainFilter = {box: TrackedBox => box.chainStatus.onChain}
   val parentTx = ErgoLikeTransaction(IndexedSeq(), IndexedSeq())
 
   val TrueLeaf: SigmaPropValue = Values.TrueLeaf.toSigmaProp
@@ -24,7 +25,7 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers {
     select(Seq(uBox).toIterator, noFilter, 10, Map()) shouldBe None
 
     //filter(which is about selecting only onchain boxes) is preventing from picking the proper box
-    select(Seq(uBox).toIterator, box => box.chainStatus.onChain, 1, Map()) shouldBe None
+    select(Seq(uBox).toIterator, onChainFilter, 1, Map()) shouldBe None
 
     //no target asset in the input box
     select(Seq(uBox).toIterator, noFilter, 1, Map(bytesToId(Array.fill(32)(0: Byte)) -> 1L)) shouldBe None
@@ -61,7 +62,7 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers {
     s3.get.trackedBoxes shouldBe Seq(uBox1, uBox2)
 
     //box2 should be filtered out
-    val s4 = select(uBoxes.toIterator, box => box.chainStatus.onChain, 11, Map())
+    val s4 = select(uBoxes.toIterator, onChainFilter, 11, Map())
     s4.isDefined shouldBe true
     s4.get.changeBoxes.size == 1
     s4.get.changeBoxes.head.value shouldBe 90
@@ -102,7 +103,7 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers {
     s2.get.changeBoxes.head.tokens(assetId1) shouldBe 90
     s2.get.trackedBoxes shouldBe Seq(uBox1, uBox3)
 
-    select(uBoxes.toIterator, box => box.chainStatus.onChain, 1, Map(assetId2 -> 1)) shouldBe None
+    select(uBoxes.toIterator, onChainFilter, 1, Map(assetId2 -> 1)) shouldBe None
     select(uBoxes.toIterator, noFilter, 1, Map(assetId2 -> 11)) shouldBe None
     select(uBoxes.toIterator, noFilter, 1, Map(assetId1 -> 1000)) shouldBe None
 
@@ -114,7 +115,7 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers {
     s3.get.changeBoxes.head.tokens(assetId2) shouldBe 9
     s3.get.trackedBoxes shouldBe Seq(uBox1, uBox2, uBox3)
 
-    select(uBoxes.toIterator, box => box.chainStatus.onChain, 1, Map(assetId1 -> 11, assetId2 -> 1)) shouldBe None
+    select(uBoxes.toIterator, onChainFilter, 1, Map(assetId1 -> 11, assetId2 -> 1)) shouldBe None
   }
 
   property("properly selects coins - assets w. multiple change boxes") {

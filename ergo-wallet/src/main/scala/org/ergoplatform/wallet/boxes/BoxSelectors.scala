@@ -9,6 +9,8 @@ import org.ergoplatform.ErgoBoxAssetsHolder
 
 object BoxSelectors {
 
+  // TODO: move all back to BoxSelection trait 
+
   final case class SelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
 
   def select[T <: ErgoBoxAssets](

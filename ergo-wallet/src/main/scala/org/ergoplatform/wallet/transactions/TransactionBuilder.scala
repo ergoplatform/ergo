@@ -26,7 +26,6 @@ object TransactionBuilder {
       .map(b => collTokensToMap(b.additionalTokens))
       .foldLeft(Map[ModifierId, Long]()){case (a, e) => a.combine(e) }
 
-  // TODO: extract into an Iso
   private def collTokensToMap(tokens: Coll[(TokenId, Long)]): Map[ModifierId, Long] = 
     tokens.toArray.toSeq.map(t => bytesToId(t._1) -> t._2).toMap
 

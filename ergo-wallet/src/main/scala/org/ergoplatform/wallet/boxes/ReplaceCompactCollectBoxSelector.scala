@@ -1,10 +1,12 @@
 package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
+import org.ergoplatform.ErgoBoxAssets
+import org.ergoplatform.ErgoBox.MaxTokens
 import scorex.util.ModifierId
 
 import scala.annotation.tailrec
-import org.ergoplatform.ErgoBoxAssets
+import scala.collection.mutable
 
 /**
   * A box selector which is parameterized by maximum number of inputs a transaction can have, and optimal number of inputs.
@@ -62,6 +64,22 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
         }
       }
     }
+  }
+
+  protected[boxes] def calcChange[T <: ErgoBoxAssets](
+    boxes: Seq[T],
+    targetBalance: Long,
+    targetAssets: Map[ModifierId, Long]
+  ): Option[Seq[ErgoBoxAssets]] = {
+    val compactedBalance = boxes.map(_.value).sum
+    val compactedAssets  = mutable.Map[ModifierId, Long]()
+    BoxSelector.mergeAssetsMut(compactedAssets, boxes.map(_.tokens): _*)
+
+    BoxSelector.subtractAssetsMut(compactedAssets, targetAssets)
+    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] =
+      compactedAssets.grouped(MaxTokens).toSeq
+    val changeBalance = compactedBalance - targetBalance
+    DefaultBoxSelector.formChangeBoxes(changeBalance, changeBoxesAssets)
   }
 
   protected[boxes] def collectDust[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],

@@ -18,6 +18,7 @@ import sigmastate.eval._
 import org.ergoplatform.ErgoBox.TokenId
 import scorex.crypto.hash.Digest32
 import cats.implicits._
+import org.ergoplatform.wallet.boxes.DefaultBoxSelector
 
 object TransactionBuilder {
 
@@ -90,7 +91,7 @@ object TransactionBuilder {
     val mintedTokensNum = tokensOut.size - tokensOutNoMinted.size
     require(mintedTokensNum <= 1, s"Only one token can be minted, but found $mintedTokensNum")
 
-    val selection = BoxSelectors.select(inputs.toIterator, outputTotal, tokensOutNoMinted).getOrElse(
+    val selection = DefaultBoxSelector.select(inputs.toIterator, outputTotal, tokensOutNoMinted).getOrElse(
       throw new IllegalArgumentException(s"failed to calculate change for outputTotal: $outputTotal, \ntokens: $tokensOut, \ninputs: $inputs, ")
     )
     // although we're only interested in change boxes, make sure selection contains exact inputs

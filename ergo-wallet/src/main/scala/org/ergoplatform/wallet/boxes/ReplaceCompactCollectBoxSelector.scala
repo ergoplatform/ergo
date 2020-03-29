@@ -1,7 +1,6 @@
 package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
-import org.ergoplatform.wallet.boxes.BoxSelectors.calcChange
 import scorex.util.ModifierId
 
 import scala.annotation.tailrec
@@ -43,20 +42,20 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
                       targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult[T]] = {
     DefaultBoxSelector.select(inputBoxes, filterFn, targetBalance, targetAssets).flatMap { initialSelection =>
       val tail = inputBoxes.take(maxInputs * ScanDepthFactor).filter(filterFn).toSeq
-      (if (initialSelection.trackedBoxes.length > maxInputs) {
+      (if (initialSelection.boxes.length > maxInputs) {
         replace(initialSelection, tail, targetBalance, targetAssets)
       } else {
         Some(initialSelection)
       }).flatMap { afterReplacement =>
-        if (afterReplacement.trackedBoxes.length > maxInputs) {
+        if (afterReplacement.boxes.length > maxInputs) {
           compress(afterReplacement, targetBalance, targetAssets)
         } else {
           Some(afterReplacement)
         }
       }.flatMap { afterCompaction =>
-        if (afterCompaction.trackedBoxes.length > maxInputs) {
+        if (afterCompaction.boxes.length > maxInputs) {
           None
-        } else if (afterCompaction.trackedBoxes.length < optimalInputs) {
+        } else if (afterCompaction.boxes.length < optimalInputs) {
           collectDust(afterCompaction, tail, targetBalance, targetAssets)
         } else {
           Some(afterCompaction)
@@ -69,17 +68,17 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
                   tail: Seq[T],
                   targetBalance: Long,
                   targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult[T]] = {
-    val diff = optimalInputs - bsr.trackedBoxes.length
-    val dust = tail.sortBy(_.value).take(diff).filter(b => !bsr.trackedBoxes.contains(b))
+    val diff = optimalInputs - bsr.boxes.length
+    val dust = tail.sortBy(_.value).take(diff).filter(b => !bsr.boxes.contains(b))
 
-    val boxes = bsr.trackedBoxes ++ dust
+    val boxes = bsr.boxes ++ dust
     calcChange(boxes, targetBalance, targetAssets).map(changeBoxes => BoxSelectionResult(boxes, changeBoxes))
   }
 
   protected[boxes] def compress[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
                targetBalance: Long,
                targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult[T]] = {
-    val boxes = bsr.trackedBoxes
+    val boxes = bsr.boxes
     val diff = boxes.map(_.value).sum - targetBalance
 
     val boxesToThrowAway = boxes.filter(!_.tokens.keySet.exists(tid => targetAssets.keySet.contains(tid)))
@@ -104,7 +103,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
               targetBalance: Long,
               targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult[T]] = {
     val bigBoxes = tail.sortBy(-_.value)
-    val boxesToThrowAway = bsr.trackedBoxes.filter(!_.tokens.keySet.exists(tid => targetAssets.keySet.contains(tid)))
+    val boxesToThrowAway = bsr.boxes.filter(!_.tokens.keySet.exists(tid => targetAssets.keySet.contains(tid)))
     val sorted = boxesToThrowAway.sortBy(_.value)
 
     type BoxesToAdd = Seq[T]
@@ -128,7 +127,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
 
     val (toAdd, toDrop) = replaceStep(bigBoxes, sorted, (Seq(), Seq()))
     if (toAdd.nonEmpty) {
-      val compactedBoxes = bsr.trackedBoxes.filter(b => !toDrop.contains(b)) ++ toAdd
+      val compactedBoxes = bsr.boxes.filter(b => !toDrop.contains(b)) ++ toAdd
       calcChange(compactedBoxes, targetBalance, targetAssets)
         .map(changeBoxes => BoxSelectionResult(compactedBoxes, changeBoxes))
     } else {

@@ -476,7 +476,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     }
 
   private def prepareTransaction(prover: ErgoProvingInterpreter, payTo: Seq[ErgoBoxCandidate])
-                                (r: BoxSelector.BoxSelectionResult): Try[ErgoLikeTransaction] = {
+                                (r: BoxSelector.BoxSelectionResult[TrackedBox]): Try[ErgoLikeTransaction] = {
     val inputs = r.trackedBoxes.map(_.box).toIndexedSeq
 
     val changeAddress = storage.readChangeAddress

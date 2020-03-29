@@ -24,15 +24,15 @@ trait BoxSelector {
     *         to spend as well as monetary values and assets for boxes containing change
     *         (wrapped in a special BoxSelectionResult class).
     */
-  def select(inputBoxes: Iterator[TrackedBox],
-             filterFn: TrackedBox => Boolean,
+  def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
+             filterFn: T => Boolean,
              targetBalance: Long,
-             targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult]
+             targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult[T]]
   
 }
 
 object BoxSelector {
 
-  final case class BoxSelectionResult(trackedBoxes: Seq[TrackedBox], changeBoxes: Seq[ErgoBoxAssets])
+  final case class BoxSelectionResult[T <: ErgoBoxAssets](trackedBoxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
 
 }

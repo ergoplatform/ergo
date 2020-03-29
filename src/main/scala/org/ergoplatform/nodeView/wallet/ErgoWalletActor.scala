@@ -465,8 +465,10 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
               val makeTx = prepareTransaction(prover, payTo) _
 
               selectionOpt.map(makeTx) match {
-                case Some(txTry) => txTry.map(ErgoTransaction.apply)
-                case None => Failure(new Exception(s"No enough boxes to assemble a transaction for $payTo"))
+                case Right(txTry) => txTry.map(ErgoTransaction.apply)
+                case Left(e) => Failure(
+                  new Exception(s"Failed to find boxes to assemble a transaction for $payTo, \nreason: ${e}")
+                )
               }
             }
           }

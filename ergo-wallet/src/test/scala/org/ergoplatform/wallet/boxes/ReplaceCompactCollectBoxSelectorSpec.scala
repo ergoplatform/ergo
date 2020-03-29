@@ -5,8 +5,9 @@ import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.scalatest.{Matchers, PropSpec}
 import sigmastate.Values
 import sigmastate.Values.SigmaPropValue
+import org.scalatest.EitherValues
 
-class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers {
+class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
 
   private val noFilter: TrackedBox => Boolean = _ => true
   val parentTx = ErgoLikeTransaction(IndexedSeq(), IndexedSeq())
@@ -25,12 +26,12 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers {
     val boxSelectionResult = BoxSelectionResult(
       inputValues.map(trackedBox), Seq()
     )
-    val res = selector.compress(boxSelectionResult, targetBalance, Map()).get
+    val res = selector.compress(boxSelectionResult, targetBalance, Map()).right.value
     res.boxes.length shouldBe 3
     res.boxes.map(_.value) shouldBe Seq(100L, 200L, 1000L)
 
     //now we test that compress works under select
-    val sr = selector.select(inputValues.map(trackedBox).toIterator, noFilter, targetBalance, Map()).get
+    val sr = selector.select(inputValues.map(trackedBox).toIterator, noFilter, targetBalance, Map()).right.value
     sr shouldBe res
   }
 
@@ -39,7 +40,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers {
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
     val targetBalance = 1303
     val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), Seq())
-    val res = selector.replace(boxSelectionResult, Seq(), targetBalance, Map()).get
+    val res = selector.replace(boxSelectionResult, Seq(), targetBalance, Map()).right.value
     res.boxes.map(_.value) shouldBe inputValues
   }
 
@@ -48,7 +49,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers {
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
     val targetBalance = 1303
     val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), Seq())
-    val res = selector.replace(boxSelectionResult, Seq(trackedBox(300), trackedBox(200)), targetBalance, Map()).get
+    val res = selector.replace(boxSelectionResult, Seq(trackedBox(300), trackedBox(200)), targetBalance, Map()).right.value
     res.boxes.length shouldBe 3
     res.boxes.map(_.value) shouldBe Seq(200L, 1000L, 300L)
   }
@@ -58,7 +59,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers {
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
     val targetBalance = 1303
     val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), Seq())
-    val res = selector.replace(boxSelectionResult, Seq(trackedBox(2000)), targetBalance, Map()).get
+    val res = selector.replace(boxSelectionResult, Seq(trackedBox(2000)), targetBalance, Map()).right.value
     res.boxes.length shouldBe 1
     res.boxes.map(_.value) shouldBe Seq(2000L)
   }
@@ -69,25 +70,25 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers {
 
     {
       val targetBalance = 6
-      val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).get
+      val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
       res.boxes.map(_.value) shouldBe Seq(1, 2, 3)
     }
 
     {
       val targetBalance = 17
-      val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).get
+      val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
       res.boxes.map(_.value) shouldBe Seq(10, 9, 8)
     }
 
     {
       val targetBalance = 25
-      val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).get
+      val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
       res.boxes.map(_.value) shouldBe Seq(10, 9, 8)
     }
 
     {
       val targetBalance = 27
-      val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).get
+      val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
       res.boxes.map(_.value) shouldBe Seq(10, 9, 8)
     }
   }
@@ -99,7 +100,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers {
 
     {
       val targetBalance = 6
-      val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).get
+      val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
       res.boxes.length shouldBe optimalInputs
     }
   }

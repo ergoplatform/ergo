@@ -16,10 +16,14 @@ object DefaultBoxSelector extends BoxSelector {
 
   import BoxSelector._
 
+  final case class NotEnoughCoinsError(val message: String) extends BoxSelectionError
+  final case class NotEnoughTokensError(val message: String) extends BoxSelectionError
+  final case class NotEnoughCoinsForChangeBoxesError(val message: String) extends BoxSelectionError
+
   override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
                       externalFilter: T => Boolean,
                       targetBalance: Long,
-                      targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult[T]] = {
+                      targetAssets: Map[ModifierId, Long]): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     //mutable structures to collect results
     val res            = mutable.Buffer[T]()
     var currentBalance = 0L
@@ -76,20 +80,22 @@ object DefaultBoxSelector extends BoxSelector {
           BoxSelectionResult(res, changeBoxes)
         )
       } else {
-        None
+        Left(NotEnoughTokensError(s"not enough boxes to meet token needs $targetAssets (found only $currentAssets)"))
       }
     } else {
-      None
+      Left(NotEnoughCoinsError(s"not enough boxes to meet ERG needs $targetBalance (found only ${currentBalance})"))
     }
   }
 
   def formChangeBoxes(
     changeBalance: Long,
     changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]]
-  ): Option[Seq[ErgoBoxAssets]] = {
+  ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
     //at least 1 ergo token should be assigned per a created box
     if (changeBoxesAssets.size > changeBalance) {
-      None
+      Left(NotEnoughCoinsForChangeBoxesError(
+        s"Not enough ERG $changeBalance to create ${changeBoxesAssets.size} change boxes, \nfor $changeBoxesAssets"
+      ))
     } else {
       val changeBoxes = if (changeBoxesAssets.nonEmpty) {
         val baseChangeBalance = changeBalance / changeBoxesAssets.size
@@ -111,7 +117,7 @@ object DefaultBoxSelector extends BoxSelector {
       } else {
         Seq.empty
       }
-      Some(changeBoxes)
+      Right(changeBoxes)
     }
   }
 

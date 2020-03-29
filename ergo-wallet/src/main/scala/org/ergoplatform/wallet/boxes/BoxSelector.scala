@@ -3,6 +3,7 @@ package org.ergoplatform.wallet.boxes
 import org.ergoplatform.ErgoBoxAssets
 import org.ergoplatform.ErgoBox.MaxTokens
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
+import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 import scorex.util.ModifierId
 import scala.collection.mutable
 
@@ -29,20 +30,23 @@ trait BoxSelector {
   def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
              filterFn: T => Boolean,
              targetBalance: Long,
-             targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult[T]]
+             targetAssets: Map[ModifierId, Long]): Either[BoxSelectionError, BoxSelectionResult[T]]
   
   def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
     targetBalance: Long,
     targetAssets: Map[ModifierId, Long]
-  ): Option[BoxSelectionResult[T]] =
+  ): Either[BoxSelectionError, BoxSelectionResult[T]] =
     select(inputBoxes, _ => true, targetBalance, targetAssets)
-
 
 }
 
 object BoxSelector {
 
   final case class BoxSelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
+
+  trait BoxSelectionError {
+    def message: String
+  }
 
   def mergeAssetsMut(
     into: mutable.Map[ModifierId, Long],

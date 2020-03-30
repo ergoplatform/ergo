@@ -64,4 +64,16 @@ object Utils {
     )
   }
 
+  implicit class EitherOpsFor211[+A, +B](val source: Either[A, B]) extends AnyVal {
+
+    def mapRight[B1](f: B => B1): Either[A, B1] = source match {
+      case Right(b) => Right(f(b))
+      case _        => source.asInstanceOf[Either[A, B1]]
+    }
+
+    def flatMapRight[A1 >: A, B1](f: B => Either[A1, B1]): Either[A1, B1] = source match {
+      case Right(b) => f(b)
+      case _        => source.asInstanceOf[Either[A1, B1]]
+    }
+  }
 }

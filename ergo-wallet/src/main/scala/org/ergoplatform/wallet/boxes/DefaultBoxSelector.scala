@@ -92,8 +92,8 @@ object DefaultBoxSelector extends BoxSelector {
     changeBalance: Long,
     changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]]
   ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
-    //at least 1 ergo token should be assigned per a created box
-    if (changeBoxesAssets.size > changeBalance) {
+    //at least a minimum amount of ERG should be assigned per a created box
+    if (changeBoxesAssets.size * MinBoxValue > changeBalance) {
       Left(NotEnoughCoinsForChangeBoxesError(
         s"Not enough ERG $changeBalance to create ${changeBoxesAssets.size} change boxes, \nfor $changeBoxesAssets"
       ))

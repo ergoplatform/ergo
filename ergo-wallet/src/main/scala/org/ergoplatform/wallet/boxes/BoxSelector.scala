@@ -66,7 +66,7 @@ object BoxSelector {
   ): Unit = {
     subtractor.foreach {
       case (id, subtractAmt) =>
-        val fromAmt = from(id)
+        val fromAmt = from.getOrElse(id, 0L)
         if (fromAmt == subtractAmt) {
           from.remove(id)
         } else {

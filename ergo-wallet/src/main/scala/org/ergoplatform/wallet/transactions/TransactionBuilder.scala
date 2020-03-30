@@ -90,9 +90,11 @@ object TransactionBuilder {
     val mintedTokensNum = tokensOut.size - tokensOutNoMinted.size
     require(mintedTokensNum <= 1, s"Only one token can be minted, but found $mintedTokensNum")
 
-    val selection = DefaultBoxSelector.select(inputs.toIterator, outputTotal, tokensOutNoMinted).getOrElse(
-      throw new IllegalArgumentException(s"failed to calculate change for outputTotal: $outputTotal, \ntokens: $tokensOut, \ninputs: $inputs, ")
-    )
+    val selection = DefaultBoxSelector.select(inputs.toIterator, outputTotal, tokensOutNoMinted) match {
+      case Left(err) => throw new IllegalArgumentException(
+        s"failed to calculate change for outputTotal: $outputTotal, \ntokens: $tokensOut, \ninputs: $inputs, \nreason: $err")
+      case Right(v) => v
+    }
     // although we're only interested in change boxes, make sure selection contains exact inputs
     assert(selection.boxes == inputs, s"unexpected selected boxes, expected: $inputs, got ${selection.boxes}")
     val changeBoxes = selection.changeBoxes

@@ -78,12 +78,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     val compactedBalance = boxes.map(_.value).sum
     val compactedAssets  = mutable.Map[ModifierId, Long]()
     BoxSelector.mergeAssetsMut(compactedAssets, boxes.map(_.tokens): _*)
-
-    BoxSelector.subtractAssetsMut(compactedAssets, targetAssets)
-    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] =
-      compactedAssets.grouped(MaxTokens).toSeq
-    val changeBalance = compactedBalance - targetBalance
-    DefaultBoxSelector.formChangeBoxes(changeBalance, changeBoxesAssets)
+    DefaultBoxSelector.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets)
   }
 
   protected[boxes] def collectDust[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],

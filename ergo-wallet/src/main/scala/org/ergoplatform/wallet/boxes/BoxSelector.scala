@@ -42,6 +42,8 @@ trait BoxSelector {
 
 object BoxSelector {
 
+  val MinBoxValue: Long = 1000L * 1000L
+
   final case class BoxSelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
 
   trait BoxSelectionError {

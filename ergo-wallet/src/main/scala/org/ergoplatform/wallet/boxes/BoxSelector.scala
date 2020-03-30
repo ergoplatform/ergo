@@ -6,6 +6,7 @@ import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 import scorex.util.ModifierId
 import scala.collection.mutable
+import org.ergoplatform.SigmaConstants.MaxBoxSize
 
 
 /**
@@ -42,7 +43,9 @@ trait BoxSelector {
 
 object BoxSelector {
 
-  val MinBoxValue: Long = 1000L * 1000L
+  // from https://github.com/ergoplatform/ergo/blob/2ce78a0380977b8ca354518edca93a5269ac9f53/src/main/scala/org/ergoplatform/settings/Parameters.scala#L258-L258
+  private val MinValuePerByteDefault = 30 * 12
+  val MinBoxValue: Long = (MaxBoxSize.value / 2) * MinValuePerByteDefault
 
   final case class BoxSelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
 

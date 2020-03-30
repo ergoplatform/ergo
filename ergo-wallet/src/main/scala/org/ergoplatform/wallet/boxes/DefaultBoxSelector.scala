@@ -73,13 +73,9 @@ object DefaultBoxSelector extends BoxSelector {
               },
             assetsMet
           )) {
-        subtractAssetsMut(currentAssets, targetAssets)
-        val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] =
-          currentAssets.grouped(MaxTokens).toSeq
-        val changeBalance = currentBalance - targetBalance
-        formChangeBoxes(changeBalance, changeBoxesAssets).mapRight(changeBoxes =>
+        formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets).mapRight { changeBoxes =>
           BoxSelectionResult(res, changeBoxes)
-        )
+        }
       } else {
         Left(NotEnoughTokensError(s"not enough boxes to meet token needs $targetAssets (found only $currentAssets)"))
       }
@@ -89,9 +85,14 @@ object DefaultBoxSelector extends BoxSelector {
   }
 
   def formChangeBoxes(
-    changeBalance: Long,
-    changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]]
+    foundBalance: Long,
+    targetBalance: Long,
+    foundBoxAssets: mutable.Map[ModifierId, Long],
+    targetBoxAssets: Map[ModifierId, Long]
   ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
+    subtractAssetsMut(foundBoxAssets, targetBoxAssets)
+    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxTokens).toSeq
+    val changeBalance = foundBalance - targetBalance
     //at least a minimum amount of ERG should be assigned per a created box
     if (changeBoxesAssets.size * MinBoxValue > changeBalance) {
       Left(NotEnoughCoinsForChangeBoxesError(

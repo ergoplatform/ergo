@@ -38,7 +38,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     *                      filterFn(box) returns true
     * @param targetBalance - ergo balance to be met
     * @param targetAssets  - assets balances to be met
-    * @return None if select() is failing to pick appropriate boxes, otherwise Some(res), where res contains boxes
+    * @return Left(error) if select() is failing to pick appropriate boxes, otherwise Right(res), where res contains boxes
     *         to spend as well as monetary values and assets for boxes containing change
     *         (wrapped in a special BoxSelectionResult class).
     */

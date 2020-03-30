@@ -6,6 +6,7 @@ import org.ergoplatform.ErgoBoxAssetsHolder
 import org.ergoplatform.ErgoBox.MaxTokens
 import scala.annotation.tailrec
 import scala.collection.mutable
+import org.ergoplatform.wallet.Utils._
 
 /**
   * Default implementation of the box selector. It simply picks boxes till sum of their monetary values
@@ -76,7 +77,7 @@ object DefaultBoxSelector extends BoxSelector {
         val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] =
           currentAssets.grouped(MaxTokens).toSeq
         val changeBalance = currentBalance - targetBalance
-        formChangeBoxes(changeBalance, changeBoxesAssets).map(changeBoxes =>
+        formChangeBoxes(changeBalance, changeBoxesAssets).mapRight(changeBoxes =>
           BoxSelectionResult(res, changeBoxes)
         )
       } else {

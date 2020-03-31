@@ -18,6 +18,7 @@ import scorex.crypto.hash.Digest32
 import cats.implicits._
 import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector
+import scala.collection.mutable
 
 object TransactionBuilder {
 
@@ -70,7 +71,7 @@ object TransactionBuilder {
     changeAddress: ErgoAddress,
     minChangeValue: Long,
     minerRewardDelay: Int,
-    boxSelector: BoxSelector = DefaultBoxSelector,
+    boxSelector: BoxSelector = DefaultBoxSelector
   ): Try[UnsignedErgoLikeTransaction] = Try {
 
     validateStatelessChecks(inputs, dataInputs, outputCandidates)

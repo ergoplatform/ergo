@@ -16,6 +16,7 @@ import sigmastate.eval._
 import org.ergoplatform.ErgoBox.TokenId
 import scorex.crypto.hash.Digest32
 import cats.implicits._
+import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector
 
 object TransactionBuilder {
@@ -68,7 +69,8 @@ object TransactionBuilder {
     feeAmount: Long,
     changeAddress: ErgoAddress,
     minChangeValue: Long,
-    minerRewardDelay: Int
+    minerRewardDelay: Int,
+    boxSelector: BoxSelector = DefaultBoxSelector,
   ): Try[UnsignedErgoLikeTransaction] = Try {
 
     validateStatelessChecks(inputs, dataInputs, outputCandidates)
@@ -89,7 +91,7 @@ object TransactionBuilder {
     val mintedTokensNum = tokensOut.size - tokensOutNoMinted.size
     require(mintedTokensNum <= 1, s"Only one token can be minted, but found $mintedTokensNum")
 
-    val selection = DefaultBoxSelector.select(inputs.toIterator, outputTotal, tokensOutNoMinted) match {
+    val selection = boxSelector.select(inputs.toIterator, outputTotal, tokensOutNoMinted) match {
       case Left(err) => throw new IllegalArgumentException(
         s"failed to calculate change for outputTotal: $outputTotal, \ntokens: $tokensOut, \ninputs: $inputs, \nreason: $err")
       case Right(v) => v

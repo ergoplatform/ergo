@@ -4,7 +4,6 @@ import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.Digest32
 import scorex.util._
-import scorex.util.encode.Base16
 
 
 object Algos extends ErgoAlgos with scorex.core.utils.ScorexEncoding {
@@ -41,13 +40,4 @@ object Algos extends ErgoAlgos with scorex.core.utils.ScorexEncoding {
   def merkleTreeRoot(elements: Seq[LeafData]): Digest32 =
     if (elements.isEmpty) emptyMerkleTreeRoot else merkleTree(elements).rootHash
 
-}
-
-
-object TreeRootPrinter extends App {
-  import Algos._
-
-  println(Base16.encode(emptyMerkleTreeRoot))
-
-  println(Base16.encode(merkleTree(Seq.empty).rootHash))
 }

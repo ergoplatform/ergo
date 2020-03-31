@@ -34,6 +34,8 @@ object Algos extends ErgoAlgos with scorex.core.utils.ScorexEncoding {
     *  of a Merkle tree instance (merkleTree(elements).rootHash) which is equal to another special value
     *  0000000000000000000000000000000000000000000000000000000000000000
     *
+    *  See https://github.com/ergoplatform/ergo/issues/1077
+    *
     * @param elements - tree leafs
     * @return 256-bits (32-bytes) long digest of the tree
     */

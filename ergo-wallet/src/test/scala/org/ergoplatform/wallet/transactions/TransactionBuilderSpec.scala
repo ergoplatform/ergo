@@ -31,17 +31,17 @@ class TransactionBuilderSpec extends PropSpec with Matchers {
   val minChangeValue   = 1000000L
   val minerRewardDelay = 720
 
-  val TrueLeaf: SigmaPropValue = Values.TrueLeaf.toSigmaProp
+  val TrueProp: SigmaPropValue = Values.TrueLeaf.toSigmaProp
 
-  def box(value: Long) = ErgoBox(value, TrueLeaf, currentHeight)
+  def box(value: Long) = ErgoBox(value, TrueProp, currentHeight)
 
   def box(value: Long, tokens: Seq[(TokenId, Long)]) =
-    ErgoBox(value, TrueLeaf, currentHeight, tokens)
+    ErgoBox(value, TrueProp, currentHeight, tokens)
 
-  def boxCandidate(value: Long) = new ErgoBoxCandidate(value, TrueLeaf, currentHeight)
+  def boxCandidate(value: Long) = new ErgoBoxCandidate(value, TrueProp, currentHeight)
 
   def boxCandidate(value: Long, tokens: Seq[(TokenId, Long)]) =
-    new ErgoBoxCandidate(value, TrueLeaf, currentHeight, tokens.toColl)
+    new ErgoBoxCandidate(value, TrueProp, currentHeight, tokens.toColl)
 
   property("token minting") {
     val inputBox = box(minFee * 2)

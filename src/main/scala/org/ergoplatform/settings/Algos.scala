@@ -4,6 +4,7 @@ import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.Digest32
 import scorex.util._
+import scorex.util.encode.Base16
 
 
 object Algos extends ErgoAlgos with scorex.core.utils.ScorexEncoding {
@@ -28,10 +29,25 @@ object Algos extends ErgoAlgos with scorex.core.utils.ScorexEncoding {
   /**
     * A method which is building a Merkle tree over binary objects and returns a digest
     * (256-bits long root hash) of the tree
+    *
+    * !!! If input sequence is empty, then the function returns a special value (hash of empty byte array), which is
+    *  equal to 0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8 and different from "rootHash" property
+    *  of a Merkle tree instance (merkleTree(elements).rootHash) which is equal to another special value
+    *  0000000000000000000000000000000000000000000000000000000000000000
+    *
     * @param elements - tree leafs
     * @return 256-bits (32-bytes) long digest of the tree
     */
   def merkleTreeRoot(elements: Seq[LeafData]): Digest32 =
     if (elements.isEmpty) emptyMerkleTreeRoot else merkleTree(elements).rootHash
 
+}
+
+
+object TreeRootPrinter extends App {
+  import Algos._
+
+  println(Base16.encode(emptyMerkleTreeRoot))
+
+  println(Base16.encode(merkleTree(Seq.empty).rootHash))
 }

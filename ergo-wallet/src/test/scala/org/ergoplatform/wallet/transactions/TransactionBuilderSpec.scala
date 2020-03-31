@@ -14,6 +14,7 @@ import org.ergoplatform.P2PKAddress
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.ErgoAddressEncoder
+import org.ergoplatform.wallet.boxes.BoxSelector
 
 class TransactionBuilderSpec extends PropSpec with Matchers {
   import TransactionBuilder.buildUnsignedTx
@@ -27,8 +28,8 @@ class TransactionBuilderSpec extends PropSpec with Matchers {
   val rootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(seed)
 
   val currentHeight    = 0
-  val minFee           = 1000000L
-  val minChangeValue   = 1000000L
+  val minBoxValue      = BoxSelector.MinBoxValue
+  val minChangeValue   = BoxSelector.MinBoxValue
   val minerRewardDelay = 720
 
   val TrueProp: SigmaPropValue = Values.TrueLeaf.toSigmaProp
@@ -44,14 +45,14 @@ class TransactionBuilderSpec extends PropSpec with Matchers {
     new ErgoBoxCandidate(value, TrueProp, currentHeight, tokens.toColl)
 
   property("token minting") {
-    val inputBox = box(minFee * 2)
+    val inputBox = box(minBoxValue * 2)
     val tokenId  = Digest32 @@ inputBox.id
-    val outBox = boxCandidate(minFee, Seq(tokenId -> 100L))
+    val outBox = boxCandidate(minBoxValue, Seq(tokenId -> 100L))
 
     val ins           = IndexedSeq(inputBox)
     val outs          = IndexedSeq(outBox)
     val changeAddress = P2PKAddress(rootSecret.key.publicImage)
-    val fee           = minFee
+    val fee           = minBoxValue
 
     val res = buildUnsignedTx(
       inputs           = ins,

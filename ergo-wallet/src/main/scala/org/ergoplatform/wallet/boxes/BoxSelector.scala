@@ -1,7 +1,6 @@
 package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.ErgoBoxAssets
-import org.ergoplatform.ErgoBox.MaxTokens
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 import scorex.util.ModifierId

@@ -3,7 +3,6 @@ package org.ergoplatform.wallet.boxes
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 import org.ergoplatform.ErgoBoxAssets
-import org.ergoplatform.ErgoBox.MaxTokens
 import scorex.util.ModifierId
 import org.ergoplatform.wallet.Utils._
 

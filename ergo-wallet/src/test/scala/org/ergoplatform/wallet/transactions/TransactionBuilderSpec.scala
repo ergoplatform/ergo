@@ -8,9 +8,8 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 
 import org.scalatest.{Matchers, PropSpec}
 import org.ergoplatform.ErgoBox.TokenId
-import scorex.crypto.hash.Blake2b256
 import scala.util.Success
-import scorex.crypto.hash.`package`.Digest32
+import scorex.crypto.hash.Digest32
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey

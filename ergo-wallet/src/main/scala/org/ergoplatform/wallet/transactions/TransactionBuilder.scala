@@ -1,7 +1,6 @@
 package org.ergoplatform.wallet.transactions
 
 import scala.collection.IndexedSeq
-import scala.language.postfixOps
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.DataInput
 import org.ergoplatform.ErgoBoxCandidate

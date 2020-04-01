@@ -23,8 +23,8 @@ trait BlockSection extends ErgoPersistentModifier {
 
 object BlockSection {
   def computeId(modifierType: ModifierTypeId, headerId: ModifierId, digest: Array[Byte]): ModifierId =
-    bytesToId(Algos.hash.prefixedHash(modifierType, idToBytes(headerId), digest))
+    bytesToId(computeIdBytes(modifierType, headerId, digest))
 
   def computeIdBytes(modifierType: ModifierTypeId, headerId: ModifierId, digest: Array[Byte]): Array[Byte] =
-    Algos.hash.prefixedHash(modifierType, idToBytes(headerId), digest)
+      Algos.hash.prefixedHash(modifierType, idToBytes(headerId), digest)
 }

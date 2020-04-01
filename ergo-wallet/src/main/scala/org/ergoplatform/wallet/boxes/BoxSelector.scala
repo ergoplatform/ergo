@@ -1,10 +1,12 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.ErgoBox
-import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionResult, subtractAssetsMut}
+import org.ergoplatform.ErgoBoxAssets
+import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
+import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 import scorex.util.ModifierId
-
 import scala.collection.mutable
+import org.ergoplatform.SigmaConstants.MaxBoxSize
+
 
 /**
   * An interface which is exposing a method to select unspent boxes according to target amounts in Ergo tokens and
@@ -21,89 +23,57 @@ trait BoxSelector {
     *                      filterFn(box) returns true
     * @param targetBalance - ergo balance to be met
     * @param targetAssets  - assets balances to be met
-    * @return None if select() is failing to pick appropriate boxes, otherwise Some(res), where res contains boxes
+    * @return Left(error) if select() is failing to pick appropriate boxes, otherwise Right(res), where res contains boxes
     *         to spend as well as monetary values and assets for boxes containing change
     *         (wrapped in a special BoxSelectionResult class).
     */
-  def select(inputBoxes: Iterator[TrackedBox],
-             filterFn: TrackedBox => Boolean,
+  def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
+             filterFn: T => Boolean,
              targetBalance: Long,
-             targetAssets: Map[ModifierId, Long]): Option[BoxSelector.BoxSelectionResult]
+             targetAssets: Map[ModifierId, Long]): Either[BoxSelectionError, BoxSelectionResult[T]]
+  
+  def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
+    targetBalance: Long,
+    targetAssets: Map[ModifierId, Long]
+  ): Either[BoxSelectionError, BoxSelectionResult[T]] =
+    select(inputBoxes, _ => true, targetBalance, targetAssets)
 
-  protected def calcChange(boxes: Seq[ErgoBox],
-                 targetBalance: Long,
-                 targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
-    val compactedBalance = boxes.map(_.value).sum
-    val compactedAssets = mutable.Map[ModifierId, Long]()
-    BoxSelector.mergeAssetsMut(compactedAssets, boxes.map(BoxSelector.assetMap): _*)
-
-    subtractAssetsMut(compactedAssets, targetAssets)
-    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = compactedAssets.grouped(ErgoBox.MaxTokens).toSeq
-    val changeBalance = compactedBalance - targetBalance
-    formChangeBoxes(changeBalance, changeBoxesAssets).map(changeBoxes => BoxSelectionResult(boxes, changeBoxes))
-  }
-
-  protected def formChangeBoxes(changeBalance: Long,
-                                changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]]): Option[Seq[(Long, Map[ModifierId, Long])]] = {
-    //at least 1 ergo token should be assigned per a created box
-    if (changeBoxesAssets.size > changeBalance) {
-      None
-    } else {
-      val changeBoxes = if (changeBoxesAssets.nonEmpty) {
-        val baseChangeBalance = changeBalance / changeBoxesAssets.size
-
-        val changeBoxesNoBalanceAdjusted = changeBoxesAssets.map { a =>
-          baseChangeBalance -> a.toMap
-        }
-
-        val modifiedBoxOpt = changeBoxesNoBalanceAdjusted.headOption.map { firstBox =>
-          (changeBalance - baseChangeBalance * (changeBoxesAssets.size - 1)) -> firstBox._2
-        }
-
-        modifiedBoxOpt.toSeq ++ changeBoxesNoBalanceAdjusted.tail
-      } else if (changeBalance > 0) {
-        Seq(changeBalance -> Map.empty[ModifierId, Long])
-      } else {
-        Seq.empty
-      }
-      Some(changeBoxes)
-    }
-  }
 }
 
 object BoxSelector {
 
-  final case class BoxSelectionResult(boxes: Seq[ErgoBox],
-                                      changeBoxes: Seq[(Long, Map[ModifierId, Long])])
+  // from https://github.com/ergoplatform/ergo/blob/2ce78a0380977b8ca354518edca93a5269ac9f53/src/main/scala/org/ergoplatform/settings/Parameters.scala#L258-L258
+  private val MinValuePerByteDefault = 30 * 12
+  val MinBoxValue: Long = (MaxBoxSize.value / 2) * MinValuePerByteDefault
 
-  @inline
-  def assetMap(box: ErgoBox): Map[ModifierId, Long] = box.additionalTokens.toArray.map{case (k, v) =>
-    scorex.util.bytesToId(k) -> v
-  }.toMap
+  final case class BoxSelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
 
-  @inline
-  def mergeAssetsMut(into: mutable.Map[ModifierId, Long], from: Map[ModifierId, Long]*): Unit = {
-    from.foreach(_.foreach { case (id, amount) =>
-      into.put(id, into.getOrElse(id, 0L) + amount)
+  trait BoxSelectionError {
+    def message: String
+  }
+
+  def mergeAssetsMut(
+    into: mutable.Map[ModifierId, Long],
+    from: Map[ModifierId, Long]*
+  ): Unit = {
+    from.foreach(_.foreach {
+      case (id, amount) =>
+        into.put(id, into.getOrElse(id, 0L) + amount)
     })
   }
 
-  @inline
-  def mergeAssets(from: Map[ModifierId, Long], to: Map[ModifierId, Long] = Map.empty): Map[ModifierId, Long] = {
-    from.foldLeft(to) { case (acc, (id, amount)) =>
-      acc.updated(id, acc.getOrElse(id, 0L) + amount)
-    }
-  }
-
-  @inline
-  def subtractAssetsMut(from: mutable.Map[ModifierId, Long], subtractor: Map[ModifierId, Long]): Unit = {
-    subtractor.foreach { case (id, subtractAmt) =>
-      val fromAmt = from(id)
-      if (fromAmt == subtractAmt) {
-        from.remove(id)
-      } else {
-        from.put(id, fromAmt - subtractAmt)
-      }
+  def subtractAssetsMut(
+    from: mutable.Map[ModifierId, Long],
+    subtractor: Map[ModifierId, Long]
+  ): Unit = {
+    subtractor.foreach {
+      case (id, subtractAmt) =>
+        val fromAmt = from.getOrElse(id, 0L)
+        if (fromAmt == subtractAmt) {
+          from.remove(id)
+        } else {
+          from.put(id, fromAmt - subtractAmt)
+        }
     }
   }
 

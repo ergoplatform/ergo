@@ -457,8 +457,10 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
               val makeTx = prepareTransaction(prover, payTo) _
 
               selectionOpt.map(makeTx) match {
-                case Some(txTry) => txTry.map(ErgoTransaction.apply)
-                case None => Failure(new Exception(s"No enough boxes to assemble a transaction for $payTo"))
+                case Right(txTry) => txTry.map(ErgoTransaction.apply)
+                case Left(e) => Failure(
+                  new Exception(s"Failed to find boxes to assemble a transaction for $payTo, \nreason: ${e}")
+                )
               }
             }
           }
@@ -468,8 +470,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     }
 
   private def prepareTransaction(prover: ErgoProvingInterpreter, payTo: Seq[ErgoBoxCandidate])
-                                (r: BoxSelector.BoxSelectionResult): Try[ErgoLikeTransaction] = {
-    val inputs = r.boxes.toIndexedSeq
+                                (r: BoxSelector.BoxSelectionResult[TrackedBox]): Try[ErgoLikeTransaction] = {
+    val inputs = r.boxes.map(_.box).toIndexedSeq
 
     val changeAddress = storage.readChangeAddress
       .map(_.pubkey)
@@ -478,9 +480,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         prover.pubKeys.head
       }
 
-    val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>
-      val assets = tokensChange.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
-      new ErgoBoxCandidate(ergChange, changeAddress, height, assets.toColl)
+    val changeBoxCandidates = r.changeBoxes.map { changeBox =>
+      val assets = changeBox.tokens.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
+      new ErgoBoxCandidate(changeBox.value, changeAddress, height, assets.toColl)
     }
 
     val unsignedTx = new UnsignedErgoTransaction(
@@ -543,6 +545,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       .select(unspentBoxes.toIterator, onChainFilter, targetAmount, targetAssets)
       .toSeq
       .flatMap(_.boxes)
+      .map(_.box)
   }
 
   private def readSecretStorage: Try[JsonSecretStorage] = {

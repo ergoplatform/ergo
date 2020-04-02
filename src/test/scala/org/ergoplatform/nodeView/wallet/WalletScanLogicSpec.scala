@@ -12,7 +12,6 @@ import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletReg
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ExternalAppRequest}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ApplicationId
-import org.ergoplatform.wallet.boxes.BoxCertainty
 import org.scalacheck.Gen
 import sigmastate.Values.{ErgoTree, FalseLeaf}
 
@@ -37,9 +36,9 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
   private val monetarySettings = initSettings.chainSettings.monetary.copy(minerRewardDelay = 720)
   private val s = initSettings.copy(chainSettings = initSettings.chainSettings.copy(monetary = monetarySettings))
 
-  private val uncertainProp = org.ergoplatform.settings.Constants.TrueLeaf
-  private val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, uncertainProp.bytes)
-  private val appReq = ExternalAppRequest("True detector", scanningPredicate, alwaysCertain = false)
+  private val trueProp = org.ergoplatform.settings.Constants.TrueLeaf
+  private val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, trueProp.bytes)
+  private val appReq = ExternalAppRequest("True detector", scanningPredicate)
   private val appId: ApplicationId = ApplicationId @@ 50.toShort
 
   private val walletVars = WalletVars(Some(prover), Seq(appReq.toApp(appId).get), None)(s)
@@ -53,7 +52,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
   private def nonTrackablePaymentsGen: Gen[List[ErgoTree]] = Gen.nonEmptyListOf(Gen.const(FalseLeaf.toSigmaProp))
 
-  private def appPaymentsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.const(uncertainProp))
+  private def appPaymentsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.const(trueProp))
 
   private def trackedTransactionGen: Gen[TrackedTransaction] = {
     for {
@@ -89,14 +88,11 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
       foundBoxes.map(_.inclusionHeightOpt).forall(_ == inclusionHeightOpt) shouldBe true
       foundBoxes.map(_.value).sum shouldBe trackedTransaction.valuesSum
       foundBoxes.forall(tb => if (trackedTransaction.payments.contains(tb.box.ergoTree)) {
-        tb.certain(Constants.PaymentsAppId).get == BoxCertainty.Certain &&
-          tb.applicationStatuses == Map(Constants.PaymentsAppId -> BoxCertainty.Certain)
+        tb.applicationStatuses == Set(Constants.PaymentsAppId)
       } else if(trackedTransaction.miningRewards.contains(tb.box.ergoTree)) {
-        tb.certain(Constants.MiningRewardsAppId).get == BoxCertainty.Certain &&
-          tb.applicationStatuses == Map(Constants.MiningRewardsAppId -> BoxCertainty.Certain)
+        tb.applicationStatuses == Set(Constants.MiningRewardsAppId)
       } else {
-        tb.certain(appId).get == BoxCertainty.Uncertain &&
-          tb.applicationStatuses == Map(appId -> BoxCertainty.Uncertain)
+        tb.applicationStatuses == Set(appId)
       }) shouldBe true
     }
   }

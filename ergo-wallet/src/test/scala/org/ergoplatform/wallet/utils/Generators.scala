@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.utils
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.wallet.Constants
-import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
+import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.mnemonic.{Mnemonic, WordList}
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey, Index}
 import org.ergoplatform.wallet.settings.EncryptionSettings
@@ -152,19 +152,13 @@ trait Generators {
     }
   }
 
-  def appStatusesGen: Gen[Map[ApplicationId, BoxCertainty]] = {
+  def appStatusesGen: Gen[Set[ApplicationId]] = {
     if(scala.util.Random.nextBoolean()) {
       // simulate complex usage scenario
-      Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.toSet.toSeq.map { id: Short => ApplicationId @@ id }).flatMap { appIds =>
-        Gen.listOfN(appIds.length, Gen.oneOf(BoxCertainty.Certain, BoxCertainty.Uncertain)).map { certainities =>
-          appIds.zip(certainities)
-        }
-      }.map(_.map { case (appId, certainty) =>
-        appId -> (if (appId == PaymentsAppId) BoxCertainty.Certain else certainty)
-      }.toMap)
+      Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.map { id: Short => ApplicationId @@ id }.toSet)
     } else {
       // simulate simple payment
-      Map(PaymentsAppId -> BoxCertainty.Certain)
+      Set(PaymentsAppId)
     }
   }
 

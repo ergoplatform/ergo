@@ -99,7 +99,6 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
       height <- Gen.posNum[Int]
       amount <- Gen.choose(1L, 100000L)
       balances <- additionalTokensGen
-      // uncertain <- Gen.listOf(boxIdGen)
     } yield {
       val encodedBalances = balances.map { case (x1, x2) => encodedTokenId(x1) -> x2 }.toMap
       RegistryDigest(height, amount, encodedBalances)
@@ -139,8 +138,7 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
   def externalAppReqGen: Gen[ExternalAppRequest] = for {
     appName <- Gen.alphaNumStr
     pred <- scanningPredicateGen
-    alwaysCertain <- Gen.oneOf(true, false)
-  } yield ExternalAppRequest(appName, pred, alwaysCertain)
+  } yield ExternalAppRequest(appName, pred)
 
   def externalAppGen: Gen[ExternalApplication] = for {
     appId <- Gen.posNum[Short]

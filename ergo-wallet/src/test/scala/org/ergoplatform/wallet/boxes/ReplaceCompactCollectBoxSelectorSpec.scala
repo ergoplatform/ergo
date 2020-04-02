@@ -16,7 +16,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers with E
   val TrueLeaf: SigmaPropValue = Values.TrueLeaf.toSigmaProp
 
   def box(value:Long) = ErgoBox(value, TrueLeaf, 0)
-  def trackedBox(value:Long) = TrackedBox(parentTx, 0, None, box(value), Map(PaymentsAppId -> BoxCertainty.Certain))
+  def trackedBox(value:Long) = TrackedBox(parentTx, 0, None, box(value), Set(PaymentsAppId))
 
   property("compress() done properly") {
     val selector = new ReplaceCompactCollectBoxSelector(3, 2)

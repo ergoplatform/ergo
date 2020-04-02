@@ -124,7 +124,6 @@ components:
         - confirmationsNum
         - address
         - creationTransaction
-        - certain
         - onchain
         - creationOutIndex
         - spendingTransaction
@@ -164,10 +163,6 @@ components:
           format: int32
           minimum: 0
           example: 147
-        certain:
-          description: A flag signalling wheatehr the box is certainly resolved (as belonging to a wallet)
-          type: boolean
-          example: true
         onchain:
           description: A flag signalling wheatehr the box is created on main chain
           type: boolean
@@ -693,14 +688,11 @@ components:
           type: string
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
-        alwaysCertain:
-          type: boolean
       example:
         appName: Assets Tracker
         trackingRule:
           predicate: containsAsset
           assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
-        alwaysCertain: true
 
     ExternalApplication:
       type: object
@@ -711,15 +703,12 @@ components:
           type: integer
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
-        alwaysCertain:
-            type: boolean
       example:
         appId: 2
         appName: Assets Tracker
         trackingRule:
           predicate: containsAsset
           assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
-        alwaysCertain: true
 
     ApplicationId:
       type: object
@@ -3131,39 +3120,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /application/uncertainBoxes/{appId}:
-    get:
-      security:
-        - ApiKeyAuth: [api_key]
-      summary: List boxes which delivered to the application but not necessarily belong to it.
-      operationId: listUncertainApplications
-      tags:
-        - application
-      parameters:
-        - in: path
-          name: appId
-          required: true
-          description: identifier of an application to remove
-          schema:
-            type: integer
-            format: int32
-      responses:
-        '200':
-          description: List of uncertain boxes
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/WalletBox'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-
   /application/unspentBoxes/{appId}:
     get:
       security:
@@ -3189,34 +3145,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/WalletBox'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-
-  /application/makeCertain:
-    post:
-      security:
-        - ApiKeyAuth: [api_key]
-      summary: Mark application-related box as cartainly belonging to the application
-      operationId: appMakeCertain
-      tags:
-        - application
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ApplicationIdBoxId'
-      responses:
-        '200':
-          description: The box marked as certain successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApplicationIdBoxId'
         default:
           description: Error
           content:

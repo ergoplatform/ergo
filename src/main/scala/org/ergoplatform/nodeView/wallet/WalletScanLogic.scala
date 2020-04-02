@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.wallet
 
-import org.ergoplatform.http.api.ApplicationEntities.ApplicationIdWrapper
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
@@ -10,7 +9,7 @@ import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletReg
 import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.wallet.Constants.{ApplicationId, MiningRewardsAppId, PaymentsAppId}
-import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
+import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
@@ -55,10 +54,10 @@ object WalletScanLogic extends ScorexLogging {
     //todo: replace with Bloom filter?
     val previousBoxIds = registry.walletUnspentBoxes().map(tb => encodedBoxId(tb.box.id))
 
-    val resolvedBoxes = registry.uncertainBoxes(MiningRewardsAppId).flatMap { tb =>
+    val resolvedBoxes = registry.unspentBoxes(MiningRewardsAppId).flatMap { tb =>
       //todo: more efficient resolving, just by using height
       val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)
-      if (spendable) Some(tb.copy(applicationStatuses = Map(PaymentsAppId -> BoxCertainty.Certain))) else None
+      if (spendable) Some(tb.copy(applicationStatuses = Set(PaymentsAppId))) else None
     }
 
     //input tx id, input box id, tracked box
@@ -81,7 +80,7 @@ object WalletScanLogic extends ScorexLogging {
         }
 
         // Applications related to the transaction
-        val walletAppIds = (spentBoxes ++ myOutputs).flatMap(_.applicationStatuses.keys).toSet
+        val walletAppIds = (spentBoxes ++ myOutputs).flatMap(_.applicationStatuses).toSet
         val wtx = WalletTransaction(tx, height, walletAppIds.toSeq)
 
         val newRel = (scanResults._2: InputData) ++ spendingInputIds.zip(spentBoxes).map(t => (tx.id, t._1, t._2))
@@ -119,39 +118,37 @@ object WalletScanLogic extends ScorexLogging {
     val externalApplications: Seq[ExternalApplication] = walletVars.externalApplications
 
     tx.outputs.flatMap { bx =>
-      val appsTriggered = externalApplications.filter(_.trackingRule.filter(bx))
-        .map(app => app.appId -> app.initialCertainty)
-        .toMap
+      val appsTriggered = externalApplications.filter(_.trackingRule.filter(bx)).map(app => app.appId)
 
       val boxScript = bx.propositionBytes
 
-      val statuses: Map[ApplicationId, BoxCertainty] = if (walletVars.filter.lookup(boxScript)) {
+      val statuses: Set[ApplicationId] = if (walletVars.filter.lookup(boxScript)) {
 
         val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
 
         //tweak for tests
-        lazy val miningStatus: (ApplicationId, BoxCertainty) = if (walletVars.settings.miningRewardDelay > 0) {
-          MiningRewardsAppId -> BoxCertainty.Certain
+        lazy val miningStatus: ApplicationId = if (walletVars.settings.miningRewardDelay > 0) {
+          MiningRewardsAppId
         } else {
-          PaymentsAppId -> BoxCertainty.Certain
+          PaymentsAppId
         }
 
-        val prePaymentStatuses = if (miningIncomeTriggered) appsTriggered + miningStatus else appsTriggered
+        val prePaymentStatuses = if (miningIncomeTriggered) appsTriggered :+ miningStatus else appsTriggered
 
         if (prePaymentStatuses.nonEmpty) {
           //if other applications intercept the box, it is not being tracked by the payments app
-          prePaymentStatuses
+          prePaymentStatuses.toSet
         } else {
           val paymentsTriggered = trackedBytes.exists(bs => boxScript.sameElements(bs))
 
           if (paymentsTriggered) {
-            Map(PaymentsAppId -> BoxCertainty.Certain)
+            Set(PaymentsAppId)
           } else {
-            Map.empty
+            Set.empty
           }
         }
       } else {
-        appsTriggered
+        appsTriggered.toSet
       }
 
       if (statuses.nonEmpty) {

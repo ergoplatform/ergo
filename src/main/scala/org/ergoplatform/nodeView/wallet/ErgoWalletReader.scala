@@ -74,9 +74,6 @@ trait ErgoWalletReader extends VaultReader {
   def appBoxes(appId: ApplicationId, unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
     (walletActor ? GetAppBoxes(appId, unspentOnly)).mapTo[Seq[WalletBox]]
 
-  def uncertainBoxes(appId: ApplicationId): Future[Seq[WalletBox]] =
-    (walletActor ? GetUncertainBoxes(appId)).mapTo[Seq[WalletBox]]
-
   def updateChangeAddress(address: P2PKAddress): Unit =
     walletActor ! UpdateChangeAddress(address)
 
@@ -101,9 +98,6 @@ trait ErgoWalletReader extends VaultReader {
 
   def readApplications(): Future[Seq[ExternalApplication]] =
     (walletActor ? ReadApplications).mapTo[Seq[ExternalApplication]]
-
-  def makeCertain(appId: ApplicationId, boxId: BoxId): Future[Try[Unit]] =
-    (walletActor ? MakeCertain(appId, boxId)).mapTo[Try[Unit]]
 
   def stopTracking(appId: ApplicationId, boxId: BoxId): Future[Try[Unit]] =
     (walletActor ? StopTracking(appId, boxId)).mapTo[Try[Unit]]

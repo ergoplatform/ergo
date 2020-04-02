@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, EncodedTokenId}
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.Constants
-import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox, TrackedBoxSerializer}
+import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
@@ -22,9 +22,9 @@ import scala.util.{Failure, Success, Try}
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
   *
-  * * current wallet status (height, balances, uncertain boxes)
+  * * current wallet status (height, balances)
   * * wallet-related transactions
-  * * certain boxes, spent or not
+  * * boxes, spent or not
   *
   */
 class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
@@ -45,28 +45,12 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   def unspentBoxes(appId: ApplicationId): Seq[TrackedBox] = {
     store.getRange(firstAppBoxSpaceKey(appId), lastAppBoxSpaceKey(appId))
       .flatMap { case (_, boxId) =>
-        getBox(ADKey @@ boxId).flatMap { b =>
-          if (b.applicationStatuses(appId).certain) Some(b) else None
-        }
+        getBox(ADKey @@ boxId)
       }
   }
 
   def spentBoxes(appId: ApplicationId): Seq[TrackedBox] = {
     store.getRange(firstSpentAppBoxSpaceKey(appId), lastSpentAppBoxSpaceKey(appId))
-      .flatMap { case (_, boxId) =>
-        getBox(ADKey @@ boxId)
-      }
-  }
-
-  def uncertainBoxes(appId: ApplicationId): Seq[TrackedBox] = {
-    store.getRange(firstUncertainAppBoxSpaceKey(appId), lastUncertainAppBoxSpaceKey(appId))
-      .flatMap { case (_, boxId) =>
-        getBox(ADKey @@ boxId)
-      }
-  }
-
-  def certainBoxes(appId: ApplicationId): Seq[TrackedBox] = {
-    store.getRange(firstCertainAppBoxSpaceKey(appId), lastCertainAppBoxSpaceKey(appId))
       .flatMap { case (_, boxId) =>
         getBox(ADKey @@ boxId)
       }
@@ -205,35 +189,25 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     }
   }
 
-  def makeCertain(appId: ApplicationId, boxId: BoxId): Try[Unit] = {
-    getBox(boxId) match {
-      case Some(tb) => tb.applicationStatuses.get(appId).map { _ =>
-        store.cacheRemove(Seq(certaintyKey(appId, tb)))
-        val updTb = tb.copy(applicationStatuses = tb.applicationStatuses.updated(appId, BoxCertainty.Certain))
-        store.cachePut(Seq(boxToKvPair(updTb), certaintyKey(appId, updTb) -> boxId))
-        Success((): Unit)
-      }.getOrElse(Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId")))
-
-      case None => Failure(new Exception(s"No box with id ${Algos.encode(boxId)} found in the wallet database"))
-    }
-  }
-
   def removeApp(appId: ApplicationId, boxId: BoxId): Try[Unit] = {
     getBox(boxId) match {
       case Some(tb) =>
         (if (tb.applicationStatuses.size == 1) {
-          tb.applicationStatuses.get(appId).map { _ =>
+          if(tb.applicationStatuses.head == appId) {
             val bag = WalletRegistry.removeBox(KeyValuePairsBag.empty, tb)
             Success(bag)
-          }.getOrElse(Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId")))
+          } else {
+            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId"))
+          }
         } else {
-          tb.applicationStatuses.get(appId).map { _ =>
+          if(tb.applicationStatuses.contains(appId)){
             val updTb = tb.copy(applicationStatuses = tb.applicationStatuses - appId)
             val keyToRemove = Seq(spentIndexKey(appId, updTb),
-              certaintyKey(appId, updTb),
               inclusionHeightAppBoxIndexKey(appId, updTb))
             Success(KeyValuePairsBag(Seq(boxToKvPair(updTb)), keyToRemove))
-          }.getOrElse(Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId")))
+          } else {
+            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId"))
+          }
         }).map { bag =>
           store.cachePut(bag.toInsert)
           store.cacheRemove(bag.toRemove)
@@ -265,9 +239,6 @@ object WalletRegistry {
   private val UnspentIndexPrefix: Byte = 0x03
   private val SpentIndexPrefix: Byte = 0x04
 
-  private val UncertainAppBoxIndexPrefix: Byte = 0x05
-  private val CertainAppBoxIndexPrefix: Byte = 0x06
-
   private val InclusionHeightAppBoxPrefix: Byte = 0x07
 
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
@@ -284,18 +255,6 @@ object WalletRegistry {
 
   private def lastSpentAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
     SpentIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
-
-  private def firstUncertainAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    UncertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
-
-  private def lastUncertainAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    UncertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
-
-  private def firstCertainAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    CertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
-
-  private def lastCertainAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    CertainAppBoxIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
 
   private def firstIncludedAppBoxSpaceKey(appId: ApplicationId, height: Int): Array[Byte] =
     UnspentIndexPrefix +: (Shorts.toByteArray(appId) ++ Ints.toByteArray(height) ++ Array.fill(32)(0: Byte))
@@ -320,21 +279,15 @@ object WalletRegistry {
     prefix +: (Shorts.toByteArray(appId) ++ trackedBox.box.id)
   }
 
-  private def certaintyKey(appId: ApplicationId, trackedBox: TrackedBox): Array[Byte] = {
-    val prefix = if (trackedBox.certain(appId).get.certain) CertainAppBoxIndexPrefix else UncertainAppBoxIndexPrefix //todo: .get
-    prefix +: (Shorts.toByteArray(appId) ++ trackedBox.box.id)
-  }
-
   private def inclusionHeightAppBoxIndexKey(appId: ApplicationId, trackedBox: TrackedBox): Array[Byte] = {
     val inclusionHeightBytes = Ints.toByteArray(trackedBox.inclusionHeightOpt.getOrElse(0))
     InclusionHeightAppBoxPrefix +: (Shorts.toByteArray(appId) ++ inclusionHeightBytes ++ trackedBox.box.id)
   }
 
   def boxIndexKeys(box: TrackedBox): Seq[Array[Byte]] = {
-    box.applicationStatuses.toSeq.flatMap { case (appId, _) =>
+    box.applicationStatuses.toSeq.flatMap { appId =>
       Seq(
         spentIndexKey(appId, box),
-        certaintyKey(appId, box), //todo: avoid for simple payments app
         inclusionHeightAppBoxIndexKey(appId, box)
       )
     }

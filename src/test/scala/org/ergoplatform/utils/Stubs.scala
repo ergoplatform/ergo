@@ -20,7 +20,7 @@ import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.wallet.Constants.PaymentsAppId
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
-import org.ergoplatform.wallet.boxes.{BoxCertainty, ChainStatus, TrackedBox}
+import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.P2PKAddress
@@ -189,7 +189,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         spendingTxIdOpt = Some(modifierIdGen.sample.get),
         spendingHeightOpt = None,
         box = ergoBoxGen.sample.get,
-        applicationStatuses = Map(PaymentsAppId -> BoxCertainty.Certain)
+        applicationStatuses = Set(PaymentsAppId)
       ),
       confirmationsNumOpt = Some(10)
     )

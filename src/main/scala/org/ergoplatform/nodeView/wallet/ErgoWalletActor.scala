@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequ
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
-import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
+import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey, JsonSecretStorage}
@@ -150,12 +150,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case GetAppBoxes(appId, unspent) =>
       val currentHeight = height
       sender() ! (if (unspent) registry.unspentBoxes(appId) else registry.confirmedBoxes(appId, 0))
-        .map(tb => WalletBox(tb, currentHeight))
-        .sortBy(_.trackedBox.inclusionHeightOpt)
-
-    case GetUncertainBoxes(appId) =>
-      val currentHeight = height
-      sender() ! registry.uncertainBoxes(appId)
         .map(tb => WalletBox(tb, currentHeight))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
@@ -309,10 +303,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       res.foreach(app => walletVars = walletVars.addApplication(app))
       sender() ! AddApplicationResponse(res)
 
-
-    case MakeCertain(appId: ApplicationId, boxId: BoxId) =>
-      sender() ! registry.makeCertain(appId, boxId)
-
     case StopTracking(appId: ApplicationId, boxId: BoxId) =>
       sender() ! registry.removeApp(appId, boxId)
   }
@@ -401,7 +391,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def boxesToFakeTracked(inputs: Seq[ErgoBox]): Iterator[TrackedBox] = {
     inputs
       .map { box => // declare fake inclusion height in order to confirm the box is onchain
-        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, Map(PaymentsAppId -> BoxCertainty.Certain))
+        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, Set(PaymentsAppId))
       }
       .toIterator
   }
@@ -768,8 +758,6 @@ object ErgoWalletActor {
 
   final case class GetAppBoxes(appId: ApplicationId, unspentOnly: Boolean)
 
-  final case class GetUncertainBoxes(appId: ApplicationId)
-
   final case class UpdateChangeAddress(address: P2PKAddress)
 
   final case class AddApplication(appRequest: ExternalAppRequest)
@@ -795,8 +783,6 @@ object ErgoWalletActor {
   case object ReadRandomPublicKey
 
   case object ReadApplications
-
-  case class MakeCertain(appId: ApplicationId, boxId: BoxId)
 
   case class StopTracking(appId: ApplicationId, boxId: BoxId)
 

@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
 import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.Constants.ApplicationId
-import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
+import org.ergoplatform.wallet.boxes.TrackedBox
 import scorex.core.validation.ValidationResult
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.interpreter.CryptoConstants.EcPointType
@@ -77,17 +77,6 @@ trait ApiCodecs extends JsonCodecs {
     ApplicationId @@ c.as[Short]
   }
 
-  implicit val applicationBoxStatusEncoder: Encoder[(ApplicationId, BoxCertainty)] = { appStatus =>
-    Json.obj("appId" -> appStatus._1.asJson, "certainty" -> appStatus._2.certain.asJson)
-  }
-
-  implicit val applicationBoxStatusDecoder: Decoder[(ApplicationId, BoxCertainty)] = { c: HCursor =>
-    for {
-      appId <- ApplicationId @@ c.downField("appId").as[Short]
-      certain <- c.downField("certainty").as[Boolean].map(BoxCertainty.fromBoolean)
-    } yield (appId, certain)
-  }
-
   implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = { box =>
     val plainFields = Map(
       "spent" -> box.spendingStatus.spent.asJson,
@@ -95,7 +84,7 @@ trait ApiCodecs extends JsonCodecs {
       "creationOutIndex" -> box.creationOutIndex.asJson,
       "inclusionHeight" -> box.inclusionHeightOpt.asJson,
       "spendingHeight" -> box.spendingHeightOpt.asJson,
-      "applications" -> box.applicationStatuses.toSeq.asJson,
+      "applications" -> box.applicationStatuses.asJson,
       "box" -> box.box.asJson
     )
 

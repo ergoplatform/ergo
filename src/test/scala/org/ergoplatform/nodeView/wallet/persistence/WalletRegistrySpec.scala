@@ -4,7 +4,7 @@ import org.ergoplatform.wallet.Constants.{ApplicationId, PaymentsAppId}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedBoxId
 import org.ergoplatform.utils.generators.WalletGenerators
-import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
+import org.ergoplatform.wallet.boxes.TrackedBox
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
@@ -19,7 +19,7 @@ class WalletRegistrySpec
     with FileUtils {
 
   private val emptyBag = KeyValuePairsBag.empty
-  private val walletBoxStatus = Map(PaymentsAppId -> BoxCertainty.Certain)
+  private val walletBoxStatus = Set(PaymentsAppId)
 
   private val ws = settings.walletSettings
 
@@ -146,9 +146,7 @@ class WalletRegistrySpec
         WalletRegistry.putBoxes(emptyBag, tbs).transact(store)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs tbs.map(Some.apply)
         val updateFn = (tb: TrackedBox) => tb.copy(spendingHeightOpt = Some(0),
-          applicationStatuses = Map(
-            PaymentsAppId -> BoxCertainty.Certain,
-            ApplicationId @@ 2.toShort -> BoxCertainty.Uncertain))
+          applicationStatuses = Set(PaymentsAppId, ApplicationId @@ 2.toShort))
         val updatedBoxes = tbs.map(updateFn)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs updatedBoxes.map(Some.apply)
         WalletRegistry.removeBoxes(emptyBag, tbs).transact(store)

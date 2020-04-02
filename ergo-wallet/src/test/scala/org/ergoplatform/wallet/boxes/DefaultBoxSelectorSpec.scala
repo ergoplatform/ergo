@@ -25,7 +25,7 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
 
   property("returns error when it is impossible to select coins") {
     val box = ErgoBox(1, TrueLeaf, creationHeight = StartHeight)
-    val uBox = TrackedBox(parentTx, 0, None, box, Map(PaymentsAppId -> BoxCertainty.Certain))
+    val uBox = TrackedBox(parentTx, 0, None, box, Set(PaymentsAppId))
 
     //target amount is too high
     select(Seq(uBox).toIterator, noFilter, 10, Map()).left.value shouldBe a [NotEnoughCoinsError]
@@ -46,9 +46,9 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
     val box2 = ErgoBox(10, TrueLeaf, creationHeight = StartHeight)
     val box3 = ErgoBox(100, TrueLeaf, creationHeight = StartHeight)
 
-    val uBox1 = TrackedBox(parentTx, 0, Option(100), box1, Map(PaymentsAppId -> BoxCertainty.Certain))
-    val uBox2 = TrackedBox(parentTx, 1, None, box2, Map(PaymentsAppId -> BoxCertainty.Certain))
-    val uBox3 = TrackedBox(parentTx, 2, Option(100), box3, Map(PaymentsAppId -> BoxCertainty.Certain))
+    val uBox1 = TrackedBox(parentTx, 0, Option(100), box1, Set(PaymentsAppId))
+    val uBox2 = TrackedBox(parentTx, 1, None, box2, Set(PaymentsAppId))
+    val uBox3 = TrackedBox(parentTx, 2, Option(100), box3, Set(PaymentsAppId))
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 
@@ -92,9 +92,9 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
     val box2 = ErgoBox(10 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32 @@ idToBytes(assetId2) -> 10))
     val box3 = ErgoBox(100 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32 @@ idToBytes(assetId1) -> 100))
 
-    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Map(PaymentsAppId -> BoxCertainty.Certain))
-    val uBox2 = TrackedBox(parentTx, 1, None, box2, Map(PaymentsAppId -> BoxCertainty.Certain))
-    val uBox3 = TrackedBox(parentTx, 2, Some(100), box3, Map(PaymentsAppId -> BoxCertainty.Certain))
+    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsAppId))
+    val uBox2 = TrackedBox(parentTx, 1, None, box2, Set(PaymentsAppId))
+    val uBox3 = TrackedBox(parentTx, 2, Some(100), box3, Set(PaymentsAppId))
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 
@@ -148,9 +148,9 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
       Seq(Digest32 @@ idToBytes(assetId3) -> 100, Digest32 @@ idToBytes(assetId4) -> 100,
         Digest32 @@ idToBytes(assetId5) -> 100, Digest32 @@ idToBytes(assetId6) -> 100))
 
-    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Map(PaymentsAppId -> BoxCertainty.Certain))
-    val uBox2 = TrackedBox(parentTx, 1, None, box2, Map(PaymentsAppId -> BoxCertainty.Certain))
-    val uBox3 = TrackedBox(parentTx, 2, Some(100), box3, Map(PaymentsAppId -> BoxCertainty.Certain))
+    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsAppId))
+    val uBox2 = TrackedBox(parentTx, 1, None, box2, Set(PaymentsAppId))
+    val uBox3 = TrackedBox(parentTx, 2, Some(100), box3, Set(PaymentsAppId))
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 

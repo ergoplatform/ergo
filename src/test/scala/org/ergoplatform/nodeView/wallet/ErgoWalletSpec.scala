@@ -1,15 +1,14 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
-import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ExternalAppRequest}
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.utils._
-import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoUnsafeProver}
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalatest.PropSpec
 import scorex.util.encode.Base16
 import sigmastate.eval._
@@ -22,54 +21,6 @@ import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
 class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
-
-  property("uncertain boxes spending") {
-    withFixture { implicit w =>
-      val walletPk = getPublicKeys.head.pubkey
-
-      val uncertainProp = Constants.TrueLeaf
-      val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, uncertainProp.bytes)
-      val appReq = ExternalAppRequest("True detector", scanningPredicate, alwaysCertain = false)
-      val app = await(w.wallet.addApplication(appReq)).response.get
-
-      val genesisBlock = makeGenesisBlock(walletPk, randomNewAsset)
-
-      applyBlock(genesisBlock) shouldBe 'success
-      waitForScanning(genesisBlock)
-
-      val confirmedBalance = getConfirmedBalances.walletBalance
-      confirmedBalance > MinBoxValue shouldBe true
-      val balanceToMakeUncertain = confirmedBalance - MinBoxValue
-      val balanceAfterSpending = confirmedBalance - balanceToMakeUncertain
-
-      val req = PaymentRequest(Pay2SAddress(uncertainProp), balanceToMakeUncertain, Seq.empty, Map.empty)
-      val tx = await(wallet.generateTransaction(Seq(req))).get
-
-      val block = makeNextBlock(getUtxoState, Seq(tx))
-      applyBlock(block) shouldBe 'success
-      waitForScanning(block)
-
-      val registryDigest = await(wallet.confirmedBalances)
-      registryDigest.walletBalance shouldBe balanceAfterSpending
-      await(wallet.uncertainBoxes(app.appId)).head.trackedBox.box.value shouldBe balanceToMakeUncertain
-
-      val uncertainTxUnsigned = new UnsignedErgoTransaction(
-        tx.outputs.find(_.ergoTree == uncertainProp).toIndexedSeq.map(b => new UnsignedInput(b.id)),
-        IndexedSeq(),
-        IndexedSeq(new ErgoBoxCandidate(balanceToMakeUncertain, Constants.TrueLeaf, block.height + 1))
-      )
-      val uncertainTx = ErgoUnsafeProver.prove(uncertainTxUnsigned, getSecret.get)
-
-      val finalBlock = makeNextBlock(getUtxoState, Seq(ErgoTransaction(uncertainTx)))
-      applyBlock(finalBlock) shouldBe 'success
-      waitForScanning(finalBlock)
-
-      val finalIndex = await(wallet.confirmedBalances)
-
-      finalIndex.walletBalance shouldBe balanceAfterSpending
-    }
-  }
-
 
   property("do not use inputs spent in off-chain transaction") {
     withFixture { implicit w =>
@@ -782,38 +733,4 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
     }
   }
 
-  property("only unspent certain boxes is used for transaction generation") {
-    withFixture { implicit w =>
-      val pubKey = getPublicKeys.head.pubkey
-      val genesisBlock = makeGenesisBlock(pubKey)
-      val uncertainAmount = 2000000
-      val modifiedBlock = {
-        val prop = ErgoScriptPredef.rewardOutputScript(100, pubKey)
-        val txToModify = genesisBlock.blockTransactions.txs.last
-        val txWithUncertainOutput = txToModify
-          .copy(outputCandidates = IndexedSeq(new ErgoBoxCandidate(uncertainAmount, prop, 1)))
-        genesisBlock.copy(
-          blockTransactions = genesisBlock.blockTransactions.copy(
-            txs = genesisBlock.blockTransactions.txs :+ txWithUncertainOutput
-          )
-        )
-      }
-      val initialBoxes = boxesAvailable(modifiedBlock, pubKey)
-      val totalAvailableAmount = initialBoxes.map(_.value).sum
-      val certainAmount = totalAvailableAmount - uncertainAmount
-
-      wallet.scanPersistent(modifiedBlock)
-
-      blocking(Thread.sleep(100))
-
-      val requestWithTotalAmount = PaymentRequest(
-        ErgoAddressEncoder(0: Byte).fromProposition(pubKey).get, totalAvailableAmount, Seq.empty, Map.empty)
-      val requestWithCertainAmount = requestWithTotalAmount.copy(value = certainAmount)
-
-      val uncertainTxTry = await(wallet.generateTransaction(Seq(requestWithTotalAmount)))
-      uncertainTxTry shouldBe 'failure
-      uncertainTxTry.failed.get.getMessage.startsWith("Failed to find boxes to assemble a transaction") shouldBe true
-      await(wallet.generateTransaction(Seq(requestWithCertainAmount))) shouldBe 'success
-    }
-  }
 }

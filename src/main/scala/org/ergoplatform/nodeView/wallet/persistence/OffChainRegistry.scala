@@ -34,8 +34,7 @@ case class OffChainRegistry(height: Int,
   /**
     * Update on receiving new off-chain transaction.
     */
-  def updateOnTransaction(certainBoxes: Seq[TrackedBox],
-              spentIds: Seq[EncodedBoxId]): OffChainRegistry = {
+  def updateOnTransaction(certainBoxes: Seq[TrackedBox], spentIds: Seq[EncodedBoxId]): OffChainRegistry = {
     val unspentCertain = offChainBoxes.filterNot(x => spentIds.contains(x.boxId)) ++ certainBoxes
     val onChainBalancesUpdated = onChainBalances.filterNot(x => spentIds.contains(x.id))
     this.copy(

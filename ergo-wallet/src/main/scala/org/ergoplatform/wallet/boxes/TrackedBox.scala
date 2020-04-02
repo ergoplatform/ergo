@@ -27,7 +27,7 @@ final case class TrackedBox(creationTxId: ModifierId,
                             spendingTxIdOpt: Option[ModifierId],
                             spendingHeightOpt: Option[Int],
                             box: ErgoBox,
-                            applicationStatuses: Map[ApplicationId, BoxCertainty]) extends ErgoBoxAssets {
+                            applicationStatuses: Set[ApplicationId]) extends ErgoBoxAssets {
 
 
   /**
@@ -68,8 +68,6 @@ final case class TrackedBox(creationTxId: ModifierId,
 
   def spent: Boolean = spendingHeightOpt.isDefined
 
-  def certain(appId: ApplicationId): Option[BoxCertainty] = applicationStatuses.get(appId)
-
   lazy val tokens: Map[ModifierId, Long] = box.additionalTokens.toArray.map {
     case (id, amt) => bytesToId(id) -> amt
   }.toMap
@@ -86,7 +84,7 @@ final case class TrackedBox(creationTxId: ModifierId,
 object TrackedBox {
 
   def apply(creationTx: ErgoLikeTransaction, creationOutIndex: Short, creationHeight: Option[Int],
-            box: ErgoBox, appStatuses: Map[ApplicationId, BoxCertainty]): TrackedBox =
+            box: ErgoBox, appStatuses: Set[ApplicationId]): TrackedBox =
     apply(creationTx.id, creationOutIndex, creationHeight, None, None, box, appStatuses)
 
 }
@@ -102,13 +100,12 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
 
     val appsCount = obj.applicationStatuses.size.toShort
 
-    if (appsCount == 1 && obj.applicationStatuses.head._1 == Constants.PaymentsAppId) {
+    if (appsCount == 1 && obj.applicationStatuses.head == Constants.PaymentsAppId) {
       w.putShort(0)
     } else {
       w.putShort(appsCount)
-      obj.applicationStatuses.foreach { case (appId, certainty) =>
+      obj.applicationStatuses.foreach { appId =>
         w.putShort(appId)
-        w.put(if (certainty.certain) 0x01 else 0x00)
       }
     }
     ErgoBoxSerializer.serialize(obj.box, w)
@@ -122,17 +119,14 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
     val spendingHeightOpt = r.getOption(r.getInt())
 
     val appsCount = r.getShort()
-    val appStatuses: Seq[(ApplicationId, BoxCertainty)] = if (appsCount == 0){
-      Seq((Constants.PaymentsAppId, BoxCertainty.Certain))
+    val appStatuses: Set[ApplicationId] = if (appsCount == 0){
+      Set(Constants.PaymentsAppId)
     } else {
-      (0 until appsCount)
-        .map(_ =>
-          (ApplicationId @@ r.getShort(), if (r.getByte() == 0x01) BoxCertainty.Certain else BoxCertainty.Uncertain)
-        )
+      (0 until appsCount).map(_ => ApplicationId @@ r.getShort()).toSet
     }
     val box = ErgoBoxSerializer.parse(r)
     TrackedBox(
-      creationTxId, creationOutIndex, inclusionHeightOpt, spendingTxIdOpt, spendingHeightOpt, box, appStatuses.toMap)
+      creationTxId, creationOutIndex, inclusionHeightOpt, spendingTxIdOpt, spendingHeightOpt, box, appStatuses)
   }
 
 }

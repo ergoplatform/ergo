@@ -10,6 +10,7 @@ import scorex.core.{ModifierTypeId, NodeViewModifier}
 import sigmastate.Values
 import sigmastate.Values.ErgoTree
 
+
 object Constants {
   val HashLength: Int = 32
 

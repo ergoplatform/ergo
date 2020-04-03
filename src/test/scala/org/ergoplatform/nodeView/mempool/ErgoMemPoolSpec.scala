@@ -63,7 +63,7 @@ class ErgoMemPoolSpec extends FlatSpec
       val (_, outcome) = pool.process(tx, us)
       outcome.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
       outcome.asInstanceOf[ProcessingOutcome.Declined]
-        .e.getMessage.contains("Minimal fee amount not met") shouldBe true
+        .e.getMessage.contains("Min fee not met") shouldBe true
     }
 
     val minSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = 0))

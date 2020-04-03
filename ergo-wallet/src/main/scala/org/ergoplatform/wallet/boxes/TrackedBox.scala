@@ -77,7 +77,7 @@ final case class TrackedBox(creationTxId: ModifierId,
     case _ => false
   }
 
-  override def hashCode(): Int = (creationTxId, creationOutIndex).hashCode()
+  override def hashCode(): Int = creationTxId.hashCode() * 31 + creationOutIndex.hashCode()
 
 }
 

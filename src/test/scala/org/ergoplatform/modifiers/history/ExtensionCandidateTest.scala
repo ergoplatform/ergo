@@ -11,9 +11,13 @@ class ExtensionCandidateTest extends ErgoPropertyTest {
       val fields = left ++ (middle +: right)
 
       val ext = ExtensionCandidate(fields)
-      val pf = ext.proofFor(middle._1.clone)
-      pf shouldBe defined
-      pf.get.valid(ext.digest) shouldBe true
+      val proof = ext.proofFor(middle._1.clone)
+      proof shouldBe defined
+      val nakedLeaf = proof.get.leafData
+      val numBytesKey = nakedLeaf.head
+      val key = nakedLeaf.tail.take(numBytesKey)
+      key shouldBe middle._1
+      proof.get.valid(ext.digest) shouldBe true
     }
   }
 }

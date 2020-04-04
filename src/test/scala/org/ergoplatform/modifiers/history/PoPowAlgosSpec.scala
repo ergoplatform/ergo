@@ -57,19 +57,19 @@ class PoPowAlgosSpec extends PropSpec with Matchers with ChainGenerator with Erg
     val blockIds = Gen.listOfN(255, modifierIdGen).sample.get
     val extension = PoPowAlgos.interlinksToExtension(blockIds)
     val blockIdToProve = blockIds.head
-    val pf = proofForInterlink(extension, blockIdToProve)
+    val proof = proofForInterlink(extension, blockIdToProve)
 
-    pf shouldBe defined
-    val fieldOfProof = pf.get.leafData
-    val numBytesKey = fieldOfProof.head
-    val key = fieldOfProof.tail.take(numBytesKey)
+    proof shouldBe defined
+    val encodedField = proof.get.leafData
+    val numBytesKey = encodedField.head
+    val key = encodedField.tail.take(numBytesKey)
     val prefix = key.head
-    val value = fieldOfProof.drop(numBytesKey + 1)
+    val value = encodedField.drop(numBytesKey + 1)
     val blockId = value.tail
     numBytesKey shouldBe 2
     prefix shouldBe InterlinksVectorPrefix
     bytesToId(blockId) shouldBe blockIdToProve
-    pf.get.valid(extension.digest) shouldBe true
+    proof.get.valid(extension.digest) shouldBe true
   }
 
 }

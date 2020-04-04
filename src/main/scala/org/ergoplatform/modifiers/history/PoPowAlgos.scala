@@ -7,6 +7,8 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 import Extension.InterlinksVectorPrefix
+import scorex.crypto.authds.merkle.MerkleProof
+import scorex.crypto.hash.Digest32
 
 /**
   * A set of utilities for working with PoPoW security protocol.
@@ -62,6 +64,15 @@ object PoPowAlgos {
     }
 
     loop(links.zipWithIndex.toList, Seq.empty)
+  }
+
+  /**
+    * Proves the inclusion of an interlink pointer to blockId in the Merkle Tree of the given extension.
+    */
+  def proofForInterlink(ext: Extension, blockId: ModifierId): Option[MerkleProof[Digest32]] = {
+    ext.fields
+      .find({ case (key, value) => key.head == InterlinksVectorPrefix && (value.tail sameElements idToBytes(blockId)) })
+      .flatMap({ case (key, _) => ext.proofFor(key) })
   }
 
   @inline def interlinksToExtension(links: Seq[ModifierId]): ExtensionCandidate = {

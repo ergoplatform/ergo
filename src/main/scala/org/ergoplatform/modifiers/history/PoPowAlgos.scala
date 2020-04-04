@@ -69,7 +69,7 @@ object PoPowAlgos {
   /**
     * Proves the inclusion of an interlink pointer to blockId in the Merkle Tree of the given extension.
     */
-  def proofForInterlink(ext: Extension, blockId: ModifierId): Option[MerkleProof[Digest32]] = {
+  def proofForInterlink(ext: ExtensionCandidate, blockId: ModifierId): Option[MerkleProof[Digest32]] = {
     ext.fields
       .find({ case (key, value) => key.head == InterlinksVectorPrefix && (value.tail sameElements idToBytes(blockId)) })
       .flatMap({ case (key, _) => ext.proofFor(key) })

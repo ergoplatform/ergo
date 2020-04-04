@@ -42,4 +42,7 @@ object Algos extends ErgoAlgos with scorex.core.utils.ScorexEncoding {
   def merkleTreeRoot(elements: Seq[LeafData]): Digest32 =
     if (elements.isEmpty) emptyMerkleTreeRoot else merkleTree(elements).rootHash
 
+  def merkleTreeRoot(tree: MerkleTree[Digest32]): Digest32 =
+    if (tree.length == 0) emptyMerkleTreeRoot else tree.rootHash
+
 }

@@ -52,7 +52,7 @@ class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
   def ++(that: ExtensionCandidate): ExtensionCandidate = ExtensionCandidate(fields ++ that.fields)
 
   def proofFor(key: Array[Byte]): Option[MerkleProof[Digest32]] =
-    fields.find(_._1 == key)
+    fields.find(_._1 sameElements key)
       .map(Extension.kvToLeaf)
       .flatMap(kv => merkleTree.proofByElement(Leaf[Digest32](LeafData @@ kv)(Algos.hash)))
 }

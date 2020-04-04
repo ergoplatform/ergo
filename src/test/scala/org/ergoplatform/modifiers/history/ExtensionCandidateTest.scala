@@ -11,7 +11,7 @@ class ExtensionCandidateTest extends ErgoPropertyTest {
       val fields = left ++ (middle +: right)
 
       val ext = ExtensionCandidate(fields)
-      val pf = ext.proofFor(middle._2)
+      val pf = ext.proofFor(middle._1)
       pf shouldBe defined
       pf.get.valid(ext.digest) shouldBe true
     }

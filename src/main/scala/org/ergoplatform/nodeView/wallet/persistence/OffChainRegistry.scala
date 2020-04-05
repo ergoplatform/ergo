@@ -6,7 +6,7 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 
 /**
   * Holds version-agnostic off-chain data (such as off-chain boxes) in runtime memory.
-  * Needed to store aggregate wallet data (including off-chain) with no need fo re-processing it on each request.
+  * Needed to obtain wallet state in regards with unconfirmed transactions with no reprocessing them on each request.
   *
   * @param height           - latest processed block height
   * @param offChainBoxes    - boxes from off-chain transactions

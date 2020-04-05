@@ -4,7 +4,7 @@ import Extension.InterlinksVectorPrefix
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators}
 import org.scalacheck.Gen
 import org.scalatest.{Matchers, PropSpec}
-import scorex.util.{ModifierId, bytesToId, idToBytes}
+import scorex.util.{ModifierId, bytesToId}
 
 class PoPowAlgosSpec extends PropSpec with Matchers with ChainGenerator with ErgoGenerators {
 

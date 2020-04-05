@@ -65,25 +65,28 @@ object DerivationPath {
     * Finds next available path index for a new key.
     */
   def nextPath(secrets: IndexedSeq[ExtendedSecretKey]): Try[DerivationPath] = {
+
+    def pathSequence(secret: ExtendedSecretKey): Seq[Int] = secret.path.decodedPath.tail
+
     @scala.annotation.tailrec
-    def nextPath(accPath: List[Int], rem: Seq[Seq[Int]]): Try[DerivationPath] = {
-      if (!rem.forall(_.isEmpty)) {
-        val maxChildIdx = rem.flatMap(_.headOption).max
+    def nextPath(accPath: List[Int], remaining: Seq[Seq[Int]]): Try[DerivationPath] = {
+      if (!remaining.forall(_.isEmpty)) {
+        val maxChildIdx = remaining.flatMap(_.headOption).max
         if (!Index.isHardened(maxChildIdx)) {
           Success(DerivationPath(0 +: (accPath :+ maxChildIdx + 1), publicBranch = false))
         } else {
-          nextPath(accPath :+ maxChildIdx, rem.map(_.drop(1)))
+          nextPath(accPath :+ maxChildIdx, remaining.map(_.drop(1)))
         }
       } else {
-        Failure(
-          new Exception("Out of non-hardened index space. Try to derive hardened key specifying path manually"))
+        val exc = new Exception("Out of non-hardened index space. Try to derive hardened key specifying path manually")
+        Failure(exc)
       }
     }
 
     if (secrets.size == 1) {
       Success(DerivationPath(Array(0, 1), publicBranch = false))
     } else {
-      nextPath(List.empty, secrets.map(_.path.decodedPath.tail.toList))
+      nextPath(List.empty, secrets.map(pathSequence))
     }
   }
 

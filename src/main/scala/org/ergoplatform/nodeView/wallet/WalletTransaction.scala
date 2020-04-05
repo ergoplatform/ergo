@@ -6,6 +6,15 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
 
+/**
+  * Transaction stored in the wallet.
+  * Includes transaction itself, as well as some metadata: inclusion height and applications the transaction
+  * can be associated with.
+  *
+  * @param tx - transaction to be stored in the wallet
+  * @param inclusionHeight - blockchain inclusion height for the transaction
+  * @param applicationIds - applications the transaction is associated with
+  */
 final case class WalletTransaction(tx: ErgoTransaction, inclusionHeight: Int, applicationIds: Seq[Short]) {
 
   def id: ModifierId = tx.id

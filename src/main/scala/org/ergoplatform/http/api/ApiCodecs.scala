@@ -9,7 +9,7 @@ import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
-import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
+import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.Constants.ApplicationId
 import org.ergoplatform.wallet.boxes.TrackedBox
@@ -46,7 +46,7 @@ trait ApiCodecs extends JsonCodecs {
 
   implicit val encodedTokenIdEncoder: Encoder[EncodedTokenId] = _.asJson
 
-  implicit val balancesSnapshotEncoder: Encoder[RegistryDigest] = { v =>
+  implicit val balancesSnapshotEncoder: Encoder[WalletDigest] = { v =>
     import v._
     Json.obj(
       "height" -> height.asJson,

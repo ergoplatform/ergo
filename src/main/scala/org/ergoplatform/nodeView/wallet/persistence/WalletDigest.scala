@@ -7,19 +7,26 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 
-final case class RegistryDigest(height: Int,
-                                walletBalance: Long,
-                                walletAssetBalances: Map[EncodedTokenId, Long])
-object RegistryDigest {
+/**
+  * Holds aggregate wallet data (including off-chain) with no need fo re-processing it on each request.
+  *
+  * @param height - height corresponding to the wallet state digest
+  * @param walletBalance - wallet balance (in nanoErgs)
+  * @param walletAssetBalances - asset balances
+  */
+final case class WalletDigest(height: Int,
+                              walletBalance: Long,
+                              walletAssetBalances: Map[EncodedTokenId, Long])
+object WalletDigest {
 
-  def empty: RegistryDigest =
-    RegistryDigest(ErgoHistory.EmptyHistoryHeight, 0, Map.empty)
+  def empty: WalletDigest =
+    WalletDigest(ErgoHistory.EmptyHistoryHeight, 0, Map.empty)
 
 }
 
-object RegistryDigestSerializer extends ScorexSerializer[RegistryDigest] {
+object RegistryDigestSerializer extends ScorexSerializer[WalletDigest] {
 
-  override def serialize(obj: RegistryDigest, w: Writer): Unit = {
+  override def serialize(obj: WalletDigest, w: Writer): Unit = {
     w.putInt(obj.height)
     w.putLong(obj.walletBalance)
 
@@ -30,7 +37,7 @@ object RegistryDigestSerializer extends ScorexSerializer[RegistryDigest] {
     }
   }
 
-  override def parse(r: Reader): RegistryDigest = {
+  override def parse(r: Reader): WalletDigest = {
     val height = r.getInt()
     val balance = r.getLong()
 
@@ -39,7 +46,7 @@ object RegistryDigestSerializer extends ScorexSerializer[RegistryDigest] {
       encodedTokenId(Digest32 @@ r.getBytes(Constants.ModifierIdSize)) -> r.getLong()
     }.toMap
 
-    RegistryDigest(height, balance, walletAssetBalances)
+    WalletDigest(height, balance, walletAssetBalances)
   }
 
 }

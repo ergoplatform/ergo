@@ -3,7 +3,7 @@ package org.ergoplatform.utils.generators
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.IdUtils._
-import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
+import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning._
 import org.ergoplatform.settings.Constants
@@ -94,14 +94,14 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
     } yield AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), amount, name, description, decimals)
   }
 
-  def registrySummaryGen: Gen[RegistryDigest] = {
+  def registrySummaryGen: Gen[WalletDigest] = {
     for {
       height <- Gen.posNum[Int]
       amount <- Gen.choose(1L, 100000L)
       balances <- additionalTokensGen
     } yield {
       val encodedBalances = balances.map { case (x1, x2) => encodedTokenId(x1) -> x2 }.toMap
-      RegistryDigest(height, amount, encodedBalances)
+      WalletDigest(height, amount, encodedBalances)
     }
   }
 

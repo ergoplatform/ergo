@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.IdUtils._
-import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
+import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.fixtures.WalletFixture
 import scorex.crypto.authds.ADKey
@@ -38,10 +38,10 @@ trait WalletTestOps extends NodeViewBaseOps {
   def getSecret(implicit w: WalletFixture): Option[DLogProverInput] =
     await(w.wallet.firstSecret).toOption
 
-  def getConfirmedBalances(implicit w: WalletFixture): RegistryDigest =
+  def getConfirmedBalances(implicit w: WalletFixture): WalletDigest =
     await(w.wallet.confirmedBalances)
 
-  def getBalancesWithUnconfirmed(implicit w: WalletFixture): RegistryDigest =
+  def getBalancesWithUnconfirmed(implicit w: WalletFixture): WalletDigest =
     await(w.wallet.balancesWithUnconfirmed)
 
   def scanningInterval(implicit ctx: Ctx): Long = ctx.settings.walletSettings.scanningInterval.toMillis

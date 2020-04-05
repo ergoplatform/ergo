@@ -7,9 +7,10 @@ import org.iq80.leveldb.{DB, ReadOptions}
 import scala.collection.mutable
 
 /**
-  * Basic interface for key-value storage. Both keys and values are var-sized byte arrays.
+  * Basic interface for reading from LevelDB key-value storage.
+  * Both keys and values are var-sized byte arrays.
   */
-trait KVStore extends AutoCloseable {
+trait KVStoreReader extends AutoCloseable {
 
   type K = Array[Byte]
   type V = Array[Byte]

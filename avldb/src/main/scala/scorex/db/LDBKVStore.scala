@@ -6,8 +6,10 @@ import scorex.util.ScorexLogging
 
 /**
   * A LevelDB wrapper providing a convenient db interface.
+  *
+  * Both keys and values are var-sized byte arrays.
   */
-class LDBKVStore(protected val db: DB) extends KVStore with ScorexLogging {
+class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging {
 
   def update(toInsert: Seq[(K, V)], toRemove: Seq[K]): Unit = {
     val batch = db.createWriteBatch()
@@ -27,7 +29,7 @@ class LDBKVStore(protected val db: DB) extends KVStore with ScorexLogging {
   def remove(keys: Seq[K]): Unit = update(Seq.empty, keys)
 
   /**
-    * Get last key within some range by used comparator.
+    * Get last key within some range (inclusive) by used comparator.
     * Could be useful for applications with sequential ids.
     * The method iterates over all the keys so could be slow if there are many keys in the range.
     */

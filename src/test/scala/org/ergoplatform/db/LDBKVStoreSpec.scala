@@ -54,6 +54,8 @@ class LDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
       store.lastKeyInRange(valueD._1, valueF._1).get.toSeq shouldBe valueF._1.toSeq
       store.lastKeyInRange(valueF._1, byteString32("Z")).get.toSeq shouldBe valueF._1.toSeq
       store.lastKeyInRange(Array(10: Byte), valueA._1).get.toSeq shouldBe valueA._1.toSeq
+
+      store.lastKeyInRange(Array(10: Byte), Array(11: Byte)).isDefined shouldBe false
     }
   }
 

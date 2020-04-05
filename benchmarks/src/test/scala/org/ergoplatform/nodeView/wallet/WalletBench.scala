@@ -9,7 +9,7 @@ import org.ergoplatform.Utils
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.NVBenchmark
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{ReadBalances, ScanOnChain}
-import org.ergoplatform.nodeView.wallet.persistence.RegistryDigest
+import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.wallet.boxes.{ChainStatus, DefaultBoxSelector}
 import scorex.testkit.utils.FileUtils
@@ -41,7 +41,7 @@ object WalletBench
 
   private def bench(blocks: Seq[ErgoFullBlock]): Unit = {
     blocks.foreach(walletRef ! ScanOnChain(_))
-    val balancesF: Future[RegistryDigest] = (walletRef ? ReadBalances(ChainStatus.OnChain)).mapTo[RegistryDigest]
+    val balancesF: Future[WalletDigest] = (walletRef ? ReadBalances(ChainStatus.OnChain)).mapTo[WalletDigest]
     Await.result(balancesF, 10.minutes)
   }
 

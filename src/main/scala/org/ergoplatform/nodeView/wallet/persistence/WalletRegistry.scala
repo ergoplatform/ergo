@@ -80,13 +80,13 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
       }
   }
 
-  def fetchDigest(): RegistryDigest = {
+  def fetchDigest(): WalletDigest = {
     store.get(RegistrySummaryKey)
       .flatMap(r => RegistryDigestSerializer.parseBytesTry(r).toOption)
-      .getOrElse(RegistryDigest.empty)
+      .getOrElse(WalletDigest.empty)
   }
 
-  def updateDigest(bag: KeyValuePairsBag)(updateF: RegistryDigest => RegistryDigest): KeyValuePairsBag = {
+  def updateDigest(bag: KeyValuePairsBag)(updateF: WalletDigest => WalletDigest): KeyValuePairsBag = {
     val digest = fetchDigest()
     putDigest(bag, updateF(digest))
   }
@@ -113,7 +113,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     val spentBoxesWithTx = inputs.map(t => t._1 -> t._3)
     val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
 
-    val bag4 = updateDigest(bag3) { case RegistryDigest(height, wBalance, wTokens) =>
+    val bag4 = updateDigest(bag3) { case WalletDigest(height, wBalance, wTokens) =>
       if (height + 1 != blockHeight) {
         log.error(s"Blocks were skipped during wallet scanning, from ${height + 1} until $blockHeight")
       }
@@ -145,7 +145,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
       require(
         (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
         "Balance could not be negative")
-      RegistryDigest(blockHeight, newBalance, newTokensBalance)
+      WalletDigest(blockHeight, newBalance, newTokensBalance)
     }
 
     bag4.transact(store, idToBytes(blockId))
@@ -337,7 +337,7 @@ object WalletRegistry {
     bag.copy(toRemove = bag.toRemove ++ ids.map(txKey))
   }
 
-  def putDigest(bag: KeyValuePairsBag, index: RegistryDigest): KeyValuePairsBag = {
+  def putDigest(bag: KeyValuePairsBag, index: WalletDigest): KeyValuePairsBag = {
     val registryBytes = RegistryDigestSerializer.toBytes(index)
     bag.copy(toInsert = bag.toInsert :+ (RegistrySummaryKey, registryBytes))
   }

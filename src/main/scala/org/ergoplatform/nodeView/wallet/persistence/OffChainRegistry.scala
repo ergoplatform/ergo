@@ -6,6 +6,7 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 
 /**
   * Holds version-agnostic off-chain data (such as off-chain boxes) in runtime memory.
+  * Needed to store aggregate wallet data (including off-chain) with no need fo re-processing it on each request.
   *
   * @param height           - latest processed block height
   * @param offChainBoxes    - boxes from off-chain transactions
@@ -20,7 +21,7 @@ case class OffChainRegistry(height: Int,
   /**
     * Off-chain index considering on-chain balances.
     */
-  val digest: RegistryDigest = {
+  val digest: WalletDigest = {
     val offChainBalances = offChainBoxes.map(Balance.apply)
     val balance = offChainBalances.map(_.value).sum + onChainBalances.map(_.value).sum
     val tokensBalance = (offChainBalances ++ onChainBalances)
@@ -28,7 +29,7 @@ case class OffChainRegistry(height: Int,
       .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
         acc.updated(id, acc.getOrElse(id, 0L) + amt)
       }
-    RegistryDigest(height, balance, tokensBalance)
+    WalletDigest(height, balance, tokensBalance)
   }
 
   /**

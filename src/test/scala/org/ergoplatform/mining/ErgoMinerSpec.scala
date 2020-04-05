@@ -106,7 +106,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     //check that tx is included into UTXO set
     val state = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
-    tx.outputs.foreach(o => state.boxById(o.id) should not be None)
+    tx.outputs.foreach(o => state.boxById(o.id).get shouldBe o)
 
     // try to spend all the boxes with complex scripts
     val complexInputs = tx.outputs.map(o => Input(o.id, emptyProverResult))

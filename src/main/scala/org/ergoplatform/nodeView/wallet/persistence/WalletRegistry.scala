@@ -82,7 +82,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   def fetchDigest(): WalletDigest = {
     store.get(RegistrySummaryKey)
-      .flatMap(r => RegistryDigestSerializer.parseBytesTry(r).toOption)
+      .flatMap(r => WalletDigestSerializer.parseBytesTry(r).toOption)
       .getOrElse(WalletDigest.empty)
   }
 
@@ -338,7 +338,7 @@ object WalletRegistry {
   }
 
   def putDigest(bag: KeyValuePairsBag, index: WalletDigest): KeyValuePairsBag = {
-    val registryBytes = RegistryDigestSerializer.toBytes(index)
+    val registryBytes = WalletDigestSerializer.toBytes(index)
     bag.copy(toInsert = bag.toInsert :+ (RegistrySummaryKey, registryBytes))
   }
 }

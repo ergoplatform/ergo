@@ -4,7 +4,6 @@ import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
 
-import scala.concurrent.duration._
 
 case class NodeViewTestConfig(stateType: StateType,
                               verifyTransactions: Boolean,

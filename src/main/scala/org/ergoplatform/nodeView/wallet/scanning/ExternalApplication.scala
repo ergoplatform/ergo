@@ -8,7 +8,9 @@ import scorex.util.serialization.{Reader, Writer}
 import scala.util.{Failure, Success, Try}
 
 /**
-  * A class which encodes a request to create an application.
+  * Wraps information about user application.
+  *
+  * Application is providing scanning rules for specific boxes, and then work with boxes found by the node.
   *
   * @param appId         - unique identifier of an application in the local system
   * @param appName       - application description (255 bytes in UTF-8 encoding max)
@@ -24,7 +26,7 @@ object ExternalApplication {
 }
 
 /**
-  * A class which encodes a request to create an application.
+  * A class which encodes an API request to create an application.
   *
   * @param appName       - application description (255 bytes in UTF-8 encoding max)
   * @param trackingRule  - a predicate to scan the blockchain for specific application-related boxes

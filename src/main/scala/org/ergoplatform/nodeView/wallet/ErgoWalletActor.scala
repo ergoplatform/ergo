@@ -140,7 +140,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         sender() ! Failure(new Exception("Wallet is locked"))
       }
 
-    //todo: returns only confirmed boxes now is it okay?
     case GetWalletBoxes(unspent) =>
       val currentHeight = height
       sender() ! (if (unspent) registry.walletUnspentBoxes() else registry.walletConfirmedBoxes(0))

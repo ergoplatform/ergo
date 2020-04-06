@@ -29,8 +29,16 @@ final case class DerivationPath(decodedPath: Seq[Int], publicBranch: Boolean) {
 
   def extended(idx: Int): DerivationPath = DerivationPath(decodedPath :+ idx, publicBranch)
 
-  def toPublic: DerivationPath = this.copy(publicBranch = true)
+  /**
+    * Convert the derivation path to public branch. See BIP-32 for details.
+    * @return derivation path from the public branch
+    */
+  def toPublicBranch: DerivationPath = this.copy(publicBranch = true)
 
+  /**
+    * Convert the derivation path to private branch. See BIP-32 for details.
+    * @return derivation path from the private branch
+    */
   def toPrivateBranch: DerivationPath = this.copy(publicBranch = false)
 
   override def toString: String = encoded

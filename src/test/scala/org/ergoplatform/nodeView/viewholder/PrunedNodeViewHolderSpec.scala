@@ -26,7 +26,6 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
         voting = VotingSettings(10, 10, 10),
         blockInterval = BlockInterval
       ),
-      walletSettings = defaultSettings.walletSettings.copy(scanningInterval = 15.millis),
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = StateType.Digest,
         verifyTransactions = true,

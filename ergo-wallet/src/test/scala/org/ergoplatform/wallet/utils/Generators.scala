@@ -137,7 +137,7 @@ trait Generators {
   } yield DerivationPath(0 +: indices, isPublic)
 
   def extendedSecretGen: Gen[ExtendedSecretKey] = for {
-    seed <- Gen.const(Constants.KeyLen).map(scorex.utils.Random.randomBytes)
+    seed <- Gen.const(Constants.SecretKeyLength).map(scorex.utils.Random.randomBytes)
   } yield ExtendedSecretKey.deriveMasterKey(seed)
 
   def extendedPubKeyGen: Gen[ExtendedPublicKey] = extendedSecretGen.map(_.publicKey)

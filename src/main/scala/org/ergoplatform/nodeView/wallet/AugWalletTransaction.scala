@@ -7,7 +7,7 @@ import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 
 /**
-  * A wallet transaction augmented with confirmations number.
+  * A wallet transaction augmented with number of confirmations.
   */
 final case class AugWalletTransaction(wtx: WalletTransaction, numConfirmations: Int)
 

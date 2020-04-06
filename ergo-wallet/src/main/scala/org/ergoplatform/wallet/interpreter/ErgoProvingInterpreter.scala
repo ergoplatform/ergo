@@ -7,8 +7,7 @@ import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext, TransactionContext}
 import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import scorex.util.encode.Base16
-import sigmastate.basics.DLogProtocol
-import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.eval.{CompiletimeIRContext, IRContext}
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
@@ -32,28 +31,43 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[ExtendedSecretKey],
                             (implicit IR: IRContext)
   extends ErgoInterpreter(params) with ProverInterpreter {
 
+  /**
+    * Secrets prover is using to prove (to sing)
+    */
   val secrets: IndexedSeq[DLogProverInput] = secretKeys.map(_.key)
 
+  /**
+    * Public keys corresponding to the secrets
+    */
   val extendedPublicKeys: IndexedSeq[ExtendedPublicKey] = cachedPubKeysOpt match {
     case Some(cachedPubKeys) =>
       if (cachedPubKeys.length != secrets.length) {
-        log.error(s"ErgoProverInterpreter: pubkeys and secrets of different sizes: ${cachedPubKeys.length} and ${secrets.length}")
+        log.error(
+          s"ErgoProverInterpreter: pubkeys and secrets of different sizes: ${cachedPubKeys.length} and ${secrets.length}"
+        )
       }
       cachedPubKeys
     case None =>
       secretKeys.map(_.publicKey) // costly operation if there are many secret keys
   }
 
-  val pubKeys: IndexedSeq[DLogProtocol.ProveDlog] = extendedPublicKeys.map(_.key)
+  /**
+    * ProveDlog propositions corresponding to the public keys of the prover
+    */
+  val proveDlogs: IndexedSeq[ProveDlog] = extendedPublicKeys.map(_.key)
 
+  /**
+    * Produces updated instance of ErgoProvingInterpreter with a new secret included
+    * @param secret - new secret to add
+    * @return modified prover
+    */
   def withNewSecret(secret: ExtendedSecretKey): (ErgoProvingInterpreter, ExtendedPublicKey) = {
     val newPk = secret.publicKey
-    val sks = secretKeys :+ secret
-    val pks = extendedPublicKeys :+ newPk
+    val sks   = secretKeys :+ secret
+    val pks   = extendedPublicKeys :+ newPk
     log.info(s"New secret created, public image: ${Base16.encode(newPk.key.pkBytes)}")
     new ErgoProvingInterpreter(sks, params, Some(pks)) -> newPk
   }
-
 
   /**
     * @note requires `unsignedTx` and `boxesToSpend` have the same boxIds in the same order.

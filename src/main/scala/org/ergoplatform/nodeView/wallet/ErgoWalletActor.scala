@@ -467,7 +467,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       .map(_.pubkey)
       .getOrElse {
         log.warn("Change address not specified. Using root address from wallet.")
-        prover.pubKeys.head
+        prover.proveDlogs.head
       }
 
     val changeBoxCandidates = r.changeBoxes.map { changeBox =>

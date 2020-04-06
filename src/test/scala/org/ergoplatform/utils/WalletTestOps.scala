@@ -44,18 +44,8 @@ trait WalletTestOps extends NodeViewBaseOps {
   def getBalancesWithUnconfirmed(implicit w: WalletFixture): WalletDigest =
     await(w.wallet.balancesWithUnconfirmed)
 
-  def scanningInterval(implicit ctx: Ctx): Long = ctx.settings.walletSettings.scanningInterval.toMillis
-
-  def waitForScanning(block: ErgoFullBlock)(implicit ctx: Ctx): Unit = blocking(Thread.sleep(scanTime(block)))
-
-  def scanTime(block: ErgoFullBlock)(implicit ctx: Ctx): Long = {
-    val boxes = block.transactions.flatMap(_.outputs)
-    val tokens = boxes.flatMap(_.additionalTokens.toArray)
-    scanTime(boxes.size, tokens.size)
-  }
-
-  def scanTime(boxCount: Int, tokenCount: Int)(implicit ctx: Ctx): Long =
-    boxCount * scanningInterval + tokenCount * scanningInterval * 2 + 5000
+  // Wait for 5 seconds
+  def waitForScanning(block: ErgoFullBlock)(implicit ctx: Ctx): Unit = blocking(Thread.sleep(5000))
 
   def waitForOffchainScanning(tx: ErgoTransaction): Unit = blocking(Thread.sleep(offchainScanTime(tx)))
 
@@ -119,21 +109,25 @@ trait WalletTestOps extends NodeViewBaseOps {
              assets: Seq[(TokenId, Long)] = Seq.empty): ErgoTransaction = {
     val inputs = boxesToSpend.map(box => Input(box.id, proofToSpend))
     val balanceToSpend = boxesToSpend.map(_.value).sum - balanceToReturn
+
     def creatingCandidate = new ErgoBoxCandidate(balanceToReturn, scriptToReturn, startHeight, replaceNewAssetStub(assets, inputs).toColl)
+
     val spendingOutput = if (balanceToSpend > 0) Some(new ErgoBoxCandidate(balanceToSpend, Constants.TrueLeaf, creationHeight = startHeight)) else None
     val creatingOutput = if (balanceToReturn > 0) Some(creatingCandidate) else None
     ErgoTransaction(inputs.toIndexedSeq, spendingOutput.toIndexedSeq ++ creatingOutput.toIndexedSeq)
   }
 
   private def replaceNewAssetStub(assets: Seq[(TokenId, Long)], inputs: Seq[Input]): Seq[(TokenId, Long)] = {
-    def isNewAsset(tokenId: TokenId, value: Long): Boolean =  java.util.Arrays.equals(tokenId, newAssetIdStub)
+    def isNewAsset(tokenId: TokenId, value: Long): Boolean = java.util.Arrays.equals(tokenId, newAssetIdStub)
+
     val (newAsset, spentAssets) = assets.partition((isNewAsset _).tupled)
     newAsset.map(Digest32 @@ inputs.head.boxId -> _._2) ++ spentAssets
   }
 
   def randomNewAsset: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> randomLong())
+
   def assetsWithRandom(boxes: Seq[ErgoBox]): Seq[(TokenId, Long)] = randomNewAsset ++ assetsByTokenId(boxes)
 
-  val fakeInputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), emptyProverResult))
+  val fakeInputs: IndexedSeq[Input] = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), emptyProverResult))
 
 }

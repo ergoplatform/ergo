@@ -16,7 +16,6 @@ case class NodeViewTestConfig(stateType: StateType,
       chainSettings = defaultSettings.chainSettings.copy(
         powScheme = new DefaultFakePowScheme(defaultSettings.chainSettings.powScheme.k, defaultSettings.chainSettings.powScheme.n)
       ),
-      walletSettings = defaultSettings.walletSettings.copy(scanningInterval = 15.millis),
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = stateType,
         verifyTransactions = verifyTransactions,

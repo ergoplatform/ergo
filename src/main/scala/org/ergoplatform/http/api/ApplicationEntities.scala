@@ -8,13 +8,14 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.Constants.ApplicationId
 import scorex.crypto.authds.ADKey
 
-//Application-related classes and objects
+/**
+  * Application-related classes and objects needed for API
+  */
 object ApplicationEntities {
 
   case class ApplicationIdWrapper(appId: ApplicationId)
 
   object ApplicationIdWrapper extends ApiCodecs {
-
 
     implicit val applicationIdWrapperEncoder: Encoder[ApplicationIdWrapper] = { appStatus =>
       Json.obj("appId" -> appStatus.appId.asJson)

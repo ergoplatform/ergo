@@ -48,7 +48,7 @@ libraryDependencies ++= Seq(
   "com.google.guava" % "guava" % "21.0",
   "com.joefkelley" %% "argyle" % "1.0.0",
 
-  "com.github.oskin1" %% "scakoo" % "0.4.1",
+  "com.github.oskin1" %% "scakoo" % "0.4.1", // Cuckoo filter implementation
 
   "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
   "com.storm-enroute" %% "scalameter" % "0.9" % "test",

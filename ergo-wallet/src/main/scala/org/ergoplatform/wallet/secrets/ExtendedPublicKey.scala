@@ -49,7 +49,7 @@ object ExtendedPublicKey {
     require(!Index.isHardened(idx), "Hardened public keys derivation is not supported")
     val (childKeyProto, childChainCode) = HmacSHA512
       .hash(parentKey.chainCode, parentKey.keyBytes ++ Index.serializeIndex(idx))
-      .splitAt(Constants.KeyLen)
+      .splitAt(Constants.SecretKeyLength)
     val childKeyProtoDecoded = BigIntegers.fromUnsignedByteArray(childKeyProto)
     val childKey = DLogProverInput(childKeyProtoDecoded).publicImage.value.add(parentKey.key.value)
     if (childKeyProtoDecoded.compareTo(CryptoConstants.groupOrder) >= 0 || childKey.isInfinity)
@@ -65,7 +65,7 @@ object ExtendedPublicKeySerializer extends ErgoWalletSerializer[ExtendedPublicKe
   import scorex.util.Extensions._
 
   //ASN.1 encoding for secp256k1 points - 1 byte for sign + 32 bytes for x-coordinate of the point
-  val PublicKeyBytesSize: Int = Constants.KeyLen + 1
+  val PublicKeyBytesSize: Int = Constants.SecretKeyLength + 1
 
   override def serialize(obj: ExtendedPublicKey, w: Writer): Unit = {
     w.putBytes(obj.keyBytes)
@@ -77,7 +77,7 @@ object ExtendedPublicKeySerializer extends ErgoWalletSerializer[ExtendedPublicKe
 
   override def parse(r: Reader): ExtendedPublicKey = {
     val keyBytes = r.getBytes(PublicKeyBytesSize)
-    val chainCode = r.getBytes(Constants.KeyLen)
+    val chainCode = r.getBytes(Constants.SecretKeyLength)
     val pathLen = r.getUInt().toIntExact
     val path = DerivationPathSerializer.parseBytes(r.getBytes(pathLen))
     new ExtendedPublicKey(keyBytes, chainCode, path)

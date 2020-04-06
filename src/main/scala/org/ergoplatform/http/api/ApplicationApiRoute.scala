@@ -37,7 +37,7 @@ case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettin
   override val route: Route = (pathPrefix("application") & withAuth) {
     registerR ~
       deregisterR ~
-      listR ~
+      listAppsR ~
       unspentR ~
       stopTrackingR
   }
@@ -57,7 +57,7 @@ case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettin
   }
 
   //todo: paging?
-  def listR: Route = (path("listAll") & get) {
+  def listAppsR: Route = (path("listAll") & get) {
     withWallet(_.readApplications())
   }
 

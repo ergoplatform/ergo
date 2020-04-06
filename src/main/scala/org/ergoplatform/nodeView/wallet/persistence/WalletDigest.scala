@@ -24,7 +24,7 @@ object WalletDigest {
 
 }
 
-object RegistryDigestSerializer extends ScorexSerializer[WalletDigest] {
+object WalletDigestSerializer extends ScorexSerializer[WalletDigest] {
 
   override def serialize(obj: WalletDigest, w: Writer): Unit = {
     w.putInt(obj.height)

@@ -25,7 +25,7 @@ final class ExtendedSecretKey(val keyBytes: Array[Byte],
   def child(idx: Int): ExtendedSecretKey = ExtendedSecretKey.deriveChildSecretKey(this, idx)
 
   def publicKey: ExtendedPublicKey =
-    new ExtendedPublicKey(key.publicImage.value.getEncoded(true), chainCode, path.toPublic)
+    new ExtendedPublicKey(key.publicImage.value.getEncoded(true), chainCode, path.toPublicBranch)
 
   def isErased: Boolean = keyBytes.forall(_ == 0x00)
 

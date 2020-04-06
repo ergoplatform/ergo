@@ -55,8 +55,9 @@ trait ApiCodecs extends JsonCodecs {
     )
   }
 
-  // todo: this val is named "anyRegisterIdEncoder" because parent trait already contains
+  // this val is named "anyRegisterIdEncoder" because parent trait already contains
   // "registerIdEncoder" which is actually a KeyEncoder for NonMandatoryRegisterId
+  // todo: rename "registerIdEncoder" into "nonMandatoryRegisterId" in parent trait in sigma repo
   implicit val anyRegisterIdEncoder: Encoder[RegisterId] = { regId =>
     s"R${regId.number}".asJson
   }
@@ -69,11 +70,11 @@ trait ApiCodecs extends JsonCodecs {
     } yield reg
   }
 
-  implicit val applicationIdEncoder: Encoder[ApplicationId] = {appId =>
+  implicit val applicationIdEncoder: Encoder[ApplicationId] = { appId =>
     appId.toShort.asJson
   }
 
-  implicit val applicationDecoder: Decoder[ApplicationId] = {c: HCursor =>
+  implicit val applicationDecoder: Decoder[ApplicationId] = { c: HCursor =>
     ApplicationId @@ c.as[Short]
   }
 

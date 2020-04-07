@@ -7,9 +7,6 @@ scorex.yaml
 # scala build folders
 target
 
-# dotfiles
-.editorconfig
-
 # standalone docker
 !Dockerfile
 
@@ -55,3 +52,12 @@ local.conf
 
 # osx files
 .DS_Store
+
+# metals, bloop, vscode
+.bloop/
+.metals/
+.vscode/
+project/metals.sbt
+
+# scala worksheets
+*.worksheet.sc

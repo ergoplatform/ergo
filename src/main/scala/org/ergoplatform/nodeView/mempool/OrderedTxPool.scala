@@ -95,7 +95,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
   def canAccept(tx: ErgoTransaction): Boolean = {
     val weight = weighted(tx).weight
     !isInvalidated(tx.id) && !contains(tx.id) &&
-      (size < settings.nodeSettings.mempoolCapacity ||
+      (size < mempoolCapacity ||
         weight > updateFamily(tx, weight).orderedTransactions.firstKey.weight)
   }
 

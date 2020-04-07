@@ -61,8 +61,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   extends ErgoLikeStateContext
     with BytesSerializable
     with ScorexEncoding
-    with ScorexLogging
-{
+    with ScorexLogging {
 
   override type M = ErgoStateContext
 
@@ -129,28 +128,42 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                               (validationState: ValidationState[Unit]): Try[(Parameters, ErgoValidationSettings)] = {
     val height = header.height
     val parsedParamsTry = Parameters.parseExtension(height, extension)
-    val parsedValidationTry = ErgoValidationSettings.parseExtension(extension)
+    val parsedValidationSettingsTry = ErgoValidationSettings.parseExtension(extension)
 
     validationState
       .validateNoFailure(exParseParameters, parsedParamsTry)
-      .validateNoFailure(exParseValidationSettings, parsedValidationTry)
+      .validateNoFailure(exParseValidationSettings, parsedValidationSettingsTry)
       .validateTry(parsedParamsTry, e => ModifierValidator.fatal("Failed to parse parameters", e)) {
-        case (currentValidationState, parsedParams) =>
+        case (vs, parsedParams) =>
+          vs.validateTry(parsedValidationSettingsTry, e => ModifierValidator.fatal("Failed to parse validation settings", e)) {
+            case (currentValidationState, parsedSettings) =>
 
-          val (calculatedParams, disabled) = currentParameters
-            .update(height, forkVote, votingData.epochVotes, parsedParams.proposedUpdate, votingSettings)
-          val calculatedSettings = validationSettings.updated(disabled)
+              /*
+               Calculating blockchain parameters and validation rules based on the locally stored blockchain,
+               to compare them then with announced ones.
+               If current parameters height is equal to 0, it means that whether it is first epoch after genesis,
+               or node is starting in light regime with validating suffix only. For the former case, we assume that
+               parameters and validation settings were not changed, which is true for both Ergo mainnet and testnet.
+               For the latter case, the light fullnode is just relied on PoW majority about parameters and validation
+               settings.
+               */
+              val (calculatedParams, calculatedSettings) = if (currentParameters.height == 0) {
+                parsedParams -> parsedSettings
+              } else {
+                val (params, settingsUpdates) = currentParameters
+                  .update(height, forkVote, votingData.epochVotes, parsedParams.proposedUpdate, votingSettings)
+                val settings = validationSettings.updated(settingsUpdates)
+                params -> settings
+              }
 
-          currentValidationState
-            .validate(exBlockVersion, calculatedParams.blockVersion == header.version, s"${calculatedParams.blockVersion} == ${header.version}")
-            .validateNoFailure(exMatchParameters, Parameters.matchParameters(parsedParams, calculatedParams))
-            .validateTry(parsedValidationTry, e => ModifierValidator.fatal("Failed to parse validation settings", e)) {
-              case (vs, parsedSettings) =>
-                vs.validate(exMatchValidationSettings, parsedSettings == calculatedSettings, s"$parsedSettings vs $calculatedSettings")
-            }
-      }.result.toTry
-      .flatMap(_ => parsedParamsTry.flatMap(p => parsedValidationTry.map(vs => (p, vs))))
-
+              currentValidationState
+                .validate(exBlockVersion, calculatedParams.blockVersion == header.version, s"${calculatedParams.blockVersion} == ${header.version}")
+                .validateNoFailure(exMatchParameters, Parameters.matchParameters(parsedParams, calculatedParams))
+                .validate(exMatchValidationSettings, parsedSettings == calculatedSettings, s"$parsedSettings vs $calculatedSettings")
+          }.result
+      }.result
+      .toTry
+      .flatMap(_ => parsedParamsTry.flatMap(p => parsedValidationSettingsTry.map(vs => (p, vs))))
   }
 
   def process(header: Header, extensionOpt: Option[Extension]): Try[ErgoStateContext] = {
@@ -198,7 +211,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     if (lastHeaders.isEmpty) {
       log.info(s"Last headers are empty, starting assembling state context with $header")
     }
-    if(lastHeaders.isEmpty || lastHeaders.head.height + 1 == header.height) {
+    if (lastHeaders.isEmpty || lastHeaders.head.height + 1 == header.height) {
       Success(())
     } else {
       Failure(new Exception(s"Improper application of $header (last applied header is $lastHeaderOpt: " +

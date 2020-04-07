@@ -729,54 +729,156 @@ object ErgoWalletActor {
 
   // Signals for the wallet actor
 
+  /**
+    * Command to scan offchain transaction
+    * @param tx - offchain transaction
+    */
   final case class ScanOffChain(tx: ErgoTransaction)
 
+  /**
+    * Command to scan a block
+    * @param block - block to scan
+    */
   final case class ScanOnChain(block: ErgoFullBlock)
 
+  /**
+    * Rollback to previous version of the wallet, by throwing away effects of blocks after the version
+    * @param version
+    */
   final case class Rollback(version: VersionTag)
 
+  /**
+    * Generate new transaction fulfilling given requests
+    * @param requests
+    * @param inputsRaw
+    */
   final case class GenerateTransaction(requests: Seq[TransactionRequest], inputsRaw: Seq[String])
 
+  /**
+    *
+    * @param chainStatus
+    */
   final case class ReadBalances(chainStatus: ChainStatus)
 
+  /**
+    * Read a slice of wallet public keys
+    * @param from
+    * @param until
+    */
   final case class ReadPublicKeys(from: Int, until: Int)
 
-  final case class InitWallet(pass: String, mnemonicPassOpt: Option[String])
+  /**
+    * Initialize wallet with given wallet pass and optional mnemonic pass (according to BIP-32)
+    * @param walletPass
+    * @param mnemonicPassOpt
+    */
+  final case class InitWallet(walletPass: String, mnemonicPassOpt: Option[String])
 
-  final case class RestoreWallet(mnemonic: String, passOpt: Option[String], encryptionPass: String)
+  /**
+    * Restore wallet with mnemonic, optional mnemonic password and (mandatory) wallet encryption password
+    * @param mnemonic
+    * @param mnemonicPassOpt
+    * @param walletPass
+    */
+  final case class RestoreWallet(mnemonic: String, mnemonicPassOpt: Option[String], walletPass: String)
 
-  final case class UnlockWallet(pass: String)
+  /**
+    * Unlock wallet with wallet password
+    * @param walletPass
+    */
+  final case class UnlockWallet(walletPass: String)
 
+  /**
+    * Derive key with given path according to BIP-32
+    * @param path
+    */
   final case class DeriveKey(path: String)
 
+  /**
+    * Get boxes related to P2PK payments
+    * @param unspentOnly
+    */
   final case class GetWalletBoxes(unspentOnly: Boolean)
 
+  /**
+    * Get boxes related to an application
+    * @param unspentOnly
+    */
   final case class GetAppBoxes(appId: ApplicationId, unspentOnly: Boolean)
 
+  /**
+    * Set or update address for change outputs. Initially the address is set to root key address
+    * @param address
+    */
   final case class UpdateChangeAddress(address: P2PKAddress)
 
+  /**
+    * Command to register new application
+    * @param appRequest
+    */
   final case class AddApplication(appRequest: ExternalAppRequest)
 
+  /**
+    * Wallet's response for application registration request
+    * @param response
+    */
   final case class AddApplicationResponse(response: Try[ExternalApplication])
 
+  /**
+    * Command to deregister an application
+    * @param appId
+    */
   final case class RemoveApplication(appId: ApplicationId)
 
+  /**
+    * Wallet's response for application removal request
+    * @param response
+    */
   final case class RemoveApplicationResponse(response: Try[Unit])
 
+  /**
+    * Get wallet-related transaction
+    * @param id
+    */
   final case class GetTransaction(id: ModifierId)
 
+  /**
+    * Get all wallet-related transaction
+    */
   case object GetTransactions
 
+  /**
+    * Derive next key-pair according to BIP-32
+    * //todo: describe procedure or provide a link
+    */
   case object DeriveNextKey
 
+  /**
+    * Lock wallet
+    */
   case object LockWallet
 
+  /**
+    * Get wallet status
+    */
   case object GetLockStatus
 
+  /**
+    * Get root secret key (used in miner)
+    */
   case object GetFirstSecret
 
+  /**
+    * Get registered applications list
+    */
   case object ReadApplications
 
+  /**
+    * Remove association between an application and a box (remove a box if its the only one which belongs to the
+    * application)
+    * @param appId
+    * @param boxId
+    */
   case class StopTracking(appId: ApplicationId, boxId: BoxId)
 
 }

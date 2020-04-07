@@ -26,6 +26,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
 
   import WalletStorage._
 
+  //todo: pre-3.3.0 method for storing derivation paths, not used anymore, aside of test for readPaths
+  //      remove after 3.3.0 release
   private[persistence] def addPath(derivationPath: DerivationPath): Unit = {
     val updatedPaths = (readPaths :+ derivationPath).toSet
     val toInsert = Ints.toByteArray(updatedPaths.size) ++ updatedPaths
@@ -36,14 +38,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     store.insert(Seq(SecretPathsKey -> toInsert))
   }
 
-  def addKey(publicKey: ExtendedPublicKey): Unit = {
-    store.insert(Seq(pubKeyPrefixKey(publicKey) -> ExtendedPublicKeySerializer.toBytes(publicKey)))
-  }
-
-  def readAllKeys(): Seq[ExtendedPublicKey] = store.getRange(FirstPublicKeyId, LastPublicKeyId).map { case (_, v) =>
-    ExtendedPublicKeySerializer.parseBytes(v)
-  }
-
+  //todo: used now only for importing pre-3.3.0 wallet database, remove after while
   def readPaths(): Seq[DerivationPath] = store
     .get(SecretPathsKey)
     .toSeq
@@ -59,21 +54,56 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
       }._1
     }
 
+  /**
+    * Remove pre-3.3.0 derivation paths
+    */
   def removePaths(): Unit = store.remove(Seq(SecretPathsKey))
 
+  /**
+    * Store wallet-related public key in the database
+    * @param publicKey - public key to store
+    */
+  def addKey(publicKey: ExtendedPublicKey): Unit = {
+    store.insert(Seq(pubKeyPrefixKey(publicKey) -> ExtendedPublicKeySerializer.toBytes(publicKey)))
+  }
+
+  /**
+    * Read wallet-related public keys from the database
+    * @return wallet public keys
+    */
+  def readAllKeys(): Seq[ExtendedPublicKey] = store.getRange(FirstPublicKeyId, LastPublicKeyId).map { case (_, v) =>
+    ExtendedPublicKeySerializer.parseBytes(v)
+  }
+
+  /**
+    * Write state context into the database
+    * @param ctx - state context
+    */
   def updateStateContext(ctx: ErgoStateContext): Unit = store
     .insert(Seq(StateContextKey -> ctx.bytes))
 
+  /**
+    * Read state context from the database
+    * @return state context read
+    */
   def readStateContext: ErgoStateContext = store
     .get(StateContextKey)
     .flatMap(r => ErgoStateContextSerializer(settings.chainSettings.voting).parseBytesTry(r).toOption)
     .getOrElse(ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte), settings))
 
+  /**
+    * Update address used by the wallet for change outputs
+    * @param address - new changed address
+    */
   def updateChangeAddress(address: P2PKAddress): Unit = {
     val bytes = addressEncoder.toString(address).getBytes(Constants.StringEncoding)
     store.insert(Seq(ChangeAddressKey -> bytes))
   }
 
+  /**
+    * Read address used by the wallet for change outputs. If not set, default wallet address is used (root address)
+    * @return optional change address
+    */
   def readChangeAddress: Option[P2PKAddress] =
     store.get(ChangeAddressKey).flatMap { x =>
       addressEncoder.fromString(new String(x, Constants.StringEncoding)) match {
@@ -82,25 +112,47 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
       }
     }
 
+  /**
+    * Register an application (according to EIP-1)
+    * @param appReq - request for an application
+    * @return application or error (e.g. if application identifier space is exhausted)
+    */
   def addApplication(appReq: ExternalAppRequest): Try[ExternalApplication] = {
-    val id = ApplicationId @@ (lastUsedId + 1).toShort
+    val id = ApplicationId @@ (lastUsedAppId + 1).toShort
     appReq.toApp(id).flatMap { app =>
       Try(store.insert(Seq(appPrefixKey(id) -> ExternalApplicationSerializer.toBytes(app)))).map(_ => app)
     }
   }
 
+  /**
+    * Remove an application from the database
+    * @param id application identifier
+    */
   def removeApplication(id: Short): Unit =
     store.remove(Seq(appPrefixKey(id)))
 
+  /**
+    * Get application by its identifier
+    * @param id application identifier
+    * @return application stored in the database, or None
+    */
   def getApplication(id: Short): Option[ExternalApplication] =
     store.get(appPrefixKey(id)).map(bytes => ExternalApplicationSerializer.parseBytes(bytes))
 
+  /**
+    * Read all the applications from the database
+    * @return applications stored in the database
+    */
   def allApplications: Seq[ExternalApplication] = {
     store.getRange(SmallestPossibleApplicationId, BiggestPossibleApplicationId)
       .map { case (_, v) => ExternalApplicationSerializer.parseBytes(v) }
   }
 
-  def lastUsedId: Short = store.lastKeyInRange(SmallestPossibleApplicationId, BiggestPossibleApplicationId)
+  /**
+    * Last inserted application identifier (as they are growing sequentially)
+    * @return identifier of last inserted application
+    */
+  def lastUsedAppId: Short = store.lastKeyInRange(SmallestPossibleApplicationId, BiggestPossibleApplicationId)
     .map(bs => Shorts.fromByteArray(bs.takeRight(2)))
     .getOrElse(PaymentsAppId)
 

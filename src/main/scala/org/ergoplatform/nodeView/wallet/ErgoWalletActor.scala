@@ -161,10 +161,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! registry.getTx(id)
         .map(tx => AugWalletTransaction(tx, height - tx.inclusionHeight))
 
-    case ReadRandomPublicKey =>
-      val publicKeys = walletVars.publicKeyAddresses
-      sender() ! publicKeys(Random.nextInt(publicKeys.size))
-
     case ReadApplications =>
       sender() ! walletVars.externalApplications
   }
@@ -731,7 +727,7 @@ object ErgoWalletActor {
     }
   }
 
-  final case class WatchFor(address: ErgoAddress)
+  // Signals for the wallet actor
 
   final case class ScanOffChain(tx: ErgoTransaction)
 
@@ -778,8 +774,6 @@ object ErgoWalletActor {
   case object GetLockStatus
 
   case object GetFirstSecret
-
-  case object ReadRandomPublicKey
 
   case object ReadApplications
 

@@ -83,9 +83,6 @@ trait ErgoWalletReader extends VaultReader {
   def transactionById(id: ModifierId): Future[Option[AugWalletTransaction]] =
     (walletActor ? GetTransaction(id)).mapTo[Option[AugWalletTransaction]]
 
-  def randomPublicKey: Future[P2PKAddress] =
-    (walletActor ? ReadRandomPublicKey).mapTo[P2PKAddress]
-
   def generateTransaction(requests: Seq[TransactionRequest],
                           inputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
     (walletActor ? GenerateTransaction(requests, inputsRaw)).mapTo[Try[ErgoTransaction]]

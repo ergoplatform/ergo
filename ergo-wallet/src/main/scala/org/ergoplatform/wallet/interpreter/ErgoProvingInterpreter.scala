@@ -32,7 +32,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[ExtendedSecretKey],
   extends ErgoInterpreter(params) with ProverInterpreter {
 
   /**
-    * Secrets prover is using to prove (to sing)
+    * Secrets prover is using to prove (to sign)
     */
   val secrets: IndexedSeq[DLogProverInput] = secretKeys.map(_.key)
 

@@ -34,14 +34,30 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   private val keepHistory = ws.keepSpentBoxes
 
+  /**
+    * Read wallet-related box with metadata
+    * @param id - box identifier (the same as Ergobox identifier)
+    * @return wallet related box if it is stored in the database, None otherwise
+    */
   def getBox(id: BoxId): Option[TrackedBox] = {
     store.get(key(id)).flatMap(r => TrackedBoxSerializer.parseBytesTry(r).toOption)
   }
 
+
+  /**
+    * Read wallet-related boxes with metadata, see getBox
+    * @param ids - box identifier
+    * @return wallet related boxes (optional result for each box)
+    */
   def getBoxes(ids: Seq[BoxId]): Seq[Option[TrackedBox]] = {
     ids.map(id => store.get(key(id)).flatMap(x => TrackedBoxSerializer.parseBytesTry(x).toOption))
   }
 
+  /**
+    * Read unspent boxes which belong to given application
+    * @param appId - application identifier
+    * @return sequences of application-related unspent boxes found in the database
+    */
   def unspentBoxes(appId: ApplicationId): Seq[TrackedBox] = {
     store.getRange(firstAppBoxSpaceKey(appId), lastAppBoxSpaceKey(appId))
       .flatMap { case (_, boxId) =>
@@ -49,6 +65,11 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
       }
   }
 
+  /**
+    * Read spent boxes which belong to given application
+    * @param appId - application identifier
+    * @return sequences of application-related spent boxes found in the database
+    */
   def spentBoxes(appId: ApplicationId): Seq[TrackedBox] = {
     store.getRange(firstSpentAppBoxSpaceKey(appId), lastSpentAppBoxSpaceKey(appId))
       .flatMap { case (_, boxId) =>
@@ -56,23 +77,49 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
       }
   }
 
+  /**
+    * Unspent boxes belong to payments application
+    */
   def walletUnspentBoxes(): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsAppId)
 
+  /**
+    * Spent boxes belong to payments application
+    */
   def walletSpentBoxes(): Seq[TrackedBox] = spentBoxes(Constants.PaymentsAppId)
 
+  /**
+    * Read boxes with certain number of confirmations at most, both spent or not
+    * @param appId application identifier
+    * @param fromHeight min height when box was included into the blockchain
+    * @return sequence of application-related boxes
+    */
   def confirmedBoxes(appId: ApplicationId, fromHeight: Int): Seq[TrackedBox] = {
     store.getRange(firstIncludedAppBoxSpaceKey(appId, fromHeight), lastIncludedAppBoxSpaceKey(appId)).flatMap { case (_, boxId) =>
       getBox(ADKey @@ boxId)
     }
   }
 
+  /**
+    * Read boxes belong to the payment application with certain number of confirmations at most, both spent or not
+    * @param fromHeight min height when box was included into the blockchain
+    * @return sequence of (P2PK-payment)-related boxes
+    */
   def walletConfirmedBoxes(fromHeight: Int): Seq[TrackedBox] = confirmedBoxes(Constants.PaymentsAppId, fromHeight)
 
+  /**
+    *
+    * @param id
+    * @return
+    */
   def getTx(id: ModifierId): Option[WalletTransaction] = {
     store.get(txKey(id)).flatMap(r => WalletTransactionSerializer.parseBytesTry(r).toOption)
   }
 
   //todo: filter by application
+  /**
+    * Read all the wallet-related transactions
+    * @return all the transactions for all the applications
+    */
   def allWalletTxs(): Seq[WalletTransaction] = {
     store.getRange(FirstTxSpaceKey, LastTxSpaceKey)
       .flatMap { case (_, txBytes) =>
@@ -80,12 +127,20 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
       }
   }
 
+  /**
+    * Read aggregate wallet information
+    * @return wallet digest
+    */
   def fetchDigest(): WalletDigest = {
     store.get(RegistrySummaryKey)
       .flatMap(r => WalletDigestSerializer.parseBytesTry(r).toOption)
       .getOrElse(WalletDigest.empty)
   }
 
+
+  /**
+    * Update aggregate wallet information
+    */
   def updateDigest(bag: KeyValuePairsBag)(updateF: WalletDigest => WalletDigest): KeyValuePairsBag = {
     val digest = fetchDigest()
     putDigest(bag, updateF(digest))
@@ -189,6 +244,11 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     }
   }
 
+  /**
+    * Remove association between an application and a box
+    * @param appId application identifier
+    * @param boxId box identifier
+    */
   def removeApp(appId: ApplicationId, boxId: BoxId): Try[Unit] = {
     getBox(boxId) match {
       case Some(tb) =>

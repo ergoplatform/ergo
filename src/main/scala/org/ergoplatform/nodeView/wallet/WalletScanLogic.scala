@@ -25,7 +25,8 @@ object WalletScanLogic extends ScorexLogging {
   /**
     * Tries to prove the given box in order to define whether it could be spent by this wallet.
     *
-    * todo: currently used only to decide that a box with mining rewards could be spent, do special method for that?
+    * todo: currently used only to decide that a box with mining rewards could be spent,
+    *       do special efficient method for that? The method would just use height, not doing signing.
     */
   private def resolve(box: ErgoBox,
                       proverOpt: Option[ErgoProvingInterpreter],
@@ -43,6 +44,10 @@ object WalletScanLogic extends ScorexLogging {
     proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined
   }
 
+
+  /**
+    * Updates wallet database by scanning and processing block transactions.
+    */
   def scanBlockTransactions(registry: WalletRegistry,
                             offChainRegistry: OffChainRegistry,
                             stateContext: ErgoStateContext,
@@ -51,11 +56,10 @@ object WalletScanLogic extends ScorexLogging {
                             blockId: ModifierId,
                             transactions: Seq[ErgoTransaction]): (WalletRegistry, OffChainRegistry) = {
 
-    //todo: replace with Bloom filter?
+    //todo: inefficient for wallets with many outputs, replace with a Bloom/Cuckoo filter?
     val previousBoxIds = registry.walletUnspentBoxes().map(tb => encodedBoxId(tb.box.id))
 
     val resolvedBoxes = registry.unspentBoxes(MiningRewardsAppId).flatMap { tb =>
-      //todo: more efficient resolving, just by using height
       val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)
       if (spendable) Some(tb.copy(applicationStatuses = Set(PaymentsAppId))) else None
     }

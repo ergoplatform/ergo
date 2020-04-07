@@ -13,6 +13,14 @@ sealed trait ScanningPredicate {
   def filter(box: ErgoBox): Boolean
 }
 
+/**
+  * Scanning predicate to track boxes which contain a register which, in turn, contains certain bytes
+  * (wildcard matching, so register contains *bytes*)
+  *
+  *
+  * @param regId - register identifier
+  * @param bytes - bytes to track
+  */
 case class ContainsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byte]) extends ScanningPredicate {
 
   override def filter(box: ErgoBox): Boolean = {
@@ -34,6 +42,15 @@ case class ContainsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byt
   override def hashCode(): Int = regId.hashCode() * 31 + bytes.toSeq.hashCode()
 }
 
+
+/**
+  * Scanning predicate to track boxes which contain a register which, in turn, contains certain bytes
+  * (exact matching, so register contains exactly bytes)
+  *
+  *
+  * @param regId - register identifier
+  * @param bytes - bytes to track
+  */
 case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byte]) extends ScanningPredicate {
   override def filter(box: ErgoBox): Boolean = {
     box.get(regId).exists {
@@ -54,6 +71,12 @@ case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byte]
   override def toString: String = s"EqualsScanningPredicate($regId, ${Base16.encode(bytes)})"
 }
 
+
+/**
+  * Scanning predicate to track boxes which certain asset.
+  *
+  * @param assetId - bytes to track
+  */
 case class ContainsAssetPredicate(assetId: ErgoBox.TokenId) extends ScanningPredicate {
   override def filter(box: ErgoBox): Boolean = {
     box.additionalTokens.exists(_._1.sameElements(assetId))
@@ -69,10 +92,22 @@ case class ContainsAssetPredicate(assetId: ErgoBox.TokenId) extends ScanningPred
   override def toString: String = s"ContainsAssetPredicate(${Base16.encode(assetId)})"
 }
 
+
+/**
+  * Scanning predicate to track boxes which satisfy all the sub-predicates at the same time.
+  *
+  * @param subPredicates - arbitrary number of sub-predicates
+  */
 case class AndScanningPredicate(subPredicates: ScanningPredicate*) extends ScanningPredicate {
   override def filter(box: ErgoBox): Boolean = subPredicates.forall(p => p.filter(box))
 }
 
+
+/**
+  * Scanning predicate to track boxes which satisfy any of the sub-predicates.
+  *
+  * @param subPredicates - arbitrary number of sub-predicates
+  */
 case class OrScanningPredicate(subPredicates: ScanningPredicate*) extends ScanningPredicate {
   override def filter(box: ErgoBox): Boolean = subPredicates.exists(p => p.filter(box))
 }

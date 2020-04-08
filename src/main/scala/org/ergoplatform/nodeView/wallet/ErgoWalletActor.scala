@@ -34,7 +34,7 @@ import org.ergoplatform.wallet.Constants.{ApplicationId, PaymentsAppId}
 import sigmastate.Values
 
 import scala.concurrent.Future
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Failure, Success, Try}
 
 
 class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
@@ -173,6 +173,18 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   //Secret is set in form of keystore file of testMnemonic in the config
   private def secretIsSet: Boolean = secretStorageOpt.nonEmpty || walletSettings.testMnemonic.nonEmpty
 
+  /**
+    * Address to send change to. Corresponds to first secret of the prover by default. Can be set by a user via API.
+    */
+  private def changeAddress(prover: ErgoProvingInterpreter): P2PKAddress =
+    storage.readChangeAddress
+    .getOrElse {
+      log.info("Change address not specified. Using root address from wallet.")
+      P2PKAddress(prover.proveDlogs.head)
+    }
+
+  private def changeAddress: Option[P2PKAddress] = walletVars.proverOpt.map(changeAddress)
+
   private def walletInit: Receive = {
     //Init wallet (w. mnemonic generation) if secret is not set yet
     case InitWallet(pass, mnemonicPassOpt) if !secretIsSet =>
@@ -245,8 +257,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       walletVars = walletVars.resetProver()
       secretStorageOpt.foreach(_.lock())
 
-    case GetLockStatus =>
-      sender() ! (secretIsSet -> walletVars.proverOpt.isDefined)
+    case GetWalletStatus =>
+      val status = WalletStatus(secretIsSet, walletVars.proverOpt.isDefined, changeAddress)
+      sender() ! status
 
     case GenerateTransaction(requests, inputsRaw) =>
       sender() ! generateTransactionWithOutputs(requests, inputsRaw)
@@ -458,16 +471,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                                 (r: BoxSelector.BoxSelectionResult[TrackedBox]): Try[ErgoLikeTransaction] = {
     val inputs = r.boxes.map(_.box).toIndexedSeq
 
-    val changeAddress = storage.readChangeAddress
-      .map(_.pubkey)
-      .getOrElse {
-        log.warn("Change address not specified. Using root address from wallet.")
-        prover.proveDlogs.head
-      }
+    val changeAddr = changeAddress(prover).pubkey
 
     val changeBoxCandidates = r.changeBoxes.map { changeBox =>
       val assets = changeBox.tokens.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
-      new ErgoBoxCandidate(changeBox.value, changeAddress, height, assets.toColl)
+      new ErgoBoxCandidate(changeBox.value, changeAddr, height, assets.toColl)
     }
 
     val unsignedTx = new UnsignedErgoTransaction(
@@ -861,7 +869,16 @@ object ErgoWalletActor {
   /**
     * Get wallet status
     */
-  case object GetLockStatus
+  case object GetWalletStatus
+
+  /**
+    * Wallet status. To be sent in response to GetWalletStatus
+    *
+    * @param initialized - whether wallet is initialized or not
+    * @param unlocked - whether wallet is unlocked or not
+    * @param changeAddress - address used for change (optional)
+    */
+  case class WalletStatus(initialized: Boolean, unlocked: Boolean, changeAddress: Option[P2PKAddress])
 
   /**
     * Get root secret key (used in miner)

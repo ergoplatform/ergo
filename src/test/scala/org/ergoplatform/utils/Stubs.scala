@@ -144,7 +144,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case LockWallet => ()
 
-      case GetLockStatus => sender() ! (true, true)
+      case GetWalletStatus => sender() ! (true, true, None)
 
       case GetWalletBoxes(unspentOnly) =>
         val boxes = if (unspentOnly) {

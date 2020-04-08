@@ -2240,6 +2240,7 @@ paths:
                 required:
                   - isInitialized
                   - isUnlocked
+                  - changeAddress
                 properties:
                   isInitialized:
                     type: boolean
@@ -2247,6 +2248,12 @@ paths:
                   isUnlocked:
                     type: boolean
                     description: true if wallet is unlocked, false otherwise
+                  changeAddress:
+                    type: string
+                    description: address to send change to. Empty when wallet is not initialized or locked.
+                                 By default change address correponds to root key address, could be set via
+                                 /wallet/updateChangeAddress method.
+                    example: '3WzCFq7mkykKqi4Ykdk8BK814tkh6EsPmA42pQZxU2NRwSDgd6yB'
         default:
           description: Error
           content:

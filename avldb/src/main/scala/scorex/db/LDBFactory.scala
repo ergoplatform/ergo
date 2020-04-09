@@ -111,11 +111,11 @@ object LDBFactory extends ScorexLogging {
 
   private val nativeFactory = "org.fusesource.leveldbjni.JniDBFactory"
   private val javaFactory = "org.iq80.leveldb.impl.Iq80DBFactory"
-  private val memoryPoolSize = 512*1024
+  private val memoryPoolSize = 512 * 1024
 
   def setLevelDBParams(factory: DBFactory): Unit = {
     val pushMemoryPool = factory.getClass().getDeclaredMethod("pushMemoryPool", classOf[Int])
-    pushMemoryPool.invoke(null, new Integer(memoryPoolSize))
+    pushMemoryPool.invoke(null, Integer.valueOf(memoryPoolSize))
   }
 
   lazy val factory: DBFactory = {

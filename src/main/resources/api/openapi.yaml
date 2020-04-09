@@ -305,6 +305,12 @@ components:
           items:
             type: string
             description: hex-encoded serialized box bytes
+        inputsRaw:
+          description: List of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
 
     SourceHolder:
       type: object

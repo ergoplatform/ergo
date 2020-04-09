@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
+import org.ergoplatform.ErgoBox;
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
@@ -16,6 +17,7 @@ import org.ergoplatform.{ErgoAddress, P2PKAddress}
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.basics.SigmaProtocolPrivateInput
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -86,5 +88,8 @@ trait ErgoWalletReader extends VaultReader {
   def generateTransaction(requests: Seq[TransactionRequest],
                           inputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
     (walletActor ? GenerateTransaction(requests, inputsRaw)).mapTo[Try[ErgoTransaction]]
+
+  def signTransaction(secrets: Seq[SigmaProtocolPrivateInput[_, _]], tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxes: Seq[ErgoBox]): Future[Try[ErgoTransaction]] =
+    (walletActor ? SignTransaction(secrets, tx, boxesToSpend, dataBoxes)).mapTo[Try[ErgoTransaction]]
 
 }

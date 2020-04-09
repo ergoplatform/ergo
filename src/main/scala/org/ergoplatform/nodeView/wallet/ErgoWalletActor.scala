@@ -17,6 +17,7 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
+import org.ergoplatform.SecretsProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.TransactionContext
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage}
@@ -27,6 +28,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
+import sigmastate.basics.SigmaProtocolPrivateInput
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ContextExtension
@@ -262,6 +264,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case GenerateTransaction(requests, inputsRaw) =>
       sender() ! generateTransactionWithOutputs(requests, inputsRaw)
+
+    case SignTransaction(secrets, tx, boxesToSpend, dataBoxes) =>
+      sender() ! signTransaction(secrets, tx, boxesToSpend, dataBoxes)
 
     case DeriveKey(encodedPath) =>
       withWalletLockHandler(sender()) {
@@ -503,6 +508,16 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       .fold(e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputs", e)), tx => Success(tx))
   }
 
+  private def signTransaction(secrets: Seq[SigmaProtocolPrivateInput[_, _]], tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxes: Seq[ErgoBox]): Try[ErgoTransaction] = {
+    val secretsProver = new SecretsProvingInterpreter(parameters, secrets.toIndexedSeq)(new RuntimeIRContext)
+    val unsignedTx = new UnsignedErgoTransaction(
+      boxesToSpend.toIndexedSeq.map(box => new UnsignedInput(box.id)),
+      dataBoxes.toIndexedSeq.map(box => new DataInput(box.id)),
+      tx.outputCandidates,
+    )
+    secretsProver.sign(unsignedTx, boxesToSpend.toIndexedSeq, dataBoxes.toIndexedSeq, stateContext).map(ErgoTransaction.apply)
+  }
+
   /**
     * Updates indexes according to a given wallet-critical data.
     */
@@ -649,6 +664,8 @@ object ErgoWalletActor {
   final case class Rollback(version: VersionTag, height: Int)
 
   final case class GenerateTransaction(requests: Seq[TransactionRequest], inputsRaw: Seq[String])
+
+  final case class SignTransaction(secrets: Seq[SigmaProtocolPrivateInput[_, _]], tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxes: Seq[ErgoBox])
 
   final case class ReadBalances(chainStatus: ChainStatus)
 

@@ -8,6 +8,7 @@ import io.circe.{Encoder, Json}
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
@@ -15,6 +16,13 @@ import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
+
+import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
+import sigmastate.eval._
+import sigmastate.interpreter.CryptoConstants
+import scorex.util.encode.Base16
+import java.math.BigInteger
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -45,6 +53,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         generateTransactionR ~
         sendPaymentTransactionR ~
         sendTransactionR ~
+        signTransactionR ~
         initWalletR ~
         restoreWalletR ~
         unlockWalletR ~
@@ -144,6 +153,32 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def generateTransactionR: Route = (path("transaction" / "generate") & post
     & entity(as[RequestsHolder])) (holder => generateTransaction(holder.withFee, holder.inputsRaw))
+
+
+  // TODO
+  // {
+  //   "tx": ErgoTransaction,
+  //   "secrets": {
+  //     "dlog": ["base16" (32 bytes BigInt), ...], // DLogProverInput(SigmaDsl.BigInt(new BigInteger(1, Base16.decode("base16").get)))
+  //     "dht": [["base16" (32 bytes BigInt), ["base16" (33 bytes compressed GroupElement), "same", "same", "same"]], ...] // DiffieHellmanTupleProverInput(..., ProveDHTuple(...))
+  //   }
+  // }
+  def signTransactionR: Route = (path("transaction" / "sign") & post & entity(as[ErgoTransaction])) { tx =>
+    onSuccess {
+      (readersHolder ? GetReaders).mapTo[Readers].flatMap(r => {
+        val usr: UtxoStateReader = r.s.asInstanceOf[UtxoStateReader]
+        val boxesToSpend = tx.inputs.map(d => usr.boxById(d.boxId).get)
+        val dataBoxes = tx.dataInputs.map(d => usr.boxById(d.boxId).get)
+        val secrets = IndexedSeq(...)
+        r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)
+      })
+    } {
+      _.fold(
+        e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
+        tx => ApiResponse(tx.asJson)
+      )
+    }
+  }
 
   def sendPaymentTransactionR: Route = (path("payment" / "send") & post
     & entity(as[Seq[PaymentRequest]])) { requests =>

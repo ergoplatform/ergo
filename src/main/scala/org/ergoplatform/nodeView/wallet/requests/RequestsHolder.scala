@@ -9,7 +9,8 @@ import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoScriptPredef, Pay2
 
 case class RequestsHolder(requests: Seq[TransactionRequest],
                           feeOpt: Option[Long] = None,
-                          inputsRaw: Seq[String] = Seq.empty)
+                          inputsRaw: Seq[String] = Seq.empty,
+                          dataInputsRaw: Seq[String] = Seq.empty)
                          (implicit val addressEncoder: ErgoAddressEncoder) {
 
   // Add separate payment request with fee.
@@ -32,7 +33,8 @@ class RequestsHolderEncoder(settings: ErgoSettings) extends Encoder[RequestsHold
     Json.obj(
       "requests" -> holder.requests.asJson,
       "fee" -> holder.feeOpt.asJson,
-      "inputsRaw" -> holder.inputsRaw.asJson
+      "inputsRaw" -> holder.inputsRaw.asJson,
+      "dataInputsRaw" -> holder.dataInputsRaw.asJson
     )
   }
 
@@ -48,7 +50,8 @@ class RequestsHolderDecoder(settings: ErgoSettings) extends Decoder[RequestsHold
       requests <- cursor.downField("requests").as[Seq[TransactionRequest]]
       fee <- cursor.downField("fee").as[Option[Long]]
       inputs <- cursor.downField("inputsRaw").as[Seq[String]]
-    } yield RequestsHolder(requests, fee, inputs)
+      dataInputs <- cursor.downField("dataInputsRaw").as[Seq[String]]
+    } yield RequestsHolder(requests, fee, inputs, dataInputs)
   }
 
 }

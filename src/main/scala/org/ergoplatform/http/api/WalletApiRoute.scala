@@ -126,7 +126,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
                                             inputsRaw: Seq[String],
                                             dataInputsRaw: Seq[String],
                                             processFn: ErgoTransaction => Route): Route = {
-    withWalletOp(_.generateTransaction(requests, inputsRaw)) {
+    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw)) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => processFn(tx)
     }

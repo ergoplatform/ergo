@@ -419,18 +419,18 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     */
   private def generateTransactionWithOutputs(requests: Seq[TransactionRequest],
                                              inputsRaw: Seq[String],
-                                             dataInputsRaw: Seq[String]): Try[ErgoTransaction] =
+                                             dataInputsRaw: Seq[String]): Try[ErgoTransaction] = Try {
     proverOpt match {
       case Some(prover) =>
-         val inputs = inputsRaw
-                .toList
-                .map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry))
-                .map(_.get) //todo .get
+        val inputs = inputsRaw
+          .toList
+          .map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry))
+          .map(_.get)
 
-         val dataInputs = dataInputsRaw
-                .toIndexedSeq
-                .map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry))
-                .map(_.get) //todo .get
+        val dataInputs = dataInputsRaw
+          .toIndexedSeq
+          .map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry))
+          .map(_.get)
 
         requestsToBoxCandidates(requests).flatMap { payTo =>
           require(prover.pubKeys.nonEmpty, "No public keys in the prover to extract change address from")
@@ -466,7 +466,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
           val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
 
-          selectionOpt.map {selectionResult =>
+          selectionOpt.map { selectionResult =>
             prepareTransaction(prover, payTo, selectionResult, dataInputs)
           } match {
             case Right(txTry) => txTry.map(ErgoTransaction.apply)
@@ -479,6 +479,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       case None =>
         Failure(new Exception(s"Cannot generateTransactionWithOutputs($requests, $inputsRaw): Wallet is locked"))
     }
+  }.flatten
 
   private def prepareTransaction(prover: ErgoProvingInterpreter,
                                  payTo: Seq[ErgoBoxCandidate],

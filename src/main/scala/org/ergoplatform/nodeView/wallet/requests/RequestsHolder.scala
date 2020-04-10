@@ -9,9 +9,9 @@ import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoScriptPredef, Pay2
 
 
 case class RequestsHolder(requests: Seq[TransactionRequest],
-                          feeOpt: Option[Long] = None,
-                          inputsRaw: Seq[String] = Seq.empty,
-                          dataInputsRaw: Seq[String] = Seq.empty)
+                          feeOpt: Option[Long],
+                          inputsRaw: Seq[String],
+                          dataInputsRaw: Seq[String])
                          (implicit val addressEncoder: ErgoAddressEncoder) {
 
   // Add separate payment request with fee.

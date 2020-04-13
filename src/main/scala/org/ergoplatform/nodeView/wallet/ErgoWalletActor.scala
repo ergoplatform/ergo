@@ -16,8 +16,7 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequ
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.CustomSecretsProvingInterpreter
+import org.ergoplatform.wallet.interpreter.{CustomSecretsProvingInterpreter, ErgoProvingInterpreter}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.TransactionContext
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage, SecretKey}

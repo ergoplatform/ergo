@@ -1,7 +1,6 @@
-package org.ergoplatform
+package org.ergoplatform.wallet.interpreter
 
 import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.SecretKey
 import sigmastate.eval.IRContext
 import sigmastate.interpreter.ProverInterpreter

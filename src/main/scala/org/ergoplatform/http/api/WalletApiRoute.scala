@@ -169,7 +169,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         val usr: UtxoStateReader = r.s.asInstanceOf[UtxoStateReader]
         val boxesToSpend = tx.inputs.map(d => usr.boxById(d.boxId).get)
         val dataBoxes = tx.dataInputs.map(d => usr.boxById(d.boxId).get)
-        val secrets = IndexedSeq(...)
+        val secrets = IndexedSeq()
         r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)
       })
     } {

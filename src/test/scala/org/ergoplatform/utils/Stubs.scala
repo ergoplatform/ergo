@@ -131,7 +131,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     import WalletActorStub.{walletBox10_10, walletBox20_30, walletBoxSpent21_31, walletTxs}
 
     private val prover: ErgoProvingInterpreter = defaultProver
-    private val trackedAddresses: Seq[P2PKAddress] = prover.pubKeys.map(P2PKAddress.apply)
+    private val trackedAddresses: Seq[P2PKAddress] = prover.hdPubKeys.map(P2PKAddress.apply)
 
     def receive: Receive = {
 

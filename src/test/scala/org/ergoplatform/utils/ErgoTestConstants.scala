@@ -54,8 +54,8 @@ trait ErgoTestConstants extends ScorexLogging {
   val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(settings.chainSettings).head
   val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(
     defaultRootSecret +: defaultChildSecrets, parameters)
-  val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
-  val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
+  val defaultMinerSecret: DLogProverInput = defaultProver.hdKeys.head.key
+  val defaultMinerSecretNumber: BigInt = defaultProver.hdKeys.head.key.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
   val defaultMinerPkPoint: EcPointType = defaultMinerPk.h
 

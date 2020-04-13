@@ -5,12 +5,13 @@ import java.util
 import org.ergoplatform._
 import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext, TransactionContext}
-import org.ergoplatform.wallet.secrets.ExtendedSecretKey
-import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
-import sigmastate.eval.{IRContext, CompiletimeIRContext}
+import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, SecretKey}
+import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.basics.{SigmaProtocolCommonInput, SigmaProtocolPrivateInput}
+import sigmastate.eval.{CompiletimeIRContext, IRContext}
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * A class which is holding secrets and signing transactions.
@@ -23,13 +24,19 @@ import scala.util.{Success, Failure, Try}
   * @param secretKeys - secrets in extended form to be used by prover
   * @param params     - ergo network parameters
   */
-class ErgoProvingInterpreter(val secretKeys: IndexedSeq[ExtendedSecretKey], params: ErgoLikeParameters)
+class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: ErgoLikeParameters)
                             (implicit IR: IRContext)
   extends ErgoInterpreter(params) with ProverInterpreter {
 
-  val secrets: IndexedSeq[DLogProverInput] = secretKeys.map(_.key)
+  val secrets: IndexedSeq[SigmaProtocolPrivateInput[_, _]] = secretKeys.map(_.key)
 
-  val pubKeys: IndexedSeq[ProveDlog] = secrets.map(_.publicImage)
+  val hdKeys: IndexedSeq[ExtendedSecretKey] =
+    secretKeys.filter(_.isInstanceOf[ExtendedSecretKey]).map(_.asInstanceOf[ExtendedSecretKey])
+
+  val pubKeys: IndexedSeq[SigmaProtocolCommonInput[_]] =
+    secrets.map(_.publicImage.asInstanceOf[SigmaProtocolCommonInput[_]])
+
+  val hdPubKeys: IndexedSeq[ProveDlog] = hdKeys.map(_.publicImage)
 
   /**
     * @note requires `unsignedTx` and `boxesToSpend` have the same boxIds in the same order.

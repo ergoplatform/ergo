@@ -17,10 +17,10 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.SecretsProvingInterpreter
+import org.ergoplatform.CustomSecretsProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.TransactionContext
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage}
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage, SecretKey}
 import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
@@ -81,7 +81,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           .testKeysQty.toIndexedSeq
           .flatMap(qty => (0 until qty).map(rootSk.child))
         proverOpt = Some(ErgoProvingInterpreter(rootSk +: childSks, parameters))
-        storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
+        storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.hdPubKeys.map(pk => P2PKAddress(pk))))
       case None =>
         log.info("Trying to read wallet in secure mode ..")
         readSecretStorage.fold(
@@ -154,7 +154,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case GetFirstSecret =>
       if (proverOpt.nonEmpty) {
-        proverOpt.foreach(_.secrets.headOption.foreach(s => sender() ! Success(s)))
+        proverOpt.foreach(_.hdKeys.headOption.foreach(s => sender() ! Success(s)))
       } else {
         sender() ! Failure(new Exception("Wallet is locked"))
       }
@@ -309,7 +309,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         callback ! Failure(new Exception("Wallet is not initialized"))
     }
 
-  private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
+  private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.hdPubKeys.map(P2PKAddress.apply))
 
   private def trackedAddresses: Seq[ErgoAddress] = storage.readTrackedAddresses
 
@@ -490,7 +490,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       .map(_.pubkey)
       .getOrElse {
         log.warn("Change address not specified. Using root address from wallet.")
-        prover.pubKeys.head
+        prover.hdPubKeys.head
       }
 
     val changeBoxCandidates = r.changeBoxes.map { changeBox => 
@@ -508,8 +508,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       .fold(e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputs", e)), tx => Success(tx))
   }
 
-  private def signTransaction(secrets: Seq[SigmaProtocolPrivateInput[_, _]], tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxes: Seq[ErgoBox]): Try[ErgoTransaction] = {
-    val secretsProver = new SecretsProvingInterpreter(parameters, secrets.toIndexedSeq)(new RuntimeIRContext)
+  private def signTransaction(secrets: Seq[SigmaProtocolPrivateInput[_, _]],
+                              tx: ErgoTransaction,
+                              boxesToSpend: Seq[ErgoBox],
+                              dataBoxes: Seq[ErgoBox]): Try[ErgoTransaction] = {
+    val secretsProver = new CustomSecretsProvingInterpreter(parameters, secrets.map(SecretKey.apply).toIndexedSeq)(new RuntimeIRContext)
     val unsignedTx = new UnsignedErgoTransaction(
       boxesToSpend.toIndexedSeq.map(box => new UnsignedInput(box.id)),
       dataBoxes.toIndexedSeq.map(box => new DataInput(box.id)),
@@ -527,7 +530,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                            outputs: Seq[(ModifierId, ErgoBox)],
                            txs: Seq[ErgoTransaction]): Unit = {
     // re-create interpreter in order to avoid IR context bloating.
-    proverOpt = proverOpt.map(oldInterpreter => ErgoProvingInterpreter(oldInterpreter.secretKeys, parameters))
+    proverOpt = proverOpt.map{ oldInterpreter =>
+      new ErgoProvingInterpreter(oldInterpreter.secretKeys, parameters)(oldInterpreter.IR)
+    }
     val prevUncertainBoxes = registry.readUncertainBoxes
     val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
       .filterNot { case (_, o) => inputs.map(_._2).contains(encodedBoxId(o.id)) }
@@ -578,7 +583,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     }
     val prover = ErgoProvingInterpreter(secrets, parameters)
     proverOpt = Some(prover)
-    storage.addTrackedAddresses(prover.pubKeys.map(pk => P2PKAddress(pk)))
+    storage.addTrackedAddresses(prover.hdPubKeys.map(pk => P2PKAddress(pk)))
     // process postponed blocks when prover is available.
     val lastProcessedHeight = registry.readIndex.height
     storage.readLatestPostponedBlockHeight.foreach { lastPostponedHeight =>
@@ -643,7 +648,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       }
     }
 
-    val secrets = proverOpt.toIndexedSeq.flatMap(_.secretKeys)
+    val secrets = proverOpt.toIndexedSeq.flatMap(_.hdKeys)
     if (secrets.size == 1) {
       Success(DerivationPath(Array(0, 1), publicBranch = false))
     } else {

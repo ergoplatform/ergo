@@ -511,11 +511,12 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                               tx: ErgoTransaction,
                               boxesToSpend: Seq[ErgoBox],
                               dataBoxes: Seq[ErgoBox]): Try[ErgoTransaction] = {
-    val secretsProver = new CustomSecretsProvingInterpreter(parameters, secrets.map(SecretKey.apply).toIndexedSeq)(new RuntimeIRContext)
+    val secretsWrapped = secrets.map(SecretKey.apply).toIndexedSeq
+    val secretsProver = new CustomSecretsProvingInterpreter(parameters, secretsWrapped)(new RuntimeIRContext)
     val unsignedTx = new UnsignedErgoTransaction(
       boxesToSpend.toIndexedSeq.map(box => new UnsignedInput(box.id)),
-      dataBoxes.toIndexedSeq.map(box => new DataInput(box.id)),
-      tx.outputCandidates,
+      dataBoxes.toIndexedSeq.map(box => DataInput(box.id)),
+      tx.outputCandidates
     )
     secretsProver.sign(unsignedTx, boxesToSpend.toIndexedSeq, dataBoxes.toIndexedSeq, stateContext).map(ErgoTransaction.apply)
   }

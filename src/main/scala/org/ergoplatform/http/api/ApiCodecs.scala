@@ -1,17 +1,22 @@
 package org.ergoplatform.http.api
 
+import java.math.BigInteger
+
 import io.circe._
 import io.circe.syntax._
+import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.JsonCodecs
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, ErgoAlgos}
 import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.wallet.secrets.{DhtSecretWrapper, DlogSecretWrapper}
 import scorex.core.validation.ValidationResult
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
 trait ApiCodecs extends JsonCodecs {
@@ -72,6 +77,39 @@ trait ApiCodecs extends JsonCodecs {
         ("spendingTransactionId" -> box.spendingTxIdOpt.asJson)
     }
     fieldsWithTx.asJson
+  }
+
+  implicit val dlogSecretWrapperEncoder: Encoder[DlogSecretWrapper] = Encoder.instance{dl =>
+    ErgoAlgos.encode(BigIntegers.asUnsignedByteArray(dl.key.w)).asJson
+  }
+
+  implicit val secretBigIntDecoder: Decoder[BigInteger] = arrayBytesDecoder.map{ bytes=>
+    BigIntegers.fromUnsignedByteArray(bytes)
+  }
+
+  implicit val dlogSecretWrapperDecoder: Decoder[DlogSecretWrapper] =
+    secretBigIntDecoder
+      .map(DLogProverInput.apply)
+      .map(DlogSecretWrapper.apply)
+
+  implicit val dhtSecretWrapperEncoder: Encoder[DhtSecretWrapper] = { dht =>
+    Json.obj(
+      "secret" -> dht.key.w.asJson,
+      "g" -> dht.key.commonInput.g.asJson,
+      "h" -> dht.key.commonInput.h.asJson,
+      "u" -> dht.key.commonInput.u.asJson,
+      "v" -> dht.key.commonInput.v.asJson
+    )
+  }
+
+  implicit val dhtSecretWrapperDecoder: Decoder[DhtSecretWrapper] = {cursor =>
+    for {
+      secret <- cursor.downField("secret").as[BigInteger]
+      g <- cursor.downField("g").as[EcPointType]
+      h <- cursor.downField("h").as[EcPointType]
+      u <- cursor.downField("u").as[EcPointType]
+      v <- cursor.downField("v").as[EcPointType]
+    } yield DhtSecretWrapper(DiffieHellmanTupleProverInput(secret, ProveDHTuple(g, h, u, v)))
   }
 }
 

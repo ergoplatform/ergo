@@ -156,13 +156,14 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   //     "dht": [["base16" (32 bytes BigInt), ["base16" (33 bytes compressed GroupElement), "same", "same", "same"]], ...] // DiffieHellmanTupleProverInput(..., ProveDHTuple(...))
   //   }
   // }
-  def signTransactionR: Route = (path("transaction" / "sign") & post & entity(as[ErgoTransaction])) { tx =>
+  def signTransactionR: Route = (path("transaction" / "sign") & post & entity(as[TransactionSigningRequest])) {tsr =>
+    val tx = tsr.tx
+    val secrets = tsr.dlogs ++ tsr.dhts
     onSuccess {
       (readersHolder ? GetReaders).mapTo[Readers].flatMap(r => {
         val usr: UtxoStateReader = r.s.asInstanceOf[UtxoStateReader]
         val boxesToSpend = tx.inputs.map(d => usr.boxById(d.boxId).get)
         val dataBoxes = tx.dataInputs.map(d => usr.boxById(d.boxId).get)
-        val secrets = IndexedSeq()
         r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)
       })
     } {

@@ -158,7 +158,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   // }
   def signTransactionR: Route = (path("transaction" / "sign") & post & entity(as[TransactionSigningRequest])) {tsr =>
     val tx = tsr.tx
-    val secrets = tsr.dlogs ++ tsr.dhts
+    val secrets = (tsr.dlogs ++ tsr.dhts).map(OneTimeSecret.apply)
     onSuccess {
       (readersHolder ? GetReaders).mapTo[Readers].flatMap(r => {
         val usr: UtxoStateReader = r.s.asInstanceOf[UtxoStateReader]

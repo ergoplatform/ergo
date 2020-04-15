@@ -8,7 +8,7 @@ import io.circe.{Encoder, Json}
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
+import org.ergoplatform.nodeView.state. UtxoStateReader
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
@@ -16,13 +16,6 @@ import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
-
-import sigmastate.basics.DLogProtocol.DLogProverInput
-import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
-import sigmastate.eval._
-import sigmastate.interpreter.CryptoConstants
-import scorex.util.encode.Base16
-import java.math.BigInteger
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -118,7 +111,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       }
     }
 
-  private def withFee(requests: Seq[TransactionRequest]): Seq[TransactionRequest] = {
+  private def withFee(requests: Seq[TransactionGenerationRequest]): Seq[TransactionGenerationRequest] = {
     requests :+ PaymentRequest(Pay2SAddress(ergoSettings.chainSettings.monetary.feeProposition),
       ergoSettings.walletSettings.defaultTransactionFee, Seq.empty, Map.empty)
   }
@@ -131,14 +124,14 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWalletOp(op)(ApiResponse.apply[T])
   }
 
-  private def generateTransaction(requests: Seq[TransactionRequest], inputsRaw: Seq[String]): Route = {
+  private def generateTransaction(requests: Seq[TransactionGenerationRequest], inputsRaw: Seq[String]): Route = {
     withWalletOp(_.generateTransaction(requests, inputsRaw)) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => ApiResponse(tx)
     }
   }
 
-  private def sendTransaction(requests: Seq[TransactionRequest], inputsRaw: Seq[String]): Route = {
+  private def sendTransaction(requests: Seq[TransactionGenerationRequest], inputsRaw: Seq[String]): Route = {
     withWalletOp(_.generateTransaction(requests, inputsRaw)) {
       case Failure(e) =>
         BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")

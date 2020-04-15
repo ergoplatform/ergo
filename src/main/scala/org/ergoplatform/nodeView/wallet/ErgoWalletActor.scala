@@ -12,14 +12,14 @@ import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, U
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.{CustomSecretsProvingInterpreter, ErgoProvingInterpreter}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.TransactionContext
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage, SecretKey}
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage, PrimitiveSecretKey, SecretKey}
 import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
@@ -354,7 +354,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     */
   private def extractAllInputs(tx: ErgoTransaction): Seq[EncodedBoxId] = tx.inputs.map(x => encodedBoxId(x.boxId))
 
-  private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] =
+  private def requestsToBoxCandidates(requests: Seq[TransactionGenerationRequest]): Try[Seq[ErgoBoxCandidate]] =
     Traverse[List].sequence {
       requests.toList
         .map {
@@ -421,7 +421,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   /**
     * Generates new transaction according to a given requests using available boxes.
     */
-  private def generateTransactionWithOutputs(requests: Seq[TransactionRequest],
+  private def generateTransactionWithOutputs(requests: Seq[TransactionGenerationRequest],
                                              inputsRaw: Seq[String]): Try[ErgoTransaction] =
     proverOpt match {
       case Some(prover) =>
@@ -511,7 +511,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                               tx: ErgoTransaction,
                               boxesToSpend: Seq[ErgoBox],
                               dataBoxes: Seq[ErgoBox]): Try[ErgoTransaction] = {
-    val secretsWrapped = secrets.map(SecretKey.apply).toIndexedSeq
+    val secretsWrapped = secrets.map(PrimitiveSecretKey.apply).toIndexedSeq
     val secretsProver = new CustomSecretsProvingInterpreter(parameters, secretsWrapped)(new RuntimeIRContext)
     val unsignedTx = new UnsignedErgoTransaction(
       boxesToSpend.toIndexedSeq.map(box => new UnsignedInput(box.id)),
@@ -668,7 +668,7 @@ object ErgoWalletActor {
 
   final case class Rollback(version: VersionTag, height: Int)
 
-  final case class GenerateTransaction(requests: Seq[TransactionRequest], inputsRaw: Seq[String])
+  final case class GenerateTransaction(requests: Seq[TransactionGenerationRequest], inputsRaw: Seq[String])
 
   final case class SignTransaction(secrets: Seq[SigmaProtocolPrivateInput[_, _]], tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxes: Seq[ErgoBox])
 

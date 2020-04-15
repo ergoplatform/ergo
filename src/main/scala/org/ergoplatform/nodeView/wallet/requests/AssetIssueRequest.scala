@@ -27,7 +27,7 @@ case class AssetIssueRequest(addressOpt: Option[ErgoAddress],
                              name: String,
                              description: String,
                              decimals: Int,
-                             registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]]) extends TransactionRequest
+                             registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]]) extends TransactionGenerationRequest
 
 object AssetIssueRequest {
 

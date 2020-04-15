@@ -12,7 +12,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, U
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionGenerationRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, OneTimeSecret, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
@@ -507,11 +507,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       .fold(e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputs", e)), tx => Success(tx))
   }
 
-  private def signTransaction(secrets: Seq[SigmaProtocolPrivateInput[_, _]],
+  private def signTransaction(secrets: Seq[OneTimeSecret],
                               tx: ErgoTransaction,
                               boxesToSpend: Seq[ErgoBox],
                               dataBoxes: Seq[ErgoBox]): Try[ErgoTransaction] = {
-    val secretsWrapped = secrets.map(PrimitiveSecretKey.apply).toIndexedSeq
+    val secretsWrapped = secrets.map(_.key).toIndexedSeq
     val secretsProver = new CustomSecretsProvingInterpreter(parameters, secretsWrapped)(new RuntimeIRContext)
     val unsignedTx = new UnsignedErgoTransaction(
       boxesToSpend.toIndexedSeq.map(box => new UnsignedInput(box.id)),
@@ -670,7 +670,7 @@ object ErgoWalletActor {
 
   final case class GenerateTransaction(requests: Seq[TransactionGenerationRequest], inputsRaw: Seq[String])
 
-  final case class SignTransaction(secrets: Seq[SigmaProtocolPrivateInput[_, _]], tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxes: Seq[ErgoBox])
+  final case class SignTransaction(secrets: Seq[OneTimeSecret], tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxes: Seq[ErgoBox])
 
   final case class ReadBalances(chainStatus: ChainStatus)
 

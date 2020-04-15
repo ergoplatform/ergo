@@ -5,11 +5,11 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
-import org.ergoplatform.ErgoBox;
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
-import org.ergoplatform.nodeView.wallet.requests.TransactionGenerationRequest
+import org.ergoplatform.nodeView.wallet.requests.{OneTimeSecret, TransactionGenerationRequest}
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.secrets.DerivationPath
@@ -89,7 +89,7 @@ trait ErgoWalletReader extends VaultReader {
                           inputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
     (walletActor ? GenerateTransaction(requests, inputsRaw)).mapTo[Try[ErgoTransaction]]
 
-  def signTransaction(secrets: Seq[SigmaProtocolPrivateInput[_, _]],
+  def signTransaction(secrets: Seq[OneTimeSecret],
                       tx: ErgoTransaction,
                       boxesToSpend: Seq[ErgoBox],
                       dataBoxes: Seq[ErgoBox]): Future[Try[ErgoTransaction]] =

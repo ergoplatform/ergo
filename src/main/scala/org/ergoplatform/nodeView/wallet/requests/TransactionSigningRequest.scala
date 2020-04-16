@@ -9,7 +9,10 @@ trait Hint
 
 case class OneTimeSecret(key: PrimitiveSecretKey) extends Hint
 
-case class TransactionSigningRequest(tx: UnsignedErgoTransaction, hints: Seq[Hint]){
+case class TransactionSigningRequest(tx: UnsignedErgoTransaction,
+                                     hints: Seq[Hint],
+                                     inputs: Seq[String],
+                                     dataInputs: Seq[String]){
   lazy val dlogs: Seq[DlogSecretWrapper] = hints.flatMap{ h => h match{
     case OneTimeSecret(d: DlogSecretWrapper) => Some(d)
     case _ => None
@@ -49,6 +52,13 @@ object TransactionSigningRequest extends ApiCodecs {
       tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
       dlogs <- cursor.downField("secrets").downField("dlog").as[Option[Seq[DlogSecretWrapper]]]
       dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DlogSecretWrapper]]]
-    } yield TransactionSigningRequest(tx, (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(OneTimeSecret.apply))
+      inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
+      dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
+    } yield
+      TransactionSigningRequest(
+        tx,
+        (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(OneTimeSecret.apply),
+        inputs.getOrElse(Seq.empty),
+        dataInputs.getOrElse(Seq.empty))
   }
 }

@@ -508,7 +508,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   private def signTransaction(secrets: Seq[OneTimeSecret],
-                              tx: ErgoTransaction,
+                              tx: UnsignedErgoTransaction,
                               boxesToSpend: Seq[ErgoBox],
                               dataBoxes: Seq[ErgoBox]): Try[ErgoTransaction] = {
     val secretsWrapped = secrets.map(_.key).toIndexedSeq
@@ -670,7 +670,10 @@ object ErgoWalletActor {
 
   final case class GenerateTransaction(requests: Seq[TransactionGenerationRequest], inputsRaw: Seq[String])
 
-  final case class SignTransaction(secrets: Seq[OneTimeSecret], tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox], dataBoxes: Seq[ErgoBox])
+  final case class SignTransaction(secrets: Seq[OneTimeSecret],
+                                   utx: UnsignedErgoTransaction,
+                                   boxesToSpend: Seq[ErgoBox],
+                                   dataBoxes: Seq[ErgoBox])
 
   final case class ReadBalances(chainStatus: ChainStatus)
 

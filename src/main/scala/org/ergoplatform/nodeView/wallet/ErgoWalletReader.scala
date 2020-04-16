@@ -6,7 +6,7 @@ import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
 import org.ergoplatform.nodeView.wallet.requests.{OneTimeSecret, TransactionGenerationRequest}
@@ -90,7 +90,7 @@ trait ErgoWalletReader extends VaultReader {
     (walletActor ? GenerateTransaction(requests, inputsRaw)).mapTo[Try[ErgoTransaction]]
 
   def signTransaction(secrets: Seq[OneTimeSecret],
-                      tx: ErgoTransaction,
+                      tx: UnsignedErgoTransaction,
                       boxesToSpend: Seq[ErgoBox],
                       dataBoxes: Seq[ErgoBox]): Future[Try[ErgoTransaction]] =
     (walletActor ? SignTransaction(secrets, tx, boxesToSpend, dataBoxes)).mapTo[Try[ErgoTransaction]]

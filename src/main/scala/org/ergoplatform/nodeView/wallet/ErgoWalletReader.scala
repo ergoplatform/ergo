@@ -17,7 +17,6 @@ import org.ergoplatform.{ErgoAddress, P2PKAddress}
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.DLogProverInput
-import sigmastate.basics.SigmaProtocolPrivateInput
 
 import scala.concurrent.Future
 import scala.util.Try

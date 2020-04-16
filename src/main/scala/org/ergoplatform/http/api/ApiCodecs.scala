@@ -5,9 +5,10 @@ import java.math.BigInteger
 import io.circe._
 import io.circe.syntax._
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.JsonCodecs
+import org.ergoplatform.{ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
@@ -110,6 +111,27 @@ trait ApiCodecs extends JsonCodecs {
       u <- cursor.downField("u").as[EcPointType]
       v <- cursor.downField("v").as[EcPointType]
     } yield DhtSecretWrapper(DiffieHellmanTupleProverInput(secret, ProveDHTuple(g, h, u, v)))
+  }
+
+  implicit val unsignedTransactionEncoder: Encoder[UnsignedErgoTransaction] = { tx =>
+    tx.asInstanceOf[UnsignedErgoLikeTransaction].asJson
+  }
+
+  implicit val unsignedTransactionDecoder: Decoder[UnsignedErgoTransaction] = { cursor =>
+    for {
+      ergoLikeTx <- cursor.as[UnsignedErgoLikeTransaction]
+    } yield UnsignedErgoTransaction(ergoLikeTx)
+  }
+
+  implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>
+    tx.asInstanceOf[ErgoLikeTransaction].asJson
+      .mapObject(_.add("size", tx.size.asJson))
+  }
+
+  implicit val transactionDecoder: Decoder[ErgoTransaction] = { cursor =>
+    for {
+      ergoLikeTx <- cursor.as[ErgoLikeTransaction]
+    } yield ErgoTransaction(ergoLikeTx)
   }
 }
 

@@ -2,14 +2,14 @@ package org.ergoplatform.nodeView.wallet.requests
 
 import io.circe.{Decoder, Encoder, Json}
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.wallet.secrets.{DhtSecretWrapper, DlogSecretWrapper, PrimitiveSecretKey}
 
 trait Hint
 
 case class OneTimeSecret(key: PrimitiveSecretKey) extends Hint
 
-case class TransactionSigningRequest(tx: ErgoTransaction, hints: Seq[Hint]){
+case class TransactionSigningRequest(tx: UnsignedErgoTransaction, hints: Seq[Hint]){
   lazy val dlogs: Seq[DlogSecretWrapper] = hints.flatMap{ h => h match{
     case OneTimeSecret(d: DlogSecretWrapper) => Some(d)
     case _ => None
@@ -34,9 +34,6 @@ case class TransactionSigningRequest(tx: ErgoTransaction, hints: Seq[Hint]){
 object TransactionSigningRequest extends ApiCodecs {
   import io.circe.syntax._
 
-  private implicit val txEncoder = ErgoTransaction.transactionEncoder
-  private implicit val txDecoder = ErgoTransaction.transactionDecoder
-
   implicit val encoder: Encoder[TransactionSigningRequest] = { tsr =>
     Json.obj(
       "tx" -> tsr.tx.asJson,
@@ -49,7 +46,7 @@ object TransactionSigningRequest extends ApiCodecs {
 
   implicit val decoder: Decoder[TransactionSigningRequest] = { cursor =>
     for {
-      tx <- cursor.downField("tx").as[ErgoTransaction]
+      tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
       dlogs <- cursor.downField("secrets").downField("dlog").as[Option[Seq[DlogSecretWrapper]]]
       dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DlogSecretWrapper]]]
     } yield TransactionSigningRequest(tx, (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(OneTimeSecret.apply))

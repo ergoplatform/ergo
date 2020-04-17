@@ -1,5 +1,7 @@
 package org.ergoplatform.utils.generators
 
+import java.math.BigInteger
+
 import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
@@ -37,6 +39,11 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val noProofGen: Gen[ProverResult] =
     Gen.const(emptyProverResult)
+
+  lazy val dlogSecretWithPublicImageGen: Gen[(DLogProverInput, ProveDlog)] = for {
+    secret <- genBytes(32).map(seed => BigIntegers.fromUnsignedByteArray(seed))
+    dlpi = DLogProverInput(secret)
+  } yield (dlpi, dlpi.publicImage)
 
   lazy val proveDlogGen: Gen[ProveDlog] = for {
     seed <- genBytes(32)

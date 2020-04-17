@@ -9,7 +9,7 @@ trait Hint
 
 case class OneTimeSecret(key: PrimitiveSecretKey) extends Hint
 
-case class TransactionSigningRequest(tx: UnsignedErgoTransaction,
+case class TransactionSigningRequest(utx: UnsignedErgoTransaction,
                                      hints: Seq[Hint],
                                      inputs: Seq[String],
                                      dataInputs: Seq[String]){
@@ -39,11 +39,13 @@ object TransactionSigningRequest extends ApiCodecs {
 
   implicit val encoder: Encoder[TransactionSigningRequest] = { tsr =>
     Json.obj(
-      "tx" -> tsr.tx.asJson,
+      "tx" -> tsr.utx.asJson,
       "secrets" -> Json.obj(
         "dlog" -> tsr.dlogs.asJson,
         "dht" -> tsr.dhts.asJson
-      )
+      ),
+      "inputsRaw" -> tsr.inputs.asJson,
+      "dataInputsRaw" -> tsr.dataInputs.asJson
     )
   }
 

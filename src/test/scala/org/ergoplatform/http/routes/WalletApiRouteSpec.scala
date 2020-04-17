@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueR
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
 import org.ergoplatform.settings.{Args, Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress}
+import org.ergoplatform.{ErgoAddress, Pay2SAddress}
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.util.Try
@@ -72,6 +72,13 @@ class WalletApiRouteSpec extends FlatSpec
       responseAs[String] should not be empty
     }
   }
+
+  /*it should "sign a transaction with secrets given" in {
+    Post(prefix + "/transaction/signWithSecretsGiven", null) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[String] should not be empty
+    }
+  }*/
 
   it should "generate & send payment transaction" in {
     Post(prefix + "/payment/send", Seq(paymentRequest).asJson) ~> route ~> check {

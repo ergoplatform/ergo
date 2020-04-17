@@ -163,12 +163,12 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     * - default prover does not know how to sign at least one input
     * - number of assets exceeds Transaction.MaxTokens
     */
-  def validTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
-                                rnd: Random = new Random,
-                                issueNew: Boolean = true,
-                                outputsProposition: ErgoTree = Constants.TrueLeaf,
-                                stateCtxOpt: Option[ErgoStateContext] = None,
-                                dataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()): ErgoTransaction = {
+  def validUnsignedTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
+                                        rnd: Random = new Random,
+                                        issueNew: Boolean = true,
+                                        outputsProposition: ErgoTree = Constants.TrueLeaf,
+                                        stateCtxOpt: Option[ErgoStateContext] = None,
+                                        dataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()): UnsignedErgoTransaction = {
     require(boxesToSpend.nonEmpty, "At least one box is needed to generate a transaction")
 
     val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
@@ -247,12 +247,21 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     val dataInputs = dataBoxes.map(b => DataInput(b.id))
     val unsignedTx = UnsignedErgoTransaction(inputs, dataInputs, newBoxes)
     require(unsignedTx.dataInputs.length == dataBoxes.length, s"${unsignedTx.dataInputs.length} == ${dataBoxes.length}")
+    unsignedTx
+  }
 
+  def validTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
+                                rnd: Random = new Random,
+                                issueNew: Boolean = true,
+                                outputsProposition: ErgoTree = Constants.TrueLeaf,
+                                stateCtxOpt: Option[ErgoStateContext] = None,
+                                dataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()): ErgoTransaction = {
+    val unsignedTx = validUnsignedTransactionFromBoxes(boxesToSpend, rnd, issueNew, outputsProposition, stateCtxOpt, dataBoxes)
     defaultProver.sign(unsignedTx, boxesToSpend, dataBoxes, stateCtxOpt.getOrElse(emptyStateContext))
       .map(ErgoTransaction.apply)
       .getOrElse {
         log.debug(s"Going to generate a transaction with incorrect spending proofs: $unsignedTx")
-        ErgoTransaction(inputs, dataInputs, newBoxes)
+        ErgoTransaction(boxesToSpend.map(b => Input(b.id, emptyProverResult)), unsignedTx.dataInputs, unsignedTx.outputs)
       }
   }
 

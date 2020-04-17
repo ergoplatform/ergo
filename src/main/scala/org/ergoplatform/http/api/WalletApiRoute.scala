@@ -157,7 +157,9 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   //     "dht": [["base16" (32 bytes BigInt), ["base16" (33 bytes compressed GroupElement), "same", "same", "same"]], ...] // DiffieHellmanTupleProverInput(..., ProveDHTuple(...))
   //   }
   // }
-  def signTransactionR: Route = (path("transaction" / "sign") & post & entity(as[TransactionSigningRequest])) { tsr =>
+  def signTransactionR: Route = (path("transaction" / "signWithSecretsGiven")
+    & post & entity(as[TransactionSigningRequest])) { tsr =>
+
     val tx = tsr.tx
     val secrets = (tsr.dlogs ++ tsr.dhts).map(OneTimeSecret.apply)
 

@@ -1,19 +1,29 @@
 package org.ergoplatform.wallet.utils
 
-import org.ergoplatform.ErgoBox
-import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
 import org.ergoplatform.wallet.mnemonic.{Mnemonic, WordList}
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index}
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, SecretKey}
 import org.ergoplatform.wallet.settings.EncryptionSettings
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.authds.ADKey
-import scorex.crypto.hash.Digest32
-import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, SigmaPropValue, TrueLeaf}
+import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.{SByte, SType}
+import scala.collection.IndexedSeq
+import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoBoxCandidate
+import org.ergoplatform.ErgoScriptPredef
+import org.ergoplatform.UnsignedErgoLikeTransaction
+import org.ergoplatform.UnsignedInput
+import sigmastate.eval.Extensions._
+import scorex.util.{ModifierId, bytesToId}
+import sigmastate.eval._
+import org.ergoplatform.ErgoBox.TokenId
+import scorex.crypto.hash.Digest32
+
 
 trait Generators {
 
@@ -140,4 +150,31 @@ trait Generators {
   } yield TrackedBox(
     creationTxId, creationOutIndex, inclusionHeightOpt, spendingTxIdOpt, spendingHeightOpt, box, certainty, 1)
 
+  def dlogPropGen(dlog: ProveDlog): Gen[SigmaPropValue] = Gen.const(dlog.toSigmaProp)
+
+  def unsignedTxGen(secret: SecretKey): Gen[(IndexedSeq[ErgoBox], UnsignedErgoLikeTransaction)] = {
+    val dlog = dlogPropGen(secret.key.publicImage.asInstanceOf[ProveDlog])
+    for {
+      ins <- Gen.listOfN(2, ergoBoxGen(dlog))
+      value <- Gen.posNum[Long]
+      h <- Gen.posNum[Int]
+      out = new ErgoBoxCandidate(
+        value,
+        ErgoScriptPredef.feeProposition(),
+        h,
+        Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+        Map.empty
+      )
+      unsignedInputs = ins
+        .map { box =>
+          new UnsignedInput(box.id)
+        }
+        .toIndexedSeq
+      unsignedTx = new UnsignedErgoLikeTransaction(
+        unsignedInputs,
+        IndexedSeq(),
+        IndexedSeq(out)
+      )
+    } yield (ins.toIndexedSeq, unsignedTx)
+  }
 }

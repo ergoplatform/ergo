@@ -148,15 +148,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   def generateTransactionR: Route = (path("transaction" / "generate") & post
     & entity(as[RequestsHolder])) (holder => generateTransaction(holder.withFee, holder.inputsRaw))
 
-
-  // TODO
-  // {
-  //   "tx": ErgoTransaction,
-  //   "secrets": {
-  //     "dlog": ["base16" (32 bytes BigInt), ...], // DLogProverInput(SigmaDsl.BigInt(new BigInteger(1, Base16.decode("base16").get)))
-  //     "dht": [["base16" (32 bytes BigInt), ["base16" (33 bytes compressed GroupElement), "same", "same", "same"]], ...] // DiffieHellmanTupleProverInput(..., ProveDHTuple(...))
-  //   }
-  // }
   def signTransactionR: Route = (path("transaction" / "signWithSecretsGiven")
     & post & entity(as[TransactionSigningRequest])) { tsr =>
 
@@ -184,9 +175,9 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
 
     onSuccess {
-      (readersHolder ? GetReaders).mapTo[Readers].flatMap(r => {
-        signWithReaders(r)
-      })
+      (readersHolder ? GetReaders)
+        .mapTo[Readers]
+        .flatMap(r => signWithReaders(r))
     } {
       _.fold(
         e => BadRequest(s"Malformed request: ${e.getMessage}"),

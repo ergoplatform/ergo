@@ -94,7 +94,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: Ergo
 
 object ErgoProvingInterpreter {
 
-  def apply(secrets: IndexedSeq[ExtendedSecretKey], params: ErgoLikeParameters): ErgoProvingInterpreter =
+  def apply(secrets: IndexedSeq[SecretKey], params: ErgoLikeParameters): ErgoProvingInterpreter =
     new ErgoProvingInterpreter(secrets, params)(new CompiletimeIRContext)
 
   def apply(rootSecret: ExtendedSecretKey, params: ErgoLikeParameters): ErgoProvingInterpreter =

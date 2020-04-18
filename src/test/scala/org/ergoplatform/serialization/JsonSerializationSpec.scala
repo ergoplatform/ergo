@@ -8,7 +8,6 @@ import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{Algos, Args, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest

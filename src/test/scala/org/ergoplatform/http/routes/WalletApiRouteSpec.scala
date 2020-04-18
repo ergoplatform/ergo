@@ -2,11 +2,11 @@ package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import io.circe.{Decoder, Json}
-import org.ergoplatform.http.api.WalletApiRoute
+import org.ergoplatform.http.api.{ApiCodecs, WalletApiRoute}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
@@ -17,12 +17,16 @@ import org.ergoplatform.{ErgoAddress, Pay2SAddress}
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.util.Try
+import scala.concurrent.duration._
 
 class WalletApiRouteSpec extends FlatSpec
   with Matchers
   with ScalatestRouteTest
   with Stubs
-  with FailFastCirceSupport {
+  with FailFastCirceSupport
+  with ApiCodecs {
+
+  implicit val timeout: RouteTestTimeout = RouteTestTimeout(145.seconds)
 
   val prefix = "/wallet"
 
@@ -77,10 +81,9 @@ class WalletApiRouteSpec extends FlatSpec
   it should "sign a transaction with secrets given" in {
     val tsr = ErgoTransactionGenerators.transactionSigningRequestGen.sample.get
     Post(prefix + "/transaction/signWithSecretsGiven", tsr.asJson) ~> route ~> check {
-      println(responseAs[String])
-      println(status)
+      println(responseAs[Any])
       status shouldBe StatusCodes.OK
-      responseAs[String] should not be empty
+      responseAs[ErgoTransaction].id shouldBe tsr.utx.id
     }
   }
 

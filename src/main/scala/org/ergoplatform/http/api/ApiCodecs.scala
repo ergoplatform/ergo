@@ -80,12 +80,17 @@ trait ApiCodecs extends JsonCodecs {
     fieldsWithTx.asJson
   }
 
-  implicit val dlogSecretWrapperEncoder: Encoder[DlogSecretWrapper] = Encoder.instance{dl =>
-    ErgoAlgos.encode(BigIntegers.asUnsignedByteArray(dl.key.w)).asJson
+
+  implicit val secretBigIntEncoder: Encoder[BigInteger] = Encoder.instance{w =>
+    ErgoAlgos.encode(BigIntegers.asUnsignedByteArray(w)).asJson
   }
 
   implicit val secretBigIntDecoder: Decoder[BigInteger] = arrayBytesDecoder.map{ bytes=>
     BigIntegers.fromUnsignedByteArray(bytes)
+  }
+
+  implicit val dlogSecretWrapperEncoder: Encoder[DlogSecretWrapper] = Encoder.instance{dl =>
+    secretBigIntEncoder(dl.key.w)
   }
 
   implicit val dlogSecretWrapperDecoder: Decoder[DlogSecretWrapper] =

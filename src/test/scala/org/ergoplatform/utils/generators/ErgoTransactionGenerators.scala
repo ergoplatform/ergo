@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.BoxUtils
-import org.ergoplatform.wallet.secrets.DlogSecretWrapper
+import org.ergoplatform.wallet.secrets.{DhtSecretWrapper, DlogSecretWrapper}
 import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -390,9 +390,10 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   lazy val transactionSigningRequestGen: Gen[TransactionSigningRequest] = for {
     (secret, pubKey) <- dlogSecretWithPublicImageGen
+    (secretDh, pubKeyDh) <- dhtSecretWithPublicImageGen
     (inputBoxes, utx) <- validUnsignedErgoTransactionGen(pubKey)
     inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
-    secretSeq = Seq(OneTimeSecret(DlogSecretWrapper(secret)))
+    secretSeq = Seq(OneTimeSecret(DlogSecretWrapper(secret)), OneTimeSecret(DhtSecretWrapper(secretDh)))
   } yield TransactionSigningRequest(utx, secretSeq, inputBoxesEncoded, Seq.empty)
 
 }

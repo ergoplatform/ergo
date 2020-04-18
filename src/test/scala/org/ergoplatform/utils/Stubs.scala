@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReade
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.nodeView.state.{DigestState, StateType}
+import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
@@ -41,11 +41,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   implicit val system: ActorSystem
 
-  lazy val chain: Seq[ErgoFullBlock] = genChain(6)
+  val chain: Seq[ErgoFullBlock] = genChain(6)
 
-  lazy val history: HT = applyChain(generateHistory(), chain)
+  val history: HT = applyChain(generateHistory(), chain)
 
-  lazy val state: DigestState = {
+  val state: DigestState = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
       DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
     }
@@ -55,8 +55,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   val txs: Seq[ErgoTransaction] = validTransactionsFromBoxHolder(boxesHolderGen.sample.get)._1
 
-  lazy val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs).get
-  lazy val readers = Readers(history, state, memPool, wallet)
+  val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs).get
+  val readers = Readers(history, state, memPool, wallet)
 
   val protocolVersion = Version("1.1.1")
 
@@ -173,6 +173,10 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         val input = ErgoTransactionGenerators.inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
         sender ! Success(tx)
+
+      case SignTransaction(secrets, tx, boxesToSpend, dataBoxes) =>
+        val sc = ErgoStateContext.empty(stateConstants)
+        sender() ! ErgoWalletActor.signTransaction(secrets, tx, boxesToSpend, dataBoxes, LaunchParameters, sc)
     }
   }
 

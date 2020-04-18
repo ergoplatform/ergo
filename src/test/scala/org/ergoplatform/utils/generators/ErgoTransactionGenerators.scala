@@ -319,10 +319,10 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   }
 
   def validUnsignedErgoTransactionGen(prop: ErgoTree): Gen[(IndexedSeq[ErgoBox], UnsignedErgoTransaction)] =
-    validUnsignedErgoTransactionGenTemplate(0, propositionGen = Gen.const(prop))
+    validUnsignedErgoTransactionGenTemplate(0, maxAssets = 5, maxInputs = 10, propositionGen = Gen.const(prop))
 
   lazy val validUnsignedErgoTransactionGen: Gen[(IndexedSeq[ErgoBox], UnsignedErgoTransaction)] =
-    validUnsignedErgoTransactionGenTemplate(0)
+    validUnsignedErgoTransactionGenTemplate(0, maxAssets = 5, maxInputs = 10)
 
   lazy val validErgoTransactionGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = validErgoTransactionGenTemplate(0)
   lazy val validErgoTransactionWithAssetsGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] =
@@ -393,10 +393,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     (inputBoxes, utx) <- validUnsignedErgoTransactionGen(pubKey)
     inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
     secretSeq = Seq(OneTimeSecret(DlogSecretWrapper(secret)))
-  } yield {
-    require(inputBoxesEncoded.size == utx.inputs.size)
-    TransactionSigningRequest(utx, secretSeq, inputBoxesEncoded, Seq.empty)
-  }
+  } yield TransactionSigningRequest(utx, secretSeq, inputBoxesEncoded, Seq.empty)
+
 }
 
 object ErgoTransactionGenerators extends ErgoTransactionGenerators

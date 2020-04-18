@@ -26,14 +26,6 @@ case class TransactionSigningRequest(utx: UnsignedErgoTransaction,
 
 }
 
-// TODO
-// {
-//   "tx": ErgoTransaction,
-//   "secrets": {
-//     "dlog": ["base16" (32 bytes BigInt), ...], // DLogProverInput(SigmaDsl.BigInt(new BigInteger(1, Base16.decode("base16").get)))
-//     "dht": [["base16" (32 bytes BigInt), ["base16" (33 bytes compressed GroupElement), "same", "same", "same"]], ...] // DiffieHellmanTupleProverInput(..., ProveDHTuple(...))
-//   }
-// }
 object TransactionSigningRequest extends ApiCodecs {
   import io.circe.syntax._
 
@@ -53,7 +45,7 @@ object TransactionSigningRequest extends ApiCodecs {
     for {
       tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
       dlogs <- cursor.downField("secrets").downField("dlog").as[Option[Seq[DlogSecretWrapper]]]
-      dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DlogSecretWrapper]]]
+      dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DhtSecretWrapper]]]
       inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
       dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
     } yield

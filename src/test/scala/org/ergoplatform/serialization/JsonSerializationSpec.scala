@@ -9,7 +9,7 @@ import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.wallet.requests._
-import org.ergoplatform.settings.{Algos, Args, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.TrackedBox
@@ -17,7 +17,7 @@ import org.ergoplatform.wallet.secrets.{DhtSecretWrapper, DlogSecretWrapper}
 import org.scalatest.Inspectors
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
-import sigmastate.basics.DLogProtocol.DLogProverInput
+
 
 class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with ApiCodecs {
 
@@ -104,8 +104,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   property("transactionSigningRequest roundtrip") {
     forAll(transactionSigningRequestGen) { request =>
       val json = request.asJson
-      println(json)
-      val parsedRequest = json.as[TransactionSigningRequest]
+      val parsedRequest = json.as[TransactionSigningRequest].toOption.get
       parsedRequest shouldBe request
     }
   }

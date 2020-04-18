@@ -13,9 +13,11 @@ import org.ergoplatform.settings.{Algos, Args, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.wallet.secrets.{DhtSecretWrapper, DlogSecretWrapper}
 import org.scalatest.Inspectors
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
+import sigmastate.basics.DLogProtocol.DLogProverInput
 
 class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with ApiCodecs {
 
@@ -81,6 +83,33 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
+  property("dlog secret roundtrip") {
+    forAll(dlogSecretWithPublicImageGen) { case (secret, _) =>
+      val wrappedSecret = DlogSecretWrapper(secret)
+      val json = wrappedSecret.asJson
+      val parsedSecret = json.as[DlogSecretWrapper].toOption.get
+      parsedSecret shouldBe wrappedSecret
+    }
+  }
+
+  property("dht secret roundtrip") {
+    forAll(dhtSecretWithPublicImageGen) { case (secret, _) =>
+      val wrappedSecret = DhtSecretWrapper(secret)
+      val json = wrappedSecret.asJson
+      val parsedSecret = json.as[DhtSecretWrapper].toOption.get
+      parsedSecret shouldBe wrappedSecret
+    }
+  }
+
+  property("transactionSigningRequest roundtrip") {
+    forAll(transactionSigningRequestGen) { request =>
+      val json = request.asJson
+      println(json)
+      val parsedRequest = json.as[TransactionSigningRequest]
+      parsedRequest shouldBe request
+    }
+  }
+
   private def checkTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {
     c.downField("spent").as[Boolean] shouldBe Right(b.spendingStatus.spent)
     c.downField("onchain").as[Boolean] shouldBe Right(b.chainStatus.onChain)
@@ -108,6 +137,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     def stringify(assets: Seq[(ErgoBox.TokenId, Long)]) = {
       assets map { case (tokenId, amount) => (Algos.encode(tokenId), amount) }
     }
+
     val Right(decodedAssets) = c.as[Seq[(ErgoBox.TokenId, Long)]]
     stringify(decodedAssets) should contain theSameElementsAs stringify(assets)
   }

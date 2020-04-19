@@ -177,4 +177,5 @@ trait Generators {
       )
     } yield (ins.toIndexedSeq, unsignedTx)
   }
+
 }

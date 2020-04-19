@@ -390,7 +390,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
   lazy val transactionSigningRequestGen: Gen[TransactionSigningRequest] = for {
     (secret, pubKey) <- dlogSecretWithPublicImageGen
-    (secretDh, pubKeyDh) <- dhtSecretWithPublicImageGen
+    (secretDh, _) <- dhtSecretWithPublicImageGen
     (inputBoxes, utx) <- validUnsignedErgoTransactionGen(pubKey)
     inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
     secretSeq = Seq(OneTimeSecret(DlogSecretWrapper(secret)), OneTimeSecret(DhtSecretWrapper(secretDh)))

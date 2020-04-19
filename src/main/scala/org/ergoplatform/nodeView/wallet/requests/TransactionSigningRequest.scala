@@ -23,8 +23,8 @@ case class TransactionSigningRequest(utx: UnsignedErgoTransaction,
     case _ => None
   }}
 
-
 }
+
 
 object TransactionSigningRequest extends ApiCodecs {
   import io.circe.syntax._
@@ -55,4 +55,5 @@ object TransactionSigningRequest extends ApiCodecs {
         inputs.getOrElse(Seq.empty),
         dataInputs.getOrElse(Seq.empty))
   }
+
 }

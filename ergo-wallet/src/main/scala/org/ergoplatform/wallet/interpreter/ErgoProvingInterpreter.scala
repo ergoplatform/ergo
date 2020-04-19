@@ -21,7 +21,7 @@ import scala.util.{Failure, Success, Try}
   * blockchain state) by using the secrets (no additional inputs, e.g. hash function preimages required in scripts,
   * are supported. Here, signing a transaction means spending proofs generation for all of its input boxes.
   *
-  * @param secretKeys - secrets in extended form to be used by prover
+  * @param secretKeys - secrets used by the prover
   * @param params     - ergo network parameters
   */
 class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: ErgoLikeParameters)

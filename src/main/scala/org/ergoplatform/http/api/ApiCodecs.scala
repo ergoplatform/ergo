@@ -40,8 +40,8 @@ trait ApiCodecs extends JsonCodecs {
     } yield groupElemFromBytes(bytes)
   }
 
-  implicit val ecPointEncoder: Encoder[EcPointType] = { point:EcPointType =>
-      groupElemToBytes(point).asJson
+  implicit val ecPointEncoder: Encoder[EcPointType] = { point: EcPointType =>
+    groupElemToBytes(point).asJson
   }
 
   implicit val proveDlogEncoder: Encoder[ProveDlog] = _.pkBytes.asJson
@@ -81,15 +81,15 @@ trait ApiCodecs extends JsonCodecs {
   }
 
 
-  implicit val secretBigIntEncoder: Encoder[BigInteger] = Encoder.instance{w =>
+  implicit val secretBigIntEncoder: Encoder[BigInteger] = Encoder.instance { w =>
     ErgoAlgos.encode(BigIntegers.asUnsignedByteArray(w)).asJson
   }
 
-  implicit val secretBigIntDecoder: Decoder[BigInteger] = arrayBytesDecoder.map{ bytes=>
+  implicit val secretBigIntDecoder: Decoder[BigInteger] = arrayBytesDecoder.map { bytes =>
     BigIntegers.fromUnsignedByteArray(bytes)
   }
 
-  implicit val dlogSecretWrapperEncoder: Encoder[DlogSecretWrapper] = Encoder.instance{dl =>
+  implicit val dlogSecretWrapperEncoder: Encoder[DlogSecretWrapper] = Encoder.instance { dl =>
     secretBigIntEncoder(dl.key.w)
   }
 
@@ -108,7 +108,7 @@ trait ApiCodecs extends JsonCodecs {
     )
   }
 
-  implicit val dhtSecretWrapperDecoder: Decoder[DhtSecretWrapper] = {cursor =>
+  implicit val dhtSecretWrapperDecoder: Decoder[DhtSecretWrapper] = { cursor =>
     for {
       secret <- cursor.downField("secret").as[BigInteger]
       g <- cursor.downField("g").as[EcPointType]

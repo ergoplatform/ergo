@@ -81,7 +81,6 @@ class WalletApiRouteSpec extends FlatSpec
   it should "sign a transaction with secrets given" in {
     val tsr = ErgoTransactionGenerators.transactionSigningRequestGen.sample.get
     Post(prefix + "/transaction/signWithSecretsGiven", tsr.asJson) ~> route ~> check {
-      println(responseAs[Any])
       status shouldBe StatusCodes.OK
       responseAs[ErgoTransaction].id shouldBe tsr.utx.id
     }

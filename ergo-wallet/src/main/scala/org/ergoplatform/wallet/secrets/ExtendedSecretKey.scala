@@ -8,6 +8,7 @@ import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.crypto.HmacSHA512
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import scorex.util.serialization.{Reader, Writer}
+import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.CryptoConstants
 
@@ -22,7 +23,7 @@ final class ExtendedSecretKey(val keyBytes: Array[Byte],
 
   override def key: DLogProverInput = DLogProverInput(BigIntegers.fromUnsignedByteArray(keyBytes))
 
-  def publicImage = key.publicImage
+  def publicImage: DLogProtocol.ProveDlog = key.publicImage
 
   def child(idx: Int): ExtendedSecretKey = ExtendedSecretKey.deriveChildSecretKey(this, idx)
 

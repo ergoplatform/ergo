@@ -81,7 +81,6 @@ trait ApiCodecs extends JsonCodecs {
     fieldsWithTx.asJson
   }
 
-
   implicit val secretBigIntEncoder: Encoder[BigInteger] = Encoder.instance { w =>
     ErgoAlgos.encode(BigIntegers.asUnsignedByteArray(CryptoConstants.groupSize, w)).asJson
   }
@@ -139,6 +138,7 @@ trait ApiCodecs extends JsonCodecs {
       ergoLikeTx <- cursor.as[ErgoLikeTransaction]
     } yield ErgoTransaction(ergoLikeTx)
   }
+
 }
 
 trait ApiEncoderOption

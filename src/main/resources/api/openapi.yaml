@@ -2658,6 +2658,45 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/transaction/signWithSecretsGiven:
+    post:
+      summary: Sign arbitrary unsigned transaction with secrets provided.
+      operationId: walletTransactionSignWithSecretsGiven
+      tags:
+        - wallet
+      requestBody:
+        description:
+          With this API method an arbitrary unsigned transaction can be signed with secrets provided. Both DLOG and
+          Diffie-Hellman tuple secrets are supported.
+
+          Please note that the unsigned transaction contains only identifiers of inputs and data inputs. If the node
+          holds UTXO set, it is able to extract boxes needed. Otherwise, input (and data-input) boxes can be provided
+          in "inputsRaw" and "dataInputsRaw" fields.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionSigningRequest'
+      responses:
+        '200':
+          description: Generated Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransaction'
+        '400':
+          description: Bad transaction request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/transaction/send:
     post:
       security:

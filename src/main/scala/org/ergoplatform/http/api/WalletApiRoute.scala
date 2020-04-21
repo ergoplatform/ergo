@@ -156,9 +156,12 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     val secrets = (tsr.dlogs ++ tsr.dhts).map(OneTimeSecret.apply)
 
     def signWithReaders(r: Readers): Future[Try[ErgoTransaction]] = {
-      if (tsr.inputs.size == tx.inputs.size && tsr.dataInputs.size == tx.dataInputs.size) {
-        val boxesToSpend = tsr.inputs.flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
-        val dataBoxes = tsr.dataInputs.flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
+      if (tsr.inputs.isDefined) {
+        val boxesToSpend = tsr.inputs.get
+          .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
+        val dataBoxes = tsr.dataInputs.getOrElse(Seq.empty)
+          .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
+
         if (boxesToSpend.size == tx.inputs.size && dataBoxes.size == tx.dataInputs.size) {
           r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)
         } else {

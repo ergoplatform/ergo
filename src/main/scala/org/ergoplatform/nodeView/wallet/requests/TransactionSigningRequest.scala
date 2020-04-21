@@ -5,14 +5,30 @@ import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.wallet.secrets.{DhtSecretWrapper, DlogSecretWrapper, PrimitiveSecretKey}
 
+/**
+  * Basic trait for externally provided hint for interpreter (to be used during script execution and signature
+  * generation).
+  */
 trait Hint
 
+/**
+  * Externally provided secret (to be used once for a transaction to sign)
+  * @param key - the secret
+  */
 case class OneTimeSecret(key: PrimitiveSecretKey) extends Hint
 
+/**
+  * A request to sign a transaction
+  * @param utx - unsigned transaction
+  * @param hints - hints for interpreter (such as additional one-time secrets)
+  * @param inputs - hex-encoded input boxes bytes for the unsigned transaction (optional)
+  * @param dataInputs - hex-encoded data-input boxes bytes for the unsigned transaction (optional)
+  */
 case class TransactionSigningRequest(utx: UnsignedErgoTransaction,
                                      hints: Seq[Hint],
-                                     inputs: Seq[String],
-                                     dataInputs: Seq[String]){
+                                     inputs: Option[Seq[String]],
+                                     dataInputs: Option[Seq[String]]){
+
   lazy val dlogs: Seq[DlogSecretWrapper] = hints.flatMap{ h => h match{
     case OneTimeSecret(d: DlogSecretWrapper) => Some(d)
     case _ => None
@@ -48,12 +64,8 @@ object TransactionSigningRequest extends ApiCodecs {
       dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DhtSecretWrapper]]]
       inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
       dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
-    } yield
-      TransactionSigningRequest(
-        tx,
-        (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(OneTimeSecret.apply),
-        inputs.getOrElse(Seq.empty),
-        dataInputs.getOrElse(Seq.empty))
+      secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(OneTimeSecret.apply)
+    } yield TransactionSigningRequest(tx, secrets, inputs, dataInputs)
   }
 
 }

@@ -392,9 +392,10 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     (secret, pubKey) <- dlogSecretWithPublicImageGen
     (secretDh, _) <- dhtSecretWithPublicImageGen
     (inputBoxes, utx) <- validUnsignedErgoTransactionGen(pubKey)
+    coin = Random.nextBoolean()
     inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
     secretSeq = Seq(OneTimeSecret(DlogSecretWrapper(secret)), OneTimeSecret(DhtSecretWrapper(secretDh)))
-  } yield TransactionSigningRequest(utx, secretSeq, inputBoxesEncoded, Seq.empty)
+  } yield TransactionSigningRequest(utx, secretSeq, if(coin) Some(inputBoxesEncoded) else None, None)
 
 }
 

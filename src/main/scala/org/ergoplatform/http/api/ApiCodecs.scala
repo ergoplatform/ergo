@@ -18,6 +18,7 @@ import org.ergoplatform.wallet.secrets.{DhtSecretWrapper, DlogSecretWrapper}
 import scorex.core.validation.ValidationResult
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
+import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
 trait ApiCodecs extends JsonCodecs {
@@ -82,7 +83,7 @@ trait ApiCodecs extends JsonCodecs {
 
 
   implicit val secretBigIntEncoder: Encoder[BigInteger] = Encoder.instance { w =>
-    ErgoAlgos.encode(BigIntegers.asUnsignedByteArray(w)).asJson
+    ErgoAlgos.encode(BigIntegers.asUnsignedByteArray(CryptoConstants.groupSize, w)).asJson
   }
 
   implicit val secretBigIntDecoder: Decoder[BigInteger] = arrayBytesDecoder.map { bytes =>

@@ -83,6 +83,14 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
+  property("json-encoded dlog secret is always about 32 bytes") {
+    forAll(dlogSecretWithPublicImageGen) { case (secret, _) =>
+      val wrappedSecret = DlogSecretWrapper(secret)
+      val json = wrappedSecret.asJson
+      json.toString().length shouldBe 66 // 32-bytes hex-encoded data (64 ASCII chars) + quotes == 66 ASCII chars
+    }
+  }
+
   property("dlog secret roundtrip") {
     forAll(dlogSecretWithPublicImageGen) { case (secret, _) =>
       val wrappedSecret = DlogSecretWrapper(secret)

@@ -349,6 +349,46 @@ components:
           type: string
           example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
 
+    TrasanctionSigningRequest:
+      description: A request to sign a transaction with secrets provided
+        type: object
+        required:
+          - tx
+          - secrets
+          - inputsRaw
+          - dataInputsRaw
+        properties:
+          tx:
+            description: Unsigned transaction to sign
+            type: object
+            $ref: '#/components/schemas/UnsignedErgoTransaction'
+          inputsRaw:
+            description: Optional list of inputs to be used in serialized form
+            type: array
+            items:
+              type: string
+              description: hex-encoded serialized box bytes
+          dataInputsRaw:
+            description: Optional list of inputs to be used in serialized form
+            type: array
+            items:
+              type: string
+              description: hex-encoded serialized box bytes
+          secrets:
+            description: Secrets used for signing
+            type: object
+            properties:
+              dlog:
+                description: Sequence of secret exponents (DLOG secrets)
+                type: array
+                items:
+                  $ref: '#/components/schemas/DlogSecret'
+              dht:
+                description: Sequence of secret Diffie-Hellman tuple exponents (DHT secrets)
+                type: array
+                items:
+                  $ref: '#/components/schemas/DhtSecret'
+
     AddressHolder:
       description: Holds encoded ErgoAddress
       type: object

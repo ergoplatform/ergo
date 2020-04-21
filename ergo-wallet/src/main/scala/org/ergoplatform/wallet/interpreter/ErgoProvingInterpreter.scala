@@ -7,7 +7,7 @@ import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext, TransactionContext}
 import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, SecretKey}
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.basics.{SigmaProtocolCommonInput, SigmaProtocolPrivateInput}
+import sigmastate.basics.SigmaProtocolPrivateInput
 import sigmastate.eval.{CompiletimeIRContext, IRContext}
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
@@ -15,27 +15,29 @@ import scala.util.{Failure, Success, Try}
 
 /**
   * A class which is holding secrets and signing transactions.
-  *
-  * Currently it just generates some number of secrets (the number is provided via "dlogSecretsNumber" setting in the
-  * "wallet" section) from a seed and sign a transaction (against input boxes to spend and
-  * blockchain state) by using the secrets (no additional inputs, e.g. hash function preimages required in scripts,
-  * are supported. Here, signing a transaction means spending proofs generation for all of its input boxes.
+  * Signing a transaction means spending proofs generation for all of its input boxes.
   *
   * @param secretKeys - secrets used by the prover
-  * @param params     - ergo network parameters
+  * @param params     - ergo network parameters at the moment of proving
   */
 class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: ErgoLikeParameters)
                             (implicit IR: IRContext)
   extends ErgoInterpreter(params) with ProverInterpreter {
 
+  /**
+    * Interpreter's secrets, in form of sigma protocols private inputs
+    */
   val secrets: IndexedSeq[SigmaProtocolPrivateInput[_, _]] = secretKeys.map(_.key)
 
+  /**
+    * Only secrets corresponding to hierarchical deterministic scheme (BIP-32 impl)
+    */
   val hdKeys: IndexedSeq[ExtendedSecretKey] =
     secretKeys.filter(_.isInstanceOf[ExtendedSecretKey]).map(_.asInstanceOf[ExtendedSecretKey])
 
-  val pubKeys: IndexedSeq[SigmaProtocolCommonInput[_]] =
-    secrets.map(_.publicImage.asInstanceOf[SigmaProtocolCommonInput[_]])
-
+  /**
+    * Only public keys corresponding to hierarchical deterministic scheme (BIP-32 impl)
+    */
   val hdPubKeys: IndexedSeq[ProveDlog] = hdKeys.map(_.publicImage)
 
   /**
@@ -99,4 +101,5 @@ object ErgoProvingInterpreter {
 
   def apply(rootSecret: ExtendedSecretKey, params: ErgoLikeParameters): ErgoProvingInterpreter =
     new ErgoProvingInterpreter(IndexedSeq(rootSecret), params)(new CompiletimeIRContext)
+
 }

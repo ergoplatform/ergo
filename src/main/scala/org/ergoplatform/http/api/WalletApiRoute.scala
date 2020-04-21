@@ -47,7 +47,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         generateTransactionR ~
         sendPaymentTransactionR ~
         sendTransactionR ~
-        signTransactionR ~
         initWalletR ~
         restoreWalletR ~
         unlockWalletR ~
@@ -56,6 +55,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         deriveNextKeyR ~
         updateChangeAddressR
     }
+  } ~ pathPrefix("wallet") {
+    signTransactionR
   }
 
   private val password: Directive1[String] = entity(as[Json]).flatMap { p =>

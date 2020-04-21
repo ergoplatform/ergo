@@ -204,7 +204,7 @@ components:
 
   UnsignedErgoTransaction:
     type: object
-      description: Unsigned Ergo transaction
+    description: Unsigned Ergo transaction
     required:
       - unsignedInputs
       - dataInputs
@@ -322,11 +322,11 @@ components:
                     elements "u", "v", such as g^w = u, h^w = v
       type: object
       required:
-      -secret
-      -g
-      -h
-      -u
-      -v
+        -secret
+        -g
+        -h
+        -u
+        -v
       properties:
         secret:
           description: Hex-encoded big-endian 256-bits secret exponent
@@ -351,43 +351,43 @@ components:
 
     TrasanctionSigningRequest:
       description: A request to sign a transaction with secrets provided
-        type: object
-        required:
-          - tx
-          - secrets
-          - inputsRaw
-          - dataInputsRaw
-        properties:
-          tx:
-            description: Unsigned transaction to sign
-            type: object
-            $ref: '#/components/schemas/UnsignedErgoTransaction'
-          inputsRaw:
-            description: Optional list of inputs to be used in serialized form
-            type: array
-            items:
-              type: string
-              description: hex-encoded serialized box bytes
-          dataInputsRaw:
-            description: Optional list of inputs to be used in serialized form
-            type: array
-            items:
-              type: string
-              description: hex-encoded serialized box bytes
-          secrets:
-            description: Secrets used for signing
-            type: object
-            properties:
-              dlog:
-                description: Sequence of secret exponents (DLOG secrets)
-                type: array
-                items:
-                  $ref: '#/components/schemas/DlogSecret'
-              dht:
-                description: Sequence of secret Diffie-Hellman tuple exponents (DHT secrets)
-                type: array
-                items:
-                  $ref: '#/components/schemas/DhtSecret'
+      type: object
+      required:
+        - tx
+        - secrets
+        - inputsRaw
+        - dataInputsRaw
+      properties:
+        tx:
+          description: Unsigned transaction to sign
+          type: object
+          $ref: '#/components/schemas/UnsignedErgoTransaction'
+        inputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
+        dataInputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
+        secrets:
+          description: Secrets used for signing
+          type: object
+          properties:
+            dlog:
+              description: Sequence of secret exponents (DLOG secrets)
+              type: array
+              items:
+                $ref: '#/components/schemas/DlogSecret'
+            dht:
+              description: Sequence of secret Diffie-Hellman tuple exponents (DHT secrets)
+              type: array
+              items:
+                $ref: '#/components/schemas/DhtSecret'
 
     AddressHolder:
       description: Holds encoded ErgoAddress

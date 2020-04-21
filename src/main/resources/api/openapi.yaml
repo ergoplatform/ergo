@@ -179,15 +179,15 @@ components:
           minimum: 0
           example: 147
         certain:
-          description: A flag signalling wheatehr the box is certainly resolved (as belonging to a wallet)
+          description: A flag signalling whether the box is certainly resolved (as belonging to a wallet)
           type: boolean
           example: true
         onchain:
-          description: A flag signalling wheatehr the box is created on main chain
+          description: A flag signalling whether the box is created on main chain
           type: boolean
           example: true
         spent:
-          description: A flag signalling wheatehr the box was spent
+          description: A flag signalling whether the box was spent
           type: boolean
           example: false
         creationOutIndex:
@@ -600,7 +600,7 @@ components:
             $ref: '#/components/schemas/SigmaHeader'
         preHeader:
           type: object
-          description: fields of block header with the current `spendingTransaction`, that can be predicted by a miner before it's formation
+          description: fields of block header with the current `spendingTransaction`, that can be predicted by a miner before its formation
           $ref: '#/components/schemas/PreHeader'
         dataBoxes:
           type: array
@@ -627,7 +627,7 @@ components:
           description: prover-defined key-value pairs, that may be used inside a script
         validationSettings:
           type: string
-          description: validataion parameters passed to Interpreter.verify to detect soft-fork conditions
+          description: validation parameters passed to Interpreter.verify to detect soft-fork conditions
           example: "10e8070001e9070001ea070001eb070001ec070001ed070001ee070001ef070001f0070001f1070001f2070001f3070001f4070001f5070001f6070001f7070001"
         costLimit:
           type: integer
@@ -654,7 +654,7 @@ components:
           type: object
           nullable: true
         context:
-          description: Interpretator context
+          description: Interpreter context
           type: object
           nullable: true
           $ref: '#/components/schemas/ErgoLikeContext'
@@ -1214,7 +1214,7 @@ components:
         maxBlockCost:
           type: integer
           format: int32
-          description: Maximum cumulative computational complexity of input scipts in block transactions
+          description: Maximum cumulative computational complexity of input scripts in block transactions
           minimum: 0
           example: 104876
           nullable: false
@@ -1364,7 +1364,7 @@ components:
       example: 1524143059077
 
     EmissionInfo:
-      description: Emssion info for height
+      description: Emission info for height
       type: object
       properties:
         minerReward:

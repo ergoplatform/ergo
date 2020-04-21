@@ -38,15 +38,15 @@ components:
           example:
             '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
-  ErgoTransactionDataInput:
-    type: object
-    required:
-      - boxId
-    properties:
-      boxId:
-        $ref: '#/components/schemas/TransactionBoxId'
-      extension:
-        type: object
+    ErgoTransactionDataInput:
+      type: object
+      required:
+        - boxId
+      properties:
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
+        extension:
+          type: object
         additionalProperties:
           $ref: '#/components/schemas/SValue'
         example:
@@ -202,31 +202,31 @@ components:
           example: 1
           default: 1
 
-  UnsignedErgoTransaction:
-    type: object
-    description: Unsigned Ergo transaction
-    required:
-      - unsignedInputs
-      - dataInputs
-      - outputs
-    properties:
-      id:
-        $ref: '#/components/schemas/TransactionId'
-      inputs:
-        description: Unsigned inputs of the transaction
-        type: array
-        items:
-          $ref: '#/components/schemas/ErgoTransactionUnsignedInput'
-      dataInputs:
-        description: Data inputs of the transaction
-        type: array
-        items:
-          $ref: '#/components/schemas/ErgoTransactionDataInput'
-      outputs:
-        description: Outputs of the transaction
-        type: array
-        items:
-          $ref: '#/components/schemas/ErgoTransactionOutput'
+    UnsignedErgoTransaction:
+      type: object
+      description: Unsigned Ergo transaction
+      required:
+        - unsignedInputs
+        - dataInputs
+        - outputs
+      properties:
+        id:
+          $ref: '#/components/schemas/TransactionId'
+        inputs:
+          description: Unsigned inputs of the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionUnsignedInput'
+        dataInputs:
+          description: Data inputs of the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionDataInput'
+        outputs:
+          description: Outputs of the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransactionOutput'
 
     ErgoTransaction:
       type: object

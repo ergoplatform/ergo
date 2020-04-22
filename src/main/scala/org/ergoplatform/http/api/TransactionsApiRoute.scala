@@ -16,12 +16,13 @@ import scorex.core.settings.RESTApiSettings
 import scorex.core.transaction.state.TransactionValidation
 
 import scala.concurrent.Future
+import scala.util.Try
 
 case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, settings: RESTApiSettings)
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   override val route: Route = pathPrefix("transactions") {
-    getUnconfirmedTransactionsR ~ sendTransactionR
+    getUnconfirmedTransactionsR ~ sendTransactionR ~ checkTransactionR
   }
 
   private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
@@ -54,6 +55,23 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
 
   def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (offset, limit) =>
     ApiResponse(getUnconfirmedTransactions(offset, limit))
+  }
+
+  def checkTransactionR: Route = (path("check") & post & entity(as[ErgoTransaction])) {tx =>
+    onSuccess {
+      getState
+        .map {
+          case validator: TransactionValidation[ErgoTransaction@unchecked] =>
+            validator.validate(tx)
+          case _ =>
+            Try(new Exception("Transaction validation is not supported in absence of UTXO set"))
+        }
+    } {
+      _.fold(
+        e => BadRequest(s"Validation failed: ${e.getMessage}"),
+        _ => ApiResponse(tx.id)
+      )
+    }
   }
 
 }

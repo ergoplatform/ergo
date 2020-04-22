@@ -14,18 +14,19 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.{AssetUtils, BoxUtils}
+import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.TransactionContext
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage}
+import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
@@ -448,13 +449,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
             .map(_.value)
             .sum
 
-          val targetAssets = payTo
-            .filterNot(bx => assetIssueBox.contains(bx))
-            .foldLeft(Map.empty[ModifierId, Long]) { case (acc, bx) =>
-              // TODO optimize: avoid toArray and use mapFirst
-              val boxTokens = bx.additionalTokens.toArray.map(t => bytesToId(t._1) -> t._2).toMap
-              AssetUtils.mergeAssets(boxTokens, acc)
-            }
+          val targetAssets = TransactionBuilder.collectOutputTokens(payTo.filterNot(bx => assetIssueBox.contains(bx)))
 
           val (inputBoxes, filter) = if (inputs.nonEmpty) {
             //inputs are provided externally, no need for filtering

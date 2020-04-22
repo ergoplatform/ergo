@@ -436,7 +436,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           require(prover.pubKeys.nonEmpty, "No public keys in the prover to extract change address from")
           require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
           require(payTo.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, parameters)), "Minimal ERG value not met")
-          require(payTo.forall(_.additionalTokens.forall(_._2 >= 0)), "Negative asset value")
+          require(payTo.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
 
           val assetIssueBox = payTo
             .zip(requests)

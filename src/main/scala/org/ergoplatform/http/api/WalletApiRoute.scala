@@ -153,7 +153,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     & post & entity(as[TransactionSigningRequest])) { tsr =>
 
     val tx = tsr.utx
-    val secrets = (tsr.dlogs ++ tsr.dhts).map(OneTimeSecret.apply)
+    val secrets = (tsr.dlogs ++ tsr.dhts).map(ExternalSecret.apply)
 
     def signWithReaders(r: Readers): Future[Try[ErgoTransaction]] = {
       if (tsr.inputs.isDefined) {

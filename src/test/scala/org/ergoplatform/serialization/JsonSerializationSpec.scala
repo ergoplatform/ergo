@@ -13,7 +13,7 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.ergoplatform.wallet.secrets.{DhtSecretWrapper, DlogSecretWrapper}
+import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.scalatest.Inspectors
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
@@ -85,7 +85,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
 
   property("json-encoded dlog secret is always about 32 bytes") {
     forAll(dlogSecretWithPublicImageGen) { case (secret, _) =>
-      val wrappedSecret = DlogSecretWrapper(secret)
+      val wrappedSecret = DlogSecretKey(secret)
       val json = wrappedSecret.asJson
       json.toString().length shouldBe 66 // 32-bytes hex-encoded data (64 ASCII chars) + quotes == 66 ASCII chars
     }
@@ -93,18 +93,18 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
 
   property("dlog secret roundtrip") {
     forAll(dlogSecretWithPublicImageGen) { case (secret, _) =>
-      val wrappedSecret = DlogSecretWrapper(secret)
+      val wrappedSecret = DlogSecretKey(secret)
       val json = wrappedSecret.asJson
-      val parsedSecret = json.as[DlogSecretWrapper].toOption.get
+      val parsedSecret = json.as[DlogSecretKey].toOption.get
       parsedSecret shouldBe wrappedSecret
     }
   }
 
   property("dht secret roundtrip") {
     forAll(dhtSecretWithPublicImageGen) { case (secret, _) =>
-      val wrappedSecret = DhtSecretWrapper(secret)
+      val wrappedSecret = DhtSecretKey(secret)
       val json = wrappedSecret.asJson
-      val parsedSecret = json.as[DhtSecretWrapper].toOption.get
+      val parsedSecret = json.as[DhtSecretKey].toOption.get
       parsedSecret shouldBe wrappedSecret
     }
   }

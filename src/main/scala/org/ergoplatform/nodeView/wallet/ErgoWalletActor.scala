@@ -12,7 +12,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, U
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, OneTimeSecret, PaymentRequest, TransactionGenerationRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{AssetUtils, BoxUtils}
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
@@ -655,7 +655,7 @@ object ErgoWalletActor {
 
   final case class GenerateTransaction(requests: Seq[TransactionGenerationRequest], inputsRaw: Seq[String])
 
-  final case class SignTransaction(secrets: Seq[OneTimeSecret],
+  final case class SignTransaction(secrets: Seq[ExternalSecret],
                                    utx: UnsignedErgoTransaction,
                                    boxesToSpend: Seq[ErgoBox],
                                    dataBoxes: Seq[ErgoBox])
@@ -692,7 +692,7 @@ object ErgoWalletActor {
 
   case object GetFirstSecret
 
-  def signTransaction(secrets: Seq[OneTimeSecret],
+  def signTransaction(secrets: Seq[ExternalSecret],
                       tx: UnsignedErgoTransaction,
                       boxesToSpend: Seq[ErgoBox],
                       dataBoxes: Seq[ErgoBox],

@@ -1,7 +1,7 @@
 package org.ergoplatform.wallet.interpreter
 
 import org.ergoplatform.wallet.crypto.ErgoSignature
-import org.ergoplatform.wallet.secrets.{DlogSecretWrapper, ExtendedSecretKey}
+import org.ergoplatform.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.utils.Generators
 import org.scalatest.{FlatSpec, Matchers}
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
@@ -19,7 +19,7 @@ class ErgoProvingInterpreterSpec
     val extendedSecretKey = ExtendedSecretKey.deriveMasterKey(entropy)
     val fullProver = ErgoProvingInterpreter(extendedSecretKey, parameters)
 
-    val primitiveKey = DlogSecretWrapper(extendedSecretKey.key)
+    val primitiveKey = DlogSecretKey(extendedSecretKey.privateInput)
     val unsafeProver = ErgoProvingInterpreter(IndexedSeq(primitiveKey), parameters)
 
     forAll(unsignedTxGen(extendedSecretKey)) { case (ins, unsignedTx) =>

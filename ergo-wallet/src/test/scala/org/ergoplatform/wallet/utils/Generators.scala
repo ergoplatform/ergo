@@ -153,7 +153,7 @@ trait Generators {
   def dlogPropGen(dlog: ProveDlog): Gen[SigmaPropValue] = Gen.const(dlog.toSigmaProp)
 
   def unsignedTxGen(secret: SecretKey): Gen[(IndexedSeq[ErgoBox], UnsignedErgoLikeTransaction)] = {
-    val dlog = dlogPropGen(secret.key.publicImage.asInstanceOf[ProveDlog])
+    val dlog = dlogPropGen(secret.privateInput.publicImage.asInstanceOf[ProveDlog])
     for {
       ins <- Gen.listOfN(2, ergoBoxGen(dlog))
       value <- Gen.posNum[Long]

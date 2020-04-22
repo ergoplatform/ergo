@@ -1,4 +1,4 @@
-package org.ergoplatform.utils
+package org.ergoplatform.wallet
 
 import scorex.util.ModifierId
 
@@ -7,10 +7,11 @@ import scala.collection.mutable
 object AssetUtils {
 
   @inline
-  def mergeAssetsMut(into: mutable.Map[ModifierId, Long], from: Map[ModifierId, Long]): Unit = {
-    from.foreach { case (id, amount) =>
-      into.put(id, into.getOrElse(id, 0L) + amount)
-    }
+  def mergeAssetsMut(into: mutable.Map[ModifierId, Long], from: Map[ModifierId, Long]*): Unit = {
+    from.foreach(_.foreach {
+      case (id, amount) =>
+        into.put(id, into.getOrElse(id, 0L) + amount)
+    })
   }
 
   @inline

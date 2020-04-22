@@ -169,7 +169,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case ReadTrackedAddresses =>
         sender ! trackedAddresses
 
-      case GenerateTransaction(_, _) =>
+      case GenerateTransaction(_, _, _) =>
         val input = ErgoTransactionGenerators.inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
         sender ! Success(tx)

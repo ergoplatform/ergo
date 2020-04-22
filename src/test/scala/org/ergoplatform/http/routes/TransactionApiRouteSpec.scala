@@ -44,6 +44,18 @@ class TransactionApiRouteSpec extends FlatSpec
     }
   }
 
+  it should "check transaction" in {
+      Post(prefix + "/check", tx.asJson) ~> route ~> check {
+        status shouldBe StatusCodes.OK
+        responseAs[String] shouldEqual tx.id
+      }
+      //second attempt should be fine also
+      Post(prefix + "/check", tx.asJson) ~> route ~> check {
+        status shouldBe StatusCodes.OK
+        responseAs[String] shouldEqual tx.id
+      }
+  }
+
   it should "get unconfirmed from mempool" in {
     Get(prefix + "/unconfirmed") ~> route ~> check {
       status shouldBe StatusCodes.OK

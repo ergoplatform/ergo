@@ -122,32 +122,44 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWalletOp(op)(ApiResponse.apply[T])
   }
 
-  private def generateTransaction(requests: Seq[TransactionRequest], inputsRaw: Seq[String]): Route = {
-    withWalletOp(_.generateTransaction(requests, inputsRaw)) {
+  private def generateTransactionAndProcess(requests: Seq[TransactionRequest],
+                                            inputsRaw: Seq[String],
+                                            dataInputsRaw: Seq[String],
+                                            processFn: ErgoTransaction => Route): Route = {
+    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw)) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(tx) => ApiResponse(tx)
+      case Success(tx) => processFn(tx)
     }
   }
 
-  private def sendTransaction(requests: Seq[TransactionRequest], inputsRaw: Seq[String]): Route = {
-    withWalletOp(_.generateTransaction(requests, inputsRaw)) {
-      case Failure(e) =>
-        BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(tx) =>
-        nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
-        ApiResponse(tx.id)
-    }
+  private def generateTransaction(requests: Seq[TransactionRequest],
+                                  inputsRaw: Seq[String],
+                                  dataInputsRaw: Seq[String]): Route = {
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, tx => ApiResponse(tx))
   }
 
-  def sendTransactionR: Route = (path("transaction" / "send") & post
-    & entity(as[RequestsHolder])) (holder => sendTransaction(holder.withFee, holder.inputsRaw))
+  private def sendTransaction(requests: Seq[TransactionRequest],
+                              inputsRaw: Seq[String],
+                              dataInputsRaw: Seq[String]): Route = {
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, {tx =>
+      nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+      ApiResponse(tx.id)
+    })
+  }
 
-  def generateTransactionR: Route = (path("transaction" / "generate") & post
-    & entity(as[RequestsHolder])) (holder => generateTransaction(holder.withFee, holder.inputsRaw))
+  def sendTransactionR: Route =
+    (path("transaction" / "send") & post & entity(as[RequestsHolder])){ holder =>
+      sendTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+    }
+
+  def generateTransactionR: Route =
+    (path("transaction" / "generate") & post & entity(as[RequestsHolder])){ holder =>
+      generateTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+    }
 
   def sendPaymentTransactionR: Route = (path("payment" / "send") & post
     & entity(as[Seq[PaymentRequest]])) { requests =>
-    sendTransaction(withFee(requests), Seq.empty)
+    sendTransaction(withFee(requests), Seq.empty, Seq.empty)
   }
 
   def balancesR: Route = (path("balances") & get) {

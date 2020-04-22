@@ -121,10 +121,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
     val transactionsRoot = BlockTransactions.transactionsRoot(transactions)
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
-    val extensionRoot: Digest32 = Extension.rootHash(extensionCandidate)
 
     prove(parentOpt, version, nBits, stateRoot, adProofsRoot, transactionsRoot,
-      timestamp, extensionRoot, votes, sk, minNonce, maxNonce).map { h =>
+      timestamp, extensionCandidate.digest, votes, sk, minNonce, maxNonce).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
       val blockTransactions = BlockTransactions(h.id, transactions)
       val extension = extensionCandidate.toExtension(h.id)

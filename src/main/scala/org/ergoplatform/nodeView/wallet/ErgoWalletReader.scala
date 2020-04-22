@@ -9,7 +9,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
-import org.ergoplatform.nodeView.wallet.requests.{OneTimeSecret, TransactionGenerationRequest}
+import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.secrets.DerivationPath
@@ -88,7 +88,7 @@ trait ErgoWalletReader extends VaultReader {
                           inputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
     (walletActor ? GenerateTransaction(requests, inputsRaw)).mapTo[Try[ErgoTransaction]]
 
-  def signTransaction(secrets: Seq[OneTimeSecret],
+  def signTransaction(secrets: Seq[ExternalSecret],
                       tx: UnsignedErgoTransaction,
                       boxesToSpend: Seq[ErgoBox],
                       dataBoxes: Seq[ErgoBox]): Future[Try[ErgoTransaction]] =

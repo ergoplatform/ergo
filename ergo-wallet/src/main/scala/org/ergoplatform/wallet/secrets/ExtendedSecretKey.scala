@@ -21,14 +21,14 @@ final class ExtendedSecretKey(val keyBytes: Array[Byte],
                               val path: DerivationPath)
   extends ExtendedKey with SecretKey {
 
-  override def key: DLogProverInput = DLogProverInput(BigIntegers.fromUnsignedByteArray(keyBytes))
+  override def privateInput: DLogProverInput = DLogProverInput(BigIntegers.fromUnsignedByteArray(keyBytes))
 
-  def publicImage: DLogProtocol.ProveDlog = key.publicImage
+  def publicImage: DLogProtocol.ProveDlog = privateInput.publicImage
 
   def child(idx: Int): ExtendedSecretKey = ExtendedSecretKey.deriveChildSecretKey(this, idx)
 
   def publicKey: ExtendedPublicKey =
-    new ExtendedPublicKey(key.publicImage.value.getEncoded(true), chainCode, path.toPublic)
+    new ExtendedPublicKey(privateInput.publicImage.value.getEncoded(true), chainCode, path.toPublic)
 
   def isErased: Boolean = keyBytes.forall(_ == 0x00)
 
@@ -57,7 +57,7 @@ object ExtendedSecretKey {
   def deriveChildSecretKey(parentKey: ExtendedSecretKey, idx: Int): ExtendedSecretKey = {
     val keyCoded: Array[Byte] =
       if (Index.isHardened(idx)) (0x00: Byte) +: parentKey.keyBytes
-      else parentKey.key.publicImage.value.getEncoded(true)
+      else parentKey.privateInput.publicImage.value.getEncoded(true)
     val (childKeyProto, childChainCode) = HmacSHA512
       .hash(parentKey.chainCode, keyCoded ++ Index.serializeIndex(idx))
       .splitAt(Constants.KeyLen)
@@ -73,7 +73,7 @@ object ExtendedSecretKey {
 
   def deriveChildPublicKey(parentKey: ExtendedSecretKey, idx: Int): ExtendedPublicKey = {
     val derivedSecret = deriveChildSecretKey(parentKey, idx)
-    val derivedPk = derivedSecret.key.publicImage.value.getEncoded(true)
+    val derivedPk = derivedSecret.privateInput.publicImage.value.getEncoded(true)
     val derivedPath = derivedSecret.path.copy(publicBranch = true)
     new ExtendedPublicKey(derivedPk, derivedSecret.chainCode, derivedPath)
   }

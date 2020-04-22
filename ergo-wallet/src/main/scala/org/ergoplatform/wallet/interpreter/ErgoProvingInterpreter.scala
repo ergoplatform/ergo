@@ -27,13 +27,12 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: Ergo
   /**
     * Interpreter's secrets, in form of sigma protocols private inputs
     */
-  val secrets: IndexedSeq[SigmaProtocolPrivateInput[_, _]] = secretKeys.map(_.key)
+  val secrets: IndexedSeq[SigmaProtocolPrivateInput[_, _]] = secretKeys.map(_.privateInput)
 
   /**
     * Only secrets corresponding to hierarchical deterministic scheme (BIP-32 impl)
     */
-  val hdKeys: IndexedSeq[ExtendedSecretKey] =
-    secretKeys.filter(_.isInstanceOf[ExtendedSecretKey]).map(_.asInstanceOf[ExtendedSecretKey])
+  val hdKeys: IndexedSeq[ExtendedSecretKey] = secretKeys.collect { case ek: ExtendedSecretKey => ek }
 
   /**
     * Only public keys corresponding to hierarchical deterministic scheme (BIP-32 impl)

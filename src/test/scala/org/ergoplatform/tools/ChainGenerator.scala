@@ -199,7 +199,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
   private def proveCandidate(candidate: CandidateBlock): ErgoFullBlock = {
     log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp ${candidate.timestamp}")
 
-    pow.proveCandidate(candidate, prover.hdKeys.head.key.w) match {
+    pow.proveCandidate(candidate, prover.hdKeys.head.privateInput.w) match {
       case Some(fb) => fb
       case _ =>
         val interlinks = candidate.parentOpt

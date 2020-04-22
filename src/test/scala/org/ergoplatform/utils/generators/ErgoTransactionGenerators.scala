@@ -7,12 +7,12 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
-import org.ergoplatform.nodeView.wallet.requests.{OneTimeSecret, TransactionSigningRequest}
+import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionSigningRequest}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction}
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.BoxUtils
-import org.ergoplatform.wallet.secrets.{DhtSecretWrapper, DlogSecretWrapper}
+import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -394,7 +394,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     (inputBoxes, utx) <- validUnsignedErgoTransactionGen(pubKey)
     coin = Random.nextBoolean()
     inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
-    secretSeq = Seq(OneTimeSecret(DlogSecretWrapper(secret)), OneTimeSecret(DhtSecretWrapper(secretDh)))
+    secretSeq = Seq(ExternalSecret(DlogSecretKey(secret)), ExternalSecret(DhtSecretKey(secretDh)))
   } yield TransactionSigningRequest(utx, secretSeq, if(coin) Some(inputBoxesEncoded) else None, None)
 
 }

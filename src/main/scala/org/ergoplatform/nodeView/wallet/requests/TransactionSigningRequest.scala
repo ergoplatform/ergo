@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet.requests
 import io.circe.{Decoder, Encoder, Json}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
-import org.ergoplatform.wallet.secrets.{DhtSecretWrapper, DlogSecretWrapper, PrimitiveSecretKey}
+import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey, PrimitiveSecretKey}
 
 /**
   * Basic trait for externally provided hint for interpreter (to be used during script execution and signature
@@ -15,7 +15,7 @@ trait Hint
   * Externally provided secret (to be used once for a transaction to sign)
   * @param key - the secret
   */
-case class OneTimeSecret(key: PrimitiveSecretKey) extends Hint
+case class ExternalSecret(key: PrimitiveSecretKey) extends Hint
 
 /**
   * A request to sign a transaction
@@ -29,13 +29,13 @@ case class TransactionSigningRequest(utx: UnsignedErgoTransaction,
                                      inputs: Option[Seq[String]],
                                      dataInputs: Option[Seq[String]]){
 
-  lazy val dlogs: Seq[DlogSecretWrapper] = hints.flatMap{ h => h match{
-    case OneTimeSecret(d: DlogSecretWrapper) => Some(d)
+  lazy val dlogs: Seq[DlogSecretKey] = hints.flatMap{ h => h match{
+    case ExternalSecret(d: DlogSecretKey) => Some(d)
     case _ => None
   }}
 
-  lazy val dhts: Seq[DhtSecretWrapper] = hints.flatMap{ h => h match{
-    case OneTimeSecret(d: DhtSecretWrapper) => Some(d)
+  lazy val dhts: Seq[DhtSecretKey] = hints.flatMap{ h => h match{
+    case ExternalSecret(d: DhtSecretKey) => Some(d)
     case _ => None
   }}
 
@@ -60,11 +60,11 @@ object TransactionSigningRequest extends ApiCodecs {
   implicit val decoder: Decoder[TransactionSigningRequest] = { cursor =>
     for {
       tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
-      dlogs <- cursor.downField("secrets").downField("dlog").as[Option[Seq[DlogSecretWrapper]]]
-      dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DhtSecretWrapper]]]
+      dlogs <- cursor.downField("secrets").downField("dlog").as[Option[Seq[DlogSecretKey]]]
+      dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DhtSecretKey]]]
       inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
       dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
-      secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(OneTimeSecret.apply)
+      secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
     } yield TransactionSigningRequest(tx, secrets, inputs, dataInputs)
   }
 

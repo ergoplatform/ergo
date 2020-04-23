@@ -2,6 +2,7 @@ package org.ergoplatform.http.routes
 
 import java.net.InetSocketAddress
 
+import akka.actor.{Actor, Props}
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
@@ -9,9 +10,10 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import org.ergoplatform.http.api.TransactionsApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.Stubs
-import org.ergoplatform.{DataInput, ErgoBoxCandidate, Input}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
 
@@ -28,7 +30,7 @@ class TransactionApiRouteSpec extends FlatSpec
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
   val route: Route = TransactionsApiRoute(utxoReadersRef, nodeViewRef, restApiSettings).route
 
-  val inputBox = utxoState.takeBoxes(1).head
+  val inputBox: ErgoBox = utxoState.takeBoxes(1).head
   val input = Input(inputBox.id, emptyProverResult)
   val dataInput = DataInput(input.boxId)
 
@@ -46,13 +48,27 @@ class TransactionApiRouteSpec extends FlatSpec
   }
 
   it should "post chained transactions" in {
+    Post(prefix, chainedTx.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+
     Post(prefix, tx.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] shouldEqual tx.id
     }
 
-    Post(prefix, chainedTx.asJson) ~> route ~> check {
-      println(responseAs[String])
+    //constructing memory pool and node view test with the transaction tx included
+    val mp2 = memPool.put(tx).get
+    class UtxoReadersStub2 extends Actor {
+      def receive: PartialFunction[Any, Unit] = {
+        case GetReaders => sender() ! Readers(history, utxoState, mp2, wallet)
+        case GetDataFromHistory(f) => sender() ! f(history)
+      }
+    }
+    val readers2 = system.actorOf(Props(new UtxoReadersStub2))
+    val route2: Route = TransactionsApiRoute(readers2, nodeViewRef, restApiSettings).route
+
+    Post(prefix, chainedTx.asJson) ~> route2 ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] shouldEqual chainedTx.id
     }

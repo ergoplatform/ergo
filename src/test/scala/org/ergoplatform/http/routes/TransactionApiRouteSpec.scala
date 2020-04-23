@@ -40,6 +40,19 @@ class TransactionApiRouteSpec extends FlatSpec
   val chainedInput = Input(tx.outputs.head.id, emptyProverResult)
   val chainedTx: ErgoTransaction = ErgoTransaction(IndexedSeq(chainedInput), IndexedSeq(output))
 
+  val chainedRoute: Route = {
+    //constructing memory pool and node view  with the transaction tx included
+    val mp2 = memPool.put(tx).get
+    class UtxoReadersStub2 extends Actor {
+      def receive: PartialFunction[Any, Unit] = {
+        case GetReaders => sender() ! Readers(history, utxoState, mp2, wallet)
+        case GetDataFromHistory(f) => sender() ! f(history)
+      }
+    }
+    val readers2 = system.actorOf(Props(new UtxoReadersStub2))
+    TransactionsApiRoute(readers2, nodeViewRef, restApiSettings).route
+  }
+
   it should "post transaction" in {
     Post(prefix, tx.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
@@ -57,18 +70,7 @@ class TransactionApiRouteSpec extends FlatSpec
       responseAs[String] shouldEqual tx.id
     }
 
-    //constructing memory pool and node view test with the transaction tx included
-    val mp2 = memPool.put(tx).get
-    class UtxoReadersStub2 extends Actor {
-      def receive: PartialFunction[Any, Unit] = {
-        case GetReaders => sender() ! Readers(history, utxoState, mp2, wallet)
-        case GetDataFromHistory(f) => sender() ! f(history)
-      }
-    }
-    val readers2 = system.actorOf(Props(new UtxoReadersStub2))
-    val route2: Route = TransactionsApiRoute(readers2, nodeViewRef, restApiSettings).route
-
-    Post(prefix, chainedTx.asJson) ~> route2 ~> check {
+    Post(prefix, chainedTx.asJson) ~> chainedRoute ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] shouldEqual chainedTx.id
     }
@@ -83,6 +85,15 @@ class TransactionApiRouteSpec extends FlatSpec
       Post(prefix + "/check", tx.asJson) ~> route ~> check {
         status shouldBe StatusCodes.OK
         responseAs[String] shouldEqual tx.id
+      }
+
+      Post(prefix + "/check", chainedTx.asJson) ~> route ~> check {
+        status shouldBe StatusCodes.BadRequest
+      }
+
+      Post(prefix + "/check", chainedTx.asJson) ~> chainedRoute ~> check {
+        status shouldBe StatusCodes.OK
+        responseAs[String] shouldEqual chainedTx.id
       }
   }
 

@@ -10,11 +10,10 @@ import io.circe.syntax._
 import org.ergoplatform.http.api.TransactionsApiRoute
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.utils.{BoxUtils, Stubs}
-import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.utils.Stubs
+import org.ergoplatform.{DataInput, ErgoBoxCandidate, Input}
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.core.settings.RESTApiSettings
-import scorex.crypto.authds.ADKey
 
 import scala.concurrent.duration._
 
@@ -27,20 +26,35 @@ class TransactionApiRouteSpec extends FlatSpec
   val prefix = "/transactions"
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds)
-  val route: Route = TransactionsApiRoute(readersRef, nodeViewRef, restApiSettings).route
+  val route: Route = TransactionsApiRoute(utxoReadersRef, nodeViewRef, restApiSettings).route
 
-  val input = Input(ADKey @@ Array.fill(ErgoBox.BoxId.size)(0: Byte), emptyProverResult)
+  val inputBox = utxoState.takeBoxes(1).head
+  val input = Input(inputBox.id, emptyProverResult)
   val dataInput = DataInput(input.boxId)
 
-  val boxValue: Long = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, parameters)
-  val output: ErgoBoxCandidate = new ErgoBoxCandidate(boxValue, Constants.TrueLeaf,
-    creationHeight = creationHeightGen.sample.get)
+  val output: ErgoBoxCandidate = new ErgoBoxCandidate(inputBox.value, Constants.TrueLeaf, creationHeight = 0)
   val tx: ErgoTransaction = ErgoTransaction(IndexedSeq(input), IndexedSeq(dataInput), IndexedSeq(output))
+
+  val chainedInput = Input(tx.outputs.head.id, emptyProverResult)
+  val chainedTx: ErgoTransaction = ErgoTransaction(IndexedSeq(chainedInput), IndexedSeq(output))
 
   it should "post transaction" in {
     Post(prefix, tx.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] shouldEqual tx.id
+    }
+  }
+
+  it should "post chained transactions" in {
+    Post(prefix, tx.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[String] shouldEqual tx.id
+    }
+
+    Post(prefix, chainedTx.asJson) ~> route ~> check {
+      println(responseAs[String])
+      status shouldBe StatusCodes.OK
+      responseAs[String] shouldEqual chainedTx.id
     }
   }
 

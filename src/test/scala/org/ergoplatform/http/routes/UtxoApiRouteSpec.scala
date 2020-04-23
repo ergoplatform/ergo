@@ -24,25 +24,6 @@ class UtxoApiRouteSpec extends FlatSpec
 
   val prefix = "/utxo"
 
-  val utxoSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(stateType = StateType.Utxo))
-
-  lazy val utxoState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, utxoSettings)).sample.value
-
-  lazy val utxoReaders = Readers(history, utxoState, memPool, wallet)
-
-  class UtxoReadersStub extends Actor {
-    def receive: PartialFunction[Any, Unit] = {
-      case GetReaders => sender() ! utxoReaders
-      case GetDataFromHistory(f) => sender() ! f(history)
-    }
-  }
-
-  object UtxoReadersStub {
-    def props(): Props = Props(new UtxoReadersStub)
-  }
-
-  lazy val utxoReadersRef: ActorRef = system.actorOf(UtxoReadersStub.props())
-
   val route: Route = UtxoApiRoute(utxoReadersRef, utxoSettings.scorexSettings.restApi).route
 
   it should "get utxo box with /byId" in {

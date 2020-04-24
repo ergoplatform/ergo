@@ -32,7 +32,7 @@ class WalletApiRouteSpec extends FlatSpec
 
   val ergoSettings: ErgoSettings = ErgoSettings.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
-  val route: Route = WalletApiRoute(readersRef, nodeViewRef, settings).route
+  val route: Route = WalletApiRoute(digestReadersRef, nodeViewRef, settings).route
 
   implicit val paymentRequestEncoder: PaymentRequestEncoder = new PaymentRequestEncoder(ergoSettings)
   implicit val assetIssueRequestEncoder: AssetIssueRequestEncoder = new AssetIssueRequestEncoder(ergoSettings)

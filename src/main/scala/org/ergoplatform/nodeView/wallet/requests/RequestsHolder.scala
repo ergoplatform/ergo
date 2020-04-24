@@ -8,14 +8,14 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoScriptPredef, Pay2SAddress}
 
 
-case class RequestsHolder(requests: Seq[TransactionRequest],
+case class RequestsHolder(requests: Seq[TransactionGenerationRequest],
                           feeOpt: Option[Long],
                           inputsRaw: Seq[String],
                           dataInputsRaw: Seq[String])
                          (implicit val addressEncoder: ErgoAddressEncoder) {
 
   // Add separate payment request with fee.
-  def withFee: Seq[TransactionRequest] = {
+  def withFee: Seq[TransactionGenerationRequest] = {
     val address = Pay2SAddress(ErgoScriptPredef.feeProposition())
     val feeRequests = feeOpt
         .map(PaymentRequest(address, _, assets = Seq.empty, registers = Map.empty))
@@ -48,7 +48,7 @@ class RequestsHolderDecoder(settings: ErgoSettings) extends Decoder[RequestsHold
 
   def apply(cursor: HCursor): Decoder.Result[RequestsHolder] = {
     for {
-      requests <- cursor.downField("requests").as[Seq[TransactionRequest]]
+      requests <- cursor.downField("requests").as[Seq[TransactionGenerationRequest]]
       fee <- cursor.downField("fee").as[Option[Long]]
       inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
       dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]

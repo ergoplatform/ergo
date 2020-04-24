@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReade
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.nodeView.state.{DigestState, StateType}
+import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
@@ -23,7 +23,6 @@ import org.ergoplatform.wallet.boxes.{BoxCertainty, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.P2PKAddress
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
@@ -105,7 +104,6 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class NodeViewStub extends Actor {
     def receive: Receive = {
-      case LocallyGeneratedTransaction(tx: ErgoTransaction) => memPool.put(tx).get
       case _ =>
     }
   }
@@ -140,7 +138,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     import WalletActorStub.{walletBox10_10, walletBox20_30, walletBoxSpent21_31, walletTxs}
 
     private val prover: ErgoProvingInterpreter = defaultProver
-    private val trackedAddresses: Seq[P2PKAddress] = prover.pubKeys.map(P2PKAddress.apply)
+    private val trackedAddresses: Seq[P2PKAddress] = prover.hdPubKeys.map(P2PKAddress.apply)
 
     def receive: Receive = {
 
@@ -182,6 +180,11 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         val input = ErgoTransactionGenerators.inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
         sender ! Success(tx)
+
+      case SignTransaction(secrets, tx, boxesToSpend, dataBoxes) =>
+        val sc = ErgoStateContext.empty(stateConstants)
+        val params = LaunchParameters
+        sender() ! ErgoWalletActor.signTransaction(Some(prover), secrets, tx, boxesToSpend, dataBoxes, params, sc)
     }
   }
 

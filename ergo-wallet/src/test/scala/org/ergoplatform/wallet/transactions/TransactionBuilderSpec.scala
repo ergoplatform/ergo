@@ -51,7 +51,7 @@ class TransactionBuilderSpec extends PropSpec with Matchers {
 
     val ins           = IndexedSeq(inputBox)
     val outs          = IndexedSeq(outBox)
-    val changeAddress = P2PKAddress(rootSecret.key.publicImage)
+    val changeAddress = P2PKAddress(rootSecret.privateInput.publicImage)
     val fee           = minBoxValue
 
     val res = buildUnsignedTx(

@@ -2,32 +2,39 @@ package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import io.circe.{Decoder, Json}
-import org.ergoplatform.http.api.WalletApiRoute
+import org.ergoplatform.http.api.{ApiCodecs, WalletApiRoute}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
 import org.ergoplatform.settings.{Args, Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, Pay2SAddress}
+import org.ergoplatform.utils.generators.ErgoTransactionGenerators
+import org.ergoplatform.{ErgoAddress, Pay2SAddress}
 import org.scalatest.{FlatSpec, Matchers}
 
-import scala.util.Try
+import scala.util.{Random, Try}
+import scala.concurrent.duration._
 
 class WalletApiRouteSpec extends FlatSpec
   with Matchers
   with ScalatestRouteTest
   with Stubs
-  with FailFastCirceSupport {
+  with FailFastCirceSupport
+  with ApiCodecs {
+
+  implicit val timeout: RouteTestTimeout = RouteTestTimeout(145.seconds)
 
   val prefix = "/wallet"
 
   val ergoSettings: ErgoSettings = ErgoSettings.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = WalletApiRoute(digestReadersRef, nodeViewRef, settings).route
+
+  val utxoRoute: Route = WalletApiRoute(utxoReadersRef, nodeViewRef, settings).route
 
   implicit val paymentRequestEncoder: PaymentRequestEncoder = new PaymentRequestEncoder(ergoSettings)
   implicit val assetIssueRequestEncoder: AssetIssueRequestEncoder = new AssetIssueRequestEncoder(ergoSettings)
@@ -75,6 +82,19 @@ class WalletApiRouteSpec extends FlatSpec
     Post(prefix + "/transaction/send", requestsHolder.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
+    }
+  }
+
+  it should "sign a transaction" in {
+    val digest = Random.nextBoolean()
+    val (tsr, r) = if(digest){
+      (ErgoTransactionGenerators.transactionSigningRequestGen(true).sample.get, route)
+    } else {
+      (ErgoTransactionGenerators.transactionSigningRequestGen(utxoState).sample.get, utxoRoute)
+    }
+    Post(prefix + "/transaction/sign", tsr.asJson) ~> r ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[ErgoTransaction].id shouldBe tsr.utx.id
     }
   }
 

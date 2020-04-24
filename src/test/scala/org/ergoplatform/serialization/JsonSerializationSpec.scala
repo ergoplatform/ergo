@@ -8,15 +8,18 @@ import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._
-import org.ergoplatform.settings.{Algos, Args, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.scalatest.Inspectors
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
+
+import scala.util.Random
+
 
 class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with ApiCodecs {
 
@@ -82,6 +85,40 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
+  property("json-encoded dlog secret is always about 32 bytes") {
+    forAll(dlogSecretWithPublicImageGen) { case (secret, _) =>
+      val wrappedSecret = DlogSecretKey(secret)
+      val json = wrappedSecret.asJson
+      json.toString().length shouldBe 66 // 32-bytes hex-encoded data (64 ASCII chars) + quotes == 66 ASCII chars
+    }
+  }
+
+  property("dlog secret roundtrip") {
+    forAll(dlogSecretWithPublicImageGen) { case (secret, _) =>
+      val wrappedSecret = DlogSecretKey(secret)
+      val json = wrappedSecret.asJson
+      val parsedSecret = json.as[DlogSecretKey].toOption.get
+      parsedSecret shouldBe wrappedSecret
+    }
+  }
+
+  property("dht secret roundtrip") {
+    forAll(dhtSecretWithPublicImageGen) { case (secret, _) =>
+      val wrappedSecret = DhtSecretKey(secret)
+      val json = wrappedSecret.asJson
+      val parsedSecret = json.as[DhtSecretKey].toOption.get
+      parsedSecret shouldBe wrappedSecret
+    }
+  }
+
+  property("transactionSigningRequest roundtrip") {
+    forAll(transactionSigningRequestGen(Random.nextBoolean)) { request =>
+      val json = request.asJson
+      val parsedRequest = json.as[TransactionSigningRequest].toOption.get
+      parsedRequest shouldBe request
+    }
+  }
+
   private def checkTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {
     c.downField("spent").as[Boolean] shouldBe Right(b.spendingStatus.spent)
     c.downField("onchain").as[Boolean] shouldBe Right(b.chainStatus.onChain)
@@ -109,6 +146,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     def stringify(assets: Seq[(ErgoBox.TokenId, Long)]) = {
       assets map { case (tokenId, amount) => (Algos.encode(tokenId), amount) }
     }
+
     val Right(decodedAssets) = c.as[Seq[(ErgoBox.TokenId, Long)]]
     stringify(decodedAssets) should contain theSameElementsAs stringify(assets)
   }

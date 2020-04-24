@@ -1650,10 +1650,37 @@ paths:
 
   /transactions:
     post:
-      summary: Send an Ergo transaction
+      summary: Submit an Ergo transaction to unconfirmed pool to send it over the network
       operationId: sendTransaction
       tags:
       - transactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErgoTransaction'
+      responses:
+        '200':
+          description: JSON with ID of the new transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionId'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/check:
+    post:
+      summary: Checks an Ergo transaction without sending it over the network. Checks that transaction is valid and
+                its inputs are in the UTXO set. Returns transaction identifier if the transaction is passing the checks.
+      operationId: checkTransaction
+      tags:
+        - transactions
       requestBody:
         required: true
         content:

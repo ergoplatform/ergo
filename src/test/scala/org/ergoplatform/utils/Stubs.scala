@@ -183,7 +183,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case SignTransaction(secrets, tx, boxesToSpend, dataBoxes) =>
         val sc = ErgoStateContext.empty(stateConstants)
-        sender() ! ErgoWalletActor.signTransaction(secrets, tx, boxesToSpend, dataBoxes, LaunchParameters, sc)
+        val params = LaunchParameters
+        sender() ! ErgoWalletActor.signTransaction(Some(prover), secrets, tx, boxesToSpend, dataBoxes, params, sc)
     }
   }
 

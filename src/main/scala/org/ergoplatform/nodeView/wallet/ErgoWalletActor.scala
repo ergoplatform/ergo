@@ -265,7 +265,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! generateTransactionWithOutputs(requests, inputsRaw, dataInputsRaw)
 
     case SignTransaction(secrets, tx, boxesToSpend, dataBoxes) =>
-      sender() ! signTransaction(secrets, tx, boxesToSpend, dataBoxes, parameters, stateContext)
+      sender() ! signTransaction(proverOpt, secrets, tx, boxesToSpend, dataBoxes, parameters, stateContext)
 
     case DeriveKey(encodedPath) =>
       withWalletLockHandler(sender()) {
@@ -697,14 +697,16 @@ object ErgoWalletActor {
 
   case object GetFirstSecret
 
-  def signTransaction(secrets: Seq[ExternalSecret],
+  def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
+                      secrets: Seq[ExternalSecret],
                       tx: UnsignedErgoTransaction,
                       boxesToSpend: Seq[ErgoBox],
                       dataBoxes: Seq[ErgoBox],
                       parameters: Parameters,
                       stateContext: ErgoStateContext): Try[ErgoTransaction] = {
+    val proverSecrets = proverOpt.map(_.secretKeys).getOrElse(Seq.empty)
     val secretsWrapped = secrets.map(_.key).toIndexedSeq
-    val secretsProver = ErgoProvingInterpreter(secretsWrapped, parameters)
+    val secretsProver = ErgoProvingInterpreter(secretsWrapped ++ proverSecrets, parameters)
     val unsignedTx = new UnsignedErgoTransaction(
       boxesToSpend.toIndexedSeq.map(box => new UnsignedInput(box.id)),
       dataBoxes.toIndexedSeq.map(box => DataInput(box.id)),

@@ -161,7 +161,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       generateTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
     }
 
-  def signTransactionR: Route = (path("transaction" / "signWithSecretsGiven")
+  def signTransactionR: Route = (path("transaction" / "sign")
     & post & entity(as[TransactionSigningRequest])) { tsr =>
 
     val tx = tsr.utx

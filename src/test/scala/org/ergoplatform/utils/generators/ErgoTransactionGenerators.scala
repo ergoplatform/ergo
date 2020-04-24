@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionSigningRequest}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction}
@@ -13,7 +14,7 @@ import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
-import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
+import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress, UnsignedInput}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
@@ -318,8 +319,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     }
   }
 
-  def validUnsignedErgoTransactionGen(prop: ErgoTree): Gen[(IndexedSeq[ErgoBox], UnsignedErgoTransaction)] =
-    validUnsignedErgoTransactionGenTemplate(0, maxAssets = 5, maxInputs = 10, propositionGen = Gen.const(prop))
+  def validUnsignedErgoTransactionGen(prop: ErgoTree*): Gen[(IndexedSeq[ErgoBox], UnsignedErgoTransaction)] =
+    validUnsignedErgoTransactionGenTemplate(0, maxAssets = 5, maxInputs = 10, propositionGen = Gen.oneOf(prop))
 
   lazy val validUnsignedErgoTransactionGen: Gen[(IndexedSeq[ErgoBox], UnsignedErgoTransaction)] =
     validUnsignedErgoTransactionGenTemplate(0, maxAssets = 5, maxInputs = 10)
@@ -388,14 +389,23 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     }
   }
 
-  lazy val transactionSigningRequestGen: Gen[TransactionSigningRequest] = for {
+  def transactionSigningRequestGen(includeInputs: Boolean):Gen[TransactionSigningRequest] = for {
     (secret, pubKey) <- dlogSecretWithPublicImageGen
     (secretDh, _) <- dhtSecretWithPublicImageGen
     (inputBoxes, utx) <- validUnsignedErgoTransactionGen(pubKey)
-    coin = Random.nextBoolean()
     inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
     secretSeq = Seq(ExternalSecret(DlogSecretKey(secret)), ExternalSecret(DhtSecretKey(secretDh)))
-  } yield TransactionSigningRequest(utx, secretSeq, if(coin) Some(inputBoxesEncoded) else None, None)
+  } yield TransactionSigningRequest(utx, secretSeq, if(includeInputs) Some(inputBoxesEncoded) else None, None)
+
+  def transactionSigningRequestGen(utxoSet: WrappedUtxoState): Gen[TransactionSigningRequest] = Gen.const {
+    val inputBoxes = utxoSet.takeBoxes(3).toIndexedSeq
+
+    val utx = UnsignedErgoTransaction(inputBoxes.map(b => new UnsignedInput(b.id)), inputBoxes)
+    val coin = Random.nextBoolean()
+    val inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
+
+    TransactionSigningRequest(utx, Seq.empty, if(coin) Some(inputBoxesEncoded) else None, None)
+  }
 
 }
 

@@ -13,36 +13,43 @@ trait Hint
 
 /**
   * Externally provided secret (to be used once for a transaction to sign)
+  *
   * @param key - the secret
   */
 case class ExternalSecret(key: PrimitiveSecretKey) extends Hint
 
 /**
   * A request to sign a transaction
-  * @param utx - unsigned transaction
-  * @param hints - hints for interpreter (such as additional one-time secrets)
-  * @param inputs - hex-encoded input boxes bytes for the unsigned transaction (optional)
+  *
+  * @param utx        - unsigned transaction
+  * @param hints      - hints for interpreter (such as additional one-time secrets)
+  * @param inputs     - hex-encoded input boxes bytes for the unsigned transaction (optional)
   * @param dataInputs - hex-encoded data-input boxes bytes for the unsigned transaction (optional)
   */
 case class TransactionSigningRequest(utx: UnsignedErgoTransaction,
                                      hints: Seq[Hint],
                                      inputs: Option[Seq[String]],
-                                     dataInputs: Option[Seq[String]]){
+                                     dataInputs: Option[Seq[String]]) {
 
-  lazy val dlogs: Seq[DlogSecretKey] = hints.flatMap{ h => h match{
-    case ExternalSecret(d: DlogSecretKey) => Some(d)
-    case _ => None
-  }}
+  lazy val dlogs: Seq[DlogSecretKey] = hints.flatMap { h =>
+    h match {
+      case ExternalSecret(d: DlogSecretKey) => Some(d)
+      case _ => None
+    }
+  }
 
-  lazy val dhts: Seq[DhtSecretKey] = hints.flatMap{ h => h match{
-    case ExternalSecret(d: DhtSecretKey) => Some(d)
-    case _ => None
-  }}
+  lazy val dhts: Seq[DhtSecretKey] = hints.flatMap { h =>
+    h match {
+      case ExternalSecret(d: DhtSecretKey) => Some(d)
+      case _ => None
+    }
+  }
 
 }
 
 
 object TransactionSigningRequest extends ApiCodecs {
+
   import io.circe.syntax._
 
   implicit val encoder: Encoder[TransactionSigningRequest] = { tsr =>

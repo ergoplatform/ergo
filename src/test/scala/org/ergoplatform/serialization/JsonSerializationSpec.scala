@@ -18,6 +18,8 @@ import org.scalatest.Inspectors
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
 
+import scala.util.Random
+
 
 class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with ApiCodecs {
 
@@ -110,7 +112,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   }
 
   property("transactionSigningRequest roundtrip") {
-    forAll(transactionSigningRequestGen) { request =>
+    forAll(transactionSigningRequestGen(Random.nextBoolean)) { request =>
       val json = request.asJson
       val parsedRequest = json.as[TransactionSigningRequest].toOption.get
       parsedRequest shouldBe request

@@ -31,19 +31,9 @@ case class TransactionSigningRequest(utx: UnsignedErgoTransaction,
                                      inputs: Option[Seq[String]],
                                      dataInputs: Option[Seq[String]]) {
 
-  lazy val dlogs: Seq[DlogSecretKey] = hints.flatMap { h =>
-    h match {
-      case ExternalSecret(d: DlogSecretKey) => Some(d)
-      case _ => None
-    }
-  }
+  lazy val dlogs: Seq[DlogSecretKey] = hints.collect { case ExternalSecret(d: DlogSecretKey) => d }
 
-  lazy val dhts: Seq[DhtSecretKey] = hints.flatMap { h =>
-    h match {
-      case ExternalSecret(d: DhtSecretKey) => Some(d)
-      case _ => None
-    }
-  }
+  lazy val dhts: Seq[DhtSecretKey] = hints.collect { case ExternalSecret(d: DhtSecretKey) => d }
 
 }
 

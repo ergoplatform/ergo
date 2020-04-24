@@ -41,7 +41,12 @@ class WalletApiRouteSpec extends FlatSpec
 
   val paymentRequest = PaymentRequest(Pay2SAddress(Constants.FalseLeaf), 100L, Seq.empty, Map.empty)
   val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), 100L, "TEST", "Test", 8)
-  val requestsHolder = RequestsHolder((0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)), Some(10000L))
+  val requestsHolder = RequestsHolder(
+    (0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)),
+    Some(10000L),
+    Seq.empty,
+    Seq.empty
+  )
 
 
   it should "generate arbitrary transaction" in {

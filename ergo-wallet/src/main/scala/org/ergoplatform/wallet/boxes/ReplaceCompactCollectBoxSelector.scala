@@ -3,6 +3,7 @@ package org.ergoplatform.wallet.boxes
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 import org.ergoplatform.ErgoBoxAssets
+import org.ergoplatform.wallet.AssetUtils
 import scorex.util.ModifierId
 import org.ergoplatform.wallet.Utils._
 
@@ -76,7 +77,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
   ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
     val compactedBalance = boxes.map(_.value).sum
     val compactedAssets  = mutable.Map[ModifierId, Long]()
-    BoxSelector.mergeAssetsMut(compactedAssets, boxes.map(_.tokens): _*)
+    AssetUtils.mergeAssetsMut(compactedAssets, boxes.map(_.tokens): _*)
     DefaultBoxSelector.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets)
   }
 

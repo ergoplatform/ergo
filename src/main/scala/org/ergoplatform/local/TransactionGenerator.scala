@@ -104,7 +104,7 @@ class TransactionGenerator(viewHolder: ActorRef,
       }
     }
     payloadReq.flatMap { payloadReqOpt =>
-      wallet.generateTransaction(payloadReqOpt.toSeq :+ feeReq, Seq.empty)
+      wallet.generateTransaction(payloadReqOpt.toSeq :+ feeReq, Seq.empty, Seq.empty)
     }
   }
 

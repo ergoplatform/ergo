@@ -32,8 +32,8 @@ object OneWayStablecoin extends App with ApiCodecs {
   val tokenBox = ErgoBoxSerializer.parseBytes(gfBytes)
   val tokenBoxId = tokenBox.id
 
-  // 53866449600 nanoErgs
-  val aliceBoxId = Base16.decode("ae2d9083fc458b77cd63f282f96287b2713971658c02ca3fbb3bd749751db8df").get
+  // 54863949600 nanoErgs
+  val aliceBoxId = Base16.decode("a078ee34cd7ccbe9697ac99ebf970a73f33907a11deea7b6aa7856bad5754cdd").get
 
   val inputs = IndexedSeq(new UnsignedInput(ADKey @@ tokenBoxId), new UnsignedInput(ADKey @@ aliceBoxId))
 
@@ -41,18 +41,18 @@ object OneWayStablecoin extends App with ApiCodecs {
   // 2020-04-26 01:00:12,260 [INFO] Ergo Price in USD: 0.141234271868
   // 2020-04-26 01:00:12,261 [INFO] Nanoergs per USD: 7080434421
 
-  val tokenOut = new ErgoBoxCandidate(100000, tokenBox.ergoTree, creationHeight, Array(usdTokenId -> 79999L).toColl)
+  val tokenOut = new ErgoBoxCandidate(100000, tokenBox.ergoTree, creationHeight, Array(usdTokenId -> 79900L).toColl)
 
   val bobScript = enc.fromString("9iHWcYYSPkgYbnC6aHfZcLZrKrrkpFzM2ETUZ2ikFqFwVAB2CU7").get.script
-  val bobOut = new ErgoBoxCandidate(7080434421L, bobScript, creationHeight)
+  val bobOut = new ErgoBoxCandidate(7148366874L, bobScript, creationHeight)
 
   val aliceScript = enc.fromString("9gmNsqrqdSppLUBqg2UzREmmivgqh1r3jmNcLAc53hk3YCvAGWE").get.script
-  val aliceOut = new ErgoBoxCandidate(46785015179L, aliceScript, creationHeight, Array(usdTokenId -> 1L).toColl)
+  val aliceOut = new ErgoBoxCandidate(47714582726L, aliceScript, creationHeight, Array(usdTokenId -> 100L).toColl)
 
   val feeScript = enc.fromString("2iHkR7CWvD1R4j1yZg5bkeDRQavjAaVPeTDFGGLZduHyfWMuYpmhHocX8GJoaieTx78FntzJbCBVL6rf96ocJoZdmWBL2fci7NqWgAirppPQmZ7fN9V6z13Ay6brPriBKYqLp1bT2Fk4FkFLCfdPpe").get.script
   val feeOut = new ErgoBoxCandidate(1000000, feeScript, creationHeight)
 
-  val rateBoxId = Base16.decode("4f314e472e42eed5236ab6fdf45f827d21ca44d9ca8c8bc8f82d78b66fa1c9a5").get
+  val rateBoxId = Base16.decode("a932fc9e21538ce7b73b784621d3b7099d68c376abf6dda3ff298fb3218dea38").get
   val dataInputs = IndexedSeq(DataInput(ADKey @@ rateBoxId))
 
   val outputs = IndexedSeq(tokenOut, bobOut, aliceOut, feeOut)
@@ -69,10 +69,6 @@ object OneWayStablecoin extends App with ApiCodecs {
 
   val tbs = Base16.decode("1b26f80bb93977e85ffda7b54572e31a68d77295fc4c8a1b762071a44350bad6").get
   println(Base58.encode(tbs))
-
-  println(Base16.encode(ValueSerializer.serialize(LongConstant(7079696227L))))
-  println(ValueSerializer.deserialize(Base16.decode("05c5dddcdf34").get))
-  println(7080434421L / (1 / 100))
 }
 
 

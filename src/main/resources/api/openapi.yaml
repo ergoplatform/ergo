@@ -2691,6 +2691,8 @@ paths:
 
   /wallet/transaction/sign:
     post:
+      security:
+        - ApiKeyAuth: [api_key]
       summary: Sign arbitrary unsigned transaction with wallet secrets and also secrets provided.
       operationId: walletTransactionSign
       tags:

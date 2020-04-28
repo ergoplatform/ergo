@@ -15,7 +15,6 @@ import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 
 import scala.concurrent.Future
-import scala.util.Try
 
 case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, settings: RESTApiSettings)
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
@@ -35,7 +34,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     p.getAll.slice(offset, offset + limit).map(_.asJson).asJson
   }
 
-  def sendTransactionR: Route = (post & entity(as[ErgoTransaction])) { tx =>
+  private def validateTransactionAndProcess(tx: ErgoTransaction)(processFn: ErgoTransaction => Any): Route = {
     onSuccess {
       getStateAndPool
         .map {
@@ -48,32 +47,25 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
       _.fold(
         e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
         _ => {
-          nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+          processFn(tx)
           ApiResponse(tx.id)
         }
       )
     }
   }
 
-  def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (offset, limit) =>
-    ApiResponse(getUnconfirmedTransactions(offset, limit))
+  def sendTransactionR: Route = (post & entity(as[ErgoTransaction])) { tx =>
+    validateTransactionAndProcess(tx) { tx =>
+      nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+    }
   }
 
   def checkTransactionR: Route = (path("check") & post & entity(as[ErgoTransaction])) { tx =>
-    onSuccess {
-      getStateAndPool
-        .map {
-          case (utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
-            utxo.withTransactions(mp.getAll).validate(tx)
-          case _ =>
-            Try(new Exception("Transaction validation is not supported in absence of UTXO set"))
-        }
-    } {
-      _.fold(
-        e => BadRequest(s"Validation failed: ${e.getMessage}"),
-        _ => ApiResponse(tx.id)
-      )
-    }
+    validateTransactionAndProcess(tx) { tx => tx }
+  }
+
+  def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (offset, limit) =>
+    ApiResponse(getUnconfirmedTransactions(offset, limit))
   }
 
 }

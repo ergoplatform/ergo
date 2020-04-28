@@ -21,7 +21,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   override val route: Route = pathPrefix("transactions") {
-    getUnconfirmedTransactionsR ~ sendTransactionR ~ checkTransactionR
+    checkTransactionR ~ getUnconfirmedTransactionsR ~ sendTransactionR
   }
 
   private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)

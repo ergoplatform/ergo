@@ -9,7 +9,12 @@ case class UnsignedErgoTransaction(override val inputs: IndexedSeq[UnsignedInput
   extends UnsignedErgoLikeTransaction(inputs, dataInputs, outputCandidates)
 
 object UnsignedErgoTransaction {
-  def apply(inputs: IndexedSeq[UnsignedInput], outputCandidates: IndexedSeq[ErgoBoxCandidate]): UnsignedErgoTransaction = {
+  def apply(inputs: IndexedSeq[UnsignedInput],
+            outputCandidates: IndexedSeq[ErgoBoxCandidate]): UnsignedErgoTransaction = {
     UnsignedErgoTransaction(inputs, IndexedSeq(), outputCandidates)
   }
+
+  def apply(utx: UnsignedErgoLikeTransaction): UnsignedErgoTransaction =
+    UnsignedErgoTransaction(utx.inputs, utx.dataInputs, utx.outputCandidates)
+
 }

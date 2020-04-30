@@ -23,8 +23,9 @@ import scorex.util.{ModifierId, _}
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.ProverResult
+import sigmastate.interpreter.{CryptoConstants, ProverResult}
 
 import scala.util.Random
 
@@ -37,6 +38,20 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val noProofGen: Gen[ProverResult] =
     Gen.const(emptyProverResult)
+
+  lazy val dlogSecretWithPublicImageGen: Gen[(DLogProverInput, ProveDlog)] = for {
+    secret <- genBytes(32).map(seed => BigIntegers.fromUnsignedByteArray(seed))
+    dlpi = DLogProverInput(secret)
+  } yield (dlpi, dlpi.publicImage)
+
+  lazy val dhtSecretWithPublicImageGen: Gen[(DiffieHellmanTupleProverInput, ProveDHTuple)] = for {
+    secret <- genBytes(32).map(seed => BigIntegers.fromUnsignedByteArray(seed))
+    g <- genECPoint
+    h <- genECPoint
+    u: EcPointType = CryptoConstants.dlogGroup.exponentiate(g, secret)
+    v: EcPointType = CryptoConstants.dlogGroup.exponentiate(h, secret)
+    dhtpi = DiffieHellmanTupleProverInput(secret, ProveDHTuple(g, h, u, v))
+  } yield (dhtpi, dhtpi.publicImage)
 
   lazy val proveDlogGen: Gen[ProveDlog] = for {
     seed <- genBytes(32)

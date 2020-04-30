@@ -1,6 +1,5 @@
 package org.ergoplatform.modifiers.mempool
 
-import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
@@ -274,17 +273,6 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
     ErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)
 
   val MaxAssetsPerBox = 255
-
-  implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>
-    tx.asInstanceOf[ErgoLikeTransaction].asJson
-      .mapObject(_.add("size", tx.size.asJson))
-  }
-
-  implicit val transactionDecoder: Decoder[ErgoTransaction] = { cursor =>
-    for {
-      ergoLikeTx <- cursor.as[ErgoLikeTransaction]
-    } yield ErgoTransaction(ergoLikeTx)
-  }
 
 }
 

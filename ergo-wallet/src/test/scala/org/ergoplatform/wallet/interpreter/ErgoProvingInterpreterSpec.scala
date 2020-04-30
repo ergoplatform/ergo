@@ -1,28 +1,30 @@
 package org.ergoplatform.wallet.interpreter
 
 import org.ergoplatform.wallet.crypto.ErgoSignature
-import org.ergoplatform.wallet.secrets.ExtendedSecretKey
+import org.ergoplatform.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.utils.Generators
 import org.scalatest.{FlatSpec, Matchers}
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 import scorex.util.Random
 
-class ErgoUnsafeProverSpec
+class ErgoProvingInterpreterSpec
   extends FlatSpec
     with ScalaCheckDrivenPropertyChecks
     with Matchers
     with Generators
     with InterpreterSpecCommon {
 
-  it should "produce the same proof as a fully-functional prover" in {
+  it should "produce proofs with primitive secrets" in {
     val entropy = Random.randomBytes(32)
     val extendedSecretKey = ExtendedSecretKey.deriveMasterKey(entropy)
     val fullProver = ErgoProvingInterpreter(extendedSecretKey, parameters)
-    val unsafeProver = ErgoUnsafeProver
+
+    val primitiveKey = DlogSecretKey(extendedSecretKey.privateInput)
+    val unsafeProver = ErgoProvingInterpreter(IndexedSeq(primitiveKey), parameters)
 
     forAll(unsignedTxGen(extendedSecretKey)) { case (ins, unsignedTx) =>
       val signedTxFull = fullProver.sign(unsignedTx, ins.toIndexedSeq, IndexedSeq(), stateContext).get
-      val signedTxUnsafe = unsafeProver.prove(unsignedTx, extendedSecretKey.privateInput)
+      val signedTxUnsafe = unsafeProver.sign(unsignedTx, ins.toIndexedSeq, IndexedSeq(), stateContext).get
 
       signedTxFull shouldEqual signedTxUnsafe
 
@@ -33,5 +35,4 @@ class ErgoUnsafeProverSpec
         }
     }
   }
-
 }

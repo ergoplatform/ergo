@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SuccessfulTransaction}
@@ -89,7 +89,7 @@ class TransactionGenerator(viewHolder: ActorRef,
     val feeAmount = Math.max(minimalErgoAmount, settings.nodeSettings.minimalFeeAmount)
     val feeReq = PaymentRequest(Pay2SAddress(feeProp), feeAmount, Seq.empty, Map.empty)
 
-    val payloadReq: Future[Option[TransactionRequest]] = wallet.confirmedBalances.map { balances =>
+    val payloadReq: Future[Option[TransactionGenerationRequest]] = wallet.confirmedBalances.map { balances =>
       Random.nextInt(100) match {
         case i if i < 70 =>
           Some(PaymentRequest(randProposition, math.min(randAmount, balances.balance - feeReq.value), Seq.empty, Map.empty))
@@ -104,7 +104,7 @@ class TransactionGenerator(viewHolder: ActorRef,
       }
     }
     payloadReq.flatMap { payloadReqOpt =>
-      wallet.generateTransaction(payloadReqOpt.toSeq :+ feeReq, Seq.empty)
+      wallet.generateTransaction(payloadReqOpt.toSeq :+ feeReq, Seq.empty, Seq.empty)
     }
   }
 

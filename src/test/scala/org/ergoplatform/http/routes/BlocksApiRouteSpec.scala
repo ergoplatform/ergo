@@ -20,7 +20,7 @@ class BlocksApiRouteSpec extends FlatSpec
 
   val prefix = "/blocks"
 
-  val route: Route = BlocksApiRoute(nodeViewRef, readersRef, settings).route
+  val route: Route = BlocksApiRoute(nodeViewRef, digestReadersRef, settings).route
 
   val headerIdBytes: ModifierId = history.lastHeaders(1).headers.head.id
   val headerIdString: String = Algos.encode(headerIdBytes)

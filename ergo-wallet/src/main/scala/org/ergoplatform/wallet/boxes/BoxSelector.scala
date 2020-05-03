@@ -4,7 +4,6 @@ import org.ergoplatform.ErgoBoxAssets
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 import scorex.util.ModifierId
-import scala.collection.mutable
 import org.ergoplatform.SigmaConstants.MaxBoxSize
 
 
@@ -50,31 +49,6 @@ object BoxSelector {
 
   trait BoxSelectionError {
     def message: String
-  }
-
-  def mergeAssetsMut(
-    into: mutable.Map[ModifierId, Long],
-    from: Map[ModifierId, Long]*
-  ): Unit = {
-    from.foreach(_.foreach {
-      case (id, amount) =>
-        into.put(id, into.getOrElse(id, 0L) + amount)
-    })
-  }
-
-  def subtractAssetsMut(
-    from: mutable.Map[ModifierId, Long],
-    subtractor: Map[ModifierId, Long]
-  ): Unit = {
-    subtractor.foreach {
-      case (id, subtractAmt) =>
-        val fromAmt = from.getOrElse(id, 0L)
-        if (fromAmt == subtractAmt) {
-          from.remove(id)
-        } else {
-          from.put(id, fromAmt - subtractAmt)
-        }
-    }
   }
 
 }

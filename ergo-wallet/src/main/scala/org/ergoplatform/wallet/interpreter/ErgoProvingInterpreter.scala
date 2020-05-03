@@ -5,9 +5,10 @@ import java.util
 import org.ergoplatform._
 import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext, TransactionContext}
+import org.ergoplatform.wallet.secrets.SecretKey
+import sigmastate.basics.SigmaProtocolPrivateInput
 import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import scorex.util.encode.Base16
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.eval.{CompiletimeIRContext, IRContext}
 import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 
@@ -15,46 +16,54 @@ import scala.util.{Failure, Success, Try}
 
 /**
   * A class which is holding secrets and signing transactions.
+  * Signing a transaction means producing spending proofs for all of the input boxes of the transaction.
   *
-  * Currently it just generates some number of secrets (the number is provided via "dlogSecretsNumber" setting in the
-  * "wallet" section) from a seed and sign a transaction (against input boxes to spend and
-  * blockchain state) by using the secrets (no additional inputs, e.g. hash function preimages required in scripts,
-  * are supported. Here, signing a transaction means spending proofs generation for all of its input boxes.
+  * This interpreter also acts as a wallet, in the sense that it is a vault holding user's secrets.
   *
-  * @param secretKeys       - secrets in extended form to be used by prover
-  * @param params           - ergo network parameters
-  * @param cachedPubKeysOpt - optionally, public keys corresponding to the secrets (to not to recompute them)
+  * There are two basic types of secrets, hierarchical deterministic keys corresponding to BIP-32
+  * implementation, and also "primitive" keys, such as just secret exponent for a Schnorr signature
+  * scheme done in Ergo.
+  *
+  * It is considered that there could be very many hierarchical deterministic keys (for example, if
+  * we are talking about an exchange there could be thousands of them), and not so many primitive keys.
+  * Optimizations are centered around this assumption.
+  *
+  *
+  * @param secretKeys - secrets used by the prover
+  * @param params     - ergo network parameters at the moment of proving
+  * @param cachedHdPubKeysOpt - optionally, public keys corresponding to the BIP32-related secrets
+  *                           (to not to recompute them)
   */
-class ErgoProvingInterpreter(val secretKeys: IndexedSeq[ExtendedSecretKey],
+class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
                              params: ErgoLikeParameters,
-                             val cachedPubKeysOpt: Option[IndexedSeq[ExtendedPublicKey]] = None)
+                             val cachedHdPubKeysOpt: Option[IndexedSeq[ExtendedPublicKey]] = None)
                             (implicit IR: IRContext)
   extends ErgoInterpreter(params) with ProverInterpreter {
 
   /**
-    * Secrets prover is using to prove (to sign)
+    * Interpreter's secrets, in form of sigma protocols private inputs
     */
-  val secrets: IndexedSeq[DLogProverInput] = secretKeys.map(_.key)
+  val secrets: IndexedSeq[SigmaProtocolPrivateInput[_, _]] = secretKeys.map(_.privateInput)
 
   /**
-    * Public keys corresponding to the secrets
+    * Only secrets corresponding to hierarchical deterministic scheme (BIP-32 impl)
     */
-  val extendedPublicKeys: IndexedSeq[ExtendedPublicKey] = cachedPubKeysOpt match {
+  val hdKeys: IndexedSeq[ExtendedSecretKey] = secretKeys.collect { case ek: ExtendedSecretKey => ek }
+
+  /**
+    * Only public keys corresponding to hierarchical deterministic scheme (BIP-32 impl)
+    */
+  val hdPubKeys: IndexedSeq[ExtendedPublicKey] = cachedHdPubKeysOpt match {
     case Some(cachedPubKeys) =>
-      if (cachedPubKeys.length != secrets.length) {
+      if (cachedPubKeys.length != hdKeys.length) {
         log.error(
           s"ErgoProverInterpreter: pubkeys and secrets of different sizes: ${cachedPubKeys.length} and ${secrets.length}"
         )
       }
       cachedPubKeys
     case None =>
-      secretKeys.map(_.publicKey) // costly operation if there are many secret keys
+      hdKeys.map(_.publicKey) // costly operation if there are many secret keys
   }
-
-  /**
-    * ProveDlog propositions corresponding to the public keys of the prover
-    */
-  val proveDlogs: IndexedSeq[ProveDlog] = extendedPublicKeys.map(_.key)
 
   /**
     * Produces updated instance of ErgoProvingInterpreter with a new secret included
@@ -64,7 +73,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[ExtendedSecretKey],
   def withNewSecret(secret: ExtendedSecretKey): (ErgoProvingInterpreter, ExtendedPublicKey) = {
     val newPk = secret.publicKey
     val sks   = secretKeys :+ secret
-    val pks   = extendedPublicKeys :+ newPk
+    val pks   = hdPubKeys :+ newPk
     log.info(s"New secret created, public image: ${Base16.encode(newPk.key.pkBytes)}")
     new ErgoProvingInterpreter(sks, params, Some(pks)) -> newPk
   }
@@ -125,7 +134,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[ExtendedSecretKey],
 
 object ErgoProvingInterpreter {
 
-  def apply(secrets: IndexedSeq[ExtendedSecretKey], params: ErgoLikeParameters): ErgoProvingInterpreter =
+  def apply(secrets: IndexedSeq[SecretKey], params: ErgoLikeParameters): ErgoProvingInterpreter =
     new ErgoProvingInterpreter(secrets, params)(new CompiletimeIRContext)
 
   def apply(rootSecret: ExtendedSecretKey, params: ErgoLikeParameters): ErgoProvingInterpreter =

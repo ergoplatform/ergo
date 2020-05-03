@@ -1,20 +1,28 @@
 package org.ergoplatform.http.api
 
+import java.math.BigInteger
+
 import io.circe._
 import io.circe.syntax._
-import org.ergoplatform.JsonCodecs
+import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.{ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
+import org.ergoplatform.settings.ErgoAlgos
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.Constants.ApplicationId
 import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import scorex.core.validation.ValidationResult
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
+import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
 
@@ -100,6 +108,65 @@ trait ApiCodecs extends JsonCodecs {
     }
     fieldsWithTx.asJson
   }
+
+  implicit val secretBigIntEncoder: Encoder[BigInteger] = Encoder.instance { w =>
+    ErgoAlgos.encode(BigIntegers.asUnsignedByteArray(CryptoConstants.groupSize, w)).asJson
+  }
+
+  implicit val secretBigIntDecoder: Decoder[BigInteger] = arrayBytesDecoder.map { bytes =>
+    BigIntegers.fromUnsignedByteArray(bytes)
+  }
+
+  implicit val dlogSecretWrapperEncoder: Encoder[DlogSecretKey] = Encoder.instance { dl =>
+    secretBigIntEncoder(dl.privateInput.w)
+  }
+
+  implicit val dlogSecretWrapperDecoder: Decoder[DlogSecretKey] =
+    secretBigIntDecoder
+      .map(DLogProverInput.apply)
+      .map(DlogSecretKey.apply)
+
+  implicit val dhtSecretWrapperEncoder: Encoder[DhtSecretKey] = { dht =>
+    Json.obj(
+      "secret" -> dht.privateInput.w.asJson,
+      "g" -> dht.privateInput.commonInput.g.asJson,
+      "h" -> dht.privateInput.commonInput.h.asJson,
+      "u" -> dht.privateInput.commonInput.u.asJson,
+      "v" -> dht.privateInput.commonInput.v.asJson
+    )
+  }
+
+  implicit val dhtSecretWrapperDecoder: Decoder[DhtSecretKey] = { cursor =>
+    for {
+      secret <- cursor.downField("secret").as[BigInteger]
+      g <- cursor.downField("g").as[EcPointType]
+      h <- cursor.downField("h").as[EcPointType]
+      u <- cursor.downField("u").as[EcPointType]
+      v <- cursor.downField("v").as[EcPointType]
+    } yield DhtSecretKey(DiffieHellmanTupleProverInput(secret, ProveDHTuple(g, h, u, v)))
+  }
+
+  implicit val unsignedTransactionEncoder: Encoder[UnsignedErgoTransaction] = { tx =>
+    tx.asInstanceOf[UnsignedErgoLikeTransaction].asJson
+  }
+
+  implicit val unsignedTransactionDecoder: Decoder[UnsignedErgoTransaction] = { cursor =>
+    for {
+      ergoLikeTx <- cursor.as[UnsignedErgoLikeTransaction]
+    } yield UnsignedErgoTransaction(ergoLikeTx)
+  }
+
+  implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>
+    tx.asInstanceOf[ErgoLikeTransaction].asJson
+      .mapObject(_.add("size", tx.size.asJson))
+  }
+
+  implicit val transactionDecoder: Decoder[ErgoTransaction] = { cursor =>
+    for {
+      ergoLikeTx <- cursor.as[ErgoLikeTransaction]
+    } yield ErgoTransaction(ergoLikeTx)
+  }
+
 }
 
 trait ApiEncoderOption

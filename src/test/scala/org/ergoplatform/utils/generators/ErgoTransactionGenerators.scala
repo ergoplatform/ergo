@@ -6,17 +6,25 @@ import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, VotingData}
+import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionSigningRequest}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction}
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
+import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress, UnsignedInput}
+import org.scalacheck.Arbitrary.arbByte
 import org.ergoplatform.wallet.utils.Generators
 import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.ByteArrayWrapper
 import scorex.util._
+import scorex.util.encode.Base16
+import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
+import sigmastate._
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
@@ -102,12 +110,12 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     * - default prover does not know how to sign at least one input
     * - number of assets exceeds Transaction.MaxTokens
     */
-  def validTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
-                                rnd: Random = new Random,
-                                issueNew: Boolean = true,
-                                outputsProposition: ErgoTree = Constants.TrueLeaf,
-                                stateCtxOpt: Option[ErgoStateContext] = None,
-                                dataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()): ErgoTransaction = {
+  def validUnsignedTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
+                                        rnd: Random = new Random,
+                                        issueNew: Boolean = true,
+                                        outputsProposition: ErgoTree = Constants.TrueLeaf,
+                                        stateCtxOpt: Option[ErgoStateContext] = None,
+                                        dataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()): UnsignedErgoTransaction = {
     require(boxesToSpend.nonEmpty, "At least one box is needed to generate a transaction")
 
     val inputSum = boxesToSpend.map(_.value).reduce(Math.addExact(_, _))
@@ -186,14 +194,21 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     val dataInputs = dataBoxes.map(b => DataInput(b.id))
     val unsignedTx = UnsignedErgoTransaction(inputs, dataInputs, newBoxes)
     require(unsignedTx.dataInputs.length == dataBoxes.length, s"${unsignedTx.dataInputs.length} == ${dataBoxes.length}")
+    unsignedTx
+  }
 
-    require(unsignedTx.outputs.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, parameters)), "Minimal ERG value not met")
-
+  def validTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
+                                rnd: Random = new Random,
+                                issueNew: Boolean = true,
+                                outputsProposition: ErgoTree = Constants.TrueLeaf,
+                                stateCtxOpt: Option[ErgoStateContext] = None,
+                                dataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()): ErgoTransaction = {
+    val unsignedTx = validUnsignedTransactionFromBoxes(boxesToSpend, rnd, issueNew, outputsProposition, stateCtxOpt, dataBoxes)
     defaultProver.sign(unsignedTx, boxesToSpend, dataBoxes, stateCtxOpt.getOrElse(emptyStateContext))
       .map(ErgoTransaction.apply)
       .getOrElse {
         log.debug(s"Going to generate a transaction with incorrect spending proofs: $unsignedTx")
-        ErgoTransaction(inputs, dataInputs, newBoxes)
+        ErgoTransaction(boxesToSpend.map(b => Input(b.id, emptyProverResult)), unsignedTx.dataInputs, unsignedTx.outputs)
       }
   }
 
@@ -208,12 +223,12 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     tokensDistribution.ensuring(_.forall(_.forall(_._2 > 0)))
   }
 
-  def validErgoTransactionGenTemplate(minAssets: Int,
-                                      maxAssets: Int = -1,
-                                      minInputs: Int = 1,
-                                      maxInputs: Int = 100,
-                                      propositionGen: Gen[ErgoTree] = trueLeafGen
-                                     ): Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = for {
+  private def boxesGenTemplate(minAssets: Int,
+                               maxAssets: Int = -1,
+                               minInputs: Int = 1,
+                               maxInputs: Int = 100,
+                               propositionGen: Gen[ErgoTree] = trueLeafGen
+                              ): Gen[(IndexedSeq[ErgoBox], ErgoTree)] = for {
     inputsCount <- Gen.choose(minInputs, maxInputs)
     tokensCount <- Gen.choose(
       minAssets,
@@ -221,8 +236,37 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     tokensDistribution <- disperseTokens(inputsCount, tokensCount.toByte)
     from <- Gen.sequence(tokensDistribution.map(tokens => ergoBoxGenForTokens(tokens, propositionGen)))
     prop <- propositionGen
-    tx = validTransactionFromBoxes(from.asScala.toIndexedSeq, outputsProposition = prop)
-  } yield from.asScala.toIndexedSeq -> tx
+  } yield from.asScala.toIndexedSeq -> prop
+
+  def validErgoTransactionGenTemplate(minAssets: Int,
+                                      maxAssets: Int = -1,
+                                      minInputs: Int = 1,
+                                      maxInputs: Int = 100,
+                                      propositionGen: Gen[ErgoTree] = trueLeafGen
+                                     ): Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = {
+    boxesGenTemplate(minAssets, maxAssets, maxInputs, maxInputs, propositionGen).map { case (boxes, prop) =>
+      val tx = validTransactionFromBoxes(boxes, outputsProposition = prop)
+      boxes -> tx
+    }
+  }
+
+  def validUnsignedErgoTransactionGenTemplate(minAssets: Int,
+                                              maxAssets: Int = -1,
+                                              minInputs: Int = 1,
+                                              maxInputs: Int = 100,
+                                              propositionGen: Gen[ErgoTree] = trueLeafGen
+                                             ): Gen[(IndexedSeq[ErgoBox], UnsignedErgoTransaction)] = {
+    boxesGenTemplate(minAssets, maxAssets, maxInputs, maxInputs, propositionGen).map { case (boxes, prop) =>
+      val utx = validUnsignedTransactionFromBoxes(boxes, outputsProposition = prop)
+      boxes -> utx
+    }
+  }
+
+  def validUnsignedErgoTransactionGen(prop: ErgoTree*): Gen[(IndexedSeq[ErgoBox], UnsignedErgoTransaction)] =
+    validUnsignedErgoTransactionGenTemplate(0, maxAssets = 5, maxInputs = 10, propositionGen = Gen.oneOf(prop))
+
+  lazy val validUnsignedErgoTransactionGen: Gen[(IndexedSeq[ErgoBox], UnsignedErgoTransaction)] =
+    validUnsignedErgoTransactionGenTemplate(0, maxAssets = 5, maxInputs = 10)
 
   lazy val validErgoTransactionGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] = validErgoTransactionGenTemplate(0)
   lazy val validErgoTransactionWithAssetsGen: Gen[(IndexedSeq[ErgoBox], ErgoTransaction)] =
@@ -287,6 +331,25 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
         ErgoStateContext.empty(stateRoot, settings)
     }
   }
+
+  def transactionSigningRequestGen(includeInputs: Boolean):Gen[TransactionSigningRequest] = for {
+    (secret, pubKey) <- dlogSecretWithPublicImageGen
+    (secretDh, _) <- dhtSecretWithPublicImageGen
+    (inputBoxes, utx) <- validUnsignedErgoTransactionGen(pubKey)
+    inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
+    secretSeq = Seq(ExternalSecret(DlogSecretKey(secret)), ExternalSecret(DhtSecretKey(secretDh)))
+  } yield TransactionSigningRequest(utx, secretSeq, if(includeInputs) Some(inputBoxesEncoded) else None, None)
+
+  def transactionSigningRequestGen(utxoSet: WrappedUtxoState): Gen[TransactionSigningRequest] = Gen.const {
+    val inputBoxes = utxoSet.takeBoxes(3).toIndexedSeq
+
+    val utx = UnsignedErgoTransaction(inputBoxes.map(b => new UnsignedInput(b.id)), inputBoxes)
+    val coin = Random.nextBoolean()
+    val inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
+
+    TransactionSigningRequest(utx, Seq.empty, if(coin) Some(inputBoxesEncoded) else None, None)
+  }
+
 }
 
 object ErgoTransactionGenerators extends ErgoTransactionGenerators

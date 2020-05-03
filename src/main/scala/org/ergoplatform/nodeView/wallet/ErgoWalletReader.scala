@@ -6,15 +6,15 @@ import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.{ErgoAddress, ErgoBox, P2PKAddress}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
-import org.ergoplatform.nodeView.wallet.requests.TransactionRequest
 import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication}
+import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.secrets.DerivationPath
-import org.ergoplatform.P2PKAddress
 import org.ergoplatform.wallet.Constants.ApplicationId
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
@@ -83,9 +83,16 @@ trait ErgoWalletReader extends VaultReader {
   def transactionById(id: ModifierId): Future[Option[AugWalletTransaction]] =
     (walletActor ? GetTransaction(id)).mapTo[Option[AugWalletTransaction]]
 
-  def generateTransaction(requests: Seq[TransactionRequest],
-                          inputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
-    (walletActor ? GenerateTransaction(requests, inputsRaw)).mapTo[Try[ErgoTransaction]]
+  def generateTransaction(requests: Seq[TransactionGenerationRequest],
+                          inputsRaw: Seq[String] = Seq.empty,
+                          dataInputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
+    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw)).mapTo[Try[ErgoTransaction]]
+
+  def signTransaction(secrets: Seq[ExternalSecret],
+                      tx: UnsignedErgoTransaction,
+                      boxesToSpend: Seq[ErgoBox],
+                      dataBoxes: Seq[ErgoBox]): Future[Try[ErgoTransaction]] =
+    (walletActor ? SignTransaction(secrets, tx, boxesToSpend, dataBoxes)).mapTo[Try[ErgoTransaction]]
 
   def addApplication(appRequest: ExternalAppRequest): Future[AddApplicationResponse] =
     (walletActor ? AddApplication(appRequest)).mapTo[AddApplicationResponse]

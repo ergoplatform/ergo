@@ -40,7 +40,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val inputs = IndexedSeq(Input(foundersBox.id, emptyProverResult))
       val remaining = emission.remainingFoundationRewardAtHeight(height)
       val newFoundersBox = ErgoBox(remaining, foundersBox.ergoTree, height, Seq(), Map(R4 -> foundersBox.additionalRegisters(R4)))
-      val rewardBox = ErgoBox(foundersBox.value - remaining, defaultProver.secrets.last.publicImage, height)
+      val rewardBox = ErgoBox(foundersBox.value - remaining, defaultProver.hdKeys.last.publicImage, height)
       val newBoxes = IndexedSeq(newFoundersBox, rewardBox)
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx: ErgoTransaction = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
@@ -60,8 +60,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     val settingsPks = settings.chainSettings.foundersPubkeys
       .map(str => groupElemFromBytes(Base16.decode(str).get))
       .map(pk => ProveDlog(pk))
-
-    settingsPks.count(defaultProver.proveDlogs.contains) shouldBe 2
+    settingsPks.count(defaultProver.hdPubKeys.contains) shouldBe 2
 
     forAll(defaultHeaderGen) { header =>
       val rewardPk = new DLogProverInput(BigInt(header.height).bigInteger).publicImage

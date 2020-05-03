@@ -2,10 +2,13 @@ package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive, Directive1, Route}
+import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
+import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
@@ -13,10 +16,11 @@ import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
+import scorex.util.encode.Base16
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
@@ -49,7 +53,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         lockWalletR ~
         deriveKeyR ~
         deriveNextKeyR ~
-        updateChangeAddressR
+        updateChangeAddressR ~
+        signTransactionR
     }
   }
 
@@ -99,37 +104,90 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       }
     }
 
-  private def withFee(requests: Seq[TransactionRequest]): Seq[TransactionRequest] = {
+  private def withFee(requests: Seq[TransactionGenerationRequest]): Seq[TransactionGenerationRequest] = {
     requests :+ PaymentRequest(Pay2SAddress(ergoSettings.chainSettings.monetary.feeProposition),
       ergoSettings.walletSettings.defaultTransactionFee, Seq.empty, Map.empty)
   }
 
-  private def generateTransaction(requests: Seq[TransactionRequest], inputsRaw: Seq[String]): Route = {
-    withWalletOp(_.generateTransaction(requests, inputsRaw)) {
+  private def generateTransactionAndProcess(requests: Seq[TransactionGenerationRequest],
+                                            inputsRaw: Seq[String],
+                                            dataInputsRaw: Seq[String],
+                                            processFn: ErgoTransaction => Route): Route = {
+    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw)) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(tx) => ApiResponse(tx)
+      case Success(tx) => processFn(tx)
     }
   }
 
-  private def sendTransaction(requests: Seq[TransactionRequest], inputsRaw: Seq[String]): Route = {
-    withWalletOp(_.generateTransaction(requests, inputsRaw)) {
-      case Failure(e) =>
-        BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(tx) =>
-        nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
-        ApiResponse(tx.id)
-    }
+  private def generateTransaction(requests: Seq[TransactionGenerationRequest],
+                                  inputsRaw: Seq[String],
+                                  dataInputsRaw: Seq[String]): Route = {
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, tx => ApiResponse(tx))
   }
 
-  def sendTransactionR: Route = (path("transaction" / "send") & post
-    & entity(as[RequestsHolder])) (holder => sendTransaction(holder.withFee, holder.inputsRaw))
+  private def sendTransaction(requests: Seq[TransactionGenerationRequest],
+                              inputsRaw: Seq[String],
+                              dataInputsRaw: Seq[String]): Route = {
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, {tx =>
+      nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+      ApiResponse(tx.id)
+    })
+  }
 
-  def generateTransactionR: Route = (path("transaction" / "generate") & post
-    & entity(as[RequestsHolder])) (holder => generateTransaction(holder.withFee, holder.inputsRaw))
+  def sendTransactionR: Route =
+    (path("transaction" / "send") & post & entity(as[RequestsHolder])){ holder =>
+      sendTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+    }
+
+  def generateTransactionR: Route =
+    (path("transaction" / "generate") & post & entity(as[RequestsHolder])){ holder =>
+      generateTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+    }
+
+  def signTransactionR: Route = (path("transaction" / "sign")
+    & post & entity(as[TransactionSigningRequest])) { tsr =>
+
+    val tx = tsr.utx
+    val secrets = (tsr.dlogs ++ tsr.dhts).map(ExternalSecret.apply)
+
+    def signWithReaders(r: Readers): Future[Try[ErgoTransaction]] = {
+      if (tsr.inputs.isDefined) {
+        val boxesToSpend = tsr.inputs.get
+          .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
+        val dataBoxes = tsr.dataInputs.getOrElse(Seq.empty)
+          .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
+
+        if (boxesToSpend.size == tx.inputs.size && dataBoxes.size == tx.dataInputs.size) {
+          r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)
+        } else {
+          Future(Failure(new Exception("Can't parse input boxes provided")))
+        }
+      } else {
+        r.s match {
+          case utxoSet: UtxoStateReader =>
+            val boxesToSpend = tx.inputs.map(d => utxoSet.boxById(d.boxId).get)
+            val dataBoxes = tx.dataInputs.map(d => utxoSet.boxById(d.boxId).get)
+            r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)
+          case _ => Future(Failure(new Exception("No input boxes provided, and no UTXO set to read them from")))
+        }
+      }
+    }
+
+    onSuccess {
+      (readersHolder ? GetReaders)
+        .mapTo[Readers]
+        .flatMap(r => signWithReaders(r))
+    } {
+      _.fold(
+        e => BadRequest(s"Malformed request: ${e.getMessage}"),
+        tx => ApiResponse(tx.asJson)
+      )
+    }
+  }
 
   def sendPaymentTransactionR: Route = (path("payment" / "send") & post
     & entity(as[Seq[PaymentRequest]])) { requests =>
-    sendTransaction(withFee(requests), Seq.empty)
+    sendTransaction(withFee(requests), Seq.empty, Seq.empty)
   }
 
   def balancesR: Route = (path("balances") & get) {

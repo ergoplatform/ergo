@@ -15,7 +15,7 @@ lazy val commonSettings = Seq(
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "Bintray" at "https://jcenter.bintray.com/", //for org.ethereum % leveldbjni-all 
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
-    "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
+    "Typesafe maven releases" at "https://repo.typesafe.com/typesafe/maven-releases/",
     "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"),
   homepage := Some(url("http://ergoplatform.org/")),
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode")),

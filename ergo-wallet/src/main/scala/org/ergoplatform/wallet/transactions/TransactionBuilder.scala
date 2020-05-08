@@ -16,22 +16,22 @@ import special.collection.Coll
 import sigmastate.eval._
 import org.ergoplatform.ErgoBox.TokenId
 import scorex.crypto.hash.Digest32
-import org.ergoplatform.wallet.AssetUtils
+import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector
 
 
 object TransactionBuilder {
 
-  def collectOutputTokens(outputCandidates: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] =
+  def collectOutputTokens(outputCandidates: Seq[ErgoBoxCandidate]): TokensMap =
     outputCandidates
       .map(b => collTokensToMap(b.additionalTokens))
       .foldLeft(Map[ModifierId, Long]()){case (a, e) => AssetUtils.mergeAssets(e, a) }
 
-  private def collTokensToMap(tokens: Coll[(TokenId, Long)]): Map[ModifierId, Long] =
+  private def collTokensToMap(tokens: Coll[(TokenId, Long)]): TokensMap =
     tokens.toArray.toSeq.map(t => bytesToId(t._1) -> t._2).toMap
 
-  private def tokensMapToColl(tokens: Map[ModifierId, Long]): Coll[(TokenId, Long)] =
+  private def tokensMapToColl(tokens: TokensMap): Coll[(TokenId, Long)] =
     tokens.toSeq.map {t => (Digest32 @@ idToBytes(t._1)) -> t._2}.toArray.toColl
 
   private def validateStatelessChecks(inputs: IndexedSeq[ErgoBox], dataInputs: IndexedSeq[DataInput],

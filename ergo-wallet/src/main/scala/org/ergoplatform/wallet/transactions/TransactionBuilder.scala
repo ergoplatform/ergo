@@ -24,14 +24,14 @@ import org.ergoplatform.wallet.boxes.DefaultBoxSelector
 object TransactionBuilder {
 
   def collectOutputTokens(outputCandidates: Seq[ErgoBoxCandidate]): TokensMap =
-    outputCandidates
-      .map(b => collTokensToMap(b.additionalTokens))
-      .foldLeft(Map[ModifierId, Long]()){case (a, e) => AssetUtils.mergeAssets(e, a) }
+    AssetUtils.mergeAssets(
+      to = Map.empty[ModifierId, Long],
+      from = outputCandidates.map(b => collTokensToMap(b.additionalTokens)):_*)
 
-  private def collTokensToMap(tokens: Coll[(TokenId, Long)]): TokensMap =
+  def collTokensToMap(tokens: Coll[(TokenId, Long)]): TokensMap =
     tokens.toArray.toSeq.map(t => bytesToId(t._1) -> t._2).toMap
 
-  private def tokensMapToColl(tokens: TokensMap): Coll[(TokenId, Long)] =
+  def tokensMapToColl(tokens: TokensMap): Coll[(TokenId, Long)] =
     tokens.toSeq.map {t => (Digest32 @@ idToBytes(t._1)) -> t._2}.toArray.toColl
 
   private def validateStatelessChecks(inputs: IndexedSeq[ErgoBox], dataInputs: IndexedSeq[DataInput],
@@ -72,6 +72,7 @@ object TransactionBuilder {
     changeAddress: ErgoAddress,
     minChangeValue: Long,
     minerRewardDelay: Int,
+    burnTokens: TokensMap = Map.empty,
     boxSelector: BoxSelector = DefaultBoxSelector
   ): Try[UnsignedErgoLikeTransaction] = Try {
 
@@ -92,10 +93,15 @@ object TransactionBuilder {
     val tokensOutNoMinted = tokensOut.filterKeys(_ != firstInputBoxId)
     val mintedTokensNum = tokensOut.size - tokensOutNoMinted.size
     require(mintedTokensNum <= 1, s"Only one token can be minted, but found $mintedTokensNum")
+    require(burnTokens.values.forall(_ > 0), s"Incorrect burnTokens specification: $burnTokens")
 
-    val selection = boxSelector.select(inputs.toIterator, outputTotal, tokensOutNoMinted) match {
+    // add burnTokens to target assets so that they are excluded from the change outputs
+    // thus total outputs assets will be reduced which is interpreted as _token burning_
+    val tokensOutWithBurned = AssetUtils.mergeAssets(tokensOutNoMinted, burnTokens)
+
+    val selection = boxSelector.select(inputs.toIterator, outputTotal, tokensOutWithBurned) match {
       case Left(err) => throw new IllegalArgumentException(
-        s"failed to calculate change for outputTotal: $outputTotal, \ntokens: $tokensOut, \ninputs: $inputs, \nreason: $err")
+        s"failed to calculate change for outputTotal: $outputTotal, \ntokens: $tokensOut, \nburnTokens: $burnTokens, \ninputs: $inputs, \nreason: $err")
       case Right(v) => v
     }
     // although we're only interested in change boxes, make sure selection contains exact inputs

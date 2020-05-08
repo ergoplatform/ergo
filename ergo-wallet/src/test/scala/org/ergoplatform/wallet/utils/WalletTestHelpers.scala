@@ -1,6 +1,8 @@
 package org.ergoplatform.wallet.utils
 
+import org.ergoplatform.settings.ErgoAlgos
 import org.scalatest.PropSpec
+import scorex.util.ModifierId
 
 import scala.annotation.tailrec
 
@@ -22,5 +24,9 @@ trait WalletTestHelpers extends PropSpec {
   final def rootCause(t: Throwable): Throwable =
     if (t.getCause == null) t
     else rootCause(t.getCause)
+
+  def tid(s: String): ModifierId = {
+    scorex.util.bytesToId(ErgoAlgos.hash(s))
+  }
 
 }

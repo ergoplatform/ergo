@@ -18,7 +18,7 @@ class AssetUtilsSpec extends WalletTestHelpers with Matchers with ScalaCheckProp
     (Map(), Map(tid1 -> 1, tid2 -> 1), Map(tid1 -> 1, tid2 -> 1)),
     (Map(tid1 -> 1), Map(tid1 -> 1), Map(tid1 -> 2)),
     (Map(tid1 -> 1, tid2 -> 1), Map(tid1 -> 1), Map(tid2 -> 1, tid1 -> 2)), // NOTE, order is not important
-    (Map(tid1 -> 1), Map(tid1 -> 1, tid2 -> 1), Map(tid2 -> 1, tid1 -> 2)),
+    (Map(tid1 -> 1), Map(tid1 -> 1, tid2 -> 1), Map(tid2 -> 1, tid1 -> 2))
   )
 
   property("mergeAssets") {
@@ -43,7 +43,7 @@ class AssetUtilsSpec extends WalletTestHelpers with Matchers with ScalaCheckProp
       (Map(tid2 -> 1), Map(tid2 -> 1, tid1 -> 1)),
       (Map(tid1 -> 1), Map(tid1 -> 2)),
       (Map(tid1 -> 1, tid2 -> 1), Map(tid2 -> 1, tid1 -> 2)),
-      (Map(tid1 -> 1), Map(tid1 -> -1)),
+      (Map(tid1 -> 1), Map(tid1 -> -1))
     )
 
     forAll(failExamples) { (small, big) =>

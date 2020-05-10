@@ -14,8 +14,6 @@ import org.ergoplatform.UnsignedInput
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import scorex.crypto.hash.Digest32
-import sigmastate.Values.LongConstant
-import sigmastate.serialization.ValueSerializer
 
 
 

@@ -8,6 +8,7 @@ Ergo Platform website: [https://ergoplatform.org/](https://ergoplatform.org/)
 
 ## Differences from Bitcoin
 
+* Powerful contracts in the multi-stage extended UTXO model (see [ErgoScript whitepaper](https://ergoplatform.org/docs/ErgoScript.pdf)) 
 * Memory-hard non-outsourceable Proof-of-Work function [Autolykos](https://github.com/ergoplatform/autoleakus)
 * New modes of operation: [light-fullnode](https://eprint.iacr.org/2016/994),
 [light-SPV](http://fc16.ifca.ai/bitcoin/papers/KLS16.pdf), hybrid modes
@@ -82,7 +83,7 @@ To run specific Ergo version `<VERSION>` as a service with custom config `/path/
         -v /path/on/host/system/to/myergo.conf:/etc/myergo.conf \
         ergoplatform/ergo:<VERSION> --<networkId> -c /etc/myergo.conf
 
-Available versions can be found on [Ergo Docker image page](https://hub.docker.com/r/ergoplatform/ergo/tags), for example, `v3.1.0`.
+Available versions can be found on [Ergo Docker image page](https://hub.docker.com/r/ergoplatform/ergo/tags), for example, `v3.2.2`.
 
 This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf` and network flag `--<networkId>`. Every default config value would be overwritten with corresponding value in `myergo.conf`.
 

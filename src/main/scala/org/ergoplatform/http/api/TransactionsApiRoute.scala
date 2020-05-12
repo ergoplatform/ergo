@@ -69,21 +69,4 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     ApiResponse(getUnconfirmedTransactions(offset, limit))
   }
 
-  def checkTransactionR: Route = (path("check") & post & entity(as[ErgoTransaction])) {tx =>
-    onSuccess {
-      getState
-        .map {
-          case validator: TransactionValidation[ErgoTransaction@unchecked] =>
-            validator.validate(tx)
-          case _ =>
-            Try(new Exception("Transaction validation is not supported in absence of UTXO set"))
-        }
-    } {
-      _.fold(
-        e => BadRequest(s"Validation failed: ${e.getMessage}"),
-        _ => ApiResponse(tx.id)
-      )
-    }
-  }
-
 }

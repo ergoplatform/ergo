@@ -154,7 +154,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case GetFirstSecret =>
       if (proverOpt.nonEmpty) {
-        proverOpt.foreach(_.hdKeys.headOption.foreach(s => sender() ! Success(s)))
+        proverOpt.foreach(_.hdKeys.headOption.foreach(s => sender() ! Success(s.privateInput)))
       } else {
         sender() ! Failure(new Exception("Wallet is locked"))
       }

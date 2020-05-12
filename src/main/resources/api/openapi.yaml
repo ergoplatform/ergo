@@ -322,11 +322,11 @@ components:
         elements "u", "v", such as g^w = u, h^w = v
       type: object
       required:
-        -secret
-        -g
-        -h
-        -u
-        -v
+        - secret
+        - g
+        - h
+        - u
+        - v
       properties:
         secret:
           description: Hex-encoded big-endian 256-bits secret exponent
@@ -3014,7 +3014,7 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Create P2SHAddress from Sigma source
-      operationId: scriptP2SAddress
+      operationId: scriptP2SHAddress
       tags:
         - script
       requestBody:

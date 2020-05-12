@@ -21,12 +21,12 @@ case class ExternalSecret(key: PrimitiveSecretKey) extends Hint
 /**
   * A request to sign a transaction
   *
-  * @param utx        - unsigned transaction
+  * @param unsignedTx        - unsigned transaction
   * @param hints      - hints for interpreter (such as additional one-time secrets)
   * @param inputs     - hex-encoded input boxes bytes for the unsigned transaction (optional)
   * @param dataInputs - hex-encoded data-input boxes bytes for the unsigned transaction (optional)
   */
-case class TransactionSigningRequest(utx: UnsignedErgoTransaction,
+case class TransactionSigningRequest(unsignedTx: UnsignedErgoTransaction,
                                      hints: Seq[Hint],
                                      inputs: Option[Seq[String]],
                                      dataInputs: Option[Seq[String]]) {
@@ -44,7 +44,7 @@ object TransactionSigningRequest extends ApiCodecs {
 
   implicit val encoder: Encoder[TransactionSigningRequest] = { tsr =>
     Json.obj(
-      "tx" -> tsr.utx.asJson,
+      "tx" -> tsr.unsignedTx.asJson,
       "secrets" -> Json.obj(
         "dlog" -> tsr.dlogs.asJson,
         "dht" -> tsr.dhts.asJson

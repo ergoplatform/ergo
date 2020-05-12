@@ -9,6 +9,7 @@ import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.LeafData
+import scorex.crypto.authds.merkle.{Leaf, MerkleProof, MerkleTree}
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
@@ -27,8 +28,6 @@ case class Extension(headerId: ModifierId,
 
   override val modifierTypeId: ModifierTypeId = Extension.modifierTypeId
 
-  override def digest: Digest32 = Extension.rootHash(fields)
-
   override type M = Extension
 
   override def serializer: ScorexSerializer[Extension] = ExtensionSerializer
@@ -44,9 +43,18 @@ case class Extension(headerId: ModifierId,
   * Extension block section with not filled header id
   */
 class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
+  lazy val merkleTree: MerkleTree[Digest32] = Extension.merkleTree(fields)
+
+  lazy val digest: Digest32 = Algos.merkleTreeRoot(merkleTree)
+
   def toExtension(headerId: ModifierId): Extension = Extension(headerId, fields)
 
   def ++(that: ExtensionCandidate): ExtensionCandidate = ExtensionCandidate(fields ++ that.fields)
+
+  def proofFor(key: Array[Byte]): Option[MerkleProof[Digest32]] =
+    fields.find(_._1 sameElements key)
+      .map(Extension.kvToLeaf)
+      .flatMap(kv => merkleTree.proofByElement(Leaf[Digest32](LeafData @@ kv)(Algos.hash)))
 }
 
 object ExtensionCandidate {
@@ -63,15 +71,11 @@ object Extension extends ApiCodecs {
   val InterlinksVectorPrefix: Byte = 0x01
   val ValidationRulesPrefix: Byte = 0x02
 
-  def rootHash(e: Extension): Digest32 = rootHash(e.fields)
+  def kvToLeaf(kv: (Array[Byte], Array[Byte])): Array[Byte] =
+    Bytes.concat(Array(kv._1.length.toByte), kv._1, kv._2)
 
-  def rootHash(e: ExtensionCandidate): Digest32 = rootHash(e.fields)
-
-  def rootHash(fields: Seq[(Array[Byte], Array[Byte])]): Digest32 = {
-    val elements: Seq[Array[Byte]] = fields.map { f =>
-      Bytes.concat(Array(f._1.length.toByte), f._1, f._2)
-    }
-    Algos.merkleTreeRoot(LeafData @@ elements)
+  def merkleTree(fields: Seq[(Array[Byte], Array[Byte])]): MerkleTree[Digest32] = {
+    Algos.merkleTree(LeafData @@ fields.map(kvToLeaf))
   }
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (108: Byte)

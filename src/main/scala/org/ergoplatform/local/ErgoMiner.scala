@@ -541,7 +541,7 @@ object ErgoMiner extends ScorexLogging {
     val (parentId, height) = derivedHeaderFields(candidate.parentOpt)
     val transactionsRoot = BlockTransactions.transactionsRoot(candidate.transactions)
     val adProofsRoot = ADProofs.proofDigest(candidate.adProofBytes)
-    val extensionRoot: Digest32 = Extension.rootHash(candidate.extension)
+    val extensionRoot: Digest32 = candidate.extension.digest
 
     HeaderWithoutPow(
       candidate.version,

@@ -206,7 +206,7 @@ components:
       type: object
       description: Unsigned Ergo transaction
       required:
-        - unsignedInputs
+        - inputs
         - dataInputs
         - outputs
       properties:

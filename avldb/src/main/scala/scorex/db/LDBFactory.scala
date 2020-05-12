@@ -111,6 +111,12 @@ object LDBFactory extends ScorexLogging {
 
   private val nativeFactory = "org.fusesource.leveldbjni.JniDBFactory"
   private val javaFactory = "org.iq80.leveldb.impl.Iq80DBFactory"
+  private val memoryPoolSize = 512 * 1024
+
+  def setLevelDBParams(factory: DBFactory): Unit = {
+    val pushMemoryPool = factory.getClass().getDeclaredMethod("pushMemoryPool", classOf[Int])
+    pushMemoryPool.invoke(null, Integer.valueOf(memoryPoolSize))
+  }
 
   lazy val factory: DBFactory = {
     val loaders = List(ClassLoader.getSystemClassLoader, this.getClass.getClassLoader)
@@ -128,6 +134,7 @@ object LDBFactory extends ScorexLogging {
       log.warn("Using the pure java LevelDB implementation which is still experimental")
     } else {
       log.info(s"Loaded $name with $factory")
+      setLevelDBParams(factory)
     }
     StoreRegistry(factory)
   }

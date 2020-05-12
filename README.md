@@ -93,12 +93,20 @@ Ergo node works normally behind NAT, so you can keep closed your `9030` port, he
 
 It is also a good practice to keep closed REST API port `9053`, and connect to your node from inside another container in the same Docker network (this case not covered by this short quick start manual).
 
+## Testing
+
+There are three kinds of tests: 
+
+1) Unit and property tests, run them with `sbt test` command.
+2) Integration tests, they require for Docker to be installed, then run `sudo sbt it:test`.
+3) Bootstrapping tests, very slow as they are checking that the node is indeed catching up with the main network in 
+different regimes, they require for Docker too, run as `sudo sbt it2:test`.
+
 ## Open project in IDE
 
 Your can use [IntelliJ IDEA](https://www.jetbrains.com/idea/) (Community or Ultimate edition) or 
 [VSCode](https://code.visualstudio.com/) + [Metals](https://scalameta.org/metals/).
-Before opening the project in IDE make sure it can be built with sbt
-as described above. You can also run tests using `sbt test` command.
+Before opening the project in IDE make sure it can be built with sbt. 
 You may need to fix dependency resolution errors first.
 
 After that you can open the project folder in Idea (File / Open)

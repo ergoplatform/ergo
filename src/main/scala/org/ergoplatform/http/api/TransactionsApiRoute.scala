@@ -15,7 +15,6 @@ import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 
 import scala.concurrent.Future
-import scala.util.Try
 
 case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, settings: RESTApiSettings)
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {

@@ -155,7 +155,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
-    * Assembles candidate block for external miner.
+    * Assembles candidate block for external miners.
     */
   def deriveExternalCandidate(candidate: CandidateBlock, pk: ProveDlog): ExternalCandidateBlock =
     deriveExternalCandidate(candidate, pk, Seq.empty)

@@ -8,13 +8,15 @@ import io.circe.syntax._
 
 /**
   * Proof of inclusion of certain transactions into a block with known (unproven) header
+  *
   * @param minHeader - (unproven or proven) header
-  * @param txProofs - proofs of membership for transactions (against a transactions Merkle tree digest in the header)
+  * @param txProofs  - proofs of membership for transactions (against a transactions Merkle tree digest in the header)
   */
-case class ProofForMandatoryTransactions(minHeader: HeaderWithoutPow, txProofs: Seq[TransactionMembershipProof]) {
+case class ProofOfUpcomingTransactions(minHeader: HeaderWithoutPow, txProofs: Seq[TransactionMembershipProof]) {
 
   /**
     * Checks that all the proofs of membership are valid
+    *
     * @return true if all the transactions are valid, false otherwise
     */
   def check(): Boolean = txProofs.forall { tp =>
@@ -22,11 +24,11 @@ case class ProofForMandatoryTransactions(minHeader: HeaderWithoutPow, txProofs: 
   }
 }
 
-object ProofForMandatoryTransactions {
+object ProofOfUpcomingTransactions {
 
   import TransactionMembershipProof.txMembershipProofEncoder
 
-  implicit val encoder: Encoder[ProofForMandatoryTransactions] = { p: ProofForMandatoryTransactions =>
+  implicit val encoder: Encoder[ProofOfUpcomingTransactions] = { p: ProofOfUpcomingTransactions =>
     val preimageBytes = HeaderSerializer.bytesWithoutPow(p.minHeader)
     Json.obj(
       "msgPreimage" -> Algos.encode(preimageBytes).asJson,

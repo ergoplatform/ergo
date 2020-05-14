@@ -24,7 +24,7 @@ jobs:
       script: sbt +ergoWallet/test
     - stage: release
       jdk: openjdk8
-      script: ci/publish_release_gpg2.sh
+      script: chmod +x ci/publish_release_gpg2.sh && ci/publish_release_gpg2.sh
     - stage: snapshot
       jdk: openjdk8
       script: sbt +ergoWallet/publish

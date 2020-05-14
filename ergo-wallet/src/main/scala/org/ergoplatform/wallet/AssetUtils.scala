@@ -15,18 +15,18 @@ object AssetUtils {
   }
 
   @inline
-  def mergeAssets(to: TokensMap, from: TokensMap*): TokensMap = {
-    from.foldLeft(to){ case (to, from) =>
-      from.foldLeft(to) { case (acc, (id, amount)) =>
+  def mergeAssets(initialMap: TokensMap, maps: TokensMap*): TokensMap = {
+    maps.foldLeft(initialMap) { case (to, map) =>
+      map.foldLeft(to) { case (acc, (id, amount)) =>
         acc.updated(id, Math.addExact(acc.getOrElse(id, 0L), amount))
       }
     }
   }
 
   @inline
-  def subtractAssets(from: TokensMap, subtractor: TokensMap*): TokensMap = {
-    subtractor.foldLeft(from){ case (from, substractor) =>
-      substractor.foldLeft(from) { case (acc, (id, amount)) =>
+  def subtractAssets(initialMap: TokensMap, subtractor: TokensMap*): TokensMap = {
+    subtractor.foldLeft(initialMap){ case (from, mapToSubtract) =>
+      mapToSubtract.foldLeft(from) { case (acc, (id, amount)) =>
         val currAmt = acc.getOrElse(id,
           throw new IllegalArgumentException(s"Cannot subtract $amount of token $id: token not found in $acc"))
         require(amount >= 0, s"Cannot subtract negative amount from token $id: $amount")

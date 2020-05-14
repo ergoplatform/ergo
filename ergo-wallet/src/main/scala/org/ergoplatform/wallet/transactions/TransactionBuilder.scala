@@ -25,8 +25,8 @@ object TransactionBuilder {
 
   def collectOutputTokens(outputCandidates: Seq[ErgoBoxCandidate]): TokensMap =
     AssetUtils.mergeAssets(
-      to = Map.empty[ModifierId, Long],
-      from = outputCandidates.map(b => collTokensToMap(b.additionalTokens)):_*)
+      initialMap = Map.empty[ModifierId, Long],
+      maps = outputCandidates.map(b => collTokensToMap(b.additionalTokens)):_*)
 
   def collTokensToMap(tokens: Coll[(TokenId, Long)]): TokensMap =
     tokens.toArray.toSeq.map(t => bytesToId(t._1) -> t._2).toMap
@@ -93,7 +93,8 @@ object TransactionBuilder {
     val tokensOutNoMinted = tokensOut.filterKeys(_ != firstInputBoxId)
     val mintedTokensNum = tokensOut.size - tokensOutNoMinted.size
     require(mintedTokensNum <= 1, s"Only one token can be minted, but found $mintedTokensNum")
-    require(burnTokens.values.forall(_ > 0), s"Incorrect burnTokens specification: $burnTokens")
+    require(burnTokens.values.forall(_ > 0),
+      s"Incorrect burnTokens specification, positive values are expected: $burnTokens")
 
     // add burnTokens to target assets so that they are excluded from the change outputs
     // thus total outputs assets will be reduced which is interpreted as _token burning_

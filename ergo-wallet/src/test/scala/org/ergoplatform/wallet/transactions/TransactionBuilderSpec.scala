@@ -4,8 +4,8 @@ import sigmastate.Values
 import sigmastate.Values.SigmaPropValue
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
-import org.ergoplatform.{UnsignedErgoLikeTransaction, ErgoAddressEncoder, P2PKAddress, ErgoBox, ErgoBoxCandidate}
-import org.scalatest.{PropSpec, Matchers}
+import org.ergoplatform._
+import org.scalatest.Matchers
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.wallet.TokensMap
 
@@ -35,8 +35,8 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
 
   val TrueProp: SigmaPropValue = Values.TrueLeaf.toSigmaProp
 
-  val tid1 = tid("t1")
-  val tid2 = tid("t2")
+  val tid1 = stringToId("t1")
+  val tid2 = stringToId("t2")
 
   def box(value: Long) = ErgoBox(value, TrueProp, currentHeight)
 

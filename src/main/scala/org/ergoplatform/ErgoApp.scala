@@ -107,6 +107,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
+  // Create an instance of ErgoMiner actor if "mining = true" in config
   private val minerRefOpt: Option[ActorRef] =
     if (ergoSettings.nodeSettings.mining) {
       Some(ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider))
@@ -138,8 +139,10 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val httpService = ErgoHttpService(apiRoutes, swaggerRoute, panelRoute)
 
+  // Run mining immediately, i.e. without syncing if mining = true and offlineGeneration = true
+  // Useful for local blockchains (devnet)
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
-    require(minerRefOpt.isDefined, "Miner does not exist but mining=true in config")
+    require(minerRefOpt.isDefined, "Miner does not exist but mining = true in config")
     minerRefOpt.get ! StartMining
   }
 

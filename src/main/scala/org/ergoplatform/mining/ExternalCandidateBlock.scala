@@ -18,7 +18,7 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 case class ExternalCandidateBlock(msg: Array[Byte],
                                   b: BigInt,
                                   pk: ProveDlog,
-                                  proofsForMandatoryTransactions: Option[ProofForMandatoryTransactions])
+                                  proofsForMandatoryTransactions: Option[ProofOfUpcomingTransactions])
 
 object ExternalCandidateBlock extends ApiCodecs {
 

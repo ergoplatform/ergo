@@ -9,7 +9,6 @@ import akka.stream.ActorMaterializer
 import org.ergoplatform.http._
 import org.ergoplatform.http.api._
 import org.ergoplatform.local.ErgoMiner.StartMining
-import org.ergoplatform.local.TransactionGenerator.StartGeneration
 import org.ergoplatform.local._
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
@@ -148,11 +147,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
     nodeViewHolderRef
   )
   sys.addShutdownHook(ErgoApp.shutdown(actorSystem, actorsToStop))
-
-  if (ergoSettings.testingSettings.transactionGeneration) {
-    val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
-    txGen ! StartGeneration
-  }
 
   if (!ergoSettings.nodeSettings.stateType.requireProofs) {
     MempoolAuditorRef(nodeViewHolderRef, networkControllerRef, ergoSettings)

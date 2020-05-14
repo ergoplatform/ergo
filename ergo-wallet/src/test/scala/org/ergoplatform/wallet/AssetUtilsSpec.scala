@@ -7,8 +7,8 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 class AssetUtilsSpec extends WalletTestHelpers with Matchers with ScalaCheckPropertyChecks {
   import AssetUtils._
 
-  val tid1 = tid("t1")
-  val tid2 = tid("t2")
+  val tid1 = stringToId("t1")
+  val tid2 = stringToId("t2")
 
   val examples = Table[TokensMap, TokensMap, TokensMap]  (("m1", "m2", "merged"),
     (Map(), Map(), Map()),

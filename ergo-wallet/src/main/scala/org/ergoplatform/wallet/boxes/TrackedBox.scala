@@ -1,6 +1,6 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.{Constants, TokensMap}
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
 import scorex.util.serialization.{Reader, Writer}
@@ -65,7 +65,7 @@ case class TrackedBox(creationTxId: ModifierId,
 
   override def value: Long = box.value
 
-  override def tokens: Map[ModifierId, Long] = box.additionalTokens.toArray.map {
+  override def tokens: TokensMap = box.additionalTokens.toArray.map {
     case (id, amt) => bytesToId(id) -> amt
   }.toMap
 

@@ -70,4 +70,5 @@ object PreHeader {
     votes = Array.fill(3)(0.toByte),
     minerPk = org.ergoplatform.mining.group.generator
   )
+
 }

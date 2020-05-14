@@ -4,7 +4,7 @@ import scorex.util.ModifierId
 import org.ergoplatform.ErgoBoxAssets
 import org.ergoplatform.ErgoBoxAssetsHolder
 import org.ergoplatform.ErgoBox.MaxTokens
-import org.ergoplatform.wallet.AssetUtils
+import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -26,7 +26,7 @@ object DefaultBoxSelector extends BoxSelector {
   override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
                       externalFilter: T => Boolean,
                       targetBalance: Long,
-                      targetAssets: Map[ModifierId, Long]): Either[BoxSelectionError, BoxSelectionResult[T]] = {
+                      targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     //mutable structures to collect results
     val res            = mutable.Buffer[T]()
     var currentBalance = 0L
@@ -90,7 +90,7 @@ object DefaultBoxSelector extends BoxSelector {
     foundBalance: Long,
     targetBalance: Long,
     foundBoxAssets: mutable.Map[ModifierId, Long],
-    targetBoxAssets: Map[ModifierId, Long]
+    targetBoxAssets: TokensMap
   ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
     AssetUtils.subtractAssetsMut(foundBoxAssets, targetBoxAssets)
     val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxTokens).toSeq

@@ -56,15 +56,16 @@ object ChainGenerator extends App with ErgoTestHelpers {
 
   val miningDelay = 1.second
   val minimalSuffix = 2
+  val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
   val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(StateType.Utxo, verifyTransactions = true,
-    -1, poPoWBootstrap = false, minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false,
+    -1, poPoWBootstrap = false, minimalSuffix, mining = false, complexityLimit, miningDelay, useExternalMiner = false,
     miningPubKeyHex = None, offlineGeneration = false, 200, 100000, 100000, 1.minute, rebroadcastCount = 20, 1000000, 100)
   val ms = settings.chainSettings.monetary.copy(
     minerRewardDelay = RewardDelay
   )
   val cs = realNetworkSetting.chainSettings
 
-  val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, cs, settings.testingSettings,
+  val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, cs,
     nodeSettings, settings.scorexSettings, settings.walletSettings, CacheSettings.default)
   val stateDir = ErgoState.stateDir(fullHistorySettings)
   stateDir.mkdirs()

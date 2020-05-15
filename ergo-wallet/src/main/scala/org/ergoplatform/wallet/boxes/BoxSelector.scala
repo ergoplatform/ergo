@@ -3,8 +3,8 @@ package org.ergoplatform.wallet.boxes
 import org.ergoplatform.ErgoBoxAssets
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
-import scorex.util.ModifierId
 import org.ergoplatform.SigmaConstants.MaxBoxSize
+import org.ergoplatform.wallet.TokensMap
 
 
 /**
@@ -29,11 +29,11 @@ trait BoxSelector {
   def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
              filterFn: T => Boolean,
              targetBalance: Long,
-             targetAssets: Map[ModifierId, Long]): Either[BoxSelectionError, BoxSelectionResult[T]]
+             targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]]
   
   def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
     targetBalance: Long,
-    targetAssets: Map[ModifierId, Long]
+    targetAssets: TokensMap
   ): Either[BoxSelectionError, BoxSelectionResult[T]] =
     select(inputBoxes, _ => true, targetBalance, targetAssets)
 

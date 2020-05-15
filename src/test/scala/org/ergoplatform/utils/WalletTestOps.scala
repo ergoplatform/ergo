@@ -12,9 +12,10 @@ import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.fixtures.WalletFixture
+import org.ergoplatform.wallet.TokensMap
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.bytesToId
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.eval.Extensions._
@@ -59,10 +60,10 @@ trait WalletTestOps extends NodeViewBaseOps {
   def boxesAvailable(tx: ErgoTransaction, pk: ProveDlog): Seq[ErgoBox] =
     tx.outputs.filter(_.propositionBytes.containsSlice(org.ergoplatform.mining.groupElemToBytes(pk.value)))
 
-  def assetAmount(boxes: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] =
+  def assetAmount(boxes: Seq[ErgoBoxCandidate]): TokensMap =
     assetsByTokenId(boxes).map { case (tokenId, sum) => (bytesToId(tokenId), sum) }
 
-  def toAssetMap(assetSeq: Seq[(TokenId, Long)]): Map[ModifierId, Long] =
+  def toAssetMap(assetSeq: Seq[(TokenId, Long)]): TokensMap =
     assetSeq.map { case (tokenId, sum) => (bytesToId(tokenId), sum) }.toMap
 
   def assetsByTokenId(boxes: Seq[ErgoBoxCandidate]): Map[TokenId, Long] = {

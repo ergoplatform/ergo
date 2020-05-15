@@ -95,7 +95,7 @@ class WalletApiRouteSpec extends FlatSpec
     }
     Post(prefix + "/transaction/sign", tsr.asJson) ~> r ~> check {
       status shouldBe StatusCodes.OK
-      responseAs[ErgoTransaction].id shouldBe tsr.utx.id
+      responseAs[ErgoTransaction].id shouldBe tsr.unsignedTx.id
     }
   }
 

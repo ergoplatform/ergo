@@ -38,7 +38,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
       val txComplexity = boxesToSpend.map(_.ergoTree.complexity).sum
       if (txComplexity > complexityLimit) {
-        throw new Exception(s"Transaction $tx have too high complexity $txComplexity")
+        throw new Exception(s"Transaction $tx has too high complexity $txComplexity")
       }
       tx.statefulValidity(
         boxesToSpend,

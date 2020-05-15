@@ -1,7 +1,7 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ApplicationId
+import org.ergoplatform.wallet.{Constants, TokensMap}
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
 import scorex.util.serialization.{Reader, Writer}
@@ -68,7 +68,7 @@ final case class TrackedBox(creationTxId: ModifierId,
 
   def spent: Boolean = spendingHeightOpt.isDefined
 
-  lazy val tokens: Map[ModifierId, Long] = box.additionalTokens.toArray.map {
+  lazy val tokens: TokensMap = box.additionalTokens.toArray.map {
     case (id, amt) => bytesToId(id) -> amt
   }.toMap
 

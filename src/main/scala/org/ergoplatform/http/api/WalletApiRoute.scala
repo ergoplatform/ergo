@@ -147,7 +147,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   def signTransactionR: Route = (path("transaction" / "sign")
     & post & entity(as[TransactionSigningRequest])) { tsr =>
 
-    val tx = tsr.utx
+    val tx = tsr.unsignedTx
     val secrets = (tsr.dlogs ++ tsr.dhts).map(ExternalSecret.apply)
 
     def signWithReaders(r: Readers): Future[Try[ErgoTransaction]] = {
@@ -165,8 +165,10 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       } else {
         r.s match {
           case utxoSet: UtxoStateReader =>
-            val boxesToSpend = tx.inputs.map(d => utxoSet.boxById(d.boxId).get)
-            val dataBoxes = tx.dataInputs.map(d => utxoSet.boxById(d.boxId).get)
+            val mempool = r.m
+            val utxosWithUnconfirmed = utxoSet.withTransactions(mempool.getAll)
+            val boxesToSpend = tx.inputs.map(d => utxosWithUnconfirmed.boxById(d.boxId).get)
+            val dataBoxes = tx.dataInputs.map(d => utxosWithUnconfirmed.boxById(d.boxId).get)
             r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)
           case _ => Future(Failure(new Exception("No input boxes provided, and no UTXO set to read them from")))
         }

@@ -201,7 +201,7 @@ components:
       type: object
       description: Unsigned Ergo transaction
       required:
-        - unsignedInputs
+        - inputs
         - dataInputs
         - outputs
       properties:
@@ -317,11 +317,11 @@ components:
         elements "u", "v", such as g^w = u, h^w = v
       type: object
       required:
-        -secret
-        -g
-        -h
-        -u
-        -v
+        - secret
+        - g
+        - h
+        - u
+        - v
       properties:
         secret:
           description: Hex-encoded big-endian 256-bits secret exponent
@@ -1327,7 +1327,7 @@ components:
         maxBlockCost:
           type: integer
           format: int32
-          description: Maximum cumulative computational complexity of input scripts in block transactions
+          description: Maximum cumulative computational cost of input scripts in block transactions
           minimum: 0
           example: 104876
           nullable: false

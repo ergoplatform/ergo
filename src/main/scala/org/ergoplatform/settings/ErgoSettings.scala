@@ -18,7 +18,6 @@ import scala.util.Try
 case class ErgoSettings(directory: String,
                         networkType: NetworkType,
                         chainSettings: ChainSettings,
-                        testingSettings: TestingSettings,
                         nodeSettings: NodeConfigurationSettings,
                         scorexSettings: ScorexSettings,
                         walletSettings: WalletSettings,
@@ -61,7 +60,6 @@ object ErgoSettings extends ScorexLogging
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
     val bootstrappingSettingsOpt = config.as[Option[BootstrapSettings]](s"$configPath.bootstrap")
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
-    val testingSettings = config.as[TestingSettings](s"$configPath.testing")
     val walletSettings = config.as[WalletSettings](s"$configPath.wallet")
     val cacheSettings = config.as[CacheSettings](s"$configPath.cache")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
@@ -76,7 +74,6 @@ object ErgoSettings extends ScorexLogging
         directory,
         networkType,
         chainSettings,
-        testingSettings,
         nodeSettings,
         scorexSettings,
         walletSettings,

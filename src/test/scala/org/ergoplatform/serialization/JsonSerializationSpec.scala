@@ -8,6 +8,7 @@ import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
@@ -117,6 +118,14 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
       val json = request.asJson
       val parsedRequest = json.as[TransactionSigningRequest].toOption.get
       parsedRequest shouldBe request
+    }
+  }
+
+  property("unsignedErgoTransaction roundtrip") {
+    forAll(validUnsignedErgoTransactionGen) { case (_, tx) =>
+      val json = tx.asJson
+      val parsedTx = json.as[UnsignedErgoTransaction].toOption.get
+      parsedTx shouldBe tx
     }
   }
 

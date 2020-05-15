@@ -287,6 +287,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 }
 
 class Listener extends Actor {
+
   var generatedBlocks: Int = 0
 
   override def preStart(): Unit = {
@@ -297,6 +298,7 @@ class Listener extends Actor {
     case SemanticallySuccessfulModifier(_) => generatedBlocks += 1
     case Status => sender ! generatedBlocks
   }
+
 }
 
 object Listener {

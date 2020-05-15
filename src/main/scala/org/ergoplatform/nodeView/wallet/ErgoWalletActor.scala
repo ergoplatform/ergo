@@ -17,6 +17,8 @@ import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalAp
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.wallet.TokensMap
+import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
@@ -136,7 +138,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case GetFirstSecret =>
       if (walletVars.proverOpt.nonEmpty) {
-        walletVars.proverOpt.foreach(_.hdKeys.headOption.foreach(s => sender() ! Success(s)))
+        walletVars.proverOpt.foreach(_.hdKeys.headOption.foreach(s => sender() ! Success(s.privateInput)))
       } else {
         sender() ! Failure(new Exception("Wallet is locked"))
       }
@@ -538,7 +540,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
 
   private def inputsFor(targetAmount: Long,
-                        targetAssets: Map[ModifierId, Long] = Map.empty): Seq[ErgoBox] = {
+                        targetAssets: TokensMap = Map.empty): Seq[ErgoBox] = {
     val unspentBoxes = registry.walletUnspentBoxes()
     boxSelector
       .select(unspentBoxes.toIterator, onChainFilter, targetAmount, targetAssets)

@@ -107,7 +107,13 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-  private val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
+  // Create an instance of ErgoMiner actor if "mining = true" in config
+  private val minerRefOpt: Option[ActorRef] =
+    if (ergoSettings.nodeSettings.mining) {
+      Some(ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider))
+    } else {
+      None
+    }
 
   private val statsCollectorRef: ActorRef =
     ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider)
@@ -124,29 +130,31 @@ class ErgoApp(args: Args) extends ScorexLogging {
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
-    MiningApiRoute(minerRef, ergoSettings),
     UtxoApiRoute(readersHolderRef, settings.restApi),
     ScriptApiRoute(readersHolderRef, ergoSettings)
-  )
+  ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
 
   private val swaggerRoute = SwaggerRoute(settings.restApi, swaggerConfig)
   private val panelRoute = NodePanelRoute()
 
   private val httpService = ErgoHttpService(apiRoutes, swaggerRoute, panelRoute)
 
+  // Run mining immediately, i.e. without syncing if mining = true and offlineGeneration = true
+  // Useful for local blockchains (devnet)
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
-    minerRef ! StartMining
+    require(minerRefOpt.isDefined, "Miner does not exist but mining = true in config")
+    minerRefOpt.get ! StartMining
   }
 
   private val actorsToStop: Seq[ActorRef] = Seq(
-    minerRef,
     peerManagerRef,
     networkControllerRef,
     readersHolderRef,
     nodeViewSynchronizer,
     statsCollectorRef,
     nodeViewHolderRef
-  )
+  ) ++ minerRefOpt.toSeq
+
   sys.addShutdownHook(ErgoApp.shutdown(actorSystem, actorsToStop))
 
   if (ergoSettings.testingSettings.transactionGeneration) {

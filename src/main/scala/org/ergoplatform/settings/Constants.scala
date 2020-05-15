@@ -62,10 +62,6 @@ object Constants {
   // Maximum extension size during bytes parsing. Allows to move MaxExtensionSize to Parameters in future
   val MaxExtensionSizeMax: Int = 1024 * 1024
 
-  // Default limit for transaction complexity to be included into block.
-  // Used in tests only.
-  val DefaultComplexityLimit: Int = 250000
-
   // SimplePayments application identifier
   val DefaultAppId: Short = 1
 

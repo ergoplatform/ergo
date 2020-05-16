@@ -51,15 +51,15 @@ libraryDependencies ++= Seq(
   "com.github.oskin1" %% "scakoo" % "0.4.1", // Cuckoo filter implementation
 
   "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
-  "com.storm-enroute" %% "scalameter" % "0.9" % "test",
-  "org.scalactic" %% "scalactic" % "3.0.5" % "test",
+  "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
+  "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
-  "org.scalacheck" %% "scalacheck" % "1.13.5" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.14.0" % "test",
 
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",
   "com.typesafe.akka" %% "akka-http-testkit" % "10.1.9" % "test",
-  "org.asynchttpclient" % "async-http-client" % "2.6.0" % "test",
+  "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test",
   "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded"
 )

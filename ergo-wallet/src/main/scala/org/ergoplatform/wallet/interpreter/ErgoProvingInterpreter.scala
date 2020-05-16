@@ -110,7 +110,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
             transactionContext.boxesToSpend,
             transactionContext.spendingTransaction,
             transactionContext.selfIndex,
-            ContextExtension.empty,
+            unsignedInput.extension,
             ValidationRules.currentSettings,
             params.maxBlockCost,
             initialCost

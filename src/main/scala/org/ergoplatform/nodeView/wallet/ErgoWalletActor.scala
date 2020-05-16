@@ -18,7 +18,6 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSec
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.TokensMap
-import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic

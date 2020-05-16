@@ -922,13 +922,8 @@ object ErgoWalletActor {
     val proverSecrets = proverOpt.map(_.secretKeys).getOrElse(Seq.empty)
     val secretsWrapped = secrets.map(_.key).toIndexedSeq
     val secretsProver = ErgoProvingInterpreter(secretsWrapped ++ proverSecrets, parameters)
-    val unsignedTx = new UnsignedErgoTransaction(
-      boxesToSpend.toIndexedSeq.map(box => new UnsignedInput(box.id)),
-      dataBoxes.toIndexedSeq.map(box => DataInput(box.id)),
-      tx.outputCandidates
-    )
     secretsProver
-      .sign(unsignedTx, boxesToSpend.toIndexedSeq, dataBoxes.toIndexedSeq, stateContext)
+      .sign(tx, boxesToSpend.toIndexedSeq, dataBoxes.toIndexedSeq, stateContext)
       .map(ErgoTransaction.apply)
   }
 

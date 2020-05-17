@@ -231,4 +231,23 @@ class WalletRegistrySpec
     }
   }
 
+  it should "remove application and then rollback - multiple apps" in {
+    val appId: ApplicationId = ApplicationId @@ 20.toShort
+
+    forAll(trackedBoxGen) { tb0 =>
+      val tb = tb0.copy(applications = Set(PaymentsAppId, appId))
+      withHybridStore(10) { store =>
+        val reg = new WalletRegistry(store)(ws)
+        val version = scorex.utils.Random.randomBytes()
+
+        WalletRegistry.putBox(emptyBag, tb).transact(store, version)
+        reg.getBox(tb.box.id).get.applications.size shouldBe 2
+        reg.removeApp(tb.box.id, appId).isSuccess shouldBe true
+        reg.getBox(tb.box.id).get.applications.size shouldBe 1
+        reg.rollback(VersionTag @@ Base16.encode(version)).isSuccess shouldBe true
+        reg.getBox(tb.box.id).get.applications.size shouldBe 1
+      }
+    }
+  }
+
 }

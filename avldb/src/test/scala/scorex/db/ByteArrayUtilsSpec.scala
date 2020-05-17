@@ -20,10 +20,9 @@ class ByteArrayUtilsSpec extends PropSpec with GeneratorDrivenPropertyChecks wit
       val efficientOrdering = Seq(bs1, bs2).sorted(ByteArrayUtils.ByteArrayOrdering)
       val simpleOrdering = Seq(bs1, bs2).sorted(ordering)
 
-      efficientOrdering(0).hashCode() shouldBe simpleOrdering(0).hashCode()
-      efficientOrdering(1).hashCode() shouldBe simpleOrdering(1).hashCode()
+      efficientOrdering(0).sameElements(simpleOrdering(0)) shouldBe true
+      efficientOrdering(1).sameElements(simpleOrdering(1)) shouldBe true
     }
   }
-
 
 }

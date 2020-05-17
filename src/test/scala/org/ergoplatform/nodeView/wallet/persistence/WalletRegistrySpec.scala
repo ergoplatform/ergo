@@ -8,7 +8,9 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
+import scorex.core.VersionTag
 import scorex.testkit.utils.FileUtils
+import scorex.util.encode.Base16
 
 class WalletRegistrySpec
   extends FlatSpec
@@ -201,15 +203,32 @@ class WalletRegistrySpec
       val tb = tb0.copy(applications = Set(appId))
       withHybridStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
-        val bag1 = WalletRegistry.putBox(emptyBag, tb).transact(store)
+        WalletRegistry.putBox(emptyBag, tb).transact(store)
         reg.getBox(tb.box.id).isDefined shouldBe true
-        reg.removeApp(tb.box.id, appId)
+        reg.removeApp(tb.box.id, appId).isSuccess shouldBe true
+        reg.getBox(tb.box.id).isDefined shouldBe false
       }
     }
+
   }
 
-  it should "remove application and then rollback" in {
+  it should "remove application and then rollback - one app" in {
+    val appId: ApplicationId = ApplicationId @@ 20.toShort
 
+    forAll(trackedBoxGen) { tb0 =>
+      val tb = tb0.copy(applications = Set(appId))
+      withHybridStore(10) { store =>
+        val reg = new WalletRegistry(store)(ws)
+        val version = scorex.utils.Random.randomBytes()
+
+        WalletRegistry.putBox(emptyBag, tb).transact(store, version)
+        reg.getBox(tb.box.id).isDefined shouldBe true
+        reg.removeApp(tb.box.id, appId).isSuccess shouldBe true
+        reg.getBox(tb.box.id).isDefined shouldBe false
+        reg.rollback(VersionTag @@ Base16.encode(version)).isSuccess shouldBe true
+        reg.getBox(tb.box.id).isDefined shouldBe false
+      }
+    }
   }
 
 }

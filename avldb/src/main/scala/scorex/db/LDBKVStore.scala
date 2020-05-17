@@ -5,7 +5,7 @@ import scorex.util.ScorexLogging
 
 
 /**
-  * A LevelDB wrapper providing a convenient db interface.
+  * A LevelDB wrapper providing a convenient non-versioned database interface.
   *
   * Both keys and values are var-sized byte arrays.
   */

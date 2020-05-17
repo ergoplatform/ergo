@@ -246,6 +246,7 @@ class WalletRegistrySpec
         reg.getBox(tb.box.id).get.applications.size shouldBe 1
         reg.rollback(VersionTag @@ Base16.encode(version)).isSuccess shouldBe true
         reg.getBox(tb.box.id).get.applications.size shouldBe 1
+        reg.getBox(tb.box.id).get.applications shouldBe Set(PaymentsAppId)
       }
     }
   }

@@ -245,7 +245,9 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   }
 
   /**
-    * Remove association between an application and a box
+    * Remove association between an application and a box.
+    * Please note that in case of rollback association remains removed!
+    *
     * @param boxId box identifier
     * @param appId application identifier
     */
@@ -269,8 +271,8 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
             Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId"))
           }
         }).map { bag =>
-          store.cachePut(bag.toInsert)
-          store.cacheRemove(bag.toRemove)
+          store.nonVersionedPut(bag.toInsert)
+          store.nonVersionedRemove(bag.toRemove)
         }
 
       case None => Failure(new Exception(s"No box with id ${Algos.encode(boxId)} found in the wallet database"))

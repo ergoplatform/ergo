@@ -195,12 +195,15 @@ class WalletRegistrySpec
   }
 
   it should "remove application from a box correctly" in {
-    val app: ApplicationId = ApplicationId @@ 20.toShort
+    val appId: ApplicationId = ApplicationId @@ 20.toShort
 
     forAll(trackedBoxGen) { tb0 =>
-      val tb = tb0
+      val tb = tb0.copy(applications = Set(appId))
       withHybridStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
+        val bag1 = WalletRegistry.putBox(emptyBag, tb).transact(store)
+        reg.getBox(tb.box.id).isDefined shouldBe true
+        reg.removeApp(tb.box.id, appId)
       }
     }
   }

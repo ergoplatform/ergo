@@ -246,10 +246,10 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   /**
     * Remove association between an application and a box
-    * @param appId application identifier
     * @param boxId box identifier
+    * @param appId application identifier
     */
-  def removeApp(appId: ApplicationId, boxId: BoxId): Try[Unit] = {
+  def removeApp(boxId: BoxId, appId: ApplicationId): Try[Unit] = {
     getBox(boxId) match {
       case Some(tb) =>
         (if (tb.applications.size == 1) {

@@ -26,7 +26,7 @@ class WalletRegistrySpec
   it should "read unspent wallet boxes" in {
     forAll(trackedBoxGen) { box =>
       withHybridStore(10) { store =>
-        val unspentBox = box.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applicationStatuses = walletBoxStatus)
+        val unspentBox = box.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applications = walletBoxStatus)
         WalletRegistry.putBox(emptyBag, unspentBox).transact(store)
 
         val registry = new WalletRegistry(store)(settings.walletSettings)
@@ -39,7 +39,7 @@ class WalletRegistrySpec
     forAll(trackedBoxGen) { box =>
       forAll(modifierIdGen) { txId =>
         withHybridStore(10) { store =>
-          val uncertainBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), applicationStatuses = walletBoxStatus)
+          val uncertainBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), applications = walletBoxStatus)
           WalletRegistry.putBox(emptyBag, uncertainBox).transact(store)
           val registry = new WalletRegistry(store)(settings.walletSettings)
           registry.walletSpentBoxes() shouldBe Seq(uncertainBox)
@@ -65,7 +65,7 @@ class WalletRegistrySpec
     forAll(Gen.nonEmptyListOf(trackedBoxGen), modifierIdGen) { (boxes, txId) =>
       withHybridStore(10) { store =>
         val unspentBoxes = boxes.map(
-          _.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applicationStatuses = walletBoxStatus))
+          _.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applications = walletBoxStatus))
         val transitedBoxes = unspentBoxes.map(
           _.copy(spendingHeightOpt = Some(spendingHeight), spendingTxIdOpt = Some(txId)))
 
@@ -82,7 +82,7 @@ class WalletRegistrySpec
       withHybridStore(10) { store =>
         val registry = new WalletRegistry(store)(settings.walletSettings)
         val blockId = modifierIdGen.sample.get
-        val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applicationStatuses = walletBoxStatus))
+        val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applications = walletBoxStatus))
         registry.updateOnBlock(unspentBoxes, Seq.empty, Seq.empty)(blockId, 100)
         registry.walletUnspentBoxes().toList should contain theSameElementsAs unspentBoxes
       }
@@ -95,7 +95,7 @@ class WalletRegistrySpec
       val registry = new WalletRegistry(store)(settings.walletSettings.copy(keepSpentBoxes = keepSpent))
       val blockId = modifierIdGen.sample.get
       val outs = boxes.map { bx =>
-        bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applicationStatuses = walletBoxStatus)
+        bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, applications = walletBoxStatus)
       }
       val inputs = outs.map(tb => (fakeTxId, EncodedBoxId @@ tb.boxId, tb))
       registry.updateOnBlock(outs, inputs, Seq.empty)(blockId, 100)
@@ -146,7 +146,7 @@ class WalletRegistrySpec
         WalletRegistry.putBoxes(emptyBag, tbs).transact(store)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs tbs.map(Some.apply)
         val updateFn = (tb: TrackedBox) => tb.copy(spendingHeightOpt = Some(0),
-          applicationStatuses = Set(PaymentsAppId, ApplicationId @@ 2.toShort))
+          applications = Set(PaymentsAppId, ApplicationId @@ 2.toShort))
         val updatedBoxes = tbs.map(updateFn)
         reg.getBoxes(tbs.map(_.box.id)) should contain theSameElementsAs updatedBoxes.map(Some.apply)
         WalletRegistry.removeBoxes(emptyBag, tbs).transact(store)
@@ -192,6 +192,21 @@ class WalletRegistrySpec
         reg.fetchDigest() shouldBe updatedIndex
       }
     }
+  }
+
+  it should "remove application from a box correctly" in {
+    val app: ApplicationId = ApplicationId @@ 20.toShort
+
+    forAll(trackedBoxGen) { tb0 =>
+      val tb = tb0
+      withHybridStore(10) { store =>
+        val reg = new WalletRegistry(store)(ws)
+      }
+    }
+  }
+
+  it should "remove application and then rollback" in {
+
   }
 
 }

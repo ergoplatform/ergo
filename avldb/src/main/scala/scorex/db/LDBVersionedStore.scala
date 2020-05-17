@@ -19,6 +19,10 @@ import scala.util.Try
   * list of reverse operations needed to undo changes of applied transactions.
   * This list is stored in separate LevelDB database (undo) and size of list is limited by the keepVersions parameter.
   * If keepVersions == 0, then undo list is not maintained and rollback of the committed transactions is not possible.
+  *
+  * @param dir - folder to store data
+  * @param keepVersions - number of versions to keep
+  *
   */
 class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends KVStoreReader {
   type VersionID = Array[Byte]

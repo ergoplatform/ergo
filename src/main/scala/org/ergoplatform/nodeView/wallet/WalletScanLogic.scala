@@ -61,7 +61,7 @@ object WalletScanLogic extends ScorexLogging {
 
     val resolvedBoxes = registry.unspentBoxes(MiningRewardsAppId).flatMap { tb =>
       val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)
-      if (spendable) Some(tb.copy(applicationStatuses = Set(PaymentsAppId))) else None
+      if (spendable) Some(tb.copy(applications = Set(PaymentsAppId))) else None
     }
 
     //input tx id, input box id, tracked box
@@ -84,7 +84,7 @@ object WalletScanLogic extends ScorexLogging {
         }
 
         // Applications related to the transaction
-        val walletAppIds = (spentBoxes ++ myOutputs).flatMap(_.applicationStatuses).toSet
+        val walletAppIds = (spentBoxes ++ myOutputs).flatMap(_.applications).toSet
         val wtx = WalletTransaction(tx, height, walletAppIds.toSeq)
 
         val newRel = (scanResults._2: InputData) ++ spendingInputIds.zip(spentBoxes).map(t => (tx.id, t._1, t._2))

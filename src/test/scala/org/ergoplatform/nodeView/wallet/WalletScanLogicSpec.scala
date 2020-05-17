@@ -88,11 +88,11 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
       foundBoxes.map(_.inclusionHeightOpt).forall(_ == inclusionHeightOpt) shouldBe true
       foundBoxes.map(_.value).sum shouldBe trackedTransaction.valuesSum
       foundBoxes.forall(tb => if (trackedTransaction.payments.contains(tb.box.ergoTree)) {
-        tb.applicationStatuses == Set(Constants.PaymentsAppId)
+        tb.applications == Set(Constants.PaymentsAppId)
       } else if(trackedTransaction.miningRewards.contains(tb.box.ergoTree)) {
-        tb.applicationStatuses == Set(Constants.MiningRewardsAppId)
+        tb.applications == Set(Constants.MiningRewardsAppId)
       } else {
-        tb.applicationStatuses == Set(appId)
+        tb.applications == Set(appId)
       }) shouldBe true
     }
   }

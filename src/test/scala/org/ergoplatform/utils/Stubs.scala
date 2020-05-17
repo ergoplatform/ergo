@@ -201,7 +201,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         spendingTxIdOpt = Some(modifierIdGen.sample.get),
         spendingHeightOpt = None,
         box = ergoBoxGen.sample.get,
-        applicationStatuses = Set(PaymentsAppId)
+        applications = Set(PaymentsAppId)
       ),
       confirmationsNumOpt = Some(10)
     )

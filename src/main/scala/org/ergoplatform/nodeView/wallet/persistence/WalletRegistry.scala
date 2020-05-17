@@ -172,14 +172,14 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
       if (height + 1 != blockHeight) {
         log.error(s"Blocks were skipped during wallet scanning, from ${height + 1} until $blockHeight")
       }
-      val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.contains(PaymentsAppId))
+      val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.applications.contains(PaymentsAppId))
       val spentAmt = spentWalletBoxes.map(_.box.value).sum
       val spentTokensAmt = spentWalletBoxes
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
-      val receivedTokensAmt = newOutputs.filter(_.applicationStatuses.contains(PaymentsAppId))
+      val receivedTokensAmt = newOutputs.filter(_.applications.contains(PaymentsAppId))
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
@@ -195,7 +195,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
           if (decreasedAmt > 0) acc.updated(encodedId, decreasedAmt) else acc - encodedId
         }
 
-      val receivedAmt = newOutputs.filter(_.applicationStatuses.contains(PaymentsAppId)).map(_.box.value).sum
+      val receivedAmt = newOutputs.filter(_.applications.contains(PaymentsAppId)).map(_.box.value).sum
       val newBalance = wBalance + receivedAmt - spentAmt
       require(
         (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
@@ -252,16 +252,16 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   def removeApp(appId: ApplicationId, boxId: BoxId): Try[Unit] = {
     getBox(boxId) match {
       case Some(tb) =>
-        (if (tb.applicationStatuses.size == 1) {
-          if(tb.applicationStatuses.head == appId) {
+        (if (tb.applications.size == 1) {
+          if(tb.applications.head == appId) {
             val bag = WalletRegistry.removeBox(KeyValuePairsBag.empty, tb)
             Success(bag)
           } else {
             Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId"))
           }
         } else {
-          if(tb.applicationStatuses.contains(appId)){
-            val updTb = tb.copy(applicationStatuses = tb.applicationStatuses - appId)
+          if(tb.applications.contains(appId)){
+            val updTb = tb.copy(applications = tb.applications - appId)
             val keyToRemove = Seq(spentIndexKey(appId, updTb),
               inclusionHeightAppBoxIndexKey(appId, updTb))
             Success(KeyValuePairsBag(Seq(boxToKvPair(updTb)), keyToRemove))
@@ -345,7 +345,7 @@ object WalletRegistry {
   }
 
   def boxIndexKeys(box: TrackedBox): Seq[Array[Byte]] = {
-    box.applicationStatuses.toSeq.flatMap { appId =>
+    box.applications.toSeq.flatMap { appId =>
       Seq(
         spentIndexKey(appId, box),
         inclusionHeightAppBoxIndexKey(appId, box)

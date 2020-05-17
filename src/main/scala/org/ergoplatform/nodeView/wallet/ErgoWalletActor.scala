@@ -317,7 +317,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! AddApplicationResponse(res)
 
     case StopTracking(appId: ApplicationId, boxId: BoxId) =>
-      sender() ! registry.removeApp(appId, boxId)
+      sender() ! registry.removeApp(boxId, appId)
   }
 
   private def withWalletLockHandler(callbackActor: ActorRef)

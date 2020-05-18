@@ -30,7 +30,7 @@ object WalletDigestSerializer extends ScorexSerializer[WalletDigest] {
     w.putInt(obj.height)
     w.putLong(obj.walletBalance)
 
-    w.putInt(obj.walletAssetBalances.size)
+    w.putUInt(obj.walletAssetBalances.size)
     obj.walletAssetBalances.foreach { case (id, amt) =>
       w.putBytes(decodedTokenId(id))
       w.putLong(amt)
@@ -41,7 +41,7 @@ object WalletDigestSerializer extends ScorexSerializer[WalletDigest] {
     val height = r.getInt()
     val balance = r.getLong()
 
-    val walletAssetBalancesSize = r.getInt()
+    val walletAssetBalancesSize = r.getUInt().toInt
     val walletAssetBalances = (0 until walletAssetBalancesSize).map { _ =>
       encodedTokenId(Digest32 @@ r.getBytes(Constants.ModifierIdSize)) -> r.getLong()
     }.toMap

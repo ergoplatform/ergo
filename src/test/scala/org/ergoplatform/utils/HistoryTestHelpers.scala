@@ -43,11 +43,11 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
 
     val miningDelay = 1.second
     val minimalSuffix = 2
+    val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
+      PoPoWBootstrap, minimalSuffix, mining = false, complexityLimit, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
       offlineGeneration = false, 200, 100000, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
     val scorexSettings: ScorexSettings = null
-    val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
     val chainSettings = initialDiffOpt match {
       case Some(diff) =>
@@ -58,7 +58,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     }
 
     val dir = createTempDir
-    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings, testingSettings,
+    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
       nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)

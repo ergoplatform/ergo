@@ -10,7 +10,7 @@ import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, SecretKey}
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.{DLogInteractiveProver, ProveDlog}
 import sigmastate.basics.{DiffieHellmanTupleInteractiveProver, FirstProverMessage, ProveDHTuple, SigmaProtocolPrivateInput}
-import sigmastate.eval.{CompiletimeIRContext, IRContext}
+import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.{HintsBag, ProverInterpreter}
 
 import scala.util.{Failure, Success, Try}
@@ -21,8 +21,11 @@ import scala.util.{Failure, Success, Try}
   *
   * @param secretKeys - secrets used by the prover
   * @param params     - ergo network parameters at the moment of proving
+  * @param hintsBag   - hints provided to the prover
   */
-class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: ErgoLikeParameters)
+class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
+                             params: ErgoLikeParameters,
+                             hintsBag: HintsBag = HintsBag.empty)
                             (implicit IR: IRContext)
   extends ErgoInterpreter(params) with ProverInterpreter {
 
@@ -30,6 +33,8 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: Ergo
     * Interpreter's secrets, in form of sigma protocols private inputs
     */
   val secrets: IndexedSeq[SigmaProtocolPrivateInput[_, _]] = secretKeys.map(_.privateInput)
+
+  private val pubKeys = secrets.map(_.publicImage.asInstanceOf[SigmaBoolean])
 
   /**
     * Only secrets corresponding to hierarchical deterministic scheme (BIP-32 impl)
@@ -43,11 +48,21 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: Ergo
 
   /**
     * Create new prover instance with additional hints added
+    *
     * @param additionalHints - hints to add to the prover
     * @return updated prover
     */
   def addHints(additionalHints: HintsBag): ErgoProvingInterpreter =
     new ErgoProvingInterpreter(secretKeys, params, hintsBag ++ additionalHints)
+
+  /**
+    * Create new prover instance with hints provided
+    *
+    * @param  hints - hints to add to the prover
+    * @return updated prover
+    */
+  def withHints(hints: HintsBag): ErgoProvingInterpreter =
+    new ErgoProvingInterpreter(secretKeys, params, hints)
 
   /**
     * @note requires `unsignedTx` and `boxesToSpend` have the same boxIds in the same order.
@@ -71,8 +86,8 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: Ergo
           // Cost of transaction initialization: we should read and parse all inputs and data inputs,
           // and also iterate through all outputs to check rules
           val initialCost: Long = boxesToSpend.size * params.inputCost +
-          dataBoxes.size * params.dataInputCost +
-          unsignedTx.outputCandidates.size * params.outputCost
+            dataBoxes.size * params.dataInputCost +
+            unsignedTx.outputCandidates.size * params.outputCost
 
           val context = new ErgoLikeContext(ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
             stateContext.sigmaLastHeaders,
@@ -87,7 +102,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: Ergo
             initialCost
           )
 
-          prove(inputBox.ergoTree, context, unsignedTx.messageToSign).flatMap { proverResult =>
+          prove(inputBox.ergoTree, context, unsignedTx.messageToSign, hintsBag).flatMap { proverResult =>
             val newTC = totalCost + proverResult.cost
             if (newTC > context.costLimit)
               Failure(new Exception(s"Cost of transaction $unsignedTx exceeds limit ${context.costLimit}"))
@@ -129,10 +144,17 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: Ergo
 
 object ErgoProvingInterpreter {
 
-  def apply(secrets: IndexedSeq[SecretKey], params: ErgoLikeParameters): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(secrets, params)(new CompiletimeIRContext)
+  def apply(secrets: IndexedSeq[SecretKey],
+            params: ErgoLikeParameters,
+            hints: HintsBag): ErgoProvingInterpreter =
+    new ErgoProvingInterpreter(secrets, params, hints)(new RuntimeIRContext)
 
-  def apply(rootSecret: ExtendedSecretKey, params: ErgoLikeParameters): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(IndexedSeq(rootSecret), params)(new CompiletimeIRContext)
+  def apply(secrets: IndexedSeq[SecretKey],
+            params: ErgoLikeParameters): ErgoProvingInterpreter =
+    new ErgoProvingInterpreter(secrets, params, HintsBag.empty)(new RuntimeIRContext)
+
+  def apply(rootSecret: ExtendedSecretKey,
+            params: ErgoLikeParameters): ErgoProvingInterpreter =
+    new ErgoProvingInterpreter(IndexedSeq(rootSecret), params, HintsBag.empty)(new RuntimeIRContext)
 
 }

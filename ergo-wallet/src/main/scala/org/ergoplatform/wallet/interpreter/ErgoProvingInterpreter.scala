@@ -1,15 +1,17 @@
 package org.ergoplatform.wallet.interpreter
 
+import java.math.BigInteger
 import java.util
 
 import org.ergoplatform._
 import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext, TransactionContext}
 import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, SecretKey}
-import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.basics.SigmaProtocolPrivateInput
+import sigmastate.Values.SigmaBoolean
+import sigmastate.basics.DLogProtocol.{DLogInteractiveProver, ProveDlog}
+import sigmastate.basics.{DiffieHellmanTupleInteractiveProver, FirstProverMessage, ProveDHTuple, SigmaProtocolPrivateInput}
 import sigmastate.eval.{CompiletimeIRContext, IRContext}
-import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
+import sigmastate.interpreter.{HintsBag, ProverInterpreter}
 
 import scala.util.{Failure, Success, Try}
 
@@ -38,6 +40,14 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: Ergo
     * Only public keys corresponding to hierarchical deterministic scheme (BIP-32 impl)
     */
   val hdPubKeys: IndexedSeq[ProveDlog] = hdKeys.map(_.publicImage)
+
+  /**
+    * Create new prover instance with additional hints added
+    * @param additionalHints - hints to add to the prover
+    * @return updated prover
+    */
+  def addHints(additionalHints: HintsBag): ErgoProvingInterpreter =
+    new ErgoProvingInterpreter(secretKeys, params, hintsBag ++ additionalHints)
 
   /**
     * @note requires `unsignedTx` and `boxesToSpend` have the same boxIds in the same order.
@@ -89,6 +99,30 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: Ergo
       .map { case (inputs, _) =>
         new ErgoLikeTransaction(inputs, unsignedTx.dataInputs, unsignedTx.outputCandidates)
       }
+  }
+
+  /**
+    * A method which is generating a commitment to randomness, which is a first step to prove
+    * knowledge of a secret. Method checks whether secret is known to the prover, and returns
+    * None if the secret is not known.
+    *
+    * @param pubkey - public image of a secret
+    * @return Some((r, cmt)), a commitment to (secret) randomness "cmt" along with the randomness "r",
+    *         if the secret corresponding to pubkey is known, None otherwise
+    */
+  def generateCommitmentFor(pubkey: SigmaBoolean): Option[(BigInteger, FirstProverMessage)] = {
+    val idx = pubKeys.indexOf(pubkey)
+    if (idx == -1) {
+      None
+    } else {
+      pubkey match {
+        case dl: ProveDlog =>
+          Some(DLogInteractiveProver.firstMessage(dl))
+        case dh: ProveDHTuple =>
+          Some(DiffieHellmanTupleInteractiveProver.firstMessage(dh))
+        case _ => None
+      }
+    }
   }
 
 }

@@ -10,7 +10,6 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
-
 import scala.util.{Failure, Success}
 import ApplicationEntities._
 import org.ergoplatform.wallet.Constants.ApplicationId
@@ -42,17 +41,17 @@ case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettin
       stopTrackingR
   }
 
-  def deregisterR: Route = (path("deregister") & post & entity(as[ApplicationIdWrapper])) { appId =>
-    withWalletOp(_.removeApplication(appId.appId).map(_.response)) {
-      case Failure(e) => BadRequest(s"No application exists or db error: ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(_) => ApiResponse(ApplicationIdWrapper(appId.appId))
-    }
-  }
-
   def registerR: Route = (path("register") & post & entity(as[ExternalAppRequest])) { request =>
     withWalletOp(_.addApplication(request).map(_.response)) {
       case Failure(e) => BadRequest(s"Bad request $request. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(app) => ApiResponse(ApplicationIdWrapper(app.appId))
+    }
+  }
+
+  def deregisterR: Route = (path("deregister") & post & entity(as[ApplicationIdWrapper])) { appId =>
+    withWalletOp(_.removeApplication(appId.appId).map(_.response)) {
+      case Failure(e) => BadRequest(s"No application exists or db error: ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success(_) => ApiResponse(ApplicationIdWrapper(appId.appId))
     }
   }
 

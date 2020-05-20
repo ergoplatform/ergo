@@ -193,6 +193,12 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! RemoveApplicationResponse(res)
 
+      case GetAppBoxes(_, _) =>
+        sender() ! Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
+
+      case StopTracking(appId, boxId) =>
+        sender() ! StopTrackingResponse(Success(()))
+
       case ReadApplications =>
         sender() ! ReadApplicationsResponse(apps.values.toSeq)
 
@@ -327,4 +333,5 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       defaultMinerSecretNumber
     ).value
   }
+
 }

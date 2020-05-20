@@ -317,7 +317,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! AddApplicationResponse(res)
 
     case StopTracking(appId: ApplicationId, boxId: BoxId) =>
-      sender() ! registry.removeApp(appId, boxId)
+      sender() ! StopTrackingResponse(registry.removeApp(appId, boxId))
   }
 
   private def withWalletLockHandler(callbackActor: ActorRef)
@@ -915,6 +915,12 @@ object ErgoWalletActor {
     * @param boxId
     */
   case class StopTracking(appId: ApplicationId, boxId: BoxId)
+
+  /**
+    * Wrapper for a result of StopTracking processing
+    * @param status
+    */
+  case class StopTrackingResponse(status: Try[Unit])
 
   def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
                       secrets: Seq[ExternalSecret],

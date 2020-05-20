@@ -68,9 +68,9 @@ case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettin
   }
 
   def stopTrackingR: Route = (path("stopTracking") & post & entity(as[ApplicationIdBoxId])) { appIdBoxId =>
-    withWalletOp(_.stopTracking(appIdBoxId.appId, appIdBoxId.boxId)) {
+    withWalletOp(_.stopTracking(appIdBoxId.appId, appIdBoxId.boxId).map(_.status)) {
       case Failure(e) => BadRequest(s"Bad request ($appIdBoxId): ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(app) => ApiResponse(appIdBoxId)
+      case Success(_) => ApiResponse(appIdBoxId)
     }
   }
 

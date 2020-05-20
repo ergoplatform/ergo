@@ -4,16 +4,18 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
-import io.circe.{Decoder, Encoder}
+import io.circe.{Decoder, Encoder, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.http.api.{ApiCodecs, ApplicationApiRoute}
 import org.ergoplatform.nodeView.wallet.scanning.{ContainsScanningPredicate, ExternalAppRequest, ExternalApplication, ExternalApplicationJsonCodecs}
 import org.ergoplatform.utils.Stubs
 import org.scalatest.{FlatSpec, Matchers}
 import io.circe.syntax._
-import org.ergoplatform.http.api.ApplicationEntities.ApplicationIdWrapper
+import org.ergoplatform.http.api.ApplicationEntities.{ApplicationIdBoxId, ApplicationIdWrapper}
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.wallet.Constants.ApplicationId
+import scorex.crypto.authds.ADKey
+import scorex.utils.Random
 
 import scala.util.Try
 import scala.concurrent.duration._
@@ -72,7 +74,7 @@ class ApplicationApiRouteSpec extends FlatSpec
 
     // second time it should be not successful
     Post(prefix + "/deregister", appId.asJson) ~> route ~> check {
-      status shouldBe  StatusCodes.BadRequest
+      status shouldBe StatusCodes.BadRequest
     }
   }
 
@@ -95,18 +97,36 @@ class ApplicationApiRouteSpec extends FlatSpec
       val response = Try(responseAs[Seq[ExternalApplication]])
       response shouldBe 'success
       val apps = response.get
-      apps.length shouldBe 2
-      apps.head.appName shouldBe appRequest.appName
-      apps.last.appName shouldBe appRequest2.appName
+
+      apps.map(_.appName).contains(appRequest.appName) shouldBe true
+      apps.map(_.appName).contains(appRequest2.appName) shouldBe true
     }
   }
 
   it should "list unspent boxes for an application" in {
+    val minConfirmations = 15
+    val minInclusionHeight = 20
 
+    val suffix = s"/unspentBoxes/101?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
+
+    Get(prefix + suffix) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = Try(responseAs[List[Json]])
+      response shouldBe 'success
+      response.get.nonEmpty shouldBe true
+      response.get.foreach { json =>
+        json.hcursor.downField("confirmationsNum").as[Int].forall(_ >= minConfirmations) shouldBe true
+        json.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
+      }
+    }
   }
 
   it should "stop tracking a box" in {
+    val appIdBoxId = ApplicationIdBoxId(ApplicationId @@ (51: Short), ADKey @@ Random.randomBytes(32))
 
+    Post(prefix + "/stopTracking", appIdBoxId.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
   }
 
 }

@@ -103,7 +103,7 @@ trait ErgoWalletReader extends VaultReader {
   def readApplications(): Future[ReadApplicationsResponse] =
     (walletActor ? ReadApplications).mapTo[ReadApplicationsResponse]
 
-  def stopTracking(appId: ApplicationId, boxId: BoxId): Future[Try[Unit]] =
-    (walletActor ? StopTracking(appId, boxId)).mapTo[Try[Unit]]
+  def stopTracking(appId: ApplicationId, boxId: BoxId): Future[StopTrackingResponse] =
+    (walletActor ? StopTracking(appId, boxId)).mapTo[StopTrackingResponse]
 
 }

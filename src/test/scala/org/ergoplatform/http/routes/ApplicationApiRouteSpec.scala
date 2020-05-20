@@ -13,6 +13,7 @@ import org.scalatest.{FlatSpec, Matchers}
 import io.circe.syntax._
 import org.ergoplatform.http.api.ApplicationEntities.ApplicationIdWrapper
 import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.wallet.Constants.ApplicationId
 
 import scala.util.Try
 import scala.concurrent.duration._
@@ -48,7 +49,26 @@ class ApplicationApiRouteSpec extends FlatSpec
   }
 
   it should "deregister an application" in {
+    var appId: ApplicationIdWrapper = ApplicationIdWrapper(ApplicationId @@ (-1000: Short)) // improper value
 
+    // first, register an app
+    Post(prefix + "/register", appRequest.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = Try(responseAs[ApplicationIdWrapper])
+      response shouldBe 'success
+      appId = response.get
+    }
+
+    // then remove it
+    Post(prefix + "/deregister", appId.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      Try(responseAs[ApplicationIdWrapper]) shouldBe 'success
+    }
+
+    // second time it should be not successful
+    Post(prefix + "/deregister", appId.asJson) ~> route ~> check {
+      status shouldBe  StatusCodes.BadRequest
+    }
   }
 
   it should "list registered applications" in {

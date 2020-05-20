@@ -24,6 +24,7 @@ import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.P2PKAddress
+import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
@@ -34,9 +35,10 @@ import scorex.crypto.hash.Digest32
 import scorex.util.Random
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
+import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.Success
+import scala.util.{Failure, Success, Try}
 
 trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with scorex.testkit.utils.FileUtils {
 
@@ -141,6 +143,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     private val prover: ErgoProvingInterpreter = defaultProver
     private val trackedAddresses: Seq[P2PKAddress] = prover.hdPubKeys.map(epk => P2PKAddress(epk.key))
 
+    private val apps = mutable.Map[ApplicationId, ExternalApplication]()
+
     def receive: Receive = {
 
       case _: InitWallet => sender() ! Success(WalletActorStub.mnemonic)
@@ -175,7 +179,19 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         sender ! WalletDigest(0, WalletActorStub.balance(chainStatus), Map.empty)
 
       case AddApplication(req) =>
-        sender ! AddApplicationResponse(req.toApp(ApplicationId @@ (100: Short)))
+        val appId = ApplicationId @@ (apps.lastOption.map(_._1).getOrElse(100: Short) + 1).toShort
+        val app = req.toApp(appId)
+        apps += appId -> app.get
+        sender ! AddApplicationResponse(app)
+
+      case RemoveApplication(appId) =>
+        val res: Try[Unit] = if(apps.exists(_._1 == appId)) {
+          apps.remove(appId)
+          Success(())
+        } else {
+          Failure(new Exception(""))
+        }
+        sender ! RemoveApplicationResponse(res)
 
       case GenerateTransaction(_, _, _) =>
         val input = ErgoTransactionGenerators.inputGen.sample.value

@@ -12,7 +12,6 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, AssetIssueR
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
 import org.ergoplatform.settings.{Args, Constants, ErgoSettings}
 import org.ergoplatform.utils.Stubs
-import org.ergoplatform.{ErgoAddress, Pay2SAddress}
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.{ErgoAddress, Pay2SAddress}
 import org.scalatest.{FlatSpec, Matchers}

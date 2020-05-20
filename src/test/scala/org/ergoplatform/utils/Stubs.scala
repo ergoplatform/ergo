@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.wallet.Constants.PaymentsAppId
+import org.ergoplatform.wallet.Constants.{ApplicationId, PaymentsAppId}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
@@ -173,6 +173,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case ReadBalances(chainStatus) =>
         sender ! WalletDigest(0, WalletActorStub.balance(chainStatus), Map.empty)
+
+      case AddApplication(req) =>
+        sender ! AddApplicationResponse(req.toApp(ApplicationId @@ (100: Short)))
 
       case GenerateTransaction(_, _, _) =>
         val input = ErgoTransactionGenerators.inputGen.sample.value

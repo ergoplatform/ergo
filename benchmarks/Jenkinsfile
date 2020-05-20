@@ -1,7 +1,7 @@
 pipeline {
     agent { label 'slave' }
+    options { timestamps(); timeout(time: 1, unit: 'HOURS') }
     stages {
-
         stage('org.ergoplatform.bench.BenchRunner') {
             steps {
                 sh('sbt "benchmarks/test:runMain org.ergoplatform.bench.BenchRunner"')

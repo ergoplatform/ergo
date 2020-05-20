@@ -164,7 +164,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         .map(tx => AugWalletTransaction(tx, height - tx.inclusionHeight))
 
     case ReadApplications =>
-      sender() ! walletVars.externalApplications
+      sender() ! ReadApplicationsResponse(walletVars.externalApplications)
   }
 
   private def onStateChanged: Receive = {
@@ -902,6 +902,11 @@ object ErgoWalletActor {
     * Get registered applications list
     */
   case object ReadApplications
+
+  /**
+    * Get registered applications list
+    */
+  case class ReadApplicationsResponse(apps: Seq[ExternalApplication])
 
   /**
     * Remove association between an application and a box (remove a box if its the only one which belongs to the

@@ -57,7 +57,7 @@ case class ApplicationApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettin
 
   //todo: paging?
   def listAppsR: Route = (path("listAll") & get) {
-    withWallet(_.readApplications())
+    withWallet(_.readApplications().map(_.apps))
   }
 
   def unspentR: Route = (path("unspentBoxes" / IntNumber) & get & boxParams) { (appIdInt, minConfNum, minHeight) =>

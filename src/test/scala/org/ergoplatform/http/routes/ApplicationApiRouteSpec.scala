@@ -7,7 +7,7 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.{Decoder, Encoder}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.http.api.{ApiCodecs, ApplicationApiRoute}
-import org.ergoplatform.nodeView.wallet.scanning.{ContainsScanningPredicate, ExternalAppRequest, ExternalApplicationJsonCodecs}
+import org.ergoplatform.nodeView.wallet.scanning.{ContainsScanningPredicate, ExternalAppRequest, ExternalApplication, ExternalApplicationJsonCodecs}
 import org.ergoplatform.utils.Stubs
 import org.scalatest.{FlatSpec, Matchers}
 import io.circe.syntax._
@@ -27,6 +27,9 @@ class ApplicationApiRouteSpec extends FlatSpec
 
   implicit val timeout: RouteTestTimeout = RouteTestTimeout(145.seconds)
 
+  implicit val appEncoder: Encoder[ExternalApplication] = ExternalApplicationJsonCodecs.appEncoder
+  implicit val appDecoder: Decoder[ExternalApplication] = ExternalApplicationJsonCodecs.appDecoder
+
   implicit val appReqEncoder: Encoder[ExternalAppRequest] = ExternalApplicationJsonCodecs.appReqEncoder
   implicit val appReqDecoder: Decoder[ExternalAppRequest] = ExternalApplicationJsonCodecs.appReqDecoder
 
@@ -40,6 +43,8 @@ class ApplicationApiRouteSpec extends FlatSpec
   val route: Route = ApplicationApiRoute(utxoReadersRef, ergoSettings).route
 
   val appRequest = ExternalAppRequest("demo", ContainsScanningPredicate(ErgoBox.R4, Array(0: Byte, 1: Byte)))
+
+  val appRequest2 = ExternalAppRequest("demo2", ContainsScanningPredicate(ErgoBox.R4, Array(1: Byte, 1: Byte)))
 
   it should "register an application" in {
     Post(prefix + "/register", appRequest.asJson) ~> route ~> check {
@@ -72,7 +77,28 @@ class ApplicationApiRouteSpec extends FlatSpec
   }
 
   it should "list registered applications" in {
+    // register two apps
+    Post(prefix + "/register", appRequest.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = Try(responseAs[ApplicationIdWrapper])
+      response shouldBe 'success
+    }
 
+    Post(prefix + "/register", appRequest2.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = Try(responseAs[ApplicationIdWrapper])
+      response shouldBe 'success
+    }
+
+    Get(prefix + "/listAll") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = Try(responseAs[Seq[ExternalApplication]])
+      response shouldBe 'success
+      val apps = response.get
+      apps.length shouldBe 2
+      apps.head.appName shouldBe appRequest.appName
+      apps.last.appName shouldBe appRequest2.appName
+    }
   }
 
   it should "list unspent boxes for an application" in {

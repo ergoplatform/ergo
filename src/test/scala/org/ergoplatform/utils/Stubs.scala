@@ -176,13 +176,13 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         sender() ! trackedAddresses.slice(from, until)
 
       case ReadBalances(chainStatus) =>
-        sender ! WalletDigest(0, WalletActorStub.balance(chainStatus), Map.empty)
+        sender() ! WalletDigest(0, WalletActorStub.balance(chainStatus), Map.empty)
 
       case AddApplication(req) =>
         val appId = ApplicationId @@ (apps.lastOption.map(_._1).getOrElse(100: Short) + 1).toShort
         val app = req.toApp(appId)
         apps += appId -> app.get
-        sender ! AddApplicationResponse(app)
+        sender() ! AddApplicationResponse(app)
 
       case RemoveApplication(appId) =>
         val res: Try[Unit] = if(apps.exists(_._1 == appId)) {
@@ -191,12 +191,15 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         } else {
           Failure(new Exception(""))
         }
-        sender ! RemoveApplicationResponse(res)
+        sender() ! RemoveApplicationResponse(res)
+
+      case ReadApplications =>
+        sender() ! ReadApplicationsResponse(apps.values.toSeq)
 
       case GenerateTransaction(_, _, _) =>
         val input = ErgoTransactionGenerators.inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
-        sender ! Success(tx)
+        sender() ! Success(tx)
 
       case SignTransaction(secrets, tx, boxesToSpend, dataBoxes) =>
         val sc = ErgoStateContext.empty(stateConstants)

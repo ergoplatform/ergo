@@ -1,10 +1,11 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.{Constants, TokensMap}
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
+import org.ergoplatform.ErgoBoxAssets
 
 /**
   * A box tracked by a wallet that contains Ergo box itself as well as
@@ -26,7 +27,7 @@ case class TrackedBox(creationTxId: ModifierId,
                       spendingHeightOpt: Option[Int],
                       box: ErgoBox,
                       certainty: BoxCertainty,
-                      applicationId: Short) {
+                      applicationId: Short) extends ErgoBoxAssets {
 
   /**
     * Whether the box is spent or not
@@ -62,14 +63,14 @@ case class TrackedBox(creationTxId: ModifierId,
 
   def boxId: ModifierId = bytesToId(box.id)
 
-  def value: Long = box.value
+  override def value: Long = box.value
 
-  def assets: Map[ModifierId, Long] = box.additionalTokens.toArray.map {
+  override def tokens: TokensMap = box.additionalTokens.toArray.map {
     case (id, amt) => bytesToId(id) -> amt
   }.toMap
 
   override def equals(obj: Any): Boolean = obj match {
-    case tb: TrackedBox => tb.creationTxId == creationTxId && tb.creationOutIndex == creationOutIndex
+    case tb: TrackedBox => tb.creationTxId == creationTxId && tb.creationOutIndex == creationOutIndex && box == tb.box
     case _ => false
   }
 

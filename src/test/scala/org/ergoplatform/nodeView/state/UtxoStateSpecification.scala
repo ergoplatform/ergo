@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extensio
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.core._
@@ -40,11 +40,12 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val inputs = IndexedSeq(Input(foundersBox.id, emptyProverResult))
       val remaining = emission.remainingFoundationRewardAtHeight(height)
       val newFoundersBox = ErgoBox(remaining, foundersBox.ergoTree, height, Seq(), Map(R4 -> foundersBox.additionalRegisters(R4)))
-      val rewardBox = ErgoBox(foundersBox.value - remaining, defaultProver.secrets.last.publicImage, height)
+      val rewardBox = ErgoBox(foundersBox.value - remaining, defaultProver.hdKeys.last.publicImage, height)
       val newBoxes = IndexedSeq(newFoundersBox, rewardBox)
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx: ErgoTransaction = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
-      us.validateWithCost(tx, None, Constants.DefaultComplexityLimit).get should be <= 100000L
+      val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
+      us.validateWithCost(tx, None, complexityLimit).get should be <= 100000L
       val block1 = validFullBlock(Some(lastBlock), us, Seq(ErgoTransaction(tx)))
       us = us.applyModifier(block1).get
       foundersBox = tx.outputs.head
@@ -60,7 +61,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     val settingsPks = settings.chainSettings.foundersPubkeys
       .map(str => groupElemFromBytes(Base16.decode(str).get))
       .map(pk => ProveDlog(pk))
-    settingsPks.count(defaultProver.pubKeys.contains) shouldBe 2
+    settingsPks.count(defaultProver.hdPubKeys.contains) shouldBe 2
 
     forAll(defaultHeaderGen) { header =>
       val rewardPk = new DLogProverInput(BigInt(header.height).bigInteger).publicImage

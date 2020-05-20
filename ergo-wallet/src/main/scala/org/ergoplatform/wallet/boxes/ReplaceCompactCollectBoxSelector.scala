@@ -1,10 +1,14 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
+import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
+import org.ergoplatform.ErgoBoxAssets
+import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 import scorex.util.ModifierId
+import org.ergoplatform.wallet.Utils._
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 
 /**
   * A box selector which is parameterized by maximum number of inputs a transaction can have, and optimal number of inputs.
@@ -22,6 +26,8 @@ import scala.annotation.tailrec
   */
 class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) extends BoxSelector {
 
+  import ReplaceCompactCollectBoxSelector._
+
   val ScanDepthFactor = 10
 
   /**
@@ -32,51 +38,67 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     *                      filterFn(box) returns true
     * @param targetBalance - ergo balance to be met
     * @param targetAssets  - assets balances to be met
-    * @return None if select() is failing to pick appropriate boxes, otherwise Some(res), where res contains boxes
+    * @return Left(error) if select() is failing to pick appropriate boxes, otherwise Right(res), where res contains boxes
     *         to spend as well as monetary values and assets for boxes containing change
     *         (wrapped in a special BoxSelectionResult class).
     */
-  override def select(inputBoxes: Iterator[TrackedBox],
-                      filterFn: TrackedBox => Boolean,
+  override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
+                      filterFn: T => Boolean,
                       targetBalance: Long,
-                      targetAssets: Map[ModifierId, Long]): Option[BoxSelector.BoxSelectionResult] = {
-    DefaultBoxSelector.select(inputBoxes, filterFn, targetBalance, targetAssets).flatMap { initialSelection =>
+                      targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
+    DefaultBoxSelector.select(inputBoxes, filterFn, targetBalance, targetAssets).flatMapRight { initialSelection =>
       val tail = inputBoxes.take(maxInputs * ScanDepthFactor).filter(filterFn).toSeq
       (if (initialSelection.boxes.length > maxInputs) {
         replace(initialSelection, tail, targetBalance, targetAssets)
-      } else Some(initialSelection)).flatMap { afterReplacement =>
+      } else {
+        Right(initialSelection)
+      }).flatMapRight { afterReplacement =>
         if (afterReplacement.boxes.length > maxInputs) {
           compress(afterReplacement, targetBalance, targetAssets)
-        } else Some(afterReplacement)
-      }.flatMap { afterCompaction =>
+        } else {
+          Right(afterReplacement)
+        }
+      }.flatMapRight { afterCompaction =>
         if (afterCompaction.boxes.length > maxInputs) {
-          None
+          Left(MaxInputsExceededError(s"${afterCompaction.boxes.length} boxes exceed max inputs in transaction ($maxInputs)"))
         } else if (afterCompaction.boxes.length < optimalInputs) {
           collectDust(afterCompaction, tail, targetBalance, targetAssets)
-        } else Some(afterCompaction)
+        } else {
+          Right(afterCompaction)
+        }
       }
     }
   }
 
-  protected[boxes] def collectDust(bsr: BoxSelectionResult,
-                  tail: Seq[TrackedBox],
-                  targetBalance: Long,
-                  targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
-    val diff = optimalInputs - bsr.boxes.length
-    val afterCompactionIds = bsr.boxes.map(_.id).map(scorex.util.bytesToId)
-    val dust = tail.sortBy(_.value).take(diff).filter(b => !afterCompactionIds.contains(b.boxId))
-
-    val boxes = bsr.boxes ++ dust.map(_.box)
-    calcChange(boxes, targetBalance, targetAssets)
+  protected[boxes] def calcChange[T <: ErgoBoxAssets](
+    boxes: Seq[T],
+    targetBalance: Long,
+    targetAssets: TokensMap
+  ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
+    val compactedBalance = boxes.map(_.value).sum
+    val compactedAssets  = mutable.Map[ModifierId, Long]()
+    AssetUtils.mergeAssetsMut(compactedAssets, boxes.map(_.tokens): _*)
+    DefaultBoxSelector.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets)
   }
 
-  protected[boxes] def compress(bsr: BoxSelectionResult,
+  protected[boxes] def collectDust[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
+                  tail: Seq[T],
+                  targetBalance: Long,
+                  targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
+    val diff = optimalInputs - bsr.boxes.length
+    val dust = tail.sortBy(_.value).take(diff).filter(b => !bsr.boxes.contains(b))
+
+    val boxes = bsr.boxes ++ dust
+    calcChange(boxes, targetBalance, targetAssets).mapRight(changeBoxes => BoxSelectionResult(boxes, changeBoxes))
+  }
+
+  protected[boxes] def compress[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
                targetBalance: Long,
-               targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
+               targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     val boxes = bsr.boxes
     val diff = boxes.map(_.value).sum - targetBalance
 
-    val boxesToThrowAway = boxes.filter(!_.additionalTokens.toArray.map(_._1).exists(tid => targetAssets.keySet.contains(scorex.util.bytesToId(tid))))
+    val boxesToThrowAway = boxes.filter(!_.tokens.keySet.exists(tid => targetAssets.keySet.contains(tid)))
     val sorted = boxesToThrowAway.sortBy(_.value)
 
     if (diff >= sorted.head.value) {
@@ -87,23 +109,26 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
       }
       val compactedBoxes = boxes.filter(b => !thrownBoxes.contains(b))
       calcChange(compactedBoxes, targetBalance, targetAssets)
-    } else Some(bsr)
+        .mapRight(changeBoxes => BoxSelectionResult(compactedBoxes, changeBoxes))
+    } else {
+      Right(bsr)
+    }
   }
 
-  protected[boxes] def replace(bsr: BoxSelectionResult,
-              tail: Seq[TrackedBox],
+  protected[boxes] def replace[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
+              tail: Seq[T],
               targetBalance: Long,
-              targetAssets: Map[ModifierId, Long]): Option[BoxSelectionResult] = {
-    val bigBoxes = tail.sortBy(-_.value).map(_.box)
-    val boxesToThrowAway = bsr.boxes.filter(!_.additionalTokens.toArray.map(_._1).exists(tid => targetAssets.keySet.contains(scorex.util.bytesToId(tid))))
+              targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
+    val bigBoxes = tail.sortBy(-_.value)
+    val boxesToThrowAway = bsr.boxes.filter(!_.tokens.keySet.exists(tid => targetAssets.keySet.contains(tid)))
     val sorted = boxesToThrowAway.sortBy(_.value)
 
-    type BoxesToAdd = Seq[ErgoBox]
-    type BoxesToDrop = Seq[ErgoBox]
+    type BoxesToAdd = Seq[T]
+    type BoxesToDrop = Seq[T]
     type Operations = (BoxesToAdd, BoxesToDrop)
 
     @tailrec
-    def replaceStep(candidates: Seq[ErgoBox], toDrop: Seq[ErgoBox], currentOps: Operations): Operations = {
+    def replaceStep(candidates: Seq[T], toDrop: Seq[T], currentOps: Operations): Operations = {
       candidates match {
         case Seq() => currentOps
         case Seq(cand) if cand.value <= toDrop.headOption.map(_.value).getOrElse(Long.MaxValue) => currentOps
@@ -121,7 +146,14 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     if (toAdd.nonEmpty) {
       val compactedBoxes = bsr.boxes.filter(b => !toDrop.contains(b)) ++ toAdd
       calcChange(compactedBoxes, targetBalance, targetAssets)
-    } else Some(bsr)
+        .mapRight(changeBoxes => BoxSelectionResult(compactedBoxes, changeBoxes))
+    } else {
+      Right(bsr)
+    }
   }
 
+}
+
+object ReplaceCompactCollectBoxSelector {
+    final case class MaxInputsExceededError(val message: String) extends BoxSelectionError
 }

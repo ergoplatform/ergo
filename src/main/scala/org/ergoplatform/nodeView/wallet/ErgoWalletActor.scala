@@ -12,20 +12,22 @@ import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, U
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.{AssetUtils, BoxUtils}
+import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.TransactionContext
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage}
+import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
@@ -79,7 +81,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           .testKeysQty.toIndexedSeq
           .flatMap(qty => (0 until qty).map(rootSk.child))
         proverOpt = Some(ErgoProvingInterpreter(rootSk +: childSks, parameters))
-        storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.pubKeys.map(pk => P2PKAddress(pk))))
+        storage.addTrackedAddresses(proverOpt.toSeq.flatMap(_.hdPubKeys.map(pk => P2PKAddress(pk))))
       case None =>
         log.info("Trying to read wallet in secure mode ..")
         readSecretStorage.fold(
@@ -152,7 +154,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     case GetFirstSecret =>
       if (proverOpt.nonEmpty) {
-        proverOpt.foreach(_.secrets.headOption.foreach(s => sender() ! Success(s)))
+        proverOpt.foreach(_.hdKeys.headOption.foreach(s => sender() ! Success(s.privateInput)))
       } else {
         sender() ! Failure(new Exception("Wallet is locked"))
       }
@@ -260,8 +262,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case WatchFor(address) =>
       storage.addTrackedAddress(address)
 
-    case GenerateTransaction(requests, inputsRaw) =>
-      sender() ! generateTransactionWithOutputs(requests, inputsRaw)
+    case GenerateTransaction(requests, inputsRaw, dataInputsRaw) =>
+      sender() ! generateTransactionWithOutputs(requests, inputsRaw, dataInputsRaw)
+
+    case SignTransaction(secrets, tx, boxesToSpend, dataBoxes) =>
+      sender() ! signTransaction(proverOpt, secrets, tx, boxesToSpend, dataBoxes, parameters, stateContext)
 
     case DeriveKey(encodedPath) =>
       withWalletLockHandler(sender()) {
@@ -304,7 +309,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         callback ! Failure(new Exception("Wallet is not initialized"))
     }
 
-  private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.pubKeys.map(P2PKAddress.apply))
+  private def publicKeys: Seq[P2PKAddress] = proverOpt.toSeq.flatMap(_.hdPubKeys.map(P2PKAddress.apply))
 
   private def trackedAddresses: Seq[ErgoAddress] = storage.readTrackedAddresses
 
@@ -357,7 +362,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     */
   private def extractAllInputs(tx: ErgoTransaction): Seq[EncodedBoxId] = tx.inputs.map(x => encodedBoxId(x.boxId))
 
-  private def requestsToBoxCandidates(requests: Seq[TransactionRequest]): Try[Seq[ErgoBoxCandidate]] =
+  private def requestsToBoxCandidates(requests: Seq[TransactionGenerationRequest]): Try[Seq[ErgoBoxCandidate]] =
     Traverse[List].sequence {
       requests.toList
         .map {
@@ -424,40 +429,38 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   /**
     * Generates new transaction according to a given requests using available boxes.
     */
-  private def generateTransactionWithOutputs(requests: Seq[TransactionRequest],
-                                             inputsRaw: Seq[String]): Try[ErgoTransaction] =
+  private def generateTransactionWithOutputs(requests: Seq[TransactionGenerationRequest],
+                                             inputsRaw: Seq[String],
+                                             dataInputsRaw: Seq[String]): Try[ErgoTransaction] = Try {
     proverOpt match {
       case Some(prover) =>
-        Traverse[List]
-          .sequence {
-            inputsRaw
-              .toList
-              .map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry))
-          }
-          .flatMap { inputs =>
-            requestsToBoxCandidates(requests).flatMap { payTo =>
-              require(prover.pubKeys.nonEmpty, "No public keys in the prover to extract change address from")
-              require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
-              require(payTo.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, parameters)), "Minimal ERG value not met")
-              require(payTo.forall(_.additionalTokens.forall(_._2 >= 0)), "Negative asset value")
+        val inputs = inputsRaw
+          .toList
+          .map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry))
+          .map(_.get)
 
-              val assetIssueBox = payTo
-                .zip(requests)
-                .filter(_._2.isInstanceOf[AssetIssueRequest])
-                .map(_._1)
-                .headOption
+        val dataInputs = dataInputsRaw
+          .toIndexedSeq
+          .map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry))
+          .map(_.get)
 
-              val targetBalance = payTo
-                .map(_.value)
-                .sum
+        requestsToBoxCandidates(requests).flatMap { payTo =>
+          require(prover.hdPubKeys.nonEmpty, "No public keys in the prover to extract change address from")
+          require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
+          require(payTo.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, parameters)), "Minimal ERG value not met")
+          require(payTo.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
 
-              val targetAssets = payTo
-                .filterNot(bx => assetIssueBox.contains(bx))
-                .foldLeft(Map.empty[ModifierId, Long]) { case (acc, bx) =>
-                  // TODO optimize: avoid toArray and use mapFirst
-                  val boxTokens = bx.additionalTokens.toArray.map(t => bytesToId(t._1) -> t._2).toMap
-                  AssetUtils.mergeAssets(boxTokens, acc)
-                }
+          val assetIssueBox = payTo
+            .zip(requests)
+            .filter(_._2.isInstanceOf[AssetIssueRequest])
+            .map(_._1)
+            .headOption
+
+          val targetBalance = payTo
+            .map(_.value)
+            .sum
+
+          val targetAssets = TransactionBuilder.collectOutputTokens(payTo.filterNot(bx => assetIssueBox.contains(bx)))
 
               val (inputBoxes, filter) = if (inputs.nonEmpty) {
                 //inputs are provided externally, no need for filtering
@@ -468,44 +471,50 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                 (boxesToSpend.toIterator, onChainFilter)
               }
 
-              val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
+          val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
 
-              val makeTx = prepareTransaction(prover, payTo) _
-
-              selectionOpt.map(makeTx) match {
-                case Some(txTry) => txTry.map(ErgoTransaction.apply)
-                case None => Failure(new Exception(s"No enough boxes to assemble a transaction for $payTo"))
-              }
-            }
+          selectionOpt.map { selectionResult =>
+            prepareTransaction(prover, payTo, selectionResult, dataInputs)
+          } match {
+            case Right(txTry) => txTry.map(ErgoTransaction.apply)
+            case Left(e) => Failure(
+              new Exception(s"Failed to find boxes to assemble a transaction for $payTo, \nreason: ${e}")
+            )
           }
+        }
 
       case None =>
         Failure(new Exception(s"Cannot generateTransactionWithOutputs($requests, $inputsRaw): Wallet is locked"))
     }
+  }.flatten
 
-  private def prepareTransaction(prover: ErgoProvingInterpreter, payTo: Seq[ErgoBoxCandidate])
-                                (r: BoxSelector.BoxSelectionResult): Try[ErgoLikeTransaction] = {
-    val inputs = r.boxes.toIndexedSeq
+  private def prepareTransaction(prover: ErgoProvingInterpreter,
+                                 payTo: Seq[ErgoBoxCandidate],
+                                 r: BoxSelector.BoxSelectionResult[TrackedBox],
+                                 dataInputBoxes: IndexedSeq[ErgoBox]
+                                ): Try[ErgoLikeTransaction] = {
+    val inputs = r.boxes.map(_.box).toIndexedSeq
+    val dataInputs = dataInputBoxes.map(dataInputBox => DataInput(dataInputBox.id))
 
     val changeAddress = storage.readChangeAddress
       .map(_.pubkey)
       .getOrElse {
         log.warn("Change address not specified. Using root address from wallet.")
-        prover.pubKeys.head
+        prover.hdPubKeys.head
       }
 
-    val changeBoxCandidates = r.changeBoxes.map { case (ergChange, tokensChange) =>
-      val assets = tokensChange.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
-      new ErgoBoxCandidate(ergChange, changeAddress, height, assets.toColl)
+    val changeBoxCandidates = r.changeBoxes.map { changeBox =>
+      val assets = changeBox.tokens.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
+      new ErgoBoxCandidate(changeBox.value, changeAddress, height, assets.toColl)
     }
 
     val unsignedTx = new UnsignedErgoTransaction(
       inputs.map(_.id).map(id => new UnsignedInput(id)),
-      IndexedSeq(),
+      dataInputs,
       (payTo ++ changeBoxCandidates).toIndexedSeq
     )
 
-    prover.sign(unsignedTx, inputs, IndexedSeq(), stateContext)
+    prover.sign(unsignedTx, inputs, dataInputBoxes, stateContext)
       .fold(e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputs", e)), tx => Success(tx))
   }
 
@@ -518,7 +527,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                            outputs: Seq[(ModifierId, ErgoBox)],
                            txs: Seq[ErgoTransaction]): Unit = {
     // re-create interpreter in order to avoid IR context bloating.
-    proverOpt = proverOpt.map(oldInterpreter => ErgoProvingInterpreter(oldInterpreter.secretKeys, parameters))
+    proverOpt = proverOpt.map{ oldInterpreter =>
+      new ErgoProvingInterpreter(oldInterpreter.secretKeys, parameters)(oldInterpreter.IR)
+    }
     val prevUncertainBoxes = registry.readUncertainBoxes
     val (resolved, unresolved) = (outputs ++ prevUncertainBoxes.map(b => b.creationTxId -> b.box))
       .filterNot { case (_, o) => inputs.map(_._2).contains(encodedBoxId(o.id)) }
@@ -569,7 +580,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     }
     val prover = ErgoProvingInterpreter(secrets, parameters)
     proverOpt = Some(prover)
-    storage.addTrackedAddresses(prover.pubKeys.map(pk => P2PKAddress(pk)))
+    storage.addTrackedAddresses(prover.hdPubKeys.map(pk => P2PKAddress(pk)))
     // process postponed blocks when prover is available.
     val lastProcessedHeight = registry.readIndex.height
     storage.readLatestPostponedBlockHeight.foreach { lastPostponedHeight =>
@@ -583,11 +594,12 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   private def inputsFor(targetAmount: Long,
-                        targetAssets: Map[ModifierId, Long] = Map.empty): Seq[ErgoBox] =
+                        targetAssets: TokensMap = Map.empty): Seq[ErgoBox] =
     boxSelector
       .select(registry.readCertainUnspentBoxes.toIterator, onChainFilter, targetAmount, targetAssets)
       .toSeq
       .flatMap(_.boxes)
+      .map(_.box)
 
   private def readSecretStorage: Try[JsonSecretStorage] = {
     val dir = new File(settings.walletSettings.secretStorage.secretDir)
@@ -633,7 +645,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       }
     }
 
-    val secrets = proverOpt.toIndexedSeq.flatMap(_.secretKeys)
+    val secrets = proverOpt.toIndexedSeq.flatMap(_.hdKeys)
     if (secrets.size == 1) {
       Success(DerivationPath(Array(0, 1), publicBranch = false))
     } else {
@@ -653,7 +665,14 @@ object ErgoWalletActor {
 
   final case class Rollback(version: VersionTag, height: Int)
 
-  final case class GenerateTransaction(requests: Seq[TransactionRequest], inputsRaw: Seq[String])
+  final case class GenerateTransaction(requests: Seq[TransactionGenerationRequest],
+                                       inputsRaw: Seq[String],
+                                       dataInputsRaw: Seq[String])
+
+  final case class SignTransaction(secrets: Seq[ExternalSecret],
+                                   utx: UnsignedErgoTransaction,
+                                   boxesToSpend: Seq[ErgoBox],
+                                   dataBoxes: Seq[ErgoBox])
 
   final case class ReadBalances(chainStatus: ChainStatus)
 
@@ -686,5 +705,20 @@ object ErgoWalletActor {
   case object ReadTrackedAddresses
 
   case object GetFirstSecret
+
+  def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
+                      secrets: Seq[ExternalSecret],
+                      tx: UnsignedErgoTransaction,
+                      boxesToSpend: Seq[ErgoBox],
+                      dataBoxes: Seq[ErgoBox],
+                      parameters: Parameters,
+                      stateContext: ErgoStateContext): Try[ErgoTransaction] = {
+    val proverSecrets = proverOpt.map(_.secretKeys).getOrElse(Seq.empty)
+    val secretsWrapped = secrets.map(_.key).toIndexedSeq
+    val secretsProver = ErgoProvingInterpreter(secretsWrapped ++ proverSecrets, parameters)
+    secretsProver
+      .sign(tx, boxesToSpend.toIndexedSeq, dataBoxes.toIndexedSeq, stateContext)
+      .map(ErgoTransaction.apply)
+  }
 
 }

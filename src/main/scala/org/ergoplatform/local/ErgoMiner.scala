@@ -105,17 +105,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case QueryWallet =>
       val callback = self
       viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        v.vault.firstSecret.onComplete(
-          _.foreach {
-            _.fold(
-              _ => {
-                log.warn("Failed to load key from wallet. Wallet is locked.")
-                context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet)(context.system.dispatcher)
-              },
-              r => callback ! UpdateSecret(r)
-            )
-          }
-        )
+        v.vault.firstSecret.onComplete { _.flatten match {
+          case Failure(t) =>
+            log.warn(s"Failed to load key from wallet: ${t.getMessage} ")
+            context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet)(context.system.dispatcher)
+          case Success(proverInput: DLogProverInput) =>
+            callback ! UpdateSecret(proverInput)
+        }}
       }
   }
 

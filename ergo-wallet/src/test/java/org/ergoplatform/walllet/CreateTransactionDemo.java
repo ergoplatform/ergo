@@ -21,7 +21,7 @@ public class CreateTransactionDemo {
         // Create an address
         byte[] entropy = Random.randomBytes(32);
         ExtendedSecretKey extendedSecretKey = ExtendedSecretKey.deriveMasterKey(entropy);
-        ErgoAddress myAddress = P2PKAddress.apply(extendedSecretKey.key().publicImage(), encoder);
+        ErgoAddress myAddress = P2PKAddress.apply(extendedSecretKey.privateInput().publicImage(), encoder);
 
         int transferAmt = 25000000; // amount to transfer
         int feeAmt = 1000000; // minimal fee amount
@@ -44,7 +44,7 @@ public class CreateTransactionDemo {
                 currentNetworkHeight
         );
 
-        ErgoLikeTransaction tx = new ErgoUnsafeProver().prove(unsignedTx, extendedSecretKey.key());
+        ErgoLikeTransaction tx = new ErgoUnsafeProver().prove(unsignedTx, extendedSecretKey.privateInput());
     }
 
 }

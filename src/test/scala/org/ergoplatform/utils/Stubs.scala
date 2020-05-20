@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReade
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.nodeView.state.{DigestState, StateType}
+import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
@@ -41,22 +41,29 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   implicit val system: ActorSystem
 
-  lazy val chain: Seq[ErgoFullBlock] = genChain(6)
+  val chain: Seq[ErgoFullBlock] = genChain(6)
 
-  lazy val history: HT = applyChain(generateHistory(), chain)
+  val history: HT = applyChain(generateHistory(), chain)
 
-  lazy val state: DigestState = {
+  val digestState: DigestState = {
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings)).map { wus =>
       DigestState.create(Some(wus.version), Some(wus.rootHash), createTempDir, stateConstants)
     }
-    }.sample.value
+  }.sample.value
+
+  val utxoSettings: ErgoSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(stateType = StateType.Utxo))
+
+  val utxoState: WrappedUtxoState =
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, utxoSettings)).sample.value
 
   lazy val wallet = new WalletStub
 
   val txs: Seq[ErgoTransaction] = validTransactionsFromBoxHolder(boxesHolderGen.sample.get)._1
+  val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs).get
 
-  lazy val memPool: ErgoMemPool = ErgoMemPool.empty(settings).put(txs).get
-  lazy val readers = Readers(history, state, memPool, wallet)
+  val digestReaders = Readers(history, digestState, memPool, wallet)
+
+  val utxoReaders = Readers(history, utxoState, memPool, wallet)
 
   val protocolVersion = Version("1.1.1")
 
@@ -131,7 +138,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     import WalletActorStub.{walletBox10_10, walletBox20_30, walletBoxSpent21_31, walletTxs}
 
     private val prover: ErgoProvingInterpreter = defaultProver
-    private val trackedAddresses: Seq[P2PKAddress] = prover.pubKeys.map(P2PKAddress.apply)
+    private val trackedAddresses: Seq[P2PKAddress] = prover.hdPubKeys.map(P2PKAddress.apply)
 
     def receive: Receive = {
 
@@ -169,10 +176,15 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case ReadTrackedAddresses =>
         sender ! trackedAddresses
 
-      case GenerateTransaction(_, _) =>
+      case GenerateTransaction(_, _, _) =>
         val input = ErgoTransactionGenerators.inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
         sender ! Success(tx)
+
+      case SignTransaction(secrets, tx, boxesToSpend, dataBoxes) =>
+        val sc = ErgoStateContext.empty(stateConstants)
+        val params = LaunchParameters
+        sender() ! ErgoWalletActor.signTransaction(Some(prover), secrets, tx, boxesToSpend, dataBoxes, params, sc)
     }
   }
 
@@ -224,18 +236,32 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   }
 
 
-  class ReadersStub extends Actor {
+  class DigestReadersStub extends Actor {
     def receive: PartialFunction[Any, Unit] = {
-      case GetReaders => sender() ! readers
+      case GetReaders => sender() ! digestReaders
       case GetDataFromHistory(f) => sender() ! f(history)
     }
   }
 
-  object ReadersStub {
-    def props(): Props = Props(new ReadersStub)
+  object DigestReadersStub {
+    def props(): Props = Props(new DigestReadersStub)
   }
 
-  lazy val readersRef: ActorRef = system.actorOf(ReadersStub.props())
+  class UtxoReadersStub extends Actor {
+    def receive: PartialFunction[Any, Unit] = {
+      case GetReaders => sender() ! utxoReaders
+      case GetDataFromHistory(f) => sender() ! f(history)
+    }
+  }
+
+  object UtxoReadersStub {
+    def props(): Props = Props(new UtxoReadersStub)
+  }
+
+
+  lazy val digestReadersRef: ActorRef = system.actorOf(DigestReadersStub.props())
+  lazy val utxoReadersRef: ActorRef = system.actorOf(UtxoReadersStub.props())
+
   lazy val minerRef: ActorRef = system.actorOf(MinerStub.props())
   lazy val peerManagerRef: ActorRef = system.actorOf(PeerManagerStub.props())
   lazy val pmRef: ActorRef = system.actorOf(PeersManagerStub.props())
@@ -251,16 +277,16 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     val miningDelay = 1.second
     val minimalSuffix = 2
+    val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, Constants.DefaultComplexityLimit, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
+      PoPoWBootstrap, minimalSuffix, mining = false, complexityLimit, miningDelay, useExternalMiner = false, miningPubKeyHex = None,
       offlineGeneration = false, 200, 100000, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
     val scorexSettings: ScorexSettings = null
-    val testingSettings: TestingSettings = null
     val walletSettings: WalletSettings = null
     val chainSettings = settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs)
 
     val dir = createTempDir
-    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings, testingSettings,
+    val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
       nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)

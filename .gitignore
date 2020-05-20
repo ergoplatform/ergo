@@ -1,3 +1,6 @@
+mainnet
+devnet
+
 # IDE/Editor files
 .idea
 .ensime
@@ -6,9 +9,6 @@ scorex.yaml
 
 # scala build folders
 target
-
-# dotfiles
-.editorconfig
 
 # standalone docker
 !Dockerfile
@@ -61,3 +61,6 @@ local.conf
 .metals/
 .vscode/
 project/metals.sbt
+
+# scala worksheets
+*.worksheet.sc

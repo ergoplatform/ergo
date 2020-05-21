@@ -6,11 +6,11 @@ import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.{ErgoAddress, ErgoBox, P2PKAddress}
+import org.ergoplatform.{ErgoBox, P2PKAddress}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
-import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication}
+import org.ergoplatform.nodeView.wallet.scanning.ExternalAppRequest
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
@@ -100,10 +100,10 @@ trait ErgoWalletReader extends VaultReader {
   def removeApplication(appId: ApplicationId): Future[RemoveApplicationResponse] =
     (walletActor ? RemoveApplication(appId)).mapTo[RemoveApplicationResponse]
 
-  def readApplications(): Future[Seq[ExternalApplication]] =
-    (walletActor ? ReadApplications).mapTo[Seq[ExternalApplication]]
+  def readApplications(): Future[ReadApplicationsResponse] =
+    (walletActor ? ReadApplications).mapTo[ReadApplicationsResponse]
 
-  def stopTracking(appId: ApplicationId, boxId: BoxId): Future[Try[Unit]] =
-    (walletActor ? StopTracking(appId, boxId)).mapTo[Try[Unit]]
+  def stopTracking(appId: ApplicationId, boxId: BoxId): Future[StopTrackingResponse] =
+    (walletActor ? StopTracking(appId, boxId)).mapTo[StopTrackingResponse]
 
 }

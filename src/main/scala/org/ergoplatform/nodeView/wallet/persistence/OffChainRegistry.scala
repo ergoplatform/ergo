@@ -4,6 +4,8 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.wallet.Constants.PaymentsAppId
 import org.ergoplatform.wallet.boxes.TrackedBox
 
+import scala.collection.mutable
+
 /**
   * Holds version-agnostic off-chain data (such as off-chain boxes) in runtime memory.
   * Needed to obtain wallet state in regards with unconfirmed transactions with no reprocessing them on each request.
@@ -26,8 +28,8 @@ case class OffChainRegistry(height: Int,
     val balance = offChainBalances.map(_.value).sum + onChainBalances.map(_.value).sum
     val tokensBalance = (offChainBalances ++ onChainBalances)
       .flatMap(_.assets)
-      .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
-        acc.updated(id, acc.getOrElse(id, 0L) + amt)
+      .foldLeft(mutable.LinkedHashMap.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
+        acc += id -> (acc.getOrElse(id, 0L) + amt)
       }
     WalletDigest(height, balance, tokensBalance)
   }

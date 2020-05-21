@@ -7,6 +7,8 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 
+import scala.collection.mutable
+
 /**
   * Holds aggregate wallet data (including off-chain) with no need fo re-processing it on each request.
   *
@@ -16,11 +18,11 @@ import scorex.util.serialization.{Reader, Writer}
   */
 final case class WalletDigest(height: Int,
                               walletBalance: Long,
-                              walletAssetBalances: Map[EncodedTokenId, Long])
+                              walletAssetBalances: mutable.LinkedHashMap[EncodedTokenId, Long])
 object WalletDigest {
 
   def empty: WalletDigest =
-    WalletDigest(ErgoHistory.EmptyHistoryHeight, 0, Map.empty)
+    WalletDigest(ErgoHistory.EmptyHistoryHeight, 0, mutable.LinkedHashMap.empty)
 
 }
 
@@ -42,9 +44,12 @@ object WalletDigestSerializer extends ScorexSerializer[WalletDigest] {
     val balance = r.getLong()
 
     val walletAssetBalancesSize = r.getUInt().toInt
-    val walletAssetBalances = (0 until walletAssetBalancesSize).map { _ =>
-      encodedTokenId(Digest32 @@ r.getBytes(Constants.ModifierIdSize)) -> r.getLong()
-    }.toMap
+
+    val walletAssetBalances = mutable.LinkedHashMap.empty[EncodedTokenId, Long]
+    (0 until walletAssetBalancesSize).foreach { _ =>
+      val kv = encodedTokenId(Digest32 @@ r.getBytes(Constants.ModifierIdSize)) -> r.getLong()
+      walletAssetBalances += kv
+    }
 
     WalletDigest(height, balance, walletAssetBalances)
   }

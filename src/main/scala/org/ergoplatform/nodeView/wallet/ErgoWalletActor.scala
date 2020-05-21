@@ -478,7 +478,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           } match {
             case Right(txTry) => txTry.map(ErgoTransaction.apply)
             case Left(e) => Failure(
-              new Exception(s"Failed to find boxes to assemble a transaction for $payTo, \nreason: ${e}")
+              new Exception(s"Failed to find boxes to assemble a transaction for $payTo, \nreason: $e")
             )
           }
         }

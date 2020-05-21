@@ -25,7 +25,7 @@ object AVLTreeBatchPerformance extends {
     var operations: Array[Operation] = _
 
     @Setup(Level.Iteration)
-    def up: Unit = {
+    def up(): Unit = {
       val (p, s, _) = persistentProverWithVersionedStore(1000, proverCnt)
       store = s
       prover = p
@@ -33,7 +33,7 @@ object AVLTreeBatchPerformance extends {
     }
 
     @TearDown(Level.Iteration)
-    def down: Unit = {
+    def down(): Unit = {
       prover = null
       operations = Array.empty
     }

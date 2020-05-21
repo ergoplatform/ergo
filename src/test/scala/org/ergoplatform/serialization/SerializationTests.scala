@@ -100,7 +100,7 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
     }
   }
 
-  property("RegistryIndex serialization") {
+  property("WalletDigest serialization") {
     forAll(registrySummaryGen) { index =>
       WalletDigestSerializer.parseBytes(WalletDigestSerializer.toBytes(index)) shouldEqual index
     }

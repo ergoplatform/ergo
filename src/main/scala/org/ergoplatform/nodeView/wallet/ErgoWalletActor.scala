@@ -164,7 +164,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         .map(tx => AugWalletTransaction(tx, height - tx.inclusionHeight))
 
     case ReadApplications =>
-      sender() ! walletVars.externalApplications
+      sender() ! ReadApplicationsResponse(walletVars.externalApplications)
   }
 
   private def onStateChanged: Receive = {
@@ -317,7 +317,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! AddApplicationResponse(res)
 
     case StopTracking(appId: ApplicationId, boxId: BoxId) =>
-      sender() ! registry.removeApp(boxId, appId)
+      sender() ! StopTrackingResponse(registry.removeApp(boxId, appId))
   }
 
   private def withWalletLockHandler(callbackActor: ActorRef)
@@ -904,12 +904,23 @@ object ErgoWalletActor {
   case object ReadApplications
 
   /**
+    * Get registered applications list
+    */
+  case class ReadApplicationsResponse(apps: Seq[ExternalApplication])
+
+  /**
     * Remove association between an application and a box (remove a box if its the only one which belongs to the
     * application)
     * @param appId
     * @param boxId
     */
   case class StopTracking(appId: ApplicationId, boxId: BoxId)
+
+  /**
+    * Wrapper for a result of StopTracking processing
+    * @param status
+    */
+  case class StopTrackingResponse(status: Try[Unit])
 
   def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
                       secrets: Seq[ExternalSecret],

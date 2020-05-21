@@ -318,9 +318,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   /**
     * This filter is selecting boxes which are onchain and not spent offchain yet or created offchain
     * (and not spent offchain, but that is ensured by offChainRegistry).
-    * This filter is used when the wallet is looking through its boxes to assemble a transaction.
+    * This filter is used when the wallet is going through its boxes to assemble a transaction.
     */
-  private val onChainFilter: FilterFn = (trackedBox: TrackedBox) => {
+  private val walletFilter: FilterFn = (trackedBox: TrackedBox) => {
     if(trackedBox.chainStatus.onChain) {
       offChainRegistry.onChainBalances.exists(_.id == trackedBox.boxId)
     } else {
@@ -472,7 +472,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
             //inputs are to be selected by the wallet
             require(prover.hdPubKeys.nonEmpty, "No public keys in the prover to extract change address from")
             val boxesToSpend = registry.readCertainUnspentBoxes ++ offChainRegistry.offChainBoxes
-            (boxesToSpend.toIterator, onChainFilter)
+            (boxesToSpend.toIterator, walletFilter)
           }
 
           val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
@@ -600,7 +600,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def inputsFor(targetAmount: Long,
                         targetAssets: TokensMap = Map.empty): Seq[ErgoBox] =
     boxSelector
-      .select(registry.readCertainUnspentBoxes.toIterator, onChainFilter, targetAmount, targetAssets)
+      .select(registry.readCertainUnspentBoxes.toIterator, walletFilter, targetAmount, targetAssets)
       .toSeq
       .flatMap(_.boxes)
       .map(_.box)

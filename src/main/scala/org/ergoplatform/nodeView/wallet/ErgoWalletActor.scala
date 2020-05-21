@@ -427,64 +427,68 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   /**
-    * Generates new transaction according to a given requests using available boxes.
+    * Generates new transaction according to given requests using available or provided boxes.
+    *
+    * @param requests - requests to transfer funds or to issue an asset
+    * @param inputsRaw - user-provided inputs. If empty then wallet is looking for inputs itself. If non-empty, then
+    *                  the wallet is not adding anything, thus the user in this case should take care about satisfying
+    *                  the (sum(inputs) == sum(outputs)) preservation rule for ergs.
+    * @param dataInputsRaw - user-provided data (read-only) inputs. Wallet is not able to provide data inputs
+    *                      (if they are needed in order to spend the spendable inputs).
+    *
+    * @return generated transaction or an error
     */
   private def generateTransactionWithOutputs(requests: Seq[TransactionGenerationRequest],
                                              inputsRaw: Seq[String],
                                              dataInputsRaw: Seq[String]): Try[ErgoTransaction] = Try {
+
+    // A helper which converts Base16-encoded boxes to ErgoBox instances
+    def stringsToBoxes(strings: Seq[String]): Seq[ErgoBox] =
+      strings.map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry)).map(_.get)
+
     proverOpt match {
       case Some(prover) =>
-        val inputs = inputsRaw
-          .toList
-          .map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry))
-          .map(_.get)
+        val userInputs = stringsToBoxes(inputsRaw)
+        val dataInputs = stringsToBoxes(dataInputsRaw).toIndexedSeq
 
-        val dataInputs = dataInputsRaw
-          .toIndexedSeq
-          .map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry))
-          .map(_.get)
-
-        requestsToBoxCandidates(requests).flatMap { payTo =>
-          require(prover.hdPubKeys.nonEmpty, "No public keys in the prover to extract change address from")
+        requestsToBoxCandidates(requests).flatMap { outputs =>
           require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
-          require(payTo.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, parameters)), "Minimal ERG value not met")
-          require(payTo.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
+          require(outputs.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, parameters)), "Minimal ERG value not met")
+          require(outputs.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
 
-          val assetIssueBox = payTo
+          val assetIssueBox = outputs
             .zip(requests)
             .filter(_._2.isInstanceOf[AssetIssueRequest])
             .map(_._1)
             .headOption
 
-          val targetBalance = payTo
-            .map(_.value)
-            .sum
+          val targetBalance = outputs.map(_.value).sum
+          val targetAssets = TransactionBuilder.collectOutputTokens(outputs.filterNot(bx => assetIssueBox.contains(bx)))
 
-          val targetAssets = TransactionBuilder.collectOutputTokens(payTo.filterNot(bx => assetIssueBox.contains(bx)))
-
-              val (inputBoxes, filter) = if (inputs.nonEmpty) {
-                //inputs are provided externally, no need for filtering
-                (boxesToFakeTracked(inputs), noFilter)
-              } else {
-                //inputs are to be selected by the wallet
-                val boxesToSpend = registry.readCertainUnspentBoxes ++ offChainRegistry.offChainBoxes
-                (boxesToSpend.toIterator, onChainFilter)
-              }
+          val (inputBoxes, filter) = if (userInputs.nonEmpty) {
+            //inputs are provided externally, no need for filtering
+            (boxesToFakeTracked(userInputs), noFilter)
+          } else {
+            //inputs are to be selected by the wallet
+            require(prover.hdPubKeys.nonEmpty, "No public keys in the prover to extract change address from")
+            val boxesToSpend = registry.readCertainUnspentBoxes ++ offChainRegistry.offChainBoxes
+            (boxesToSpend.toIterator, onChainFilter)
+          }
 
           val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
 
           selectionOpt.map { selectionResult =>
-            prepareTransaction(prover, payTo, selectionResult, dataInputs)
+            prepareTransaction(prover, outputs, selectionResult, dataInputs)
           } match {
             case Right(txTry) => txTry.map(ErgoTransaction.apply)
             case Left(e) => Failure(
-              new Exception(s"Failed to find boxes to assemble a transaction for $payTo, \nreason: $e")
+              new Exception(s"Failed to find boxes to assemble a transaction for $outputs, \nreason: $e")
             )
           }
         }
 
       case None =>
-        Failure(new Exception(s"Cannot generateTransactionWithOutputs($requests, $inputsRaw): Wallet is locked"))
+        Failure(new Exception(s"Cannot generateTransactionWithOutputs($requests, $inputsRaw): wallet is locked"))
     }
   }.flatten
 

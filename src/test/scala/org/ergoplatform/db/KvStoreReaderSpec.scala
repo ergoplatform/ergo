@@ -16,6 +16,16 @@ class KvStoreReaderSpec extends PropSpec with Matchers with DBSpec {
       store.insert(Seq(keyEnd -> keyEnd))
       store.getRange(keyStart, keyEnd).length shouldBe 2
 
+      // keys before the range
+      store.getRange(byteString("a"), byteString("z")).length shouldBe 0
+
+      // keys inside the range
+      store.getRange(byteString("<"), byteString("z")).length shouldBe 2
+
+      // keys after the range
+      store.getRange(byteString("<"), byteString("?")).length shouldBe 0
+
+      //removing keys
       store.remove(Seq(keyStart, keyEnd))
       store.getRange(keyStart, keyEnd).length shouldBe 0
     }

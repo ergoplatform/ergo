@@ -176,7 +176,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         sender() ! trackedAddresses.slice(from, until)
 
       case ReadBalances(chainStatus) =>
-        sender() ! WalletDigest(0, WalletActorStub.balance(chainStatus), Map.empty)
+        sender() ! WalletDigest(0, WalletActorStub.balance(chainStatus), mutable.LinkedHashMap.empty)
 
       case AddApplication(req) =>
         val appId = ApplicationId @@ (apps.lastOption.map(_._1).getOrElse(100: Short) + 1).toShort

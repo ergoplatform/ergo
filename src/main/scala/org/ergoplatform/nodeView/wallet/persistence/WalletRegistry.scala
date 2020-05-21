@@ -186,13 +186,17 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
         }
 
       val increasedTokenBalances = receivedTokensAmt.foldLeft(wTokens) { case (acc, (encodedId, amt)) =>
-        acc.updated(encodedId, acc.getOrElse(encodedId, 0L) + amt)
+        acc += encodedId -> (acc.getOrElse(encodedId, 0L) + amt)
       }
 
       val newTokensBalance = spentTokensAmt
         .foldLeft(increasedTokenBalances) { case (acc, (encodedId, amt)) =>
           val decreasedAmt = acc.getOrElse(encodedId, 0L) - amt
-          if (decreasedAmt > 0) acc.updated(encodedId, decreasedAmt) else acc - encodedId
+          if (decreasedAmt > 0) {
+            acc += encodedId -> decreasedAmt
+          } else {
+            acc - encodedId
+          }
         }
 
       val receivedAmt = newOutputs.filter(_.applicationStatuses.contains(PaymentsAppId)).map(_.box.value).sum

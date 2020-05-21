@@ -115,7 +115,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
         v.vault.firstSecret.onComplete { _.flatten match {
           case Failure(t) =>
-            log.warn("Failed to load key from wallet. ", t)
+            log.warn(s"Failed to load key from wallet: ${t.getMessage} ")
             context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet)(context.system.dispatcher)
           case Success(proverInput: DLogProverInput) =>
             callback ! UpdateSecret(proverInput)

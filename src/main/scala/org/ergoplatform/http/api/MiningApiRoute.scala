@@ -17,7 +17,8 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 
 import scala.concurrent.Future
 
-case class MiningApiRoute(miner: ActorRef, ergoSettings: ErgoSettings)
+case class MiningApiRoute(miner: ActorRef,
+                          ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi

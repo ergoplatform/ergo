@@ -21,6 +21,9 @@ import scala.util.Try
 
 /**
   * Autolykos PoW puzzle scheme reference implementation.
+  *
+  * See https://docs.ergoplatform.com/ErgoPow.pdf for details
+  *
   * Mining process is implemented in inefficient way and should not be used in real environment.
   *
   * @see papers/yellow/pow/ErgoPow.tex for full description
@@ -38,7 +41,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   private val N: Int = Math.pow(2, n).toInt
 
   /**
-    * Constant data to be added to hash function to increase it's calculation time
+    * Constant data to be added to hash function to increase its calculation time
     */
   val M: Array[Byte] = (0 until 1024).toArray.flatMap(i => Longs.toByteArray(i))
 
@@ -98,7 +101,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
-    * Get message we should proof for header `h`
+    * Header digest ("message" for default GPU miners) a miner is working on
     */
   def msgByHeader(h: HeaderWithoutPow): Array[Byte] = Blake2b256(HeaderSerializer.bytesWithoutPow(h))
 
@@ -155,38 +158,6 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
-    * Assembles candidate block for external miners.
-    */
-  def deriveExternalCandidate(candidate: CandidateBlock, pk: ProveDlog): ExternalCandidateBlock =
-    deriveExternalCandidate(candidate, pk, Seq.empty)
-
-
-  /**
-    * Assembles candidate block for external miner with certain transactions included into the block
-    * @param candidate - block candidate (contained the transactions)
-    * @param pk - miner pubkey
-    * @param mandatoryTxIds - ids of the transactions to include
-    * @return - block candidate for external miner
-    */
-  def deriveExternalCandidate(candidate: CandidateBlock,
-                              pk: ProveDlog,
-                              mandatoryTxIds: Seq[ModifierId]): ExternalCandidateBlock = {
-    val h = ErgoMiner.deriveUnprovenHeader(candidate)
-    val msg = msgByHeader(h)
-    val b = getB(candidate.nBits)
-
-    val proofs = if(mandatoryTxIds.nonEmpty) {
-      val fakeHeaderId = scorex.util.bytesToId(Array.fill(org.ergoplatform.wallet.Constants.ModifierIdLength)(0: Byte))
-      val bt = BlockTransactions(fakeHeaderId, candidate.transactions)
-      val ps = mandatoryTxIds.flatMap { txId => bt.proofFor(txId).map(mp => TransactionMembershipProof(txId, mp)) }
-      Some(ProofOfUpcomingTransactions(h, ps))
-    } else {
-      None
-    }
-    ExternalCandidateBlock(msg, b, pk, proofs)
-  }
-
-  /**
     * Check nonces from `startNonce` to `endNonce` for message `m`, secrets `sk` and `x`, difficulty `b`.
     * Return AutolykosSolution if there is any valid nonce in this interval.
     */
@@ -240,12 +211,45 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     hash(Bytes.concat(indexBytes, M, pk, m, w))
   }
 
+
+  /**
+    * Assembles candidate block for external miners.
+    */
+  def deriveExternalCandidate(candidate: CandidateBlock, pk: ProveDlog): ExternalCandidateBlock =
+    deriveExternalCandidate(candidate, pk, Seq.empty)
+
+  /**
+    * Assembles candidate block for external miner with certain transactions included into the block
+    * @param candidate - block candidate (contained the transactions)
+    * @param pk - miner pubkey
+    * @param mandatoryTxIds - ids of the transactions to include
+    * @return - block candidate for external miner
+    */
+  def deriveExternalCandidate(candidate: CandidateBlock,
+                              pk: ProveDlog,
+                              mandatoryTxIds: Seq[ModifierId]): ExternalCandidateBlock = {
+    val h = ErgoMiner.deriveUnprovenHeader(candidate)
+    val msg = msgByHeader(h)
+    val b = getB(candidate.nBits)
+
+    val proofs = if(mandatoryTxIds.nonEmpty) {
+      // constructs fake block transactions section (BlockTransactions instance) to get proofs from it
+      val fakeHeaderId = scorex.util.bytesToId(Array.fill(org.ergoplatform.wallet.Constants.ModifierIdLength)(0: Byte))
+      val bt = BlockTransactions(fakeHeaderId, candidate.transactions)
+      val ps = mandatoryTxIds.flatMap { txId => bt.proofFor(txId).map(mp => TransactionMembershipProof(txId, mp)) }
+      Some(ProofOfUpcomingTransactions(h, ps))
+    } else {
+      None
+    }
+    ExternalCandidateBlock(msg, b, pk, proofs)
+  }
+
 }
 
 object AutolykosPowScheme {
 
   /**
-    * Calculate header fields based on parent header
+    * Calculate header fields based on its parent, namely, header's parent id and height
     */
   def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Int) = {
 

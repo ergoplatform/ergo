@@ -403,6 +403,11 @@ object WalletRegistry {
   }
 }
 
+/**
+  * This class collects data for versioned database update
+  * @param toInsert - key-value pairs to write to the database
+  * @param toRemove - keys to remove from the database
+  */
 case class KeyValuePairsBag(toInsert: Seq[(Array[Byte], Array[Byte])],
                             toRemove: Seq[Array[Byte]]) {
 

@@ -14,7 +14,9 @@ import scorex.db.{LDBFactory, LDBKVStore}
 import scala.util.{Success, Try}
 
 /**
-  * Persists version-agnostic wallet actor's mutable state:
+  * Persists version-agnostic wallet actor's mutable state
+  *  (so data which do not have different versions unlike blockchain-related objects):
+  *
   * * tracked addresses
   * * derivation paths
   * * changed addresses

@@ -283,6 +283,10 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     system.terminate()
   }
 
+  it should "collect fee" in new TestKit(ActorSystem()) {
+
+  }
+
 }
 
 class Listener extends Actor {

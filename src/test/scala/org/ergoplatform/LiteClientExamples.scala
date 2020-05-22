@@ -7,9 +7,9 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.encode.Base16
 
 /**
-  * This class contains how-to examples for building clients
+  * This class contains how-to examples for building lite clients
   */
-class ClientExamples extends ErgoPropertyTest {
+class LiteClientExamples extends ErgoPropertyTest {
 
   /**
     * This code shows how to do a client checking a Merkle-tree based membership proof against an

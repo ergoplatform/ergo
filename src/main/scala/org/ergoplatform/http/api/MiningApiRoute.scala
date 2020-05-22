@@ -32,12 +32,19 @@ case class MiningApiRoute(miner: ActorRef,
       rewardAddressR
   }
 
+  /**
+    * Get block candidate. Useful for external miners.
+    */
   def candidateR: Route = (path("candidate") & pathEndOrSingleSlash & get) {
     val prepareCmd = ErgoMiner.PrepareCandidate(Seq.empty)
     val candidateF = (miner ? prepareCmd).mapTo[Future[ExternalCandidateBlock]].flatten
     ApiResponse(candidateF)
   }
 
+  /**
+    * Get block candidate with transactions provided being included.
+    * Useful for external miners when they want to insert certain transactions.
+    */
   def candidateWithTxsR: Route = (path("candidateWithTxs") & post & entity(as[Seq[CostedTransaction]]) ) { txs =>
     val prepareCmd = ErgoMiner.PrepareCandidate(txs)
     val candidateF = (miner ? prepareCmd).mapTo[Future[ExternalCandidateBlock]].flatten

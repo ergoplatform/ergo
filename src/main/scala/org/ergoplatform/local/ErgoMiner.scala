@@ -27,7 +27,6 @@ import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallyS
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.ValidationSettings
 import scorex.crypto.hash.Digest32
-import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.SType.ErgoBoxRType

@@ -29,7 +29,6 @@ import sigmastate.utxo.CostTable
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
-
 /**
   * ErgoTransaction is an atomic state transition operation. It destroys Boxes from the state
   * and creates new ones. If transaction is spending boxes protected by some non-trivial scripts,

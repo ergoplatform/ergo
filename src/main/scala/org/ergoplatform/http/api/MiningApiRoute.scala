@@ -7,7 +7,7 @@ import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.{AutolykosSolution, ExternalCandidateBlock}
-import org.ergoplatform.modifiers.mempool.CostedTransaction
+import org.ergoplatform.modifiers.mempool.{CostedTransaction, ErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoScriptPredef, Pay2SAddress}
@@ -45,7 +45,7 @@ case class MiningApiRoute(miner: ActorRef,
     * Get block candidate with transactions provided being included.
     * Useful for external miners when they want to insert certain transactions.
     */
-  def candidateWithTxsR: Route = (path("candidateWithTxs") & post & entity(as[Seq[CostedTransaction]]) ) { txs =>
+  def candidateWithTxsR: Route = (path("candidateWithTxs") & post & entity(as[Seq[ErgoTransaction]]) ) { txs =>
     val prepareCmd = ErgoMiner.PrepareCandidate(txs)
     val candidateF = (miner ? prepareCmd).mapTo[Future[ExternalCandidateBlock]].flatten
     ApiResponse(candidateF)

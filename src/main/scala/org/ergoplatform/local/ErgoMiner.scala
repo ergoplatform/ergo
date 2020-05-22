@@ -45,19 +45,6 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 /**
-  * Holder for both candidate block and data for external miners derived from it
-  * (to avoid possibly costly recalculation)
-  *
-  * @param candidateBlock
-  * @param externalVersion
-  * @param txsToInclude
-  */
-case class CandidateCache(candidateBlock: CandidateBlock,
-                          externalVersion: ExternalCandidateBlock,
-                          txsToInclude: Seq[CostedTransaction])
-
-
-/**
   * Actor which feeds external miners with needed data, or controls in-built miner.
   */
 class ErgoMiner(ergoSettings: ErgoSettings,
@@ -244,7 +231,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       sender() ! candidateOpt
         .map(_.externalVersion)
         .fold[Future[ExternalCandidateBlock]](
-          Future.failed(new Exception("Failed to create candidate")))(Future.successful)
+        Future.failed(new Exception("Failed to create candidate")))(Future.successful)
 
     case PrepareCandidate(txsToInclude) =>
       val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
@@ -308,7 +295,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                               pool: ErgoMemPoolReader,
                               proposedUpdate: ErgoValidationSettingsUpdate,
                               state: UtxoStateReader,
-                              mandatoryTransactions: Seq[CostedTransaction]): Try[CandidateBlock] = Try {
+                              mandatoryTransactions: Seq[ErgoTransaction]): Try[CandidateBlock] = Try {
     // Extract best header and extension of a best block user their data for assembling a new block
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
     val bestExtensionOpt: Option[Extension] = bestHeaderOpt
@@ -361,7 +348,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     }
 
     val poolTxs = pool.getAllPrioritized
-    val mt = emissionTxOpt.toSeq.map { case (tx, cost) => CostedTransaction(tx, cost) } ++ mandatoryTransactions
+
+    val costedEmissionTxOpt = emissionTxOpt.map { case (tx, cost) => CostedTransaction(tx, cost) }
+    val mt = MandatoryTransactions(costedEmissionTxOpt, mandatoryTransactions)
 
     val (txs, toEliminate) = ErgoMiner.collectTxs(minerPk,
       state.stateContext.currentParameters.maxBlockCost,
@@ -405,6 +394,25 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
 
 object ErgoMiner extends ScorexLogging {
+
+  /**
+    * Holder for both candidate block and data for external miners derived from it
+    * (to avoid possibly costly recalculation)
+    *
+    * @param candidateBlock
+    * @param externalVersion
+    * @param txsToInclude
+    */
+  private case class CandidateCache(candidateBlock: CandidateBlock,
+                                    externalVersion: ExternalCandidateBlock,
+                                    txsToInclude: Seq[ErgoTransaction])
+
+  case class MandatoryTransactions(emissionTx: Option[CostedTransaction], userTxs: Seq[ErgoTransaction])
+
+  object MandatoryTransactions {
+    def empty: MandatoryTransactions = MandatoryTransactions(None, Seq.empty)
+  }
+
 
   //TODO move ErgoMiner to mining package and make `collectTxs` and `fixTxsConflicts` private[mining]
 
@@ -495,7 +503,7 @@ object ErgoMiner extends ScorexLogging {
                  us: UtxoStateReader,
                  upcomingContext: ErgoStateContext,
                  mempoolTxsIn: Iterable[ErgoTransaction],
-                 mandatoryTxs: Seq[CostedTransaction])
+                 mandatoryTxs: MandatoryTransactions)
                 (implicit vs: ValidationSettings): (Seq[ErgoTransaction], Seq[ModifierId]) = {
 
     @tailrec
@@ -513,7 +521,7 @@ object ErgoMiner extends ScorexLogging {
 
           if (!tx.inputs.forall(inp => stateWithTxs.boxById(inp.boxId).isDefined) || doublespend(current, tx)) {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
-            //do these checks before validating the scripts
+            //do these checks before validating the scripts to save time
             current -> (invalidTxs :+ tx.id)
           } else {
             implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)
@@ -558,7 +566,7 @@ object ErgoMiner extends ScorexLogging {
       }
     }
 
-    loop(mempoolTxsIn, mandatoryTxs, None, Seq.empty)
+    loop(mandatoryTxs.userTxs ++ mempoolTxsIn, mandatoryTxs.emissionTx.toSeq, None, Seq.empty)
   }
 
   //Checks that transaction "tx" is not spending outputs spent already by transactions "txs"
@@ -606,7 +614,7 @@ object ErgoMiner extends ScorexLogging {
 
   case object QueryWallet
 
-  case class PrepareCandidate(toInclude: Seq[CostedTransaction])
+  case class PrepareCandidate(toInclude: Seq[ErgoTransaction])
 
   case object ReadMinerPk
 

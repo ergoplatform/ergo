@@ -2,22 +2,20 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
 
-import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.HybridLDBKVStore
 import org.ergoplatform.modifiers.history.PreGenesisHeader
-import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, EncodedBoxId}
+import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, EncodedTokenId}
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
-import org.ergoplatform.settings.{Algos, WalletSettings, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
-import scorex.util.{idToBytes, ScorexLogging, ModifierId}
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import Constants.{ApplicationId, PaymentsAppId}
 import scorex.db.LDBVersionedStore
-import spire.syntax.all.cfor
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
@@ -322,7 +320,7 @@ object WalletRegistry {
     res
   }
 
-  /** Same as [[composeKey()]] with additional height parameter. */
+  /** Same as [[composeKey()]] where suffix is given by id. */
   private[persistence] final def composeKeyWithBoxId(prefix: Byte, appId: ApplicationId, suffixId: BoxId): Array[Byte] = {
     val res = new Array[Byte](3 + suffixId.length) // 1 byte for prefix + 2 for appId
     res(0) = prefix
@@ -341,7 +339,7 @@ object WalletRegistry {
     res
   }
 
-  /** Same as [[composeKey()]] with additional height parameter. */
+  /** Same as [[composeKey()]] with additional height parameter and suffix given by id. */
   private[persistence] final def composeKeyWithBoxId(prefix: Byte, appId: ApplicationId, height: Int, suffixId: BoxId): Array[Byte] = {
     val res = new Array[Byte](7 + suffixId.length) // 1 byte for prefix + 2 for appId + 4 for height
     res(0) = prefix

@@ -47,12 +47,7 @@ object ByteArrayUtils {
 
   /** Put the given bytes at the given position in the buffer array. */
   @inline final def putBytes(buf: Array[Byte], pos: Int, bytes: Array[Byte]): Unit = {
-    val limit = bytes.length
-    var i = 0
-    while(i < limit) {
-      buf(pos + i) = bytes(i)
-      i += 1
-    }
+    System.arraycopy(bytes, 0, buf, pos, bytes.length)
   }
 
 }

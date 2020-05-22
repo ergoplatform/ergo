@@ -35,6 +35,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   assert(k <= 32, "k > 32 is not allowed due to genIndexes function")
   assert(n < 31, "n >= 31 is not allowed")
 
+  //Consensus-critical code below
+
   /**
     * Total number of elements
     */
@@ -75,6 +77,40 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
+    * Header digest ("message" for default GPU miners) a miner is working on
+    */
+  def msgByHeader(h: HeaderWithoutPow): Array[Byte] = Blake2b256(HeaderSerializer.bytesWithoutPow(h))
+
+  /**
+    * Get target `b` from encoded difficulty `nBits`
+    */
+  private[mining] def getB(nBits: Long): BigInt = q / RequiredDifficulty.decodeCompactBits(nBits)
+
+  /**
+    * Hash function that takes `m` and `nonceBytes` and returns a list of size `k` with numbers in
+    * [0,`N`)
+    */
+  private def genIndexes(seed: Array[Byte]): Seq[Int] = {
+    val hash = Blake2b256(seed)
+    val extendedHash = Bytes.concat(hash, hash.take(3))
+    (0 until k).map { i =>
+      BigInt(1, extendedHash.slice(i, i + 4)).mod(N).toInt
+    }
+  }.ensuring(_.length == k)
+
+  /**
+    * Generate element of Autolykos equation.
+    */
+  private def genElement(m: Array[Byte],
+                         pk: Array[Byte],
+                         w: Array[Byte],
+                         indexBytes: Array[Byte]): BigInt = {
+    hash(Bytes.concat(indexBytes, M, pk, m, w))
+  }
+
+  //Proving-related code which is not critical for consensus below
+
+  /**
     * Find a nonce from `minNonce` to `maxNonce`, such that header with the specified fields will contain
     * correct solution of the Autolykos PoW puzzle.
     */
@@ -99,11 +135,6 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val x = randomSecret()
     checkNonces(msg, sk, x, b, minNonce, maxNonce).map(s => h.toHeader(s, None))
   }
-
-  /**
-    * Header digest ("message" for default GPU miners) a miner is working on
-    */
-  def msgByHeader(h: HeaderWithoutPow): Array[Byte] = Blake2b256(HeaderSerializer.bytesWithoutPow(h))
 
   /**
     * Find a nonce from `minNonce` to `maxNonce`, such that full block with the specified fields will contain
@@ -183,34 +214,6 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
     loop(startNonce)
   }
-
-  /**
-    * Get target `b` from encoded difficulty `nBits`
-    */
-  private[mining] def getB(nBits: Long): BigInt = q / RequiredDifficulty.decodeCompactBits(nBits)
-
-  /**
-    * Hash function that takes `m` and `nonceBytes` and returns a list of size `k` with numbers in
-    * [0,`N`)
-    */
-  private def genIndexes(seed: Array[Byte]): Seq[Int] = {
-    val hash = Blake2b256(seed)
-    val extendedHash = Bytes.concat(hash, hash.take(3))
-    (0 until k).map { i =>
-      BigInt(1, extendedHash.slice(i, i + 4)).mod(N).toInt
-    }
-  }.ensuring(_.length == k)
-
-  /**
-    * Generate element of Autolykos equation.
-    */
-  private def genElement(m: Array[Byte],
-                         pk: Array[Byte],
-                         w: Array[Byte],
-                         indexBytes: Array[Byte]): BigInt = {
-    hash(Bytes.concat(indexBytes, M, pk, m, w))
-  }
-
 
   /**
     * Assembles candidate block for external miners.

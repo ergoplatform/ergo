@@ -284,6 +284,51 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
   }
 
 
+  it should "include mandatory transactions" in new TestKit(ActorSystem()) {
+    val testProbe = new TestProbe(system)
+    val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
+
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
+
+    def minerRef: ActorRef = ErgoMinerRef(
+      ergoSettings,
+      nodeViewHolderRef,
+      readersHolderRef,
+      timeProvider,
+      Some(defaultMinerSecret)
+    )
+
+    val passiveMiner: ActorRef = minerRef
+
+
+    expectNoMessage(1 second)
+    val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+
+    val history: ErgoHistoryReader = r.h
+    val startBlock: Option[Header] = history.bestHeaderOpt
+
+    minerRef ! StartMining
+
+    testProbe.expectMsgClass(newBlockDuration, newBlock)
+
+    val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
+
+    val boxToDoubleSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
+    boxToDoubleSpend.propositionBytes shouldBe ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
+
+    val input = Input(boxToDoubleSpend.id, emptyProverResult)
+
+    val outputs1 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop1, r.s.stateContext.currentHeight))
+    val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs1)
+    val tx1 = defaultProver.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), IndexedSeq(), r.s.stateContext).get.asInstanceOf[ErgoTransaction]
+
+
+    val cand = await((passiveMiner ? PrepareCandidate(Seq.empty)).mapTo[Future[ExternalCandidateBlock]].flatten)
+    cand.proofsForMandatoryTransactions.get.txProofs.size shouldBe 2
+    system.terminate()
+  }
+
 }
 
 class Listener extends Actor {

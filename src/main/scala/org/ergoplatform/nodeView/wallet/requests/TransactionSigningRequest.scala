@@ -9,7 +9,7 @@ import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey, PrimitiveSe
   * Basic trait for externally provided hint for interpreter (to be used during script execution and signature
   * generation).
   */
-trait Hint
+import sigmastate.interpreter.Hint
 
 /**
   * Externally provided secret (to be used once for a transaction to sign)

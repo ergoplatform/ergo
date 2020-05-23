@@ -135,7 +135,11 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
           Some(DLogInteractiveProver.firstMessage(dl))
         case dh: ProveDHTuple =>
           Some(DiffieHellmanTupleInteractiveProver.firstMessage(dh))
-        case _ => None
+        case _ =>
+          // other options not supported yet but possible,
+          // e.g. a sub-tree like ("pk_A || pkC")
+          // corresponding to the complex statement ("(pk_A || pkC) && (pk_D || pkE)")
+          None
       }
     }
   }

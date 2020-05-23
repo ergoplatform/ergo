@@ -120,7 +120,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   implicit val executeRequestDecoder: ExecuteRequestDecoder = new ExecuteRequestDecoder(ergoSettings)
 
-  implicit def sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
+  implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
     sigma =>
       val op = sigma.opCode.toByte.asJson
       sigma match {
@@ -136,7 +136,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       }
   }
 
-  implicit def cryptResultEncoder: Encoder[CryptoResult] = {
+  implicit val cryptResultEncoder: Encoder[CryptoResult] = {
     res =>
       val fields = Map(
         "value" -> res.value.asJson,
@@ -170,6 +170,11 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         e => BadRequest(e.getMessage),
         tree => ApiResponse(Map("tree" -> tree).asJson)
       )
+  }
+
+
+  def generateCommitment: Route = (path("generateCommitment") & post & entity(as[SigmaBoolean])) { sigma =>
+
   }
 
 }

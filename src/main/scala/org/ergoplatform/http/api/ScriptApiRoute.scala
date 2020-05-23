@@ -5,27 +5,30 @@ import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
 import io.circe.generic.auto._
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, HCursor, Json}
+import io.circe.{Decoder, DecodingFailure, Encoder, HCursor, Json}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform._
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 import sigmastate.Values.{ErgoTree, SigmaBoolean}
 import sigmastate._
-import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.basics.DLogProtocol.{FirstDLogProverMessage, ProveDlog}
 import sigmastate.basics.ProveDHTuple
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
+import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.lang.SigmaCompiler
+import sigmastate.serialization.OpCodes
 import special.sigma.AnyValue
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 case class CryptoResult(value: SigmaBoolean, cost: Long)
 
@@ -136,6 +139,16 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       }
   }
 
+  implicit val sigmaBooleanDecoder: Decoder[SigmaBoolean] = Decoder.instance { c =>
+    c.downField("op").as[Byte].flatMap {
+      case b: Byte if b == OpCodes.ProveDlogCode =>
+        c.downField("h").as[EcPointType].map(h => ProveDlog(h))
+      case _ =>
+        //only dlog is supported for now
+        Left(DecodingFailure("Unsupported value", List()))
+    }
+  }
+
   implicit val cryptResultEncoder: Encoder[CryptoResult] = {
     res =>
       val fields = Map(
@@ -174,7 +187,8 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
 
   def generateCommitment: Route = (path("generateCommitment") & post & entity(as[SigmaBoolean])) { sigma =>
-
+    val (r, a) = ErgoProvingInterpreter.generateCommitmentFor(sigma)
+    ApiResponse(Map("r" -> r.asJson, "a" -> a.asInstanceOf[FirstDLogProverMessage].ecData.asJson).asJson)
   }
 
 }

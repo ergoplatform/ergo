@@ -116,34 +116,6 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
       }
   }
 
-  /**
-    * A method which is generating a commitment to randomness, which is a first step to prove
-    * knowledge of a secret. Method checks whether secret is known to the prover, and returns
-    * None if the secret is not known.
-    *
-    * @param pubkey - public image of a secret
-    * @return Some((r, cmt)), a commitment to (secret) randomness "cmt" along with the randomness "r",
-    *         if the secret corresponding to pubkey is known, None otherwise
-    */
-  def generateCommitmentFor(pubkey: SigmaBoolean): Option[(BigInteger, FirstProverMessage)] = {
-    val idx = pubKeys.indexOf(pubkey)
-    if (idx == -1) {
-      None
-    } else {
-      pubkey match {
-        case dl: ProveDlog =>
-          Some(DLogInteractiveProver.firstMessage(dl))
-        case dh: ProveDHTuple =>
-          Some(DiffieHellmanTupleInteractiveProver.firstMessage(dh))
-        case _ =>
-          // other options not supported yet but possible,
-          // e.g. a sub-tree like ("pk_A || pkC")
-          // corresponding to the complex statement ("(pk_A || pkC) && (pk_D || pkE)")
-          None
-      }
-    }
-  }
-
 }
 
 object ErgoProvingInterpreter {
@@ -161,4 +133,26 @@ object ErgoProvingInterpreter {
             params: ErgoLikeParameters): ErgoProvingInterpreter =
     new ErgoProvingInterpreter(IndexedSeq(rootSecret), params, HintsBag.empty)(new RuntimeIRContext)
 
+
+  /**
+    * A method which is generating a commitment to randomness, which is a first step to prove
+    * knowledge of a secret. Method checks whether secret is known to the prover, and returns
+    * None if the secret is not known.
+    *
+    * @param pubkey - public image of a secret
+    * @return (r, cmt), a commitment to (secret) randomness "cmt" along with the randomness "r"
+    */
+  def generateCommitmentFor(pubkey: SigmaBoolean): (BigInteger, FirstProverMessage) = {
+    pubkey match {
+      case dl: ProveDlog =>
+        DLogInteractiveProver.firstMessage(dl)
+      case dh: ProveDHTuple =>
+        DiffieHellmanTupleInteractiveProver.firstMessage(dh)
+      case _ =>
+        // other options not supported yet but possible,
+        // e.g. a sub-tree like ("pk_A || pkC")
+        // corresponding to the complex statement ("(pk_A || pkC) && (pk_D || pkE)")
+        ???
+    }
+  }
 }

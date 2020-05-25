@@ -29,8 +29,8 @@ trait FullBlockProcessor extends HeadersProcessor {
   /**
     * Id of header that contains transactions and proofs
     */
-  override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.getIndex(BestFullBlockKey)
-    .map(bytesToId)
+  override def bestFullBlockIdOpt: Option[ModifierId] =
+    historyStorage.getIndex(BestFullBlockKey).map(bytesToId)
 
   // todo: `getFullBlock` is frequently used to define whether some`header` have enough
   // todo: related sections - it would be far more efficient to keep such information in the indexes.
@@ -48,7 +48,7 @@ trait FullBlockProcessor extends HeadersProcessor {
                                  newMod: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
     val bestFullChainAfter = calculateBestChain(fullBlock.header)
     val newBestBlockHeader = typedModifierById[Header](bestFullChainAfter.last).ensuring(_.isDefined)
-    processing(ToProcess(fullBlock, newMod, newBestBlockHeader, nodeSettings.blocksToKeep, bestFullChainAfter))
+    processing(ToProcess(fullBlock, newMod, newBestBlockHeader, bestFullChainAfter))
   }
 
   private def processing: BlockProcessing =
@@ -63,7 +63,7 @@ trait FullBlockProcessor extends HeadersProcessor {
   }
 
   private def processValidFirstBlock: BlockProcessing = {
-    case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), _, newBestChain)
+    case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), newBestChain)
       if isValidFirstFullBlock(fullBlock.header) =>
 
       val headers = headerChainBack(10, fullBlock.header, h => h.height == 1)
@@ -78,7 +78,7 @@ trait FullBlockProcessor extends HeadersProcessor {
   }
 
   private def processBetterChain: BlockProcessing = {
-    case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), blocksToKeep, _)
+    case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), _)
       if bestFullBlockOpt.nonEmpty && isBetterChain(newBestBlockHeader.id) && isLinkable(fullBlock.header) =>
 
       val prevBest = bestFullBlockOpt.get
@@ -94,16 +94,16 @@ trait FullBlockProcessor extends HeadersProcessor {
       logStatus(toRemove, toApply, fullBlock, Some(prevBest))
       val branchPoint = toRemove.headOption.map(_ => prevChain.head.id)
 
-      val minForkRootHeight = newBestBlockHeader.height - nodeSettings.blocksToKeep
-      // remove block ids which have no chance to be applied
-      if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
-
       // insert updated chains statuses
       val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
         toRemove.map(b => chainStatusKey(b.id) -> FullBlockProcessor.NonBestChainMarker)
       updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes)
 
-      if (blocksToKeep >= 0) {
+      // remove block ids which have no chance to be applied
+      val minForkRootHeight = toApply.last.height - nodeSettings.keepVersions
+      if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
+
+      if (nodeSettings.blocksToKeep >= 0) {
         val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
         val bestHeight: Int = newBestBlockHeader.height
         val diff = bestHeight - prevBest.header.height
@@ -250,7 +250,6 @@ object FullBlockProcessor {
   case class ToProcess(fullBlock: ErgoFullBlock,
                        newModRow: ErgoPersistentModifier,
                        newBestBlockHeaderOpt: Option[Header],
-                       blocksToKeep: Int,
                        newBestChain: Seq[ModifierId])
 
   case class CacheBlock(id: ModifierId, height: Int)

@@ -45,10 +45,15 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
       if (acc.lengthCompare(howMany) >= 0) {
         acc.take(howMany)
       } else {
-        val toDownload = headerIdsAtHeight(height).flatMap(id => typedModifierById[Header](id)).flatMap {
-          header => requiredModifiersForHeader(header).filter(m => condition(m._2))
+        val headersAtThisHeight = headerIdsAtHeight(height).flatMap(id => typedModifierById[Header](id))
+
+        if (headersAtThisHeight.nonEmpty) {
+          val toDownload = headersAtThisHeight.flatMap(h => requiredModifiersForHeader(h))
+                       .filter(m => condition(m._2))
+                    continuation(height + 1, acc ++ toDownload)
+        } else {
+          acc
         }
-        if(toDownload.nonEmpty) continuation(height + 1, acc ++ toDownload) else acc
       }
     }
 
@@ -58,7 +63,8 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         Seq.empty
       case Some(fb) =>
         // download children blocks of last 100 full blocks applied to the best chain
-        continuation(fb.header.height - 100 , Seq.empty)
+        val minHeight = Math.max(1, fb.header.height - 100)
+        continuation(minHeight, Seq.empty)
       case _ =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
         continuation(pruningProcessor.minimalFullBlockHeight, Seq.empty)

@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants
 import scorex.core.NodeViewHolder._
 import scorex.core.PersistentNodeViewModifier
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SendLocalSyncInfo}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{CheckDelivery, SemanticallySuccessfulModifier, SendLocalSyncInfo}
 import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
@@ -75,6 +75,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       }
     }
+  }
+
+  //todo: pull back to Scorex
+  override protected def checkDelivery: Receive = {
+    case CheckDelivery(peerOpt, modifierTypeId, modifierId) =>
+      if (deliveryTracker.status(modifierId) == ModifiersStatus.Requested) {
+        peerOpt match {
+          case Some(peer) =>
+            log.info(s"Peer ${peer.toString} has not delivered asked modifier ${encoder.encodeId(modifierId)} on time")
+            penalizeNonDeliveringPeer(peer)
+            deliveryTracker.setUnknown(modifierId)
+            requestDownload(modifierTypeId, Seq(modifierId))
+          case None =>
+            // Random peer did not delivered modifier we need, ask another peer
+            // We need this modifier - no limit for number of attempts
+            log.info(s"Modifier ${encoder.encodeId(modifierId)} was not delivered on time")
+            deliveryTracker.setUnknown(modifierId)
+            requestDownload(modifierTypeId, Seq(modifierId))
+        }
+      }
   }
 
   /**

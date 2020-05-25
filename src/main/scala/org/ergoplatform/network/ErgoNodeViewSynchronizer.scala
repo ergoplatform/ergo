@@ -77,7 +77,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  //todo: pull back to Scorex
+  //todo: pull back to Scorex with fixing this method
   override protected def checkDelivery: Receive = {
     case CheckDelivery(peerOpt, modifierTypeId, modifierId) =>
       if (deliveryTracker.status(modifierId) == ModifiersStatus.Requested) {

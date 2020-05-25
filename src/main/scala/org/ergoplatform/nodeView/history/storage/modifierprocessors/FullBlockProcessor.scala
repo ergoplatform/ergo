@@ -65,6 +65,7 @@ trait FullBlockProcessor extends HeadersProcessor {
   private def processValidFirstBlock: BlockProcessing = {
     case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), _, newBestChain)
       if isValidFirstFullBlock(fullBlock.header) =>
+
       val headers = headerChainBack(10, fullBlock.header, h => h.height == 1)
       val toApply = fullBlock +: newBestChain.tail
         .map(id => typedModifierById[Header](id).flatMap(getFullBlock))
@@ -81,6 +82,8 @@ trait FullBlockProcessor extends HeadersProcessor {
       if bestFullBlockOpt.nonEmpty && isBetterChain(newBestBlockHeader.id) && isLinkable(fullBlock.header) =>
 
       val prevBest = bestFullBlockOpt.get
+
+      //find chains starting from the forking point
       val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, newBestBlockHeader)
       val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
       val toApply: Seq[ErgoFullBlock] = newChain.tail.headers
@@ -213,13 +216,13 @@ trait FullBlockProcessor extends HeadersProcessor {
                         prevBest: Option[ErgoFullBlock]): Unit = {
     val toRemoveStr = if (toRemove.isEmpty) "" else s" and to remove ${toRemove.length}"
     val newStatusStr = if (toApply.isEmpty) "" else {
-      s" New best block is ${toApply.last.header.encodedId} " +
+        s"New best block is ${toApply.last.header.encodedId} " +
         s"with height ${toApply.last.header.height} " +
         s"updates block ${prevBest.map(_.encodedId).getOrElse("None")} " +
         s"with height ${ErgoHistory.heightOf(prevBest.map(_.header))}"
     }
     log.info(s"Full block ${appliedBlock.encodedId} appended, " +
-      s"going to apply ${toApply.length}$toRemoveStr modifiers.$newStatusStr")
+      s"going to apply ${toApply.length}$toRemoveStr modifiers. $newStatusStr")
   }
 
   private def pruneBlockDataAt(heights: Seq[Int]): Try[Unit] = Try {

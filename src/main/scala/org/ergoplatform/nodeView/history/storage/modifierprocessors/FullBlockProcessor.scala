@@ -79,6 +79,7 @@ trait FullBlockProcessor extends HeadersProcessor {
   private def processBetterChain: BlockProcessing = {
     case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), blocksToKeep, _)
       if bestFullBlockOpt.nonEmpty && isBetterChain(newBestBlockHeader.id) && isLinkable(fullBlock.header) =>
+
       val prevBest = bestFullBlockOpt.get
       val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, newBestBlockHeader)
       val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)

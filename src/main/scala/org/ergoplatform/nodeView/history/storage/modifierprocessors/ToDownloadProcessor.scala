@@ -37,7 +37,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
   def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
 
   /** Returns Next `howMany` modifier ids satisfying `filter` condition our node should download
-    * to synchronize full block chain with headers chain
+    * to synchronize full blocks
     */
   def nextModifiersToDownload(howMany: Int, condition: ModifierId => Boolean): Seq[(ModifierTypeId, ModifierId)] = {
     @tailrec
@@ -45,13 +45,10 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
       if (acc.lengthCompare(howMany) >= 0) {
         acc.take(howMany)
       } else {
-        headerIdsAtHeight(height).headOption.flatMap(id => typedModifierById[Header](id)) match {
-          case Some(bestHeaderAtThisHeight) =>
-            val toDownload = requiredModifiersForHeader(bestHeaderAtThisHeight)
-              .filter(m => condition(m._2))
-            continuation(height + 1, acc ++ toDownload)
-          case None => acc
+        val toDownload = headerIdsAtHeight(height).flatMap(id => typedModifierById[Header](id)).flatMap {
+          header => requiredModifiersForHeader(header).filter(m => condition(m._2))
         }
+        if(toDownload.nonEmpty) continuation(height + 1, acc ++ toDownload) else acc
       }
     }
 
@@ -59,9 +56,9 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
       case _ if !isHeadersChainSynced || !nodeSettings.verifyTransactions =>
         // do not download full blocks if no headers-chain synced yet or SPV mode
         Seq.empty
-      case Some(fb) if isInBestChain(fb.id) =>
-        // download children blocks of last full block applied in the best chain
-        continuation(fb.header.height + 1, Seq.empty)
+      case Some(fb) =>
+        // download children blocks of last 100 full blocks applied to the best chain
+        continuation(fb.header.height - 100 , Seq.empty)
       case _ =>
         // if headers-chain is synced and no full blocks applied yet, find full block height to go from
         continuation(pruningProcessor.minimalFullBlockHeight, Seq.empty)

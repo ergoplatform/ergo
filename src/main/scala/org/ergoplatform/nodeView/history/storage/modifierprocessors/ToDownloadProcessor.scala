@@ -48,9 +48,8 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         val headersAtThisHeight = headerIdsAtHeight(height).flatMap(id => typedModifierById[Header](id))
 
         if (headersAtThisHeight.nonEmpty) {
-          val toDownload = headersAtThisHeight.flatMap(h => requiredModifiersForHeader(h))
-                       .filter(m => condition(m._2))
-                    continuation(height + 1, acc ++ toDownload)
+          val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter(m => condition(m._2))
+          continuation(height + 1, acc ++ toDownload)
         } else {
           acc
         }

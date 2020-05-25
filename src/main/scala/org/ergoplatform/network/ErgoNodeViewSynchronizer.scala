@@ -52,8 +52,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       historyReaderOpt.foreach { h =>
         def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(h)) == ModifiersStatus.Unknown
 
-        h.nextModifiersToDownload(desiredSizeOfExpectingQueue - deliveryTracker.requestedSize, downloadRequired)
-          .groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
+        val toDownload = h.nextModifiersToDownload(
+          networkSettings.maxModifiersCacheSize - deliveryTracker.requestedSize,
+          downloadRequired)
+
+        log.info(s"${toDownload.length} modifiers to be downloaded")
+
+        toDownload.groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }
   }
 

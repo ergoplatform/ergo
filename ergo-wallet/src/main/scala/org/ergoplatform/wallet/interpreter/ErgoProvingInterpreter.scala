@@ -144,8 +144,8 @@ object ErgoProvingInterpreter {
     */
   def generateCommitmentFor(pubkey: SigmaBoolean): (BigInteger, FirstProverMessage) = {
     pubkey match {
-      case dl: ProveDlog =>
-        DLogInteractiveProver.firstMessage(dl)
+      case _: ProveDlog =>
+        DLogInteractiveProver.firstMessage()
       case dh: ProveDHTuple =>
         DiffieHellmanTupleInteractiveProver.firstMessage(dh)
       case _ =>

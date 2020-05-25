@@ -1,11 +1,14 @@
 package org.ergoplatform.http.api
 
+import java.math.BigInteger
+
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
 import io.circe.generic.auto._
 import io.circe.syntax._
 import io.circe.{Decoder, DecodingFailure, Encoder, HCursor, Json}
+import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
@@ -21,7 +24,8 @@ import sigmastate._
 import sigmastate.basics.DLogProtocol.{FirstDLogProverMessage, ProveDlog}
 import sigmastate.basics.ProveDHTuple
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
-import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.interpreter.CryptoConstants
+import sigmastate.interpreter.CryptoConstants.{EcPointType, dlogGroup, secureRandom}
 import sigmastate.lang.SigmaCompiler
 import sigmastate.serialization.OpCodes
 import special.sigma.AnyValue
@@ -46,7 +50,8 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       // p2shAddressR ~
       p2sAddressR ~
       addressToTreeR ~
-      executeWithContextR
+      executeWithContextR ~
+      generateCommitmentR
     }
   }
 
@@ -185,10 +190,39 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       )
   }
 
-
-  def generateCommitment: Route = (path("generateCommitment") & post & entity(as[SigmaBoolean])) { sigma =>
+  def generateCommitmentR: Route = (path("generateCommitment") & post & entity(as[SigmaBoolean])) { sigma =>
     val (r, a) = ErgoProvingInterpreter.generateCommitmentFor(sigma)
     ApiResponse(Map("r" -> r.asJson, "a" -> a.asInstanceOf[FirstDLogProverMessage].ecData.asJson).asJson)
   }
 
+}
+
+
+object Generate extends App with ApiCodecs {
+  import CryptoConstants.dlogGroup
+
+  implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
+    sigma =>
+      val op = Base16.encode(Array(sigma.opCode.toByte)).asJson
+      sigma match {
+        case dlog: ProveDlog   => Map("op" -> op, "h" -> dlog.h.asJson).asJson
+        case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
+        case tp: TrivialProp   => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
+        case and: CAND =>
+          Map("op" -> op, "args" -> and.sigmaBooleans.map(_.asJson).asJson).asJson
+        case or: COR =>
+          Map("op" -> op, "args" -> or.sigmaBooleans.map(_.asJson).asJson).asJson
+        case th: CTHRESHOLD =>
+          Map("op" -> op, "args" -> th.sigmaBooleans.map(_.asJson).asJson).asJson
+      }
+  }
+
+  val qMinusOne = dlogGroup.order.subtract(BigInteger.ONE)
+  val r = BigIntegers.createRandomInRange(BigInteger.ZERO, qMinusOne, secureRandom)
+  val a = dlogGroup.exponentiate(dlogGroup.generator, r)
+  r -> FirstDLogProverMessage(a)
+
+  println(sigmaBooleanEncoder.apply(ProveDlog(a)))
+  println(sigmaBooleanEncoder.apply(CAND(Seq(ProveDlog(a), ProveDlog(a)))))
+  println(sigmaBooleanEncoder.apply(CAND(Seq(ProveDlog(a), ProveDlog(a), ProveDlog(a)))))
 }

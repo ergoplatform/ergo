@@ -8,9 +8,11 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInf
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.Constants
 import scorex.core.NodeViewHolder._
-import scorex.core.PersistentNodeViewModifier
+import scorex.core.{ModifierTypeId, PersistentNodeViewModifier}
+import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{CheckDelivery, SemanticallySuccessfulModifier}
-import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer}
+import scorex.core.network.message.{InvData, Message}
+import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer, SendToRandom}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ModifierId
@@ -72,14 +74,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       historyReaderOpt.foreach { h =>
         def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(h)) == ModifiersStatus.Unknown
 
-        val toDownload = h.nextModifiersToDownload(
-          networkSettings.maxModifiersCacheSize - deliveryTracker.requestedSize,
-          downloadRequired)
+        val toDownload =
+          h.nextModifiersToDownload(desiredSizeOfExpectingQueue - deliveryTracker.requestedSize, downloadRequired)
 
         log.info(s"${toDownload.length} modifiers to be downloaded")
 
         toDownload.groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }
+  }
+
+  override protected def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
+    deliveryTracker.setRequested(modifierIds, modifierTypeId, None)
+    val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
+    networkControllerRef ! SendToNetwork(msg, SendToRandom)
   }
 
   /**

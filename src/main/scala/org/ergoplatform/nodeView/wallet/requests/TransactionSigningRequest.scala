@@ -6,12 +6,13 @@ import io.circe.{Decoder, DecodingFailure, Encoder, Json}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey, PrimitiveSecretKey}
+import scorex.util.encode.Base16
 import sigmastate.Values.SigmaBoolean
-import sigmastate.{CAND, COR, CTHRESHOLD, TrivialProp}
+import sigmastate.{CAND, COR, CTHRESHOLD, SigSerializer, TrivialProp}
 import sigmastate.basics.DLogProtocol.{FirstDLogProverMessage, ProveDlog}
 import sigmastate.basics.{FirstDiffieHellmanTupleProverMessage, FirstProverMessage, ProveDHTuple}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{CommitmentHint, OwnCommitment, RealCommitment, SimulatedCommitment}
+import sigmastate.interpreter.{CommitmentHint, OwnCommitment, RealCommitment, RealSecretProof, SecretProven, SimulatedCommitment}
 import sigmastate.serialization.OpCodes
 
 /**
@@ -143,6 +144,20 @@ object HintCodecs extends ApiCodecs {
         Left(DecodingFailure("Unsupported hint value", List()))
     }
   }
+
+  implicit val secretProofEncoder: Encoder[SecretProven] = { sp =>
+    //todo: fix .isInstanceOf with adding a flag to SecretProven
+
+    val proofType = if(sp.isInstanceOf[RealSecretProof]) "proofReal" else "proofSimulated"
+
+    Json.obj(
+      "hint" -> proofType.asJson,
+      "challenge" -> Base16.encode(sp.challenge).asJson,
+      "pubkey" -> sp.image.asJson,
+      "proof" -> SigSerializer.toBytes(sp.uncheckedTree).asJson
+    )
+  }
+
 }
 
 object TransactionSigningRequest extends ApiCodecs {

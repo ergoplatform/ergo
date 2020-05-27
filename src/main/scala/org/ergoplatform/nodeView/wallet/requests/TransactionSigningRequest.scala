@@ -1,5 +1,7 @@
 package org.ergoplatform.nodeView.wallet.requests
 
+import java.math.BigInteger
+
 import io.circe.{Decoder, DecodingFailure, Encoder, Json}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
@@ -7,7 +9,7 @@ import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey, PrimitiveSe
 import sigmastate.Values.SigmaBoolean
 import sigmastate.{CAND, COR, CTHRESHOLD, TrivialProp}
 import sigmastate.basics.DLogProtocol.{FirstDLogProverMessage, ProveDlog}
-import sigmastate.basics.{FirstDiffieHellmanTupleProverMessage, ProveDHTuple}
+import sigmastate.basics.{FirstDiffieHellmanTupleProverMessage, FirstProverMessage, ProveDHTuple}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.interpreter.{CommitmentHint, OwnCommitment, RealCommitment, SimulatedCommitment}
 import sigmastate.serialization.OpCodes
@@ -82,21 +84,53 @@ object HintCodecs extends ApiCodecs {
   import SigmaBooleanCodecs._
   import io.circe.syntax._
 
+  implicit val firstProverMessageEncoder: Encoder[FirstProverMessage] = {
+    case cmtDlog: FirstDLogProverMessage =>
+      Json.obj("type" -> "dlog".asJson, "a" -> cmtDlog.ecData.asJson)
+    case cmtDht: FirstDiffieHellmanTupleProverMessage =>
+      Json.obj("type" -> "dht".asJson, "a" -> cmtDht.a.asJson, "b" -> cmtDht.b.asJson)
+    case _ => ???
+  }
+
+  implicit val firstProverMessageDecoder: Decoder[FirstProverMessage] = { c =>
+    c.downField("type").as[String].flatMap {
+      case h: String if h == "dlog" =>
+        for {
+          a <- c.downField("a").as[EcPointType]
+        } yield FirstDLogProverMessage(a)
+      case h: String if h == "dht" =>
+        for {
+          a <- c.downField("a").as[EcPointType]
+          b <- c.downField("b").as[EcPointType]
+        } yield FirstDiffieHellmanTupleProverMessage(a, b)
+      case _ =>
+        Left(DecodingFailure("Unsupported sigma-protocol type value", List()))
+    }
+  }
+
   implicit val commitmentHintEncoder: Encoder[CommitmentHint] = { ch =>
     val commonFields: Json = (ch match {
-      case own: OwnCommitment => Json.obj("hint" -> "cmtWithSecret".asJson, "r" -> own.randomness.asJson)
+      case own: OwnCommitment => Json.obj("hint" -> "cmtWithSecret".asJson, "secret" -> own.randomness.asJson)
       case _: RealCommitment => Json.obj("hint" -> "cmtReal".asJson)
       case _: SimulatedCommitment => Json.obj("hint" -> "cmtSimulated".asJson)
     }).deepMerge(Json.obj("pubkey" -> ch.image.asJson))
 
-    val cmt = ch.commitment match {
-      case cmtDlog: FirstDLogProverMessage  =>
-        Json.obj("type" -> "dlog".asJson, "a" -> cmtDlog.ecData.asJson)
-      case cmtDht: FirstDiffieHellmanTupleProverMessage =>
-        Json.obj("type" -> "dht".asJson, "a" -> cmtDht.a.asJson, "b" -> cmtDht.b.asJson)
-      case _ => ???
-    }
+    val cmt = ch.commitment.asJson
     commonFields.deepMerge(cmt)
+  }
+
+  implicit val commitmentHintDecoder: Decoder[CommitmentHint] = Decoder.instance { c =>
+    c.downField("hint").as[String].flatMap {
+      case h: String if h == "cmtWithSecret" =>
+        for {
+          secret <- c.downField("secret").as[BigInteger]
+          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          firstMsg <- firstProverMessageDecoder.tryDecode(c)
+        } yield OwnCommitment(pubkey, secret, firstMsg)
+      case _ =>
+        //only dlog is supported for now
+        Left(DecodingFailure("Unsupported hint value", List()))
+    }
   }
 }
 

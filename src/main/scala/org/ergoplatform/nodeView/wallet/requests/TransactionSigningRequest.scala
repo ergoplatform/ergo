@@ -48,15 +48,16 @@ case class TransactionSigningRequest(unsignedTx: UnsignedErgoTransaction,
 }
 
 object SigmaBooleanCodecs extends ApiCodecs {
+
   import io.circe.syntax._
 
   implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
     sigma =>
       val op = sigma.opCode.toByte.asJson
       sigma match {
-        case dlog: ProveDlog   => Map("op" -> op, "h" -> dlog.h.asJson).asJson
+        case dlog: ProveDlog => Map("op" -> op, "h" -> dlog.h.asJson).asJson
         case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
-        case tp: TrivialProp   => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
+        case tp: TrivialProp => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
         case and: CAND =>
           Map("op" -> op, "args" -> and.sigmaBooleans.map(_.asJson).asJson).asJson
         case or: COR =>
@@ -127,6 +128,16 @@ object HintCodecs extends ApiCodecs {
           pubkey <- c.downField("pubkey").as[SigmaBoolean]
           firstMsg <- firstProverMessageDecoder.tryDecode(c)
         } yield OwnCommitment(pubkey, secret, firstMsg)
+      case h: String if h == "cmtReal" =>
+        for {
+          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          firstMsg <- firstProverMessageDecoder.tryDecode(c)
+        } yield RealCommitment(pubkey, firstMsg)
+      case h: String if h == "cmtSimulated" =>
+        for {
+          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          firstMsg <- firstProverMessageDecoder.tryDecode(c)
+        } yield SimulatedCommitment(pubkey, firstMsg)
       case _ =>
         //only dlog is supported for now
         Left(DecodingFailure("Unsupported hint value", List()))

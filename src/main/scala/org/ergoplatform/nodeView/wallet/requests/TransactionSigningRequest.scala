@@ -10,9 +10,10 @@ import scorex.util.encode.Base16
 import sigmastate.Values.SigmaBoolean
 import sigmastate.{CAND, COR, CTHRESHOLD, SigSerializer, TrivialProp}
 import sigmastate.basics.DLogProtocol.{FirstDLogProverMessage, ProveDlog}
+import sigmastate.basics.VerifierMessage.Challenge
 import sigmastate.basics.{FirstDiffieHellmanTupleProverMessage, FirstProverMessage, ProveDHTuple}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{CommitmentHint, OwnCommitment, RealCommitment, RealSecretProof, SecretProven, SimulatedCommitment}
+import sigmastate.interpreter.{CommitmentHint, OwnCommitment, RealCommitment, RealSecretProof, SecretProven, SimulatedCommitment, SimulatedSecretProof}
 import sigmastate.serialization.OpCodes
 
 /**
@@ -156,6 +157,29 @@ object HintCodecs extends ApiCodecs {
       "pubkey" -> sp.image.asJson,
       "proof" -> SigSerializer.toBytes(sp.uncheckedTree).asJson
     )
+  }
+
+  implicit val secretProofDecoder: Decoder[SecretProven] = { c =>
+    c.downField("hint").as[String].flatMap {
+      case h: String if h == "proofReal" =>
+        for {
+          challenge <- c.downField("challenge").as[String]
+          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          proof <- c.downField("proof").as[String]
+        } yield RealSecretProof(pubkey,
+          Challenge @@ Base16.decode(challenge).get,
+          SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get)
+        )
+      case h: String if h == "proofSimulated" =>
+        for {
+          challenge <- c.downField("challenge").as[String]
+          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          proof <- c.downField("proof").as[String]
+        } yield SimulatedSecretProof(pubkey,
+          Challenge @@ Base16.decode(challenge).get,
+          SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get)
+        )
+    }
   }
 
 }

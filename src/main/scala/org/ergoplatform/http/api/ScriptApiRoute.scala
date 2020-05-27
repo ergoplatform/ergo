@@ -39,6 +39,8 @@ case class CryptoResult(value: SigmaBoolean, cost: Long)
 case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
+  import org.ergoplatform.nodeView.wallet.requests.SigmaBooleanCodecs._
+
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
   implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
   implicit val addressJsonEncoder: Encoder[ErgoAddress] = paymentRequestDecoder.addressEncoders.encoder
@@ -127,32 +129,6 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
   implicit val executeRequestDecoder: ExecuteRequestDecoder = new ExecuteRequestDecoder(ergoSettings)
-
-  implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
-    sigma =>
-      val op = sigma.opCode.toByte.asJson
-      sigma match {
-        case dlog: ProveDlog   => Map("op" -> op, "h" -> dlog.h.asJson).asJson
-        case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
-        case tp: TrivialProp   => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
-        case and: CAND =>
-          Map("op" -> op, "args" -> and.sigmaBooleans.map(_.asJson).asJson).asJson
-        case or: COR =>
-          Map("op" -> op, "args" -> or.sigmaBooleans.map(_.asJson).asJson).asJson
-        case th: CTHRESHOLD =>
-          Map("op" -> op, "args" -> th.sigmaBooleans.map(_.asJson).asJson).asJson
-      }
-  }
-
-  implicit val sigmaBooleanDecoder: Decoder[SigmaBoolean] = Decoder.instance { c =>
-    c.downField("op").as[Byte].flatMap {
-      case b: Byte if b == OpCodes.ProveDlogCode =>
-        c.downField("h").as[EcPointType].map(h => ProveDlog(h))
-      case _ =>
-        //only dlog is supported for now
-        Left(DecodingFailure("Unsupported value", List()))
-    }
-  }
 
   implicit val cryptResultEncoder: Encoder[CryptoResult] = {
     res =>

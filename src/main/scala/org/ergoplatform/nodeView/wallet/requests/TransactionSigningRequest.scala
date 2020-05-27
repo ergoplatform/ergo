@@ -1,14 +1,22 @@
 package org.ergoplatform.nodeView.wallet.requests
 
-import io.circe.{Decoder, Encoder, Json}
+import io.circe.{Decoder, DecodingFailure, Encoder, Json}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey, PrimitiveSecretKey}
+import sigmastate.Values.SigmaBoolean
+import sigmastate.{CAND, COR, CTHRESHOLD, TrivialProp}
+import sigmastate.basics.DLogProtocol.{FirstDLogProverMessage, ProveDlog}
+import sigmastate.basics.{FirstDiffieHellmanTupleProverMessage, ProveDHTuple}
+import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.interpreter.{CommitmentHint, OwnCommitment, RealCommitment, SimulatedCommitment}
+import sigmastate.serialization.OpCodes
 
 /**
   * Basic trait for externally provided hint for interpreter (to be used during script execution and signature
   * generation).
   */
+
 import sigmastate.interpreter.Hint
 
 /**
@@ -21,7 +29,7 @@ case class ExternalSecret(key: PrimitiveSecretKey) extends Hint
 /**
   * A request to sign a transaction
   *
-  * @param unsignedTx        - unsigned transaction
+  * @param unsignedTx - unsigned transaction
   * @param hints      - hints for interpreter (such as additional one-time secrets)
   * @param inputs     - hex-encoded input boxes bytes for the unsigned transaction (optional)
   * @param dataInputs - hex-encoded data-input boxes bytes for the unsigned transaction (optional)
@@ -37,6 +45,60 @@ case class TransactionSigningRequest(unsignedTx: UnsignedErgoTransaction,
 
 }
 
+object SigmaBooleanCodecs extends ApiCodecs {
+  import io.circe.syntax._
+
+  implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
+    sigma =>
+      val op = sigma.opCode.toByte.asJson
+      sigma match {
+        case dlog: ProveDlog   => Map("op" -> op, "h" -> dlog.h.asJson).asJson
+        case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
+        case tp: TrivialProp   => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
+        case and: CAND =>
+          Map("op" -> op, "args" -> and.sigmaBooleans.map(_.asJson).asJson).asJson
+        case or: COR =>
+          Map("op" -> op, "args" -> or.sigmaBooleans.map(_.asJson).asJson).asJson
+        case th: CTHRESHOLD =>
+          Map("op" -> op, "args" -> th.sigmaBooleans.map(_.asJson).asJson).asJson
+      }
+  }
+
+  implicit val sigmaBooleanDecoder: Decoder[SigmaBoolean] = Decoder.instance { c =>
+    c.downField("op").as[Byte].flatMap {
+      case b: Byte if b == OpCodes.ProveDlogCode =>
+        c.downField("h").as[EcPointType].map(h => ProveDlog(h))
+      case _ =>
+        //only dlog is supported for now
+        Left(DecodingFailure("Unsupported value", List()))
+    }
+  }
+
+}
+
+
+object HintCodecs extends ApiCodecs {
+
+  import SigmaBooleanCodecs._
+  import io.circe.syntax._
+
+  implicit val commitmentHintEncoder: Encoder[CommitmentHint] = { ch =>
+    val commonFields: Json = (ch match {
+      case own: OwnCommitment => Json.obj("hint" -> "cmtWithSecret".asJson, "r" -> own.randomness.asJson)
+      case _: RealCommitment => Json.obj("hint" -> "cmtReal".asJson)
+      case _: SimulatedCommitment => Json.obj("hint" -> "cmtSimulated".asJson)
+    }).deepMerge(Json.obj("pubkey" -> ch.image.asJson))
+
+    val cmt = ch.commitment match {
+      case cmtDlog: FirstDLogProverMessage  =>
+        Json.obj("type" -> "dlog".asJson, "a" -> cmtDlog.ecData.asJson)
+      case cmtDht: FirstDiffieHellmanTupleProverMessage =>
+        Json.obj("type" -> "dht".asJson, "a" -> cmtDht.a.asJson, "b" -> cmtDht.b.asJson)
+      case _ => ???
+    }
+    commonFields.deepMerge(cmt)
+  }
+}
 
 object TransactionSigningRequest extends ApiCodecs {
 

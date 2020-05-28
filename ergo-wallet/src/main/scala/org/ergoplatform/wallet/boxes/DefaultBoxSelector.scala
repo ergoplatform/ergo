@@ -19,7 +19,7 @@ object DefaultBoxSelector extends BoxSelector {
 
   import BoxSelector._
 
-  final case class NotEnoughCoinsError(message: String) extends BoxSelectionError
+  final case class NotEnoughErgsError(message: String) extends BoxSelectionError
 
   final case class NotEnoughTokensError(message: String) extends BoxSelectionError
 
@@ -81,7 +81,7 @@ object DefaultBoxSelector extends BoxSelector {
         Left(NotEnoughTokensError(s"not enough boxes to meet token needs $targetAssets (found only $currentAssets)"))
       }
     } else {
-      Left(NotEnoughCoinsError(s"not enough boxes to meet ERG needs $targetBalance (found only $currentBalance)"))
+      Left(NotEnoughErgsError(s"not enough boxes to meet ERG needs $targetBalance (found only $currentBalance)"))
     }
   }
 

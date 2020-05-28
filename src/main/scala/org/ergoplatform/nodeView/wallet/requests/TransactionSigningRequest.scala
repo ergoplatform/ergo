@@ -179,20 +179,24 @@ object HintCodecs extends ApiCodecs {
           Challenge @@ Base16.decode(challenge).get,
           SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get)
         )
+      case _ =>
+        //only dlog is supported for now
+        Left(DecodingFailure("Unsupported hint value", List()))
     }
   }
 
-  implicit val hintEncoder: Encoder[Hint] = { h =>
-    h match {
-      case cmt: CommitmentHint => cmt.asJson
-      case proof: SecretProven => proof.asJson
-      case _ => ???
-    }
+  implicit val hintEncoder: Encoder[Hint] = {
+    case cmt: CommitmentHint => cmt.asJson
+    case proof: SecretProven => proof.asJson
+    case _ => ???
   }
 
- // implicit val hintDecoder: Decoder[Hint] = { c =>
-
- // }
+  implicit val hintDecoder: Decoder[Hint] = { cursor =>
+    Seq(commitmentHintDecoder, secretProofDecoder)
+      .map(_.apply(cursor))
+      .find(_.isRight)
+      .getOrElse(Left(DecodingFailure("Can not find suitable decoder", cursor.history)))
+  }
 
 }
 

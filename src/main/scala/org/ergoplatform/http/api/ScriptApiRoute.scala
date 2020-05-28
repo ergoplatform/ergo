@@ -177,7 +177,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     val ctx: ErgoLikeContext = null
     val idx = 0
 
-    interpreter.bagForMultisig(ctx, )
+   // interpreter.bagForMultisig(ctx, )
 
     ApiResponse(Map().asJson)
   }

@@ -5,7 +5,7 @@ import java.util
 
 import org.ergoplatform._
 import org.ergoplatform.validation.ValidationRules
-import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext, TransactionContext}
+import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
 import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, SecretKey}
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.{DLogInteractiveProver, ProveDlog}
@@ -77,32 +77,32 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     } else if (unsignedTx.dataInputs.length != dataBoxes.length) {
       Failure(new Exception("Not enough data boxes"))
     } else {
+
+      // Cost of transaction initialization: we should read and parse all inputs and data inputs,
+      // and also iterate through all outputs to check rules
+      val initialCost: Long = boxesToSpend.size * params.inputCost +
+        dataBoxes.size * params.dataInputCost +
+        unsignedTx.outputCandidates.size * params.outputCost
+
       boxesToSpend
         .zipWithIndex
-        .foldLeft(Try(IndexedSeq[Input]() -> 0L)) { case (inputsCostTry, (inputBox, boxIdx)) =>
+        .foldLeft(Try(IndexedSeq[Input]() -> initialCost)) { case (inputsCostTry, (inputBox, boxIdx)) =>
           val unsignedInput = unsignedTx.inputs(boxIdx)
           require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
 
           inputsCostTry.flatMap { case (ins, totalCost) =>
-
-            // Cost of transaction initialization: we should read and parse all inputs and data inputs,
-            // and also iterate through all outputs to check rules
-            val initialCost: Long = boxesToSpend.size * params.inputCost +
-              dataBoxes.size * params.dataInputCost +
-              unsignedTx.outputCandidates.size * params.outputCost
-
             val context = new ErgoLikeContext(
               ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
               stateContext.sigmaLastHeaders,
               stateContext.sigmaPreHeader,
               dataBoxes,
               boxesToSpend,
-              spendingTransaction,
-              selfIndex,
+              unsignedTx,
+              boxIdx.toShort,
               unsignedInput.extension,
               ValidationRules.currentSettings,
               params.maxBlockCost,
-              initialCost
+              totalCost
             )
 
             prove(inputBox.ergoTree, context, unsignedTx.messageToSign, hintsBag).flatMap { proverResult =>
@@ -114,7 +114,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
               }
             }
           }
-        }.map{ case (inputs, _) => new ErgoLikeTransaction(inputs, unsignedTx.dataInputs, unsignedTx.outputCandidates)}
+        }.map { case (inputs, _) => new ErgoLikeTransaction(inputs, unsignedTx.dataInputs, unsignedTx.outputCandidates) }
     }
   }
 }

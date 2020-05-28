@@ -26,7 +26,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   // Now these settings are hard-coded, however, they should be parameterized
   // https://github.com/ergoplatform/ergo/issues/856
   val maxInputs = 48
-  val optimalInputs = 5
+  val optimalInputs = 6
 
   val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs)
 

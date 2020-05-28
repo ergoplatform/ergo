@@ -177,10 +177,9 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     val ctx: ErgoLikeContext = null
     val idx = 0
 
-    //interpreter.bagForMultisig(ctx, )
+    interpreter.bagForMultisig(ctx, )
 
-    val (r, a) = ErgoProvingInterpreter.generateCommitmentFor(sigma)
-    ApiResponse(Map("r" -> r.asJson, "a" -> a.asInstanceOf[FirstDLogProverMessage].ecData.asJson).asJson)
+    ApiResponse(Map().asJson)
   }
 
 }

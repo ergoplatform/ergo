@@ -43,7 +43,7 @@ case class TransactionSigningRequest(unsignedTx: UnsignedErgoTransaction,
                                      hints: Seq[Hint],
                                      inputs: Option[Seq[String]],
                                      dataInputs: Option[Seq[String]],
-                                     fullDetalization: Boolean) {
+                                     fullDetalization: Boolean = false) {
 
   lazy val dlogs: Seq[DlogSecretKey] = hints.collect { case ExternalSecret(d: DlogSecretKey) => d }
 

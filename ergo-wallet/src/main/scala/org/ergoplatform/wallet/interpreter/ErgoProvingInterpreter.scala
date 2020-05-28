@@ -83,8 +83,6 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
           val unsignedInput = unsignedTx.inputs(boxIdx)
           require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
 
-          val transactionContext = TransactionContext(boxesToSpend, dataBoxes, unsignedTx, boxIdx.toShort)
-
           inputsCostTry.flatMap { case (ins, totalCost) =>
 
             // Cost of transaction initialization: we should read and parse all inputs and data inputs,
@@ -93,13 +91,14 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
               dataBoxes.size * params.dataInputCost +
               unsignedTx.outputCandidates.size * params.outputCost
 
-            val context = new ErgoLikeContext(ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
+            val context = new ErgoLikeContext(
+              ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
               stateContext.sigmaLastHeaders,
               stateContext.sigmaPreHeader,
-              transactionContext.dataBoxes,
-              transactionContext.boxesToSpend,
-              transactionContext.spendingTransaction,
-              transactionContext.selfIndex,
+              dataBoxes,
+              boxesToSpend,
+              spendingTransaction,
+              selfIndex,
               unsignedInput.extension,
               ValidationRules.currentSettings,
               params.maxBlockCost,

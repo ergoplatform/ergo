@@ -71,51 +71,53 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
            boxesToSpend: IndexedSeq[ErgoBox],
            dataBoxes: IndexedSeq[ErgoBox],
            stateContext: ErgoLikeStateContext): Try[ErgoLikeTransaction] = {
-    if (unsignedTx.inputs.length != boxesToSpend.length) Failure(new Exception("Not enough boxes to spend"))
-    else if (unsignedTx.dataInputs.length != dataBoxes.length) Failure(new Exception("Not enough data boxes"))
-    else boxesToSpend
-      .zipWithIndex
-      .foldLeft(Try(IndexedSeq[Input]() -> 0L)) { case (inputsCostTry, (inputBox, boxIdx)) =>
-        val unsignedInput = unsignedTx.inputs(boxIdx)
-        require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
 
-        val transactionContext = TransactionContext(boxesToSpend, dataBoxes, unsignedTx, boxIdx.toShort)
+    if (unsignedTx.inputs.length != boxesToSpend.length) {
+      Failure(new Exception("Not enough boxes to spend"))
+    } else if (unsignedTx.dataInputs.length != dataBoxes.length) {
+      Failure(new Exception("Not enough data boxes"))
+    } else {
+      boxesToSpend
+        .zipWithIndex
+        .foldLeft(Try(IndexedSeq[Input]() -> 0L)) { case (inputsCostTry, (inputBox, boxIdx)) =>
+          val unsignedInput = unsignedTx.inputs(boxIdx)
+          require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
 
-        inputsCostTry.flatMap { case (ins, totalCost) =>
+          val transactionContext = TransactionContext(boxesToSpend, dataBoxes, unsignedTx, boxIdx.toShort)
 
-          // Cost of transaction initialization: we should read and parse all inputs and data inputs,
-          // and also iterate through all outputs to check rules
-          val initialCost: Long = boxesToSpend.size * params.inputCost +
-            dataBoxes.size * params.dataInputCost +
-            unsignedTx.outputCandidates.size * params.outputCost
+          inputsCostTry.flatMap { case (ins, totalCost) =>
 
-          val context = new ErgoLikeContext(ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
-            stateContext.sigmaLastHeaders,
-            stateContext.sigmaPreHeader,
-            transactionContext.dataBoxes,
-            transactionContext.boxesToSpend,
-            transactionContext.spendingTransaction,
-            transactionContext.selfIndex,
-            unsignedInput.extension,
-            ValidationRules.currentSettings,
-            params.maxBlockCost,
-            initialCost
-          )
+            // Cost of transaction initialization: we should read and parse all inputs and data inputs,
+            // and also iterate through all outputs to check rules
+            val initialCost: Long = boxesToSpend.size * params.inputCost +
+              dataBoxes.size * params.dataInputCost +
+              unsignedTx.outputCandidates.size * params.outputCost
 
-          prove(inputBox.ergoTree, context, unsignedTx.messageToSign, hintsBag).flatMap { proverResult =>
-            val newTC = totalCost + proverResult.cost
-            if (newTC > context.costLimit)
-              Failure(new Exception(s"Cost of transaction $unsignedTx exceeds limit ${context.costLimit}"))
-            else
-              Success((ins :+ Input(unsignedInput.boxId, proverResult)) -> newTC)
+            val context = new ErgoLikeContext(ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
+              stateContext.sigmaLastHeaders,
+              stateContext.sigmaPreHeader,
+              transactionContext.dataBoxes,
+              transactionContext.boxesToSpend,
+              transactionContext.spendingTransaction,
+              transactionContext.selfIndex,
+              unsignedInput.extension,
+              ValidationRules.currentSettings,
+              params.maxBlockCost,
+              initialCost
+            )
+
+            prove(inputBox.ergoTree, context, unsignedTx.messageToSign, hintsBag).flatMap { proverResult =>
+              val newTC = totalCost + proverResult.cost
+              if (newTC > context.costLimit) {
+                Failure(new Exception(s"Cost of transaction $unsignedTx exceeds limit ${context.costLimit}"))
+              } else {
+                Success((ins :+ Input(unsignedInput.boxId, proverResult)) -> newTC)
+              }
+            }
           }
-        }
-      }
-      .map { case (inputs, _) =>
-        new ErgoLikeTransaction(inputs, unsignedTx.dataInputs, unsignedTx.outputCandidates)
-      }
+        }.map{ case (inputs, _) => new ErgoLikeTransaction(inputs, unsignedTx.dataInputs, unsignedTx.outputCandidates)}
+    }
   }
-
 }
 
 object ErgoProvingInterpreter {

@@ -37,11 +37,13 @@ case class ExternalSecret(key: PrimitiveSecretKey) extends Hint
   * @param hints      - hints for interpreter (such as additional one-time secrets)
   * @param inputs     - hex-encoded input boxes bytes for the unsigned transaction (optional)
   * @param dataInputs - hex-encoded data-input boxes bytes for the unsigned transaction (optional)
+  * @param fullDetalization - whether the response should provide boxes used as well as execution context
   */
 case class TransactionSigningRequest(unsignedTx: UnsignedErgoTransaction,
                                      hints: Seq[Hint],
                                      inputs: Option[Seq[String]],
-                                     dataInputs: Option[Seq[String]]) {
+                                     dataInputs: Option[Seq[String]],
+                                     fullDetalization: Boolean) {
 
   lazy val dlogs: Seq[DlogSecretKey] = hints.collect { case ExternalSecret(d: DlogSecretKey) => d }
 

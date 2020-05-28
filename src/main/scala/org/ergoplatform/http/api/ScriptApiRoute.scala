@@ -7,14 +7,15 @@ import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
 import io.circe.generic.auto._
 import io.circe.syntax._
-import io.circe.{Decoder, DecodingFailure, Encoder, HCursor, Json}
+import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, LaunchParameters}
 import org.ergoplatform._
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -25,9 +26,8 @@ import sigmastate.basics.DLogProtocol.{FirstDLogProverMessage, ProveDlog}
 import sigmastate.basics.ProveDHTuple
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
 import sigmastate.interpreter.CryptoConstants
-import sigmastate.interpreter.CryptoConstants.{EcPointType, dlogGroup, secureRandom}
+import sigmastate.interpreter.CryptoConstants.secureRandom
 import sigmastate.lang.SigmaCompiler
-import sigmastate.serialization.OpCodes
 import special.sigma.AnyValue
 
 import scala.concurrent.Future
@@ -167,6 +167,18 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
   def generateCommitmentR: Route = (path("generateCommitment") & post & entity(as[SigmaBoolean])) { sigma =>
+    val (r, a) = ErgoProvingInterpreter.generateCommitmentFor(sigma)
+    ApiResponse(Map("r" -> r.asJson, "a" -> a.asInstanceOf[FirstDLogProverMessage].ecData.asJson).asJson)
+  }
+
+  def extractHintsR: Route = (path("extractHints") & post & entity(as[ErgoTransaction])) { tx =>
+    val interpreter = ErgoProvingInterpreter(IndexedSeq.empty, LaunchParameters) // no real parameters needed here
+
+    val ctx: ErgoLikeContext = null
+    val idx = 0
+
+    //interpreter.bagForMultisig(ctx, )
+
     val (r, a) = ErgoProvingInterpreter.generateCommitmentFor(sigma)
     ApiResponse(Map("r" -> r.asJson, "a" -> a.asInstanceOf[FirstDLogProverMessage].ecData.asJson).asJson)
   }

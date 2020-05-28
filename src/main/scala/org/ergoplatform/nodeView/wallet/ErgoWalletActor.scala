@@ -31,7 +31,7 @@ import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import sigmastate.interpreter.ContextExtension
+import sigmastate.interpreter.{ContextExtension, HintsBag}
 import sigmastate.utxo.CostTable
 
 import scala.util.{Failure, Random, Success, Try}
@@ -265,8 +265,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case GenerateTransaction(requests, inputsRaw, dataInputsRaw) =>
       sender() ! generateTransactionWithOutputs(requests, inputsRaw, dataInputsRaw)
 
-    case SignTransaction(secrets, tx, boxesToSpend, dataBoxes) =>
-      sender() ! signTransaction(proverOpt, secrets, tx, boxesToSpend, dataBoxes, parameters, stateContext)
+    case SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes) =>
+      sender() ! signTransaction(proverOpt, tx, secrets, hints, boxesToSpend, dataBoxes, parameters, stateContext)
 
     case DeriveKey(encodedPath) =>
       withWalletLockHandler(sender()) {
@@ -661,8 +661,9 @@ object ErgoWalletActor {
                                        inputsRaw: Seq[String],
                                        dataInputsRaw: Seq[String])
 
-  final case class SignTransaction(secrets: Seq[ExternalSecret],
-                                   utx: UnsignedErgoTransaction,
+  final case class SignTransaction(utx: UnsignedErgoTransaction,
+                                   secrets: Seq[ExternalSecret],
+                                   hints: HintsBag,
                                    boxesToSpend: Seq[ErgoBox],
                                    dataBoxes: Seq[ErgoBox])
 
@@ -699,15 +700,16 @@ object ErgoWalletActor {
   case object GetFirstSecret
 
   def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
-                      secrets: Seq[ExternalSecret],
                       tx: UnsignedErgoTransaction,
+                      secrets: Seq[ExternalSecret],
+                      hints: HintsBag,
                       boxesToSpend: Seq[ErgoBox],
                       dataBoxes: Seq[ErgoBox],
                       parameters: Parameters,
                       stateContext: ErgoStateContext): Try[ErgoTransaction] = {
     val proverSecrets = proverOpt.map(_.secretKeys).getOrElse(Seq.empty)
     val secretsWrapped = secrets.map(_.key).toIndexedSeq
-    val secretsProver = ErgoProvingInterpreter(secretsWrapped ++ proverSecrets, parameters)
+    val secretsProver = ErgoProvingInterpreter(secretsWrapped ++ proverSecrets, parameters, hints)
     secretsProver
       .sign(tx, boxesToSpend.toIndexedSeq, dataBoxes.toIndexedSeq, stateContext)
       .map(ErgoTransaction.apply)

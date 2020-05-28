@@ -47,6 +47,8 @@ case class TransactionSigningRequest(unsignedTx: UnsignedErgoTransaction,
 
   lazy val dhts: Seq[DhtSecretKey] = hints.collect { case ExternalSecret(d: DhtSecretKey) => d }
 
+  lazy val hintsBag = HintsBag(hints)
+
 }
 
 object SigmaBooleanCodecs extends ApiCodecs {

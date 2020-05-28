@@ -166,6 +166,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     val tx = tsr.unsignedTx
     val secrets = (tsr.dlogs ++ tsr.dhts).map(ExternalSecret.apply)
 
+    val hints = tsr.hintsBag
+
     def signWithReaders(r: Readers): Future[Try[ErgoTransaction]] = {
       if (tsr.inputs.isDefined) {
         val boxesToSpend = tsr.inputs.get
@@ -174,7 +176,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
 
         if (boxesToSpend.size == tx.inputs.size && dataBoxes.size == tx.dataInputs.size) {
-          r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)
+          r.w.signTransaction(tx, secrets, hints, boxesToSpend, dataBoxes)
         } else {
           Future(Failure(new Exception("Can't parse input boxes provided")))
         }
@@ -185,7 +187,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
             val utxosWithUnconfirmed = utxoSet.withTransactions(mempool.getAll)
             val boxesToSpend = tx.inputs.map(d => utxosWithUnconfirmed.boxById(d.boxId).get)
             val dataBoxes = tx.dataInputs.map(d => utxosWithUnconfirmed.boxById(d.boxId).get)
-            r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)
+            r.w.signTransaction(tx, secrets, hints, boxesToSpend, dataBoxes)
           case _ => Future(Failure(new Exception("No input boxes provided, and no UTXO set to read them from")))
         }
       }

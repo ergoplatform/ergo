@@ -17,6 +17,7 @@ import org.ergoplatform.{ErgoAddress, P2PKAddress}
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.interpreter.HintsBag
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -89,10 +90,11 @@ trait ErgoWalletReader extends VaultReader {
                           dataInputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
     (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw)).mapTo[Try[ErgoTransaction]]
 
-  def signTransaction(secrets: Seq[ExternalSecret],
-                      tx: UnsignedErgoTransaction,
+  def signTransaction(tx: UnsignedErgoTransaction,
+                      secrets: Seq[ExternalSecret],
+                      hints: HintsBag,
                       boxesToSpend: Seq[ErgoBox],
                       dataBoxes: Seq[ErgoBox]): Future[Try[ErgoTransaction]] =
-    (walletActor ? SignTransaction(secrets, tx, boxesToSpend, dataBoxes)).mapTo[Try[ErgoTransaction]]
+    (walletActor ? SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes)).mapTo[Try[ErgoTransaction]]
 
 }

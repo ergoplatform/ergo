@@ -13,7 +13,7 @@ import sigmastate.basics.DLogProtocol.{FirstDLogProverMessage, ProveDlog}
 import sigmastate.basics.VerifierMessage.Challenge
 import sigmastate.basics.{FirstDiffieHellmanTupleProverMessage, FirstProverMessage, ProveDHTuple}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{CommitmentHint, OwnCommitment, RealCommitment, RealSecretProof, SecretProven, SimulatedCommitment, SimulatedSecretProof}
+import sigmastate.interpreter._
 import sigmastate.serialization.OpCodes
 
 /**
@@ -181,6 +181,18 @@ object HintCodecs extends ApiCodecs {
         )
     }
   }
+
+  implicit val hintEncoder: Encoder[Hint] = { h =>
+    h match {
+      case cmt: CommitmentHint => cmt.asJson
+      case proof: SecretProven => proof.asJson
+      case _ => ???
+    }
+  }
+
+ // implicit val hintDecoder: Decoder[Hint] = { c =>
+
+ // }
 
 }
 

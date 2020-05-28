@@ -16,7 +16,7 @@ import scala.collection.mutable
   * Say, the selector is given boxes denoted by their values (1,2,3,4,...10). Then the selector is working as follows:
   *
   * 1) the selector first picking up boxes in given order (1,2,3,4,...) by using DefaultBoxSelector
-  * 2) if number of inputs exceeds the limit, the selector is sorting remaining boxes(actually, only 10*maximum inputs of them) by value in descending order and replaces small-value boxes in the inputs by big-value from the tail (1,2,3,4 => 10)
+  * 2) if number of inputs exceeds the limit, the selector is sorting remaining boxes(actually, only 10*maximum boxes) by value in descending order and replaces small-value boxes in the inputs by big-value from the tail (1,2,3,4 => 10)
   * 3) if the number of inputs still exceeds the limit, the selector is trying to throw away the dust if possible. E.g. if inputs are (100, 200, 1, 2, 1000), target value is 1300 and maximum number of inputs is 3, the selector kicks out (1, 2)
   * 4) if number of inputs after the previous steps is below optimal, the selector is trying to append the dust, by sorting remaining boxes in ascending order and appending them till optimal number of inputs.
   *
@@ -46,20 +46,27 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
                                           filterFn: T => Boolean,
                                           targetBalance: Long,
                                           targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
-
+    // First picking up boxes in given order (1,2,3,4,...) by using DefaultBoxSelector
     DefaultBoxSelector.select(inputBoxes, filterFn, targetBalance, targetAssets).flatMapRight { initialSelection =>
       val tail = inputBoxes.take(maxInputs * ScanDepthFactor).filter(filterFn).toSeq
+      // if number of inputs exceeds the limit, the selector is sorting remaining boxes(actually, only 10*maximum
+      // boxes) by value in descending order and replaces small-value boxes in the inputs by big-value from the tail (1,2,3,4 => 10)
       (if (initialSelection.boxes.length > maxInputs) {
         replace(initialSelection, tail, targetBalance, targetAssets)
       } else {
         Right(initialSelection)
       }).flatMapRight { afterReplacement =>
+        // if the number of inputs still exceeds the limit, the selector is trying to throw away the dust if possible.
+        // E.g. if inputs are (100, 200, 1, 2, 1000), target value is 1300 and maximum number of inputs is 3,
+        // the selector kicks out (1, 2)
         if (afterReplacement.boxes.length > maxInputs) {
           compress(afterReplacement, targetBalance, targetAssets)
         } else {
           Right(afterReplacement)
         }
       }.flatMapRight { afterCompaction =>
+        // if number of inputs after the previous steps is below optimal, the selector is trying to append the dust,
+        // by sorting remaining boxes in ascending order and appending them till optimal number of inputs.
         if (afterCompaction.boxes.length > maxInputs) {
           Left(MaxInputsExceededError(s"${afterCompaction.boxes.length} boxes exceed max inputs in transaction ($maxInputs)"))
         } else if (afterCompaction.boxes.length < optimalInputs) {

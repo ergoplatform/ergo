@@ -33,7 +33,7 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
     select(Seq(uBox).toIterator, onChainFilter, 1, Map()).left.value shouldBe a [NotEnoughCoinsError]
 
     //no target asset in the input box
-    select(Seq(uBox).toIterator, noFilter, 1, Map(bytesToId(Array.fill(32)(0: Byte)) -> 1L)).left.value shouldBe 
+    select(Seq(uBox).toIterator, noFilter, 1, Map(bytesToId(Array.fill(32)(0: Byte)) -> 1L)).left.value shouldBe
       a [NotEnoughTokensError]
 
     //otherwise, everything is fine

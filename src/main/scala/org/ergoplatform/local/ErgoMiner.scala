@@ -407,6 +407,27 @@ object ErgoMiner extends ScorexLogging {
                                     externalVersion: ExternalCandidateBlock,
                                     txsToInclude: Seq[ErgoTransaction])
 
+  /**
+    * Transaction and its cost.
+    *
+    * Please note that the cost is context-dependent, thus do not store instances of
+    * this class for long time (and this class is used only in the block assembly).
+    *
+    * @param tx - a transaction
+    * @param cost - cost of the transaction
+    */
+  case class CostedTransaction(tx: ErgoTransaction, cost: Long) {
+    lazy val id: ModifierId = tx.id
+
+    override def equals(obj: Any): Boolean = obj match {
+      case c: CostedTransaction => c.id == id
+      case _ => false
+    }
+
+    override def hashCode(): Int = tx.hashCode()
+
+  }
+
   case class MandatoryTransactions(emissionTx: Option[CostedTransaction], userTxs: Seq[ErgoTransaction])
 
   object MandatoryTransactions {

@@ -13,7 +13,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header, HeaderWithoutPow, PoPowAlgos}
-import org.ergoplatform.modifiers.mempool.{CostedTransaction, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -341,16 +341,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, proposedUpdate, version)
     //only transactions valid from against the current utxo state we take from the mem pool
-    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules).map { tx =>
-      implicit val verifier: ErgoInterpreter = ErgoInterpreter(state.stateContext.currentParameters)
-      val cost = state.validateWithCost(tx, Some(upcomingContext), Int.MaxValue).get
-      tx -> cost
-    }
-
     val poolTxs = pool.getAllPrioritized
 
-    val costedEmissionTxOpt = emissionTxOpt.map { case (tx, cost) => CostedTransaction(tx, cost) }
-    val mt = MandatoryTransactions(costedEmissionTxOpt, mandatoryTransactions)
+    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules)
+    val mt = emissionTxOpt.toSeq ++ mandatoryTransactions
 
     val (txs, toEliminate) = ErgoMiner.collectTxs(minerPk,
       state.stateContext.currentParameters.maxBlockCost,
@@ -358,8 +352,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       maxTransactionComplexity,
       state,
       upcomingContext,
-      poolTxs,
-      mt)(state.stateContext.validationSettings)
+      mt ++ poolTxs)(state.stateContext.validationSettings)
 
     // remove transactions which turned out to be invalid
     if (toEliminate.nonEmpty) viewHolderRef ! EliminateTransactions(toEliminate)
@@ -374,7 +367,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         emissionTxOpt match {
           case Some(emissionTx) =>
             log.error("Failed to produce proofs for transactions, but emission box is found: ", t)
-            val fallbackTxs = Seq(emissionTx._1)
+            val fallbackTxs = Seq(emissionTx)
             state.proofsForTransactions(fallbackTxs).map { case (adProof, adDigest) =>
               CandidateBlock(bestHeaderOpt, version, nBits, adDigest, adProof, fallbackTxs, timestamp, extensionCandidate, votes)
             }
@@ -427,13 +420,6 @@ object ErgoMiner extends ScorexLogging {
     override def hashCode(): Int = tx.hashCode()
 
   }
-
-  case class MandatoryTransactions(emissionTx: Option[CostedTransaction], userTxs: Seq[ErgoTransaction])
-
-  object MandatoryTransactions {
-    def empty: MandatoryTransactions = MandatoryTransactions(None, Seq.empty)
-  }
-
 
   //TODO move ErgoMiner to mining package and make `collectTxs` and `fixTxsConflicts` private[mining]
 
@@ -509,8 +495,8 @@ object ErgoMiner extends ScorexLogging {
 
 
   /**
-    * Collects valid non-conflicting transactions from `mempoolTxsIn` and adds a transaction collecting fees from
-    * them to `minerPk`.
+    * Collects valid non-conflicting transactions from `mandatoryTxs` and then `mempoolTxsIn` and adds a transaction
+    * collecting fees from them to `minerPk`.
     *
     * Resulting transactions total cost does not exceed `maxBlockCost`, total size does not exceed `maxBlockSize`,
     * and the miner's transaction is correct.
@@ -523,8 +509,7 @@ object ErgoMiner extends ScorexLogging {
                  maxTransactionComplexity: Int,
                  us: UtxoStateReader,
                  upcomingContext: ErgoStateContext,
-                 mempoolTxsIn: Iterable[ErgoTransaction],
-                 mandatoryTxs: MandatoryTransactions)
+                 transactions: Iterable[ErgoTransaction])
                 (implicit vs: ValidationSettings): (Seq[ErgoTransaction], Seq[ModifierId]) = {
 
     @tailrec
@@ -551,8 +536,8 @@ object ErgoMiner extends ScorexLogging {
               case Success(costConsumed) =>
                 val newTxs = acc :+ CostedTransaction(tx, costConsumed)
                 val newBoxes = newTxs.flatMap(_.tx.outputs)
-                val emissionRules = stateWithTxs.constants.settings.chainSettings.emissionRules
 
+                val emissionRules = stateWithTxs.constants.settings.chainSettings.emissionRules
                 ErgoMiner.collectFees(stateWithTxs.stateContext.currentHeight, newTxs.map(_.tx), minerPk, emissionRules) match {
                   case Some(feeTx) =>
                     val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
@@ -587,7 +572,7 @@ object ErgoMiner extends ScorexLogging {
       }
     }
 
-    loop(mandatoryTxs.userTxs ++ mempoolTxsIn, mandatoryTxs.emissionTx.toSeq, None, Seq.empty)
+    loop(transactions, Seq.empty, None, Seq.empty)
   }
 
   //Checks that transaction "tx" is not spending outputs spent already by transactions "txs"

@@ -7,7 +7,7 @@ import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.{AutolykosSolution, ExternalCandidateBlock}
-import org.ergoplatform.modifiers.mempool.{CostedTransaction, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoScriptPredef, Pay2SAddress}

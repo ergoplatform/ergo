@@ -471,7 +471,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           } else {
             //inputs are to be selected by the wallet
             require(prover.hdPubKeys.nonEmpty, "No public keys in the prover to extract change address from")
-            val boxesToSpend = registry.readCertainUnspentBoxes ++ offChainRegistry.offChainBoxes
+            val boxesToSpend = (registry.readCertainUnspentBoxes ++ offChainRegistry.offChainBoxes).distinct
             (boxesToSpend.toIterator, walletFilter)
           }
 

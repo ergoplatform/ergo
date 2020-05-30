@@ -1006,9 +1006,36 @@ components:
           $ref: '#/components/schemas/Votes'
 
     MerkleProof:
+      type: object
+      description: Merkle proof for an array of bytes (which contains e.g. an identifier)
+      required:
+        - leaf
+        - levels
+      properties:
+        leaf:
+          type: string
+          description: Base16-encoded Merkle tree leaf bytes
+        levels:
+          type: array
+          items:
+            type: string
+            description: internal node with direction byte prepended
+            example: '018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337'
+          example: ['018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337']
 
-    ProofOfUpcomingTransaction:
 
+    ProofOfUpcomingTransactions:
+      type: object
+      description: Proof that a block corresponding to given header without PoW contains certain transactions
+      required:
+        - msgPreimage
+        - txProofs
+      properties:
+        msgPreimage:
+        txProofs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Timestamp'
 
     ExternalCandidateBlock:
       description: Candidate block info for external miner

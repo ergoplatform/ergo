@@ -14,7 +14,6 @@ import org.ergoplatform.{ErgoAddress, ErgoScriptPredef, Pay2SAddress}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import sigmastate.basics.DLogProtocol.ProveDlog
-
 import scala.concurrent.Future
 
 case class MiningApiRoute(miner: ActorRef,
@@ -45,7 +44,9 @@ case class MiningApiRoute(miner: ActorRef,
     * Get block candidate with transactions provided being included.
     * Useful for external miners when they want to insert certain transactions.
     */
-  def candidateWithTxsR: Route = (path("candidateWithTxs") & post & entity(as[Seq[ErgoTransaction]]) ) { txs =>
+  def candidateWithTxsR: Route = (path("candidateWithTxs")
+    & post & entity(as[Seq[ErgoTransaction]]) & withAuth) { txs =>
+
     val prepareCmd = ErgoMiner.PrepareCandidate(txs)
     val candidateF = (miner ? prepareCmd).mapTo[Future[ExternalCandidateBlock]].flatten
     ApiResponse(candidateF)

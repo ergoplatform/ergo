@@ -2,9 +2,10 @@ package org.ergoplatform.modifiers.mempool
 
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox._
-import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext, VotingData}
+import org.ergoplatform.SigmaConstants.MaxPropositionBytes
+import org.ergoplatform.nodeView.state.{VotingData, UpcomingStateContext, ErgoStateContext}
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
-import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txBoxSize}
+import org.ergoplatform.settings.ValidationRules.{txBoxSize, bsBlockTransactionsCost}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -12,13 +13,13 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
 import scalan.util.BenchmarkUtil
 import scorex.crypto.authds.ADKey
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.{Digest32, Blake2b256}
 import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
-import sigmastate.Values.{ByteArrayConstant, ByteConstant, IntConstant, LongArrayConstant, SigmaPropConstant}
+import sigmastate.Values.{SigmaPropConstant, ByteArrayConstant, IntConstant, ByteConstant, LongArrayConstant}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval._
-import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
+import sigmastate.interpreter.{ProverResult, ContextExtension, CryptoConstants}
 import sigmastate.utxo.CostTable
 
 import scala.util.{Random, Try}
@@ -363,6 +364,18 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     // transaction exceeds computations limit due to non-zero accumulated cost
     tx.statefulValidity(from, IndexedSeq(), sc, 1)(ErgoInterpreter(sc.currentParameters)) shouldBe 'failure
 
+  }
+
+  // TODO this test case can be removed together with AOT costing code.
+  // This tests support transaction validation refactoring caused by AOT -> JIT switching
+  // They are here to make sure the refactoring doesn't break consensus.
+  // If the test fails, then something is definitely wrong with the refactoring.
+  // Otherwise, no guarantees.
+  property("validation refactoring") {
+    // Sized.SizePropositionBytesMax will be removed from Sigma and MaxPropositionBytes.value will be redefined
+    // the concrete value should be preserved
+    MaxPropositionBytes.value shouldBe 4096
+    Sized.SizePropositionBytesMax.dataSize.toInt shouldBe MaxPropositionBytes.value
   }
 
   private def modifyValue(boxCandidate: ErgoBoxCandidate, delta: Long): ErgoBoxCandidate = {

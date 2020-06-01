@@ -132,11 +132,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       multiplyExact(dataBoxes.size, stateContext.currentParameters.dataInputCost),
       multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost),
     )
-    val maxCost = stateContext.currentParameters.maxBlockCost
+    val maxBlockCost = stateContext.currentParameters.maxBlockCost
 
     ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big
-      .validate(bsBlockTransactionsCost, maxCost >= addExact(initialCost, accumulatedCost), s"$id: initial cost")
+      .validate(bsBlockTransactionsCost, maxBlockCost >= addExact(initialCost, accumulatedCost), s"$id: initial cost")
       // Starting validation
       .payload(initialCost)
       // Perform cheap checks first
@@ -144,12 +144,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txPositiveAssets, outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)), s"$id: ${outputCandidates.map(_.additionalTokens)}")
       // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) =>
-      validationState
-        .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}")
-        .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out")
-        .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
-        .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
-    }
+        val minErgs = BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)
+        validationState
+          .validate(txDust, out.value >= minErgs, s"$id, output ${Algos.encode(out.id)}, ${out.value} >= $minErgs")
+          .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out")
+          .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
+          .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
+      }
       // Just to be sure, check that all the input boxes to spend (and to read) are presented.
       // Normally, this check should always pass, if the client is implemented properly
       // so it is not part of the protocol really.
@@ -174,7 +175,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
             validation
               // Check that transaction is not too costly considering all the assets
-              .validate(bsBlockTransactionsCost, maxCost >= newCost, s"$id: assets cost")
+              .validate(bsBlockTransactionsCost, maxBlockCost >= newCost, s"$id: assets cost")
               .validateSeq(outAssets) {
                 case (validationState, (outAssetId, outAmount)) =>
                   val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
@@ -193,30 +194,31 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
       // Check inputs, the most expensive check usually, so done last.
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
-      val currentTxCost = validation.result.payload.get
+        val currentTxCost = validation.result.payload.get
 
-      val input = inputs(idx)
-      val proof = input.spendingProof
-      val proverExtension = proof.extension
-      val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
-      val ctx = new ErgoContext(stateContext, transactionContext, proverExtension, maxCost - addExact(currentTxCost, accumulatedCost), 0)
+        val input = inputs(idx)
+        val proof = input.spendingProof
+        val proverExtension = proof.extension
+        val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
+        val remainingLimit = maxBlockCost - addExact(currentTxCost, accumulatedCost)
+        val ctx = new ErgoContext(stateContext, transactionContext, proverExtension, remainingLimit, 0)
 
-      val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
-      costTry.recover { case t =>
-        log.debug(s"Tx verification failed: ${t.getMessage}")
+        val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
+        costTry.recover { case t =>
+          log.debug(s"Tx verification failed: ${t.getMessage}")
+        }
+
+        lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, maxBlockCost + 1))
+
+        validation
+          // Just in case, should always be true if client implementation is correct.
+          .validateEquals(txBoxToSpend, box.id, input.boxId)
+          // Check whether input box script interpreter raised exception
+          .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
+          // Check that cost of the transaction after checking the input becomes too big
+          .validate(bsBlockTransactionsCost, maxBlockCost >= addExact(currentTxCost, accumulatedCost, scriptCost), s"$id: cost exceeds limit after input #$idx")
+          .map(c => addExact(c, scriptCost))
       }
-
-      lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
-
-      validation
-        // Just in case, should always be true if client implementation is correct.
-        .validateEquals(txBoxToSpend, box.id, input.boxId)
-        // Check whether input box script interpreter raised exception
-        .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
-        // Check that cost of the transaction after checking the input becomes too big
-        .validate(bsBlockTransactionsCost, maxCost >= addExact(currentTxCost, accumulatedCost, scriptCost), s"$id: cost exceeds limit after input #$idx")
-        .map(c => addExact(c, scriptCost))
-    }
   }
 
   override type M = ErgoTransaction

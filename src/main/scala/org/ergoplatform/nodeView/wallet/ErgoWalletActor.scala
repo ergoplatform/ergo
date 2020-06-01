@@ -19,7 +19,7 @@ import org.ergoplatform.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.protocol.context.TransactionContext
+import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.core.VersionTag
@@ -342,8 +342,10 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
     )
 
-    val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx, selfIndex = 0)
-    val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty,
+    val inputContext = InputContext(0, ContextExtension.empty)
+
+    val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx)
+    val context = new ErgoContext(stateContext, transactionContext, inputContext,
       parameters.maxBlockCost, CostTable.interpreterInitCost)
 
     proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined

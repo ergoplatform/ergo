@@ -10,7 +10,8 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
-import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings._
@@ -23,7 +24,7 @@ import org.ergoplatform.wallet.protocol.context.TransactionContext
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.core.VersionTag
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
@@ -63,6 +64,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private val parameters: Parameters = LaunchParameters
 
+  //todo: temporary 3.2.x collection
+  private var stateReader: Option[ErgoStateReader] = None
+  private var mempoolReader: Option[ErgoMemPoolReader] = None
+  private var unspentBoxes = Seq[TrackedBox]()
+
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
   // to the wallet (by executing testing transactions against them).
   // The state context is being updated by listening to state updates.
@@ -72,6 +78,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
+    context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
     walletSettings.testMnemonic match {
       case Some(testMnemonic) =>
         log.warn("Initializing wallet in test mode. Switch to secure mode for production usage.")
@@ -99,6 +106,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     walletInit orElse
       walletCommands orElse
       onStateChanged orElse
+      onMempoolChanged orElse
       scanLogic orElse
       readers
 
@@ -181,9 +189,33 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! trackedAddresses.toIndexedSeq
   }
 
+  private def paranoidClear() = {
+    (mempoolReader, stateReader) match {
+      case (Some(mr), Some(sr)) =>
+        sr match {
+          case u: UtxoStateReader =>
+            val utxo = u.withTransactions(mr.getAll)
+            val boxesToFilter = (registry.readCertainUnspentBoxes ++ offChainRegistry.offChainBoxes).distinct
+            unspentBoxes = boxesToFilter.filter { tb =>
+              val bid = tb.box.id
+              utxo.boxById(bid).isDefined
+            }
+          case _ =>
+        }
+      case (_, _) =>
+    }
+  }
+
+  private def onMempoolChanged: Receive = {
+    case ChangedMempool(mr: ErgoMemPoolReader@unchecked) =>
+      mempoolReader = Some(mr)
+  }
+
   private def onStateChanged: Receive = {
     case ChangedState(s: ErgoStateReader@unchecked) =>
       storage.updateStateContext(s.stateContext)
+      stateReader = Some(s)
+      paranoidClear()
   }
 
   //Secret is set in form of keystore file of testMnemonic in the config
@@ -321,7 +353,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     * This filter is used when the wallet is going through its boxes to assemble a transaction.
     */
   private val walletFilter: FilterFn = (trackedBox: TrackedBox) => {
-    if(trackedBox.chainStatus.onChain) {
+    if (trackedBox.chainStatus.onChain) {
       offChainRegistry.onChainBalances.exists(_.id == trackedBox.boxId)
     } else {
       true
@@ -429,13 +461,12 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   /**
     * Generates new transaction according to given requests using available or provided boxes.
     *
-    * @param requests - requests to transfer funds or to issue an asset
-    * @param inputsRaw - user-provided inputs. If empty then wallet is looking for inputs itself. If non-empty, then
-    *                  the wallet is not adding anything, thus the user in this case should take care about satisfying
-    *                  the (sum(inputs) == sum(outputs)) preservation rule for ergs.
+    * @param requests      - requests to transfer funds or to issue an asset
+    * @param inputsRaw     - user-provided inputs. If empty then wallet is looking for inputs itself. If non-empty, then
+    *                      the wallet is not adding anything, thus the user in this case should take care about satisfying
+    *                      the (sum(inputs) == sum(outputs)) preservation rule for ergs.
     * @param dataInputsRaw - user-provided data (read-only) inputs. Wallet is not able to provide data inputs
     *                      (if they are needed in order to spend the spendable inputs).
-    *
     * @return generated transaction or an error
     */
   private def generateTransactionWithOutputs(requests: Seq[TransactionGenerationRequest],
@@ -471,7 +502,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           } else {
             //inputs are to be selected by the wallet
             require(prover.hdPubKeys.nonEmpty, "No public keys in the prover to extract change address from")
-            val boxesToSpend = (registry.readCertainUnspentBoxes ++ offChainRegistry.offChainBoxes).distinct
+            val boxesToSpend = if (unspentBoxes.nonEmpty) {
+              unspentBoxes
+            } else {
+              (registry.readCertainUnspentBoxes ++ offChainRegistry.offChainBoxes).distinct
+            }
             (boxesToSpend.toIterator, walletFilter)
           }
 
@@ -531,7 +566,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                            outputs: Seq[(ModifierId, ErgoBox)],
                            txs: Seq[ErgoTransaction]): Unit = {
     // re-create interpreter in order to avoid IR context bloating.
-    proverOpt = proverOpt.map{ oldInterpreter =>
+    proverOpt = proverOpt.map { oldInterpreter =>
       new ErgoProvingInterpreter(oldInterpreter.secretKeys, parameters)(oldInterpreter.IR)
     }
     val prevUncertainBoxes = registry.readUncertainBoxes

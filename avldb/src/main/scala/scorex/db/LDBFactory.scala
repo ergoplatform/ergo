@@ -114,7 +114,7 @@ object LDBFactory extends ScorexLogging {
   private val memoryPoolSize = 512 * 1024
 
   def setLevelDBParams(factory: DBFactory): Unit = {
-    val pushMemoryPool = factory.getClass().getDeclaredMethod("pushMemoryPool", classOf[Int])
+    val pushMemoryPool = factory.getClass.getDeclaredMethod("pushMemoryPool", classOf[Int])
     pushMemoryPool.invoke(null, Integer.valueOf(memoryPoolSize))
   }
 

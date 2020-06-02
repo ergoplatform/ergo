@@ -7,6 +7,7 @@ import org.ergoplatform._
 import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
 import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, SecretKey}
+import sigmastate.Values
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.{DLogInteractiveProver, ProveDlog}
 import sigmastate.basics.{DiffieHellmanTupleInteractiveProver, FirstProverMessage, ProveDHTuple, SigmaProtocolPrivateInput}
@@ -64,14 +65,10 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   def withHints(hints: HintsBag): ErgoProvingInterpreter =
     new ErgoProvingInterpreter(secretKeys, params, hints)
 
-  /**
-    * @note requires `unsignedTx` and `boxesToSpend` have the same boxIds in the same order.
-    */
-  def sign(unsignedTx: UnsignedErgoLikeTransaction,
-           boxesToSpend: IndexedSeq[ErgoBox],
-           dataBoxes: IndexedSeq[ErgoBox],
-           stateContext: ErgoLikeStateContext): Try[ErgoLikeTransaction] = {
-
+  protected def signInputs(unsignedTx: UnsignedErgoLikeTransaction,
+                           boxesToSpend: IndexedSeq[ErgoBox],
+                           dataBoxes: IndexedSeq[ErgoBox],
+                           stateContext: ErgoLikeStateContext): Try[(IndexedSeq[Input], Long)] = {
     if (unsignedTx.inputs.length != boxesToSpend.length) {
       Failure(new Exception("Not enough boxes to spend"))
     } else if (unsignedTx.dataInputs.length != dataBoxes.length) {
@@ -114,9 +111,30 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
               }
             }
           }
-        }.map { case (inputs, _) => new ErgoLikeTransaction(inputs, unsignedTx.dataInputs, unsignedTx.outputCandidates) }
+        }
     }
   }
+
+  /**
+    * @note requires `unsignedTx` and `boxesToSpend` have the same boxIds in the same order.
+    */
+  def sign(unsignedTx: UnsignedErgoLikeTransaction,
+           boxesToSpend: IndexedSeq[ErgoBox],
+           dataBoxes: IndexedSeq[ErgoBox],
+           stateContext: ErgoLikeStateContext): Try[ErgoLikeTransaction] = {
+
+    val signedInputs: Try[(IndexedSeq[Input], Long)] = signInputs(unsignedTx, boxesToSpend, dataBoxes, stateContext)
+    signedInputs.map { case (inputs, _) =>
+      new ErgoLikeTransaction(inputs, unsignedTx.dataInputs, unsignedTx.outputCandidates)
+    }
+  }
+
+  def bagForTransaction(tx: ErgoLikeTransaction,
+                        realSecretsToExtract: Seq[SigmaBoolean],
+                        simulatedSecretsToExtract: Seq[SigmaBoolean]): HintsBag = {
+    ???
+  }
+
 }
 
 object ErgoProvingInterpreter {

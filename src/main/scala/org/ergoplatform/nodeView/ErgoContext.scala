@@ -24,5 +24,4 @@ class ErgoContext(val stateContext: ErgoStateContext,
     stateContext.validationSettings.sigmaSettings,
     costLimit,
     initCost
-  ) {
-}
+  )

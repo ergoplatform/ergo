@@ -4,15 +4,17 @@ import java.math.BigInteger
 import java.util
 
 import org.ergoplatform._
-import org.ergoplatform.validation.ValidationRules
+import org.ergoplatform.validation.{SigmaValidationSettings, ValidationRules}
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
 import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, SecretKey}
-import sigmastate.Values
+import sigmastate.AvlTreeData
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.{DLogInteractiveProver, ProveDlog}
 import sigmastate.basics.{DiffieHellmanTupleInteractiveProver, FirstProverMessage, ProveDHTuple, SigmaProtocolPrivateInput}
 import sigmastate.eval.{IRContext, RuntimeIRContext}
-import sigmastate.interpreter.{HintsBag, ProverInterpreter}
+import sigmastate.interpreter.{ContextExtension, HintsBag, ProverInterpreter}
+import special.collection.Coll
+import special.sigma.{Header, PreHeader}
 
 import scala.util.{Failure, Success, Try}
 
@@ -130,9 +132,33 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   }
 
   def bagForTransaction(tx: ErgoLikeTransaction,
+                        boxesToSpend: Seq[ErgoBox],
                         realSecretsToExtract: Seq[SigmaBoolean],
                         simulatedSecretsToExtract: Seq[SigmaBoolean]): HintsBag = {
-    ???
+    val augmentedInputs = tx.inputs.zip(boxesToSpend)
+    require(augmentedInputs.forall{case (input, box) => input.boxId.sameElements(box.id)}, "Wrong boxes")
+
+    augmentedInputs.foldLeft(HintsBag.empty){case (bag, (input, box)) =>
+      val exp = box.ergoTree
+      val proof = input.spendingProof.proof
+
+      val lastBlockUtxoRoot: AvlTreeData = ???
+      val headers: Coll[Header] = ???
+      val preHeader: PreHeader = ???
+      val dataBoxes: IndexedSeq[ErgoBox] = ???
+      val boxesToSpend: IndexedSeq[ErgoBox] = ???
+      val spendingTransaction: ErgoLikeTransactionTemplate[_ <: UnsignedInput] = ???
+      val selfIndex: Int = ???
+      val extension: ContextExtension = ???
+      val validationSettings: SigmaValidationSettings = ???
+      val costLimit: Long = ???
+      val initCost: Long = ???
+
+      val ctx: ErgoLikeContext = new ErgoLikeContext(lastBlockUtxoRoot, headers, preHeader, dataBoxes, boxesToSpend,
+        spendingTransaction, selfIndex, extension, validationSettings, costLimit, initCost)
+
+      bag ++ bagForMultisig(ctx, exp, proof, realSecretsToExtract, simulatedSecretsToExtract)
+    }
   }
 
 }

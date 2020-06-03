@@ -97,4 +97,9 @@ trait ErgoWalletReader extends VaultReader {
                       dataBoxes: Seq[ErgoBox]): Future[Try[ErgoTransaction]] =
     (walletActor ? SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes)).mapTo[Try[ErgoTransaction]]
 
+  def extractHints(tx: ErgoTransaction,
+                   boxesToSpend: IndexedSeq[ErgoBox],
+                   dataBoxes: IndexedSeq[ErgoBox]): Future[HintsBag] =
+    (walletActor ? ExtractHints(tx, boxesToSpend, dataBoxes)).mapTo[HintsBag]
+
 }

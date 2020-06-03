@@ -268,6 +268,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes) =>
       sender() ! signTransaction(proverOpt, tx, secrets, hints, boxesToSpend, dataBoxes, parameters, stateContext)
 
+    case ExtractHints(tx, boxesToSpend, dataBoxes) =>
+      val prover = proverOpt.getOrElse(ErgoProvingInterpreter(IndexedSeq.empty, LaunchParameters))
+      val bag = prover.bagForTransaction(tx, boxesToSpend, dataBoxes, stateContext, Seq(), Seq())
+      sender() ! bag
+
     case DeriveKey(encodedPath) =>
       withWalletLockHandler(sender()) {
         _.secret.foreach { rootSecret =>
@@ -712,6 +717,10 @@ object ErgoWalletActor {
   case object ReadTrackedAddresses
 
   case object GetFirstSecret
+
+  case class ExtractHints(tx: ErgoTransaction, boxesToSpend: IndexedSeq[ErgoBox], dataBoxes: IndexedSeq[ErgoBox])
+
+  case class ExtractHintsResult()
 
   def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
                       tx: UnsignedErgoTransaction,

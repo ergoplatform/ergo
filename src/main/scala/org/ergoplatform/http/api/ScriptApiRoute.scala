@@ -15,6 +15,7 @@ import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.{ErgoSettings, LaunchParameters}
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
@@ -53,7 +54,8 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       p2sAddressR ~
       addressToTreeR ~
       executeWithContextR ~
-      generateCommitmentR
+      generateCommitmentR ~
+      extractHintsR
     }
   }
 
@@ -172,14 +174,16 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
   def extractHintsR: Route = (path("extractHints") & post & entity(as[ErgoTransaction])) { tx =>
-    val interpreter = ErgoProvingInterpreter(IndexedSeq.empty, LaunchParameters) // no real parameters needed here
-
-    val ctx: ErgoLikeContext = null
-    val idx = 0
-
-   // interpreter.bagForMultisig(ctx, )
-
-    ApiResponse(Map().asJson)
+    onSuccess((readersHolder ? GetReaders).mapTo[Readers].flatMap{readers =>
+      val (boxesToSpend, dataBoxes) = readers.s match {
+        case utxo: UtxoStateReader =>
+          val bts = tx.inputs.map(_.boxId).flatMap(utxo.boxById)
+          val db = tx.dataInputs.map(_.boxId).flatMap(utxo.boxById)
+          (bts, db)
+        case _ => ???
+      }
+      readers.w.extractHints(tx, boxesToSpend, dataBoxes)
+    })(_ => ApiResponse(Map().asJson))
   }
 
 }

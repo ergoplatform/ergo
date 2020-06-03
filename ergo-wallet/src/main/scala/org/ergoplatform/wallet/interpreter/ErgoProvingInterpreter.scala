@@ -132,27 +132,27 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   }
 
   def bagForTransaction(tx: ErgoLikeTransaction,
-                        boxesToSpend: Seq[ErgoBox],
+                        boxesToSpend: IndexedSeq[ErgoBox],
+                        dataBoxes: IndexedSeq[ErgoBox],
+                        stateContext: ErgoLikeStateContext,
                         realSecretsToExtract: Seq[SigmaBoolean],
                         simulatedSecretsToExtract: Seq[SigmaBoolean]): HintsBag = {
-    val augmentedInputs = tx.inputs.zip(boxesToSpend)
-    require(augmentedInputs.forall{case (input, box) => input.boxId.sameElements(box.id)}, "Wrong boxes")
+    val augmentedInputs = tx.inputs.zipWithIndex.zip(boxesToSpend)
+    require(augmentedInputs.forall{case ((input, _), box) => input.boxId.sameElements(box.id)}, "Wrong boxes")
 
-    augmentedInputs.foldLeft(HintsBag.empty){case (bag, (input, box)) =>
+    augmentedInputs.foldLeft(HintsBag.empty){case (bag, ((input, idx), box)) =>
       val exp = box.ergoTree
       val proof = input.spendingProof.proof
 
-      val lastBlockUtxoRoot: AvlTreeData = ???
-      val headers: Coll[Header] = ???
-      val preHeader: PreHeader = ???
-      val dataBoxes: IndexedSeq[ErgoBox] = ???
-      val boxesToSpend: IndexedSeq[ErgoBox] = ???
-      val spendingTransaction: ErgoLikeTransactionTemplate[_ <: UnsignedInput] = ???
-      val selfIndex: Int = ???
-      val extension: ContextExtension = ???
-      val validationSettings: SigmaValidationSettings = ???
-      val costLimit: Long = ???
-      val initCost: Long = ???
+      val lastBlockUtxoRoot: AvlTreeData = ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest)
+      val headers: Coll[Header] = stateContext.sigmaLastHeaders
+      val preHeader: PreHeader = stateContext.sigmaPreHeader
+      val spendingTransaction = tx
+      val selfIndex: Int = idx
+      val extension: ContextExtension = input.spendingProof.extension
+      val validationSettings: SigmaValidationSettings = ValidationRules.currentSettings
+      val costLimit: Long = params.maxBlockCost
+      val initCost: Long = 0
 
       val ctx: ErgoLikeContext = new ErgoLikeContext(lastBlockUtxoRoot, headers, preHeader, dataBoxes, boxesToSpend,
         spendingTransaction, selfIndex, extension, validationSettings, costLimit, initCost)

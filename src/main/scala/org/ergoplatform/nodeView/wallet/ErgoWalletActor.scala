@@ -28,7 +28,7 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
-import sigmastate.Values.{ByteArrayConstant, IntConstant}
+import sigmastate.Values.{ByteArrayConstant, IntConstant, SigmaBoolean}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.{ContextExtension, HintsBag}
@@ -268,9 +268,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes) =>
       sender() ! signTransaction(proverOpt, tx, secrets, hints, boxesToSpend, dataBoxes, parameters, stateContext)
 
-    case ExtractHints(tx, boxesToSpend, dataBoxes) =>
+    case ExtractHints(tx, boxesToSpend, dataBoxes, real, simulated) =>
       val prover = proverOpt.getOrElse(ErgoProvingInterpreter(IndexedSeq.empty, LaunchParameters))
-      val bag = prover.bagForTransaction(tx, boxesToSpend, dataBoxes, stateContext, Seq(), Seq())
+      val bag = prover.bagForTransaction(tx, boxesToSpend, dataBoxes, stateContext, real, simulated)
       sender() ! bag
 
     case DeriveKey(encodedPath) =>
@@ -718,7 +718,8 @@ object ErgoWalletActor {
 
   case object GetFirstSecret
 
-  case class ExtractHints(tx: ErgoTransaction, boxesToSpend: IndexedSeq[ErgoBox], dataBoxes: IndexedSeq[ErgoBox])
+  case class ExtractHints(tx: ErgoTransaction, boxesToSpend: IndexedSeq[ErgoBox], dataBoxes: IndexedSeq[ErgoBox],
+                          real: Seq[SigmaBoolean], simulated: Seq[SigmaBoolean])
 
   case class ExtractHintsResult()
 

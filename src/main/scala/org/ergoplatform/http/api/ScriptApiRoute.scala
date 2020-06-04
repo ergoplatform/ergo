@@ -1,6 +1,5 @@
 package org.ergoplatform.http.api
 
-import java.math.BigInteger
 
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
@@ -8,15 +7,14 @@ import akka.pattern.ask
 import io.circe.generic.auto._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
-import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
-import org.ergoplatform.settings.{ErgoSettings, LaunchParameters}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.UtxoStateReader
-import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -24,10 +22,7 @@ import scorex.util.encode.Base16
 import sigmastate.Values.{ErgoTree, SigmaBoolean}
 import sigmastate._
 import sigmastate.basics.DLogProtocol.{FirstDLogProverMessage, ProveDlog}
-import sigmastate.basics.ProveDHTuple
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
-import sigmastate.interpreter.CryptoConstants
-import sigmastate.interpreter.CryptoConstants.secureRandom
 import sigmastate.lang.SigmaCompiler
 import special.sigma.AnyValue
 
@@ -41,6 +36,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   import org.ergoplatform.nodeView.wallet.requests.SigmaBooleanCodecs._
+  import HintExtractionRequest._
 
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
   implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
@@ -173,7 +169,9 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     ApiResponse(Map("r" -> r.asJson, "a" -> a.asInstanceOf[FirstDLogProverMessage].ecData.asJson).asJson)
   }
 
-  def extractHintsR: Route = (path("extractHints") & post & entity(as[ErgoTransaction])) { tx =>
+  def extractHintsR: Route = (path("extractHints") & post & entity(as[HintExtractionRequest])) { her =>
+    val tx = her.tx
+
     onSuccess((readersHolder ? GetReaders).mapTo[Readers].flatMap{readers =>
       val (boxesToSpend, dataBoxes) = readers.s match {
         case utxo: UtxoStateReader =>
@@ -182,38 +180,34 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
           (bts, db)
         case _ => ???
       }
-      readers.w.extractHints(tx, boxesToSpend, dataBoxes)
+      readers.w.extractHints(tx, boxesToSpend, dataBoxes, her.real, her.simulated)
     })(_ => ApiResponse(Map().asJson))
   }
 
 }
 
+case class HintExtractionRequest(tx: ErgoTransaction, real: Seq[SigmaBoolean], simulated: Seq[SigmaBoolean])
 
-object Generate extends App with ApiCodecs {
-  import CryptoConstants.dlogGroup
+object HintExtractionRequest extends ApiCodecs {
 
-  implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
-    sigma =>
-      val op = Base16.encode(Array(sigma.opCode.toByte)).asJson
-      sigma match {
-        case dlog: ProveDlog   => Map("op" -> op, "h" -> dlog.h.asJson).asJson
-        case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
-        case tp: TrivialProp   => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
-        case and: CAND =>
-          Map("op" -> op, "args" -> and.sigmaBooleans.map(_.asJson).asJson).asJson
-        case or: COR =>
-          Map("op" -> op, "args" -> or.sigmaBooleans.map(_.asJson).asJson).asJson
-        case th: CTHRESHOLD =>
-          Map("op" -> op, "args" -> th.sigmaBooleans.map(_.asJson).asJson).asJson
-      }
+  import org.ergoplatform.nodeView.wallet.requests.SigmaBooleanCodecs.{sigmaBooleanEncoder, sigmaBooleanDecoder}
+
+  //cd0354efc32652cad6cf1231be987afa29a686af30b5735995e3ce51339c4d0ca380 , cd is op, 03... is ec point
+
+  implicit val hintExtractionRequestEncoder: Encoder[HintExtractionRequest] = {hr =>
+    Map(
+      "transaction" -> hr.tx.asJson,
+      "real" -> hr.real.asJson,
+      "simulated" -> hr.simulated.asJson
+    ).asJson
   }
 
-  val qMinusOne = dlogGroup.order.subtract(BigInteger.ONE)
-  val r = BigIntegers.createRandomInRange(BigInteger.ZERO, qMinusOne, secureRandom)
-  val a = dlogGroup.exponentiate(dlogGroup.generator, r)
-  r -> FirstDLogProverMessage(a)
+  implicit val hintExtractionRequestDecoder: Decoder[HintExtractionRequest] = {cursor =>
+    for {
+      tx <- cursor.downField("transaction").as[ErgoTransaction]
+      real <- cursor.downField("real").as[Seq[SigmaBoolean]]
+      simulated <- cursor.downField("simulated").as[Seq[SigmaBoolean]]
+    } yield HintExtractionRequest(tx, real, simulated)
+  }
 
-  println(sigmaBooleanEncoder.apply(ProveDlog(a)))
-  println(sigmaBooleanEncoder.apply(CAND(Seq(ProveDlog(a), ProveDlog(a)))))
-  println(sigmaBooleanEncoder.apply(CAND(Seq(ProveDlog(a), ProveDlog(a), ProveDlog(a)))))
 }

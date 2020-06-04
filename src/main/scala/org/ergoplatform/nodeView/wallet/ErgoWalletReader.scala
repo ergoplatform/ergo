@@ -16,6 +16,7 @@ import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.{ErgoAddress, P2PKAddress}
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
+import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.HintsBag
 
@@ -99,7 +100,9 @@ trait ErgoWalletReader extends VaultReader {
 
   def extractHints(tx: ErgoTransaction,
                    boxesToSpend: IndexedSeq[ErgoBox],
-                   dataBoxes: IndexedSeq[ErgoBox]): Future[HintsBag] =
-    (walletActor ? ExtractHints(tx, boxesToSpend, dataBoxes)).mapTo[HintsBag]
+                   dataBoxes: IndexedSeq[ErgoBox],
+                   real: Seq[SigmaBoolean],
+                   simulated: Seq[SigmaBoolean]): Future[HintsBag] =
+    (walletActor ? ExtractHints(tx, boxesToSpend, dataBoxes, real, simulated)).mapTo[HintsBag]
 
 }

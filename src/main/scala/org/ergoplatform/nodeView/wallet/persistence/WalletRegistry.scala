@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
 
-import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.HybridLDBKVStore
 import org.ergoplatform.modifiers.history.PreGenesisHeader
@@ -16,7 +15,6 @@ import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import Constants.{ApplicationId, PaymentsAppId}
 import scorex.db.LDBVersionedStore
-
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -283,6 +281,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 }
 
 object WalletRegistry {
+  import scorex.db.ByteArrayUtils._
 
   val PreGenesisStateVersion: Array[Byte] = idToBytes(PreGenesisHeader.id)
 
@@ -308,23 +307,65 @@ object WalletRegistry {
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
   private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)
 
+  /** Performance optimized helper, which avoid unnecessary allocations and creates the resulting
+    * key bytes directly from the given parameters.
+    * It is allocation and boxing free.
+    * @return prefix | appId | Array.fill(32)(suffix)  bytes packed in an array
+    */
+  private[persistence] final def composeKey(prefix: Byte, appId: ApplicationId, suffix: Byte): Array[Byte] = {
+    val res = new Array[Byte](35) // 1 + 2 + 32
+    res(0) = prefix
+    putShort(res, pos = 1, appId)
+    putReplicated(res, pos = 3, n = 32, suffix)
+    res
+  }
+
+  /** Same as [[composeKey()]] where suffix is given by id. */
+  private[persistence] final def composeKeyWithBoxId(prefix: Byte, appId: ApplicationId, suffixId: BoxId): Array[Byte] = {
+    val res = new Array[Byte](3 + suffixId.length) // 1 byte for prefix + 2 for appId
+    res(0) = prefix
+    putShort(res, pos = 1, appId)
+    putBytes(res, pos = 3, suffixId)
+    res
+  }
+
+  /** Same as [[composeKey()]] with additional height parameter. */
+  private[persistence] final def composeKey(prefix: Byte, appId: ApplicationId, height: Int, suffix: Byte): Array[Byte] = {
+    val res = new Array[Byte](39) // 1 byte for prefix + 2 for appId + 4 for height + 32 for suffix
+    res(0) = prefix
+    putShort(res, pos = 1, appId)
+    putInt(res, pos = 3, height)
+    putReplicated(res, 7, 32, suffix)
+    res
+  }
+
+  /** Same as [[composeKey()]] with additional height parameter and suffix given by id. */
+  private[persistence] final def composeKeyWithBoxId(prefix: Byte, appId: ApplicationId, height: Int, suffixId: BoxId): Array[Byte] = {
+    val res = new Array[Byte](7 + suffixId.length) // 1 byte for prefix + 2 for appId + 4 for height
+    res(0) = prefix
+    putShort(res, pos = 1, appId)
+    putInt(res, pos = 3, height)
+    putBytes(res, 7, suffixId)
+    res
+  }
+
   private def firstAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    UnspentIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
+    composeKey(UnspentIndexPrefix, appId, 0)
 
   private def lastAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    UnspentIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
+    composeKey(UnspentIndexPrefix, appId, -1)
 
   private def firstSpentAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    SpentIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(0: Byte))
+    composeKey(SpentIndexPrefix, appId, 0)
 
   private def lastSpentAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    SpentIndexPrefix +: (Shorts.toByteArray(appId) ++ Array.fill(32)(-1: Byte))
+    composeKey(SpentIndexPrefix, appId, -1)
 
   private def firstIncludedAppBoxSpaceKey(appId: ApplicationId, height: Int): Array[Byte] =
-    UnspentIndexPrefix +: (Shorts.toByteArray(appId) ++ Ints.toByteArray(height) ++ Array.fill(32)(0: Byte))
+    composeKey(UnspentIndexPrefix, appId, height, 0)
 
   private def lastIncludedAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    UnspentIndexPrefix +: (Shorts.toByteArray(appId) ++ Ints.toByteArray(Int.MaxValue) ++ Array.fill(32)(-1: Byte))
+    composeKey(UnspentIndexPrefix, appId, Int.MaxValue, -1)
 
   private val RegistrySummaryKey: Array[Byte] = Array(0x02: Byte)
 
@@ -340,12 +381,12 @@ object WalletRegistry {
 
   private def spentIndexKey(appId: ApplicationId, trackedBox: TrackedBox): Array[Byte] = {
     val prefix = if (trackedBox.spent) SpentIndexPrefix else UnspentIndexPrefix
-    prefix +: (Shorts.toByteArray(appId) ++ trackedBox.box.id)
+    composeKeyWithBoxId(prefix, appId, trackedBox.box.id)
   }
 
   private def inclusionHeightAppBoxIndexKey(appId: ApplicationId, trackedBox: TrackedBox): Array[Byte] = {
-    val inclusionHeightBytes = Ints.toByteArray(trackedBox.inclusionHeightOpt.getOrElse(0))
-    InclusionHeightAppBoxPrefix +: (Shorts.toByteArray(appId) ++ inclusionHeightBytes ++ trackedBox.box.id)
+    val inclusionHeight= trackedBox.inclusionHeightOpt.getOrElse(0)
+    composeKeyWithBoxId(InclusionHeightAppBoxPrefix, appId, inclusionHeight, trackedBox.box.id)
   }
 
   def boxIndexKeys(box: TrackedBox): Seq[Array[Byte]] = {

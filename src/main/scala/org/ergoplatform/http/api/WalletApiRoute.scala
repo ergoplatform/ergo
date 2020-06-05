@@ -164,7 +164,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     & post & entity(as[TransactionSigningRequest])) { tsr =>
 
     val tx = tsr.unsignedTx
-    val secrets = (tsr.dlogs ++ tsr.dhts).map(ExternalSecret.apply)
+    val secrets = tsr.externalSecrets
 
     val hints = tsr.hintsBag
 

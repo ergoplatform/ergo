@@ -16,38 +16,32 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.interpreter._
 import sigmastate.serialization.OpCodes
 
-/**
-  * Basic trait for externally provided hint for interpreter (to be used during script execution and signature
-  * generation).
-  */
-
-import sigmastate.interpreter.Hint
 
 /**
   * Externally provided secret (to be used once for a transaction to sign)
   *
   * @param key - the secret
   */
-case class ExternalSecret(key: PrimitiveSecretKey) extends Hint
+case class ExternalSecret(key: PrimitiveSecretKey)
 
 /**
   * A request to sign a transaction
   *
   * @param unsignedTx - unsigned transaction
   * @param hints      - hints for interpreter (such as additional one-time secrets)
+  * @param externalSecrets - externally provided secrets
   * @param inputs     - hex-encoded input boxes bytes for the unsigned transaction (optional)
   * @param dataInputs - hex-encoded data-input boxes bytes for the unsigned transaction (optional)
-  * @param fullDetalization - whether the response should provide boxes used as well as execution context
   */
 case class TransactionSigningRequest(unsignedTx: UnsignedErgoTransaction,
                                      hints: Seq[Hint],
+                                     externalSecrets: Seq[ExternalSecret],
                                      inputs: Option[Seq[String]],
-                                     dataInputs: Option[Seq[String]],
-                                     fullDetalization: Boolean = false) {
+                                     dataInputs: Option[Seq[String]]) {
 
-  lazy val dlogs: Seq[DlogSecretKey] = hints.collect { case ExternalSecret(d: DlogSecretKey) => d }
+  lazy val dlogs: Seq[DlogSecretKey] = externalSecrets.collect { case ExternalSecret(d: DlogSecretKey) => d }
 
-  lazy val dhts: Seq[DhtSecretKey] = hints.collect { case ExternalSecret(d: DhtSecretKey) => d }
+  lazy val dhts: Seq[DhtSecretKey] = externalSecrets.collect { case ExternalSecret(d: DhtSecretKey) => d }
 
   lazy val hintsBag = HintsBag(hints)
 
@@ -206,6 +200,8 @@ object HintCodecs extends ApiCodecs {
 
 object TransactionSigningRequest extends ApiCodecs {
 
+  import HintCodecs._
+
   import io.circe.syntax._
 
   implicit val encoder: Encoder[TransactionSigningRequest] = { tsr =>
@@ -215,6 +211,7 @@ object TransactionSigningRequest extends ApiCodecs {
         "dlog" -> tsr.dlogs.asJson,
         "dht" -> tsr.dhts.asJson
       ),
+      "hints" -> tsr.hints.asJson,
       "inputsRaw" -> tsr.inputs.asJson,
       "dataInputsRaw" -> tsr.dataInputs.asJson
     )
@@ -225,10 +222,11 @@ object TransactionSigningRequest extends ApiCodecs {
       tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
       dlogs <- cursor.downField("secrets").downField("dlog").as[Option[Seq[DlogSecretKey]]]
       dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DhtSecretKey]]]
+      hints <- cursor.downField("hints").as[Option[Seq[Hint]]]
       inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
       dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
       secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
-    } yield TransactionSigningRequest(tx, secrets, inputs, dataInputs)
+    } yield TransactionSigningRequest(tx, hints.getOrElse(Seq.empty), secrets, inputs, dataInputs)
   }
 
 }

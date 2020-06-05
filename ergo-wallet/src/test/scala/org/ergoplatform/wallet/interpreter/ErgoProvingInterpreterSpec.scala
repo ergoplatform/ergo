@@ -20,11 +20,11 @@ class ErgoProvingInterpreterSpec
     val fullProver = ErgoProvingInterpreter(extendedSecretKey, parameters)
 
     val primitiveKey = DlogSecretKey(extendedSecretKey.privateInput)
-    val unsafeProver = ErgoProvingInterpreter(IndexedSeq(primitiveKey), parameters)
+    val primitiveProver = ErgoProvingInterpreter(IndexedSeq(primitiveKey), parameters)
 
     forAll(unsignedTxGen(extendedSecretKey)) { case (ins, unsignedTx) =>
       val signedTxFull = fullProver.sign(unsignedTx, ins.toIndexedSeq, IndexedSeq(), stateContext).get
-      val signedTxUnsafe = unsafeProver.sign(unsignedTx, ins.toIndexedSeq, IndexedSeq(), stateContext).get
+      val signedTxUnsafe = primitiveProver.sign(unsignedTx, ins.toIndexedSeq, IndexedSeq(), stateContext).get
 
       signedTxFull shouldEqual signedTxUnsafe
 
@@ -34,5 +34,15 @@ class ErgoProvingInterpreterSpec
             ErgoSignature.verify(unsignedTx.messageToSign, unsafeProof, extendedSecretKey.publicKey.key.h)
         }
     }
+  }
+
+  it should "produce a signature with enough hints given - 2-out-of-3 case" in {
+    def obtainSecretKey() = ExtendedSecretKey.deriveMasterKey(Random.randomBytes(32))
+
+    val prover0 = ErgoProvingInterpreter(obtainSecretKey(), parameters)
+    val prover1 = ErgoProvingInterpreter(obtainSecretKey(), parameters)
+    val prover2 = ErgoProvingInterpreter(obtainSecretKey(), parameters)
+
+
   }
 }

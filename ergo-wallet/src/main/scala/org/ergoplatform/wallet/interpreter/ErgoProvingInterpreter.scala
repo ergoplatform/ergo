@@ -67,10 +67,10 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   def withHints(hints: HintsBag): ErgoProvingInterpreter =
     new ErgoProvingInterpreter(secretKeys, params, hints)
 
-  protected def signInputs(unsignedTx: UnsignedErgoLikeTransaction,
-                           boxesToSpend: IndexedSeq[ErgoBox],
-                           dataBoxes: IndexedSeq[ErgoBox],
-                           stateContext: ErgoLikeStateContext): Try[(IndexedSeq[Input], Long)] = {
+  def signInputs(unsignedTx: UnsignedErgoLikeTransaction,
+                 boxesToSpend: IndexedSeq[ErgoBox],
+                 dataBoxes: IndexedSeq[ErgoBox],
+                 stateContext: ErgoLikeStateContext): Try[(IndexedSeq[Input], Long)] = {
     if (unsignedTx.inputs.length != boxesToSpend.length) {
       Failure(new Exception("Not enough boxes to spend"))
     } else if (unsignedTx.dataInputs.length != dataBoxes.length) {
@@ -105,7 +105,8 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
             )
 
             prove(inputBox.ergoTree, context, unsignedTx.messageToSign, hintsBag).flatMap { proverResult =>
-              val newTC = totalCost + proverResult.cost
+              //prove is accumulating cost under the hood, so proverResult.cost = totalCost + input check cost
+              val newTC = proverResult.cost
               if (newTC > context.costLimit) {
                 Failure(new Exception(s"Cost of transaction $unsignedTx exceeds limit ${context.costLimit}"))
               } else {
@@ -138,9 +139,9 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
                         realSecretsToExtract: Seq[SigmaBoolean],
                         simulatedSecretsToExtract: Seq[SigmaBoolean]): HintsBag = {
     val augmentedInputs = tx.inputs.zipWithIndex.zip(boxesToSpend)
-    require(augmentedInputs.forall{case ((input, _), box) => input.boxId.sameElements(box.id)}, "Wrong boxes")
+    require(augmentedInputs.forall { case ((input, _), box) => input.boxId.sameElements(box.id) }, "Wrong boxes")
 
-    augmentedInputs.foldLeft(HintsBag.empty){case (bag, ((input, idx), box)) =>
+    augmentedInputs.foldLeft(HintsBag.empty) { case (bag, ((input, idx), box)) =>
       val exp = box.ergoTree
       val proof = input.spendingProof.proof
 

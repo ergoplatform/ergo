@@ -51,14 +51,14 @@ object FoundationBoxSigner extends App {
   val preSign: ACTION = 1
   val sign: ACTION = 2
 
-  val height = 220000
+  val height = 230000
 
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
   val action: ACTION = generateCommitment
 
   // hints provided by a cosigner
-  val commitmentStringOpt: Option[String] = None
+  val commitmentStringOpt: Option[String] = Some("022af33e48d021c13ab6f5b521b156c22d51c4f184ed8cc695c824bf5e1ea3320c")
   val ownRandomnessStringOpt: Option[String] = None
   val partialSignatureStringOpt: Option[String] = None
 
@@ -100,7 +100,7 @@ object FoundationBoxSigner extends App {
 
   //box and message to sign
   //copy "new out bytes" here
-  val gfBytes = Base16.decode("80e083caeecc150008cd03c447ff5839fd538cb173bfd85cec371e1662f126b3491669c6daeeb4df1640b5e0b60d0000b614df6657eb022cdb8104ec54af31bcef89e4bf53bb83646d01b12ee3e3257101").get
+  val gfBytes = Base16.decode("80e8e5a5c8dfb905100e040004c094400580809cde91e7b0010580acc7f03704be944004808948058080c7b7e4992c0580b4c4c32104fe884804c0fd4f0580bcc1960b04befd4f05000400ea03d192c1b2a5730000958fa373019a73029c73037e997304a305958fa373059a73069c73077e997308a305958fa373099c730a7e99730ba305730cd193c2a7c2b2a5730d00d5040800e0b60d00010e6f98040483030808cd039bb5fe52359a64c99a60fd944fc5e388cbdc4d37ff091cc841c3ee79060b864708cd031fb52cf6e805f80d97cde289f4f757d49accf0c83fb864b27d2cf982c37f9a8b08cd0352ac2a471339b0d23b3d2c5ce0db0e81c969f77891b9edf0bda7fd39a78184e7b614df6657eb022cdb8104ec54af31bcef89e4bf53bb83646d01b12ee3e3257100").get
   val gfBox = ErgoBoxSerializer.parseBytes(gfBytes)
 
   println("Spending: " + Base16.encode(gfBox.id))

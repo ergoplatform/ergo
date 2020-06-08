@@ -7,7 +7,7 @@ import sigmastate.Values
 import sigmastate.Values.SigmaPropValue
 import scorex.util.{bytesToId, idToBytes}
 import org.scalatest.EitherValues
-import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughCoinsError
+import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughErgsError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughTokensError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughCoinsForChangeBoxesError
 
@@ -27,13 +27,13 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
     val uBox = TrackedBox(parentTx, 0, None, box, BoxCertainty.Certain, 1)
 
     //target amount is too high
-    select(Seq(uBox).toIterator, noFilter, 10, Map()).left.value shouldBe a [NotEnoughCoinsError]
+    select(Seq(uBox).toIterator, noFilter, 10, Map()).left.value shouldBe a [NotEnoughErgsError]
 
     //filter(which is about selecting only onchain boxes) is preventing from picking the proper box
-    select(Seq(uBox).toIterator, onChainFilter, 1, Map()).left.value shouldBe a [NotEnoughCoinsError]
+    select(Seq(uBox).toIterator, onChainFilter, 1, Map()).left.value shouldBe a [NotEnoughErgsError]
 
     //no target asset in the input box
-    select(Seq(uBox).toIterator, noFilter, 1, Map(bytesToId(Array.fill(32)(0: Byte)) -> 1L)).left.value shouldBe 
+    select(Seq(uBox).toIterator, noFilter, 1, Map(bytesToId(Array.fill(32)(0: Byte)) -> 1L)).left.value shouldBe
       a [NotEnoughTokensError]
 
     //otherwise, everything is fine

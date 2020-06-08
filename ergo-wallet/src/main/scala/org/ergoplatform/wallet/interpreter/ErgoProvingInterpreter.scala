@@ -13,6 +13,7 @@ import sigmastate.basics.DLogProtocol.{DLogInteractiveProver, ProveDlog}
 import sigmastate.basics.{DiffieHellmanTupleInteractiveProver, FirstProverMessage, ProveDHTuple, SigmaProtocolPrivateInput}
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.{ContextExtension, HintsBag, ProverInterpreter}
+import sigmastate.utxo.CostTable
 import special.collection.Coll
 import special.sigma.{Header, PreHeader}
 
@@ -78,8 +79,9 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     } else {
 
       // Cost of transaction initialization: we should read and parse all inputs and data inputs,
-      // and also iterate through all outputs to check rules
-      val initialCost: Long = boxesToSpend.size * params.inputCost +
+      // and also iterate through all outputs to check rules, also we add some constant for interpreter initialization
+      val initialCost: Long = CostTable.interpreterInitCost +
+        boxesToSpend.size * params.inputCost +
         dataBoxes.size * params.dataInputCost +
         unsignedTx.outputCandidates.size * params.outputCost
 

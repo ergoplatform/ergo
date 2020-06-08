@@ -74,7 +74,8 @@ class ErgoProvingInterpreterSpec
       .bagForTransaction(signRes.get, IndexedSeq(inputBox), IndexedSeq(), stateContext, Seq(pk1), Seq(pk2))
       .addHint(OwnCommitment(pk0, r, a))
 
-    val signedTx = prover0.withHints(hints).sign(utx, IndexedSeq(inputBox), IndexedSeq(), stateContext).get
+    val signedTxTry = prover0.withHints(hints).sign(utx, IndexedSeq(inputBox), IndexedSeq(), stateContext)
+    signedTxTry.isSuccess shouldBe true
   }
 
   it should "calculate cost correctly" in {
@@ -92,7 +93,6 @@ class ErgoProvingInterpreterSpec
 
     val utx = new UnsignedErgoLikeTransaction(unsignedInputs, IndexedSeq.empty, IndexedSeq(boxCandidate))
     val signRes = prover.sign(utx, inputBoxes, IndexedSeq(), stateContext)
-    println(signRes)
     signRes.isSuccess shouldBe true
   }
 

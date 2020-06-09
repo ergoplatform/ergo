@@ -214,3 +214,31 @@ object HintExtractionRequest extends ApiCodecs {
   }
 
 }
+
+
+object ApiReqPlayground extends App with ApiCodecs {
+
+  import io.circe.syntax._
+
+  val pbs = Base16.decode("02b353df14cd94849c36194bba03000dafaeb91b3a425a863f5660565189ddfe8f").get
+  val ge = GroupElementSerializer.parse(pbs)
+
+  val vbs = ValueSerializer.serialize(Values.GroupElementConstant(CGroupElement(ge)))
+  println(Base16.encode(vbs))
+
+  println(Base16.decode("cd").get.head)
+
+  val i0 = new UnsignedInput(ADKey @@ Base16.decode("3ad975c5d1fef7f5d28d4e891dd2aa469e02d3049617abc115aa58c1f91299c2").get)
+  val out0 = new ErgoBoxCandidate(1000000000L, Constants.TrueLeaf, 200000)
+  val ut = UnsignedErgoTransaction(IndexedSeq(i0), IndexedSeq.empty, IndexedSeq(out0))
+
+  println(ut.asJson)
+
+  val a = GroupElementSerializer.parse(Base16.decode("037146ed72259a19b262271c5a49ccc97e5d32ab83d1de0216b36c557d8f6b2d95").get)
+  val cmt = FirstDLogProverMessage(a)
+  val pdlog = ProveDlog(GroupElementSerializer.parse(Base16.decode("0354efc32652cad6cf1231be987afa29a686af30b5735995e3ce51339c4d0ca380").get))
+  val tsr = TransactionSigningRequest(ut, Seq(RealCommitment(pdlog, cmt)), Seq.empty, None, None)
+
+  val out = tsr.asJson.toString()
+  println(out)
+}

@@ -59,7 +59,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: Ergo
         CostTable.interpreterInitCost,
         multiplyExact(boxesToSpend.size, params.inputCost),
         multiplyExact(dataBoxes.size, params.dataInputCost),
-        multiplyExact(unsignedTx.outputCandidates.size, params.outputCost),
+        multiplyExact(unsignedTx.outputCandidates.size, params.outputCost)
       )
 
       boxesToSpend

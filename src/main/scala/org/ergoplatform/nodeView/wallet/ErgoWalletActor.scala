@@ -64,7 +64,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private val parameters: Parameters = LaunchParameters
 
-  //todo: temporary 3.2.x collection
+  //todo: temporary 3.2.x collection and readers
   private var stateReader: Option[ErgoStateReader] = None
   private var mempoolReader: Option[ErgoMemPoolReader] = None
   private var unspentBoxes = Seq[TrackedBox]()
@@ -118,8 +118,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val resolvedTrackedBoxes = resolved.map { bx =>
         TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain, Constants.DefaultAppId)
       }
-
       offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
+      paranoidClear()
 
     case ScanOnChain(block) =>
       val (walletOutputs, allInputs) = block.transactions
@@ -189,7 +189,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! trackedAddresses.toIndexedSeq
   }
 
-  private def paranoidClear() = {
+  /**
+    * Clear out wallet boxes which do not belong to UTXO set or unconfirmed transaction outputs
+    * //todo: likely temporary method for 3.2.x
+    */
+  private def paranoidClear(): Unit = {
     (mempoolReader, stateReader) match {
       case (Some(mr), Some(sr)) =>
         sr match {

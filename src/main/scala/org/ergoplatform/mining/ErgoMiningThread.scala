@@ -1,8 +1,7 @@
-package org.ergoplatform.local
+package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
-import org.ergoplatform.local.ErgoMiningThread.MineBlock
-import org.ergoplatform.mining.{CandidateBlock, PrivateKey}
+import org.ergoplatform.mining.ErgoMiningThread.MineBlock
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging

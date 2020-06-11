@@ -5,8 +5,7 @@ import akka.pattern.ask
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.local.ErgoMiner.{PrepareCandidate, StartMining}
-import org.ergoplatform.local.ErgoMinerRef
+import ErgoMiner.{PrepareCandidate, StartMining}
 import org.ergoplatform.mining.Listener._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
@@ -283,7 +282,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     system.terminate()
   }
 
-
   it should "include mandatory transactions" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlock)
@@ -321,7 +319,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val mandatoryTx1 = ErgoTransaction(mandatoryTxLike1)
 
     val outputs2 = IndexedSeq(new ErgoBoxCandidate(mBox.value, prop2, r.s.stateContext.currentHeight))
-    val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(mInput), IndexedSeq(), outputs1)
+    val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(mInput), IndexedSeq(), outputs2)
     val mandatoryTxLike2 = defaultProver.sign(unsignedTx2, IndexedSeq(mBox), IndexedSeq(), r.s.stateContext).get
     val mandatoryTx2 = ErgoTransaction(mandatoryTxLike2)
     mandatoryTx1.bytes.sameElements(mandatoryTx2.bytes) shouldBe false
@@ -330,7 +328,6 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     ecb.proofsForMandatoryTransactions.isDefined shouldBe false
 
     val ecb1 = await((minerRef ? PrepareCandidate(Seq(mandatoryTx1))).mapTo[Future[ExternalCandidateBlock]].flatten)
-
     ecb1.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
     ecb1.proofsForMandatoryTransactions.get.check() shouldBe true
 

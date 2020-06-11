@@ -4,7 +4,6 @@ package org.ergoplatform.http.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
-import io.circe.generic.auto._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -173,6 +172,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
   def extractHintsR: Route = (path("extractHints") & post & entity(as[HintExtractionRequest])) { her =>
+    import org.ergoplatform.nodeView.wallet.requests.HintCodecs._
     val tx = her.tx
 
     onSuccess((readersHolder ? GetReaders).mapTo[Readers].flatMap{readers =>
@@ -184,7 +184,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         case _ => ???
       }
       readers.w.extractHints(tx, boxesToSpend, dataBoxes, her.real, her.simulated)
-    })(_ => ApiResponse(Map().asJson))
+    })(hintsBag => ApiResponse(hintsBag.hints.asJson))
   }
 
 }

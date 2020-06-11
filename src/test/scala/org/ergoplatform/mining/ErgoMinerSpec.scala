@@ -317,19 +317,30 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     val outputs1 = IndexedSeq(new ErgoBoxCandidate(mBox.value, prop1, r.s.stateContext.currentHeight))
     val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(mInput), IndexedSeq(), outputs1)
-    val mandatoryTxLike = defaultProver.sign(unsignedTx1, IndexedSeq(mBox), IndexedSeq(), r.s.stateContext).get
-    val mandatoryTx = ErgoTransaction(mandatoryTxLike)
+    val mandatoryTxLike1 = defaultProver.sign(unsignedTx1, IndexedSeq(mBox), IndexedSeq(), r.s.stateContext).get
+    val mandatoryTx1 = ErgoTransaction(mandatoryTxLike1)
+
+    val outputs2 = IndexedSeq(new ErgoBoxCandidate(mBox.value, prop2, r.s.stateContext.currentHeight))
+    val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(mInput), IndexedSeq(), outputs1)
+    val mandatoryTxLike2 = defaultProver.sign(unsignedTx2, IndexedSeq(mBox), IndexedSeq(), r.s.stateContext).get
+    val mandatoryTx2 = ErgoTransaction(mandatoryTxLike2)
+    mandatoryTx1.bytes.sameElements(mandatoryTx2.bytes) shouldBe false
 
     val ecb = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[ExternalCandidateBlock]].flatten)
     ecb.proofsForMandatoryTransactions.isDefined shouldBe false
 
-    val ecb1 = await((minerRef ? PrepareCandidate(Seq(mandatoryTx))).mapTo[Future[ExternalCandidateBlock]].flatten)
+    val ecb1 = await((minerRef ? PrepareCandidate(Seq(mandatoryTx1))).mapTo[Future[ExternalCandidateBlock]].flatten)
 
     ecb1.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
     ecb1.proofsForMandatoryTransactions.get.check() shouldBe true
 
-    val ecb2 = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[ExternalCandidateBlock]].flatten)
-    ecb2.proofsForMandatoryTransactions.isDefined shouldBe false
+    val ecb2 = await((minerRef ? PrepareCandidate(Seq(mandatoryTx2))).mapTo[Future[ExternalCandidateBlock]].flatten)
+    ecb2.msg.sameElements(ecb1.msg) shouldBe false
+    ecb2.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
+    ecb2.proofsForMandatoryTransactions.get.check() shouldBe true
+
+    val ecb3 = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[ExternalCandidateBlock]].flatten)
+    ecb3.proofsForMandatoryTransactions.isDefined shouldBe false
 
     system.terminate()
   }

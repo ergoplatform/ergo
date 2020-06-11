@@ -220,13 +220,18 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       }
   }
 
+  private def cachedFor(txs: Seq[ErgoTransaction]): Boolean = {
+    candidateOpt.isDefined && candidateOpt.exists { c =>
+      txs.size == c.txsToInclude.size && txs.forall(c.txsToInclude.contains)
+    }
+  }
+
   private def mining: Receive = {
     case PrepareCandidate(_) if !ergoSettings.nodeSettings.mining =>
       sender() ! Future.failed(new Exception("Candidate creation is not supported when mining is disabled"))
 
     // Send cached candidate if its available and list of transactions to include hasn't been changed
-    case PrepareCandidate(txsToIncl)
-      if candidateOpt.isDefined && candidateOpt.exists(c => txsToIncl.forall(c.txsToInclude.contains)) =>
+    case PrepareCandidate(txsToIncl) if cachedFor(txsToIncl) =>
 
       sender() ! candidateOpt
         .map(_.externalVersion)
@@ -406,7 +411,7 @@ object ErgoMiner extends ScorexLogging {
     * Please note that the cost is context-dependent, thus do not store instances of
     * this class for long time (and this class is used only in the block assembly).
     *
-    * @param tx - a transaction
+    * @param tx   - a transaction
     * @param cost - cost of the transaction
     */
   case class CostedTransaction(tx: ErgoTransaction, cost: Long) {

@@ -119,7 +119,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain, Constants.DefaultAppId)
       }
       offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
-      paranoidClear()
 
     case ScanOnChain(block) =>
       val (walletOutputs, allInputs) = block.transactions
@@ -189,27 +188,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! trackedAddresses.toIndexedSeq
   }
 
-  /**
-    * Clear out wallet boxes which do not belong to UTXO set or unconfirmed transaction outputs
-    * //todo: likely temporary method for 3.2.x
-    */
-  private def paranoidClear(): Unit = {
-    (mempoolReader, stateReader) match {
-      case (Some(mr), Some(sr)) =>
-        sr match {
-          case u: UtxoStateReader =>
-            val utxo = u.withTransactions(mr.getAll)
-            val boxesToFilter = (registry.readCertainUnspentBoxes ++ offChainRegistry.offChainBoxes).distinct
-            unspentBoxes = boxesToFilter.filter { tb =>
-              val bid = tb.box.id
-              utxo.boxById(bid).isDefined
-            }
-          case _ =>
-        }
-      case (_, _) =>
-    }
-  }
-
   private def onMempoolChanged: Receive = {
     case ChangedMempool(mr: ErgoMemPoolReader@unchecked) =>
       mempoolReader = Some(mr)
@@ -219,7 +197,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case ChangedState(s: ErgoStateReader@unchecked) =>
       storage.updateStateContext(s.stateContext)
       stateReader = Some(s)
-      paranoidClear()
   }
 
   //Secret is set in form of keystore file of testMnemonic in the config
@@ -357,10 +334,23 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     * This filter is used when the wallet is going through its boxes to assemble a transaction.
     */
   private val walletFilter: FilterFn = (trackedBox: TrackedBox) => {
-    if (trackedBox.chainStatus.onChain) {
+    val preStatus = if (trackedBox.chainStatus.onChain) {
       offChainRegistry.onChainBalances.exists(_.id == trackedBox.boxId)
     } else {
       true
+    }
+
+    // double-check that boxes are indeed not spent
+    (mempoolReader, stateReader) match {
+      case (Some(mr), Some(sr)) =>
+        sr match {
+          case u: UtxoStateReader =>
+            val utxo = u.withTransactions(mr.getAll)
+            val bid = trackedBox.box.id
+            utxo.boxById(bid).isDefined
+          case _ => preStatus
+        }
+      case (_, _) => preStatus
     }
   }
 

@@ -320,10 +320,16 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val mandatoryTxLike = defaultProver.sign(unsignedTx1, IndexedSeq(mBox), IndexedSeq(), r.s.stateContext).get
     val mandatoryTx = ErgoTransaction(mandatoryTxLike)
 
-    val ecb = await((minerRef ? PrepareCandidate(Seq(mandatoryTx))).mapTo[Future[ExternalCandidateBlock]].flatten)
+    val ecb = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[ExternalCandidateBlock]].flatten)
+    ecb.proofsForMandatoryTransactions.isDefined shouldBe false
 
-    ecb.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
-    ecb.proofsForMandatoryTransactions.get.check() shouldBe true
+    val ecb1 = await((minerRef ? PrepareCandidate(Seq(mandatoryTx))).mapTo[Future[ExternalCandidateBlock]].flatten)
+
+    ecb1.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
+    ecb1.proofsForMandatoryTransactions.get.check() shouldBe true
+
+    val ecb2 = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[ExternalCandidateBlock]].flatten)
+    ecb2.proofsForMandatoryTransactions.isDefined shouldBe false
 
     system.terminate()
   }

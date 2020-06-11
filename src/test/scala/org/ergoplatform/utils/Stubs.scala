@@ -2,8 +2,7 @@ package org.ergoplatform.utils
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.local.ErgoMiner
-import org.ergoplatform.mining.{AutolykosSolution, ExternalCandidateBlock}
+import org.ergoplatform.mining.{AutolykosSolution, ErgoMiner, ExternalCandidateBlock}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction

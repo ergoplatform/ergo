@@ -1,7 +1,6 @@
 package org.ergoplatform.mining
 
 import com.google.common.primitives.{Bytes, Ints, Longs}
-import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._

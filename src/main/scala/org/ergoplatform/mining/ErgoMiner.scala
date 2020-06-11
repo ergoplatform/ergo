@@ -1,4 +1,4 @@
-package org.ergoplatform.local
+package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import akka.pattern.ask
@@ -7,12 +7,11 @@ import com.google.common.primitives.Longs
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
 import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
-import org.ergoplatform.mining._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header, HeaderWithoutPow, PoPowAlgos}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -220,7 +219,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       }
   }
 
-  private def cachedFor(txs: Seq[ErgoTransaction]): Boolean = {
+  private[mining] def cachedFor(txs: Seq[ErgoTransaction]): Boolean = {
     candidateOpt.isDefined && candidateOpt.exists { c =>
       txs.size == c.txsToInclude.size && txs.forall(c.txsToInclude.contains)
     }
@@ -230,30 +229,32 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case PrepareCandidate(_) if !ergoSettings.nodeSettings.mining =>
       sender() ! Future.failed(new Exception("Candidate creation is not supported when mining is disabled"))
 
-    // Send cached candidate if its available and list of transactions to include hasn't been changed
-    case PrepareCandidate(txsToIncl) if cachedFor(txsToIncl) =>
-
-      sender() ! candidateOpt
-        .map(_.externalVersion)
-        .fold[Future[ExternalCandidateBlock]](
-        Future.failed(new Exception("Failed to create candidate")))(Future.successful)
-
+    // Send cached candidate if it is available and list of transactions to include hasn't been changed
     case PrepareCandidate(txsToInclude) =>
-      val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
-      sender() ! readersR.flatMap {
-        case Readers(h, s: UtxoStateReader, m, _) =>
-          Future.fromTry(publicKeyOpt match {
-            case Some(pk) =>
-              createCandidate(pk, h, m, desiredUpdate, s, txsToInclude)
-                .map { c =>
-                  val ext = powScheme.deriveExternalCandidate(c, pk, txsToInclude.map(_.id))
-                  candidateOpt = Some(CandidateCache(c, ext, txsToInclude))
-                  ext
-                }
-            case None => Failure(new Exception("Candidate could not be generated: no public key available"))
-          })
-        case _ =>
-          Future.failed(new Exception("Invalid readers state"))
+      if(cachedFor(txsToInclude)) {
+        val candBlockFuture = candidateOpt
+          .map(_.externalVersion)
+          .fold[Future[ExternalCandidateBlock]](
+          Future.failed(new Exception("Failed to create candidate")))(Future.successful)
+        sender() ! candBlockFuture
+      } else {
+        val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
+        val candBlockFuture = readersR.flatMap {
+          case Readers(h, s: UtxoStateReader, m, _) =>
+            Future.fromTry(publicKeyOpt match {
+              case Some(pk) =>
+                createCandidate(pk, h, m, desiredUpdate, s, txsToInclude)
+                  .map { cand =>
+                    val ext = powScheme.deriveExternalCandidate(cand, pk, txsToInclude.map(_.id))
+                    candidateOpt = Some(CandidateCache(cand, ext, txsToInclude))
+                    ext
+                  }
+              case None => Failure(new Exception("Candidate could not be generated: no public key available"))
+            })
+          case _ =>
+            Future.failed(new Exception("Invalid readers state, mining is possible in UTXO mode only"))
+        }
+        sender() ! candBlockFuture
       }
 
     case solution: AutolykosSolution =>

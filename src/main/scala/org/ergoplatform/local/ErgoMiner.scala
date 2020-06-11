@@ -199,12 +199,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def onReaders: Receive = {
     // Miner's node can produce block candidate only if it is working in the UTXO regime
-    case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
+    case Readers(h, s: UtxoStateReader, m, _) =>
       //mandatory transactions to include into next block taken from the previous candidate
       val txsToInclude = candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty)
 
       publicKeyOpt.foreach { minerDlog =>
-        createCandidate(minerDlog, h, m, desiredUpdate, s.asInstanceOf[UtxoStateReader], txsToInclude) match {
+        createCandidate(minerDlog, h, m, desiredUpdate, s, txsToInclude) match {
           case Success(candidate) =>
             val ext = powScheme.deriveExternalCandidate(candidate, minerDlog)
             log.info(s"New candidate with msg ${Base16.encode(ext.msg)} generated")
@@ -241,10 +241,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case PrepareCandidate(txsToInclude) =>
       val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
       sender() ! readersR.flatMap {
-        case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
+        case Readers(h, s: UtxoStateReader, m, _) =>
           Future.fromTry(publicKeyOpt match {
             case Some(pk) =>
-              createCandidate(pk, h, m, desiredUpdate, s.asInstanceOf[UtxoStateReader], txsToInclude)
+              createCandidate(pk, h, m, desiredUpdate, s, txsToInclude)
                 .map { c =>
                   val ext = powScheme.deriveExternalCandidate(c, pk, txsToInclude.map(_.id))
                   candidateOpt = Some(CandidateCache(c, ext, txsToInclude))

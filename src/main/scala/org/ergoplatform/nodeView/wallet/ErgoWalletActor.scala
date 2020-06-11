@@ -67,6 +67,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   //todo: temporary 3.2.x collection and readers
   private var stateReaderOpt: Option[ErgoStateReader] = None
   private var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
+  private var utxoReaderOpt: Option[UtxoStateReader] = None
 
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
   // to the wallet (by executing testing transactions against them).
@@ -187,15 +188,29 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! trackedAddresses.toIndexedSeq
   }
 
+  private def updateUtxoSet(): Unit = {
+    (mempoolReaderOpt, stateReaderOpt) match {
+      case (Some(mr), Some(sr)) =>
+        sr match {
+          case u: UtxoStateReader =>
+            utxoReaderOpt = Some(u.withTransactions(mr.getAll))
+          case _ =>
+        }
+      case (_, _) =>
+    }
+  }
+
   private def onMempoolChanged: Receive = {
     case ChangedMempool(mr: ErgoMemPoolReader@unchecked) =>
       mempoolReaderOpt = Some(mr)
+      updateUtxoSet()
   }
 
   private def onStateChanged: Receive = {
     case ChangedState(s: ErgoStateReader@unchecked) =>
       storage.updateStateContext(s.stateContext)
       stateReaderOpt = Some(s)
+      updateUtxoSet()
   }
 
   //Secret is set in form of keystore file of testMnemonic in the config
@@ -339,19 +354,10 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       true
     }
 
-    // double-check that boxes are indeed not spent
-    (mempoolReaderOpt, stateReaderOpt) match {
-      case (Some(mr), Some(sr)) =>
-        sr match {
-          case u: UtxoStateReader =>
-            preStatus && {
-              val utxo = u.withTransactions(mr.getAll)
-              val bid = trackedBox.box.id
-              utxo.boxById(bid).isDefined
-            }
-          case _ => preStatus
-        }
-      case (_, _) => preStatus
+    // double-check that box is not spent
+    preStatus && utxoReaderOpt.forall { utxo =>
+      val bid = trackedBox.box.id
+      utxo.boxById(bid).isDefined
     }
   }
 

@@ -65,9 +65,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private val parameters: Parameters = LaunchParameters
 
   //todo: temporary 3.2.x collection and readers
-  private var stateReader: Option[ErgoStateReader] = None
-  private var mempoolReader: Option[ErgoMemPoolReader] = None
-  private var unspentBoxes = Seq[TrackedBox]()
+  private var stateReaderOpt: Option[ErgoStateReader] = None
+  private var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
 
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
   // to the wallet (by executing testing transactions against them).
@@ -190,13 +189,13 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def onMempoolChanged: Receive = {
     case ChangedMempool(mr: ErgoMemPoolReader@unchecked) =>
-      mempoolReader = Some(mr)
+      mempoolReaderOpt = Some(mr)
   }
 
   private def onStateChanged: Receive = {
     case ChangedState(s: ErgoStateReader@unchecked) =>
       storage.updateStateContext(s.stateContext)
-      stateReader = Some(s)
+      stateReaderOpt = Some(s)
   }
 
   //Secret is set in form of keystore file of testMnemonic in the config
@@ -341,13 +340,15 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     }
 
     // double-check that boxes are indeed not spent
-    (mempoolReader, stateReader) match {
+    (mempoolReaderOpt, stateReaderOpt) match {
       case (Some(mr), Some(sr)) =>
         sr match {
           case u: UtxoStateReader =>
-            val utxo = u.withTransactions(mr.getAll)
-            val bid = trackedBox.box.id
-            utxo.boxById(bid).isDefined
+            preStatus && {
+              val utxo = u.withTransactions(mr.getAll)
+              val bid = trackedBox.box.id
+              utxo.boxById(bid).isDefined
+            }
           case _ => preStatus
         }
       case (_, _) => preStatus
@@ -496,11 +497,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           } else {
             //inputs are to be selected by the wallet
             require(prover.hdPubKeys.nonEmpty, "No public keys in the prover to extract change address from")
-            val boxesToSpend = if (unspentBoxes.nonEmpty) {
-              unspentBoxes
-            } else {
-              (registry.readCertainUnspentBoxes ++ offChainRegistry.offChainBoxes).distinct
-            }
+            val boxesToSpend = (registry.readCertainUnspentBoxes ++ offChainRegistry.offChainBoxes).distinct
             (boxesToSpend.toIterator, walletFilter)
           }
 

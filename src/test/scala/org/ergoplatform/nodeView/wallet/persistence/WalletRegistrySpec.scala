@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
+import com.google.common.primitives.{Shorts, Ints}
 import org.ergoplatform.wallet.Constants.{ApplicationId, PaymentsAppId}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedBoxId
@@ -194,4 +195,22 @@ class WalletRegistrySpec
     }
   }
 
+  it should "compose keys correctly" in {
+    val box = trackedBoxGen.sample.get
+
+    forAll { (prefix: Byte, appId: Short, height: Int, suffix: Byte) =>
+      val key1 = (prefix +: Shorts.toByteArray(appId)) ++ Array.fill(32)(suffix)
+      WalletRegistry.composeKey(prefix, ApplicationId @@ appId, suffix) shouldBe key1
+
+      val key2 = (prefix +: Shorts.toByteArray(appId)) ++ Ints.toByteArray(height) ++ Array.fill(32)(suffix)
+      WalletRegistry.composeKey(prefix, ApplicationId @@ appId, height, suffix) shouldBe key2
+
+      val id = box.box.id
+      val key3 = (prefix +: Shorts.toByteArray(appId)) ++ id
+      WalletRegistry.composeKeyWithBoxId(prefix, ApplicationId @@ appId, id) shouldBe key3
+
+      val key4 = (prefix +: Shorts.toByteArray(appId)) ++ Ints.toByteArray(height) ++ id
+      WalletRegistry.composeKeyWithBoxId(prefix, ApplicationId @@ appId, height, id) shouldBe key4
+    }
+  }
 }

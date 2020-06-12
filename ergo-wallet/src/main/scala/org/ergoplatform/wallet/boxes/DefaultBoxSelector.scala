@@ -19,18 +19,20 @@ object DefaultBoxSelector extends BoxSelector {
 
   import BoxSelector._
 
-  final case class NotEnoughCoinsError(message: String) extends BoxSelectionError
+  final case class NotEnoughErgsError(message: String) extends BoxSelectionError
+
   final case class NotEnoughTokensError(message: String) extends BoxSelectionError
+
   final case class NotEnoughCoinsForChangeBoxesError(message: String) extends BoxSelectionError
 
   override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
-                      externalFilter: T => Boolean,
-                      targetBalance: Long,
-                      targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
+                                          externalFilter: T => Boolean,
+                                          targetBalance: Long,
+                                          targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     //mutable structures to collect results
-    val res            = mutable.Buffer[T]()
+    val res = mutable.Buffer[T]()
     var currentBalance = 0L
-    val currentAssets  = mutable.Map[ModifierId, Long]()
+    val currentAssets = mutable.Map[ModifierId, Long]()
 
     def pickUp(unspentBox: T) = {
       currentBalance = currentBalance + unspentBox.value
@@ -39,16 +41,13 @@ object DefaultBoxSelector extends BoxSelector {
     }
 
     def balanceMet = currentBalance >= targetBalance
+
     def assetsMet = targetAssets.forall {
       case (id, targetAmt) => currentAssets.getOrElse(id, 0L) >= targetAmt
     }
 
     @tailrec
-    def pickBoxes(
-      boxesIterator: Iterator[T],
-      filterFn: T => Boolean,
-      successFn: => Boolean
-    ): Boolean =
+    def pickBoxes(boxesIterator: Iterator[T], filterFn: T => Boolean, successFn: => Boolean): Boolean =
       if (successFn) {
         true
       } else if (!boxesIterator.hasNext) {
@@ -65,16 +64,16 @@ object DefaultBoxSelector extends BoxSelector {
       //If this condition is satisfied on the previous step, we will do one extra call to pickBoxes
       //with no touching the iterator (which is not that much).
       if (pickBoxes(
-            inputBoxes,
-            bc =>
-              externalFilter(bc) && bc.tokens.exists {
-                case (id, _) =>
-                  val targetAmt       = targetAssets.getOrElse(id, 0L)
-                  lazy val currentAmt = currentAssets.getOrElse(id, 0L)
-                  targetAmt > 0 && targetAmt > currentAmt
-              },
-            assetsMet
-          )) {
+        inputBoxes,
+        bc =>
+          externalFilter(bc) && bc.tokens.exists {
+            case (id, _) =>
+              val targetAmt = targetAssets.getOrElse(id, 0L)
+              lazy val currentAmt = currentAssets.getOrElse(id, 0L)
+              targetAmt > 0 && targetAmt > currentAmt
+          },
+        assetsMet
+      )) {
         formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets).mapRight { changeBoxes =>
           BoxSelectionResult(res, changeBoxes)
         }
@@ -82,16 +81,16 @@ object DefaultBoxSelector extends BoxSelector {
         Left(NotEnoughTokensError(s"not enough boxes to meet token needs $targetAssets (found only $currentAssets)"))
       }
     } else {
-      Left(NotEnoughCoinsError(s"not enough boxes to meet ERG needs $targetBalance (found only $currentBalance)"))
+      Left(NotEnoughErgsError(s"not enough boxes to meet ERG needs $targetBalance (found only $currentBalance)"))
     }
   }
 
   def formChangeBoxes(
-    foundBalance: Long,
-    targetBalance: Long,
-    foundBoxAssets: mutable.Map[ModifierId, Long],
-    targetBoxAssets: TokensMap
-  ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
+                       foundBalance: Long,
+                       targetBalance: Long,
+                       foundBoxAssets: mutable.Map[ModifierId, Long],
+                       targetBoxAssets: TokensMap
+                     ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
     AssetUtils.subtractAssetsMut(foundBoxAssets, targetBoxAssets)
     val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxTokens).toSeq
     val changeBalance = foundBalance - targetBalance

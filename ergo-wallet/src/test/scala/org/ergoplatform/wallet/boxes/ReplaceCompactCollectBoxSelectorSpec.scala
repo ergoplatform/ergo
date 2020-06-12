@@ -104,5 +104,12 @@ class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers with E
       val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
       res.boxes.length shouldBe optimalInputs
     }
+
+    {
+      val targetBalance = 1
+      val res = selector.select(inputValues.toIterator, noFilter, targetBalance, Map()).right.value
+      res.boxes.length shouldBe res.boxes.distinct.length
+      res.boxes.length shouldBe optimalInputs
+    }
   }
 }

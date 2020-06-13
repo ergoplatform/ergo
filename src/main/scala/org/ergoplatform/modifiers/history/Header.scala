@@ -38,7 +38,7 @@ class HeaderWithoutPow(val version: Version, // 1 byte
                        val height: Int,
                        val extensionRoot: Digest32,
                        val votes: Array[Byte]) { //3 bytes
-  def toHeader(powSolution: AutolykosSolution, headerSize: Option[Int]): Header =
+  def toHeader(powSolution: AutolykosSolution, headerSize: Option[Int] = None): Header =
     Header(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionRoot, powSolution, votes, headerSize)
 }

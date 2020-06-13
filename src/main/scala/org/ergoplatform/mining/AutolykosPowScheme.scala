@@ -132,7 +132,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val msg = msgByHeader(h)
     val b = getB(nBits)
     val x = randomSecret()
-    checkNonces(msg, sk, x, b, minNonce, maxNonce).map(s => h.toHeader(s, None))
+    checkNonces(msg, sk, x, b, minNonce, maxNonce).map(solution => h.toHeader(solution))
   }
 
   /**

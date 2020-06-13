@@ -247,6 +247,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                   .map { cand =>
                     val ext = powScheme.deriveExternalCandidate(cand, pk, txsToInclude.map(_.id))
                     candidateOpt = Some(CandidateCache(cand, ext, txsToInclude))
+                    if (!externalMinerMode) miningThreads.foreach(_ ! cand)
                     ext
                   }
               case None => Failure(new Exception("Candidate could not be generated: no public key available"))

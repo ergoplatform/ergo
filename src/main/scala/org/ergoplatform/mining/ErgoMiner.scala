@@ -66,6 +66,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val maxTransactionComplexity: Int = ergoSettings.nodeSettings.maxTransactionComplexity
 
   // shared mutable state
+
+  // flag which is set once when first block candidate if formed
   private var isMining = false
   private var candidateOpt: Option[CandidateCache] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
@@ -198,7 +200,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   // checks that current candidate block contains `txs`
   private[mining] def cachedFor(txs: Seq[ErgoTransaction]): Boolean = {
     candidateOpt.isDefined && candidateOpt.exists { c =>
-      txs.size == c.txsToInclude.size && txs.forall(c.txsToInclude.contains)
+      txs.isEmpty || (txs.size == c.txsToInclude.size && txs.forall(c.txsToInclude.contains))
     }
   }
 

@@ -217,7 +217,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Assembles candidate block for external miners.
     */
-  def deriveExternalCandidate(candidate: CandidateBlock, pk: ProveDlog): ExternalCandidateBlock =
+  def deriveExternalCandidate(candidate: CandidateBlock, pk: ProveDlog): WorkMessage =
     deriveExternalCandidate(candidate, pk, Seq.empty)
 
   /**
@@ -229,7 +229,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     */
   def deriveExternalCandidate(candidate: CandidateBlock,
                               pk: ProveDlog,
-                              mandatoryTxIds: Seq[ModifierId]): ExternalCandidateBlock = {
+                              mandatoryTxIds: Seq[ModifierId]): WorkMessage = {
     val h = ErgoMiner.deriveUnprovenHeader(candidate)
     val msg = msgByHeader(h)
     val b = getB(candidate.nBits)
@@ -243,7 +243,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     } else {
       None
     }
-    ExternalCandidateBlock(msg, b, pk, proofs)
+    WorkMessage(msg, b, pk, proofs)
   }
 
 }

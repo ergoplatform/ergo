@@ -206,7 +206,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def updateCandidate(candidate: CandidateBlock,
                               pk: ProveDlog,
-                              txsToInclude: Seq[ErgoTransaction]): ExternalCandidateBlock = {
+                              txsToInclude: Seq[ErgoTransaction]): WorkMessage = {
     val ext = powScheme.deriveExternalCandidate(candidate, pk, txsToInclude.map(_.id))
     log.info(s"New candidate with msg ${Base16.encode(ext.msg)} generated")
     log.debug(s"Got candidate block at height ${ErgoHistory.heightOf(candidate.parentOpt) + 1}" +
@@ -245,7 +245,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       if (cachedFor(txsToInclude)) {
         val candBlockFuture = candidateOpt
           .map(_.externalVersion)
-          .fold[Future[ExternalCandidateBlock]](
+          .fold[Future[WorkMessage]](
           Future.failed(new Exception("Failed to create candidate")))(Future.successful)
         sender() ! candBlockFuture
       } else {
@@ -415,7 +415,7 @@ object ErgoMiner extends ScorexLogging {
     * @param txsToInclude
     */
   private case class CandidateCache(candidateBlock: CandidateBlock,
-                                    externalVersion: ExternalCandidateBlock,
+                                    externalVersion: WorkMessage,
                                     txsToInclude: Seq[ErgoTransaction])
 
   /**

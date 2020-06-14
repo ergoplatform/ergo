@@ -5,7 +5,7 @@ import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
-import org.ergoplatform.mining.{AutolykosSolution, ErgoMiner, ExternalCandidateBlock}
+import org.ergoplatform.mining.{AutolykosSolution, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
@@ -36,7 +36,7 @@ case class MiningApiRoute(miner: ActorRef,
     */
   def candidateR: Route = (path("candidate") & pathEndOrSingleSlash & get) {
     val prepareCmd = ErgoMiner.PrepareCandidate(Seq.empty)
-    val candidateF = (miner ? prepareCmd).mapTo[Future[ExternalCandidateBlock]].flatten
+    val candidateF = (miner ? prepareCmd).mapTo[Future[WorkMessage]].flatten
     ApiResponse(candidateF)
   }
 
@@ -48,7 +48,7 @@ case class MiningApiRoute(miner: ActorRef,
     & post & entity(as[Seq[ErgoTransaction]]) & withAuth) { txs =>
 
     val prepareCmd = ErgoMiner.PrepareCandidate(txs)
-    val candidateF = (miner ? prepareCmd).mapTo[Future[ExternalCandidateBlock]].flatten
+    val candidateF = (miner ? prepareCmd).mapTo[Future[WorkMessage]].flatten
     ApiResponse(candidateF)
   }
 

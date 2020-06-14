@@ -7,22 +7,22 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 
 
 /**
-  * Block candidate for external miner
+  * Block candidate related data for external miner to perform work
   *
-  * @param msg                            - message for external miner to work on
+  * @param msg                            - message for external miner to work on (serialized header)
   * @param b                              - target value for mining
   * @param pk                             - public key of a miner
   * @param proofsForMandatoryTransactions - proofs of transactions membership (optional)
   *
   */
-case class ExternalCandidateBlock(msg: Array[Byte],
-                                  b: BigInt,
-                                  pk: ProveDlog,
-                                  proofsForMandatoryTransactions: Option[ProofOfUpcomingTransactions])
+case class WorkMessage(msg: Array[Byte],
+                       b: BigInt,
+                       pk: ProveDlog,
+                       proofsForMandatoryTransactions: Option[ProofOfUpcomingTransactions])
 
-object ExternalCandidateBlock extends ApiCodecs {
+object WorkMessage extends ApiCodecs {
 
-  implicit val encoder: Encoder[ExternalCandidateBlock] = { c: ExternalCandidateBlock =>
+  implicit val encoder: Encoder[WorkMessage] = { c: WorkMessage =>
     Json.obj(
       List(
         "msg" -> Some(c.msg.asJson),

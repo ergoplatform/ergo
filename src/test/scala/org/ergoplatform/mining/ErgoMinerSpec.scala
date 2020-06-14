@@ -278,7 +278,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     val passiveMiner: ActorRef = minerRef
 
-    await((passiveMiner ? PrepareCandidate(Seq.empty)).mapTo[Future[ExternalCandidateBlock]].flatten)
+    await((passiveMiner ? PrepareCandidate(Seq.empty)).mapTo[Future[WorkMessage]].flatten)
     system.terminate()
   }
 
@@ -324,19 +324,19 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val mandatoryTx2 = ErgoTransaction(mandatoryTxLike2)
     mandatoryTx1.bytes.sameElements(mandatoryTx2.bytes) shouldBe false
 
-    val ecb = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[ExternalCandidateBlock]].flatten)
+    val ecb = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[WorkMessage]].flatten)
     ecb.proofsForMandatoryTransactions.isDefined shouldBe false
 
-    val ecb1 = await((minerRef ? PrepareCandidate(Seq(mandatoryTx1))).mapTo[Future[ExternalCandidateBlock]].flatten)
+    val ecb1 = await((minerRef ? PrepareCandidate(Seq(mandatoryTx1))).mapTo[Future[WorkMessage]].flatten)
     ecb1.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
     ecb1.proofsForMandatoryTransactions.get.check() shouldBe true
 
-    val ecb2 = await((minerRef ? PrepareCandidate(Seq(mandatoryTx2))).mapTo[Future[ExternalCandidateBlock]].flatten)
+    val ecb2 = await((minerRef ? PrepareCandidate(Seq(mandatoryTx2))).mapTo[Future[WorkMessage]].flatten)
     ecb2.msg.sameElements(ecb1.msg) shouldBe false
     ecb2.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
     ecb2.proofsForMandatoryTransactions.get.check() shouldBe true
 
-    val ecb3 = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[ExternalCandidateBlock]].flatten)
+    val ecb3 = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[WorkMessage]].flatten)
     ecb3.msg.sameElements(ecb2.msg) shouldBe true
     ecb3.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
     ecb3.proofsForMandatoryTransactions.get.check() shouldBe true

@@ -69,12 +69,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   // flag which is set once when first block candidate if formed
   private var isMining = false
+
   private var candidateOpt: Option[CandidateCache] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
-  private var publicKeyOpt: Option[ProveDlog] = ergoSettings.miningPubKey
-    .orElse(inSecretKeyOpt.map(_.publicImage))
+  private var publicKeyOpt: Option[ProveDlog] = ergoSettings.miningPubKey.orElse(inSecretKeyOpt.map(_.publicImage))
 
   override def preStart(): Unit = {
     // in external miner mode key from wallet is used if `publicKeyOpt` is not set
@@ -420,24 +420,9 @@ object ErgoMiner extends ScorexLogging {
 
   /**
     * Transaction and its cost.
-    *
-    * Please note that the cost is context-dependent, thus do not store instances of
-    * this class for long time (and this class is used only in the block assembly).
-    *
-    * @param tx   - a transaction
-    * @param cost - cost of the transaction
     */
-  case class CostedTransaction(tx: ErgoTransaction, cost: Long) {
-    lazy val id: ModifierId = tx.id
+  type CostedTransaction = (ErgoTransaction, Long)
 
-    override def equals(obj: Any): Boolean = obj match {
-      case c: CostedTransaction => c.id == id
-      case _ => false
-    }
-
-    override def hashCode(): Int = tx.hashCode()
-
-  }
 
   //TODO move ErgoMiner to mining package and make `collectTxs` and `fixTxsConflicts` private[mining]
 
@@ -508,7 +493,7 @@ object ErgoMiner extends ScorexLogging {
   def correctLimits(blockTxs: Seq[CostedTransaction],
                     maxBlockCost: Long,
                     maxBlockSize: Long): Boolean = {
-    blockTxs.map(_.cost).sum < maxBlockCost && blockTxs.map(_.tx.size).sum < maxBlockSize
+    blockTxs.map(_._2).sum < maxBlockCost && blockTxs.map(_._1.size).sum < maxBlockSize
   }
 
 
@@ -536,7 +521,7 @@ object ErgoMiner extends ScorexLogging {
              lastFeeTx: Option[CostedTransaction],
              invalidTxs: Seq[ModifierId]): (Seq[ErgoTransaction], Seq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
-      def current: Seq[ErgoTransaction] = (acc ++ lastFeeTx).map(_.tx)
+      def current: Seq[ErgoTransaction] = (acc ++ lastFeeTx).map(_._1)
 
       val stateWithTxs = us.withTransactions(current)
 
@@ -552,18 +537,18 @@ object ErgoMiner extends ScorexLogging {
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(tx, Some(upcomingContext), maxTransactionComplexity) match {
               case Success(costConsumed) =>
-                val newTxs = acc :+ CostedTransaction(tx, costConsumed)
-                val newBoxes = newTxs.flatMap(_.tx.outputs)
+                val newTxs = acc :+ (tx -> costConsumed)
+                val newBoxes = newTxs.flatMap(_._1.outputs)
 
                 val emissionRules = stateWithTxs.constants.settings.chainSettings.emissionRules
-                ErgoMiner.collectFees(stateWithTxs.stateContext.currentHeight, newTxs.map(_.tx), minerPk, emissionRules) match {
+                ErgoMiner.collectFees(stateWithTxs.stateContext.currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
                   case Some(feeTx) =>
                     val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
                     feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext) match {
                       case Success(cost) =>
-                        val blockTxs: Seq[CostedTransaction] = CostedTransaction(feeTx, cost) +: newTxs
+                        val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
                         if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                          loop(mempoolTxs.tail, newTxs, Some(CostedTransaction(feeTx, cost)), invalidTxs)
+                          loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
                         } else {
                           current -> invalidTxs
                         }
@@ -572,7 +557,7 @@ object ErgoMiner extends ScorexLogging {
                         current -> invalidTxs
                     }
                   case None =>
-                    log.debug(s"No fee proposition found in txs ${newTxs.map(_.tx.id)} ")
+                    log.debug(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
                     val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
                     if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
                       loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs)

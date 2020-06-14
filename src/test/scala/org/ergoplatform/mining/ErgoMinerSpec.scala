@@ -337,7 +337,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     ecb2.proofsForMandatoryTransactions.get.check() shouldBe true
 
     val ecb3 = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[ExternalCandidateBlock]].flatten)
-    ecb3.proofsForMandatoryTransactions.isDefined shouldBe false
+    ecb3.msg.sameElements(ecb2.msg) shouldBe true
+    ecb3.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
+    ecb3.proofsForMandatoryTransactions.get.check() shouldBe true
 
     system.terminate()
   }

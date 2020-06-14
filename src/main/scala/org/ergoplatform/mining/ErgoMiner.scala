@@ -253,9 +253,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
             Future.fromTry(publicKeyOpt match {
               case Some(pk) =>
                 createCandidate(pk, h, m, desiredUpdate, s, txsToInclude)
-                  .map { cand =>
-                    updateCandidate(cand, pk, txsToInclude) //returns external candidate
-                  }
+                  .map(candidate => updateCandidate(candidate, pk, txsToInclude)) //returns external candidate
               case None => Failure(new Exception("Candidate could not be generated: no public key available"))
             })
           case _ =>

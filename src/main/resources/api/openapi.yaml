@@ -1087,7 +1087,7 @@ components:
 
     ProofOfUpcomingTransactions:
       type: object
-      description: Proof that a block corresponding to given header without PoW contains certain transactions
+      description: Proof that a block corresponding to given header without PoW contains some transactions
       required:
         - msgPreimage
         - txProofs
@@ -1098,7 +1098,7 @@ components:
           example: '0112e03c6d39d32509855be7cee9b62ff921f7a0cf6883e232474bd5b54d816dd056f846980d34c3b23098bdcf41222f8cdee5219224aa67750055926c3a2310a483accc4f9153e7a760615ea972ac67911cff111f8c17f563d6147205f58f85133ae695d1d4157e4aecdbbb29952cfa42b75129db55bddfce3bc53b8fd5b5465f10d8be8ddda62ed3b86afb0497ff2d381ed884bdae5287d20667def224a28d2b6e3ebfc78709780702c70bd8df0e000000'
         txProofs:
           type: array
-          description: Merkle proofs of transactions included into blocks (not necessarily all the input transactions)
+          description: Merkle proofs of transactions included into blocks (not necessarily all the block transactions)
           items:
             $ref: '#/components/schemas/MerkleProof'
 

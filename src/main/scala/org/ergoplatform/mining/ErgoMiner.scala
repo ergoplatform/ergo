@@ -220,8 +220,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     // Miner's node can produce block candidate only if it is working in the UTXO regime
     case Readers(h, s: UtxoStateReader, m, _) =>
       //mandatory transactions to include into next block taken from the previous candidate
-      val txsToInclude = candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty).filter{tx =>
-        tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
+      val txsToInclude = candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty).filter { tx =>
+        inputsNotSpent(tx, s)
       }
 
       publicKeyOpt.foreach { pk =>
@@ -242,7 +242,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     // Send cached candidate if it is available and list of transactions to include hasn't been changed
     case PrepareCandidate(txsToInclude) =>
-      if(cachedFor(txsToInclude)) {
+      if (cachedFor(txsToInclude)) {
         val candBlockFuture = candidateOpt
           .map(_.externalVersion)
           .fold[Future[ExternalCandidateBlock]](
@@ -254,9 +254,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           case Readers(h, s: UtxoStateReader, m, _) =>
             Future.fromTry(publicKeyOpt match {
               case Some(pk) =>
-                val ts = txsToInclude.filter{tx =>
-                  tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
-                }
+                val ts = txsToInclude.filter { tx => inputsNotSpent(tx, s) }
                 createCandidate(pk, h, m, desiredUpdate, s, ts)
                   .map(candidate => updateCandidate(candidate, pk, ts)) //returns external candidate
               case None => Failure(new Exception("Candidate could not be generated: no public key available"))
@@ -404,6 +402,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
 object ErgoMiner extends ScorexLogging {
 
+  private def inputsNotSpent(tx: ErgoTransaction, s: UtxoStateReader): Boolean = {
+    tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
+  }
+
   /**
     * Holder for both candidate block and data for external miners derived from it
     * (to avoid possibly costly recalculation)
@@ -541,7 +543,7 @@ object ErgoMiner extends ScorexLogging {
       mempoolTxs.headOption match {
         case Some(tx) =>
 
-          if (!tx.inputs.forall(inp => stateWithTxs.boxById(inp.boxId).isDefined) || doublespend(current, tx)) {
+          if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             //do these checks before validating the scripts to save time
             current -> (invalidTxs :+ tx.id)

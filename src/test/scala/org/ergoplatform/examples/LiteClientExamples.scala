@@ -1,4 +1,4 @@
-package org.ergoplatform
+package org.ergoplatform.examples
 
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.merkle.MerkleProof
@@ -7,7 +7,7 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.encode.Base16
 
 /**
-  * This class contains how-to examples for building lite clients
+  * This class contains how-to examples for building clients
   */
 class LiteClientExamples extends ErgoPropertyTest {
 

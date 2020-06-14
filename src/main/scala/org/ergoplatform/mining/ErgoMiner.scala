@@ -69,7 +69,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var isMining = false
   private var candidateOpt: Option[CandidateCache] = None
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
-  // cost of a transaction collecting emission box
 
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
   private var publicKeyOpt: Option[ProveDlog] = ergoSettings.miningPubKey

@@ -7,7 +7,11 @@ import org.ergoplatform.settings.Algos
 import io.circe.syntax._
 
 /**
-  * Proof of inclusion of certain transactions into a block with known and yet unproven header
+  * Proof of inclusion of certain transactions into a block with known and yet unproven header.
+  *
+  * In particular, can be useful for collateralized pools, see [[org.ergoplatform.examples.LiteClientExamples]]
+  * for details. But there are could be more examples where a miner needs to show that a transaction is included
+  * into upcoming block the miner is working on.
   *
   * @param minHeader - (unproven or proven) header
   * @param txProofs  - proofs of membership for transactions (against a transactions Merkle tree digest in the header)

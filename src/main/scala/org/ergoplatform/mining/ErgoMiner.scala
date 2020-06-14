@@ -220,7 +220,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     // Miner's node can produce block candidate only if it is working in the UTXO regime
     case Readers(h, s: UtxoStateReader, m, _) =>
       //mandatory transactions to include into next block taken from the previous candidate
-      val txsToInclude = candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty)
+      val txsToInclude = candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty).filter{tx =>
+        tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
+      }
 
       publicKeyOpt.foreach { pk =>
         createCandidate(pk, h, m, desiredUpdate, s, txsToInclude) match {
@@ -252,8 +254,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           case Readers(h, s: UtxoStateReader, m, _) =>
             Future.fromTry(publicKeyOpt match {
               case Some(pk) =>
-                createCandidate(pk, h, m, desiredUpdate, s, txsToInclude)
-                  .map(candidate => updateCandidate(candidate, pk, txsToInclude)) //returns external candidate
+                val ts = txsToInclude.filter{tx =>
+                  tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
+                }
+                createCandidate(pk, h, m, desiredUpdate, s, ts)
+                  .map(candidate => updateCandidate(candidate, pk, ts)) //returns external candidate
               case None => Failure(new Exception("Candidate could not be generated: no public key available"))
             })
           case _ =>

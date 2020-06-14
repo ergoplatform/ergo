@@ -196,33 +196,41 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       queryWallet orElse
       unknownMessage
 
+  // checks that current candidate block contains `txs`
+  private[mining] def cachedFor(txs: Seq[ErgoTransaction]): Boolean = {
+    candidateOpt.isDefined && candidateOpt.exists { c =>
+      txs.size == c.txsToInclude.size && txs.forall(c.txsToInclude.contains)
+    }
+  }
+
+  private def updateCandidate(candidate: CandidateBlock,
+                              pk: ProveDlog,
+                              txsToInclude: Seq[ErgoTransaction]): ExternalCandidateBlock = {
+    val ext = powScheme.deriveExternalCandidate(candidate, pk, txsToInclude.map(_.id))
+    log.info(s"New candidate with msg ${Base16.encode(ext.msg)} generated")
+    log.debug(s"Got candidate block at height ${ErgoHistory.heightOf(candidate.parentOpt) + 1}" +
+      s" with ${candidate.transactions.size} transactions")
+    candidateOpt = Some(CandidateCache(candidate, ext, txsToInclude))
+    if (!externalMinerMode) miningThreads.foreach(_ ! candidate)
+    ext
+  }
+
   private def onReaders: Receive = {
     // Miner's node can produce block candidate only if it is working in the UTXO regime
     case Readers(h, s: UtxoStateReader, m, _) =>
       //mandatory transactions to include into next block taken from the previous candidate
       val txsToInclude = candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty)
 
-      publicKeyOpt.foreach { minerDlog =>
-        createCandidate(minerDlog, h, m, desiredUpdate, s, txsToInclude) match {
+      publicKeyOpt.foreach { pk =>
+        createCandidate(pk, h, m, desiredUpdate, s, txsToInclude) match {
           case Success(candidate) =>
-            val ext = powScheme.deriveExternalCandidate(candidate, minerDlog)
-            log.info(s"New candidate with msg ${Base16.encode(ext.msg)} generated")
-            log.debug(s"Got candidate block at height ${ErgoHistory.heightOf(candidate.parentOpt) + 1}" +
-              s" with ${candidate.transactions.size} transactions")
-            candidateOpt = Some(CandidateCache(candidate, ext, txsToInclude))
-            if (!externalMinerMode) miningThreads.foreach(_ ! candidate)
+            updateCandidate(candidate, pk, txsToInclude)
           case Failure(e) =>
             log.warn("Failed to produce candidate block.", e)
             //candidate cleared, included mandatory transactions to include
             candidateOpt = None
         }
       }
-  }
-
-  private[mining] def cachedFor(txs: Seq[ErgoTransaction]): Boolean = {
-    candidateOpt.isDefined && candidateOpt.exists { c =>
-      txs.size == c.txsToInclude.size && txs.forall(c.txsToInclude.contains)
-    }
   }
 
   private def mining: Receive = {
@@ -245,10 +253,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
               case Some(pk) =>
                 createCandidate(pk, h, m, desiredUpdate, s, txsToInclude)
                   .map { cand =>
-                    val ext = powScheme.deriveExternalCandidate(cand, pk, txsToInclude.map(_.id))
-                    candidateOpt = Some(CandidateCache(cand, ext, txsToInclude))
-                    if (!externalMinerMode) miningThreads.foreach(_ ! cand)
-                    ext
+                    updateCandidate(cand, pk, txsToInclude) //returns external candidate
                   }
               case None => Failure(new Exception("Candidate could not be generated: no public key available"))
             })

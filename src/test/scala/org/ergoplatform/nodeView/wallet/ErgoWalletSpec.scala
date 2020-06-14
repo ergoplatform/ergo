@@ -113,7 +113,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
 
       // trying to create a new transaction
       val tx3 = await(wallet.generateTransaction(req2)).get
-      // check that tx3 have inputs, different from tx2
+      // check that tx3 have inputs different from tx2
       tx3.inputs.foreach { in =>
         tx2.inputs.exists(tx2In => tx2In.boxId sameElements in.boxId) shouldBe false
       }

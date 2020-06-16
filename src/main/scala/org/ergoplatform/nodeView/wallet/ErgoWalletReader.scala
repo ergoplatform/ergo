@@ -87,9 +87,10 @@ trait ErgoWalletReader extends VaultReader {
     (walletActor ? ReadTrackedAddresses).mapTo[Seq[ErgoAddress]]
 
   def generateTransaction(requests: Seq[TransactionGenerationRequest],
+                          sign: Boolean,
                           inputsRaw: Seq[String] = Seq.empty,
                           dataInputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
-    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw)).mapTo[Try[ErgoTransaction]]
+    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign)).mapTo[Try[ErgoTransaction]]
 
   def signTransaction(tx: UnsignedErgoTransaction,
                       secrets: Seq[ExternalSecret],

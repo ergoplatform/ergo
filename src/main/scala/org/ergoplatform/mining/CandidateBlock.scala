@@ -20,9 +20,11 @@ case class CandidateBlock(parentOpt: Option[Header],
                           votes: Array[Byte]) {
 
   override def toString: String = s"CandidateBlock(${this.asJson})"
+
 }
 
 object CandidateBlock {
+
   implicit val jsonEncoder: Encoder[CandidateBlock] = (c: CandidateBlock) =>
     Map(
       "parentId" -> c.parentOpt.map(p => Algos.encode(p.id)).getOrElse("None").asJson,
@@ -36,4 +38,5 @@ object CandidateBlock {
       "votes" -> Algos.encode(c.votes).asJson,
       "extensionHash" -> Algos.encode(c.extension.digest).asJson
     ).asJson
+
 }

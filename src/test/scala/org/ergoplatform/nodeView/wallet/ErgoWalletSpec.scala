@@ -46,7 +46,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val balanceAfterSpending = confirmedBalance - balanceToMakeUncertain
 
       val req = PaymentRequest(Pay2SAddress(uncertainProp), balanceToMakeUncertain, Seq.empty, Map.empty)
-      val tx = await(wallet.generateTransaction(Seq(req))).get
+      val tx = await(wallet.generateTransaction(Seq(req), sign = true)).get
 
       val block = makeNextBlock(getUtxoState, Seq(tx))
       applyBlock(block) shouldBe 'success
@@ -92,7 +92,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val req = (0 until inputsToCreate).map(_ => PaymentRequest(addresses.head, sumToSpend, Seq.empty, Map.empty))
       log.info(s"Confirmed balance $snap")
       log.info(s"Payment request $req")
-      val tx = await(wallet.generateTransaction(req)).get
+      val tx = await(wallet.generateTransaction(req, sign = true)).get
       log.info(s"Generated transaction $tx")
       val context = new ErgoStateContext(Seq(genesisBlock.header), Some(genesisBlock.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
       val boxesToSpend = tx.inputs.map(i => genesisTx.outputs.find(o => java.util.Arrays.equals(o.id, i.boxId)).get)
@@ -105,14 +105,14 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val newSumToSpend = tx.outputs.head.value
       val req2 = Seq(PaymentRequest(addresses.head, newSumToSpend, Seq.empty, Map.empty))
       log.info(s"Payment requests 2 $req2")
-      val tx2 = await(wallet.generateTransaction(req2)).get
+      val tx2 = await(wallet.generateTransaction(req2, sign = true)).get
       log.info(s"Generated transaction $tx2")
       wallet.scanOffchain(tx2)
       blocking(Thread.sleep(1000))
       tx2.inputs.size should be < tx.outputs.size
 
       // trying to create a new transaction
-      val tx3 = await(wallet.generateTransaction(req2)).get
+      val tx3 = await(wallet.generateTransaction(req2, sign = true)).get
       // check that tx3 have inputs, different from tx2
       tx3.inputs.foreach { in =>
         tx2.inputs.exists(tx2In => tx2In.boxId sameElements in.boxId) shouldBe false
@@ -135,7 +135,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val feeAmount = availableAmount / 4
       val feeReq = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), feeAmount, Seq.empty, Map.empty)
       val req = AssetIssueRequest(address, emissionAmount, tokenName, tokenDescription, tokenDecimals)
-      val tx = await(wallet.generateTransaction(Seq(feeReq, req))).get
+      val tx = await(wallet.generateTransaction(Seq(feeReq, req), sign = true)).get
       log.info(s"Generated transaction $tx")
       val context = new ErgoStateContext(
         Seq(genesisBlock.header),
@@ -169,7 +169,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       assetToSpend should not be empty
       val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance, assetToSpend, Map.empty)
 
-      val tx1 = await(wallet.generateTransaction(Seq(req1), boxesToUseEncoded)).get
+      val tx1 = await(wallet.generateTransaction(Seq(req1), sign = true, boxesToUseEncoded)).get
       tx1.outputs.size shouldBe 1
       tx1.outputs.head.value shouldBe confirmedBalance
       toAssetMap(tx1.outputs.head.additionalTokens.toArray) shouldBe toAssetMap(assetToSpend)
@@ -179,7 +179,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val assetToReturn = assetToSpend.map { case (tokenId, _) => (tokenId, 1L) }
       val req2 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance - MinBoxValue, assetToSpend2, Map.empty)
 
-      val tx2 = await(wallet.generateTransaction(Seq(req2))).get
+      val tx2 = await(wallet.generateTransaction(Seq(req2), sign = true)).get
       tx2.outputs.size shouldBe 2
       tx2.outputs.head.value shouldBe confirmedBalance - MinBoxValue
       toAssetMap(tx2.outputs.head.additionalTokens.toArray) shouldBe toAssetMap(assetToSpend2)
@@ -208,7 +208,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
           addresses.tail.map(a => PaymentRequest(a, sumToSpend, Seq.empty, Map.empty))
       log.info(s"Confirmed balance $snap")
       log.info(s"Payment request $req")
-      val tx = await(wallet.generateTransaction(req)).get
+      val tx = await(wallet.generateTransaction(req, sign = true)).get
       log.info(s"Generated transaction $tx")
       val context = new ErgoStateContext(
         Seq(genesisBlock.header),
@@ -230,7 +230,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
         addresses.tail.map(a => PaymentRequest(a, newSumToSpend, Seq.empty, Map.empty))
       log.info(s"New balance $newSnap")
       log.info(s"Payment requests 2 $req2")
-      val tx2 = await(wallet.generateTransaction(req2)).get
+      val tx2 = await(wallet.generateTransaction(req2, sign = true)).get
       log.info(s"Generated transaction $tx2")
       val context2 = new ErgoStateContext(Seq(block.header), Some(block.extension), startDigest, parameters, validationSettingsNoIl, VotingData.empty)
       val knownBoxes = tx.outputs ++ genesisTx.outputs
@@ -777,7 +777,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       assetToSpend should not be empty
       val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance, assetToSpend, Map.empty)
 
-      val tx1 = await(wallet.generateTransaction(Seq(req1))).get
+      val tx1 = await(wallet.generateTransaction(Seq(req1), sign = true)).get
       tx1.outputs.size shouldBe 1
       tx1.outputs.head.value shouldBe confirmedBalance
       toAssetMap(tx1.outputs.head.additionalTokens.toArray) shouldBe toAssetMap(assetToSpend)
@@ -787,7 +787,7 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       val assetToReturn = assetToSpend.map { case (tokenId, _) => (tokenId, 1L) }
       val req2 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance - MinBoxValue, assetToSpend2, Map.empty)
 
-      val tx2 = await(wallet.generateTransaction(Seq(req2))).get
+      val tx2 = await(wallet.generateTransaction(Seq(req2), sign = true)).get
       tx2.outputs.size shouldBe 2
       tx2.outputs.head.value shouldBe confirmedBalance - MinBoxValue
       toAssetMap(tx2.outputs.head.additionalTokens.toArray) shouldBe toAssetMap(assetToSpend2)
@@ -824,10 +824,10 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
         ErgoAddressEncoder(0: Byte).fromProposition(pubKey).get, totalAvailableAmount, Seq.empty, Map.empty)
       val requestWithCertainAmount = requestWithTotalAmount.copy(value = certainAmount)
 
-      val uncertainTxTry = await(wallet.generateTransaction(Seq(requestWithTotalAmount)))
+      val uncertainTxTry = await(wallet.generateTransaction(Seq(requestWithTotalAmount), sign = true))
       uncertainTxTry shouldBe 'failure
       uncertainTxTry.failed.get.getMessage.startsWith("Failed to find boxes to assemble a transaction") shouldBe true
-      await(wallet.generateTransaction(Seq(requestWithCertainAmount))) shouldBe 'success
+      await(wallet.generateTransaction(Seq(requestWithCertainAmount), sign = true)) shouldBe 'success
     }
   }
 

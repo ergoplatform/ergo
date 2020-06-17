@@ -45,6 +45,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         unspentBoxesR ~
         boxesR ~
         generateTransactionR ~
+        generateUnsignedTransactionR ~
         sendPaymentTransactionR ~
         sendTransactionR ~
         initWalletR ~
@@ -129,7 +130,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
                                             inputsRaw: Seq[String],
                                             dataInputsRaw: Seq[String],
                                             sign: Boolean,
-                                            processFn: ErgoTransaction => Route): Route = {
+                                            processFn: ErgoLikeTransactionTemplate[_] => Route): Route = {
     withWalletOp(_.generateTransaction(requests, sign, inputsRaw, dataInputsRaw)) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => processFn(tx)
@@ -140,7 +141,11 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
                                   inputsRaw: Seq[String],
                                   dataInputsRaw: Seq[String],
                                   sign: Boolean): Route = {
-    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, sign, tx => ApiResponse(tx))
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, sign, tx => {
+      tx match {
+        case et: ErgoTransaction => ApiResponse(et)
+      }
+    })
   }
 
   private def sendTransaction(requests: Seq[TransactionGenerationRequest],

@@ -497,14 +497,13 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
 
       val t = selectionOpt.map { selectionResult =>
-        prepareTransaction(outputs, selectionResult, dataInputs, changeAddressOpt)
+        prepareTransaction(outputs, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.boxes
       } match {
-        case Right(txTry) => if (sign) {
+        case Right((txTry, inputs)) => if (sign) {
           proverOpt match {
             case Some(prover) =>
               txTry.flatMap { unsignedTx =>
-                val inputs = inputBoxes.toIndexedSeq.map(_.box)
-                signTransaction2(prover, unsignedTx, inputs, dataInputs, stateContext)
+                signTransaction2(prover, unsignedTx, inputs.map(_.box).toIndexedSeq, dataInputs, stateContext)
               }
             case None =>
               Failure(new Exception(s"Cannot sign the transaction $txTry, wallet locked or not initialized"))

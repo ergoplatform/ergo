@@ -354,11 +354,23 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       true
     }
 
-    // double-check that box is not spent
-    preStatus && utxoReaderOpt.forall { utxo =>
-      val bid = trackedBox.box.id
-      utxo.boxById(bid).isDefined
+    val bid = trackedBox.box.id
+
+    def notInInputs: Boolean = {
+      mempoolReaderOpt match {
+        case Some(mr) => !mr.getAll.flatMap(_.inputs.map(_.boxId)).exists(_.sameElements(bid))
+        case None => true
+      }
     }
+
+    // double-check that box is exists in UTXO set or outputs of offchain transaction
+    def inOutputs: Boolean = {
+      utxoReaderOpt.forall { utxo =>
+        utxo.boxById(bid).isDefined
+      }
+    }
+
+    preStatus && notInInputs && inOutputs
   }
 
   /**

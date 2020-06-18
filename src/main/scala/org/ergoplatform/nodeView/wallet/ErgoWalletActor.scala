@@ -265,7 +265,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       storage.addTrackedAddress(address)
 
     case GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign) =>
-      sender() ! generateTransactionWithOutputs(requests, inputsRaw, dataInputsRaw, sign)
+      sender() ! generateUnsignedTransaction(requests, inputsRaw, dataInputsRaw)
 
     case SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes) =>
       sender() ! signTransaction(proverOpt, tx, secrets, hints, boxesToSpend, dataBoxes, parameters, stateContext)
@@ -446,10 +446,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     *                      (if they are needed in order to spend the spendable inputs).
     * @return generated transaction or an error
     */
-  private def generateTransactionWithOutputs(requests: Seq[TransactionGenerationRequest],
+  private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
                                              inputsRaw: Seq[String],
-                                             dataInputsRaw: Seq[String],
-                                             sign: Boolean): Try[ErgoLikeTransactionTemplate[_]] = Try {
+                                             dataInputsRaw: Seq[String]): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = Try {
 
     // A helper which converts Base16-encoded boxes to ErgoBox instances
     def stringsToBoxes(strings: Seq[String]): Seq[ErgoBox] =
@@ -458,7 +457,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     val userInputs = stringsToBoxes(inputsRaw)
     val dataInputs = stringsToBoxes(dataInputsRaw).toIndexedSeq
 
-    val r: Try[ErgoLikeTransactionTemplate[_]] = requestsToBoxCandidates(requests).flatMap { outputs =>
+    requestsToBoxCandidates(requests).flatMap { outputs =>
       require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
       require(outputs.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, parameters)), "Minimal ERG value not met")
       require(outputs.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
@@ -496,29 +495,31 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
       val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
 
-      val t = selectionOpt.map { selectionResult =>
+      val r:Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] =
+        selectionOpt.map { selectionResult =>
         prepareTransaction(outputs, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.boxes
       } match {
-        case Right((txTry, inputs)) => if (sign) {
-          proverOpt match {
-            case Some(prover) =>
-              txTry.flatMap { unsignedTx =>
-                signTransaction2(prover, unsignedTx, inputs.map(_.box).toIndexedSeq, dataInputs, stateContext)
-              }
-            case None =>
-              Failure(new Exception(s"Cannot sign the transaction $txTry, wallet locked or not initialized"))
-          }
-        } else {
-          txTry
-        }
+        case Right((txTry, inputs)) => txTry.map(tx => (tx, inputs.map(_.box).toIndexedSeq, dataInputs))
         case Left(e) => Failure(
           new Exception(s"Failed to find boxes to assemble a transaction for $outputs, \nreason: $e")
         )
       }
-      t
+      r
     }
-    r
-  }.flatten
+  }
+
+  def generateSignedTransaction(requests: Seq[TransactionGenerationRequest],
+                                inputsRaw: Seq[String],
+                                dataInputsRaw: Seq[String]): Try[ErgoTransaction] = {
+    generateUnsignedTransaction(requests, inputsRaw, dataInputsRaw).flatMap { case (unsignedTx, inputs, dataInputs) =>
+      proverOpt match {
+        case Some(prover) =>
+          signTransaction2(prover, unsignedTx, inputs, dataInputs, stateContext)
+        case None =>
+          Failure(new Exception(s"Cannot sign the transaction $unsignedTx, wallet locked or not initialized"))
+      }
+    }
+  }
 
   private def prepareTransaction(payTo: Seq[ErgoBoxCandidate],
                                  selectionResult: BoxSelectionResult[TrackedBox],
@@ -546,7 +547,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                        unsignedTx: UnsignedErgoTransaction,
                        inputBoxes: IndexedSeq[ErgoBox],
                        dataInputBoxes: IndexedSeq[ErgoBox],
-                       stateContext: ErgoLikeStateContext): Try[ErgoLikeTransaction] = {
+                       stateContext: ErgoLikeStateContext): Try[ErgoTransaction] = {
     prover.sign(unsignedTx, inputBoxes, dataInputBoxes, stateContext)
       .fold(
         e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputBoxes", e)),

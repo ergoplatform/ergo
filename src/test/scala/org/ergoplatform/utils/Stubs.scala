@@ -2,8 +2,7 @@ package org.ergoplatform.utils
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.local.ErgoMiner
-import org.ergoplatform.mining.{AutolykosSolution, ExternalCandidateBlock}
+import org.ergoplatform.mining.{AutolykosSolution, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -80,7 +79,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val blacklistedPeers: Seq[String] = Seq("4.4.4.4:1111", "8.8.8.8:2222")
 
   val pk: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray(Random.randomBytes(32))).publicImage
-  val externalCandidateBlock = ExternalCandidateBlock(Array.fill(32)(2: Byte), BigInt(9999), pk)
+  val externalCandidateBlock = WorkMessage(Array.fill(32)(2: Byte), BigInt(9999), pk, None)
 
   class PeersManagerStub extends Actor {
     def receive: Receive = {
@@ -95,7 +94,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class MinerStub extends Actor {
     def receive: Receive = {
-      case ErgoMiner.PrepareCandidate => sender() ! Future.successful(externalCandidateBlock)
+      case ErgoMiner.PrepareCandidate(_) => sender() ! Future.successful(externalCandidateBlock)
       case _: AutolykosSolution => sender() ! Future.successful(())
       case ErgoMiner.ReadMinerPk => sender() ! Some(pk)
     }

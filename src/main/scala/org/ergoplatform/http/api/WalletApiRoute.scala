@@ -145,7 +145,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
                                   inputsRaw: Seq[String],
                                   dataInputsRaw: Seq[String]): Route = {
-    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw)) {
+    withWalletOp(_.generateUnsignedTransaction(requests, inputsRaw, dataInputsRaw)) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(utx) => ApiResponse(utx)
     }

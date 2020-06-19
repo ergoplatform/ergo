@@ -2,7 +2,7 @@ package org.ergoplatform.utils
 
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
-import org.ergoplatform.local.ErgoMiner
+import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory

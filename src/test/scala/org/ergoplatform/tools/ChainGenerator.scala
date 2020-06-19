@@ -1,10 +1,10 @@
 package org.ergoplatform.tools
 
 import java.io.File
+
 import org.ergoplatform._
-import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock}
+import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, ErgoMiner}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}

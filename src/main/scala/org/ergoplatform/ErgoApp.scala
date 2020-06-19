@@ -7,9 +7,10 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler}
 import akka.stream.ActorMaterializer
 import org.ergoplatform.http._
+import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.http.api.{ApplicationApiRoute, _}
-import org.ergoplatform.local.ErgoMiner.StartMining
 import org.ergoplatform.local._
+import org.ergoplatform.mining.ErgoMinerRef
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.state.ErgoState

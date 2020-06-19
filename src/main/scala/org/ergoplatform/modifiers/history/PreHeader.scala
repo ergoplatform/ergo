@@ -12,7 +12,6 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
 /**
   * Only header fields that can be predicted by a miner
   */
-//todo: add votes to the PreHeader?
 trait PreHeader {
   val version: Version
   val parentId: ModifierId
@@ -71,4 +70,5 @@ object PreHeader {
     votes = Array.fill(3)(0.toByte),
     minerPk = org.ergoplatform.mining.group.generator
   )
+
 }

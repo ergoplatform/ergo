@@ -10,7 +10,7 @@ import scorex.crypto.authds._
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
 import scorex.crypto.hash.Digest32
 import scorex.util._
-import sigmastate.Values
+
 
 class AdProofSpec extends ErgoPropertyTest {
   val KL = 32

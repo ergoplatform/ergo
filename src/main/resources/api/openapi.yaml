@@ -2729,6 +2729,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/transaction/generateUnsigned:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Generate arbitrary unsigned transaction from array of requests.
+      operationId: walletUnsignedTransactionGenerate
+      tags:
+        - wallet
+      requestBody:
+        description: The same as /wallet/transaction/generate but generates unsigned transaction.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestsHolder'
+      responses:
+        '200':
+          description: Generated Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnsignedErgoTransaction'
+        '400':
+          description: Bad transaction request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+
   /wallet/transaction/sign:
     post:
       security:

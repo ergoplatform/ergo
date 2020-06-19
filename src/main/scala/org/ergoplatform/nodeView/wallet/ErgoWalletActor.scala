@@ -265,7 +265,12 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       storage.addTrackedAddress(address)
 
     case GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign) =>
-      sender() ! generateUnsignedTransaction(requests, inputsRaw, dataInputsRaw)
+      val tx = if(sign) {
+        generateSignedTransaction(requests, inputsRaw, dataInputsRaw)
+      } else {
+        generateUnsignedTransaction(requests, inputsRaw, dataInputsRaw).map(_._1)
+      }
+      sender() ! tx
 
     case SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes) =>
       sender() ! signTransaction(proverOpt, tx, secrets, hints, boxesToSpend, dataBoxes, parameters, stateContext)
@@ -495,8 +500,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
       val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
 
-      val r:Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] =
-        selectionOpt.map { selectionResult =>
+      selectionOpt.map { selectionResult =>
         prepareTransaction(outputs, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.boxes
       } match {
         case Right((txTry, inputs)) => txTry.map(tx => (tx, inputs.map(_.box).toIndexedSeq, dataInputs))
@@ -504,9 +508,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
           new Exception(s"Failed to find boxes to assemble a transaction for $outputs, \nreason: $e")
         )
       }
-      r
     }
-  }
+  }.flatten
 
   def generateSignedTransaction(requests: Seq[TransactionGenerationRequest],
                                 inputsRaw: Seq[String],
@@ -526,7 +529,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                                  dataInputBoxes: IndexedSeq[ErgoBox],
                                  changeAddressOpt: Option[ProveDlog]): Try[UnsignedErgoTransaction] = Try {
     require(
-      selectionResult.changeBoxes.nonEmpty == changeAddressOpt.isDefined,
+      changeAddressOpt.isDefined || selectionResult.changeBoxes.isEmpty,
       "Does not have change address to send change to"
     )
 
@@ -549,6 +552,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                        dataInputBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoLikeStateContext): Try[ErgoTransaction] = {
     prover.sign(unsignedTx, inputBoxes, dataInputBoxes, stateContext)
+      .map(ErgoTransaction.apply)
       .fold(
         e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputBoxes", e)),
         tx => Success(tx))

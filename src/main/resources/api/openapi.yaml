@@ -848,25 +848,65 @@ components:
           type: integer
           example: 987654321
 
-    ExternalCandidateBlock:
-      description: Candidate block info for external miner
+    BlockHeaderWithoutPow:
       type: object
       required:
-        - msg
-        - b
-        - pk
+        - id
+        - timestamp
+        - version
+        - adProofsRoot
+        - stateRoot
+        - transactionsRoot
+        - nBits
+        - extensionHash
+        - height
+        - difficulty
+        - parentId
+        - votes
       properties:
-        msg:
-          type: string
-          description: Base16-encoded block bytes without pow
-          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
-        b:
+        id:
+          $ref: '#/components/schemas/ModifierId'
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        version:
+          $ref: '#/components/schemas/Version'
+        adProofsRoot:
+          $ref: '#/components/schemas/Digest32'
+        stateRoot:
+          $ref: '#/components/schemas/ADDigest'
+        transactionsRoot:
+          $ref: '#/components/schemas/Digest32'
+        nBits:
           type: integer
-          example: 987654321
-        pk:
-          type: string
-          description: Base16-encoded public key
-          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+          format: int64
+          minimum: 0
+          example: 19857408
+        extensionHash:
+          $ref: '#/components/schemas/Digest32'
+        height:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 667
+        difficulty:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 62
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+        votes:
+          $ref: '#/components/schemas/Votes'
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
+        extensionId:
+          $ref: '#/components/schemas/ModifierId'
+        transactionsId:
+          $ref: '#/components/schemas/ModifierId'
+        adProofsId:
+          $ref: '#/components/schemas/ModifierId'
 
     BlockHeader:
       type: object
@@ -1024,6 +1064,67 @@ components:
           $ref: '#/components/schemas/Transactions'
         votes:
           $ref: '#/components/schemas/Votes'
+
+    MerkleProof:
+      type: object
+      description: Merkle proof for a leaf, which is an array of bytes (e.g. a transaction identifier)
+      required:
+        - leaf
+        - levels
+      properties:
+        leaf:
+          type: string
+          description: Base16-encoded Merkle tree leaf bytes
+          example: 'cd665e49c834b0c25574fcb19a158d836f3f2aad8e91ac195f972534c25449b3'
+        levels:
+          type: array
+          items:
+            type: string
+            description: internal node with direction byte prepended
+            example: '018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337'
+          example: ['018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337']
+
+
+    ProofOfUpcomingTransactions:
+      type: object
+      description: Proof that a block corresponding to given header without PoW contains some transactions
+      required:
+        - msgPreimage
+        - txProofs
+      properties:
+        msgPreimage:
+          type: string
+          description: Base16-encoded serialized header without Proof-of-Work
+          example: '0112e03c6d39d32509855be7cee9b62ff921f7a0cf6883e232474bd5b54d816dd056f846980d34c3b23098bdcf41222f8cdee5219224aa67750055926c3a2310a483accc4f9153e7a760615ea972ac67911cff111f8c17f563d6147205f58f85133ae695d1d4157e4aecdbbb29952cfa42b75129db55bddfce3bc53b8fd5b5465f10d8be8ddda62ed3b86afb0497ff2d381ed884bdae5287d20667def224a28d2b6e3ebfc78709780702c70bd8df0e000000'
+        txProofs:
+          type: array
+          description: Merkle proofs of transactions included into blocks (not necessarily all the block transactions)
+          items:
+            $ref: '#/components/schemas/MerkleProof'
+
+    WorkMessage:
+      description: Block candidate related data for external miner to perform work
+      type: object
+      required:
+        - msg
+        - b
+        - pk
+      properties:
+        msg:
+          type: string
+          description: Base16-encoded block header bytes without PoW solution
+          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+        b:
+          type: integer
+          description: Work target value
+          example: 987654321
+        pk:
+          type: string
+          description: Base16-encoded miner public key
+          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+        proof:
+          type: object
+          $ref: '#/components/schemas/ProofOfUpcomingTransactions'
 
     Peer:
       type: object
@@ -2815,7 +2916,35 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ExternalCandidateBlock'
+                $ref: '#/components/schemas/WorkMessage'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /mining/candidateWithTxs:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Request block candidate
+      operationId: miningRequestBlockCandidateWithMandatoryTransactions
+      tags:
+        - mining
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Transactions'
+      responses:
+        '200':
+          description: External candidate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkMessage'
         default:
           description: Error
           content:

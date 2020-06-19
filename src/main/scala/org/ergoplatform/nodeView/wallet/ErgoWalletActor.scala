@@ -356,6 +356,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
     val bid = trackedBox.box.id
 
+    // double-check that box is not spent yet by inputs of mempool transactions
     def notInInputs: Boolean = {
       mempoolReaderOpt match {
         case Some(mr) => !mr.getAll.flatMap(_.inputs.map(_.boxId)).exists(_.sameElements(bid))

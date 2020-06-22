@@ -44,7 +44,7 @@ object FeeSimulator extends App {
   println(s"Min dust value of standard-size box: $minStdDust")
 
   println("=====================")
-  println(s"Assume that Ergo state have the same number of outputs($bitcoinUtxos), as Bitcoin.")
+  println(s"Assume that Ergo state has the same number of outputs($bitcoinUtxos), as Bitcoin.")
 
   def bitcoinUtxos = 60000000
 

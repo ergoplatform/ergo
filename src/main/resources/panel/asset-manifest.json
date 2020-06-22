@@ -1,26 +1,26 @@
 {
   "files": {
-    "main.css": "./static/css/main.de2ea70b.chunk.css",
-    "main.js": "./static/js/main.d8ab7fd6.chunk.js",
-    "main.js.map": "./static/js/main.d8ab7fd6.chunk.js.map",
-    "runtime-main.js": "./static/js/runtime-main.be567568.js",
-    "runtime-main.js.map": "./static/js/runtime-main.be567568.js.map",
-    "static/css/2.a94a8b68.chunk.css": "./static/css/2.a94a8b68.chunk.css",
-    "static/js/2.365d2821.chunk.js": "./static/js/2.365d2821.chunk.js",
-    "static/js/2.365d2821.chunk.js.map": "./static/js/2.365d2821.chunk.js.map",
-    "index.html": "./index.html",
-    "precache-manifest.ab76e7c9ebc477c132f761be90467e84.js": "./precache-manifest.ab76e7c9ebc477c132f761be90467e84.js",
-    "service-worker.js": "./service-worker.js",
-    "static/css/2.a94a8b68.chunk.css.map": "./static/css/2.a94a8b68.chunk.css.map",
-    "static/css/main.de2ea70b.chunk.css.map": "./static/css/main.de2ea70b.chunk.css.map",
-    "static/media/index.scss": "./static/media/Roboto-Thin.89e2666c.ttf",
-    "static/media/logotype_white.svg": "./static/media/logotype_white.4dcfd639.svg"
+    "main.css": "/static/css/main.b07c3b60.chunk.css",
+    "main.js": "/static/js/main.31655c8e.chunk.js",
+    "main.js.map": "/static/js/main.31655c8e.chunk.js.map",
+    "runtime-main.js": "/static/js/runtime-main.8fa4c17a.js",
+    "runtime-main.js.map": "/static/js/runtime-main.8fa4c17a.js.map",
+    "static/css/2.a94a8b68.chunk.css": "/static/css/2.a94a8b68.chunk.css",
+    "static/js/2.365d2821.chunk.js": "/static/js/2.365d2821.chunk.js",
+    "static/js/2.365d2821.chunk.js.map": "/static/js/2.365d2821.chunk.js.map",
+    "index.html": "/index.html",
+    "precache-manifest.a3e8c90a352bc8e3f95fcf7ae912d659.js": "/precache-manifest.a3e8c90a352bc8e3f95fcf7ae912d659.js",
+    "service-worker.js": "/service-worker.js",
+    "static/css/2.a94a8b68.chunk.css.map": "/static/css/2.a94a8b68.chunk.css.map",
+    "static/css/main.b07c3b60.chunk.css.map": "/static/css/main.b07c3b60.chunk.css.map",
+    "static/media/index.scss": "/static/media/Roboto-Thin.89e2666c.ttf",
+    "static/media/logotype_white.svg": "/static/media/logotype_white.4dcfd639.svg"
   },
   "entrypoints": [
-    "static/js/runtime-main.be567568.js",
+    "static/js/runtime-main.8fa4c17a.js",
     "static/css/2.a94a8b68.chunk.css",
     "static/js/2.365d2821.chunk.js",
-    "static/css/main.de2ea70b.chunk.css",
-    "static/js/main.d8ab7fd6.chunk.js"
+    "static/css/main.b07c3b60.chunk.css",
+    "static/js/main.31655c8e.chunk.js"
   ]
 }

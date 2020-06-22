@@ -8,12 +8,11 @@ import scorex.utils.Random
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.{ProverResult, ContextExtension}
 import sigmastate.eval._
-import sigmastate.eval.Extensions._
+import org.ergoplatform.settings.LaunchParameters._
+import org.ergoplatform.settings.Constants._
+
 
 object FeeSimulator extends App {
-
-  import org.ergoplatform.settings.LaunchParameters._
-  import org.ergoplatform.settings.Constants._
 
   //Block size is 500Kb
   private val BlockSize = 500 * 1024

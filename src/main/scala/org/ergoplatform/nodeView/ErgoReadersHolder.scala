@@ -50,8 +50,7 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
     case GetDataFromHistory(f) =>
       historyReaderOpt.fold(log.warn("Trying to get data from undefined history reader"))(sender ! f(_))
 
-    case _ =>
-    //Do nothing for now. Implement when needed
+    case a: Any => log.warn(s"ErgoReadersHolder got improper input: $a")
   }
 }
 
@@ -67,10 +66,10 @@ object ErgoReadersHolder {
 
 object ErgoReadersHolderRef {
 
-  def props(viewHolderRef: ActorRef): Props = Props(new ErgoReadersHolder(viewHolderRef))
-
   def apply(viewHolderRef: ActorRef)
-           (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(viewHolderRef))
+           (implicit context: ActorRefFactory): ActorRef = {
+    val props = Props(new ErgoReadersHolder(viewHolderRef)).withDispatcher("api-dispatcher")
+    context.actorOf(props)
+  }
 
 }

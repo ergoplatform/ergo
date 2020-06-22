@@ -711,7 +711,6 @@ object ErgoWalletActor {
 
       MutableStateCache(tas, trackedPubKeys, tbs, f)(settings)
     }
-
   }
 
   /**

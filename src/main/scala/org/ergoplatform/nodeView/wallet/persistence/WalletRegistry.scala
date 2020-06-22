@@ -168,7 +168,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
     val bag4 = updateDigest(bag3) { case WalletDigest(height, wBalance, wTokens) =>
       if (height + 1 != blockHeight) {
-        log.error(s"Blocks were skipped during wallet scanning, from ${height + 1} until $blockHeight")
+        log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
       val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.contains(PaymentsAppId))
       val spentAmt = spentWalletBoxes.map(_.box.value).sum
@@ -380,7 +380,7 @@ object WalletRegistry {
   private def txToKvPair(tx: WalletTransaction) = txKey(tx.id) -> WalletTransactionSerializer.toBytes(tx)
 
   private def spentIndexKey(appId: ApplicationId, trackedBox: TrackedBox): Array[Byte] = {
-    val prefix = if (trackedBox.spent) SpentIndexPrefix else UnspentIndexPrefix
+    val prefix = if (trackedBox.isSpent) SpentIndexPrefix else UnspentIndexPrefix
     composeKeyWithBoxId(prefix, appId, trackedBox.box.id)
   }
 

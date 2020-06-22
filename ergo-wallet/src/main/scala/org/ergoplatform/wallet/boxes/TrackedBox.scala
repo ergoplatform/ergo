@@ -66,7 +66,7 @@ final case class TrackedBox(creationTxId: ModifierId,
 
   override def value: Long = box.value
 
-  def spent: Boolean = spendingHeightOpt.isDefined
+  def isSpent: Boolean = spendingHeightOpt.isDefined
 
   lazy val tokens: TokensMap = box.additionalTokens.toArray.map {
     case (id, amt) => bytesToId(id) -> amt

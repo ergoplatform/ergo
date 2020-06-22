@@ -64,7 +64,7 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
     val hasEnoughTimeToBeSpent = context.preHeader.height - context.self.creationHeight >= Constants.StoragePeriod
     // No spending proof provided and enough time since box creation to spend it
     // In this case anyone can spend the expired box by providing in context extension variable #127 (stored in input)
-    //    an index of a recreated box (or index of any box of the expired box hasn't enough to pay for the storage fee)
+    //    an index of a recreated box (or index of any box if the value in the expired box isn't enough to pay for the storage fee)
     if (hasEnoughTimeToBeSpent && proof.length == 0 && context.extension.values.contains(varId)) {
       Try {
         val idx = context.extension.values(varId).value.asInstanceOf[Short]

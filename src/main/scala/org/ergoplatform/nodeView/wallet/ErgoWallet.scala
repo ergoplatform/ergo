@@ -32,7 +32,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   override type NVCT = this.type
 
   override val walletActor: ActorRef =
-    actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings, boxSelector))
+    actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings, boxSelector).withDispatcher("api-dispatcher"))
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     walletActor ! ScanOffChain(tx)
@@ -67,6 +67,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
 }
 
 object ErgoWallet {
+
   def readOrGenerate(historyReader: ErgoHistoryReader,
                      settings: ErgoSettings)(implicit actorSystem: ActorSystem): ErgoWallet = {
     new ErgoWallet(historyReader, settings)

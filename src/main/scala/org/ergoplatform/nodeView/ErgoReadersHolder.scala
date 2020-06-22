@@ -73,8 +73,4 @@ object ErgoReadersHolderRef {
            (implicit context: ActorRefFactory): ActorRef =
     context.actorOf(props(viewHolderRef))
 
-  def apply(viewHolderRef: ActorRef,
-            name: String)
-           (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(viewHolderRef), name)
 }

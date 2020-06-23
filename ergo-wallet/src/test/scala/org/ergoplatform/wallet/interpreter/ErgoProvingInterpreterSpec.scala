@@ -6,10 +6,8 @@ import org.ergoplatform.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.utils.Generators
 import org.scalatest.{FlatSpec, Matchers}
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
-import scorex.util.{ModifierId, Random}
-import scorex.util.encode.Base16
 import sigmastate.CTHRESHOLD
-import sigmastate.interpreter.{ContextExtension, HintsBag, OwnCommitment, RealCommitment}
+import sigmastate.interpreter.{HintsBag, OwnCommitment, RealCommitment}
 import scorex.util.{ModifierId, Random}
 import scorex.util.encode.Base16
 import sigmastate.interpreter.ContextExtension

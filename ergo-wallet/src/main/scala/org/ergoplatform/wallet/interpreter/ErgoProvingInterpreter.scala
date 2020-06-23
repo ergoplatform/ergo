@@ -5,16 +5,9 @@ import java.util
 
 import org.ergoplatform._
 import org.ergoplatform.utils.ArithUtils.{addExact, multiplyExact}
-import org.ergoplatform.validation.ValidationRules
-import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext, TransactionContext}
 import org.ergoplatform.validation.{SigmaValidationSettings, ValidationRules}
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
 import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, SecretKey}
-import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.basics.SigmaProtocolPrivateInput
-import sigmastate.eval.{CompiletimeIRContext, IRContext}
-import sigmastate.interpreter.ProverInterpreter
-import sigmastate.utxo.CostTable
 import sigmastate.AvlTreeData
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.{DLogInteractiveProver, ProveDlog}

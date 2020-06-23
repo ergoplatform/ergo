@@ -105,8 +105,8 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   def walletConfirmedBoxes(fromHeight: Int): Seq[TrackedBox] = confirmedBoxes(Constants.PaymentsAppId, fromHeight)
 
   /**
-    *
-    * @param id
+    * Read transaction with wallet-related metadata
+    * @param id - transaction identifier
     * @return
     */
   def getTx(id: ModifierId): Option[WalletTransaction] = {
@@ -159,13 +159,15 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
                     txs: Seq[WalletTransaction])
                    (blockId: ModifierId, blockHeight: Int): Unit = {
 
-    val bag0 = KeyValuePairsBag.empty
-    val bag1 = putBoxes(bag0, newOutputs)
+    // first, put newly created outputs and related transactions into key-value bag
+    val bag1 = putBoxes(KeyValuePairsBag.empty, newOutputs)
     val bag2 = putTxs(bag1, txs)
 
+    // process spent boxes
     val spentBoxesWithTx = inputs.map(t => t._1 -> t._3)
     val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
 
+    // and update wallet digest
     val bag4 = updateDigest(bag3) { case WalletDigest(height, wBalance, wTokens) =>
       if (height + 1 != blockHeight) {
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
@@ -417,7 +419,7 @@ object WalletRegistry {
     val boxKeys = appIndexKeys :+ key(box)
 
     bag.toInsert.find(_._1.sameElements(key(box))) match {
-      case Some((id, _)) =>
+      case Some((_, _)) =>
         bag.copy(toInsert = bag.toInsert.filterNot { case (k, _) =>
           boxKeys.exists(_.sameElements(k))
         })

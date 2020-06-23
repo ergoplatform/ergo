@@ -167,17 +167,17 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
         val outputs2 = IndexedSeq(new ErgoBoxCandidate(spendingTx.outputs.map(_.value).sum, FalseLeaf.toSigmaProp, height1))
         val spendingTx2 = new ErgoTransaction(inputs2, IndexedSeq.empty, outputs2)
 
-        val (r3, o3) = scanBlockTransactions(registry, off, emptyStateContext, walletVars, height1 + 1, blockId, Seq(spendingTx2))
+        val (r3, o3) = scanBlockTransactions(registry, off, emptyStateContext, walletVars, height1 + 2, blockId, Seq(spendingTx2))
 
         val r3digest = r3.fetchDigest()
         r3digest.walletBalance shouldBe regDigestBefore
         r3digest.walletAssetBalances.size shouldBe 0
-        r3digest.height shouldBe height1 + 1
+        r3digest.height shouldBe height1 + 2
 
         val o3digest = o3.digest
         o3digest.walletBalance shouldBe offDigestBefore
         o3digest.walletAssetBalances.size shouldBe 0
-        o3digest.height shouldBe height1 + 1
+        o3digest.height shouldBe height1 + 2
 
         registry = r3
         off = o3
@@ -185,18 +185,18 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
         //applying all the three previous transactions
         val threeTxs = Seq(creatingTx, spendingTx, spendingTx2)
 
-        val (r4, o4) = scanBlockTransactions(registry, off, emptyStateContext, walletVars, height1 + 1, blockId, threeTxs)
+        val (r4, o4) = scanBlockTransactions(registry, off, emptyStateContext, walletVars, height1 + 3, blockId, threeTxs)
 
         val r4digest = r4.fetchDigest()
         r4digest.walletBalance shouldBe regDigestBefore
         r4digest.walletAssetBalances.size shouldBe 0
-        r4digest.height shouldBe height1 + 1
+        r4digest.height shouldBe height1 + 3
         r4.walletUnspentBoxes() shouldBe Seq.empty
 
         val o4digest = o4.digest
         o4digest.walletBalance shouldBe offDigestBefore
         o4digest.walletAssetBalances.size shouldBe 0
-        o4digest.height shouldBe height1 + 1
+        o4digest.height shouldBe height1 + 3
 
         registry = r4
         off = o4

@@ -4,9 +4,17 @@ import java.math.BigInteger
 import java.util
 
 import org.ergoplatform._
+import org.ergoplatform.utils.ArithUtils.{addExact, multiplyExact}
+import org.ergoplatform.validation.ValidationRules
+import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext, TransactionContext}
 import org.ergoplatform.validation.{SigmaValidationSettings, ValidationRules}
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
 import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, SecretKey}
+import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.basics.SigmaProtocolPrivateInput
+import sigmastate.eval.{CompiletimeIRContext, IRContext}
+import sigmastate.interpreter.ProverInterpreter
+import sigmastate.utxo.CostTable
 import sigmastate.AvlTreeData
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.{DLogInteractiveProver, ProveDlog}
@@ -80,10 +88,12 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
 
       // Cost of transaction initialization: we should read and parse all inputs and data inputs,
       // and also iterate through all outputs to check rules, also we add some constant for interpreter initialization
-      val initialCost: Long = CostTable.interpreterInitCost +
-        boxesToSpend.size * params.inputCost +
-        dataBoxes.size * params.dataInputCost +
-        unsignedTx.outputCandidates.size * params.outputCost
+      val initialCost: Long = addExact(
+        CostTable.interpreterInitCost,
+        multiplyExact(boxesToSpend.size, params.inputCost),
+        multiplyExact(dataBoxes.size, params.dataInputCost),
+        multiplyExact(unsignedTx.outputCandidates.size, params.outputCost)
+      )
 
       boxesToSpend
         .zipWithIndex

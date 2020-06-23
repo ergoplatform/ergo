@@ -1,4 +1,4 @@
-package org.ergoplatform.local
+package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
 import akka.pattern.ask
@@ -6,12 +6,12 @@ import akka.util.Timeout
 import com.google.common.primitives.Longs
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
-import org.ergoplatform.mining._
+import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
-import org.ergoplatform.modifiers.history.{Extension, Header, PoPowAlgos}
+import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -25,6 +25,7 @@ import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, Get
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.ValidationSettings
+import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.SType.ErgoBoxRType
@@ -42,6 +43,12 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
+/**
+  * Actor which feeds external miners with needed data, or controls in-built miner.
+  *
+  * This class needs for access to a secret used in mining if "miningPubKeyHex" is not set in the config
+  * (`inSecretKeyOpt` carrying it if test mnemonic is used, otherwise, the actor is asking the wallet for a key).
+  */
 class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
                 readersHolderRef: ActorRef,
@@ -52,6 +59,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private implicit val timeout: Timeout = 5.seconds
 
+  // votes for parameters and soft-fork provided in the config
   private val desiredUpdate = ergoSettings.votingTargets.desiredUpdate
 
   private val votingSettings = ergoSettings.chainSettings.voting
@@ -62,14 +70,20 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val maxTransactionComplexity: Int = ergoSettings.nodeSettings.maxTransactionComplexity
 
   // shared mutable state
+
+  // flag which is set once when first block candidate if formed
   private var isMining = false
-  private var candidateOpt: Option[CandidateBlock] = None
+
+  // cached block candidate
+  private var candidateOpt: Option[CandidateCache] = None
+
+  // internal miner threads, if internal mining is chosen
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
-  // cost of a transaction collecting emission box
 
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
-  private var publicKeyOpt: Option[ProveDlog] = ergoSettings.miningPubKey
-    .orElse(inSecretKeyOpt.map(_.publicImage))
+
+  // "miningPubkeyHex" setting in config has preference over wallet's secret key
+  private var publicKeyOpt: Option[ProveDlog] = ergoSettings.miningPubKey.orElse(inSecretKeyOpt.map(_.publicImage))
 
   override def preStart(): Unit = {
     // in external miner mode key from wallet is used if `publicKeyOpt` is not set
@@ -81,14 +95,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   override def postStop(): Unit = {
-    log.warn("Stopping miner's threads.")
+    log.info("Stopping miner's threads.")
     miningThreads.foreach(_ ! PoisonPill)
     miningThreads.clear()
   }
 
   private def unknownMessage: Receive = {
     case _: scala.runtime.BoxedUnit =>
-    // ignore, this message is caused by way of interaction with NVH.
+      // ignore, this message is caused by way of interaction with NodeViewHolder.
     case m =>
       log.warn(s"Unexpected message $m of class: ${m.getClass}")
   }
@@ -97,6 +111,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case UpdateSecret(s) =>
       secretKeyOpt = Some(s)
       publicKeyOpt = Some(s.publicImage)
+
+    // used in /mining/rewardAddress aPI method
     case ReadMinerPk =>
       sender() ! publicKeyOpt
   }
@@ -105,17 +121,23 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case QueryWallet =>
       val callback = self
       viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        v.vault.firstSecret.onComplete { _.flatten match {
-          case Failure(t) =>
-            log.warn(s"Failed to load key from wallet: ${t.getMessage} ")
-            context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet)(context.system.dispatcher)
-          case Success(proverInput: DLogProverInput) =>
-            callback ! UpdateSecret(proverInput)
-        }}
+        v.vault.firstSecret.onComplete {
+          _.flatten match {
+            case Failure(t) =>
+              log.warn(s"Miner can't load key from wallet: ${t.getMessage} ")
+              context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet)(context.system.dispatcher)
+            case Success(proverInput: DLogProverInput) =>
+              callback ! UpdateSecret(proverInput)
+          }
+        }
       }
   }
 
   private def startMining: Receive = {
+    case StartMining if candidateOpt.isEmpty =>
+      if (secretKeyOpt.isDefined || externalMinerMode) requestCandidate()
+      context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)
+
     case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
       candidateOpt.foreach { candidate =>
         publicKeyOpt match {
@@ -123,7 +145,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
             isMining = true
             if (!externalMinerMode) {
               log.info("Starting native miner")
-              runMiningThreads(candidate)
+              startInternalMiner(candidate.candidateBlock)
             } else {
               log.info("Ready to serve external miner")
               // Refresh candidate block if it was formed before NVH state restore in response to API requests
@@ -133,12 +155,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
             log.warn("Got start mining command while public key is not ready")
         }
       }
-    case StartMining if candidateOpt.isEmpty =>
-      if (secretKeyOpt.isDefined || externalMinerMode) requestCandidate()
-      context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)
   }
 
-  private def runMiningThreads(candidateBlock: CandidateBlock): Unit = {
+  // Start internal miner's threads. Called once.
+  private def startInternalMiner(candidateBlock: CandidateBlock): Unit = {
     secretKeyOpt match {
       case Some(sk) =>
         miningThreads += ErgoMiningThread(ergoSettings, self, candidateBlock, sk.w, timeProvider)(context)
@@ -149,7 +169,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   private def needNewCandidate(b: ErgoFullBlock): Boolean = {
-    val parentHeaderIdOpt = candidateOpt.flatMap(_.parentOpt).map(_.id)
+    val parentHeaderIdOpt = candidateOpt.map(_.candidateBlock).flatMap(_.parentOpt).map(_.id)
     !parentHeaderIdOpt.contains(b.header.id)
   }
 
@@ -167,7 +187,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if isMining && needNewCandidate(mod) => requestCandidate()
 
     /**
-      * Non obvious but case when mining is enabled, but miner doesn't started yet. Initialization case.
+      * Non obvious but case when mining is enabled, but miner isn't started yet. Initialization case.
       * We've received block that been generated by somebody else or genesis while we doesn't start.
       * And this block was generated after our miner had been started. That means that we are ready
       * to start mining.
@@ -190,61 +210,85 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       queryWallet orElse
       unknownMessage
 
+  // checks that current candidate block contains `txs`
+  private[mining] def cachedFor(txs: Seq[ErgoTransaction]): Boolean = {
+    candidateOpt.isDefined && candidateOpt.exists { c =>
+      txs.isEmpty || (txs.size == c.txsToInclude.size && txs.forall(c.txsToInclude.contains))
+    }
+  }
+
+  // helper method to update cached candidate block and corresponding message for external miners
+  private def updateCandidate(candidate: CandidateBlock,
+                              pk: ProveDlog,
+                              txsToInclude: Seq[ErgoTransaction]): WorkMessage = {
+    val ext = powScheme.deriveExternalCandidate(candidate, pk, txsToInclude.map(_.id))
+    log.info(s"New candidate with msg ${Base16.encode(ext.msg)} generated")
+    log.debug(s"Got candidate block at height ${ErgoHistory.heightOf(candidate.parentOpt) + 1}" +
+      s" with ${candidate.transactions.size} transactions")
+    candidateOpt = Some(CandidateCache(candidate, ext, txsToInclude))
+    if (!externalMinerMode) miningThreads.foreach(_ ! candidate)
+    ext
+  }
+
   private def onReaders: Receive = {
-    case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
-      publicKeyOpt.foreach { minerProp =>
-        createCandidate(minerProp, h, m, desiredUpdate, s.asInstanceOf[UtxoStateReader]) match {
+    // Miner's node can produce block candidate only if it is working in the UTXO regime
+    case Readers(h, s: UtxoStateReader, m, _) =>
+      //mandatory transactions to include into next block taken from the previous candidate
+      val txsToInclude = candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty).filter { tx =>
+        inputsNotSpent(tx, s)
+      }
+
+      publicKeyOpt.foreach { pk =>
+        createCandidate(pk, h, m, desiredUpdate, s, txsToInclude) match {
           case Success(candidate) =>
-            val candidateMsg = powScheme.msgByHeader(AutolykosPowScheme.deriveUnprovedHeader(candidate))
-            log.info(s"New candidate with msg ${Base16.encode(candidateMsg)} generated")
-            procCandidateBlock(candidate)
-          case Failure(e) => log.warn("Failed to produce candidate block.", e)
+            updateCandidate(candidate, pk, txsToInclude)
+          case Failure(e) =>
+            log.warn("Failed to produce candidate block.", e)
+            //candidate cleared, included mandatory transactions to include
+            candidateOpt = None
         }
       }
   }
 
   private def mining: Receive = {
-    case PrepareCandidate if !ergoSettings.nodeSettings.mining =>
-      sender() ! Future.failed(
-        new Exception("Candidate creation is not supported when mining is disabled"))
+    case PrepareCandidate(_) if !ergoSettings.nodeSettings.mining =>
+      sender() ! Future.failed(new Exception("Candidate creation is not supported when mining is disabled"))
 
-    case PrepareCandidate if candidateOpt.isDefined =>
-      sender() ! candidateOpt
-        .flatMap { c =>
-          publicKeyOpt.map(powScheme.deriveExternalCandidate(c, _))
+    // Send cached candidate if it is available and (non-empty) list of transactions to include hasn't been changed
+    case PrepareCandidate(txsToInclude) =>
+      if (cachedFor(txsToInclude)) {
+        val candBlockFuture = candidateOpt
+          .map(_.externalVersion)
+          .fold[Future[WorkMessage]](
+          Future.failed(new Exception("Failed to create candidate")))(Future.successful)
+        sender() ! candBlockFuture
+      } else {
+        val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
+        val candBlockFuture = readersR.flatMap {
+          case Readers(h, s: UtxoStateReader, m, _) =>
+            Future.fromTry(publicKeyOpt match {
+              case Some(pk) =>
+                val ts = txsToInclude.filter { tx => inputsNotSpent(tx, s) }
+                createCandidate(pk, h, m, desiredUpdate, s, ts)
+                  .map(candidate => updateCandidate(candidate, pk, ts)) //returns external candidate
+              case None => Failure(new Exception("Candidate could not be generated: no public key available"))
+            })
+          case _ =>
+            Future.failed(new Exception("Invalid readers state, mining is possible in UTXO mode only"))
         }
-        .fold[Future[ExternalCandidateBlock]](
-        Future.failed(new Exception("Failed to create candidate")))(Future.successful)
-
-    case PrepareCandidate =>
-      val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
-      sender() ! readersR.flatMap {
-        case Readers(h, s, m, _) if s.isInstanceOf[UtxoStateReader] =>
-          publicKeyOpt
-            .flatMap { pk =>
-              createCandidate(pk, h, m, desiredUpdate, s.asInstanceOf[UtxoStateReader])
-                .map { c =>
-                  candidateOpt = Some(c)
-                  powScheme.deriveExternalCandidate(c, pk)
-                }
-                .toOption
-            }
-            .fold[Future[ExternalCandidateBlock]](
-            Future.failed(new Exception("Failed to create candidate")))(Future.successful)
-        case _ =>
-          Future.failed(new Exception("Invalid readers state"))
+        sender() ! candBlockFuture
       }
 
     case solution: AutolykosSolution =>
       val result: Future[Unit] = candidateOpt.map { c =>
-        val newBlock = powScheme.completeBlock(c, solution)
+        val newBlock = completeBlock(c.candidateBlock, solution)
         powScheme.validate(newBlock.header).map(_ => newBlock)
       } match {
         case Some(Success(newBlock)) =>
           sendToNodeView(newBlock)
           Future.successful(())
         case Some(Failure(exception)) =>
-          Future.failed(exception)
+          Future.failed(new Exception(s"Improper block mined: ${exception.getMessage}", exception))
         case None =>
           Future.failed(new Exception("Invalid miner state"))
       }
@@ -263,27 +307,42 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
   }
 
-  private def procCandidateBlock(c: CandidateBlock): Unit = {
-    log.debug(s"Got candidate block at height ${ErgoHistory.heightOf(c.parentOpt) + 1}" +
-      s" with ${c.transactions.size} transactions")
-    candidateOpt = Some(c)
-    if (!externalMinerMode) miningThreads.foreach(_ ! c)
-  }
-
+  /**
+    * Assemble correct block candidate based on
+    *
+    * @param minerPk - public key of the miner
+    * @param history - blockchain reader (to extract parent)
+    * @param pool - memory pool reader
+    * @param proposedUpdate - votes for parameters and soft-fork
+    * @param state - UTXO set reader
+    * @param prioritizedTransactions - transactions which are going into the block in the first place
+    *                                (before transactions from the pool). No guarantee of inclusion in general case.
+    * @return - block candidate or an error
+    */
   private def createCandidate(minerPk: ProveDlog,
                               history: ErgoHistoryReader,
                               pool: ErgoMemPoolReader,
                               proposedUpdate: ErgoValidationSettingsUpdate,
-                              state: UtxoStateReader): Try[CandidateBlock] = Try {
+                              state: UtxoStateReader,
+                              prioritizedTransactions: Seq[ErgoTransaction]): Try[CandidateBlock] = Try {
+    // Extract best header and extension of a best block user their data for assembling a new block
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
     val bestExtensionOpt: Option[Extension] = bestHeaderOpt
       .flatMap(h => history.typedModifierById[Extension](h.extensionId))
+
+    // Make progress in time since last block.
+    // If no progress is made, then, by consensus rules, the block will be rejected.
     val timestamp = Math.max(timeProvider.time(), bestHeaderOpt.map(_.timestamp + 1).getOrElse(0L))
+
     val stateContext = state.stateContext
+
+    // Calculate required difficulty for the new block
     val nBits: Long = bestHeaderOpt
       .map(parent => history.requiredDifficultyAfter(parent))
       .map(d => RequiredDifficulty.encodeCompactBits(d))
       .getOrElse(ergoSettings.chainSettings.initialNBits)
+
+    // Obtain NiPoPoW interlinks vector to pack it into the extension section
     val interlinksExtension = PoPowAlgos.interlinksToExtension(updateInterlinks(bestHeaderOpt, bestExtensionOpt))
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt.map { header =>
@@ -311,13 +370,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, proposedUpdate, version)
     //only transactions valid from against the current utxo state we take from the mem pool
-    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules).map { tx =>
-      implicit val verifier: ErgoInterpreter = ErgoInterpreter(state.stateContext.currentParameters)
-      val cost = state.validateWithCost(tx, Some(upcomingContext), Int.MaxValue).get
-      tx -> cost
-    }
-
     val poolTxs = pool.getAllPrioritized
+
+    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules)
+    val mt = emissionTxOpt.toSeq ++ prioritizedTransactions
 
     val (txs, toEliminate) = ErgoMiner.collectTxs(minerPk,
       state.stateContext.currentParameters.maxBlockCost,
@@ -325,8 +381,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       maxTransactionComplexity,
       state,
       upcomingContext,
-      poolTxs,
-      emissionTxOpt.toSeq)(state.stateContext.validationSettings)
+      mt ++ poolTxs)(state.stateContext.validationSettings)
 
     // remove transactions which turned out to be invalid
     if (toEliminate.nonEmpty) viewHolderRef ! EliminateTransactions(toEliminate)
@@ -341,7 +396,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         emissionTxOpt match {
           case Some(emissionTx) =>
             log.error("Failed to produce proofs for transactions, but emission box is found: ", t)
-            val fallbackTxs = Seq(emissionTx._1)
+            val fallbackTxs = Seq(emissionTx)
             state.proofsForTransactions(fallbackTxs).map { case (adProof, adDigest) =>
               CandidateBlock(bestHeaderOpt, version, nBits, adDigest, adProof, fallbackTxs, timestamp, extensionCandidate, votes)
             }
@@ -361,6 +416,29 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
 
 object ErgoMiner extends ScorexLogging {
+
+  // helper which is checking that inputs of the transaction are not spent
+  private def inputsNotSpent(tx: ErgoTransaction, s: UtxoStateReader): Boolean = {
+    tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
+  }
+
+  /**
+    * Holder for both candidate block and data for external miners derived from it
+    * (to avoid possibly costly recalculation)
+    *
+    * @param candidateBlock - block candidate
+    * @param externalVersion - message for external miner
+    * @param txsToInclude - transactions which were prioritized for inclusion in the block candidate
+    */
+  private case class CandidateCache(candidateBlock: CandidateBlock,
+                                    externalVersion: WorkMessage,
+                                    txsToInclude: Seq[ErgoTransaction])
+
+  /**
+    * Transaction and its cost.
+    */
+  type CostedTransaction = (ErgoTransaction, Long)
+
 
   //TODO move ErgoMiner to mining package and make `collectTxs` and `fixTxsConflicts` private[mining]
 
@@ -426,13 +504,23 @@ object ErgoMiner extends ScorexLogging {
   }
 
   /**
-    * Collects valid non-conflicting transactions from `mempoolTxsIn` and adds a transaction collecting fees from
-    * them to `minerPk`.
+    * Helper function which decides whether transactions can fit into a block with given cost and size limits
+    */
+  def correctLimits(blockTxs: Seq[CostedTransaction],
+                    maxBlockCost: Long,
+                    maxBlockSize: Long): Boolean = {
+    blockTxs.map(_._2).sum < maxBlockCost && blockTxs.map(_._1.size).sum < maxBlockSize
+  }
+
+
+  /**
+    * Collects valid non-conflicting transactions from `mandatoryTxs` and then `mempoolTxsIn` and adds a transaction
+    * collecting fees from them to `minerPk`.
     *
-    * Resulting transactions total cost does not exceeds `maxBlockCost`, total size does not exceeds `maxBlockSize`,
+    * Resulting transactions total cost does not exceed `maxBlockCost`, total size does not exceed `maxBlockSize`,
     * and the miner's transaction is correct.
     *
-    * @return - transactions to include to the block, transaction ids turned out to be invalid.
+    * @return - transactions to include into the block, transaction ids turned out to be invalid.
     */
   def collectTxs(minerPk: ProveDlog,
                  maxBlockCost: Long,
@@ -440,18 +528,13 @@ object ErgoMiner extends ScorexLogging {
                  maxTransactionComplexity: Int,
                  us: UtxoStateReader,
                  upcomingContext: ErgoStateContext,
-                 mempoolTxsIn: Seq[ErgoTransaction],
-                 startTransactions: Seq[(ErgoTransaction, Long)])
+                 transactions: Iterable[ErgoTransaction])
                 (implicit vs: ValidationSettings): (Seq[ErgoTransaction], Seq[ModifierId]) = {
 
-    def correctLimits(blockTxs: Seq[(ErgoTransaction, Long)]): Boolean = {
-      blockTxs.map(_._2).sum < maxBlockCost && blockTxs.map(_._1.size).sum < maxBlockSize
-    }
-
     @tailrec
-    def loop(mempoolTxs: Seq[ErgoTransaction],
-             acc: Seq[(ErgoTransaction, Long)],
-             lastFeeTx: Option[(ErgoTransaction, Long)],
+    def loop(mempoolTxs: Iterable[ErgoTransaction],
+             acc: Seq[CostedTransaction],
+             lastFeeTx: Option[CostedTransaction],
              invalidTxs: Seq[ModifierId]): (Seq[ErgoTransaction], Seq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
       def current: Seq[ErgoTransaction] = (acc ++ lastFeeTx).map(_._1)
@@ -461,26 +544,26 @@ object ErgoMiner extends ScorexLogging {
       mempoolTxs.headOption match {
         case Some(tx) =>
 
-          if (!tx.inputs.forall(inp => stateWithTxs.boxById(inp.boxId).isDefined) || doublespend(current, tx)) {
+          if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
-            //do these checks before validating the scripts
+            //do these checks before validating the scripts to save time
             current -> (invalidTxs :+ tx.id)
           } else {
             implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(tx, Some(upcomingContext), maxTransactionComplexity) match {
               case Success(costConsumed) =>
-                val newTxs = acc :+ (tx, costConsumed)
+                val newTxs = acc :+ (tx -> costConsumed)
                 val newBoxes = newTxs.flatMap(_._1.outputs)
-                val emissionRules = stateWithTxs.constants.settings.chainSettings.emissionRules
 
+                val emissionRules = stateWithTxs.constants.settings.chainSettings.emissionRules
                 ErgoMiner.collectFees(stateWithTxs.stateContext.currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
                   case Some(feeTx) =>
                     val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
                     feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext) match {
                       case Success(cost) =>
-                        val blockTxs: Seq[(ErgoTransaction, Long)] = (feeTx -> cost) +: newTxs
-                        if (correctLimits(blockTxs)) {
+                        val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
+                        if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
                           loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
                         } else {
                           current -> invalidTxs
@@ -491,8 +574,8 @@ object ErgoMiner extends ScorexLogging {
                     }
                   case None =>
                     log.debug(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
-                    val blockTxs: Seq[(ErgoTransaction, Long)] = newTxs ++ lastFeeTx.toSeq
-                    if (correctLimits(blockTxs)) {
+                    val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
+                    if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
                       loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs)
                     } else {
                       current -> invalidTxs
@@ -508,7 +591,7 @@ object ErgoMiner extends ScorexLogging {
       }
     }
 
-    loop(mempoolTxsIn, startTransactions, None, Seq.empty)
+    loop(transactions, Seq.empty, None, Seq.empty)
   }
 
   //Checks that transaction "tx" is not spending outputs spent already by transactions "txs"
@@ -517,11 +600,46 @@ object ErgoMiner extends ScorexLogging {
     tx.inputs.exists(i => txsInputs.exists(_.sameElements(i.boxId)))
   }
 
+
+  /**
+    * Derives header without pow from [[CandidateBlock]].
+    */
+  def deriveUnprovenHeader(candidate: CandidateBlock): HeaderWithoutPow = {
+    val (parentId, height) = derivedHeaderFields(candidate.parentOpt)
+    val transactionsRoot = BlockTransactions.transactionsRoot(candidate.transactions)
+    val adProofsRoot = ADProofs.proofDigest(candidate.adProofBytes)
+    val extensionRoot: Digest32 = candidate.extension.digest
+
+    HeaderWithoutPow(
+      candidate.version,
+      parentId,
+      adProofsRoot,
+      candidate.stateRoot,
+      transactionsRoot,
+      candidate.timestamp,
+      candidate.nBits,
+      height,
+      extensionRoot,
+      candidate.votes
+    )
+  }
+
+  /**
+    * Assemble `ErgoFullBlock` using candidate block and provided pow solution.
+    */
+  def completeBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
+    val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
+    val adProofs = ADProofs(header.id, candidate.adProofBytes)
+    val blockTransactions = BlockTransactions(header.id, candidate.transactions)
+    val extension = Extension(header.id, candidate.extension.fields)
+    new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
+  }
+
   case object StartMining
 
   case object QueryWallet
 
-  case object PrepareCandidate
+  case class PrepareCandidate(toInclude: Seq[ErgoTransaction])
 
   case object ReadMinerPk
 

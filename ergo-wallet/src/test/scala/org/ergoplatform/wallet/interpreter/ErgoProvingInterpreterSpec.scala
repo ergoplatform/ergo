@@ -10,6 +10,9 @@ import scorex.util.{ModifierId, Random}
 import scorex.util.encode.Base16
 import sigmastate.CTHRESHOLD
 import sigmastate.interpreter.{ContextExtension, HintsBag, OwnCommitment, RealCommitment}
+import scorex.util.{ModifierId, Random}
+import scorex.util.encode.Base16
+import sigmastate.interpreter.ContextExtension
 
 class ErgoProvingInterpreterSpec
   extends FlatSpec
@@ -78,7 +81,7 @@ class ErgoProvingInterpreterSpec
     signedTxTry.isSuccess shouldBe true
   }
 
-  it should "calculate cost correctly" in {
+  it should "sign 50 simple inputs with default cost limit" in {
     val prover = ErgoProvingInterpreter(obtainSecretKey(), parameters)
     val pk = prover.hdPubKeys.head
 
@@ -86,7 +89,7 @@ class ErgoProvingInterpreterSpec
     val creationHeight = 10000
     val boxCandidate = new ErgoBoxCandidate(value, pk, creationHeight)
 
-    val numOfInputs = scala.util.Random.nextInt(15) + 20
+    val numOfInputs = 50
     val fakeTxId = ModifierId @@ Base16.encode(Array.fill(32)(5: Byte))
     val inputBoxes = (1 to numOfInputs).map(i => boxCandidate.toBox(fakeTxId, i.toShort))
     val unsignedInputs = inputBoxes.map(ib => new UnsignedInput(ib.id, ContextExtension.empty))

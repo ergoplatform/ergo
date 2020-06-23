@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import scorex.core.block.Block
 import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
@@ -19,6 +20,9 @@ import scala.util.Try
 
 /**
   * Autolykos PoW puzzle scheme reference implementation.
+  *
+  * See https://docs.ergoplatform.com/ErgoPow.pdf for details
+  *
   * Mining process is implemented in inefficient way and should not be used in real environment.
   *
   * @see papers/yellow/pow/ErgoPow.tex for full description
@@ -30,13 +34,15 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   assert(k <= 32, "k > 32 is not allowed due to genIndexes function")
   assert(n < 31, "n >= 31 is not allowed")
 
+  //Consensus-critical code below
+
   /**
     * Total number of elements
     */
   private val N: Int = Math.pow(2, n).toInt
 
   /**
-    * Constant data to be added to hash function to increase it's calculation time
+    * Constant data to be added to hash function to increase its calculation time
     */
   val M: Array[Byte] = (0 until 1024).toArray.flatMap(i => Longs.toByteArray(i))
 
@@ -70,6 +76,40 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
+    * Header digest ("message" for default GPU miners) a miner is working on
+    */
+  def msgByHeader(h: HeaderWithoutPow): Array[Byte] = Blake2b256(HeaderSerializer.bytesWithoutPow(h))
+
+  /**
+    * Get target `b` from encoded difficulty `nBits`
+    */
+  private[mining] def getB(nBits: Long): BigInt = q / RequiredDifficulty.decodeCompactBits(nBits)
+
+  /**
+    * Hash function that takes `m` and `nonceBytes` and returns a list of size `k` with numbers in
+    * [0,`N`)
+    */
+  private def genIndexes(seed: Array[Byte]): Seq[Int] = {
+    val hash = Blake2b256(seed)
+    val extendedHash = Bytes.concat(hash, hash.take(3))
+    (0 until k).map { i =>
+      BigInt(1, extendedHash.slice(i, i + 4)).mod(N).toInt
+    }
+  }.ensuring(_.length == k)
+
+  /**
+    * Generate element of Autolykos equation.
+    */
+  private def genElement(m: Array[Byte],
+                         pk: Array[Byte],
+                         w: Array[Byte],
+                         indexBytes: Array[Byte]): BigInt = {
+    hash(Bytes.concat(indexBytes, M, pk, m, w))
+  }
+
+  //Proving-related code which is not critical for consensus below
+
+  /**
     * Find a nonce from `minNonce` to `maxNonce`, such that header with the specified fields will contain
     * correct solution of the Autolykos PoW puzzle.
     */
@@ -87,18 +127,13 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
             maxNonce: Long = Long.MaxValue): Option[Header] = {
     val (parentId, height) = AutolykosPowScheme.derivedHeaderFields(parentOpt)
 
-    val h = Header(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
-      nBits, height, extensionHash, null, votes)
+    val h = HeaderWithoutPow(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
+      nBits, height, extensionHash, votes)
     val msg = msgByHeader(h)
     val b = getB(nBits)
     val x = randomSecret()
-    checkNonces(msg, sk, x, b, minNonce, maxNonce).map(s => h.copy(powSolution = s))
+    checkNonces(msg, sk, x, b, minNonce, maxNonce).map(solution => h.toHeader(solution))
   }
-
-  /**
-    * Get message we should proof for header `h`
-    */
-  def msgByHeader(h: Header): Array[Byte] = Blake2b256(HeaderSerializer.bytesWithoutPow(h))
 
   /**
     * Find a nonce from `minNonce` to `maxNonce`, such that full block with the specified fields will contain
@@ -153,28 +188,6 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
-    * Assembles `ErgoFullBlock` using candidate block and external pow solution.
-    */
-  def completeBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
-    val header = AutolykosPowScheme.deriveUnprovedHeader(candidate).copy(powSolution = solution)
-    val adProofs = ADProofs(header.id, candidate.adProofBytes)
-    val blockTransactions = BlockTransactions(header.id, candidate.transactions)
-    val extension = Extension(header.id, candidate.extension.fields)
-    new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
-  }
-
-  /**
-    * Assembles candidate block derivative required for external miner.
-    */
-  def deriveExternalCandidate(candidate: CandidateBlock, pk: ProveDlog): ExternalCandidateBlock = {
-    val h = AutolykosPowScheme.deriveUnprovedHeader(candidate)
-    val msg = msgByHeader(h)
-    val b = getB(candidate.nBits)
-
-    ExternalCandidateBlock(msg, b, pk)
-  }
-
-  /**
     * Check nonces from `startNonce` to `endNonce` for message `m`, secrets `sk` and `x`, difficulty `b`.
     * Return AutolykosSolution if there is any valid nonce in this interval.
     */
@@ -202,30 +215,35 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
-    * Get target `b` from encoded difficulty `nBits`
+    * Assembles candidate block for external miners.
     */
-  private[mining] def getB(nBits: Long): BigInt = q / RequiredDifficulty.decodeCompactBits(nBits)
+  def deriveExternalCandidate(candidate: CandidateBlock, pk: ProveDlog): WorkMessage =
+    deriveExternalCandidate(candidate, pk, Seq.empty)
 
   /**
-    * Hash function that takes `m` and `nonceBytes` and returns a list of size `k` with numbers in
-    * [0,`N`)
+    * Assembles candidate block for external miner with certain transactions included into the block
+    * @param candidate - block candidate (contained the transactions)
+    * @param pk - miner pubkey
+    * @param mandatoryTxIds - ids of the transactions to include
+    * @return - block candidate for external miner
     */
-  private def genIndexes(seed: Array[Byte]): Seq[Int] = {
-    val hash = Blake2b256(seed)
-    val extendedHash = Bytes.concat(hash, hash.take(3))
-    (0 until k).map { i =>
-      BigInt(1, extendedHash.slice(i, i + 4)).mod(N).toInt
+  def deriveExternalCandidate(candidate: CandidateBlock,
+                              pk: ProveDlog,
+                              mandatoryTxIds: Seq[ModifierId]): WorkMessage = {
+    val h = ErgoMiner.deriveUnprovenHeader(candidate)
+    val msg = msgByHeader(h)
+    val b = getB(candidate.nBits)
+
+    val proofs = if(mandatoryTxIds.nonEmpty) {
+      // constructs fake block transactions section (BlockTransactions instance) to get proofs from it
+      val fakeHeaderId = scorex.util.bytesToId(Array.fill(org.ergoplatform.wallet.Constants.ModifierIdLength)(0: Byte))
+      val bt = BlockTransactions(fakeHeaderId, candidate.transactions)
+      val ps = mandatoryTxIds.flatMap { txId => bt.proofFor(txId).map(mp => TransactionMembershipProof(txId, mp)) }
+      Some(ProofOfUpcomingTransactions(h, ps))
+    } else {
+      None
     }
-  }.ensuring(_.length == k)
-
-  /**
-    * Generate element of Autolykos equation.
-    */
-  private def genElement(m: Array[Byte],
-                         pk: Array[Byte],
-                         w: Array[Byte],
-                         indexBytes: Array[Byte]): BigInt = {
-    hash(Bytes.concat(indexBytes, M, pk, m, w))
+    WorkMessage(msg, b, pk, proofs)
   }
 
 }
@@ -233,7 +251,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 object AutolykosPowScheme {
 
   /**
-    * Calculate header fields based on parent header
+    * Calculate header fields based on its parent, namely, header's parent id and height
     */
   def derivedHeaderFields(parentOpt: Option[Header]): (ModifierId, Int) = {
 
@@ -242,29 +260,6 @@ object AutolykosPowScheme {
     val parentId: ModifierId = parentOpt.map(_.id).getOrElse(Header.GenesisParentId)
 
     (parentId, height)
-  }
-
-  /**
-    * Derives header without pow from [[CandidateBlock]].
-    */
-  def deriveUnprovedHeader(candidate: CandidateBlock): Header = {
-    val (parentId, height) = derivedHeaderFields(candidate.parentOpt)
-    val transactionsRoot = BlockTransactions.transactionsRoot(candidate.transactions)
-    val adProofsRoot = ADProofs.proofDigest(candidate.adProofBytes)
-
-    Header(
-      candidate.version,
-      parentId,
-      adProofsRoot,
-      candidate.stateRoot,
-      transactionsRoot,
-      candidate.timestamp,
-      candidate.nBits,
-      height,
-      candidate.extension.digest,
-      null,
-      candidate.votes
-    )
   }
 
 }

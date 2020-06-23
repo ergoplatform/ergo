@@ -8,10 +8,10 @@ import scala.collection.JavaConverters._
 import scala.util.Try
 
 /**
-  * Local miner settings to determine, how to vote
+  * Local miner settings to determine how to vote
   *
   * @param targets       - desired parameters targets
-  * @param desiredUpdate - rules to deactivate if sof-fork is desirable
+  * @param desiredUpdate - rules to deactivate if soft-fork is desirable
   */
 case class VotingTargets(targets: Map[Byte, Int], desiredUpdate: ErgoValidationSettingsUpdate) {
   val softFork: Int = targets.getOrElse(Parameters.SoftFork, 0)

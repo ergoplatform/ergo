@@ -10,7 +10,8 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
-import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings._
@@ -24,7 +25,7 @@ import org.ergoplatform.wallet.protocol.context.{ErgoLikeStateContext, InputCont
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, JsonSecretStorage}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.core.VersionTag
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
@@ -65,6 +66,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private val parameters: Parameters = LaunchParameters
 
+  //todo: temporary 3.2.x collection and readers
+  private var stateReaderOpt: Option[ErgoStateReader] = None
+  private var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
+  private var utxoReaderOpt: Option[UtxoStateReader] = None
+
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
   // to the wallet (by executing testing transactions against them).
   // The state context is being updated by listening to state updates.
@@ -74,6 +80,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
+    context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
     walletSettings.testMnemonic match {
       case Some(testMnemonic) =>
         log.warn("Initializing wallet in test mode. Switch to secure mode for production usage.")
@@ -101,6 +108,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     walletInit orElse
       walletCommands orElse
       onStateChanged orElse
+      onMempoolChanged orElse
       scanLogic orElse
       readers
 
@@ -112,7 +120,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       val resolvedTrackedBoxes = resolved.map { bx =>
         TrackedBox(tx.id, bx.index, None, None, None, bx, BoxCertainty.Certain, Constants.DefaultAppId)
       }
-
       offChainRegistry = offChainRegistry.updated(resolvedTrackedBoxes, inputs)
 
     case ScanOnChain(block) =>
@@ -183,9 +190,29 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! trackedAddresses.toIndexedSeq
   }
 
+  private def updateUtxoSet(): Unit = {
+    (mempoolReaderOpt, stateReaderOpt) match {
+      case (Some(mr), Some(sr)) =>
+        sr match {
+          case u: UtxoStateReader =>
+            utxoReaderOpt = Some(u.withTransactions(mr.getAll))
+          case _ =>
+        }
+      case (_, _) =>
+    }
+  }
+
+  private def onMempoolChanged: Receive = {
+    case ChangedMempool(mr: ErgoMemPoolReader@unchecked) =>
+      mempoolReaderOpt = Some(mr)
+      updateUtxoSet()
+  }
+
   private def onStateChanged: Receive = {
     case ChangedState(s: ErgoStateReader@unchecked) =>
       storage.updateStateContext(s.stateContext)
+      stateReaderOpt = Some(s)
+      updateUtxoSet()
   }
 
   //Secret is set in form of keystore file of testMnemonic in the config
@@ -333,11 +360,30 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     * This filter is used when the wallet is going through its boxes to assemble a transaction.
     */
   private val walletFilter: FilterFn = (trackedBox: TrackedBox) => {
-    if (trackedBox.chainStatus.onChain) {
+    val preStatus = if (trackedBox.chainStatus.onChain) {
       offChainRegistry.onChainBalances.exists(_.id == trackedBox.boxId)
     } else {
       true
     }
+
+    val bid = trackedBox.box.id
+
+    // double-check that box is not spent yet by inputs of mempool transactions
+    def notInInputs: Boolean = {
+      mempoolReaderOpt match {
+        case Some(mr) => !mr.getAll.flatMap(_.inputs.map(_.boxId)).exists(_.sameElements(bid))
+        case None => true
+      }
+    }
+
+    // double-check that box is exists in UTXO set or outputs of offchain transaction
+    def inOutputs: Boolean = {
+      utxoReaderOpt.forall { utxo =>
+        utxo.boxById(bid).isDefined
+      }
+    }
+
+    preStatus && notInInputs && inOutputs
   }
 
   /**

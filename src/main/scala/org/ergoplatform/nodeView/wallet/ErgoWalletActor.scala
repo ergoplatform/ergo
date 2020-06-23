@@ -127,7 +127,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     //scan block transactions
     case ScanOnChain(block) =>
       val (reg, offReg) = WalletScanLogic.scanBlockTransactions(registry, offChainRegistry, stateContext, walletVars,
-        height, block.id, block.transactions)
+        block.height, block.id, block.transactions)
       registry = reg
       offChainRegistry = offReg
 

@@ -9,9 +9,9 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletVars
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
-import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ExternalAppRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest}
 import org.ergoplatform.wallet.Constants
-import org.ergoplatform.wallet.Constants.ApplicationId
+import org.ergoplatform.wallet.Constants.ScanId
 import org.scalacheck.Gen
 import sigmastate.Values.{ErgoTree, FalseLeaf}
 
@@ -38,10 +38,10 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
   private val trueProp = org.ergoplatform.settings.Constants.TrueLeaf
   private val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, trueProp.bytes)
-  private val appReq = ExternalAppRequest("True detector", scanningPredicate)
-  private val appId: ApplicationId = ApplicationId @@ 50.toShort
+  private val appReq = ScanRequest("True detector", scanningPredicate)
+  private val scanId: ScanId = ScanId @@ 50.toShort
 
-  private val walletVars = WalletVars(Some(prover), Seq(appReq.toApp(appId).get), None)(s)
+  private val walletVars = WalletVars(Some(prover), Seq(appReq.toScan(scanId).get), None)(s)
 
   private val pubkeys = walletVars.trackedPubKeys
   private val miningScripts = walletVars.miningScripts
@@ -88,11 +88,11 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
       foundBoxes.map(_.inclusionHeightOpt).forall(_ == inclusionHeightOpt) shouldBe true
       foundBoxes.map(_.value).sum shouldBe trackedTransaction.valuesSum
       foundBoxes.forall(tb => if (trackedTransaction.payments.contains(tb.box.ergoTree)) {
-        tb.applicationStatuses == Set(Constants.PaymentsAppId)
+        tb.scans == Set(Constants.PaymentsScanId)
       } else if(trackedTransaction.miningRewards.contains(tb.box.ergoTree)) {
-        tb.applicationStatuses == Set(Constants.MiningRewardsAppId)
+        tb.scans == Set(Constants.MiningScanId)
       } else {
-        tb.applicationStatuses == Set(appId)
+        tb.scans == Set(scanId)
       }) shouldBe true
     }
   }

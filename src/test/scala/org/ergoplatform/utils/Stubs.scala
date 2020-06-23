@@ -16,14 +16,14 @@ import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.wallet.Constants.{ApplicationId, PaymentsAppId}
+import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.P2PKAddress
-import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication
+import org.ergoplatform.nodeView.wallet.scanning.Scan
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
@@ -142,7 +142,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     private val prover: ErgoProvingInterpreter = defaultProver
     private val trackedAddresses: Seq[P2PKAddress] = prover.hdPubKeys.map(epk => P2PKAddress(epk.key))
 
-    private val apps = mutable.Map[ApplicationId, ExternalApplication]()
+    private val apps = mutable.Map[ScanId, Scan]()
 
     def receive: Receive = {
 
@@ -177,29 +177,29 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case ReadBalances(chainStatus) =>
         sender() ! WalletDigest(0, WalletActorStub.balance(chainStatus), mutable.LinkedHashMap.empty)
 
-      case AddApplication(req) =>
-        val appId = ApplicationId @@ (apps.lastOption.map(_._1).getOrElse(100: Short) + 1).toShort
-        val app = req.toApp(appId)
-        apps += appId -> app.get
-        sender() ! AddApplicationResponse(app)
+      case AddScan(req) =>
+        val scanId = ScanId @@ (apps.lastOption.map(_._1).getOrElse(100: Short) + 1).toShort
+        val app = req.toScan(scanId)
+        apps += scanId -> app.get
+        sender() ! AddScanResponse(app)
 
-      case RemoveApplication(appId) =>
-        val res: Try[Unit] = if(apps.exists(_._1 == appId)) {
-          apps.remove(appId)
+      case RemoveScan(scanId) =>
+        val res: Try[Unit] = if(apps.exists(_._1 == scanId)) {
+          apps.remove(scanId)
           Success(())
         } else {
           Failure(new Exception(""))
         }
-        sender() ! RemoveApplicationResponse(res)
+        sender() ! RemoveScanResponse(res)
 
-      case GetAppBoxes(_, _) =>
+      case GetScanBoxes(_, _) =>
         sender() ! Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
 
-      case StopTracking(appId, boxId) =>
+      case StopTracking(scanId, boxId) =>
         sender() ! StopTrackingResponse(Success(()))
 
-      case ReadApplications =>
-        sender() ! ReadApplicationsResponse(apps.values.toSeq)
+      case ReadScans =>
+        sender() ! ReadScansResponse(apps.values.toSeq)
 
       case GenerateTransaction(_, _, _) =>
         val input = ErgoTransactionGenerators.inputGen.sample.value
@@ -228,7 +228,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         spendingTxIdOpt = Some(modifierIdGen.sample.get),
         spendingHeightOpt = None,
         box = ergoBoxGen.sample.get,
-        applicationStatuses = Set(PaymentsAppId)
+        scans = Set(PaymentsScanId)
       ),
       confirmationsNumOpt = Some(10)
     )

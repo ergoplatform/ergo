@@ -8,14 +8,14 @@ import scorex.util.serialization.{Reader, Writer}
 
 /**
   * Transaction stored in the wallet.
-  * Includes transaction itself, as well as some metadata: inclusion height and applications the transaction
+  * Includes transaction itself, as well as some metadata: inclusion height and scans the transaction
   * can be associated with.
   *
   * @param tx - transaction to be stored in the wallet
   * @param inclusionHeight - blockchain inclusion height for the transaction
-  * @param applicationIds - applications the transaction is associated with
+  * @param scanIds - scans the transaction is associated with
   */
-final case class WalletTransaction(tx: ErgoTransaction, inclusionHeight: Int, applicationIds: Seq[Short]) {
+final case class WalletTransaction(tx: ErgoTransaction, inclusionHeight: Int, scanIds: Seq[Short]) {
 
   def id: ModifierId = tx.id
 
@@ -27,13 +27,13 @@ object WalletTransactionSerializer extends ScorexSerializer[WalletTransaction] {
     val txBytes = wtx.tx.bytes
     w.putInt(wtx.inclusionHeight)
 
-    val appsCount = wtx.applicationIds.size.toShort
-    if (appsCount == 1 && wtx.applicationIds.head == Constants.PaymentsAppId) {
+    val scansCount = wtx.scanIds.size.toShort
+    if (scansCount == 1 && wtx.scanIds.head == Constants.PaymentsScanId) {
       w.putShort(0)
     } else {
-      w.putShort(appsCount)
-      wtx.applicationIds.foreach { appId =>
-        w.putShort(appId)
+      w.putShort(scansCount)
+      wtx.scanIds.foreach { scanId =>
+        w.putShort(scanId)
       }
     }
     w.putInt(txBytes.length)
@@ -43,16 +43,16 @@ object WalletTransactionSerializer extends ScorexSerializer[WalletTransaction] {
   override def parse(r: Reader): WalletTransaction = {
     val inclusionHeight = r.getInt()
 
-    val appsCount = r.getShort()
-    val appIds = if (appsCount == 0) {
-      Seq(Constants.PaymentsAppId)
+    val scansCount = r.getShort()
+    val scanIds = if (scansCount == 0) {
+      Seq(Constants.PaymentsScanId)
     } else {
-      (0 until appsCount).map(_ => r.getShort())
+      (0 until scansCount).map(_ => r.getShort())
     }
 
     val txBytesLen = r.getInt()
     val tx = ErgoTransactionSerializer.parseBytes(r.getBytes(txBytesLen))
-    WalletTransaction(tx, inclusionHeight, appIds)
+    WalletTransaction(tx, inclusionHeight, scanIds)
   }
 
 }

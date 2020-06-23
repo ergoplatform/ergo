@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.db.DBSpec
-import org.ergoplatform.nodeView.wallet.scanning.ExternalAppRequest
+import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -42,16 +42,16 @@ class WalletStorageSpec
     }
   }
 
-  it should "add, remove and read applications" in {
+  it should "add, remove and read scans" in {
     forAll(Gen.nonEmptyListOf(externalAppReqGen)) { externalAppReqs =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
-        externalAppReqs.foreach(storage.addApplication)
-        val storageApps = storage.allApplications
-        val storageRequests = storageApps.map(app => ExternalAppRequest(app.appName, app.trackingRule))
+        externalAppReqs.foreach(storage.addScan)
+        val storageApps = storage.allScans
+        val storageRequests = storageApps.map(app => ScanRequest(app.scanName, app.trackingRule))
         storageRequests.foreach(r => externalAppReqs.contains(r) shouldBe true)
-        storageApps.map(_.appId).foreach(storage.removeApplication)
-        storage.allApplications.length shouldBe 0
+        storageApps.map(_.scanId).foreach(storage.removeScan)
+        storage.allScans.length shouldBe 0
       }
     }
   }

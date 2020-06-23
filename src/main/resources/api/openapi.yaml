@@ -144,7 +144,7 @@ components:
         - spendingHeight
         - inclusionHeight
         - spent
-        - applicationId
+        - scanId
       properties:
         box:
           $ref: '#/components/schemas/ErgoTransactionOutput'
@@ -190,8 +190,8 @@ components:
           type: integer
           format: int32
           example: 2
-        applicationId:
-          description: Application identifier a box relates to
+        scanId:
+          description: Scan identifier a box relates to
           type: integer
           format: int16
           example: 1
@@ -262,7 +262,7 @@ components:
         - outputs
         - inclusionHeight
         - numConfirmations
-        - applicationId
+        - scanId
       properties:
         id:
           $ref: '#/components/schemas/TransactionId'
@@ -291,8 +291,8 @@ components:
           type: integer
           format: int32
           example: 20998
-        applicationId:
-          description: Application identifier a transaction relates to
+        scanId:
+          description: Scan identifier a transaction relates to
           type: integer
           format: int16
           example: 1
@@ -802,48 +802,48 @@ components:
               items:
                 $ref: '#/components/schemas/ScanningPredicate'
 
-    ExternalApplicationRequest:
+    ScanRequest:
       type: object
       properties:
-        appName:
+        scanName:
           type: string
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
       example:
-        appName: Assets Tracker
+        scanName: Assets Tracker
         trackingRule:
           predicate: containsAsset
           assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
 
-    ExternalApplication:
+    Scan:
       type: object
       properties:
-        appName:
+        scanName:
           type: string
-        appId:
+        scanId:
           type: integer
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
       example:
-        appId: 2
-        appName: Assets Tracker
+        scanId: 2
+        scanName: Assets Tracker
         trackingRule:
           predicate: containsAsset
           assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
 
-    ApplicationId:
+    ScanId:
       type: object
       properties:
-        appId:
+        scanId:
           type: integer
 
-    ApplicationIdBoxId:
+    ScanIdBoxId:
       type: object
       required:
-        - appId
+        - scanId
         - boxId
       properties:
-        appId:
+        scanId:
           type: integer
         boxId:
           $ref: '#/components/schemas/TransactionBoxId'
@@ -3353,27 +3353,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /application/register:
+  /scan/register:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Register an application
-      operationId: registerApplication
+      summary: Register a scan
+      operationId: registerScan
       tags:
-        - application
+        - scan
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ExternalApplicationRequest'
+              $ref: '#/components/schemas/ScanRequest'
       responses:
         '200':
-          description: Identifier of an application generated
+          description: Identifier of a scan generated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApplicationId'
+                $ref: '#/components/schemas/ScanId'
         '400':
           description: Bad request
           content:
@@ -3387,29 +3387,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /application/deregister:
+  /scan/deregister:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Stop tracking and deregister application
-      operationId: deregisterApplication
+      summary: Stop tracking and deregister scan
+      operationId: deregisterScan
       tags:
-        - application
+        - scan
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ApplicationId'
+              $ref: '#/components/schemas/ScanId'
       responses:
         '200':
-          description: Identifier of an application removed
+          description: Identifier of a scan removed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApplicationId'
+                $ref: '#/components/schemas/ScanId'
         '400':
-          description: No application found
+          description: No scan found
           content:
             application/json:
               schema:
@@ -3421,23 +3421,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /application/listAll:
+  /scan/listAll:
     get:
       security:
         - ApiKeyAuth: [api_key]
-      summary: List all the registered applications
-      operationId: listAllApplications
+      summary: List all the registered scans
+      operationId: listAllScans
       tags:
-        - application
+        - scan
       responses:
         '200':
-          description: List of applications registered
+          description: List of scans registered
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ExternalApplication'
+                  $ref: '#/components/schemas/Scan'
         default:
           description: Error
           content:
@@ -3445,19 +3445,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /application/unspentBoxes/{appId}:
+  /scan/unspentBoxes/{scanId}:
     get:
       security:
         - ApiKeyAuth: [api_key]
       summary: List boxes which are not spent.
-      operationId: listUnspentApplications
+      operationId: listUnspentScans
       tags:
-        - application
+        - scan
       parameters:
         - in: path
-          name: appId
+          name: scanId
           required: true
-          description: identifier of an application to remove
+          description: identifier of a scan
           schema:
             type: integer
             format: int32
@@ -3477,27 +3477,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /application/stopTracking:
+  /scan/stopTracking:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Stop application-related box tracking
-      operationId: appStopTracking
+      summary: Stop scan-related box tracking
+      operationId: scanStopTracking
       tags:
-        - application
+        - scan
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ApplicationIdBoxId'
+              $ref: '#/components/schemas/ScanIdBoxId'
       responses:
         '200':
           description: The box is not tracked anymore
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApplicationIdBoxId'
+                $ref: '#/components/schemas/ScanIdBoxId'
         default:
           description: Error
           content:

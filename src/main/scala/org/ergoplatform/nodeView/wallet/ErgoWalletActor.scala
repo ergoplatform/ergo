@@ -14,7 +14,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, U
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
-import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication}
+import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, Scan}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.BoxUtils
@@ -33,7 +33,7 @@ import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import org.ergoplatform.wallet.Constants.{ApplicationId, PaymentsAppId}
+import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
 import sigmastate.Values
 
 import scala.concurrent.Future
@@ -156,9 +156,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         .map(tb => WalletBox(tb, currentHeight))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
-    case GetAppBoxes(appId, unspent) =>
+    case GetScanBoxes(scanId, unspent) =>
       val currentHeight = height
-      sender() ! (if (unspent) registry.unspentBoxes(appId) else registry.confirmedBoxes(appId, 0))
+      sender() ! (if (unspent) registry.unspentBoxes(scanId) else registry.confirmedBoxes(scanId, 0))
         .map(tb => WalletBox(tb, currentHeight))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
@@ -171,8 +171,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! registry.getTx(id)
         .map(tx => AugWalletTransaction(tx, height - tx.inclusionHeight))
 
-    case ReadApplications =>
-      sender() ! ReadApplicationsResponse(walletVars.externalApplications)
+    case ReadScans =>
+      sender() ! ReadScansResponse(walletVars.externalScans)
   }
 
   private def updateUtxoSet(): Unit = {
@@ -329,23 +329,23 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case UpdateChangeAddress(address) =>
       storage.updateChangeAddress(address)
 
-    case RemoveApplication(appId) =>
+    case RemoveScan(scanId) =>
       val res: Try[Unit] = {
-        storage.getApplication(appId) match {
-          case None => Failure(new Exception(s"Application #$appId not found"))
-          case Some(_) => Try(storage.removeApplication(appId))
+        storage.getScan(scanId) match {
+          case None => Failure(new Exception(s"Scan #$scanId not found"))
+          case Some(_) => Try(storage.removeScan(scanId))
         }
       }
-      res.foreach(_ => walletVars = walletVars.removeApplication(appId))
-      sender() ! RemoveApplicationResponse(res)
+      res.foreach(_ => walletVars = walletVars.removeScan(scanId))
+      sender() ! RemoveScanResponse(res)
 
-    case AddApplication(appRequest) =>
-      val res: Try[ExternalApplication] = storage.addApplication(appRequest)
-      res.foreach(app => walletVars = walletVars.addApplication(app))
-      sender() ! AddApplicationResponse(res)
+    case AddScan(appRequest) =>
+      val res: Try[Scan] = storage.addScan(appRequest)
+      res.foreach(app => walletVars = walletVars.addScan(app))
+      sender() ! AddScanResponse(res)
 
-    case StopTracking(appId: ApplicationId, boxId: BoxId) =>
-      sender() ! StopTrackingResponse(registry.removeApp(appId, boxId))
+    case StopTracking(scanId: ScanId, boxId: BoxId) =>
+      sender() ! StopTrackingResponse(registry.removeApp(scanId, boxId))
   }
 
   private def withWalletLockHandler(callbackActor: ActorRef)
@@ -457,7 +457,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def boxesToFakeTracked(inputs: Seq[ErgoBox]): Iterator[TrackedBox] = {
     inputs
       .map { box => // declare fake inclusion height in order to confirm the box is onchain
-        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, Set(PaymentsAppId))
+        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, Set(PaymentsScanId))
       }
       .toIterator
   }
@@ -717,12 +717,12 @@ object ErgoWalletActor {
     * state explicit and unit-testable.
     *
     * @param proverOpt
-    * @param externalApplications
+    * @param externalScans
     * @param stateCacheProvided
     * @param settings
     */
   final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
-                              externalApplications: Seq[ExternalApplication],
+                              externalScans: Seq[Scan],
                               stateCacheProvided: Option[MutableStateCache] = None)
                              (implicit val settings: ErgoSettings) extends ScorexLogging {
 
@@ -744,18 +744,18 @@ object ErgoWalletActor {
     val filter: BaseCuckooFilter[Array[Byte]] =
       stateCacheOpt.map(_.filter).getOrElse(MutableStateCache.emptyFilter(settings))
 
-    def removeApplication(appId: ApplicationId): WalletVars = {
-      this.copy(externalApplications = this.externalApplications.filter(_.appId != appId))
+    def removeScan(scanId: ScanId): WalletVars = {
+      this.copy(externalScans = this.externalScans.filter(_.scanId != scanId))
     }
 
-    def addApplication(app: ExternalApplication): WalletVars = {
-      this.copy(externalApplications = this.externalApplications :+ app)
+    def addScan(app: Scan): WalletVars = {
+      this.copy(externalScans = this.externalScans :+ app)
     }
 
     /**
       * Clear the prover along with its secrets.
       *
-      * Public keys and applications still live in the new instance.
+      * Public keys and scans still live in the new instance.
       *
       * @return updated WalletVars instance
       **/
@@ -794,7 +794,7 @@ object ErgoWalletActor {
       } else {
         None
       }
-      WalletVars(None, storage.allApplications, cacheOpt)(settings)
+      WalletVars(None, storage.allScans, cacheOpt)(settings)
     }
   }
 
@@ -878,10 +878,10 @@ object ErgoWalletActor {
   final case class GetWalletBoxes(unspentOnly: Boolean)
 
   /**
-    * Get boxes related to an application
+    * Get boxes related to a scan
     * @param unspentOnly
     */
-  final case class GetAppBoxes(appId: ApplicationId, unspentOnly: Boolean)
+  final case class GetScanBoxes(scanId: ScanId, unspentOnly: Boolean)
 
   /**
     * Set or update address for change outputs. Initially the address is set to root key address
@@ -890,28 +890,28 @@ object ErgoWalletActor {
   final case class UpdateChangeAddress(address: P2PKAddress)
 
   /**
-    * Command to register new application
+    * Command to register new scan
     * @param appRequest
     */
-  final case class AddApplication(appRequest: ExternalAppRequest)
+  final case class AddScan(appRequest: ScanRequest)
 
   /**
-    * Wallet's response for application registration request
+    * Wallet's response for scan registration request
     * @param response
     */
-  final case class AddApplicationResponse(response: Try[ExternalApplication])
+  final case class AddScanResponse(response: Try[Scan])
 
   /**
-    * Command to deregister an application
-    * @param appId
+    * Command to deregister a scan
+    * @param scanId
     */
-  final case class RemoveApplication(appId: ApplicationId)
+  final case class RemoveScan(scanId: ScanId)
 
   /**
-    * Wallet's response for application removal request
+    * Wallet's response for scan removal request
     * @param response
     */
-  final case class RemoveApplicationResponse(response: Try[Unit])
+  final case class RemoveScanResponse(response: Try[Unit])
 
   /**
     * Get wallet-related transaction
@@ -955,22 +955,22 @@ object ErgoWalletActor {
   case object GetFirstSecret
 
   /**
-    * Get registered applications list
+    * Get registered scans list
     */
-  case object ReadApplications
+  case object ReadScans
 
   /**
-    * Get registered applications list
+    * Get registered scans list
     */
-  case class ReadApplicationsResponse(apps: Seq[ExternalApplication])
+  case class ReadScansResponse(apps: Seq[Scan])
 
   /**
-    * Remove association between an application and a box (remove a box if its the only one which belongs to the
-    * application)
-    * @param appId
+    * Remove association between a scan and a box (remove a box if its the only one which belongs to the
+    * scan)
+    * @param scanId
     * @param boxId
     */
-  case class StopTracking(appId: ApplicationId, boxId: BoxId)
+  case class StopTracking(scanId: ScanId, boxId: BoxId)
 
   /**
     * Wrapper for a result of StopTracking processing

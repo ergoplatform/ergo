@@ -13,7 +13,7 @@ import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
-import Constants.{ApplicationId, PaymentsAppId}
+import Constants.{ScanId, PaymentsScanId}
 import scorex.db.LDBVersionedStore
 import scala.util.{Failure, Success, Try}
 
@@ -52,57 +52,57 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   }
 
   /**
-    * Read unspent boxes which belong to given application
-    * @param appId - application identifier
-    * @return sequences of application-related unspent boxes found in the database
+    * Read unspent boxes which belong to given scan
+    * @param scanId - scan identifier
+    * @return sequences of scan-related unspent boxes found in the database
     */
-  def unspentBoxes(appId: ApplicationId): Seq[TrackedBox] = {
-    store.getRange(firstAppBoxSpaceKey(appId), lastAppBoxSpaceKey(appId))
+  def unspentBoxes(scanId: ScanId): Seq[TrackedBox] = {
+    store.getRange(firstAppBoxSpaceKey(scanId), lastAppBoxSpaceKey(scanId))
       .flatMap { case (_, boxId) =>
         getBox(ADKey @@ boxId)
       }
   }
 
   /**
-    * Read spent boxes which belong to given application
-    * @param appId - application identifier
-    * @return sequences of application-related spent boxes found in the database
+    * Read spent boxes which belong to given scan
+    * @param scanId - scan identifier
+    * @return sequences of scan-related spent boxes found in the database
     */
-  def spentBoxes(appId: ApplicationId): Seq[TrackedBox] = {
-    store.getRange(firstSpentAppBoxSpaceKey(appId), lastSpentAppBoxSpaceKey(appId))
+  def spentBoxes(scanId: ScanId): Seq[TrackedBox] = {
+    store.getRange(firstSpentAppBoxSpaceKey(scanId), lastSpentAppBoxSpaceKey(scanId))
       .flatMap { case (_, boxId) =>
         getBox(ADKey @@ boxId)
       }
   }
 
   /**
-    * Unspent boxes belong to payments application
+    * Unspent boxes belong to payments scan
     */
-  def walletUnspentBoxes(): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsAppId)
+  def walletUnspentBoxes(): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsScanId)
 
   /**
-    * Spent boxes belong to payments application
+    * Spent boxes belong to payments scan
     */
-  def walletSpentBoxes(): Seq[TrackedBox] = spentBoxes(Constants.PaymentsAppId)
+  def walletSpentBoxes(): Seq[TrackedBox] = spentBoxes(Constants.PaymentsScanId)
 
   /**
     * Read boxes with certain number of confirmations at most, both spent or not
-    * @param appId application identifier
+    * @param scanId scan identifier
     * @param fromHeight min height when box was included into the blockchain
-    * @return sequence of application-related boxes
+    * @return sequence of scan-related boxes
     */
-  def confirmedBoxes(appId: ApplicationId, fromHeight: Int): Seq[TrackedBox] = {
-    store.getRange(firstIncludedAppBoxSpaceKey(appId, fromHeight), lastIncludedAppBoxSpaceKey(appId)).flatMap { case (_, boxId) =>
+  def confirmedBoxes(scanId: ScanId, fromHeight: Int): Seq[TrackedBox] = {
+    store.getRange(firstIncludedAppBoxSpaceKey(scanId, fromHeight), lastIncludedAppBoxSpaceKey(scanId)).flatMap { case (_, boxId) =>
       getBox(ADKey @@ boxId)
     }
   }
 
   /**
-    * Read boxes belong to the payment application with certain number of confirmations at most, both spent or not
+    * Read boxes belong to the payment scan with certain number of confirmations at most, both spent or not
     * @param fromHeight min height when box was included into the blockchain
     * @return sequence of (P2PK-payment)-related boxes
     */
-  def walletConfirmedBoxes(fromHeight: Int): Seq[TrackedBox] = confirmedBoxes(Constants.PaymentsAppId, fromHeight)
+  def walletConfirmedBoxes(fromHeight: Int): Seq[TrackedBox] = confirmedBoxes(Constants.PaymentsScanId, fromHeight)
 
   /**
     * Read transaction with wallet-related metadata
@@ -113,10 +113,10 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     store.get(txKey(id)).flatMap(r => WalletTransactionSerializer.parseBytesTry(r).toOption)
   }
 
-  //todo: filter by application
+  //todo: filter by scan
   /**
     * Read all the wallet-related transactions
-    * @return all the transactions for all the applications
+    * @return all the transactions for all the scans
     */
   def allWalletTxs(): Seq[WalletTransaction] = {
     store.getRange(FirstTxSpaceKey, LastTxSpaceKey)
@@ -172,14 +172,14 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
       if (height + 1 != blockHeight) {
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
-      val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.applicationStatuses.contains(PaymentsAppId))
+      val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.scans.contains(PaymentsScanId))
       val spentAmt = spentWalletBoxes.map(_.box.value).sum
       val spentTokensAmt = spentWalletBoxes
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
-      val receivedTokensAmt = newOutputs.filter(_.applicationStatuses.contains(PaymentsAppId))
+      val receivedTokensAmt = newOutputs.filter(_.scans.contains(PaymentsScanId))
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
@@ -199,7 +199,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
           }
         }
 
-      val receivedAmt = newOutputs.filter(_.applicationStatuses.contains(PaymentsAppId)).map(_.box.value).sum
+      val receivedAmt = newOutputs.filter(_.scans.contains(PaymentsScanId)).map(_.box.value).sum
       val newBalance = wBalance + receivedAmt - spentAmt
       require(
         (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
@@ -249,28 +249,28 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   }
 
   /**
-    * Remove association between an application and a box
-    * @param appId application identifier
+    * Remove association between an scan and a box
+    * @param scanId scan identifier
     * @param boxId box identifier
     */
-  def removeApp(appId: ApplicationId, boxId: BoxId): Try[Unit] = {
+  def removeApp(scanId: ScanId, boxId: BoxId): Try[Unit] = {
     getBox(boxId) match {
       case Some(tb) =>
-        (if (tb.applicationStatuses.size == 1) {
-          if(tb.applicationStatuses.head == appId) {
+        (if (tb.scans.size == 1) {
+          if(tb.scans.head == scanId) {
             val bag = WalletRegistry.removeBox(KeyValuePairsBag.empty, tb)
             Success(bag)
           } else {
-            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId"))
+            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $scanId"))
           }
         } else {
-          if(tb.applicationStatuses.contains(appId)){
-            val updTb = tb.copy(applicationStatuses = tb.applicationStatuses - appId)
-            val keyToRemove = Seq(spentIndexKey(appId, updTb),
-              inclusionHeightAppBoxIndexKey(appId, updTb))
+          if(tb.scans.contains(scanId)){
+            val updTb = tb.copy(scans = tb.scans - scanId)
+            val keyToRemove = Seq(spentIndexKey(scanId, updTb),
+              inclusionHeightAppBoxIndexKey(scanId, updTb))
             Success(KeyValuePairsBag(Seq(boxToKvPair(updTb)), keyToRemove))
           } else {
-            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $appId"))
+            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $scanId"))
           }
         }).map { bag =>
           store.cachePut(bag.toInsert)
@@ -312,62 +312,62 @@ object WalletRegistry {
   /** Performance optimized helper, which avoid unnecessary allocations and creates the resulting
     * key bytes directly from the given parameters.
     * It is allocation and boxing free.
-    * @return prefix | appId | Array.fill(32)(suffix)  bytes packed in an array
+    * @return prefix | scanId | Array.fill(32)(suffix)  bytes packed in an array
     */
-  private[persistence] final def composeKey(prefix: Byte, appId: ApplicationId, suffix: Byte): Array[Byte] = {
+  private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, suffix: Byte): Array[Byte] = {
     val res = new Array[Byte](35) // 1 + 2 + 32
     res(0) = prefix
-    putShort(res, pos = 1, appId)
+    putShort(res, pos = 1, scanId)
     putReplicated(res, pos = 3, n = 32, suffix)
     res
   }
 
   /** Same as [[composeKey()]] where suffix is given by id. */
-  private[persistence] final def composeKeyWithBoxId(prefix: Byte, appId: ApplicationId, suffixId: BoxId): Array[Byte] = {
-    val res = new Array[Byte](3 + suffixId.length) // 1 byte for prefix + 2 for appId
+  private[persistence] final def composeKeyWithBoxId(prefix: Byte, scanId: ScanId, suffixId: BoxId): Array[Byte] = {
+    val res = new Array[Byte](3 + suffixId.length) // 1 byte for prefix + 2 for scanId
     res(0) = prefix
-    putShort(res, pos = 1, appId)
+    putShort(res, pos = 1, scanId)
     putBytes(res, pos = 3, suffixId)
     res
   }
 
   /** Same as [[composeKey()]] with additional height parameter. */
-  private[persistence] final def composeKey(prefix: Byte, appId: ApplicationId, height: Int, suffix: Byte): Array[Byte] = {
-    val res = new Array[Byte](39) // 1 byte for prefix + 2 for appId + 4 for height + 32 for suffix
+  private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, height: Int, suffix: Byte): Array[Byte] = {
+    val res = new Array[Byte](39) // 1 byte for prefix + 2 for scanId + 4 for height + 32 for suffix
     res(0) = prefix
-    putShort(res, pos = 1, appId)
+    putShort(res, pos = 1, scanId)
     putInt(res, pos = 3, height)
     putReplicated(res, 7, 32, suffix)
     res
   }
 
   /** Same as [[composeKey()]] with additional height parameter and suffix given by id. */
-  private[persistence] final def composeKeyWithBoxId(prefix: Byte, appId: ApplicationId, height: Int, suffixId: BoxId): Array[Byte] = {
-    val res = new Array[Byte](7 + suffixId.length) // 1 byte for prefix + 2 for appId + 4 for height
+  private[persistence] final def composeKeyWithBoxId(prefix: Byte, scanId: ScanId, height: Int, suffixId: BoxId): Array[Byte] = {
+    val res = new Array[Byte](7 + suffixId.length) // 1 byte for prefix + 2 for scanId + 4 for height
     res(0) = prefix
-    putShort(res, pos = 1, appId)
+    putShort(res, pos = 1, scanId)
     putInt(res, pos = 3, height)
     putBytes(res, 7, suffixId)
     res
   }
 
-  private def firstAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    composeKey(UnspentIndexPrefix, appId, 0)
+  private def firstAppBoxSpaceKey(scanId: ScanId): Array[Byte] =
+    composeKey(UnspentIndexPrefix, scanId, 0)
 
-  private def lastAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    composeKey(UnspentIndexPrefix, appId, -1)
+  private def lastAppBoxSpaceKey(scanId: ScanId): Array[Byte] =
+    composeKey(UnspentIndexPrefix, scanId, -1)
 
-  private def firstSpentAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    composeKey(SpentIndexPrefix, appId, 0)
+  private def firstSpentAppBoxSpaceKey(scanId: ScanId): Array[Byte] =
+    composeKey(SpentIndexPrefix, scanId, 0)
 
-  private def lastSpentAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    composeKey(SpentIndexPrefix, appId, -1)
+  private def lastSpentAppBoxSpaceKey(scanId: ScanId): Array[Byte] =
+    composeKey(SpentIndexPrefix, scanId, -1)
 
-  private def firstIncludedAppBoxSpaceKey(appId: ApplicationId, height: Int): Array[Byte] =
-    composeKey(UnspentIndexPrefix, appId, height, 0)
+  private def firstIncludedAppBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
+    composeKey(UnspentIndexPrefix, scanId, height, 0)
 
-  private def lastIncludedAppBoxSpaceKey(appId: ApplicationId): Array[Byte] =
-    composeKey(UnspentIndexPrefix, appId, Int.MaxValue, -1)
+  private def lastIncludedAppBoxSpaceKey(scanId: ScanId): Array[Byte] =
+    composeKey(UnspentIndexPrefix, scanId, Int.MaxValue, -1)
 
   private val RegistrySummaryKey: Array[Byte] = Array(0x02: Byte)
 
@@ -381,21 +381,21 @@ object WalletRegistry {
 
   private def txToKvPair(tx: WalletTransaction) = txKey(tx.id) -> WalletTransactionSerializer.toBytes(tx)
 
-  private def spentIndexKey(appId: ApplicationId, trackedBox: TrackedBox): Array[Byte] = {
+  private def spentIndexKey(scanId: ScanId, trackedBox: TrackedBox): Array[Byte] = {
     val prefix = if (trackedBox.isSpent) SpentIndexPrefix else UnspentIndexPrefix
-    composeKeyWithBoxId(prefix, appId, trackedBox.box.id)
+    composeKeyWithBoxId(prefix, scanId, trackedBox.box.id)
   }
 
-  private def inclusionHeightAppBoxIndexKey(appId: ApplicationId, trackedBox: TrackedBox): Array[Byte] = {
+  private def inclusionHeightAppBoxIndexKey(scanId: ScanId, trackedBox: TrackedBox): Array[Byte] = {
     val inclusionHeight= trackedBox.inclusionHeightOpt.getOrElse(0)
-    composeKeyWithBoxId(InclusionHeightAppBoxPrefix, appId, inclusionHeight, trackedBox.box.id)
+    composeKeyWithBoxId(InclusionHeightAppBoxPrefix, scanId, inclusionHeight, trackedBox.box.id)
   }
 
   def boxIndexKeys(box: TrackedBox): Seq[Array[Byte]] = {
-    box.applicationStatuses.toSeq.flatMap { appId =>
+    box.scans.toSeq.flatMap { scanId =>
       Seq(
-        spentIndexKey(appId, box),
-        inclusionHeightAppBoxIndexKey(appId, box)
+        spentIndexKey(scanId, box),
+        inclusionHeightAppBoxIndexKey(scanId, box)
       )
     }
   }

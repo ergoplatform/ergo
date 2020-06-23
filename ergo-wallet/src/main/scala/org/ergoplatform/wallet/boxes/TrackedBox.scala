@@ -1,6 +1,6 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.wallet.Constants.ApplicationId
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.{Constants, TokensMap}
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
@@ -18,8 +18,7 @@ import org.ergoplatform.ErgoBoxAssets
   * @param spendingTxIdOpt     - Id of transaction which spends the box if exists and known
   * @param spendingHeightOpt   - Height of the spending transaction block in blockchain if known
   * @param box                 - Underlying Ergo box
-  * @param applicationStatuses - Identifier of applications the box refers to and corresponding statuses
-  *                            (whether the box definitely belongs to the application or not really)
+  * @param scans               - Identifiers of scans the box refers to
   */
 final case class TrackedBox(creationTxId: ModifierId,
                             creationOutIndex: Short,
@@ -27,7 +26,7 @@ final case class TrackedBox(creationTxId: ModifierId,
                             spendingTxIdOpt: Option[ModifierId],
                             spendingHeightOpt: Option[Int],
                             box: ErgoBox,
-                            applicationStatuses: Set[ApplicationId]) extends ErgoBoxAssets {
+                            scans: Set[ScanId]) extends ErgoBoxAssets {
 
 
   /**
@@ -84,7 +83,7 @@ final case class TrackedBox(creationTxId: ModifierId,
 object TrackedBox {
 
   def apply(creationTx: ErgoLikeTransaction, creationOutIndex: Short, creationHeight: Option[Int],
-            box: ErgoBox, appStatuses: Set[ApplicationId]): TrackedBox =
+            box: ErgoBox, appStatuses: Set[ScanId]): TrackedBox =
     apply(creationTx.id, creationOutIndex, creationHeight, None, None, box, appStatuses)
 
 }
@@ -98,14 +97,14 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
     w.putOption(obj.spendingTxIdOpt)((bf, id) => bf.putBytes(idToBytes(id)))
     w.putOption(obj.spendingHeightOpt)(_.putInt(_))
 
-    val appsCount = obj.applicationStatuses.size.toShort
+    val appsCount = obj.scans.size.toShort
 
-    if (appsCount == 1 && obj.applicationStatuses.head == Constants.PaymentsAppId) {
+    if (appsCount == 1 && obj.scans.head == Constants.PaymentsScanId) {
       w.putShort(0)
     } else {
       w.putShort(appsCount)
-      obj.applicationStatuses.foreach { appId =>
-        w.putShort(appId)
+      obj.scans.foreach { scanId =>
+        w.putShort(scanId)
       }
     }
     ErgoBoxSerializer.serialize(obj.box, w)
@@ -119,10 +118,10 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
     val spendingHeightOpt = r.getOption(r.getInt())
 
     val appsCount = r.getShort()
-    val appStatuses: Set[ApplicationId] = if (appsCount == 0){
-      Set(Constants.PaymentsAppId)
+    val appStatuses: Set[ScanId] = if (appsCount == 0){
+      Set(Constants.PaymentsScanId)
     } else {
-      (0 until appsCount).map(_ => ApplicationId @@ r.getShort()).toSet
+      (0 until appsCount).map(_ => ScanId @@ r.getShort()).toSet
     }
     val box = ErgoBoxSerializer.parse(r)
     TrackedBox(

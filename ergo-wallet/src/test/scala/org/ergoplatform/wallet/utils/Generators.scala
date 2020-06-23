@@ -13,7 +13,7 @@ import scorex.crypto.authds.ADKey
 import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, SigmaPropValue, TrueLeaf}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.{SByte, SType}
-import org.ergoplatform.wallet.Constants.{ApplicationId, PaymentsAppId}
+import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
 import scorex.util._
 import scala.collection.IndexedSeq
 import org.ergoplatform.ErgoBox
@@ -163,13 +163,13 @@ trait Generators {
     }
   }
 
-  def appStatusesGen: Gen[Set[ApplicationId]] = {
+  def appStatusesGen: Gen[Set[ScanId]] = {
     if(scala.util.Random.nextBoolean()) {
       // simulate complex usage scenario
-      Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.map { id: Short => ApplicationId @@ id }.toSet)
+      Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.map { id: Short => ScanId @@ id }.toSet)
     } else {
       // simulate simple payment
-      Set(PaymentsAppId)
+      Set(PaymentsScanId)
     }
   }
 

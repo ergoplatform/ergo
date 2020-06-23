@@ -2,13 +2,13 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
-import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication, ExternalApplicationSerializer}
+import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, Scan, ScanSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
-import org.ergoplatform.wallet.Constants.{ApplicationId, PaymentsAppId}
+import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
 import scorex.db.{LDBFactory, LDBKVStore}
 
 import scala.util.{Success, Try}
@@ -21,7 +21,7 @@ import scala.util.{Success, Try}
   * * derivation paths
   * * changed addresses
   * * ErgoStateContext (is it version-agnostic?)
-  * * external applications
+  * * external scans
   */
 final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
                          (implicit val addressEncoder: ErgoAddressEncoder) {
@@ -115,62 +115,62 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     }
 
   /**
-    * Register an application (according to EIP-1)
-    * @param appReq - request for an application
-    * @return application or error (e.g. if application identifier space is exhausted)
+    * Register an scan (according to EIP-1)
+    * @param scanReq - request for an scan
+    * @return scan or error (e.g. if scan identifier space is exhausted)
     */
-  def addApplication(appReq: ExternalAppRequest): Try[ExternalApplication] = {
-    val id = ApplicationId @@ (lastUsedAppId + 1).toShort
-    appReq.toApp(id).flatMap { app =>
-      Try(store.insert(Seq(appPrefixKey(id) -> ExternalApplicationSerializer.toBytes(app)))).map(_ => app)
+  def addScan(scanReq: ScanRequest): Try[Scan] = {
+    val id = ScanId @@ (lastUsedscanId + 1).toShort
+    scanReq.toScan(id).flatMap { app =>
+      Try(store.insert(Seq(scanPrefixKey(id) -> ScanSerializer.toBytes(app)))).map(_ => app)
     }
   }
 
   /**
-    * Remove an application from the database
-    * @param id application identifier
+    * Remove an scan from the database
+    * @param id scan identifier
     */
-  def removeApplication(id: Short): Unit =
-    store.remove(Seq(appPrefixKey(id)))
+  def removeScan(id: Short): Unit =
+    store.remove(Seq(scanPrefixKey(id)))
 
   /**
-    * Get application by its identifier
-    * @param id application identifier
-    * @return application stored in the database, or None
+    * Get scan by its identifier
+    * @param id scan identifier
+    * @return scan stored in the database, or None
     */
-  def getApplication(id: Short): Option[ExternalApplication] =
-    store.get(appPrefixKey(id)).map(bytes => ExternalApplicationSerializer.parseBytes(bytes))
+  def getScan(id: Short): Option[Scan] =
+    store.get(scanPrefixKey(id)).map(bytes => ScanSerializer.parseBytes(bytes))
 
   /**
-    * Read all the applications from the database
-    * @return applications stored in the database
+    * Read all the scans from the database
+    * @return scans stored in the database
     */
-  def allApplications: Seq[ExternalApplication] = {
-    store.getRange(SmallestPossibleApplicationId, BiggestPossibleApplicationId)
-      .map { case (_, v) => ExternalApplicationSerializer.parseBytes(v) }
+  def allScans: Seq[Scan] = {
+    store.getRange(SmallestPossibleScanId, BiggestPossibleScanId)
+      .map { case (_, v) => ScanSerializer.parseBytes(v) }
   }
 
   /**
-    * Last inserted application identifier (as they are growing sequentially)
-    * @return identifier of last inserted application
+    * Last inserted scan identifier (as they are growing sequentially)
+    * @return identifier of last inserted scan
     */
-  def lastUsedAppId: Short = store.lastKeyInRange(SmallestPossibleApplicationId, BiggestPossibleApplicationId)
+  def lastUsedscanId: Short = store.lastKeyInRange(SmallestPossibleScanId, BiggestPossibleScanId)
     .map(bs => Shorts.fromByteArray(bs.takeRight(2)))
-    .getOrElse(PaymentsAppId)
+    .getOrElse(PaymentsScanId)
 
 }
 
 object WalletStorage {
   val RangedKeyPrefix: Byte = 0: Byte
 
-  val ApplicationPrefixByte: Byte = 1: Byte
+  val ScanPrefixByte: Byte = 1: Byte
   val PublicKeyPrefixByte: Byte = 2: Byte
 
-  val ApplicationPrefixArray: Array[Byte] = Array(RangedKeyPrefix, ApplicationPrefixByte)
+  val ScanPrefixArray: Array[Byte] = Array(RangedKeyPrefix, ScanPrefixByte)
   val PublicKeyPrefixArray: Array[Byte] = Array(RangedKeyPrefix, PublicKeyPrefixByte)
 
-  val SmallestPossibleApplicationId = ApplicationPrefixArray ++ Shorts.toByteArray(0)
-  val BiggestPossibleApplicationId = ApplicationPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
+  val SmallestPossibleScanId = ScanPrefixArray ++ Shorts.toByteArray(0)
+  val BiggestPossibleScanId = ScanPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
 
 
   val FirstPublicKeyId = PublicKeyPrefixArray ++ Array.fill(33)(0: Byte)
@@ -178,7 +178,7 @@ object WalletStorage {
 
   def noPrefixKey(keyString: String): Array[Byte] = Blake2b256.hash(keyString)
 
-  def appPrefixKey(appId: Short): Array[Byte] = ApplicationPrefixArray ++ Shorts.toByteArray(appId)
+  def scanPrefixKey(scanId: Short): Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(scanId)
 
   def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = PublicKeyPrefixArray ++ pk.path.bytes
 

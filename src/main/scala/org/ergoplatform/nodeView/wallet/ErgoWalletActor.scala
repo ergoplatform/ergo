@@ -62,7 +62,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private val storage: WalletStorage = WalletStorage.readOrCreate(settings)
 
-  private var registry: WalletRegistry = WalletRegistry.readOrCreate(settings)
+  private var registry: WalletRegistry = WalletRegistry.apply(settings)
   private var offChainRegistry: OffChainRegistry = OffChainRegistry.init(registry)
 
   private var walletVars = WalletVars.apply(storage, settings)

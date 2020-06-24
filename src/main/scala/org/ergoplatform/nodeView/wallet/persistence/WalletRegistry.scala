@@ -287,7 +287,7 @@ object WalletRegistry {
 
   val PreGenesisStateVersion: Array[Byte] = idToBytes(PreGenesisHeader.id)
 
-  def readOrCreate(settings: ErgoSettings): WalletRegistry = {
+  def apply(settings: ErgoSettings): WalletRegistry = {
     val dir = new File(s"${settings.directory}/wallet/registry")
     dir.mkdirs()
 
@@ -391,7 +391,7 @@ object WalletRegistry {
     composeKeyWithBoxId(InclusionHeightAppBoxPrefix, scanId, inclusionHeight, trackedBox.box.id)
   }
 
-  def boxIndexKeys(box: TrackedBox): Seq[Array[Byte]] = {
+  private def boxIndexKeys(box: TrackedBox): Seq[Array[Byte]] = {
     box.scans.toSeq.flatMap { scanId =>
       Seq(
         spentIndexKey(scanId, box),
@@ -400,21 +400,21 @@ object WalletRegistry {
     }
   }
 
-  def boxIndexes(box: TrackedBox): Seq[(Array[Byte], Array[Byte])] = {
+  private def boxIndexes(box: TrackedBox): Seq[(Array[Byte], Array[Byte])] = {
     boxIndexKeys(box).map(k => k -> box.box.id)
   }
 
-  def putBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
+  private[persistence] def putBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
     val appIndexUpdates = boxIndexes(box)
     val newKvPairs = appIndexUpdates :+ boxToKvPair(box)
     bag.copy(toInsert = bag.toInsert ++ newKvPairs)
   }
 
-  def putBoxes(bag: KeyValuePairsBag, boxes: Seq[TrackedBox]): KeyValuePairsBag = {
+  private[persistence] def putBoxes(bag: KeyValuePairsBag, boxes: Seq[TrackedBox]): KeyValuePairsBag = {
     boxes.foldLeft(bag) { case (b, box) => putBox(b, box) }
   }
 
-  def removeBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
+  private[persistence] def removeBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
     val appIndexKeys = boxIndexKeys(box)
     val boxKeys = appIndexKeys :+ key(box)
 
@@ -428,23 +428,23 @@ object WalletRegistry {
     }
   }
 
-  def removeBoxes(bag: KeyValuePairsBag, boxes: Seq[TrackedBox]): KeyValuePairsBag = {
+  private[persistence] def removeBoxes(bag: KeyValuePairsBag, boxes: Seq[TrackedBox]): KeyValuePairsBag = {
     boxes.foldLeft(bag) { case (b, box) => removeBox(b, box) }
   }
 
-  def putTx(bag: KeyValuePairsBag, wtx: WalletTransaction): KeyValuePairsBag = {
+  private[persistence] def putTx(bag: KeyValuePairsBag, wtx: WalletTransaction): KeyValuePairsBag = {
     bag.copy(toInsert = bag.toInsert :+ txToKvPair(wtx))
   }
 
-  def putTxs(bag: KeyValuePairsBag, txs: Seq[WalletTransaction]): KeyValuePairsBag = {
+  private[persistence] def putTxs(bag: KeyValuePairsBag, txs: Seq[WalletTransaction]): KeyValuePairsBag = {
     bag.copy(toInsert = bag.toInsert ++ txs.map(txToKvPair))
   }
 
-  def removeTxs(bag: KeyValuePairsBag, ids: Seq[ModifierId]): KeyValuePairsBag = {
+  private[persistence] def removeTxs(bag: KeyValuePairsBag, ids: Seq[ModifierId]): KeyValuePairsBag = {
     bag.copy(toRemove = bag.toRemove ++ ids.map(txKey))
   }
 
-  def putDigest(bag: KeyValuePairsBag, index: WalletDigest): KeyValuePairsBag = {
+  private[persistence] def putDigest(bag: KeyValuePairsBag, index: WalletDigest): KeyValuePairsBag = {
     val registryBytes = WalletDigestSerializer.toBytes(index)
     bag.copy(toInsert = bag.toInsert :+ (RegistrySummaryKey, registryBytes))
   }
@@ -477,5 +477,7 @@ case class KeyValuePairsBag(toInsert: Seq[(Array[Byte], Array[Byte])],
 }
 
 object KeyValuePairsBag {
+
   def empty: KeyValuePairsBag = KeyValuePairsBag(Seq.empty, Seq.empty)
+
 }

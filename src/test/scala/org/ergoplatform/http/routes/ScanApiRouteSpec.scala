@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
-import io.circe.{Decoder, Encoder, Json}
+import io.circe.Json
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.http.api.{ApiCodecs, ScanApiRoute}
 import org.ergoplatform.nodeView.wallet.scanning.{ContainsScanningPredicate, ScanRequest, Scan, ScanJsonCodecs}
@@ -27,16 +27,10 @@ class ScanApiRouteSpec extends FlatSpec
   with FailFastCirceSupport
   with ApiCodecs {
 
+  import ScanJsonCodecs.{scanDecoder, scanReqEncoder}
+  import ScanIdWrapper.{scanIdWrapperEncoder, scanIdWrapperDecoder}
+
   implicit val timeout: RouteTestTimeout = RouteTestTimeout(145.seconds)
-
-  implicit val scanEncoder: Encoder[Scan] = ScanJsonCodecs.scanEncoder
-  implicit val scanDecoder: Decoder[Scan] = ScanJsonCodecs.scanDecoder
-
-  implicit val scanReqEncoder: Encoder[ScanRequest] = ScanJsonCodecs.scanReqEncoder
-  implicit val scanReqDecoder: Decoder[ScanRequest] = ScanJsonCodecs.scanReqDecoder
-
-  implicit val scanIdWrapperEncoder: Encoder[ScanIdWrapper] = ScanIdWrapper.scanIdWrapperEncoder
-  implicit val scanIdWrapperDecoder: Decoder[ScanIdWrapper] = ScanIdWrapper.scanIdWrapperDecoder
 
   val prefix = "/scan"
 

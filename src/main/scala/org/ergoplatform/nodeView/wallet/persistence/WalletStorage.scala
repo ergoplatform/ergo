@@ -14,13 +14,13 @@ import scorex.db.{LDBFactory, LDBKVStore}
 import scala.util.{Success, Try}
 
 /**
-  * Persists version-agnostic wallet actor's mutable state
+  * Persists version-agnostic wallet actor's mutable state (which is not a subject to rollbacks in case of forks)
   *  (so data which do not have different versions unlike blockchain-related objects):
   *
   * * tracked addresses
   * * derivation paths
   * * changed addresses
-  * * ErgoStateContext (is it version-agnostic?)
+  * * ErgoStateContext (not version-agnostic, but state changes including rollbacks it is updated externally)
   * * external scans
   */
 final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)

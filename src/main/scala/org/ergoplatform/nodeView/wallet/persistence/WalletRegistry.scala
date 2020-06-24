@@ -43,7 +43,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
 
   /**
-    * Read wallet-related boxes with metadata, see getBox
+    * Read wallet-related boxes with metadata, see [[getBox()]]
     * @param ids - box identifier
     * @return wallet related boxes (optional result for each box)
     */

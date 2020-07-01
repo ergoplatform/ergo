@@ -72,7 +72,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     * @param secret - new secret to add
     * @return modified prover
     */
-  def withNewSecret(secret: ExtendedSecretKey): (ErgoProvingInterpreter, ExtendedPublicKey) = {
+  def withNewExtendedSecret(secret: ExtendedSecretKey): (ErgoProvingInterpreter, ExtendedPublicKey) = {
     val newPk = secret.publicKey
     val sks   = secretKeys :+ secret
     val pks   = hdPubKeys :+ newPk

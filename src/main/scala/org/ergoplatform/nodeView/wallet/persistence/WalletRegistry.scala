@@ -57,7 +57,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @return sequences of scan-related unspent boxes found in the database
     */
   def unspentBoxes(scanId: ScanId): Seq[TrackedBox] = {
-    store.getRange(firstAppBoxSpaceKey(scanId), lastAppBoxSpaceKey(scanId))
+    store.getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId))
       .flatMap { case (_, boxId) =>
         getBox(ADKey @@ boxId)
       }
@@ -69,7 +69,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @return sequences of scan-related spent boxes found in the database
     */
   def spentBoxes(scanId: ScanId): Seq[TrackedBox] = {
-    store.getRange(firstSpentAppBoxSpaceKey(scanId), lastSpentAppBoxSpaceKey(scanId))
+    store.getRange(firstSpentScanBoxSpaceKey(scanId), lastSpentScanBoxSpaceKey(scanId))
       .flatMap { case (_, boxId) =>
         getBox(ADKey @@ boxId)
       }
@@ -92,7 +92,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @return sequence of scan-related boxes
     */
   def confirmedBoxes(scanId: ScanId, fromHeight: Int): Seq[TrackedBox] = {
-    store.getRange(firstIncludedAppBoxSpaceKey(scanId, fromHeight), lastIncludedAppBoxSpaceKey(scanId)).flatMap { case (_, boxId) =>
+    store.getRange(firstIncludedScanBoxSpaceKey(scanId, fromHeight), lastIncludedScanBoxSpaceKey(scanId)).flatMap { case (_, boxId) =>
       getBox(ADKey @@ boxId)
     }
   }
@@ -253,7 +253,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @param scanId scan identifier
     * @param boxId box identifier
     */
-  def removeApp(scanId: ScanId, boxId: BoxId): Try[Unit] = {
+  def removeScan(scanId: ScanId, boxId: BoxId): Try[Unit] = {
     getBox(boxId) match {
       case Some(tb) =>
         (if (tb.scans.size == 1) {
@@ -261,16 +261,16 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
             val bag = WalletRegistry.removeBox(KeyValuePairsBag.empty, tb)
             Success(bag)
           } else {
-            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $scanId"))
+            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with scan $scanId"))
           }
         } else {
           if(tb.scans.contains(scanId)){
             val updTb = tb.copy(scans = tb.scans - scanId)
             val keyToRemove = Seq(spentIndexKey(scanId, updTb),
-              inclusionHeightAppBoxIndexKey(scanId, updTb))
+              inclusionHeightScanBoxIndexKey(scanId, updTb))
             Success(KeyValuePairsBag(Seq(boxToKvPair(updTb)), keyToRemove))
           } else {
-            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with app $scanId"))
+            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with scan $scanId"))
           }
         }).map { bag =>
           store.cachePut(bag.toInsert)
@@ -304,7 +304,7 @@ object WalletRegistry {
   private val UnspentIndexPrefix: Byte = 0x03
   private val SpentIndexPrefix: Byte = 0x04
 
-  private val InclusionHeightAppBoxPrefix: Byte = 0x07
+  private val InclusionHeightScanBoxPrefix: Byte = 0x07
 
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
   private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)
@@ -351,22 +351,22 @@ object WalletRegistry {
     res
   }
 
-  private def firstAppBoxSpaceKey(scanId: ScanId): Array[Byte] =
+  private def firstScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(UnspentIndexPrefix, scanId, 0)
 
-  private def lastAppBoxSpaceKey(scanId: ScanId): Array[Byte] =
+  private def lastScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(UnspentIndexPrefix, scanId, -1)
 
-  private def firstSpentAppBoxSpaceKey(scanId: ScanId): Array[Byte] =
+  private def firstSpentScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(SpentIndexPrefix, scanId, 0)
 
-  private def lastSpentAppBoxSpaceKey(scanId: ScanId): Array[Byte] =
+  private def lastSpentScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(SpentIndexPrefix, scanId, -1)
 
-  private def firstIncludedAppBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
+  private def firstIncludedScanBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
     composeKey(UnspentIndexPrefix, scanId, height, 0)
 
-  private def lastIncludedAppBoxSpaceKey(scanId: ScanId): Array[Byte] =
+  private def lastIncludedScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(UnspentIndexPrefix, scanId, Int.MaxValue, -1)
 
   private val RegistrySummaryKey: Array[Byte] = Array(0x02: Byte)
@@ -386,16 +386,16 @@ object WalletRegistry {
     composeKeyWithBoxId(prefix, scanId, trackedBox.box.id)
   }
 
-  private def inclusionHeightAppBoxIndexKey(scanId: ScanId, trackedBox: TrackedBox): Array[Byte] = {
+  private def inclusionHeightScanBoxIndexKey(scanId: ScanId, trackedBox: TrackedBox): Array[Byte] = {
     val inclusionHeight= trackedBox.inclusionHeightOpt.getOrElse(0)
-    composeKeyWithBoxId(InclusionHeightAppBoxPrefix, scanId, inclusionHeight, trackedBox.box.id)
+    composeKeyWithBoxId(InclusionHeightScanBoxPrefix, scanId, inclusionHeight, trackedBox.box.id)
   }
 
   private def boxIndexKeys(box: TrackedBox): Seq[Array[Byte]] = {
     box.scans.toSeq.flatMap { scanId =>
       Seq(
         spentIndexKey(scanId, box),
-        inclusionHeightAppBoxIndexKey(scanId, box)
+        inclusionHeightScanBoxIndexKey(scanId, box)
       )
     }
   }
@@ -405,8 +405,8 @@ object WalletRegistry {
   }
 
   private[persistence] def putBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
-    val appIndexUpdates = boxIndexes(box)
-    val newKvPairs = appIndexUpdates :+ boxToKvPair(box)
+    val scanIndexUpdates = boxIndexes(box)
+    val newKvPairs = scanIndexUpdates :+ boxToKvPair(box)
     bag.copy(toInsert = bag.toInsert ++ newKvPairs)
   }
 
@@ -415,8 +415,8 @@ object WalletRegistry {
   }
 
   private[persistence] def removeBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
-    val appIndexKeys = boxIndexKeys(box)
-    val boxKeys = appIndexKeys :+ key(box)
+    val scanIndexKeys = boxIndexKeys(box)
+    val boxKeys = scanIndexKeys :+ key(box)
 
     bag.toInsert.find(_._1.sameElements(key(box))) match {
       case Some((_, _)) =>

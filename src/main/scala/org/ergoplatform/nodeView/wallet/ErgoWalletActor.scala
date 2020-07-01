@@ -345,7 +345,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! AddScanResponse(res)
 
     case StopTracking(scanId: ScanId, boxId: BoxId) =>
-      sender() ! StopTrackingResponse(registry.removeApp(scanId, boxId))
+      sender() ! StopTrackingResponse(registry.removeScan(scanId, boxId))
   }
 
   private def withWalletLockHandler(callbackActor: ActorRef)

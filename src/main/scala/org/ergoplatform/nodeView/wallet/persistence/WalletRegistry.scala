@@ -34,6 +34,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   /**
     * Read wallet-related box with metadata
+    *
     * @param id - box identifier (the same as Ergobox identifier)
     * @return wallet related box if it is stored in the database, None otherwise
     */
@@ -44,6 +45,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   /**
     * Read wallet-related boxes with metadata, see [[getBox()]]
+    *
     * @param ids - box identifier
     * @return wallet related boxes (optional result for each box)
     */
@@ -53,6 +55,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   /**
     * Read unspent boxes which belong to given scan
+    *
     * @param scanId - scan identifier
     * @return sequences of scan-related unspent boxes found in the database
     */
@@ -65,6 +68,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   /**
     * Read spent boxes which belong to given scan
+    *
     * @param scanId - scan identifier
     * @return sequences of scan-related spent boxes found in the database
     */
@@ -87,7 +91,8 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   /**
     * Read boxes with certain number of confirmations at most, both spent or not
-    * @param scanId scan identifier
+    *
+    * @param scanId     scan identifier
     * @param fromHeight min height when box was included into the blockchain
     * @return sequence of scan-related boxes
     */
@@ -99,6 +104,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   /**
     * Read boxes belong to the payment scan with certain number of confirmations at most, both spent or not
+    *
     * @param fromHeight min height when box was included into the blockchain
     * @return sequence of (P2PK-payment)-related boxes
     */
@@ -106,6 +112,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   /**
     * Read transaction with wallet-related metadata
+    *
     * @param id - transaction identifier
     * @return
     */
@@ -116,6 +123,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   //todo: filter by scan
   /**
     * Read all the wallet-related transactions
+    *
     * @return all the transactions for all the scans
     */
   def allWalletTxs(): Seq[WalletTransaction] = {
@@ -127,6 +135,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   /**
     * Read aggregate wallet information
+    *
     * @return wallet digest
     */
   def fetchDigest(): WalletDigest = {
@@ -250,21 +259,22 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   /**
     * Remove association between an scan and a box
+    *
     * @param scanId scan identifier
-    * @param boxId box identifier
+    * @param boxId  box identifier
     */
   def removeScan(scanId: ScanId, boxId: BoxId): Try[Unit] = {
     getBox(boxId) match {
       case Some(tb) =>
         (if (tb.scans.size == 1) {
-          if(tb.scans.head == scanId) {
+          if (tb.scans.head == scanId) {
             val bag = WalletRegistry.removeBox(KeyValuePairsBag.empty, tb)
             Success(bag)
           } else {
             Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with scan $scanId"))
           }
         } else {
-          if(tb.scans.contains(scanId)){
+          if (tb.scans.contains(scanId)) {
             val updTb = tb.copy(scans = tb.scans - scanId)
             val keyToRemove = Seq(spentIndexKey(scanId, updTb),
               inclusionHeightScanBoxIndexKey(scanId, updTb))
@@ -283,6 +293,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 }
 
 object WalletRegistry {
+
   import scorex.db.ByteArrayUtils._
 
   val PreGenesisStateVersion: Array[Byte] = idToBytes(PreGenesisHeader.id)
@@ -299,12 +310,17 @@ object WalletRegistry {
     new WalletRegistry(store)(settings.walletSettings)
   }
 
+
   private val BoxKeyPrefix: Byte = 0x01
   private val TxKeyPrefix: Byte = 0x02
+
+  // box indexes prefixes
   private val UnspentIndexPrefix: Byte = 0x03
   private val SpentIndexPrefix: Byte = 0x04
-
   private val InclusionHeightScanBoxPrefix: Byte = 0x07
+
+  // tx index prefixes
+  private val InclusionHeightScanTxPrefix: Byte = 0x08
 
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
   private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)
@@ -312,6 +328,7 @@ object WalletRegistry {
   /** Performance optimized helper, which avoid unnecessary allocations and creates the resulting
     * key bytes directly from the given parameters.
     * It is allocation and boxing free.
+    *
     * @return prefix | scanId | Array.fill(32)(suffix)  bytes packed in an array
     */
   private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, suffix: Byte): Array[Byte] = {
@@ -380,15 +397,13 @@ object WalletRegistry {
 
   private def boxToKvPair(box: TrackedBox) = boxKey(box) -> TrackedBoxSerializer.toBytes(box)
 
-  private def txToKvPair(tx: WalletTransaction) = txKey(tx.id) -> WalletTransactionSerializer.toBytes(tx)
-
   private def spentIndexKey(scanId: ScanId, trackedBox: TrackedBox): Array[Byte] = {
     val prefix = if (trackedBox.isSpent) SpentIndexPrefix else UnspentIndexPrefix
     composeKeyWithId(prefix, scanId, trackedBox.box.id)
   }
 
   private def inclusionHeightScanBoxIndexKey(scanId: ScanId, trackedBox: TrackedBox): Array[Byte] = {
-    val inclusionHeight= trackedBox.inclusionHeightOpt.getOrElse(0)
+    val inclusionHeight = trackedBox.inclusionHeightOpt.getOrElse(0)
     composeKeyWithHeightAndId(InclusionHeightScanBoxPrefix, scanId, inclusionHeight, trackedBox.box.id)
   }
 
@@ -416,8 +431,7 @@ object WalletRegistry {
   }
 
   private[persistence] def removeBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
-    val scanIndexKeys = boxIndexKeys(box)
-    val boxKeys = scanIndexKeys :+ boxKey(box)
+    val boxKeys = boxIndexKeys(box) :+ boxKey(box)
 
     bag.toInsert.find(_._1.sameElements(boxKey(box))) match {
       case Some((_, _)) =>
@@ -433,16 +447,32 @@ object WalletRegistry {
     boxes.foldLeft(bag) { case (b, box) => removeBox(b, box) }
   }
 
+  private def inclusionHeightScanTxIndexKey(scanId: ScanId, tx: WalletTransaction): Array[Byte] = {
+    val inclusionHeight = tx.inclusionHeight
+    composeKeyWithHeightAndId(InclusionHeightScanTxPrefix, scanId, inclusionHeight, tx.idBytes)
+  }
+
+  private def txIndexKeys(tx: WalletTransaction): Seq[Array[Byte]] = {
+    tx.scanIds.map { scanId =>
+      inclusionHeightScanTxIndexKey(scanId, tx)
+    }
+  }
+
+  private def txToKvPairs(tx: WalletTransaction): Seq[(Array[Byte], Array[Byte])] = {
+    txIndexKeys(tx).map(k => k -> tx.idBytes) :+
+      (txKey(tx.id) -> WalletTransactionSerializer.toBytes(tx))
+  }
+
   private[persistence] def putTx(bag: KeyValuePairsBag, wtx: WalletTransaction): KeyValuePairsBag = {
-    bag.copy(toInsert = bag.toInsert :+ txToKvPair(wtx))
+    bag.copy(toInsert = bag.toInsert ++ txToKvPairs(wtx))
   }
 
   private[persistence] def putTxs(bag: KeyValuePairsBag, txs: Seq[WalletTransaction]): KeyValuePairsBag = {
-    bag.copy(toInsert = bag.toInsert ++ txs.map(txToKvPair))
+    bag.copy(toInsert = bag.toInsert ++ txs.flatMap(txToKvPairs))
   }
 
-  private[persistence] def removeTxs(bag: KeyValuePairsBag, ids: Seq[ModifierId]): KeyValuePairsBag = {
-    bag.copy(toRemove = bag.toRemove ++ ids.map(txKey))
+  private[persistence] def removeTxs(bag: KeyValuePairsBag, txs: Seq[WalletTransaction]): KeyValuePairsBag = {
+    bag.copy(toRemove = bag.toRemove ++ txs.flatMap(txToKvPairs).map(_._1))
   }
 
   private[persistence] def putDigest(bag: KeyValuePairsBag, index: WalletDigest): KeyValuePairsBag = {
@@ -453,6 +483,7 @@ object WalletRegistry {
 
 /**
   * This class collects data for versioned database update
+  *
   * @param toInsert - key-value pairs to write to the database
   * @param toRemove - keys to remove from the database
   */

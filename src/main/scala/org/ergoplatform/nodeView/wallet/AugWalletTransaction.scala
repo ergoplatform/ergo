@@ -33,7 +33,7 @@ object AugWalletTransaction extends ApiCodecs {
       "inputs" -> obj.wtx.tx.inputs.asJson,
       "dataInputs" -> obj.wtx.tx.dataInputs.asJson,
       // explicitly use custom ErgoBox encoder defined above
-      "outputs" -> obj.wtx.tx.outputs.toSeq.asJson(Encoder.encodeSeq(enc)),
+      "outputs" -> obj.wtx.tx.outputs.asJson(Encoder.encodeSeq(enc)),
       "size" -> obj.wtx.tx.size.asJson,
       "inclusionHeight" -> obj.wtx.inclusionHeight.asJson,
       "scans" -> obj.wtx.scanIds.asJson,

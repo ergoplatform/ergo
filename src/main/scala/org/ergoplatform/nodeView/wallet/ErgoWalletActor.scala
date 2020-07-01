@@ -774,7 +774,7 @@ object ErgoWalletActor {
     def withNewSecret(secret: ExtendedSecretKey): Try[WalletVars] = Try {
       proverOpt match {
         case Some(prover) =>
-          val (updProver, newPk) = prover.withNewSecret(secret)
+          val (updProver, newPk) = prover.withNewExtendedSecret(secret)
           val updCache = stateCacheOpt.get.withNewPubkey(newPk).get
           this.copy(proverOpt = Some(updProver), stateCacheProvided = Some(updCache))
         case None =>

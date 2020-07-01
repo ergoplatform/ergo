@@ -38,7 +38,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @return wallet related box if it is stored in the database, None otherwise
     */
   def getBox(id: BoxId): Option[TrackedBox] = {
-    store.get(key(id)).flatMap(r => TrackedBoxSerializer.parseBytesTry(r).toOption)
+    store.get(boxKey(id)).flatMap(r => TrackedBoxSerializer.parseBytesTry(r).toOption)
   }
 
 
@@ -48,7 +48,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @return wallet related boxes (optional result for each box)
     */
   def getBoxes(ids: Seq[BoxId]): Seq[Option[TrackedBox]] = {
-    ids.map(id => store.get(key(id)).flatMap(x => TrackedBoxSerializer.parseBytesTry(x).toOption))
+    ids.map(id => store.get(boxKey(id)).flatMap(x => TrackedBoxSerializer.parseBytesTry(x).toOption))
   }
 
   /**
@@ -222,7 +222,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     if (keepHistory) {
       val outSpent: Seq[TrackedBox] = spentBoxes.flatMap { case (_, tb) =>
         getBox(tb.box.id).orElse {
-          bag.toInsert.find(_._1.sameElements(key(tb))).flatMap { case (_, tbBytes) =>
+          bag.toInsert.find(_._1.sameElements(boxKey(tb))).flatMap { case (_, tbBytes) =>
             TrackedBoxSerializer.parseBytesTry(tbBytes).toOption
           } match {
             case s@Some(_) => s
@@ -371,13 +371,13 @@ object WalletRegistry {
 
   private val RegistrySummaryKey: Array[Byte] = Array(0x02: Byte)
 
-  private def key(trackedBox: TrackedBox): Array[Byte] = BoxKeyPrefix +: trackedBox.box.id
+  private def boxKey(trackedBox: TrackedBox): Array[Byte] = BoxKeyPrefix +: trackedBox.box.id
 
-  private def key(id: BoxId): Array[Byte] = BoxKeyPrefix +: id
+  private def boxKey(id: BoxId): Array[Byte] = BoxKeyPrefix +: id
 
   private def txKey(id: ModifierId): Array[Byte] = TxKeyPrefix +: idToBytes(id)
 
-  private def boxToKvPair(box: TrackedBox) = key(box) -> TrackedBoxSerializer.toBytes(box)
+  private def boxToKvPair(box: TrackedBox) = boxKey(box) -> TrackedBoxSerializer.toBytes(box)
 
   private def txToKvPair(tx: WalletTransaction) = txKey(tx.id) -> WalletTransactionSerializer.toBytes(tx)
 
@@ -416,9 +416,9 @@ object WalletRegistry {
 
   private[persistence] def removeBox(bag: KeyValuePairsBag, box: TrackedBox): KeyValuePairsBag = {
     val scanIndexKeys = boxIndexKeys(box)
-    val boxKeys = scanIndexKeys :+ key(box)
+    val boxKeys = scanIndexKeys :+ boxKey(box)
 
-    bag.toInsert.find(_._1.sameElements(key(box))) match {
+    bag.toInsert.find(_._1.sameElements(boxKey(box))) match {
       case Some((_, _)) =>
         bag.copy(toInsert = bag.toInsert.filterNot { case (k, _) =>
           boxKeys.exists(_.sameElements(k))

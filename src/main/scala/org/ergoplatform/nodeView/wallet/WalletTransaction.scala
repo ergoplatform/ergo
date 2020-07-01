@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.Constants.ScanId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
@@ -15,9 +16,13 @@ import scorex.util.serialization.{Reader, Writer}
   * @param inclusionHeight - blockchain inclusion height for the transaction
   * @param scanIds - scans the transaction is associated with
   */
-final case class WalletTransaction(tx: ErgoTransaction, inclusionHeight: Int, scanIds: Seq[Short]) {
+final case class WalletTransaction(tx: ErgoTransaction, inclusionHeight: Int, scanIds: Seq[ScanId]) {
 
+  // Transaction identifier as Base16-encoded string
   def id: ModifierId = tx.id
+
+  // Transaction identifier as a byte array
+  def idBytes: Array[Byte] = tx.serializedId
 
 }
 
@@ -47,7 +52,7 @@ object WalletTransactionSerializer extends ScorexSerializer[WalletTransaction] {
     val scanIds = if (scansCount == 0) {
       Seq(Constants.PaymentsScanId)
     } else {
-      (0 until scansCount).map(_ => r.getShort())
+      (0 until scansCount).map(_ => ScanId @@ r.getShort())
     }
 
     val txBytesLen = r.getInt()

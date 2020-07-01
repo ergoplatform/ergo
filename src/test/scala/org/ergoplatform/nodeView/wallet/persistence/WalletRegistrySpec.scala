@@ -164,7 +164,7 @@ class WalletRegistrySpec
         WalletRegistry.putTx(emptyBag, wtx).transact(store)
         reg.getTx(wtx.id) shouldEqual Some(wtx)
         reg.allWalletTxs() shouldEqual Seq(wtx)
-        WalletRegistry.removeTxs(emptyBag, Seq(wtx.id)).transact(store)
+        WalletRegistry.removeTxs(emptyBag, Seq(wtx)).transact(store)
         reg.allWalletTxs() should not contain wtx
       }
     }
@@ -213,4 +213,5 @@ class WalletRegistrySpec
       WalletRegistry.composeKeyWithHeightAndId(prefix, ScanId @@ scanId, height, id) shouldBe key4
     }
   }
+
 }

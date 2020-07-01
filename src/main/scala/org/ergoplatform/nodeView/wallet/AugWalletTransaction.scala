@@ -5,6 +5,7 @@ import io.circe._
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.wallet.Constants.ScanId
 
 /**
   * A wallet transaction augmented with number of confirmations.
@@ -45,7 +46,8 @@ object AugWalletTransaction extends ApiCodecs {
       ergoTx <- c.as[ErgoTransaction]
       inclusionHeight <- c.downField("inclusionHeight").as[Int]
       numConfirmations <- c.downField("numConfirmations").as[Int]
-      scanIds <- c.downField("scanIds").as[Seq[Short]]} yield AugWalletTransaction(WalletTransaction(ergoTx, inclusionHeight, scanIds), numConfirmations)
+      scanIds <- c.downField("scanIds").as[Seq[Short]]
+    } yield AugWalletTransaction(WalletTransaction(ergoTx, inclusionHeight, scanIds.map(ScanId @@ _)), numConfirmations)
   }
 
 }

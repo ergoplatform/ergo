@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress, UnsignedInput}
 import org.scalacheck.Arbitrary.arbByte
@@ -96,7 +97,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   lazy val walletTransactionGen: Gen[WalletTransaction] = for {
     tx <- invalidErgoTransactionGen
     inclusionHeight <- Gen.posNum[Int]
-    scanId <- Gen.posNum[Short]
+    scanId <- ScanId @@ Gen.posNum[Short]
   } yield WalletTransaction(tx, inclusionHeight, Seq(scanId))
 
   lazy val augWalletTransactionGen: Gen[AugWalletTransaction] = for {

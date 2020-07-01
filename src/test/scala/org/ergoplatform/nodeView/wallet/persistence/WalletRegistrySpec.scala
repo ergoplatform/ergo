@@ -207,10 +207,10 @@ class WalletRegistrySpec
 
       val id = box.box.id
       val key3 = (prefix +: Shorts.toByteArray(scanId)) ++ id
-      WalletRegistry.composeKeyWithBoxId(prefix, ScanId @@ scanId, id) shouldBe key3
+      WalletRegistry.composeKeyWithId(prefix, ScanId @@ scanId, id) shouldBe key3
 
       val key4 = (prefix +: Shorts.toByteArray(scanId)) ++ Ints.toByteArray(height) ++ id
-      WalletRegistry.composeKeyWithBoxId(prefix, ScanId @@ scanId, height, id) shouldBe key4
+      WalletRegistry.composeKeyWithHeightAndId(prefix, ScanId @@ scanId, height, id) shouldBe key4
     }
   }
 }

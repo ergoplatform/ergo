@@ -323,7 +323,7 @@ object WalletRegistry {
   }
 
   /** Same as [[composeKey()]] where suffix is given by id. */
-  private[persistence] final def composeKeyWithBoxId(prefix: Byte, scanId: ScanId, suffixId: BoxId): Array[Byte] = {
+  private[persistence] final def composeKeyWithId(prefix: Byte, scanId: ScanId, suffixId: Array[Byte]): Array[Byte] = {
     val res = new Array[Byte](3 + suffixId.length) // 1 byte for prefix + 2 for scanId
     res(0) = prefix
     putShort(res, pos = 1, scanId)
@@ -342,7 +342,8 @@ object WalletRegistry {
   }
 
   /** Same as [[composeKey()]] with additional height parameter and suffix given by id. */
-  private[persistence] final def composeKeyWithBoxId(prefix: Byte, scanId: ScanId, height: Int, suffixId: BoxId): Array[Byte] = {
+  private[persistence] final def composeKeyWithHeightAndId(prefix: Byte, scanId: ScanId,
+                                                           height: Int, suffixId: Array[Byte]): Array[Byte] = {
     val res = new Array[Byte](7 + suffixId.length) // 1 byte for prefix + 2 for scanId + 4 for height
     res(0) = prefix
     putShort(res, pos = 1, scanId)
@@ -383,12 +384,12 @@ object WalletRegistry {
 
   private def spentIndexKey(scanId: ScanId, trackedBox: TrackedBox): Array[Byte] = {
     val prefix = if (trackedBox.isSpent) SpentIndexPrefix else UnspentIndexPrefix
-    composeKeyWithBoxId(prefix, scanId, trackedBox.box.id)
+    composeKeyWithId(prefix, scanId, trackedBox.box.id)
   }
 
   private def inclusionHeightScanBoxIndexKey(scanId: ScanId, trackedBox: TrackedBox): Array[Byte] = {
     val inclusionHeight= trackedBox.inclusionHeightOpt.getOrElse(0)
-    composeKeyWithBoxId(InclusionHeightScanBoxPrefix, scanId, inclusionHeight, trackedBox.box.id)
+    composeKeyWithHeightAndId(InclusionHeightScanBoxPrefix, scanId, inclusionHeight, trackedBox.box.id)
   }
 
   private def boxIndexKeys(box: TrackedBox): Seq[Array[Byte]] = {

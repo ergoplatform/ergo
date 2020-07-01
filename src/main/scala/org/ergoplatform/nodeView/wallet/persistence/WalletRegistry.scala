@@ -48,7 +48,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @return wallet related boxes (optional result for each box)
     */
   def getBoxes(ids: Seq[BoxId]): Seq[Option[TrackedBox]] = {
-    ids.map(id => store.get(boxKey(id)).flatMap(x => TrackedBoxSerializer.parseBytesTry(x).toOption))
+    ids.map(id => getBox(id))
   }
 
   /**

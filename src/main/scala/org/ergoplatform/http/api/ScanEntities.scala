@@ -1,15 +1,12 @@
 package org.ergoplatform.http.api
 
-import io.circe.syntax._
-import io.circe.{Decoder, Encoder, HCursor, Json}
+import io.circe.{Decoder, HCursor}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.JsonCodecs
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.Constants.ScanId
-import scorex.crypto.authds.ADKey
 
 /**
-  * Application-related classes and objects needed for API
+  * Scan-related classes and objects needed for API
   */
 object ScanEntities {
 
@@ -17,15 +14,10 @@ object ScanEntities {
 
   object ScanIdWrapper extends ApiCodecs {
 
-    implicit val scanIdWrapperEncoder: Encoder[ScanIdWrapper] = { scanStatus =>
-      Json.obj("scanId" -> scanStatus.scanId.asJson)
-    }
+    import io.circe._, io.circe.generic.semiauto._
 
-    implicit val scanIdWrapperDecoder: Decoder[ScanIdWrapper] = { c: HCursor =>
-      for {
-        scanId <- ScanId @@ c.downField("scanId").as[Short]
-      } yield ScanIdWrapper(scanId)
-    }
+    implicit val scanIdWrapperEncoder: Decoder[ScanIdWrapper] = deriveDecoder[ScanIdWrapper]
+    implicit val scanIdWrapperDecoder: Encoder[ScanIdWrapper] = deriveEncoder[ScanIdWrapper]
 
   }
 
@@ -33,16 +25,10 @@ object ScanEntities {
 
   object ScanIdBoxId extends ApiCodecs {
 
-    implicit val scanIdBoxIdEncoder: Encoder[ScanIdBoxId] = { scanStatus =>
-      Json.obj("scanId" -> scanStatus.scanId.asJson, "boxId" -> Algos.encode(scanStatus.boxId).asJson)
-    }
+    import io.circe._, io.circe.generic.semiauto._
 
-    implicit val scanIdBoxIdDecoder: Decoder[ScanIdBoxId] = { c: HCursor =>
-      for {
-        scanId <- ScanId @@ c.downField("scanId").as[Short]
-        boxId <- c.downField("boxId").as[ADKey]
-      } yield ScanIdBoxId(scanId, boxId)
-    }
+    implicit val scanIdBoxIdEncoder: Decoder[ScanIdBoxId] = deriveDecoder[ScanIdBoxId]
+    implicit val scanIdBoxIdDecoder: Encoder[ScanIdBoxId] = deriveEncoder[ScanIdBoxId]
 
   }
 

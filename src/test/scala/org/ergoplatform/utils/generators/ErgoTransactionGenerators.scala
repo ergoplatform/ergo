@@ -13,18 +13,15 @@ import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
-import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress, UnsignedInput}
-import org.scalacheck.Arbitrary.arbByte
+import org.ergoplatform.UnsignedInput
 import org.ergoplatform.wallet.utils.Generators
 import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.ByteArrayWrapper
-import scorex.util._
 import scorex.util.encode.Base16
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
-import sigmastate._
 import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
@@ -96,8 +93,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   lazy val walletTransactionGen: Gen[WalletTransaction] = for {
     tx <- invalidErgoTransactionGen
     inclusionHeight <- Gen.posNum[Int]
-    appId <- Gen.posNum[Short]
-  } yield WalletTransaction(tx, inclusionHeight, Seq(appId))
+    scanId <- ScanId @@ Gen.posNum[Short]
+  } yield WalletTransaction(tx, inclusionHeight, Seq(scanId))
 
   lazy val augWalletTransactionGen: Gen[AugWalletTransaction] = for {
     tx <- walletTransactionGen

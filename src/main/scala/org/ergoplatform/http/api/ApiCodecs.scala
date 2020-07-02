@@ -16,7 +16,7 @@ import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
 import org.ergoplatform.settings.ErgoAlgos
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.wallet.Constants.ApplicationId
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import scorex.core.validation.ValidationResult
@@ -78,12 +78,12 @@ trait ApiCodecs extends JsonCodecs {
     } yield reg
   }
 
-  implicit val applicationIdEncoder: Encoder[ApplicationId] = { appId =>
-    appId.toShort.asJson
+  implicit val scanIdEncoder: Encoder[ScanId] = { scanId =>
+    scanId.toShort.asJson
   }
 
-  implicit val applicationDecoder: Decoder[ApplicationId] = { c: HCursor =>
-    ApplicationId @@ c.as[Short]
+  implicit val scanIdDecoder: Decoder[ScanId] = { c: HCursor =>
+    ScanId @@ c.as[Short]
   }
 
   implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = { box =>
@@ -93,7 +93,7 @@ trait ApiCodecs extends JsonCodecs {
       "creationOutIndex" -> box.creationOutIndex.asJson,
       "inclusionHeight" -> box.inclusionHeightOpt.asJson,
       "spendingHeight" -> box.spendingHeightOpt.asJson,
-      "applications" -> box.applications.asJson,
+      "scans" -> box.scans.asJson,
       "box" -> box.box.asJson
     )
 

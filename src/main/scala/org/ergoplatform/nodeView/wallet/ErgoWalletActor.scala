@@ -11,9 +11,10 @@ import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
-import org.ergoplatform.nodeView.wallet.scanning.{ExternalAppRequest, ExternalApplication}
+import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, Scan}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.BoxUtils
@@ -24,7 +25,7 @@ import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, ExtendedPublicKey, JsonSecretStorage}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.core.VersionTag
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedState
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
@@ -32,7 +33,7 @@ import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import org.ergoplatform.wallet.Constants.{ApplicationId, PaymentsAppId}
+import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
 import sigmastate.Values
 
 import scala.concurrent.Future
@@ -61,11 +62,16 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private val storage: WalletStorage = WalletStorage.readOrCreate(settings)
 
-  private var registry: WalletRegistry = WalletRegistry.readOrCreate(settings)
+  private var registry: WalletRegistry = WalletRegistry.apply(settings)
   private var offChainRegistry: OffChainRegistry = OffChainRegistry.init(registry)
 
   private var walletVars = WalletVars.apply(storage, settings)
 
+
+  //todo: temporary 3.2.x collection and readers
+  private var stateReaderOpt: Option[ErgoStateReader] = None
+  private var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
+  private var utxoReaderOpt: Option[UtxoStateReader] = None
 
   // State context used to sign transactions and check that coins found in the blockchain are indeed belonging
   // to the wallet (by executing testing transactions against them).
@@ -81,6 +87,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
+    context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
     walletSettings.testMnemonic match {
       case Some(testMnemonic) =>
         log.warn("Initializing wallet in test mode. Switch to secure mode for production usage.")
@@ -106,6 +113,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     walletInit orElse
       walletCommands orElse
       onStateChanged orElse
+      onMempoolChanged orElse
       scanLogic orElse
       readers
 
@@ -119,7 +127,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     //scan block transactions
     case ScanOnChain(block) =>
       val (reg, offReg) = WalletScanLogic.scanBlockTransactions(registry, offChainRegistry, stateContext, walletVars,
-        height, block.id, block.transactions)
+        block.height, block.id, block.transactions)
       registry = reg
       offChainRegistry = offReg
 
@@ -148,9 +156,9 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         .map(tb => WalletBox(tb, currentHeight))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
-    case GetAppBoxes(appId, unspent) =>
+    case GetScanBoxes(scanId, unspent) =>
       val currentHeight = height
-      sender() ! (if (unspent) registry.unspentBoxes(appId) else registry.confirmedBoxes(appId, 0))
+      sender() ! (if (unspent) registry.unspentBoxes(scanId) else registry.confirmedBoxes(scanId, 0))
         .map(tb => WalletBox(tb, currentHeight))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
@@ -163,13 +171,33 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       sender() ! registry.getTx(id)
         .map(tx => AugWalletTransaction(tx, height - tx.inclusionHeight))
 
-    case ReadApplications =>
-      sender() ! ReadApplicationsResponse(walletVars.externalApplications)
+    case ReadScans =>
+      sender() ! ReadScansResponse(walletVars.externalScans)
+  }
+
+  private def updateUtxoSet(): Unit = {
+    (mempoolReaderOpt, stateReaderOpt) match {
+      case (Some(mr), Some(sr)) =>
+        sr match {
+          case u: UtxoStateReader =>
+            utxoReaderOpt = Some(u.withTransactions(mr.getAll))
+          case _ =>
+        }
+      case (_, _) =>
+    }
+  }
+
+  private def onMempoolChanged: Receive = {
+    case ChangedMempool(mr: ErgoMemPoolReader@unchecked) =>
+      mempoolReaderOpt = Some(mr)
+      updateUtxoSet()
   }
 
   private def onStateChanged: Receive = {
     case ChangedState(s: ErgoStateReader@unchecked) =>
       storage.updateStateContext(s.stateContext)
+      stateReaderOpt = Some(s)
+      updateUtxoSet()
   }
 
   //Secret is set in form of keystore file of testMnemonic in the config
@@ -301,23 +329,23 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     case UpdateChangeAddress(address) =>
       storage.updateChangeAddress(address)
 
-    case RemoveApplication(appId) =>
+    case RemoveScan(scanId) =>
       val res: Try[Unit] = {
-        storage.getApplication(appId) match {
-          case None => Failure(new Exception(s"Application #$appId not found"))
-          case Some(_) => Try(storage.removeApplication(appId))
+        storage.getScan(scanId) match {
+          case None => Failure(new Exception(s"Scan #$scanId not found"))
+          case Some(_) => Try(storage.removeScan(scanId))
         }
       }
-      res.foreach(_ => walletVars = walletVars.removeApplication(appId))
-      sender() ! RemoveApplicationResponse(res)
+      res.foreach(_ => walletVars = walletVars.removeScan(scanId))
+      sender() ! RemoveScanResponse(res)
 
-    case AddApplication(appRequest) =>
-      val res: Try[ExternalApplication] = storage.addApplication(appRequest)
-      res.foreach(app => walletVars = walletVars.addApplication(app))
-      sender() ! AddApplicationResponse(res)
+    case AddScan(appRequest) =>
+      val res: Try[Scan] = storage.addScan(appRequest)
+      res.foreach(app => walletVars = walletVars.addScan(app))
+      sender() ! AddScanResponse(res)
 
-    case StopTracking(appId: ApplicationId, boxId: BoxId) =>
-      sender() ! StopTrackingResponse(registry.removeApp(boxId, appId))
+    case StopTracking(scanId: ScanId, boxId: BoxId) =>
+      sender() ! StopTrackingResponse(registry.removeScan(boxId, scanId))
   }
 
   private def withWalletLockHandler(callbackActor: ActorRef)
@@ -334,11 +362,36 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private type FilterFn = TrackedBox => Boolean
 
   /**
-    * This filter is selecting boxes which are onchain and not spent offchain yet.
-    * This filter is used when wallet is looking through its boxes to assemble a transaction.
+    * This filter is selecting boxes which are onchain and not spent offchain yet or created offchain
+    * (and not spent offchain, but that is ensured by offChainRegistry).
+    * This filter is used when the wallet is going through its boxes to assemble a transaction.
     */
-  private val onChainFilter: FilterFn = (trackedBox: TrackedBox) => trackedBox.chainStatus.onChain &&
-    offChainRegistry.onChainBalances.exists(_.id == encodedBoxId(trackedBox.box.id))
+  private val walletFilter: FilterFn = (trackedBox: TrackedBox) => {
+    val preStatus = if (trackedBox.chainStatus.onChain) {
+      offChainRegistry.onChainBalances.exists(_.id == trackedBox.boxId)
+    } else {
+      true
+    }
+
+    val bid = trackedBox.box.id
+
+    // double-check that box is not spent yet by inputs of mempool transactions
+    def notInInputs: Boolean = {
+      mempoolReaderOpt match {
+        case Some(mr) => !mr.getAll.flatMap(_.inputs.map(_.boxId)).exists(_.sameElements(bid))
+        case None => true
+      }
+    }
+
+    // double-check that box is exists in UTXO set or outputs of offchain transaction
+    def inOutputs: Boolean = {
+      utxoReaderOpt.forall { utxo =>
+        utxo.boxById(bid).isDefined
+      }
+    }
+
+    preStatus && notInInputs && inOutputs
+  }
 
   /**
     * This filter is not filtering out anything, used when the wallet works with externally provided boxes.
@@ -404,69 +457,73 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def boxesToFakeTracked(inputs: Seq[ErgoBox]): Iterator[TrackedBox] = {
     inputs
       .map { box => // declare fake inclusion height in order to confirm the box is onchain
-        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, Set(PaymentsAppId))
+        TrackedBox(box.transactionId, box.index, Some(1), None, None, box, Set(PaymentsScanId))
       }
       .toIterator
   }
 
   /**
-    * Generates new transaction according to a given requests using available boxes.
+    * Generates new transaction according to given requests using available or provided boxes.
+    *
+    * @param requests      - requests to transfer funds or to issue an asset
+    * @param inputsRaw     - user-provided inputs. If empty then wallet is looking for inputs itself. If non-empty, then
+    *                      the wallet is not adding anything, thus the user in this case should take care about satisfying
+    *                      the (sum(inputs) == sum(outputs)) preservation rule for ergs.
+    * @param dataInputsRaw - user-provided data (read-only) inputs. Wallet is not able to provide data inputs
+    *                      (if they are needed in order to spend the spendable inputs).
+    * @return generated transaction or an error
     */
   private def generateTransactionWithOutputs(requests: Seq[TransactionGenerationRequest],
                                              inputsRaw: Seq[String],
                                              dataInputsRaw: Seq[String]): Try[ErgoTransaction] = Try {
-    walletVars.proverOpt match {
+
+    // A helper which converts Base16-encoded boxes to ErgoBox instances
+    def stringsToBoxes(strings: Seq[String]): Seq[ErgoBox] =
+      strings.map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry)).map(_.get)
+
+    walletVars.proverOpt  match {
       case Some(prover) =>
-        val inputs = inputsRaw
-          .toList
-          .map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry))
-          .map(_.get)
+        val userInputs = stringsToBoxes(inputsRaw)
+        val dataInputs = stringsToBoxes(dataInputsRaw).toIndexedSeq
 
-        val dataInputs = dataInputsRaw
-          .toIndexedSeq
-          .map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry))
-          .map(_.get)
-
-        requestsToBoxCandidates(requests).flatMap { payTo =>
-          require(walletVars.publicKeyAddresses.nonEmpty, "No public keys in the prover to extract change address from")
+        requestsToBoxCandidates(requests).flatMap { outputs =>
           require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
-          require(payTo.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, parameters)), "Minimal ERG value not met")
-          require(payTo.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
+          require(outputs.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, parameters)), "Minimal ERG value not met")
+          require(outputs.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
 
-          val assetIssueBox = payTo
+          val assetIssueBox = outputs
             .zip(requests)
             .filter(_._2.isInstanceOf[AssetIssueRequest])
             .map(_._1)
             .headOption
 
-          val targetBalance = payTo
-            .map(_.value)
-            .sum
+          val targetBalance = outputs.map(_.value).sum
+          val targetAssets = TransactionBuilder.collectOutputTokens(outputs.filterNot(bx => assetIssueBox.contains(bx)))
 
-          val targetAssets = TransactionBuilder.collectOutputTokens(payTo.filterNot(bx => assetIssueBox.contains(bx)))
-
-              val (inputBoxes, filter) = if (inputs.nonEmpty) {
-                //inputs are provided externally, no need for filtering
-                (boxesToFakeTracked(inputs), noFilter)
-              } else {
-                //inputs are to be selected by the wallet
-                (registry.walletUnspentBoxes().toIterator, onChainFilter)
-              }
+          val (inputBoxes, filter) = if (userInputs.nonEmpty) {
+            //inputs are provided externally, no need for filtering
+            (boxesToFakeTracked(userInputs), noFilter)
+          } else {
+            //inputs are to be selected by the wallet
+            require(walletVars.publicKeyAddresses.nonEmpty, "No public keys in the prover to extract change address from")
+            val boxesToSpend = (registry.walletUnspentBoxes() ++ offChainRegistry.offChainBoxes).distinct
+            (boxesToSpend.toIterator, walletFilter)
+          }
 
           val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
 
           selectionOpt.map { selectionResult =>
-            prepareTransaction(prover, payTo, selectionResult, dataInputs)
+            prepareTransaction(prover, outputs, selectionResult, dataInputs)
           } match {
             case Right(txTry) => txTry.map(ErgoTransaction.apply)
             case Left(e) => Failure(
-              new Exception(s"Failed to find boxes to assemble a transaction for $payTo, \nreason: ${e}")
+              new Exception(s"Failed to find boxes to assemble a transaction for $outputs, \nreason: $e")
             )
           }
         }
 
       case None =>
-        Failure(new Exception(s"Cannot generateTransactionWithOutputs($requests, $inputsRaw): Wallet is locked"))
+        Failure(new Exception(s"Cannot generateTransactionWithOutputs($requests, $inputsRaw): wallet is locked"))
     }
   }.flatten
 
@@ -542,7 +599,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
                         targetAssets: TokensMap = Map.empty): Seq[ErgoBox] = {
     val unspentBoxes = registry.walletUnspentBoxes()
     boxSelector
-      .select(unspentBoxes.toIterator, onChainFilter, targetAmount, targetAssets)
+      .select(unspentBoxes.toIterator, walletFilter, targetAmount, targetAssets)
       .toSeq
       .flatMap(_.boxes)
       .map(_.box)
@@ -652,7 +709,6 @@ object ErgoWalletActor {
 
       MutableStateCache(tas, trackedPubKeys, tbs, f)(settings)
     }
-
   }
 
   /**
@@ -661,12 +717,12 @@ object ErgoWalletActor {
     * state explicit and unit-testable.
     *
     * @param proverOpt
-    * @param externalApplications
+    * @param externalScans
     * @param stateCacheProvided
     * @param settings
     */
   final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
-                              externalApplications: Seq[ExternalApplication],
+                              externalScans: Seq[Scan],
                               stateCacheProvided: Option[MutableStateCache] = None)
                              (implicit val settings: ErgoSettings) extends ScorexLogging {
 
@@ -688,18 +744,18 @@ object ErgoWalletActor {
     val filter: BaseCuckooFilter[Array[Byte]] =
       stateCacheOpt.map(_.filter).getOrElse(MutableStateCache.emptyFilter(settings))
 
-    def removeApplication(appId: ApplicationId): WalletVars = {
-      this.copy(externalApplications = this.externalApplications.filter(_.appId != appId))
+    def removeScan(scanId: ScanId): WalletVars = {
+      this.copy(externalScans = this.externalScans.filter(_.scanId != scanId))
     }
 
-    def addApplication(app: ExternalApplication): WalletVars = {
-      this.copy(externalApplications = this.externalApplications :+ app)
+    def addScan(app: Scan): WalletVars = {
+      this.copy(externalScans = this.externalScans :+ app)
     }
 
     /**
       * Clear the prover along with its secrets.
       *
-      * Public keys and applications still live in the new instance.
+      * Public keys and scans still live in the new instance.
       *
       * @return updated WalletVars instance
       **/
@@ -718,7 +774,7 @@ object ErgoWalletActor {
     def withNewSecret(secret: ExtendedSecretKey): Try[WalletVars] = Try {
       proverOpt match {
         case Some(prover) =>
-          val (updProver, newPk) = prover.withNewSecret(secret)
+          val (updProver, newPk) = prover.withNewExtendedSecret(secret)
           val updCache = stateCacheOpt.get.withNewPubkey(newPk).get
           this.copy(proverOpt = Some(updProver), stateCacheProvided = Some(updCache))
         case None =>
@@ -738,7 +794,7 @@ object ErgoWalletActor {
       } else {
         None
       }
-      WalletVars(None, storage.allApplications, cacheOpt)(settings)
+      WalletVars(None, storage.allScans, cacheOpt)(settings)
     }
   }
 
@@ -822,10 +878,10 @@ object ErgoWalletActor {
   final case class GetWalletBoxes(unspentOnly: Boolean)
 
   /**
-    * Get boxes related to an application
+    * Get boxes related to a scan
     * @param unspentOnly
     */
-  final case class GetAppBoxes(appId: ApplicationId, unspentOnly: Boolean)
+  final case class GetScanBoxes(scanId: ScanId, unspentOnly: Boolean)
 
   /**
     * Set or update address for change outputs. Initially the address is set to root key address
@@ -834,28 +890,28 @@ object ErgoWalletActor {
   final case class UpdateChangeAddress(address: P2PKAddress)
 
   /**
-    * Command to register new application
+    * Command to register new scan
     * @param appRequest
     */
-  final case class AddApplication(appRequest: ExternalAppRequest)
+  final case class AddScan(appRequest: ScanRequest)
 
   /**
-    * Wallet's response for application registration request
+    * Wallet's response for scan registration request
     * @param response
     */
-  final case class AddApplicationResponse(response: Try[ExternalApplication])
+  final case class AddScanResponse(response: Try[Scan])
 
   /**
-    * Command to deregister an application
-    * @param appId
+    * Command to deregister a scan
+    * @param scanId
     */
-  final case class RemoveApplication(appId: ApplicationId)
+  final case class RemoveScan(scanId: ScanId)
 
   /**
-    * Wallet's response for application removal request
+    * Wallet's response for scan removal request
     * @param response
     */
-  final case class RemoveApplicationResponse(response: Try[Unit])
+  final case class RemoveScanResponse(response: Try[Unit])
 
   /**
     * Get wallet-related transaction
@@ -899,22 +955,22 @@ object ErgoWalletActor {
   case object GetFirstSecret
 
   /**
-    * Get registered applications list
+    * Get registered scans list
     */
-  case object ReadApplications
+  case object ReadScans
 
   /**
-    * Get registered applications list
+    * Get registered scans list
     */
-  case class ReadApplicationsResponse(apps: Seq[ExternalApplication])
+  case class ReadScansResponse(apps: Seq[Scan])
 
   /**
-    * Remove association between an application and a box (remove a box if its the only one which belongs to the
-    * application)
-    * @param appId
+    * Remove association between a scan and a box (remove a box if its the only one which belongs to the
+    * scan)
+    * @param scanId
     * @param boxId
     */
-  case class StopTracking(appId: ApplicationId, boxId: BoxId)
+  case class StopTracking(scanId: ScanId, boxId: BoxId)
 
   /**
     * Wrapper for a result of StopTracking processing

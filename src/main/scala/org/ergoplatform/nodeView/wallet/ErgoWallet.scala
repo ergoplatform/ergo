@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import akka.actor.{ActorRef, ActorSystem, Props}
+import org.ergoplatform.GlobalConstants
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
@@ -24,15 +25,17 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   // and also optimal number of inputs(a selector is collecting dust if transaction has less inputs than optimal).
   // Now these settings are hard-coded, however, they should be parameterized
   // https://github.com/ergoplatform/ergo/issues/856
-  val maxInputs = 32
-  val optimalInputs = 12
+  val maxInputs = 48
+  val optimalInputs = 2
 
   val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs)
 
   override type NVCT = this.type
 
-  override val walletActor: ActorRef =
-    actorSystem.actorOf(Props(classOf[ErgoWalletActor], settings, boxSelector))
+  override val walletActor: ActorRef = {
+    val props = Props(classOf[ErgoWalletActor], settings, boxSelector).withDispatcher(GlobalConstants.ApiDispatcher)
+    actorSystem.actorOf(props)
+  }
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     walletActor ! ScanOffChain(tx)
@@ -67,6 +70,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
 }
 
 object ErgoWallet {
+
   def readOrGenerate(historyReader: ErgoHistoryReader,
                      settings: ErgoSettings)(implicit actorSystem: ActorSystem): ErgoWallet = {
     new ErgoWallet(historyReader, settings)

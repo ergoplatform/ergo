@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extensio
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.core._
@@ -61,7 +61,9 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     val settingsPks = settings.chainSettings.foundersPubkeys
       .map(str => groupElemFromBytes(Base16.decode(str).get))
       .map(pk => ProveDlog(pk))
-    settingsPks.count(defaultProver.hdPubKeys.contains) shouldBe 2
+    println("spks: " + settingsPks)
+    println("hdpks: " + defaultProver.hdPubKeys)
+    settingsPks.count(defaultProver.hdPubKeys.map(_.key).contains) shouldBe 2
 
     forAll(defaultHeaderGen) { header =>
       val rewardPk = new DLogProverInput(BigInt(header.height).bigInteger).publicImage

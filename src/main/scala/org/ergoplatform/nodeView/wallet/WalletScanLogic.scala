@@ -6,9 +6,9 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletVars
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, decodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
-import org.ergoplatform.nodeView.wallet.scanning.ExternalApplication
+import org.ergoplatform.nodeView.wallet.scanning.Scan
 import org.ergoplatform.settings.{Constants, LaunchParameters}
-import org.ergoplatform.wallet.Constants.{ApplicationId, MiningRewardsAppId, PaymentsAppId}
+import org.ergoplatform.wallet.Constants.{ScanId, MiningScanId, PaymentsScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
@@ -59,9 +59,9 @@ object WalletScanLogic extends ScorexLogging {
     //todo: inefficient for wallets with many outputs, replace with a Bloom/Cuckoo filter?
     val previousBoxIds = registry.walletUnspentBoxes().map(tb => encodedBoxId(tb.box.id))
 
-    val resolvedBoxes = registry.unspentBoxes(MiningRewardsAppId).flatMap { tb =>
+    val resolvedBoxes = registry.unspentBoxes(MiningScanId).flatMap { tb =>
       val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)
-      if (spendable) Some(tb.copy(applications = Set(PaymentsAppId))) else None
+      if (spendable) Some(tb.copy(scans = Set(PaymentsScanId))) else None
     }
 
     //input tx id, input box id, tracked box
@@ -83,9 +83,9 @@ object WalletScanLogic extends ScorexLogging {
             .orElse(scanResults._1.find(tb => tb.box.id.sameElements(decodedBoxId(inpId)))).get //todo: .get
         }
 
-        // Applications related to the transaction
-        val walletAppIds = (spentBoxes ++ myOutputs).flatMap(_.applications).toSet
-        val wtx = WalletTransaction(tx, height, walletAppIds.toSeq)
+        // Scans related to the transaction
+        val walletscanIds = (spentBoxes ++ myOutputs).flatMap(_.scans).toSet
+        val wtx = WalletTransaction(tx, height, walletscanIds.toSeq)
 
         val newRel = (scanResults._2: InputData) ++ spendingInputIds.zip(spentBoxes).map(t => (tx.id, t._1, t._2))
         (scanResults._1 ++ myOutputs, newRel, scanResults._3 :+ wtx) -> boxIds
@@ -119,34 +119,34 @@ object WalletScanLogic extends ScorexLogging {
 
     val trackedBytes: Seq[Array[Byte]] = walletVars.trackedBytes
     val miningScriptsBytes: Seq[Array[Byte]] = walletVars.miningScriptsBytes
-    val externalApplications: Seq[ExternalApplication] = walletVars.externalApplications
+    val externalScans: Seq[Scan] = walletVars.externalScans
 
     tx.outputs.flatMap { bx =>
-      val appsTriggered = externalApplications.filter(_.trackingRule.filter(bx)).map(app => app.appId)
+      val appsTriggered = externalScans.filter(_.trackingRule.filter(bx)).map(app => app.scanId)
 
       val boxScript = bx.propositionBytes
 
-      val statuses: Set[ApplicationId] = if (walletVars.filter.lookup(boxScript)) {
+      val statuses: Set[ScanId] = if (walletVars.filter.lookup(boxScript)) {
 
         val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
 
         //tweak for tests
-        lazy val miningStatus: ApplicationId = if (walletVars.settings.miningRewardDelay > 0) {
-          MiningRewardsAppId
+        lazy val miningStatus: ScanId = if (walletVars.settings.miningRewardDelay > 0) {
+          MiningScanId
         } else {
-          PaymentsAppId
+          PaymentsScanId
         }
 
         val prePaymentStatuses = if (miningIncomeTriggered) appsTriggered :+ miningStatus else appsTriggered
 
         if (prePaymentStatuses.nonEmpty) {
-          //if other applications intercept the box, it is not being tracked by the payments app
+          //if other scans intercept the box, it is not being tracked by the payments app
           prePaymentStatuses.toSet
         } else {
           val paymentsTriggered = trackedBytes.exists(bs => boxScript.sameElements(bs))
 
           if (paymentsTriggered) {
-            Set(PaymentsAppId)
+            Set(PaymentsScanId)
           } else {
             Set.empty
           }

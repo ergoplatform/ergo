@@ -10,12 +10,12 @@ import org.ergoplatform.{ErgoBox, P2PKAddress}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
-import org.ergoplatform.nodeView.wallet.scanning.ExternalAppRequest
+import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.secrets.DerivationPath
-import org.ergoplatform.wallet.Constants.ApplicationId
+import org.ergoplatform.wallet.Constants.ScanId
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
 import sigmastate.basics.DLogProtocol.DLogProverInput
@@ -71,8 +71,8 @@ trait ErgoWalletReader extends VaultReader {
   def walletBoxes(unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
     (walletActor ? GetWalletBoxes(unspentOnly)).mapTo[Seq[WalletBox]]
 
-  def appBoxes(appId: ApplicationId, unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
-    (walletActor ? GetAppBoxes(appId, unspentOnly)).mapTo[Seq[WalletBox]]
+  def appBoxes(scanId: ScanId, unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
+    (walletActor ? GetScanBoxes(scanId, unspentOnly)).mapTo[Seq[WalletBox]]
 
   def updateChangeAddress(address: P2PKAddress): Unit =
     walletActor ! UpdateChangeAddress(address)
@@ -94,16 +94,16 @@ trait ErgoWalletReader extends VaultReader {
                       dataBoxes: Seq[ErgoBox]): Future[Try[ErgoTransaction]] =
     (walletActor ? SignTransaction(secrets, tx, boxesToSpend, dataBoxes)).mapTo[Try[ErgoTransaction]]
 
-  def addApplication(appRequest: ExternalAppRequest): Future[AddApplicationResponse] =
-    (walletActor ? AddApplication(appRequest)).mapTo[AddApplicationResponse]
+  def addScan(appRequest: ScanRequest): Future[AddScanResponse] =
+    (walletActor ? AddScan(appRequest)).mapTo[AddScanResponse]
 
-  def removeApplication(appId: ApplicationId): Future[RemoveApplicationResponse] =
-    (walletActor ? RemoveApplication(appId)).mapTo[RemoveApplicationResponse]
+  def removeScan(scanId: ScanId): Future[RemoveScanResponse] =
+    (walletActor ? RemoveScan(scanId)).mapTo[RemoveScanResponse]
 
-  def readApplications(): Future[ReadApplicationsResponse] =
-    (walletActor ? ReadApplications).mapTo[ReadApplicationsResponse]
+  def readScans(): Future[ReadScansResponse] =
+    (walletActor ? ReadScans).mapTo[ReadScansResponse]
 
-  def stopTracking(appId: ApplicationId, boxId: BoxId): Future[StopTrackingResponse] =
-    (walletActor ? StopTracking(appId, boxId)).mapTo[StopTrackingResponse]
+  def stopTracking(scanId: ScanId, boxId: BoxId): Future[StopTrackingResponse] =
+    (walletActor ? StopTracking(scanId, boxId)).mapTo[StopTrackingResponse]
 
 }

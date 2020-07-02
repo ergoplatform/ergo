@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import com.google.common.primitives.{Shorts, Ints}
-import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
+import com.google.common.primitives.{Ints, Shorts}
+import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedBoxId
 import org.ergoplatform.utils.generators.WalletGenerators
@@ -9,7 +9,9 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
+import scorex.core.VersionTag
 import scorex.testkit.utils.FileUtils
+import scorex.util.encode.Base16
 
 class WalletRegistrySpec
   extends FlatSpec
@@ -191,6 +193,61 @@ class WalletRegistrySpec
         val updatedIndex = index.copy(height = 0, walletBalance = 0)
         reg.updateDigest(emptyBag)(_ => updatedIndex).transact(store)
         reg.fetchDigest() shouldBe updatedIndex
+      }
+    }
+  }
+
+  it should "remove application from a box correctly" in {
+    val appId: ScanId = ScanId @@ 20.toShort
+
+    forAll(trackedBoxGen) { tb0 =>
+      val tb = tb0.copy(scans = Set(appId))
+      withHybridStore(10) { store =>
+        val reg = new WalletRegistry(store)(ws)
+        WalletRegistry.putBox(emptyBag, tb).transact(store)
+        reg.getBox(tb.box.id).isDefined shouldBe true
+        reg.removeScan(tb.box.id, appId).isSuccess shouldBe true
+        reg.getBox(tb.box.id).isDefined shouldBe false
+      }
+    }
+
+  }
+
+  it should "remove application and then rollback - one app" in {
+    val scanId: ScanId = ScanId @@ 20.toShort
+
+    forAll(trackedBoxGen) { tb0 =>
+      val tb = tb0.copy(scans = Set(scanId))
+      withHybridStore(10) { store =>
+        val reg = new WalletRegistry(store)(ws)
+        val version = scorex.utils.Random.randomBytes()
+
+        WalletRegistry.putBox(emptyBag, tb).transact(store, version)
+        reg.getBox(tb.box.id).isDefined shouldBe true
+        reg.removeScan(tb.box.id, scanId).isSuccess shouldBe true
+        reg.getBox(tb.box.id).isDefined shouldBe false
+        reg.rollback(VersionTag @@ Base16.encode(version)).isSuccess shouldBe true
+        reg.getBox(tb.box.id).isDefined shouldBe false
+      }
+    }
+  }
+
+  it should "remove application and then rollback - multiple apps" in {
+    val scanId: ScanId = ScanId @@ 20.toShort
+
+    forAll(trackedBoxGen) { tb0 =>
+      val tb = tb0.copy(scans = Set(PaymentsScanId, scanId))
+      withHybridStore(10) { store =>
+        val reg = new WalletRegistry(store)(ws)
+        val version = scorex.utils.Random.randomBytes()
+
+        WalletRegistry.putBox(emptyBag, tb).transact(store, version)
+        reg.getBox(tb.box.id).get.scans.size shouldBe 2
+        reg.removeScan(tb.box.id, scanId).isSuccess shouldBe true
+        reg.getBox(tb.box.id).get.scans.size shouldBe 1
+        reg.rollback(VersionTag @@ Base16.encode(version)).isSuccess shouldBe true
+        reg.getBox(tb.box.id).get.scans.size shouldBe 1
+        reg.getBox(tb.box.id).get.scans shouldBe Set(PaymentsScanId)
       }
     }
   }

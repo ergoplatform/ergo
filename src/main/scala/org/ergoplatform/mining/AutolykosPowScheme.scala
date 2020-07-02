@@ -60,7 +60,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
     val p1 = groupElemToBytes(s.pk)
     val p2 = groupElemToBytes(s.w)
-    val f = genIndexes(Bytes.concat(msg, s.n)).map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib))).sum.mod(q)
+    val seed = Bytes.concat(msg, s.n)
+    val indexes = genIndexes(seed)
+    val f = indexes.map(idx => genElement(msg, p1, p2, Ints.toByteArray(idx))).sum.mod(q)
     val left = s.w.multiply(f.bigInteger)
     val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
 
@@ -70,6 +72,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Real difficulty of `header`.
     * May occasionally exceeds required difficulty due to random nature of PoW puzzle.
+    * Used in NiPoPoW.
     */
   def realDifficulty(header: Header): BigInt = {
     q / header.powSolution.d

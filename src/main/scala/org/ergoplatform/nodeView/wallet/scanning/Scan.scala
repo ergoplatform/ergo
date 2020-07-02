@@ -25,7 +25,7 @@ object Scan {
 }
 
 /**
-  * A class which encodes an API request to create an scan.
+  * A class that encodes an API request to create a scan.
   *
   * @param scanName       - scan description (255 bytes in UTF-8 encoding max)
   * @param trackingRule  - a predicate to scan the blockchain for specific scan-related boxes

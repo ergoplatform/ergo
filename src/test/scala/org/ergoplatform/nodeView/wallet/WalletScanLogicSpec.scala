@@ -7,7 +7,7 @@ import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.WalletVars
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{MutableStateCache, WalletVars}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest}
 import org.ergoplatform.wallet.Constants
@@ -27,6 +27,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
                                         miningRewards: List[ErgoTree],
                                         miningRewardValues: List[Int]) {
     def scriptsCount: Int = payments.size + appPayments.size + miningRewards.size
+
     def valuesSum: Long = (paymentValues ++ appPaymentValues ++ miningRewardValues).sum
   }
 
@@ -41,10 +42,8 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
   private val appReq = ScanRequest("True detector", scanningPredicate)
   private val scanId: ScanId = ScanId @@ 50.toShort
 
-  private val walletVars = WalletVars(Some(prover), Seq(appReq.toScan(scanId).get), None)(s)
-
-  private val pubkeys = walletVars.trackedPubKeys
-  private val miningScripts = walletVars.miningScripts
+  private val pubkeys = prover.hdPubKeys
+  private val miningScripts = MutableStateCache.miningScripts(pubkeys, s)
 
   private def paymentsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.oneOf(pubkeys.map(_.key.toSigmaProp: ErgoTree)))
 
@@ -53,6 +52,19 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
   private def nonTrackablePaymentsGen: Gen[List[ErgoTree]] = Gen.nonEmptyListOf(Gen.const(FalseLeaf.toSigmaProp))
 
   private def appPaymentsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.const(trueProp))
+
+  private def walletVarsGen: Gen[WalletVars] = {
+    for {
+      proverSet <- Gen.oneOf(true, false)
+    } yield {
+      if (proverSet) {
+        WalletVars(Some(prover), Seq(appReq.toScan(scanId).get), None)(s)
+      } else {
+        val cache = MutableStateCache(pubkeys, s)
+        WalletVars(None, Seq(appReq.toScan(scanId).get), Some(cache))(s)
+      }
+    }
+  }
 
   private def trackedTransactionGen: Gen[TrackedTransaction] = {
     for {
@@ -82,14 +94,14 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
     val height = Random.nextInt(200) - 100
     val inclusionHeightOpt = if (height <= 0) None else Some(height)
 
-    forAll(trackedTransactionGen) { trackedTransaction =>
+    forAll(trackedTransactionGen, walletVarsGen) { case (trackedTransaction, walletVars) =>
       val foundBoxes = extractWalletOutputs(trackedTransaction.tx, inclusionHeightOpt, walletVars)
       foundBoxes.length shouldBe trackedTransaction.scriptsCount
       foundBoxes.map(_.inclusionHeightOpt).forall(_ == inclusionHeightOpt) shouldBe true
       foundBoxes.map(_.value).sum shouldBe trackedTransaction.valuesSum
       foundBoxes.forall(tb => if (trackedTransaction.payments.contains(tb.box.ergoTree)) {
         tb.scans == Set(Constants.PaymentsScanId)
-      } else if(trackedTransaction.miningRewards.contains(tb.box.ergoTree)) {
+      } else if (trackedTransaction.miningRewards.contains(tb.box.ergoTree)) {
         tb.scans == Set(Constants.MiningScanId)
       } else {
         tb.scans == Set(scanId)
@@ -99,6 +111,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
   property("scanBlockTransactions") {
     withHybridStore(10) { store =>
+      val walletVars = walletVarsGen.sample.get
       val emptyReg = new WalletRegistry(store)(settings.walletSettings)
       val emptyOff = OffChainRegistry.empty
       val blockId = modIdGen.sample.get
@@ -119,7 +132,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
       var registry = r0
       var off = o0
 
-      forAll(trackedTransactionGen){trackedTransaction =>
+      forAll(trackedTransactionGen) { trackedTransaction =>
         //applying one transaction creating boxes
         val creatingTx = trackedTransaction.tx
         val txs = Seq(creatingTx)
@@ -201,6 +214,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
         registry = r4
         off = o4
       }
+
     }
   }
 

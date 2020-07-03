@@ -639,12 +639,13 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
 object ErgoWalletActor {
 
-  //Fields of WalletVars which are potentially costly to compute if there are many keys
+  /**
+    * Fields of WalletVars which are potentially costly to compute if there are many keys
+    */
   final case class MutableStateCache(publicKeyAddresses: Seq[P2PKAddress],
                                      trackedPubKeys: Seq[ExtendedPublicKey],
                                      trackedBytes: Seq[Array[Byte]],
-                                     filter: CuckooFilter[Array[Byte]]
-                                    )(implicit val settings: ErgoSettings) {
+                                     filter: CuckooFilter[Array[Byte]])(implicit val settings: ErgoSettings) {
 
     implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 

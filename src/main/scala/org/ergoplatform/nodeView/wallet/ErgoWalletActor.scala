@@ -77,6 +77,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
+
     walletSettings.testMnemonic match {
       case Some(testMnemonic) =>
         log.warn("Initializing wallet in test mode. Switch to secure mode for production usage.")
@@ -87,11 +88,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
         walletVars = walletVars.withProver(prover)
       case None =>
         log.info("Trying to read wallet in secure mode ..")
-        readSecretStorage.fold(
+        JsonSecretStorage.readFile(settings.walletSettings.secretStorage).fold(
           e => log.info(
             s"Failed to read wallet. Manual initialization is required to sign transactions. Cause: ${e.getCause}"),
           secretStorage => {
-            log.info("Wallet loaded successfully")
+            log.info("Wallet loaded successfully and locked")
             secretStorageOpt = Some(secretStorage)
           }
         )
@@ -592,22 +593,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       .toSeq
       .flatMap(_.boxes)
       .map(_.box)
-  }
-
-  private def readSecretStorage: Try[JsonSecretStorage] = {
-    val dir = new File(settings.walletSettings.secretStorage.secretDir)
-    if (dir.exists()) {
-      dir.listFiles().toList match {
-        case files if files.size > 1 =>
-          Failure(new Exception(s"Ambiguous secret files in dir '$dir'"))
-        case headFile :: _ =>
-          Success(new JsonSecretStorage(headFile, settings.walletSettings.secretStorage.encryption))
-        case Nil =>
-          Failure(new Exception(s"Cannot readSecretStorage: Secret file not found in dir '$dir'"))
-      }
-    } else {
-      Failure(new Exception(s"Cannot readSecretStorage: Secret dir '$dir' doesn't exist"))
-    }
   }
 
   private def wrapLegalExc[T](e: Throwable): Failure[T] =

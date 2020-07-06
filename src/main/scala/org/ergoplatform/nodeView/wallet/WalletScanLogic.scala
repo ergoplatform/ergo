@@ -18,7 +18,7 @@ import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
 
 /**
-  * Functions which do scan boxes, transactions and blocks to find boxes which do really belong to wallet's keys.
+  * Functions which do scan boxes, transactions and blocks to find boxes which belong to wallet's keys.
   */
 object WalletScanLogic extends ScorexLogging {
 
@@ -163,6 +163,13 @@ object WalletScanLogic extends ScorexLogging {
         None
       }
     }
+  }
+
+  /**
+    * Extracts all input boxes from the given transaction.
+    */
+  def extractInputBoxes(tx: ErgoTransaction): Seq[EncodedBoxId] = {
+    tx.inputs.map(x => encodedBoxId(x.boxId))
   }
 
 }

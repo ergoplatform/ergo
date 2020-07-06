@@ -41,14 +41,10 @@ import scala.util.{Failure, Success, Try}
 
 
 class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
-  extends Actor
-    with ScorexLogging
-    with ScorexEncoding {
+  extends Actor with ScorexLogging with ScorexEncoding {
 
   import cats.implicits._
-
   import ErgoWalletActor._
-  import IdUtils._
 
   private implicit val ec: ExecutionContextExecutor = scala.concurrent.ExecutionContext.global
 
@@ -77,11 +73,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def stateContext: ErgoStateContext = storage.readStateContext
 
   private def height: Int = stateContext.currentHeight
-
-  /**
-    * Extracts all inputs from the given transaction.
-    */
-  private def extractAllInputs(tx: ErgoTransaction): Seq[EncodedBoxId] = tx.inputs.map(x => encodedBoxId(x.boxId))
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
@@ -119,7 +110,7 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
     //scan mempool transaction
     case ScanOffChain(tx) =>
       val resolvedTrackedBoxes = WalletScanLogic.extractWalletOutputs(tx, None, walletVars)
-      val inputs = extractAllInputs(tx)
+      val inputs = WalletScanLogic.extractInputBoxes(tx)
       offChainRegistry = offChainRegistry.updateOnTransaction(resolvedTrackedBoxes, inputs)
 
     //scan block transactions

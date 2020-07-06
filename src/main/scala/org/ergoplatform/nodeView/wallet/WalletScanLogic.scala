@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
@@ -8,7 +9,7 @@ import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, decodedBoxId, enc
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.Scan
 import org.ergoplatform.settings.{Constants, LaunchParameters}
-import org.ergoplatform.wallet.Constants.{ScanId, MiningScanId, PaymentsScanId}
+import org.ergoplatform.wallet.Constants.{MiningScanId, PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
@@ -44,6 +45,15 @@ object WalletScanLogic extends ScorexLogging {
     proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined
   }
 
+  def scanBlockTransactions(registry: WalletRegistry,
+                            offChainRegistry: OffChainRegistry,
+                            stateContext: ErgoStateContext,
+                            walletVars: WalletVars,
+                            block: ErgoFullBlock): (WalletRegistry, OffChainRegistry) = {
+    scanBlockTransactions(
+      registry, offChainRegistry, stateContext, walletVars,
+      block.height, block.id, block.transactions)
+  }
 
   /**
     * Updates wallet database by scanning and processing block transactions.

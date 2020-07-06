@@ -14,7 +14,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, U
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
-import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, Scan}
+import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.BoxUtils
@@ -22,7 +22,7 @@ import org.ergoplatform.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, ExtendedPublicKey, JsonSecretStorage}
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey, JsonSecretStorage}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
@@ -33,10 +33,10 @@ import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
+import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import sigmastate.Values
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 
 
@@ -50,18 +50,16 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   import ErgoWalletActor._
   import IdUtils._
 
-  private implicit val ec = scala.concurrent.ExecutionContext.global
+  private implicit val ec: ExecutionContextExecutor = scala.concurrent.ExecutionContext.global
 
   private val walletSettings: WalletSettings = settings.walletSettings
+  private implicit val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
-  //todo: update parameters
+  //todo: update parameters, they're used in transactions signing & minimal fee estimation
   private val parameters: Parameters = LaunchParameters
 
   private var secretStorageOpt: Option[JsonSecretStorage] = None
-  private implicit val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
-
   private val storage: WalletStorage = WalletStorage.readOrCreate(settings)
-
   private var registry: WalletRegistry = WalletRegistry.apply(settings)
   private var offChainRegistry: OffChainRegistry = OffChainRegistry.init(registry)
 

@@ -60,11 +60,17 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
     require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
 
-    val p1 = groupElemToBytes(s.pk)
-    val p2 = groupElemToBytes(s.w)
-    val seed = Bytes.concat(msg, s.n)
+    val pkBytes = groupElemToBytes(s.pk)
+    val wBytes = groupElemToBytes(s.w)
+    val nonce = s.n
+
+    val seed = if (version == 1) {
+      Bytes.concat(msg, nonce) // Autolykos v1, Alg. 2, line4: m || nonce
+    } else {
+      Bytes.concat(pkBytes, wBytes, msg, nonce) // Autolykos v1, Alg. 2, line 4: pk || w || m || nonce
+    }
     val indexes = genIndexes(seed)
-    val f = indexes.map(idx => genElement(version, msg, p1, p2, Ints.toByteArray(idx))).sum.mod(q)
+    val f = indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx))).sum.mod(q)
     val left = s.w.multiply(f.bigInteger)
     val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
 
@@ -111,10 +117,10 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                          w: Array[Byte],
                          indexBytes: Array[Byte]): BigInt = {
     if (version == 1) {
-      // Autolykos v. 1: H(j|M|pk|m|w)
+      // Autolykos v. 1: H(j|M|pk|m|w) (line 4 from the Algo 2 of the spec)
       hash(Bytes.concat(indexBytes, M, pk, m, w))
     } else {
-      // Autolykos v. 2: H(j|pk|w|M|m)
+      // Autolykos v. 2: H(j|pk|w|M|m) (line 4 from the Algo 2 of the spec)
       hash(Bytes.concat(indexBytes, pk, w, M, m))
     }
   }
@@ -220,10 +226,12 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     } else {
       if (i % 1000000 == 0 && i > 0) log.debug(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)
-      val d = (
-          x * genIndexes(Bytes.concat(m, nonce))
-            .map(i => genElement(version, m, p1, p2, Ints.toByteArray(i))).sum - sk
-        ).mod(q)
+      val seed = if (version == 1) {
+        Bytes.concat(m, nonce)
+      } else {
+        Bytes.concat(p1, p2, m, nonce)
+      }
+      val d = (x * genIndexes(seed).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i))).sum - sk).mod(q)
       if (d <= b) {
         log.debug(s"Solution found at $i")
         Some(AutolykosSolution(genPk(sk), genPk(x), nonce, d))

@@ -12,8 +12,10 @@ import org.scalatest.{FlatSpec, Matchers}
 import io.circe.syntax._
 import org.ergoplatform.http.api.ScriptApiRoute
 import scorex.util.encode.Base16
-import sigmastate.Values.{ErgoTree, TrueLeaf}
-import sigmastate.serialization.ErgoTreeSerializer
+import sigmastate.SByte
+import sigmastate.Values.{CollectionConstant, ErgoTree, TrueLeaf}
+import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
+
 
 class ScriptApiRouteSpec  extends FlatSpec
   with Matchers
@@ -112,4 +114,38 @@ class ScriptApiRouteSpec  extends FlatSpec
     p2s shouldBe "Ms7smJwLGbUAjuWQ"
     Get(s"$prefix/$suffix/$p2s") ~> route ~> check(assertion(responseAs[Json], p2s))
   }
+
+  it should "address <-> bytes roundtrip via addressToBytes" in {
+    val suffix = "addressToBytes"
+
+    val assertion = (json: Json, address: String) => {
+      status shouldBe StatusCodes.OK
+      val vs = json.hcursor.downField("bytes").as[String].right.get
+      val vbs = Base16.decode(vs).get
+
+      val bac = ValueSerializer.deserialize(vbs).asInstanceOf[CollectionConstant[SByte.type]]
+
+      val bs = bac.value.toArray.map(_.byteValue())
+
+      val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bs)
+
+      val addr = ergoAddressEncoder.fromProposition(tree).get
+
+      ergoAddressEncoder.toString(addr) shouldBe address
+    }
+
+    val p2pk = "3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN"
+    Get(s"$prefix/$suffix/$p2pk") ~> route ~> check(assertion(responseAs[Json], p2pk))
+
+    //todo: temporarily switched off due to https://github.com/ergoplatform/ergo/issues/936
+    //    val p2sh = "8UmyuJuQ3FS9ts7j72fn3fKChXSGzbL9WC"
+    //    Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
+
+    val script = TrueLeaf
+    val tree = ErgoTree.fromProposition(script)
+    val p2s = ergoAddressEncoder.toString(ergoAddressEncoder.fromProposition(tree).get)
+    p2s shouldBe "Ms7smJwLGbUAjuWQ"
+    Get(s"$prefix/$suffix/$p2s") ~> route ~> check(assertion(responseAs[Json], p2s))
+  }
+
 }

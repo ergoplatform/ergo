@@ -5,12 +5,15 @@ import org.ergoplatform.ErgoBox.R1
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.crypto.hash.Digest32
-
+import sigmastate.Values.ByteArrayConstant
 import scala.util.Random
+import scala.language.implicitConversions
 
 class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransactionGenerators {
 
   val testDelay = 720 // to construct mining rewards scripts
+
+  private implicit def bacFromBytes(bs: Array[Byte]) = ByteArrayConstant(bs)
 
   //helper function to change random byte
   private def mutateRandomByte(source: Array[Byte]): Array[Byte] = {

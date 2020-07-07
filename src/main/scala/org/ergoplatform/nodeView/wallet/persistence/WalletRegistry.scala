@@ -56,6 +56,18 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   /**
     * Read unspent boxes which belong to given scan
     *
+    * @return sequences of scan-related unspent boxes found in the database
+    */
+  def allUnspentBoxes(): Seq[TrackedBox] = {
+    store.getRange(firstUnspentBoxKey, lastUnspentBoxKey)
+      .flatMap { case (_, boxId) =>
+        getBox(ADKey @@ boxId)
+      }
+  }
+
+  /**
+    * Read unspent boxes which belong to given scan
+    *
     * @param scanId - scan identifier
     * @return sequences of scan-related unspent boxes found in the database
     */
@@ -325,6 +337,9 @@ object WalletRegistry {
 
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
   private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)
+
+  private val firstUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(32)(0: Byte)
+  private val lastUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(32)(-1: Byte)
 
   /** Performance optimized helper, which avoid unnecessary allocations and creates the resulting
     * key bytes directly from the given parameters.

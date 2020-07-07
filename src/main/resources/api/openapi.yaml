@@ -3319,6 +3319,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /script/addressToBytes/{address}:
+    get:
+      summary: Convert an address to hex-encoded Sigma byte array constant which contains script bytes
+      operationId: addressToBytes
+      tags:
+        - script
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to get a script from
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: Base16-encoded Sigma byte array constant which contains script bytes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tree:
+                    type: string
+                    description: Base16-encoded bytes
+                    example: '0e0710010101d17300'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /script/executeWithContext:
     post:
       security:

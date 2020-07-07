@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
@@ -8,7 +9,7 @@ import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, decodedBoxId, enc
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.Scan
 import org.ergoplatform.settings.{Constants, LaunchParameters}
-import org.ergoplatform.wallet.Constants.{ScanId, MiningScanId, PaymentsScanId}
+import org.ergoplatform.wallet.Constants.{MiningScanId, PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
@@ -18,7 +19,7 @@ import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
 
 /**
-  * Functions which do scan boxes, transactions and blocks to find boxes which do really belong to wallet's keys.
+  * Functions which do scan boxes, transactions and blocks to find boxes which belong to wallet's keys.
   */
 object WalletScanLogic extends ScorexLogging {
 
@@ -44,6 +45,15 @@ object WalletScanLogic extends ScorexLogging {
     proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined
   }
 
+  def scanBlockTransactions(registry: WalletRegistry,
+                            offChainRegistry: OffChainRegistry,
+                            stateContext: ErgoStateContext,
+                            walletVars: WalletVars,
+                            block: ErgoFullBlock): (WalletRegistry, OffChainRegistry) = {
+    scanBlockTransactions(
+      registry, offChainRegistry, stateContext, walletVars,
+      block.height, block.id, block.transactions)
+  }
 
   /**
     * Updates wallet database by scanning and processing block transactions.
@@ -57,7 +67,8 @@ object WalletScanLogic extends ScorexLogging {
                             transactions: Seq[ErgoTransaction]): (WalletRegistry, OffChainRegistry) = {
 
     //todo: inefficient for wallets with many outputs, replace with a Bloom/Cuckoo filter?
-    val previousBoxIds = registry.walletUnspentBoxes().map(tb => encodedBoxId(tb.box.id))
+    //todo: at least, cache in RAM instead of reading from DB
+    val previousBoxIds = registry.allUnspentBoxes().map(tb => encodedBoxId(tb.box.id))
 
     val resolvedBoxes = registry.unspentBoxes(MiningScanId).flatMap { tb =>
       val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)
@@ -163,6 +174,13 @@ object WalletScanLogic extends ScorexLogging {
         None
       }
     }
+  }
+
+  /**
+    * Extracts all input boxes from the given transaction.
+    */
+  def extractInputBoxes(tx: ErgoTransaction): Seq[EncodedBoxId] = {
+    tx.inputs.map(x => encodedBoxId(x.boxId))
   }
 
 }

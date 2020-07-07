@@ -67,7 +67,8 @@ object WalletScanLogic extends ScorexLogging {
                             transactions: Seq[ErgoTransaction]): (WalletRegistry, OffChainRegistry) = {
 
     //todo: inefficient for wallets with many outputs, replace with a Bloom/Cuckoo filter?
-    val previousBoxIds = registry.walletUnspentBoxes().map(tb => encodedBoxId(tb.box.id))
+    //todo: at least, cache in RAM instead of reading from DB
+    val previousBoxIds = registry.allUnspentBoxes().map(tb => encodedBoxId(tb.box.id))
 
     val resolvedBoxes = registry.unspentBoxes(MiningScanId).flatMap { tb =>
       val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)

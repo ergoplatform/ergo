@@ -5,6 +5,10 @@ import org.ergoplatform.ErgoBox.RegisterId
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
+import sigmastate.SType
+import sigmastate.Values.{EvaluatedValue, Value}
+import sigmastate.serialization.ValueSerializer
+import scorex.util.Extensions._
 
 
 object ScanningPredicateSerializer extends ScorexSerializer[ScanningPredicate] {
@@ -19,13 +23,15 @@ object ScanningPredicateSerializer extends ScorexSerializer[ScanningPredicate] {
     case e: EqualsScanningPredicate =>
       w.put(EqualsPrefix)
       w.put(e.regId.number)
-      w.putInt(e.bytes.length)
-      w.putBytes(e.bytes)
+      val valueBytes = ValueSerializer.serialize(e.value)
+      w.putUInt(valueBytes.length)
+      w.putBytes(valueBytes)
     case s: ContainsScanningPredicate =>
       w.put(ContainsPrefix)
       w.put(s.regId.number)
-      w.putInt(s.bytes.length)
-      w.putBytes(s.bytes)
+      val valueBytes = ValueSerializer.serialize(s.value)
+      w.putUInt(valueBytes.length)
+      w.putBytes(valueBytes)
     case a: ContainsAssetPredicate =>
       w.put(ContainsAssetPrefix)
       w.putBytes(a.assetId)
@@ -48,11 +54,12 @@ object ScanningPredicateSerializer extends ScorexSerializer[ScanningPredicate] {
       args
     }
 
-    def parseRegisterAndBytes(r: Reader): (RegisterId, Array[Byte]) = {
+    def parseRegisterAndBytes(r: Reader): (RegisterId, EvaluatedValue[_ <: SType]) = {
       val reg = ErgoBox.registerByIndex(r.getByte())
-      val len = r.getInt()
+      val len  = r.getUInt().toIntExact
       val bs = r.getBytes(len)
-      reg -> bs
+      val vs = ValueSerializer.deserialize(bs)
+      reg -> vs.asInstanceOf[EvaluatedValue[SType]]
     }
 
     val prefix = r.getByte()

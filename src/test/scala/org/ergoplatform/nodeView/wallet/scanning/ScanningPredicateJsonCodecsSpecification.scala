@@ -6,8 +6,7 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import sigmastate.SByte
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant}
+import sigmastate.Values.ByteArrayConstant
 
 import scala.language.implicitConversions
 

@@ -6,20 +6,26 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
+import sigmastate.SByte
+import sigmastate.Values.{ByteArrayConstant, CollectionConstant}
+
+import scala.language.implicitConversions
 
 class ScanningPredicateJsonCodecsSpecification extends ErgoPropertyTest with WalletGenerators {
 
   import ScanningPredicateJsonCodecs.{scanningPredicateEncoder, scanningPredicateDecoder}
 
+  private implicit def bacFromBytes(bs: Array[Byte]) = ByteArrayConstant(bs)
+
   private val complexOr = OrScanningPredicate(
-    ContainsScanningPredicate(ErgoBox.R1, Array.fill(32)(1: Byte)),
-    EqualsScanningPredicate(ErgoBox.R4, Array.fill(32)(0: Byte)),
+    ContainsScanningPredicate(ErgoBox.R1, ByteArrayConstant(Array.fill(32)(1: Byte))),
+    EqualsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array.fill(32)(0: Byte))),
     ContainsAssetPredicate(Digest32 @@ Array.fill(32)(0: Byte))
   )
 
   private val complexAnd = AndScanningPredicate(
-    ContainsScanningPredicate(ErgoBox.R1, Array.fill(32)(1: Byte)),
-    EqualsScanningPredicate(ErgoBox.R4, Array.fill(32)(1: Byte)),
+    ContainsScanningPredicate(ErgoBox.R1, ByteArrayConstant(Array.fill(32)(1: Byte))),
+    EqualsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array.fill(32)(1: Byte))),
     ContainsAssetPredicate(Digest32 @@ Array.fill(32)(1: Byte))
   )
 
@@ -45,7 +51,7 @@ class ScanningPredicateJsonCodecsSpecification extends ErgoPropertyTest with Wal
   property("example from EIP-1"){
     val j = parse(
       """{"predicate": "and", "args":[{"predicate": "contains",
-        |"bytes": "02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7"},
+        |"value": "0e2102dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7"},
         |{"predicate": "containsAsset",
         |"assetId": "02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7"}]}""".stripMargin).toOption.get
 
@@ -59,7 +65,7 @@ class ScanningPredicateJsonCodecsSpecification extends ErgoPropertyTest with Wal
   property("example from EIP-1 w. explicit register"){
     val j = parse(
       """{"predicate": "and", "args":[{"predicate": "contains", "register": "R4",
-        |"bytes": "02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7"},
+        |"value": "0e2102dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7"},
         |{"predicate": "containsAsset",
         |"assetId": "02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7"}]}""".stripMargin).toOption.get
 

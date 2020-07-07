@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanR
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.scalacheck.Gen
-import sigmastate.Values.{ErgoTree, FalseLeaf}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree, FalseLeaf}
 
 import scala.util.Random
 
@@ -31,14 +31,13 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
     def valuesSum: Long = (paymentValues ++ appPaymentValues ++ miningRewardValues).sum
   }
 
-
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
   private val prover = defaultProver
   private val monetarySettings = initSettings.chainSettings.monetary.copy(minerRewardDelay = 720)
   private val s = initSettings.copy(chainSettings = initSettings.chainSettings.copy(monetary = monetarySettings))
 
   private val trueProp = org.ergoplatform.settings.Constants.TrueLeaf
-  private val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, trueProp.bytes)
+  private val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(trueProp.bytes))
   private val appReq = ScanRequest("True detector", scanningPredicate)
   private val scanId: ScanId = ScanId @@ 50.toShort
 

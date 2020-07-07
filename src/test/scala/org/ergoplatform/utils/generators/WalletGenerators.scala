@@ -11,6 +11,7 @@ import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Gen
+import sigmastate.Values.ByteArrayConstant
 
 import scala.collection.mutable
 
@@ -112,12 +113,12 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
   def containsScanningPredicateGen: Gen[ContainsScanningPredicate] = for {
     regId <- registerIdGen
     bs <- nonEmptyBytesGen
-  } yield ContainsScanningPredicate(regId, bs)
+  } yield ContainsScanningPredicate(regId, ByteArrayConstant(bs))
 
   def equalsScanningPredicateGen: Gen[EqualsScanningPredicate] = for {
     regId <- registerIdGen
     bs <- nonEmptyBytesGen
-  } yield EqualsScanningPredicate(regId, bs)
+  } yield EqualsScanningPredicate(regId, ByteArrayConstant(bs))
 
   def containsAssetPredicateGen: Gen[ContainsAssetPredicate] = for {
     asset <- assetGen

@@ -2,7 +2,8 @@ package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.ErgoBox
 import scorex.util.encode.Base16
-import sigmastate.Values
+import sigmastate.Values.{EvaluatedValue, Value}
+import sigmastate.{SType, Values}
 
 /**
   * Basic interface for box scanning predicate functionality
@@ -14,32 +15,36 @@ sealed trait ScanningPredicate {
 }
 
 /**
-  * Scanning predicate to track boxes which contain a register which, in turn, contains certain bytes
-  * (wildcard matching, so register contains *bytes*)
-  *
+  * Scanning predicate to track boxes which contain a register which, in turn, contains certain value
+  * (wildcard matching, so register contains e.g. value bytes)
   *
   * @param regId - register identifier
-  * @param bytes - bytes to track
+  * @param value - sigma-value used in track
   */
-case class ContainsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byte]) extends ScanningPredicate {
+case class ContainsScanningPredicate(regId: ErgoBox.RegisterId,
+                                     value: EvaluatedValue[SType]) extends ScanningPredicate {
 
   override def filter(box: ErgoBox): Boolean = {
-    box.get(regId).exists {
-      _ match {
-        case Values.ByteArrayConstant(arr) => arr.toArray.containsSlice(bytes)
-        case _ => false
-      }
+    value match {
+      case Values.ByteArrayConstant(bytes) =>
+        box.get(regId).exists {
+          _ match {
+            case Values.ByteArrayConstant(arr) => arr.toArray.containsSlice(bytes.toArray)
+            case _ => false
+          }
+        }
+      case _ => false
     }
   }
 
   override def equals(obj: Any): Boolean = obj match {
-    case other: ContainsScanningPredicate => other.regId == regId && other.bytes.sameElements(bytes)
+    case other: ContainsScanningPredicate => other.regId == regId && other.value == value
     case _ => false
   }
 
-  override def toString: String = s"ContainsScanningPredicate($regId, ${Base16.encode(bytes)})"
+  override def toString: String = s"ContainsScanningPredicate($regId, $value)"
 
-  override def hashCode(): Int = regId.hashCode() * 31 + bytes.toSeq.hashCode()
+  override def hashCode(): Int = regId.hashCode() * 31 + value.hashCode()
 }
 
 
@@ -47,28 +52,31 @@ case class ContainsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byt
   * Scanning predicate to track boxes which contain a register which, in turn, contains certain bytes
   * (exact matching, so register contains exactly bytes)
   *
-  *
   * @param regId - register identifier
-  * @param bytes - bytes to track
+  * @param value - bytes to track
   */
-case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, bytes: Array[Byte]) extends ScanningPredicate {
+case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, value: EvaluatedValue[SType]) extends ScanningPredicate {
   override def filter(box: ErgoBox): Boolean = {
-    box.get(regId).exists {
-      _ match {
-        case Values.ByteArrayConstant(arr) => arr.toArray.sameElements(bytes)
-        case _ => false
-      }
+    value match {
+      case Values.ByteArrayConstant(bytes) =>
+        box.get(regId).exists {
+          _ match {
+            case Values.ByteArrayConstant(arr) => arr.toArray.sameElements(bytes.toArray)
+            case _ => false
+          }
+        }
+      case _ => false
     }
   }
 
   override def equals(obj: Any): Boolean = obj match {
-    case other: EqualsScanningPredicate => other.regId == regId && other.bytes.sameElements(bytes)
+    case other: EqualsScanningPredicate => other.regId == regId && other == value
     case _ => false
   }
 
-  override def hashCode(): Int = regId.hashCode() * 31 + bytes.toSeq.hashCode()
+  override def hashCode(): Int = regId.hashCode() * 31 + value.hashCode()
 
-  override def toString: String = s"EqualsScanningPredicate($regId, ${Base16.encode(bytes)})"
+  override def toString: String = s"EqualsScanningPredicate($regId, $value)"
 }
 
 

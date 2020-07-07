@@ -8,15 +8,17 @@ import io.circe.{Decoder, Encoder}
 import io.circe.generic.auto._
 import io.circe.syntax._
 import org.ergoplatform.http.api.ApiCodecs
+import sigmastate.SType
+import sigmastate.Values.EvaluatedValue
 
 
 object ScanningPredicateJsonCodecs extends ApiCodecs {
 
   implicit val scanningPredicateEncoder: Encoder[ScanningPredicate] = {
     case cp: ContainsScanningPredicate =>
-      Json.obj("predicate" -> "contains".asJson, "register" -> cp.regId.asJson, "bytes" -> Base16.encode(cp.bytes).asJson)
+      Json.obj("predicate" -> "contains".asJson, "register" -> cp.regId.asJson, "value" -> cp.value.asJson(evaluatedValueEncoder))
     case ep: EqualsScanningPredicate =>
-      Json.obj("predicate" -> "equals".asJson, "register" -> ep.regId.asJson, "bytes" -> Base16.encode(ep.bytes).asJson)
+      Json.obj("predicate" -> "equals".asJson, "register" -> ep.regId.asJson, "value" -> ep.value.asJson)
     case cap: ContainsAssetPredicate =>
       Json.obj("predicate" -> "containsAsset".asJson, "assetId" -> Base16.encode(cap.assetId).asJson)
     case and: AndScanningPredicate =>
@@ -33,14 +35,14 @@ object ScanningPredicateJsonCodecs extends ApiCodecs {
         } yield ContainsAssetPredicate(asset)
       case predicate@(_: String) if predicate == "contains" =>
         for {
-          bytes <- cursor.downField("bytes").as[Array[Byte]]
+          value <- cursor.downField("value").as[EvaluatedValue[_ <: SType]]
           register <- cursor.downField("register").as[Option[RegisterId]]
-        } yield ContainsScanningPredicate(register.getOrElse(ErgoBox.R1), bytes)
+        } yield ContainsScanningPredicate(register.getOrElse(ErgoBox.R1), value)
       case predicate@(_: String) if predicate == "equals" =>
         for {
-          bytes <- cursor.downField("bytes").as[Array[Byte]]
+          value <- cursor.downField("value").as[EvaluatedValue[_ <: SType]]
           register <- cursor.downField("register").as[Option[RegisterId]]
-        } yield EqualsScanningPredicate(register.getOrElse(ErgoBox.R1), bytes)
+        } yield EqualsScanningPredicate(register.getOrElse(ErgoBox.R1), value)
       case predicate@(_: String) if predicate == "and" =>
         for {
           args <- cursor.downField("args").as[Seq[ScanningPredicate]]

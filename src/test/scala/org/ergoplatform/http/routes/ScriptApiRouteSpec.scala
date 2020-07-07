@@ -120,9 +120,10 @@ class ScriptApiRouteSpec  extends FlatSpec
 
     val assertion = (json: Json, address: String) => {
       status shouldBe StatusCodes.OK
-      val vs = Base16.decode(json.hcursor.downField("bytes").as[String].right.get).get
+      val vs = json.hcursor.downField("bytes").as[String].right.get
+      val vbs = Base16.decode(vs).get
 
-      val bac = ValueSerializer.deserialize(vs).asInstanceOf[CollectionConstant[SByte.type]]
+      val bac = ValueSerializer.deserialize(vbs).asInstanceOf[CollectionConstant[SByte.type]]
 
       val bs = bac.value.toArray.map(_.byteValue())
 

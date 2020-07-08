@@ -340,8 +340,9 @@ object WalletRegistry {
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
   private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)
 
-  private val firstUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(32)(0: Byte)
-  private val lastUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(32)(-1: Byte)
+  // All the unspent boxes range, dependless on scan
+  private val firstUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(34)(0: Byte)
+  private val lastUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(34)(-1: Byte)
 
   /** Performance optimized helper, which avoid unnecessary allocations and creates the resulting
     * key bytes directly from the given parameters.

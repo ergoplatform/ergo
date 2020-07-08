@@ -26,7 +26,7 @@ object Constants {
 
   val BlocksPerYear: Int = BlocksPerDay * 365
 
-  //For how many blocks a box could be put into the state with no paying (4 years).
+  //For how many blocks a box could be put into the state with no paying (3 years).
   val StoragePeriod: Int = org.ergoplatform.wallet.protocol.Constants.StoragePeriod
 
   val StorageContractCost: Long = org.ergoplatform.wallet.protocol.Constants.StorageContractCost
@@ -48,6 +48,7 @@ object Constants {
   val TrueLeaf: ErgoTree = Values.TrueLeaf.toSigmaProp
   val FalseLeaf: ErgoTree = Values.FalseLeaf.toSigmaProp
 
+  // Used in wallet during address decoding
   val StringEncoding = "UTF-8"
 
   // Maximum extension size

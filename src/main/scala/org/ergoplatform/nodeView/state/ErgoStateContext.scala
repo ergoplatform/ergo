@@ -289,6 +289,10 @@ object ErgoStateContext {
     empty(constants.settings.chainSettings.genesisStateDigest, constants.settings)
   }
 
+  def empty(settings: ErgoSettings): ErgoStateContext = {
+    empty(settings.chainSettings.genesisStateDigest, settings)
+  }
+
   /**
     * Initialize empty state context
     */

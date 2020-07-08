@@ -1,9 +1,7 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
-import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.{ModifierTypeId, NodeViewModifier}
@@ -16,9 +14,6 @@ object Constants {
 
   val CoinsInOneErgo: Long = 1000000000
 
-  val MaxTarget: BigInt = BigInt(1, Array.fill(HashLength)((-1).toByte))
-  val InitialDifficulty: Difficulty = BigInt(1)
-  val InitialNBits: Long = RequiredDifficulty.encodeCompactBits(InitialDifficulty)
   val ModifierIdSize: Int = HashLength
 
   val BlocksPerHour = 30
@@ -31,13 +26,12 @@ object Constants {
 
   val BlocksPerYear: Int = BlocksPerDay * 365
 
-  //For how many blocks a box could be put into the state with no paying.
-  //4 years
-  val StoragePeriod: Int = 4 * BlocksPerYear
+  //For how many blocks a box could be put into the state with no paying (4 years).
+  val StoragePeriod: Int = org.ergoplatform.wallet.protocol.Constants.StoragePeriod
 
-  val StorageContractCost: Long = 50
+  val StorageContractCost: Long = org.ergoplatform.wallet.protocol.Constants.StorageContractCost
 
-  val StorageIndexVarId: Byte = Byte.MaxValue
+  val StorageIndexVarId: Byte = org.ergoplatform.wallet.protocol.Constants.StorageIndexVarId
 
   // Number of last block headers available is scripts from ErgoStateContext
   val LastHeadersInContext = 10

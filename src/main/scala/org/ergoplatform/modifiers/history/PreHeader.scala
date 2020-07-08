@@ -1,7 +1,9 @@
 package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.mining.AutolykosPowScheme
+import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.Constants
 import scorex.core.block.Block._
 import scorex.util._
@@ -61,11 +63,14 @@ object PreHeader {
       minerPk = pk)
   }
 
+  val InitialDifficulty: Difficulty = BigInt(1)
+  val InitialNBits: Long = RequiredDifficulty.encodeCompactBits(InitialDifficulty)
+
   val fake: PreHeader = CPreHeader(
     version = 0.toByte,
     parentId = Header.GenesisParentId,
     timestamp = 0,
-    nBits = Constants.InitialNBits,
+    nBits = InitialNBits,
     height = ErgoHistory.EmptyHistoryHeight,
     votes = Array.fill(3)(0.toByte),
     minerPk = org.ergoplatform.mining.group.generator

@@ -109,7 +109,9 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @return sequence of scan-related boxes
     */
   def confirmedBoxes(scanId: ScanId, fromHeight: Int): Seq[TrackedBox] = {
-    store.getRange(firstIncludedScanBoxSpaceKey(scanId, fromHeight), lastIncludedScanBoxSpaceKey(scanId)).flatMap { case (_, boxId) =>
+    val firstKeyInRange = firstIncludedScanBoxSpaceKey(scanId, fromHeight)
+    val lastKeyInRange = lastIncludedScanBoxSpaceKey(scanId)
+    store.getRange(firstKeyInRange, lastKeyInRange).flatMap { case (_, boxId) =>
       getBox(ADKey @@ boxId)
     }
   }

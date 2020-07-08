@@ -6,7 +6,6 @@ import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, Scan, ScanSeriali
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
-import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
 import scorex.db.{LDBFactory, LDBKVStore}

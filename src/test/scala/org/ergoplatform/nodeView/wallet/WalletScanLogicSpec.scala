@@ -54,6 +54,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
   private def walletVarsGen: Gen[WalletVars] = {
     for {
+      // To check that scanning works with locked wallet, we randomly choose whether the prover is set or not
       proverSet <- Gen.oneOf(true, false)
     } yield {
       if (proverSet) {
@@ -213,8 +214,23 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
         registry = r4
         off = o4
       }
-
     }
+  }
+
+  property("external scan prioritized over payments one") {
+    val pk = pubkeys.head.key.toSigmaProp: ErgoTree
+    val outs = IndexedSeq(new ErgoBoxCandidate(1000, pk, creationHeight = 1))
+    val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, outs)
+
+    val cache = MutableStateCache(pubkeys, s)
+    val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(pk.bytes))
+    val paymentScanReq = ScanRequest("Payment scan", paymentPredicate)
+    val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId).get), Some(cache))(s)
+
+    val boxes = extractWalletOutputs(tx, Some(1), walletVars)
+    boxes.size shouldBe 1
+    boxes.head.scans.size shouldBe 1
+    boxes.head.scans.head shouldBe scanId
   }
 
 }

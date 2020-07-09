@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
-
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.HybridLDBKVStore
 import org.ergoplatform.modifiers.history.PreGenesisHeader
@@ -16,6 +15,7 @@ import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import Constants.{ScanId, PaymentsScanId}
 import scorex.db.LDBVersionedStore
 import scala.util.{Failure, Success, Try}
+import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
@@ -28,7 +28,6 @@ import scala.util.{Failure, Success, Try}
 class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
-  import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
 
   private val keepHistory = ws.keepSpentBoxes
 
@@ -39,7 +38,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @return wallet related box if it is stored in the database, None otherwise
     */
   def getBox(id: BoxId): Option[TrackedBox] = {
-    store.get(boxKey(id)).flatMap(r => TrackedBoxSerializer.parseBytesTry(r).toOption)
+    store.get(boxKey(id)).flatMap(bs => TrackedBoxSerializer.parseBytesTry(bs).toOption)
   }
 
 
@@ -54,9 +53,9 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   }
 
   /**
-    * Read unspent boxes which belong to given scan
+    * Read unspent boxes which belong to all the scans
     *
-    * @return sequences of scan-related unspent boxes found in the database
+    * @return sequences of all the unspent boxes from the database
     */
   def allUnspentBoxes(): Seq[TrackedBox] = {
     store.getRange(firstUnspentBoxKey, lastUnspentBoxKey)

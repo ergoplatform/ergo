@@ -65,20 +65,19 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   }
 
   /**
-    * Read unspent boxes which belong to given scan
+    * Read unspent boxes which belong to a scan with given id
     *
     * @param scanId - scan identifier
     * @return sequences of scan-related unspent boxes found in the database
     */
   def unspentBoxes(scanId: ScanId): Seq[TrackedBox] = {
-    store.getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId))
-      .flatMap { case (_, boxId) =>
-        getBox(ADKey @@ boxId)
-      }
+    store.getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId)).flatMap { case (_, boxId) =>
+      getBox(ADKey @@ boxId)
+    }
   }
 
   /**
-    * Read spent boxes which belong to given scan
+    * Read spent boxes which belong to a scan with given id
     *
     * @param scanId - scan identifier
     * @return sequences of scan-related spent boxes found in the database
@@ -91,17 +90,17 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   }
 
   /**
-    * Unspent boxes belong to payments scan
+    * Unspent boxes belong to the wallet (payments scan)
     */
   def walletUnspentBoxes(): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsScanId)
 
   /**
-    * Spent boxes belong to payments scan
+    * Spent boxes belong to the wallet (payments scan)
     */
   def walletSpentBoxes(): Seq[TrackedBox] = spentBoxes(Constants.PaymentsScanId)
 
   /**
-    * Read boxes with certain number of confirmations at most, both spent or not
+    * Read boxes created at or after given height, both spent or not
     *
     * @param scanId     scan identifier
     * @param fromHeight min height when box was included into the blockchain
@@ -116,7 +115,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   }
 
   /**
-    * Read boxes belong to the payment scan with certain number of confirmations at most, both spent or not
+    * Read boxes belong to the payment scan created at or after given height, both spent or not
     *
     * @param fromHeight min height when box was included into the blockchain
     * @return sequence of (P2PK-payment)-related boxes
@@ -133,7 +132,6 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     store.get(txKey(id)).flatMap(r => WalletTransactionSerializer.parseBytesTry(r).toOption)
   }
 
-  //todo: filter by scan
   /**
     * Read all the wallet-related transactions
     *
@@ -274,7 +272,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * Remove association between an application and a box.
     * Please note that in case of rollback association remains removed!
     *
-    * @param boxId box identifier
+    * @param boxId  box identifier
     * @param scanId scan identifier
     */
   def removeScan(boxId: BoxId, scanId: ScanId): Try[Unit] = {

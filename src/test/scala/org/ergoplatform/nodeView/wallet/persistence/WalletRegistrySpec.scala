@@ -34,6 +34,13 @@ class WalletRegistrySpec
 
         val registry = new WalletRegistry(store)(settings.walletSettings)
         registry.walletUnspentBoxes() shouldBe Seq(unspentBox)
+
+        //put app box
+        val appId = ScanId @@ (PaymentsScanId + 1).toShort
+        val unspentAppBox = box.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(appId))
+        WalletRegistry.putBox(emptyBag, unspentAppBox).transact(store)
+        registry.walletUnspentBoxes() shouldBe Seq(unspentBox)
+        registry.allUnspentBoxes() shouldBe Seq(unspentBox, unspentAppBox)
       }
     }
   }

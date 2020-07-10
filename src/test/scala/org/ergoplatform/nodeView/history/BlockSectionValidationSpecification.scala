@@ -7,10 +7,21 @@ import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.util.ModifierId
 
+import scala.util.Random
+
 class BlockSectionValidationSpecification extends HistoryTestHelpers {
 
-  property("BlockTransactions validation") {
+  property("BlockTransactions commons check") {
     val (history, block) = init()
+    commonChecks(history, block.blockTransactions, block.header)
+  }
+
+  property("BlockTransactions - random byte changed") {
+    val (history, block) = init()
+    val txBytes = HistoryModifierSerializer.toBytes(block.blockTransactions)
+    println("ps: " + block.blockTransactions.transactions.head.inputs.head.spendingProof.proof.size)
+
+   // txBytes(Random.nextInt(txBytes)) = txBytes(Random.nextInt(txBytes))
     commonChecks(history, block.blockTransactions, block.header)
   }
 

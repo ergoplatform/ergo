@@ -45,6 +45,9 @@ case class BlockTransactions(headerId: ModifierId,
     */
   override lazy val digest: Digest32 = merkleTree.rootHash
 
+  lazy val proofs = txs.flatMap(_.inputs).map(_.spendingProof.proof)
+  lazy val proofsTree = Algos.merkleTree(LeafData @@ proofs)
+
   /**
     * Calculates Merkle-tree based membership proof for a given transaction identifier
     * @param txId - transaction identifier

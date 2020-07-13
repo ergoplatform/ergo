@@ -81,6 +81,15 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   }
 
   /**
+    * Produces updated instance of ErgoProvingInterpreter with updated parameters
+    * @param newParams - updated parameters
+    * @return modified prover
+    */
+  def withNewParameters(newParams: ErgoLikeParameters): ErgoProvingInterpreter = {
+    new ErgoProvingInterpreter(secretKeys, newParams, cachedHdPubKeysOpt)
+  }
+
+  /**
     * @note requires `unsignedTx` and `boxesToSpend` have the same boxIds in the same order.
     */
   def sign(unsignedTx: UnsignedErgoLikeTransaction,

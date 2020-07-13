@@ -756,6 +756,23 @@ object ErgoWalletActor {
       }
     }
 
+
+    /**
+      * Updates parameters of the prover
+      *
+      * @param parameters - new of the prover parameters
+      * @return
+      */
+    def withParameters(parameters: Parameters): Try[WalletVars] = Try {
+      proverOpt match {
+        case Some(prover) =>
+          val updProver = prover.withNewParameters(parameters)
+          this.copy(proverOpt = Some(updProver))
+        case None =>
+          log.warn(s"Trying to add new secret, but prover is not initialized")
+          this
+      }
+    }
   }
 
   object WalletVars {

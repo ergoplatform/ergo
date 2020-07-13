@@ -50,9 +50,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private val walletSettings: WalletSettings = settings.walletSettings
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
-  //todo: update parameters, they're used in transactions signing & minimal fee estimation
-  private val parameters: Parameters = LaunchParameters
-
   private var secretStorageOpt: Option[JsonSecretStorage] = None
   private val storage: WalletStorage = WalletStorage.readOrCreate(settings)
   private var registry: WalletRegistry = WalletRegistry.apply(settings)
@@ -72,6 +69,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   private def stateContext: ErgoStateContext = storage.readStateContext
 
   private def height: Int = stateContext.currentHeight
+
+  private def parameters: Parameters = stateContext.currentParameters
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])

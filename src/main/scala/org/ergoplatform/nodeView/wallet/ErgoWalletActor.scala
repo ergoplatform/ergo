@@ -10,6 +10,7 @@ import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
@@ -68,9 +69,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   // The state context is being updated by listening to state updates.
   private def stateContext: ErgoStateContext = storage.readStateContext
 
-  private def height: Int = stateContext.currentHeight
-
-  private def parameters: Parameters = stateContext.currentParameters
+  private var height: Int = ErgoHistory.GenesisHeight
+  private var parameters: Parameters = LaunchParameters
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
@@ -175,7 +175,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def onStateChanged: Receive = {
     case ChangedState(s: ErgoStateReader@unchecked) =>
-      storage.updateStateContext(s.stateContext)
+      val stateContext = s.stateContext
+      storage.updateStateContext(stateContext)
+      height = stateContext.currentHeight
+      parameters = stateContext.currentParameters
+
       stateReaderOpt = Some(s)
       updateUtxoSet()
   }

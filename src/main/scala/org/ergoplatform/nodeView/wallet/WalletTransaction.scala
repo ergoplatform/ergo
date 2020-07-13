@@ -6,6 +6,7 @@ import org.ergoplatform.wallet.Constants.ScanId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
+import scorex.util.Extensions._
 
 /**
   * Transaction stored in the wallet.
@@ -41,7 +42,7 @@ object WalletTransactionSerializer extends ScorexSerializer[WalletTransaction] {
         w.putShort(scanId)
       }
     }
-    w.putInt(txBytes.length)
+    w.putUInt(txBytes.length)
     w.putBytes(txBytes)
   }
 
@@ -55,7 +56,7 @@ object WalletTransactionSerializer extends ScorexSerializer[WalletTransaction] {
       (0 until scansCount).map(_ => ScanId @@ r.getShort())
     }
 
-    val txBytesLen = r.getInt()
+    val txBytesLen = r.getUInt().toIntExact
     val tx = ErgoTransactionSerializer.parseBytes(r.getBytes(txBytesLen))
     WalletTransaction(tx, inclusionHeight, scanIds)
   }

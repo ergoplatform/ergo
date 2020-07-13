@@ -4,8 +4,10 @@ object ByteArrayUtils {
 
   import java.util.Comparator
 
+  // Java comparator
   val BYTE_ARRAY_COMPARATOR: Comparator[Array[Byte]] = (o1: Array[Byte], o2: Array[Byte]) => compare(o1, o2)
 
+  // Scala comparator
   implicit val ByteArrayOrdering: Ordering[Array[Byte]] =
     (o1: Array[Byte], o2: Array[Byte]) => ByteArrayUtils.compare(o1, o2)
 

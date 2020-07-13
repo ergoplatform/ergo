@@ -24,15 +24,19 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
   override type CTX = ErgoLikeContext
 
   /**
-    * Check that expired box is spent in a proper way
+    * Checks that expired box is spent in a proper way
     *
     * @param box           - box being spent
     * @param output        - newly created box when storage fee covered, otherwise any output box
     * @param currentHeight - current height of the blockchain (at the moment of spending)
+    * @param storageFeeFactor - storage fee per byte per period (of 4 years)
     * @return whether the box is spent properly according to the storage fee rule
     */
-  protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate, currentHeight: Height): Boolean = {
-    val maxStorageFee = params.storageFeeFactor * box.bytes.length
+  protected def checkExpiredBox(box: ErgoBox,
+                                output: ErgoBoxCandidate,
+                                currentHeight: Height,
+                                storageFeeFactor: Int): Boolean = {
+    val maxStorageFee = storageFeeFactor * box.bytes.length
 
     val storageFeeCovered = box.value - maxStorageFee <= 0
     val correctCreationHeight = output.creationHeight == currentHeight
@@ -54,7 +58,7 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
     */
   override def verify(env: ScriptEnv,
                       exp: ErgoTree,
-                      context: CTX,
+                      context: ErgoLikeContext,
                       proof: Array[Byte],
                       message: Array[Byte]): Try[VerificationResult] = {
 
@@ -65,7 +69,8 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
       Try {
         val idx = context.extension.values(varId).value.asInstanceOf[Short]
         val outputCandidate = context.spendingTransaction.outputCandidates(idx)
-        checkExpiredBox(context.self, outputCandidate, context.preHeader.height) -> Constants.StorageContractCost
+        val feeFactor = params.storageFeeFactor
+        checkExpiredBox(context.self, outputCandidate, context.preHeader.height, feeFactor) -> Constants.StorageContractCost
       }.recoverWith { case _ =>
         super.verify(env, exp, context, proof, message)
       }

@@ -5,9 +5,11 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.ModifierSemanticValidity
+import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
+import scorex.util.encode.Base16
 
-import scala.util.Random
+
 
 class BlockSectionValidationSpecification extends HistoryTestHelpers {
 
@@ -16,13 +18,21 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     commonChecks(history, block.blockTransactions, block.header)
   }
 
-  property("BlockTransactions - random byte changed") {
+  property("BlockTransactions - proof byte changed") {
     val (history, block) = init()
     val txBytes = HistoryModifierSerializer.toBytes(block.blockTransactions)
-    println("ps: " + block.blockTransactions.transactions.head.inputs.head.spendingProof.proof.size)
 
-   // txBytes(Random.nextInt(txBytes)) = txBytes(Random.nextInt(txBytes))
-    commonChecks(history, block.blockTransactions, block.header)
+    val txs = block.blockTransactions.transactions
+    val proof = txs.head.inputs.head.spendingProof.proof
+    proof(0) = if(proof.head < 0) (proof.head + 1).toByte else (proof.head - 1).toByte
+
+    val txBytes2 = HistoryModifierSerializer.toBytes(block.blockTransactions)
+
+    val hashBefore = Base16.encode(Blake2b256(txBytes))
+    val hashAfter = Base16.encode(Blake2b256(txBytes2))
+
+    hashBefore should not be hashAfter
+    history.applicableTry(block.blockTransactions) shouldBe 'failure
   }
 
   property("ADProofs validation") {

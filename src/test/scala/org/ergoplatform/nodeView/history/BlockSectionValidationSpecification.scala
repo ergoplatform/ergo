@@ -9,8 +9,6 @@ import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
 
-
-
 class BlockSectionValidationSpecification extends HistoryTestHelpers {
 
   property("BlockTransactions commons check") {

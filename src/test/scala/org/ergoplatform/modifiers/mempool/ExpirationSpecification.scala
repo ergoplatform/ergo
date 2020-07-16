@@ -51,6 +51,10 @@ class ExpirationSpecification extends ErgoPropertyTest {
         inContext.appendFullBlock(fb, votingSettings).get
       }
 
+      //serialization roundtrip
+      val bs = ErgoTransactionSerializer.toBytes(tx)
+      ErgoTransactionSerializer.parseBytes(bs) shouldBe tx
+
       tx.statelessValidity.isSuccess shouldBe true
       tx.statefulValidity(IndexedSeq(from), emptyDataBoxes, updContext).isSuccess shouldBe expectedValidity
     }

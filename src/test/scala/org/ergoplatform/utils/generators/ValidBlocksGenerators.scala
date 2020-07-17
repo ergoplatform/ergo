@@ -209,8 +209,8 @@ trait ValidBlocksGenerators
       utxoState.stateContext.validationSettings.toExtensionCandidate
     val votes = Array.fill(3)(0: Byte)
 
-    powScheme.proveBlock(parentOpt.map(_.header), Header.CurrentVersion, settings.chainSettings.initialNBits, updStateDigest, adProofBytes,
-      transactions, time, extension, votes, defaultMinerSecretNumber).get
+    powScheme.proveBlock(parentOpt.map(_.header), Header.InitialVersion, settings.chainSettings.initialNBits,
+      updStateDigest, adProofBytes, transactions, time, extension, votes, defaultMinerSecretNumber).get
   }
 
   /**
@@ -233,7 +233,7 @@ trait ValidBlocksGenerators
     val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate ++ interlinksExtension
     val votes = Array.fill(3)(0: Byte)
 
-    powScheme.proveBlock(parentOpt, Header.CurrentVersion, settings.chainSettings.initialNBits, updStateDigest,
+    powScheme.proveBlock(parentOpt, Header.InitialVersion, settings.chainSettings.initialNBits, updStateDigest,
       adProofBytes, transactions, time, extension, votes, defaultMinerSecretNumber).get
   }
 

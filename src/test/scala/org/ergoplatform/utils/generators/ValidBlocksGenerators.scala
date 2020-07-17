@@ -91,7 +91,7 @@ trait ValidBlocksGenerators
             // disable tokens generation to avoid situation with too many tokens
             val boxesToSpend = (consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq
             val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = dataBoxesToUse)
-            tx.statelessValidity match {
+            tx.statelessValidity() match {
               case Failure(e) =>
                 log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
                 loop(remainingCost, stateBoxes, selfBoxes, acc, rnd)
@@ -106,7 +106,7 @@ trait ValidBlocksGenerators
 
             val tx = validTransactionFromBoxes(boxesToSpend.toIndexedSeq, rnd, issueNew, dataBoxes = dataBoxesToUse)
             val cost: Long = getTxCost(tx, boxesToSpend, dataBoxesToUse)
-            tx.statelessValidity match {
+            tx.statelessValidity() match {
               case Success(_) if cost <= remainingCost =>
                 ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
               case Failure(e) =>
@@ -145,7 +145,7 @@ trait ValidBlocksGenerators
 
     assert(boxes.nonEmpty, s"Was unable to take at least 1 box from box holder $boxHolder")
     val (txs, createdBoxes) = validTransactionsFromBoxes(txSizeLimit, boxes, dataBoxes, rnd)
-    txs.foreach(_.statelessValidity.get)
+    txs.foreach(_.statelessValidity().get)
     val bs = new BoxHolder(drainedBh.boxes ++ createdBoxes.map(b => ByteArrayWrapper(b.id) -> b))
     txs -> bs
   }
@@ -238,7 +238,7 @@ trait ValidBlocksGenerators
   }
 
   private def checkPayload(transactions: Seq[ErgoTransaction], us: UtxoState): Unit = {
-    transactions.foreach(_.statelessValidity shouldBe 'success)
+    transactions.foreach(_.statelessValidity() shouldBe 'success)
     transactions.nonEmpty shouldBe true
     ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>
       assert(us.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")

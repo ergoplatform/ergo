@@ -35,7 +35,7 @@ class ErgoBoxSerializerSpec extends ErgoPropertyTest {
       val overBytes = (new VLQByteStringWriter).putUInt(overflowHeight).toBytes
 
       val ob2 = ErgoBoxSerializer.parseBytes(before ++ overBytes ++ after)
-      println("ch: " + ob2.creationHeight)
+      (ob2.creationHeight < 0) shouldBe true
     }
   }
 

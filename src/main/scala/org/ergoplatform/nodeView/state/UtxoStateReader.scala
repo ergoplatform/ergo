@@ -35,7 +35,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
                        complexityLimit: Int): Try[Long] = {
     val verifier = ErgoInterpreter(stateContext.currentParameters)
     val context = stateContextOpt.getOrElse(stateContext)
-    tx.statelessValidity.flatMap { _ =>
+    tx.statelessValidity().flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
       val txComplexity = boxesToSpend.map(_.ergoTree.complexity).sum
       if (txComplexity > complexityLimit) {

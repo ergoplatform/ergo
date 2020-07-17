@@ -2,9 +2,9 @@ package org.ergoplatform.serialization
 
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransactionSerializer}
+import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
-import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
+import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
 import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlockSerializer, RegistryIndexSerializer}
 import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsSerializer, ErgoValidationSettingsUpdateSerializer}
 import org.ergoplatform.utils.ErgoPropertyTest
@@ -51,10 +51,6 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
 
   property("Extension serialization") {
     checkSerializationRoundtrip(extensionGen, ExtensionSerializer)
-  }
-
-  property("ErgoBox serialization") {
-    checkSerializationRoundtrip(ergoBoxGen, ErgoBoxSerializer)
   }
 
   property("ErgoTransactionGen serialization") {

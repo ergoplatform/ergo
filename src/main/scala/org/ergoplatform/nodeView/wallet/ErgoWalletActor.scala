@@ -8,7 +8,7 @@ import cats.Traverse
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSec
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.TokensMap
-import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, TrackedBox}
+import org.ergoplatform.wallet.boxes.{BoxCertainty, BoxSelector, ChainStatus, ErgoBoxSerializer, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.TransactionContext

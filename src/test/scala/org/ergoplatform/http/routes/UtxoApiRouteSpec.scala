@@ -1,17 +1,13 @@
 package org.ergoplatform.http.routes
 
-import akka.actor.{Actor, ActorRef, Props}
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import org.ergoplatform.http.api.UtxoApiRoute
-import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
-import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.Stubs
+import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.scalatest.{FlatSpec, Matchers}
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16

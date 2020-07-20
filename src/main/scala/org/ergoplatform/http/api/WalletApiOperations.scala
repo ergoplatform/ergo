@@ -17,7 +17,12 @@ trait WalletApiOperations extends ErgoBaseApiRoute {
   val boxParams: Directive[(Int, Int)] =
     parameters("minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)
 
-  val boxPredicate: (WalletBox, Int, Int) => Boolean = { (bx: WalletBox, minConfNum: Int, minHeight: Int) =>
+
+  /**
+    * Filter function for wallet boxes used in box-related API calls.
+    * Allows to filter out boxes by height or number of confirmations.
+    */
+  val boxFilterPredicate: (WalletBox, Int, Int) => Boolean = { (bx: WalletBox, minConfNum: Int, minHeight: Int) =>
     bx.confirmationsNumOpt.getOrElse(0) >= minConfNum &&
       bx.trackedBox.inclusionHeightOpt.getOrElse(-1) >= minHeight
   }

@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.GlobalConstants
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.settings.ErgoSettings
@@ -26,7 +26,7 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   // Now these settings are hard-coded, however, they should be parameterized
   // https://github.com/ergoplatform/ergo/issues/856
   val maxInputs = 64
-  val optimalInputs = 2
+  val optimalInputs = 3
 
   val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs)
 
@@ -58,16 +58,19 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
     this
   }
 
-  override def rollback(to: VersionTag): Try[ErgoWallet] = {
-    if (historyReader.heightOf(scorex.core.versionToId(to)).isDefined || to == ErgoState.genesisStateVersion) {
-      walletActor ! Rollback(to)
-      Success(this)
-    } else {
-      Failure(new Exception(s"Height of a modifier with id $to not found"))
+  override def rollback(to: VersionTag): Try[ErgoWallet] =
+    historyReader.heightOf(scorex.core.versionToId(to)) match {
+      case Some(height) =>
+        walletActor ! Rollback(to, height)
+        Success(this)
+      case None if to == ErgoState.genesisStateVersion =>
+        walletActor ! Rollback(to, ErgoHistory.GenesisHeight)
+        Success(this)
+      case None =>
+        Failure(new Exception(s"Height of a modifier with id $to not found"))
     }
-  }
-
 }
+
 
 object ErgoWallet {
 

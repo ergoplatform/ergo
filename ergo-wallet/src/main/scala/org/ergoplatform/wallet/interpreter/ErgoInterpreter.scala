@@ -29,22 +29,20 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
     * @param box           - box being spent
     * @param output        - newly created box when storage fee covered, otherwise any output box
     * @param currentHeight - current height of the blockchain (at the moment of spending)
-    * @param storageFeeFactor - storage fee per byte per period (of 4 years)
     * @return whether the box is spent properly according to the storage fee rule
     */
-  protected def checkExpiredBox(box: ErgoBox,
-                                output: ErgoBoxCandidate,
-                                currentHeight: Height,
-                                storageFeeFactor: Int): Boolean = {
-    val maxStorageFee = storageFeeFactor * box.bytes.length
+  protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate, currentHeight: Height): Boolean = {
+    val storageFee = params.storageFeeFactor * box.bytes.length
 
-    val storageFeeCovered = box.value - maxStorageFee <= 0
+    val storageFeeNotCovered = box.value - storageFee <= 0
     val correctCreationHeight = output.creationHeight == currentHeight
-    val correctOutValue = output.value >= box.value - maxStorageFee
+    val correctOutValue = output.value >= box.value - storageFee
+
+    // all the registers except of R0 (monetary value) and R3 (creation height and reference) must be preserved
     val correctRegisters = ErgoBox.allRegisters.tail
       .forall(rId => rId == ErgoBox.ReferenceRegId || box.get(rId) == output.get(rId))
 
-    storageFeeCovered || (correctCreationHeight && correctOutValue && correctRegisters)
+    storageFeeNotCovered || (correctCreationHeight && correctOutValue && correctRegisters)
   }
 
   /**
@@ -58,19 +56,20 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
     */
   override def verify(env: ScriptEnv,
                       exp: ErgoTree,
-                      context: ErgoLikeContext,
+                      context: CTX,
                       proof: Array[Byte],
                       message: Array[Byte]): Try[VerificationResult] = {
 
     val varId = Constants.StorageIndexVarId
     val hasEnoughTimeToBeSpent = context.preHeader.height - context.self.creationHeight >= Constants.StoragePeriod
-    //no proof provided and enough time since box creation to spend it
+    // No spending proof provided and enough time since box creation to spend it
+    // In this case anyone can spend the expired box by providing in context extension variable #127 (stored in input)
+    //    an index of a recreated box (or index of any box if the value in the expired box isn't enough to pay for the storage fee)
     if (hasEnoughTimeToBeSpent && proof.length == 0 && context.extension.values.contains(varId)) {
       Try {
         val idx = context.extension.values(varId).value.asInstanceOf[Short]
         val outputCandidate = context.spendingTransaction.outputCandidates(idx)
-        val feeFactor = params.storageFeeFactor
-        checkExpiredBox(context.self, outputCandidate, context.preHeader.height, feeFactor) -> Constants.StorageContractCost
+        checkExpiredBox(context.self, outputCandidate, context.preHeader.height) -> Constants.StorageContractCost
       }.recoverWith { case _ =>
         super.verify(env, exp, context, proof, message)
       }

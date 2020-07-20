@@ -27,18 +27,6 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
 
   import WalletStorage._
 
-  //todo: pre-3.3.0 method for storing derivation paths, not used anymore, aside of test for readPaths
-  //      remove after 3.3.0 release
-  private[persistence] def addPath(derivationPath: DerivationPath): Unit = {
-    val updatedPaths = (readPaths :+ derivationPath).toSet
-    val toInsert = Ints.toByteArray(updatedPaths.size) ++ updatedPaths
-      .foldLeft(Array.empty[Byte]) { case (acc, path) =>
-        val bytes = DerivationPathSerializer.toBytes(path)
-        acc ++ Ints.toByteArray(bytes.length) ++ bytes
-      }
-    store.insert(Seq(SecretPathsKey -> toInsert))
-  }
-
   //todo: used now only for importing pre-3.3.0 wallet database, remove after while
   def readPaths(): Seq[DerivationPath] = store
     .get(SecretPathsKey)

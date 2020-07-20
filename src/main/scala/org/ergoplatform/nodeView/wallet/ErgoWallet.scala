@@ -60,11 +60,11 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
 
   override def rollback(to: VersionTag): Try[ErgoWallet] =
     historyReader.heightOf(scorex.core.versionToId(to)) match {
-      case Some(height) =>
-        walletActor ! Rollback(to, height)
+      case Some(_) =>
+        walletActor ! Rollback(to)
         Success(this)
       case None if to == ErgoState.genesisStateVersion =>
-        walletActor ! Rollback(to, ErgoHistory.GenesisHeight)
+        walletActor ! Rollback(to)
         Success(this)
       case None =>
         Failure(new Exception(s"Height of a modifier with id $to not found"))

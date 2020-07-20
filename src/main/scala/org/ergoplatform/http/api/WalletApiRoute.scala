@@ -220,7 +220,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet {
       _.walletBoxes(unspentOnly = true)
         .map {
-          _.filter(boxPredicate(_, minConfNum, minHeight))
+          _.filter(boxFilterPredicate(_, minConfNum, minHeight))
         }
     }
   }
@@ -229,7 +229,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet {
       _.walletBoxes()
         .map {
-          _.filter(boxPredicate(_, minConfNum, minHeight))
+          _.filter(boxFilterPredicate(_, minConfNum, minHeight))
         }
     }
   }

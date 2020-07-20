@@ -148,26 +148,38 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
 }
 
 object WalletStorage {
+
+  /**
+    * Primary prefix for entities with multiple instances, where iterating over keys space would be needed.
+    */
   val RangedKeyPrefix: Byte = 0: Byte
 
+  /**
+    * Secondary prefix byte for scans bucket
+    */
   val ScanPrefixByte: Byte = 1: Byte
+
+  /**
+    * Secondary prefix byte for public keys bucket
+    */
   val PublicKeyPrefixByte: Byte = 2: Byte
 
   val ScanPrefixArray: Array[Byte] = Array(RangedKeyPrefix, ScanPrefixByte)
   val PublicKeyPrefixArray: Array[Byte] = Array(RangedKeyPrefix, PublicKeyPrefixByte)
 
-  val SmallestPossibleScanId = ScanPrefixArray ++ Shorts.toByteArray(0)
+  // scans key space to iterate over all of them
+  val SmallestPossibleScanId: Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(0)
   val BiggestPossibleScanId = ScanPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
 
+  def scanPrefixKey(scanId: Short): Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(scanId)
+  def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = PublicKeyPrefixArray ++ pk.path.bytes
 
-  val FirstPublicKeyId = PublicKeyPrefixArray ++ Array.fill(33)(0: Byte)
-  val LastPublicKeyId = PublicKeyPrefixArray ++ Array.fill(33)(-1: Byte)
+
+  // public keys space to iterate over all of them
+  val FirstPublicKeyId: Array[Byte] = PublicKeyPrefixArray ++ Array.fill(33)(0: Byte)
+  val LastPublicKeyId: Array[Byte] = PublicKeyPrefixArray ++ Array.fill(33)(-1: Byte)
 
   def noPrefixKey(keyString: String): Array[Byte] = Blake2b256.hash(keyString)
-
-  def scanPrefixKey(scanId: Short): Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(scanId)
-
-  def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = PublicKeyPrefixArray ++ pk.path.bytes
 
   //following keys do not start with ranged key prefix, i.e. with 8 zero bits
   val StateContextKey: Array[Byte] = noPrefixKey("state_ctx")

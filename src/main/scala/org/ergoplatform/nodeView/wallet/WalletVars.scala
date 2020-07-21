@@ -25,13 +25,13 @@ import scala.util.Try
   */
 final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
                             externalScans: Seq[Scan],
-                            stateCacheProvided: Option[MutableStateCache] = None)
+                            stateCacheProvided: Option[WalletCache] = None)
                            (implicit val settings: ErgoSettings) extends ScorexLogging {
 
   private[wallet] implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
-  val stateCacheOpt: Option[MutableStateCache] =
-    stateCacheProvided.orElse(proverOpt.map(p => MutableStateCache(p.hdPubKeys, settings)))
+  val stateCacheOpt: Option[WalletCache] =
+    stateCacheProvided.orElse(proverOpt.map(p => WalletCache(p.hdPubKeys, settings)))
 
   val trackedPubKeys: Seq[ExtendedPublicKey] = stateCacheOpt.map(_.trackedPubKeys).getOrElse(Seq.empty)
 
@@ -44,7 +44,7 @@ final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
   val miningScriptsBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.miningScriptsBytes).getOrElse(Seq.empty)
 
   val filter: BaseCuckooFilter[Array[Byte]] =
-    stateCacheOpt.map(_.filter).getOrElse(MutableStateCache.emptyFilter(settings))
+    stateCacheOpt.map(_.filter).getOrElse(WalletCache.emptyFilter(settings))
 
   def removeScan(scanId: ScanId): WalletVars = {
     this.copy(externalScans = this.externalScans.filter(_.scanId != scanId))
@@ -109,7 +109,7 @@ object WalletVars {
   def apply(storage: WalletStorage, settings: ErgoSettings): WalletVars = {
     val keysRead = storage.readAllKeys()
     val cacheOpt = if (keysRead.nonEmpty) {
-      Some(MutableStateCache(keysRead, settings))
+      Some(WalletCache(keysRead, settings))
     } else {
       None
     }

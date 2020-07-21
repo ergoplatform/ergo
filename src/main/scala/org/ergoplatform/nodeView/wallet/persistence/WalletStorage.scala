@@ -169,7 +169,7 @@ object WalletStorage {
 
   // scans key space to iterate over all of them
   val SmallestPossibleScanId: Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(0)
-  val BiggestPossibleScanId = ScanPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
+  val BiggestPossibleScanId: Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
 
   def scanPrefixKey(scanId: Short): Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(scanId)
   def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = PublicKeyPrefixArray ++ pk.path.bytes

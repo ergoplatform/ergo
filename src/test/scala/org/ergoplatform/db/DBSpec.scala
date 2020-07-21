@@ -44,4 +44,5 @@ trait DBSpec extends FileUtils {
     val db = new HybridLDBKVStore(createTempDir, keepVersions)
     try body(db) finally db.close()
   }
+
 }

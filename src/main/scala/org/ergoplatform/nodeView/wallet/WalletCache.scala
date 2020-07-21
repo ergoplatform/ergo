@@ -5,37 +5,36 @@ import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef, P2PKAddress}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.wallet.secrets.ExtendedPublicKey
 import sigmastate.Values
-import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import scala.util.Try
 
 /**
   * Fields of WalletVars which are potentially costly to compute if there are many keys
   */
-final case class MutableStateCache(publicKeyAddresses: Seq[P2PKAddress],
-                                   trackedPubKeys: Seq[ExtendedPublicKey],
-                                   trackedBytes: Seq[Array[Byte]],
-                                   filter: CuckooFilter[Array[Byte]])(implicit val settings: ErgoSettings) {
+final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
+                             trackedPubKeys: Seq[ExtendedPublicKey],
+                             trackedBytes: Seq[Array[Byte]],
+                             filter: CuckooFilter[Array[Byte]])(implicit val settings: ErgoSettings) {
 
   implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
-  val miningScripts: Seq[Values.ErgoTree] = MutableStateCache.miningScripts(trackedPubKeys, settings)
+  val miningScripts: Seq[Values.ErgoTree] = WalletCache.miningScripts(trackedPubKeys, settings)
 
   val miningScriptsBytes: Seq[Array[Byte]] = miningScripts.map(_.bytes)
 
-  def withNewPubkey(newPk: ExtendedPublicKey): Try[MutableStateCache] = Try {
+  def withNewPubkey(newPk: ExtendedPublicKey): Try[WalletCache] = Try {
     val updAddresses: Seq[P2PKAddress] = publicKeyAddresses :+ P2PKAddress(newPk.key)
     val updTrackedPubKeys: Seq[ExtendedPublicKey] = trackedPubKeys :+ newPk
     val newPkBytes = newPk.key.propBytes.toArray
     val updTrackedBytes: Seq[Array[Byte]] = trackedBytes :+ newPkBytes
     val updFilter: CuckooFilter[Array[Byte]] = filter.insert(newPkBytes).get
 
-    MutableStateCache(updAddresses, updTrackedPubKeys, updTrackedBytes, updFilter)
+    WalletCache(updAddresses, updTrackedPubKeys, updTrackedBytes, updFilter)
   }
 
 }
 
-object MutableStateCache {
+object WalletCache {
   //strategy for Cuckoo filter
   import com.github.oskin1.scakoo.TaggingStrategy.MurmurHash3Strategy
 
@@ -72,13 +71,13 @@ object MutableStateCache {
                        addressEncoder: ErgoAddressEncoder): Seq[P2PKAddress] =
     trackedPubKeys.map(pk => P2PKAddress(pk.key)(addressEncoder))
 
-  def apply(trackedPubKeys: Seq[ExtendedPublicKey], settings: ErgoSettings): MutableStateCache = {
+  def apply(trackedPubKeys: Seq[ExtendedPublicKey], settings: ErgoSettings): WalletCache = {
     val tbs = trackedBytes(trackedPubKeys)
     val msbs = miningScripts(trackedPubKeys, settings).map(_.bytes)
     val f = filter(tbs, msbs, settings)
     val tas = trackedAddresses(trackedPubKeys, settings.addressEncoder)
 
-    MutableStateCache(tas, trackedPubKeys, tbs, f)(settings)
+    WalletCache(tas, trackedPubKeys, tbs, f)(settings)
   }
 
 }

@@ -7,7 +7,6 @@ import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{MutableStateCache, WalletVars}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest}
 import org.ergoplatform.wallet.Constants

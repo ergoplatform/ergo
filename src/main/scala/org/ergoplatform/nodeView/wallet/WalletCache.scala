@@ -74,10 +74,10 @@ object WalletCache {
   def apply(trackedPubKeys: Seq[ExtendedPublicKey], settings: ErgoSettings): WalletCache = {
     val tbs = trackedBytes(trackedPubKeys)
     val msBytes = miningScripts(trackedPubKeys, settings).map(_.bytes)
-    val filter = filter(tbs, msBytes, settings)
+    val f = filter(tbs, msBytes, settings)
     val tas = trackedAddresses(trackedPubKeys, settings.addressEncoder)
 
-    WalletCache(tas, trackedPubKeys, tbs, filter)(settings)
+    WalletCache(tas, trackedPubKeys, tbs, f)(settings)
   }
 
 }

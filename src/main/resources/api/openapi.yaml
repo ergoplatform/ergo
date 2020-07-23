@@ -144,7 +144,7 @@ components:
         - spendingHeight
         - inclusionHeight
         - spent
-        - scanId
+        - scans
       properties:
         box:
           $ref: '#/components/schemas/ErgoTransactionOutput'
@@ -190,12 +190,13 @@ components:
           type: integer
           format: int32
           example: 2
-        scanId:
-          description: Scan identifier a box relates to
-          type: integer
-          format: int16
-          example: 1
-          default: 1
+        scans:
+          description: Scan identifiers the box relates to
+          type: array
+          items:
+            type: integer
+            example: 1
+            default: 1
 
     UnsignedErgoTransaction:
       type: object

@@ -9,7 +9,7 @@ import sigmastate.eval._
 import scala.util.Try
 
 /**
-  * Fields of WalletVars which are potentially costly to compute if there are many keys
+  * Fields of WalletVars which are potentially costly to compute if there are many keys in the wallet
   */
 final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
                              trackedPubKeys: Seq[ExtendedPublicKey],
@@ -73,11 +73,11 @@ object WalletCache {
 
   def apply(trackedPubKeys: Seq[ExtendedPublicKey], settings: ErgoSettings): WalletCache = {
     val tbs = trackedBytes(trackedPubKeys)
-    val msbs = miningScripts(trackedPubKeys, settings).map(_.bytes)
-    val f = filter(tbs, msbs, settings)
+    val msBytes = miningScripts(trackedPubKeys, settings).map(_.bytes)
+    val filter = filter(tbs, msBytes, settings)
     val tas = trackedAddresses(trackedPubKeys, settings.addressEncoder)
 
-    WalletCache(tas, trackedPubKeys, tbs, f)(settings)
+    WalletCache(tas, trackedPubKeys, tbs, filter)(settings)
   }
 
 }

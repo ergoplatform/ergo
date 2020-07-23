@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.ErgoBox
 import scorex.util.encode.Base16
-import sigmastate.Values.{EvaluatedValue, Value}
+import sigmastate.Values.EvaluatedValue
 import sigmastate.{SType, Values}
 
 /**
@@ -70,7 +70,7 @@ case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, value: EvaluatedVa
   }
 
   override def equals(obj: Any): Boolean = obj match {
-    case other: EqualsScanningPredicate => other.regId == regId && other == value
+    case other: EqualsScanningPredicate => other.regId == regId && other.value == value
     case _ => false
   }
 

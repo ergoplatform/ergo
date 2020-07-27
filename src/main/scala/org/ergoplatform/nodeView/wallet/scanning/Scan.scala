@@ -32,7 +32,8 @@ object Scan {
   *
   */
 
-case class ScanRequest(scanName: String, trackingRule: ScanningPredicate) {
+case class ScanRequest(scanName: String,
+                       trackingRule: ScanningPredicate) {
   def toScan(scanId: ScanId): Try[Scan] = {
     if (scanName.getBytes("UTF-8").length > Scan.MaxScanNameLength) {
       Failure(new Exception(s"Too long scan name: $scanName"))

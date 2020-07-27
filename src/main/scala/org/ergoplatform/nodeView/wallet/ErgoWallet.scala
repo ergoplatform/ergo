@@ -33,7 +33,8 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   override type NVCT = this.type
 
   override val walletActor: ActorRef = {
-    val props = Props(classOf[ErgoWalletActor], settings, boxSelector).withDispatcher(GlobalConstants.ApiDispatcher)
+    val props = Props(classOf[ErgoWalletActor], settings, boxSelector, historyReader)
+                  .withDispatcher(GlobalConstants.ApiDispatcher)
     actorSystem.actorOf(props)
   }
 

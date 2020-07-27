@@ -8,7 +8,7 @@ import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
@@ -37,7 +37,9 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 
 
-class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
+class ErgoWalletActor(settings: ErgoSettings,
+                      boxSelector: BoxSelector,
+                      historyReader: ErgoHistoryReader)
   extends Actor with ScorexLogging with ScorexEncoding {
 
   import ErgoWalletActor._

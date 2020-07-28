@@ -56,12 +56,41 @@ case class ContainsScanningPredicate(regId: ErgoBox.RegisterId,
   * @param value - bytes to track
   */
 case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, value: EvaluatedValue[SType]) extends ScanningPredicate {
+  //todo: try to remove boilerplate below
   override def filter(box: ErgoBox): Boolean = {
     value match {
       case Values.ByteArrayConstant(bytes) =>
         box.get(regId).exists {
           _ match {
             case Values.ByteArrayConstant(arr) => arr.toArray.sameElements(bytes.toArray)
+            case _ => false
+          }
+        }
+      case Values.GroupElementConstant(groupElement) =>
+        box.get(regId).exists {
+          _ match {
+            case Values.GroupElementConstant(ge) => groupElement == ge
+            case _ => false
+          }
+        }
+      case Values.BooleanConstant(bool) =>
+        box.get(regId).exists {
+          _ match {
+            case Values.BooleanConstant(b) => bool == b
+            case _ => false
+          }
+        }
+      case Values.IntConstant(int) =>
+        box.get(regId).exists {
+          _ match {
+            case Values.IntConstant(i) => int == i
+            case _ => false
+          }
+        }
+      case Values.LongConstant(long) =>
+        box.get(regId).exists {
+          _ match {
+            case Values.IntConstant(l) => long == l
             case _ => false
           }
         }

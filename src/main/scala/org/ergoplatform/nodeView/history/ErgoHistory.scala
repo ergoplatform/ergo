@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
+import org.ergoplatform.ErgoLikeContext
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
@@ -184,7 +185,7 @@ trait ErgoHistory
 
 object ErgoHistory extends ScorexLogging {
 
-  type Height = Int
+  type Height = ErgoLikeContext.Height // Int
   type Score = BigInt
   type Difficulty = BigInt
   type NBits = Long

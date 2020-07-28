@@ -39,6 +39,12 @@ trait ErgoHistoryReader
   def isEmpty: Boolean = bestHeaderIdOpt.isEmpty
 
   /**
+    * Whether the node keeping all the full blocks of the blockchain or not.
+    * @return true if the blockchain is pruned, false if not
+    */
+  def isPruned: Boolean = settings.nodeSettings.blocksToKeep >= 0
+
+  /**
     * Header of best Header chain. Empty if no genesis block is applied yet (from a chain or a PoPoW proof).
     * Transactions and ADProofs for this Header may be missed, to get block from best full chain (in mode that support
     * it) call bestFullBlockOpt.

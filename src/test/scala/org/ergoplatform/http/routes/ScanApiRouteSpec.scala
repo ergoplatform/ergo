@@ -39,9 +39,11 @@ class ScanApiRouteSpec extends FlatSpec
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = ScanApiRoute(utxoReadersRef, ergoSettings).route
 
-  val appRequest = ScanRequest("demo", ContainsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array(0: Byte, 1: Byte))))
+  private val predicate0 = ContainsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array(0: Byte, 1: Byte)))
+  private val predicate1 = ContainsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array(1: Byte, 1: Byte)))
 
-  val appRequest2 = ScanRequest("demo2", ContainsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array(1: Byte, 1: Byte))))
+  val appRequest = ScanRequest("demo", predicate0, None)
+  val appRequest2 = ScanRequest("demo2", predicate1, None)
 
   it should "register a scan" in {
     Post(prefix + "/register", appRequest.asJson) ~> route ~> check {

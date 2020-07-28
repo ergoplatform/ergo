@@ -1,9 +1,11 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.http.api.ApiCodecs
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.wallet.Constants.ScanId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
+import scorex.util.Extensions._
 
 import scala.util.{Failure, Success, Try}
 
@@ -16,7 +18,7 @@ import scala.util.{Failure, Success, Try}
   * @param scanName       - scan description (255 bytes in UTF-8 encoding max)
   * @param trackingRule  - a predicate to scan the blockchain for specific scan-related boxes
   */
-case class Scan(scanId: ScanId, scanName: String, trackingRule: ScanningPredicate)
+case class Scan(scanId: ScanId, scanName: String, trackingRule: ScanningPredicate, startingHeight: Height)
 
 object Scan {
 
@@ -33,12 +35,13 @@ object Scan {
   */
 
 case class ScanRequest(scanName: String,
-                       trackingRule: ScanningPredicate) {
-  def toScan(scanId: ScanId): Try[Scan] = {
-    if (scanName.getBytes("UTF-8").length > Scan.MaxScanNameLength) {
-      Failure(new Exception(s"Too long scan name: $scanName"))
+                       trackingRule: ScanningPredicate,
+                       scanHeight: Option[Height]) {
+  def toScan(scanId: ScanId, currentHeight: Height): Try[Scan] = {
+    if (scanName.getBytes("UTF-8").length > Scan.MaxScanNameLength || currentHeight <= 0) {
+      Failure(new Exception(s"Too long scan name: $scanName or height <= 0: $currentHeight"))
     } else {
-      Success(Scan(scanId, scanName, trackingRule))
+      Success(Scan(scanId, scanName, trackingRule, scanHeight.getOrElse(currentHeight)))
     }
   }
 }
@@ -47,14 +50,16 @@ object ScanSerializer extends ScorexSerializer[Scan] {
   override def serialize(app: Scan, w: Writer): Unit = {
     w.putShort(app.scanId)
     w.putShortString(app.scanName)
+    w.putUInt(app.startingHeight)
     ScanningPredicateSerializer.serialize(app.trackingRule, w)
   }
 
   override def parse(r: Reader): Scan = {
     val scanId = ScanId @@ r.getShort()
     val appName = r.getShortString()
+    val startingHeight = r.getUInt().toIntExact
     val sp = ScanningPredicateSerializer.parse(r)
-    Scan(scanId, appName, sp)
+    Scan(scanId, appName, sp, startingHeight)
   }
 }
 

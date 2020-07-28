@@ -8,7 +8,7 @@ class ScanSpecification extends ErgoPropertyTest with WalletGenerators {
   import ScanJsonCodecs._
 
   property("external app req json serialization roundtrip") {
-    forAll(externalAppReqGen) { req =>
+    forAll(externalScanReqGen) { req =>
       val j: Json = scanReqEncoder.apply(req)
       scanReqDecoder.decodeJson(j).toTry.get == req
     }

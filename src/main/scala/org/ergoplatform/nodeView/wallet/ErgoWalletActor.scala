@@ -96,6 +96,13 @@ class ErgoWalletActor(settings: ErgoSettings,
     }
   }
 
+  def scanBlock(block: ErgoFullBlock): Unit = {
+    val (reg, offReg) =
+      WalletScanLogic.scanBlockTransactions(registry, offChainRegistry, stateContext, walletVars, block)
+    registry = reg
+    offChainRegistry = offReg
+  }
+
   private def scanLogic: Receive = {
     //scan mempool transaction
     case ScanOffChain(tx) =>
@@ -103,12 +110,25 @@ class ErgoWalletActor(settings: ErgoSettings,
       val inputs = WalletScanLogic.extractInputBoxes(tx)
       offChainRegistry = offChainRegistry.updateOnTransaction(newWalletBoxes, inputs)
 
+    case ScanInThePast(blockHeight, scanId) =>
+      historyReader.bestFullBlockAt(blockHeight) match {
+        case Some(block) =>
+          //scan id ignored for now
+          scanBlock(block)
+          self ! ScanInThePast(blockHeight + 1, scanId)
+        case None =>
+      }
+
     //scan block transactions
     case ScanOnChain(block) =>
-      val (reg, offReg) =
-        WalletScanLogic.scanBlockTransactions(registry, offChainRegistry, stateContext, walletVars, block)
-      registry = reg
-      offChainRegistry = offReg
+      val lastHeight = registry.fetchDigest().height
+      if(lastHeight + 1 == block.height) {
+        scanBlock(block)
+      } else if (lastHeight + 1 < block.height) {
+        ScanInThePast(lastHeight + 1, wallet.Constants.PaymentsScanId)
+      } else {
+        log.warn(s"lastHeight + 1 > block.height for a block at ${block.height}, blockId: ${block.id}")
+      }
 
     case Rollback(version: VersionTag) =>
       registry.rollback(version).fold(
@@ -323,7 +343,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! RemoveScanResponse(res)
 
     case AddScan(appRequest) =>
-      val res: Try[Scan] = storage.addScan(appRequest)
+      val res: Try[Scan] = storage.addScan(appRequest, height + 1)
       res.foreach(app => walletVars = walletVars.addScan(app))
       sender() ! AddScanResponse(res)
 
@@ -629,6 +649,8 @@ object ErgoWalletActor {
     * @param block - block to scan
     */
   final case class ScanOnChain(block: ErgoFullBlock)
+
+  final case class ScanInThePast(blockHeight: ErgoHistory.Height, scanId: ScanId)
 
   /**
     * Rollback to previous version of the wallet, by throwing away effects of blocks after the version

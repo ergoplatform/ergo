@@ -37,7 +37,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
   private val trueProp = org.ergoplatform.settings.Constants.TrueLeaf
   private val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(trueProp.bytes))
-  private val appReq = ScanRequest("True detector", scanningPredicate)
+  private val appReq = ScanRequest("True detector", scanningPredicate, Some(startHeight))
   private val scanId: ScanId = ScanId @@ 50.toShort
 
   private val pubkeys = prover.hdPubKeys
@@ -57,10 +57,10 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
       proverSet <- Gen.oneOf(true, false)
     } yield {
       if (proverSet) {
-        WalletVars(Some(prover), Seq(appReq.toScan(scanId).get), None)(s)
+        WalletVars(Some(prover), Seq(appReq.toScan(scanId, startHeight).get), None)(s)
       } else {
         val cache = WalletCache(pubkeys, s)
-        WalletVars(None, Seq(appReq.toScan(scanId).get), Some(cache))(s)
+        WalletVars(None, Seq(appReq.toScan(scanId, startHeight).get), Some(cache))(s)
       }
     }
   }
@@ -223,8 +223,8 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
     val cache = WalletCache(pubkeys, s)
     val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(pk.bytes))
-    val paymentScanReq = ScanRequest("Payment scan", paymentPredicate)
-    val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId).get), Some(cache))(s)
+    val paymentScanReq = ScanRequest("Payment scan", paymentPredicate, Some(startHeight))
+    val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId, startHeight).get), Some(cache))(s)
 
     val boxes = extractWalletOutputs(tx, Some(1), walletVars)
     boxes.size shouldBe 1

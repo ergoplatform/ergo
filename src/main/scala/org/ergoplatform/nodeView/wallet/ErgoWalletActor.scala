@@ -122,12 +122,14 @@ class ErgoWalletActor(settings: ErgoSettings,
     //scan block transactions
     case ScanOnChain(block) =>
       val lastHeight = registry.fetchDigest().height
-      if(lastHeight + 1 == block.height) {
+      val expectedHeight = lastHeight + 1
+      if (expectedHeight == block.height) {
         scanBlock(block)
-      } else if (lastHeight + 1 < block.height) {
-        ScanInThePast(lastHeight + 1, wallet.Constants.PaymentsScanId)
+      } else if (expectedHeight < block.height) {
+        log.warn(s"Wallet: skipped blocks found starting from $expectedHeight, going back to scan them")
+        ScanInThePast(expectedHeight, wallet.Constants.PaymentsScanId)
       } else {
-        log.warn(s"lastHeight + 1 > block.height for a block at ${block.height}, blockId: ${block.id}")
+        log.warn(s"Wallet: $expectedHeight > block.height for a block at ${block.height}, blockId: ${block.id}")
       }
 
     case Rollback(version: VersionTag) =>

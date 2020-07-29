@@ -491,8 +491,8 @@ object WalletRegistry {
     bag.copy(toRemove = bag.toRemove ++ txs.flatMap(txToKvPairs).map(_._1))
   }
 
-  private[persistence] def putDigest(bag: KeyValuePairsBag, index: WalletDigest): KeyValuePairsBag = {
-    val registryBytes = WalletDigestSerializer.toBytes(index)
+  private[persistence] def putDigest(bag: KeyValuePairsBag, digest: WalletDigest): KeyValuePairsBag = {
+    val registryBytes = WalletDigestSerializer.toBytes(digest)
     bag.copy(toInsert = bag.toInsert :+ (RegistrySummaryKey, registryBytes))
   }
 }

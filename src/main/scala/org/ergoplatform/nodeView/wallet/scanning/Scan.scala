@@ -35,13 +35,12 @@ object Scan {
   */
 
 case class ScanRequest(scanName: String,
-                       trackingRule: ScanningPredicate,
-                       scanHeight: Option[Height]) {
+                       trackingRule: ScanningPredicate) {
   def toScan(scanId: ScanId, currentHeight: Height): Try[Scan] = {
-    if (scanName.getBytes("UTF-8").length > Scan.MaxScanNameLength || currentHeight <= 0) {
-      Failure(new Exception(s"Too long scan name: $scanName or height <= 0: $currentHeight"))
+    if (scanName.getBytes("UTF-8").length > Scan.MaxScanNameLength) {
+      Failure(new Exception(s"Too long scan name: $scanName"))
     } else {
-      Success(Scan(scanId, scanName, trackingRule, scanHeight.getOrElse(currentHeight)))
+      Success(Scan(scanId, scanName, trackingRule, currentHeight))
     }
   }
 }

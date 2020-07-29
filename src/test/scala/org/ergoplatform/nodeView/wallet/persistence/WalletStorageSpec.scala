@@ -60,11 +60,10 @@ class WalletStorageSpec
     forAll(Gen.nonEmptyListOf(externalScanReqGen)) { externalScanReqs =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
-        externalScanReqs.foreach(req => storage.addScan(req, req.scanHeight.getOrElse(Int.MaxValue)))
+        externalScanReqs.foreach(req => storage.addScan(req, startHeight))
         val storageApps = storage.allScans
         val storageRequests = storageApps.map { app =>
-          val reqHeight = if (app.startingHeight == Int.MaxValue) None else Some(app.startingHeight)
-          ScanRequest(app.scanName, app.trackingRule, reqHeight)
+          ScanRequest(app.scanName, app.trackingRule)
         }
         storageRequests.foreach(r => externalScanReqs.contains(r) shouldBe true)
         storageApps.map(_.scanId).foreach(storage.removeScan)

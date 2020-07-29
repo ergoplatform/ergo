@@ -110,13 +110,19 @@ class ErgoWalletActor(settings: ErgoSettings,
       val inputs = WalletScanLogic.extractInputBoxes(tx)
       offChainRegistry = offChainRegistry.updateOnTransaction(newWalletBoxes, inputs)
 
-    case ScanInThePast(blockHeight, scanId) =>
-      historyReader.bestFullBlockAt(blockHeight) match {
-        case Some(block) =>
-          //scan id ignored for now
-          scanBlock(block)
-          self ! ScanInThePast(blockHeight + 1, scanId)
-        case None =>
+    case ScanInThePast(blockHeight) =>
+      val lastHeight = registry.fetchDigest().height
+      val expectedHeight = lastHeight + 1
+      if (expectedHeight == blockHeight) {
+        historyReader.bestFullBlockAt(blockHeight) match {
+          case Some(block) =>
+            //scan id ignored for now
+            scanBlock(block)
+            self ! ScanInThePast(blockHeight + 1)
+          case None =>
+        }
+      } else {
+        self ! ScanInThePast(expectedHeight)
       }
 
     //scan block transactions
@@ -127,7 +133,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         scanBlock(block)
       } else if (expectedHeight < block.height) {
         log.warn(s"Wallet: skipped blocks found starting from $expectedHeight, going back to scan them")
-        ScanInThePast(expectedHeight, wallet.Constants.PaymentsScanId)
+        self ! ScanInThePast(expectedHeight)
       } else {
         log.warn(s"Wallet: $expectedHeight > block.height for a block at ${block.height}, blockId: ${block.id}")
       }
@@ -652,7 +658,7 @@ object ErgoWalletActor {
     */
   final case class ScanOnChain(block: ErgoFullBlock)
 
-  final case class ScanInThePast(blockHeight: ErgoHistory.Height, scanId: ScanId)
+  final case class ScanInThePast(blockHeight: ErgoHistory.Height)
 
   /**
     * Rollback to previous version of the wallet, by throwing away effects of blocks after the version

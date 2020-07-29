@@ -119,14 +119,13 @@ class ErgoWalletActor(settings: ErgoSettings,
       if (expectedHeight == blockHeight) {
         historyReader.bestFullBlockAt(blockHeight) match {
           case Some(block) =>
-            //scan id ignored for now
             scanBlock(block)
           case None =>
             // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
         }
-        self ! ScanInThePast(blockHeight + 1)
-      } else {
-        self ! ScanInThePast(expectedHeight)
+        if(blockHeight < fullHeight) {
+          self ! ScanInThePast(blockHeight + 1)
+        }
       }
 
     //scan block transactions

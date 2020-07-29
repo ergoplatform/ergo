@@ -57,7 +57,6 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   private var walletVars = WalletVars.apply(storage, settings)
 
-
   //todo: temporary 3.2.x collection and readers
   private var stateReaderOpt: Option[ErgoStateReader] = None
   private var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
@@ -97,6 +96,7 @@ class ErgoWalletActor(settings: ErgoSettings,
   }
 
   def scanBlock(block: ErgoFullBlock): Unit = {
+    log.info(s"Wallet is going to scan a block ${block.id} at height ${block.height}")
     val (reg, offReg) =
       WalletScanLogic.scanBlockTransactions(registry, offChainRegistry, stateContext, walletVars, block)
     registry = reg

@@ -65,6 +65,11 @@ object WalletScanLogic extends ScorexLogging {
                             blockId: ModifierId,
                             transactions: Seq[ErgoTransaction]): (WalletRegistry, OffChainRegistry) = {
 
+    //input tx id, input box id, tracked box
+    type InputData = Seq[(ModifierId, EncodedBoxId, TrackedBox)]
+    //outputs, input ids, related transactions
+    type ScanResults = (Seq[TrackedBox], InputData, Seq[WalletTransaction])
+
     //todo: inefficient for wallets with many outputs, replace with a Bloom/Cuckoo filter?
     //todo: at least, cache in RAM instead of reading from DB
     val previousBoxIds = registry.allUnspentBoxes().map(tb => encodedBoxId(tb.box.id))
@@ -74,10 +79,6 @@ object WalletScanLogic extends ScorexLogging {
       if (spendable) Some(tb.copy(scans = Set(PaymentsScanId))) else None
     }
 
-    //input tx id, input box id, tracked box
-    type InputData = Seq[(ModifierId, EncodedBoxId, TrackedBox)]
-    //outputs, input ids, related transactions
-    type ScanResults = (Seq[TrackedBox], InputData, Seq[WalletTransaction])
     val initialScanResults: ScanResults = (resolvedBoxes, Seq.empty, Seq.empty)
 
     val scanRes = transactions.foldLeft((initialScanResults, previousBoxIds)) { case ((scanResults, accBoxIds), tx) =>

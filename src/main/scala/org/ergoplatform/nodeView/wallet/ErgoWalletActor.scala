@@ -67,7 +67,10 @@ class ErgoWalletActor(settings: ErgoSettings,
   // The state context is being updated by listening to state updates.
   private def stateContext: ErgoStateContext = storage.readStateContext
 
-  private var height: Int = ErgoHistory.GenesisHeight
+  /**
+    * Height of full-blocks chain as reported by the state processor
+    */
+  private var fullHeight: Int = ErgoHistory.EmptyHistoryHeight
   private var parameters: Parameters = LaunchParameters
 
   override def preStart(): Unit = {
@@ -159,13 +162,13 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case GetWalletBoxes(unspent) =>
-      val currentHeight = height
+      val currentHeight = fullHeight
       sender() ! (if (unspent) registry.walletUnspentBoxes() else registry.walletConfirmedBoxes(0))
         .map(tb => WalletBox(tb, currentHeight))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
     case GetScanBoxes(scanId, unspent) =>
-      val currentHeight = height
+      val currentHeight = fullHeight
       sender() ! (if (unspent) registry.unspentBoxes(scanId) else registry.confirmedBoxes(scanId, 0))
         .map(tb => WalletBox(tb, currentHeight))
         .sortBy(_.trackedBox.inclusionHeightOpt)
@@ -173,11 +176,11 @@ class ErgoWalletActor(settings: ErgoSettings,
     case GetTransactions =>
       sender() ! registry.allWalletTxs()
         .sortBy(-_.inclusionHeight)
-        .map(tx => AugWalletTransaction(tx, height - tx.inclusionHeight))
+        .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
 
     case GetTransaction(txId) =>
       sender() ! registry.getTx(txId)
-        .map(tx => AugWalletTransaction(tx, height - tx.inclusionHeight))
+        .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
 
     case ReadScans =>
       sender() ! ReadScansResponse(walletVars.externalScans)
@@ -205,7 +208,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ChangedState(s: ErgoStateReader@unchecked) =>
       val stateContext = s.stateContext
       storage.updateStateContext(stateContext)
-      height = stateContext.currentHeight
+      fullHeight = stateContext.currentHeight
       parameters = stateContext.currentParameters
 
       stateReaderOpt = Some(s)
@@ -353,7 +356,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! RemoveScanResponse(res)
 
     case AddScan(appRequest) =>
-      val res: Try[Scan] = storage.addScan(appRequest, height + 1)
+      val res: Try[Scan] = storage.addScan(appRequest, fullHeight + 1)
       res.foreach(app => walletVars = walletVars.addScan(app))
       sender() ! AddScanResponse(res)
 
@@ -424,7 +427,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       requests.toList
         .map {
           case PaymentRequest(address, value, assets, registers) =>
-            Success(new ErgoBoxCandidate(value, address.script, height, assets.toColl, registers))
+            Success(new ErgoBoxCandidate(value, address.script, fullHeight, assets.toColl, registers))
           case AssetIssueRequest(addressOpt, amount, name, description, decimals, registers) =>
             // Check that auxiliary registers do not try to rewrite registers R0...R6
             val registersCheck = if (registers.exists(_.forall(_._1.number < 7))) {
@@ -460,7 +463,7 @@ class ErgoWalletActor(settings: ErgoSettings,
                       new ErgoBoxCandidate(
                         minimalErgoAmount,
                         lockWithAddress.script,
-                        height,
+                        fullHeight,
                         Colls.fromItems(assetId -> amount),
                         nonMandatoryRegisters
                       )
@@ -560,7 +563,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     val changeBoxCandidates = r.changeBoxes.map { changeBox =>
       val assets = changeBox.tokens.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
-      new ErgoBoxCandidate(changeBox.value, changeAddr, height, assets.toColl)
+      new ErgoBoxCandidate(changeBox.value, changeAddr, fullHeight, assets.toColl)
     }
 
     val unsignedTx = new UnsignedErgoTransaction(

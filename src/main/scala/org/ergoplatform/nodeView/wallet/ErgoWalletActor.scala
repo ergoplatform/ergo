@@ -300,7 +300,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       secretStorageOpt.foreach(_.lock())
 
     case GetWalletStatus =>
-      val status = WalletStatus(secretIsSet, walletVars.proverOpt.isDefined, changeAddress)
+      val lastScannedHeight = registry.fetchDigest().height
+      val status = WalletStatus(secretIsSet, walletVars.proverOpt.isDefined, changeAddress, lastScannedHeight)
       sender() ! status
 
     case GenerateTransaction(requests, inputsRaw, dataInputsRaw) =>
@@ -811,8 +812,12 @@ object ErgoWalletActor {
     * @param initialized   - whether wallet is initialized or not
     * @param unlocked      - whether wallet is unlocked or not
     * @param changeAddress - address used for change (optional)
+    * @param height        - last height scanned
     */
-  case class WalletStatus(initialized: Boolean, unlocked: Boolean, changeAddress: Option[P2PKAddress])
+  case class WalletStatus(initialized: Boolean,
+                          unlocked: Boolean,
+                          changeAddress: Option[P2PKAddress],
+                          height: ErgoHistory.Height)
 
   /**
     * Get root secret key (used in miner)

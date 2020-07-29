@@ -118,9 +118,10 @@ class ErgoWalletActor(settings: ErgoSettings,
           case Some(block) =>
             //scan id ignored for now
             scanBlock(block)
-            self ! ScanInThePast(blockHeight + 1)
           case None =>
+            // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
         }
+        self ! ScanInThePast(blockHeight + 1)
       } else {
         self ! ScanInThePast(expectedHeight)
       }

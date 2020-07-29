@@ -121,9 +121,9 @@ class ErgoWalletActor(settings: ErgoSettings,
           case Some(block) =>
             scanBlock(block)
           case None =>
-            // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
+          // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
         }
-        if(blockHeight < fullHeight) {
+        if (blockHeight < fullHeight) {
           self ! ScanInThePast(blockHeight + 1)
         }
       }
@@ -355,7 +355,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! RemoveScanResponse(res)
 
     case AddScan(appRequest) =>
-      val res: Try[Scan] = storage.addScan(appRequest, fullHeight + 1)
+      val res: Try[Scan] = storage.addScan(appRequest)
       res.foreach(app => walletVars = walletVars.addScan(app))
       sender() ! AddScanResponse(res)
 

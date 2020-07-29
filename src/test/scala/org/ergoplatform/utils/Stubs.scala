@@ -179,7 +179,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case AddScan(req) =>
         val scanId = ScanId @@ (apps.lastOption.map(_._1).getOrElse(100: Short) + 1).toShort
-        val app = req.toScan(scanId, startHeight)
+        val app = req.toScan(scanId)
         apps += scanId -> app.get
         sender() ! AddScanResponse(app)
 

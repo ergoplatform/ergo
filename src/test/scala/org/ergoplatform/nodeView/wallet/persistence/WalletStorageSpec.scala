@@ -60,7 +60,7 @@ class WalletStorageSpec
     forAll(Gen.nonEmptyListOf(externalScanReqGen)) { externalScanReqs =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
-        externalScanReqs.foreach(req => storage.addScan(req, startHeight))
+        externalScanReqs.foreach(req => storage.addScan(req))
         val storageApps = storage.allScans
         val storageRequests = storageApps.map { app =>
           ScanRequest(app.scanName, app.trackingRule)

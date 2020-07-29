@@ -57,10 +57,10 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
       proverSet <- Gen.oneOf(true, false)
     } yield {
       if (proverSet) {
-        WalletVars(Some(prover), Seq(appReq.toScan(scanId, startHeight).get), None)(s)
+        WalletVars(Some(prover), Seq(appReq.toScan(scanId).get), None)(s)
       } else {
         val cache = WalletCache(pubkeys, s)
-        WalletVars(None, Seq(appReq.toScan(scanId, startHeight).get), Some(cache))(s)
+        WalletVars(None, Seq(appReq.toScan(scanId).get), Some(cache))(s)
       }
     }
   }
@@ -224,7 +224,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
     val cache = WalletCache(pubkeys, s)
     val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(pk.bytes))
     val paymentScanReq = ScanRequest("Payment scan", paymentPredicate)
-    val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId, startHeight).get), Some(cache))(s)
+    val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId).get), Some(cache))(s)
 
     val boxes = extractWalletOutputs(tx, Some(1), walletVars)
     boxes.size shouldBe 1

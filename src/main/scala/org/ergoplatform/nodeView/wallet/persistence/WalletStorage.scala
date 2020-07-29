@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import com.google.common.primitives.{Ints, Shorts}
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest, ScanSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
@@ -107,9 +106,9 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     * @param scanReq - request for an scan
     * @return scan or error (e.g. if scan identifier space is exhausted)
     */
-  def addScan(scanReq: ScanRequest, height: Height): Try[Scan] = {
+  def addScan(scanReq: ScanRequest): Try[Scan] = {
     val id = ScanId @@ (lastUsedscanId + 1).toShort
-    scanReq.toScan(id, height).flatMap { app =>
+    scanReq.toScan(id).flatMap { app =>
       Try(store.insert(Seq(scanPrefixKey(id) -> ScanSerializer.toBytes(app)))).map(_ => app)
     }
   }

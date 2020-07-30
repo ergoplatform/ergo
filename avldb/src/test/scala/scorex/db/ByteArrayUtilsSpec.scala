@@ -42,4 +42,12 @@ class ByteArrayUtilsSpec extends PropSpec with GeneratorDrivenPropertyChecks wit
     }
   }
 
+  property("mergeByteArrays") {
+    forAll(Gen.nonEmptyListOf(nonEmptyBytesGen)){ byteArrays =>
+      val merged = ByteArrayUtils.mergeByteArrays(byteArrays)
+      val simpleMerge = byteArrays.foldLeft(Array.emptyByteArray){case (acc, arr) => acc ++ arr}
+      merged.sameElements(simpleMerge) shouldBe true
+    }
+  }
+
 }

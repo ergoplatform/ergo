@@ -38,10 +38,17 @@ case class BlockTransactions(headerId: ModifierId,
 
   lazy val txIds: Seq[Array[Byte]] = txs.map(_.serializedId)
 
+  //todo: add extra byte to separate from txIds?
+  lazy val witnessIds: Seq[Array[Byte]] = txs.map(_.witnessSerializedId)
+
   /**
     * Non-empty (because there's at least 1 transaction) Merkle tree of the block transactions
     */
-  lazy val merkleTree: MerkleTree[Digest32] = Algos.merkleTree(LeafData @@ txIds)
+  lazy val merkleTree: MerkleTree[Digest32] = if(blockVersion == Header.InitialVersion) {
+    Algos.merkleTree(LeafData @@ txIds)
+  } else {
+    Algos.merkleTree(LeafData @@ (txIds ++ witnessIds))
+  }
 
   /**
     * Root hash of the Merkle tree of block transactions

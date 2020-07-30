@@ -11,13 +11,11 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
-import org.iq80.leveldb.Options
-import scorex.db.LDBFactory.factory
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.RecoverableModifierError
-import scorex.db.LDBKVStore
+import scorex.db.LDBFactory
 import scorex.util.{ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Try}
@@ -204,26 +202,9 @@ object ErgoHistory extends ScorexLogging {
     dir
   }
 
-  def createDb(path: String): LDBKVStore = {
-    val dir = new File(path)
-    dir.mkdirs()
-    val options = new Options()
-    options.createIfMissing(true)
-    try {
-      val db = factory.open(dir, options)
-      new LDBKVStore(db)
-    } catch {
-      case x: Throwable =>
-        log.error(s"Failed to initialize storage: $x. Please check that directory $path could be accessed " +
-          s"and is not used by some other active node")
-        java.lang.System.exit(2)
-        null
-    }
-  }
-
   def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
-    val indexStore = createDb(s"${ergoSettings.directory}/history/index")
-    val objectsStore = createDb(s"${ergoSettings.directory}/history/objects")
+    val indexStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/index")
+    val objectsStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/objects")
     val db = new HistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
     val nodeSettings = ergoSettings.nodeSettings
 

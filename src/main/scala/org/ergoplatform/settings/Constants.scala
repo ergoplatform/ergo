@@ -62,7 +62,4 @@ object Constants {
   // Maximum extension size during bytes parsing. Allows to move MaxExtensionSize to Parameters in future
   val MaxExtensionSizeMax: Int = 1024 * 1024
 
-  // SimplePayments application identifier
-  val DefaultAppId: Short = 1
-
 }

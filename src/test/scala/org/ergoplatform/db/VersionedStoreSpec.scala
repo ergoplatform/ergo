@@ -31,6 +31,9 @@ class VersionedStoreSpec extends PropSpec with Matchers with DBSpec {
 
       store.getAll.toSeq.toBs should contain allElementsOf Seq(keyA -> valA, keyB -> valB, keyC -> valC).toBs
       store.get(keyD) shouldBe None
+      store.get(keyA).get.sameElements(valA) shouldBe true
+
+      store.lastVersionID shouldBe Some(v2)
     }
   }
 

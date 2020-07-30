@@ -4,7 +4,6 @@ import java.io.{File, PrintWriter}
 import java.util
 import java.util.UUID
 
-import io.circe.generic.auto._
 import io.circe.parser._
 import io.circe.syntax._
 import org.ergoplatform.wallet.crypto
@@ -96,6 +95,22 @@ object JsonSecretStorage {
              (settings: SecretStorageSettings): JsonSecretStorage = {
     val seed = Mnemonic.toSeed(mnemonic, mnemonicPassOpt)
     init(seed, encryptionPass)(settings)
+  }
+
+  def readFile(settings: SecretStorageSettings): Try[JsonSecretStorage] = {
+    val dir = new File(settings.secretDir)
+    if (dir.exists()) {
+      dir.listFiles().toList match {
+        case files if files.size > 1 =>
+          Failure(new Exception(s"Ambiguous secret files in dir '$dir'"))
+        case headFile :: _ =>
+          Success(new JsonSecretStorage(headFile, settings.encryption))
+        case Nil =>
+          Failure(new Exception(s"Cannot readSecretStorage: Secret file not found in dir '$dir'"))
+      }
+    } else {
+      Failure(new Exception(s"Cannot readSecretStorage: Secret dir '$dir' doesn't exist"))
+    }
   }
 
 }

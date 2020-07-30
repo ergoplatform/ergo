@@ -162,7 +162,5 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
 }
 
 object ReplaceCompactCollectBoxSelector {
-
-  final case class MaxInputsExceededError(message: String) extends BoxSelectionError
-
+    final case class MaxInputsExceededError(message: String) extends BoxSelectionError
 }

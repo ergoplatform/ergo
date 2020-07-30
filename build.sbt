@@ -22,7 +22,7 @@ lazy val commonSettings = Seq(
   publishTo := sonatypePublishToBundle.value,
 )
 
-val scorexVersion = "master-3946bdb5-SNAPSHOT"
+val scorexVersion = "master-07d30caa-SNAPSHOT"
 val sigmaStateVersion = "3.2.1"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -48,11 +48,13 @@ libraryDependencies ++= Seq(
   "com.google.guava" % "guava" % "21.0",
   "com.joefkelley" %% "argyle" % "1.0.0",
 
+  "com.github.oskin1" %% "scakoo" % "0.4.1", // Cuckoo filter implementation
+
   "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
-  "org.scalacheck" %% "scalacheck" % "1.13.5" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.14.0" % "test",
 
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",
@@ -253,8 +255,8 @@ lazy val ergo = (project in file("."))
     scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
     javacOptions in(Compile, compile) ++= javacReleaseOption
   )
-  .dependsOn(ergoWallet % "compile->compile")
-  .dependsOn(avldb % "compile->compile")
+  .dependsOn(ergoWallet % "test->test;compile->compile")
+  .dependsOn(avldb % "test->test;compile->compile")
   .configs(It2Test)
 
 lazy val benchmarks = (project in file("benchmarks"))

@@ -177,7 +177,7 @@ object Header extends ApiCodecs {
       votes = header.votes.toColl
     )
 
-  val CurrentVersion: Byte = 1
+  val InitialVersion: Byte = 1
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
 

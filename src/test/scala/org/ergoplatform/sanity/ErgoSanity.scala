@@ -51,7 +51,7 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
 
     powScheme.prove(
       history.bestHeaderOpt,
-      Header.CurrentVersion,
+      Header.InitialVersion,
       settings.chainSettings.initialNBits,
       ADDigest @@ Array.fill(HashLength + 1)(0.toByte),
       Digest32 @@ Array.fill(HashLength)(0.toByte),

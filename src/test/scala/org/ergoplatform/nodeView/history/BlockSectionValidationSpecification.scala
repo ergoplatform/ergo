@@ -4,6 +4,7 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.HistoryTestHelpers
+import scorex.core.block.Block.Version
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
@@ -11,13 +12,9 @@ import scorex.util.encode.Base16
 
 class BlockSectionValidationSpecification extends HistoryTestHelpers {
 
-  property("BlockTransactions commons check") {
-    val (history, block) = init()
-    commonChecks(history, block.blockTransactions, block.header)
-  }
 
-  property("BlockTransactions - proof byte changed") {
-    val (history, block) = init()
+  private def changeProofByte(version: Version, outcome: Symbol) = {
+    val (history, block) = init(version)
     val txBytes = HistoryModifierSerializer.toBytes(block.blockTransactions)
 
     val txs = block.blockTransactions.transactions
@@ -30,7 +27,20 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     val hashAfter = Base16.encode(Blake2b256(txBytes2))
 
     hashBefore should not be hashAfter
-    history.applicableTry(block.blockTransactions) shouldBe 'failure
+    history.applicableTry(block.blockTransactions).shouldBe(outcome)
+  }
+
+  property("BlockTransactions - proof byte changed - v.1") {
+    changeProofByte(Header.InitialVersion, 'success)
+  }
+
+  property("BlockTransactions - proof byte changed - v.2") {
+    changeProofByte((Header.InitialVersion + 1).toByte, 'failure)
+  }
+
+  property("BlockTransactions commons check") {
+    val (history, block) = init()
+    commonChecks(history, block.blockTransactions, block.header)
   }
 
   property("ADProofs validation") {
@@ -43,9 +53,9 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     commonChecks(history, block.extension, block.header)
   }
 
-  private def init() = {
+  private def init(version: Version = Header.InitialVersion) = {
     var history = genHistory()
-    val chain = genChain(2, history)
+    val chain = genChain(2, history, version)
     history = applyBlock(history, chain.head)
     history = history.append(chain.last.header).get._1
     (history, chain.last)

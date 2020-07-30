@@ -275,13 +275,13 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
     headerId <- modifierIdGen
     txs <- Gen.nonEmptyListOf(invalidErgoTransactionGen)
-  } yield BlockTransactions(headerId, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
+  } yield BlockTransactions(headerId, 1: Byte, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
     if ((acc :+ tx).map(_.size).sum < (Parameters.MaxBlockSizeDefault - 150)) acc :+ tx else acc))
 
   def invalidBlockTransactionsGen(prop: ProveDlog, txQty: Int): Gen[BlockTransactions] = for {
     headerId <- modifierIdGen
     txs <- Gen.listOfN(txQty, invalidErgoTransactionGen(prop))
-  } yield BlockTransactions(headerId, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
+  } yield BlockTransactions(headerId, 1: Byte, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
     if ((acc :+ tx).map(_.size).sum < (Parameters.MaxBlockSizeDefault - 150)) acc :+ tx else acc))
 
   lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {

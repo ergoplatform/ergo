@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSeria
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core._
+import scorex.core.block.Block.Version
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.{Leaf, MerkleProof, MerkleTree}
@@ -20,11 +21,13 @@ import scorex.util.Extensions._
 /**
   * Section of a block which contains transactions.
   *
-  * @param headerId - identifier of a header of a corresponding block
-  * @param txs - transactions of a block
-  * @param sizeOpt - (optional) size of the section (cached to not be calculated again)
+  * @param headerId     - identifier of a header of a corresponding block
+  * @param blockVersion - block version
+  * @param txs          - transactions of a block
+  * @param sizeOpt      - (optional) size of the section (cached to not be calculated again)
   */
 case class BlockTransactions(headerId: ModifierId,
+                             blockVersion: Version,
                              txs: Seq[ErgoTransaction],
                              override val sizeOpt: Option[Int] = None)
   extends BlockSection with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
@@ -45,11 +48,9 @@ case class BlockTransactions(headerId: ModifierId,
     */
   override lazy val digest: Digest32 = merkleTree.rootHash
 
-  lazy val proofs: Seq[Array[Byte]] = txs.flatMap(_.inputs).map(_.spendingProof.proof)
-  lazy val proofsTree: MerkleTree[Digest32] = Algos.merkleTree(LeafData @@ proofs)
-
   /**
     * Calculates Merkle-tree based membership proof for a given transaction identifier
+    *
     * @param txId - transaction identifier
     * @return Some(proof) or None (if transaction with given id is not in the block)
     */
@@ -93,6 +94,7 @@ object BlockTransactions extends ApiCodecs {
     Map(
       "headerId" -> Algos.encode(bt.headerId).asJson,
       "transactions" -> bt.txs.map(_.asJson).asJson,
+      "blockVersion" -> bt.blockVersion.asJson,
       "size" -> bt.size.asJson
     ).asJson
   }
@@ -101,17 +103,21 @@ object BlockTransactions extends ApiCodecs {
     for {
       headerId <- c.downField("headerId").as[ModifierId]
       transactions <- c.downField("transactions").as[List[ErgoTransaction]]
+      blockVersion <- c.downField("blockVersion").as[Version]
       size <- c.downField("size").as[Int]
-    } yield BlockTransactions(headerId, transactions, Some(size))
+    } yield BlockTransactions(headerId, blockVersion, transactions, Some(size))
   }
 }
 
 object BlockTransactionsSerializer extends ScorexSerializer[BlockTransactions] {
+  // See a comment in the parse() function
+  val MagicNumber = 1000000
 
-  override def serialize(obj: BlockTransactions, w: Writer): Unit = {
-    w.putBytes(idToBytes(obj.headerId))
-    w.putUInt(obj.txs.size)
-    obj.txs.foreach { tx =>
+  override def serialize(bt: BlockTransactions, w: Writer): Unit = {
+    w.putBytes(idToBytes(bt.headerId))
+    w.putUInt(MagicNumber + bt.blockVersion)
+    w.putUInt(bt.txs.size)
+    bt.txs.foreach { tx =>
       ErgoTransactionSerializer.serialize(tx, w)
     }
   }
@@ -119,10 +125,27 @@ object BlockTransactionsSerializer extends ScorexSerializer[BlockTransactions] {
   override def parse(r: Reader): BlockTransactions = {
     val startPos = r.position
     val headerId: ModifierId = bytesToId(r.getBytes(Constants.ModifierIdSize))
-    val size = r.getUInt().toIntExact
-    val txs = (1 to size).map { _ =>
+    val verOrCount = r.getUInt().toIntExact
+
+    /**
+      * A hack to avoid need for a database rescan if older version of the serializer was used to put.
+      * block transactions into.
+      *
+      * We consider that in the version 1 of the protocol there could not be a block with more
+      * than 1,000,000 transactions.
+      *
+      * Then the new serializer puts 1,000,000 + block version (while the old one just puts tx count with no version),
+      * and the reader knows that a new serializer was used if the first unsigned integer read is more than 1,000,000.
+      */
+    val (blockVersion, txCount) = if (verOrCount > MagicNumber) {
+      ((verOrCount - MagicNumber).toByte, r.getUInt().toIntExact)
+    } else {
+      (1: Byte, verOrCount)
+    }
+
+    val txs = (1 to txCount).map { _ =>
       ErgoTransactionSerializer.parse(r)
     }
-    BlockTransactions(headerId, txs, Some(r.position - startPos))
+    BlockTransactions(headerId, blockVersion, txs, Some(r.position - startPos))
   }
 }

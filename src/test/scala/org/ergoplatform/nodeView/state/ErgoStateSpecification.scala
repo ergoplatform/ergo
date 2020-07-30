@@ -23,7 +23,8 @@ class ErgoStateSpecification extends ErgoPropertyTest {
 
       val dsRoot = BlockTransactions.transactionsRoot(dsTxs)
       val dsHeader = validBlock.header.copy(transactionsRoot = dsRoot)
-      val doubleSpendBlock = ErgoFullBlock(dsHeader, BlockTransactions(dsHeader.id, dsTxs), validBlock.extension, validBlock.adProofs)
+      val bt = BlockTransactions(dsHeader.id, 1: Byte, dsTxs)
+      val doubleSpendBlock = ErgoFullBlock(dsHeader, bt, validBlock.extension, validBlock.adProofs)
 
       us.applyModifier(doubleSpendBlock) shouldBe 'failure
       us.applyModifier(validBlock) shouldBe 'success

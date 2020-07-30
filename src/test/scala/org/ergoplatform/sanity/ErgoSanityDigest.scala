@@ -97,6 +97,6 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val boxHolder = boxesHolderGen.sample.get
     val txs = validTransactionsFromBoxHolder(boxHolder)._1
     val id = modifierIdGen.sample.get
-    BlockTransactions(id, txs)
+    BlockTransactions(id, 1: Byte, txs)
   }
 }

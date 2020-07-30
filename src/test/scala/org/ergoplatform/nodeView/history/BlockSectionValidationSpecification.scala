@@ -11,31 +11,34 @@ import scorex.util.ModifierId
 import scorex.util.encode.Base16
 
 class BlockSectionValidationSpecification extends HistoryTestHelpers {
-
-
+  
   private def changeProofByte(version: Version, outcome: Symbol) = {
     val (history, block) = init(version)
-    val txBytes = HistoryModifierSerializer.toBytes(block.blockTransactions)
+    val bt = block.blockTransactions
+    val txBytes = HistoryModifierSerializer.toBytes(bt)
 
-    val txs = block.blockTransactions.transactions
+    val txs = bt.transactions
     val proof = txs.head.inputs.head.spendingProof.proof
     proof(0) = if(proof.head < 0) (proof.head + 1).toByte else (proof.head - 1).toByte
 
-    val txBytes2 = HistoryModifierSerializer.toBytes(block.blockTransactions)
+    val txBytes2 = HistoryModifierSerializer.toBytes(bt)
 
     val hashBefore = Base16.encode(Blake2b256(txBytes))
     val hashAfter = Base16.encode(Blake2b256(txBytes2))
 
+    val wrongBt = HistoryModifierSerializer.parseBytes(txBytes2).asInstanceOf[BlockTransactions]
+
     hashBefore should not be hashAfter
-    history.applicableTry(block.blockTransactions).shouldBe(outcome)
+    history.applicableTry(bt) shouldBe 'success
+    history.applicableTry(wrongBt) shouldBe outcome
   }
 
   property("BlockTransactions - proof byte changed - v.1") {
-    changeProofByte(Header.InitialVersion, 'success)
+    changeProofByte(Header.InitialVersion, outcome = 'success)
   }
 
   property("BlockTransactions - proof byte changed - v.2") {
-    changeProofByte((Header.InitialVersion + 1).toByte, 'failure)
+    changeProofByte((Header.InitialVersion + 1).toByte, outcome = 'failure)
   }
 
   property("BlockTransactions commons check") {

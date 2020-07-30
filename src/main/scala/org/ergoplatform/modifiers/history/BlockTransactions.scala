@@ -44,7 +44,7 @@ case class BlockTransactions(headerId: ModifierId,
   /**
     * Non-empty (because there's at least 1 transaction) Merkle tree of the block transactions
     */
-  lazy val merkleTree: MerkleTree[Digest32] = if(blockVersion == Header.InitialVersion) {
+  lazy val merkleTree: MerkleTree[Digest32] = if (blockVersion == Header.InitialVersion) {
     Algos.merkleTree(LeafData @@ txIds)
   } else {
     Algos.merkleTree(LeafData @@ (txIds ++ witnessIds))
@@ -89,7 +89,14 @@ object BlockTransactions extends ApiCodecs {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (102: Byte)
 
   // Used in the miner when a BlockTransaction instance is not generated yet (because a header is not known)
-  def transactionsRoot(txs: Seq[ErgoTransaction]): Digest32 = Algos.merkleTreeRoot(LeafData @@ txs.map(_.serializedId))
+  def transactionsRoot(txs: Seq[ErgoTransaction], blockVersion: Version): Digest32 = {
+    if (blockVersion == Header.InitialVersion) {
+      Algos.merkleTreeRoot(LeafData @@ txs.map(_.serializedId))
+    } else {
+      //todo: add extra byte to separate from txIds?
+      Algos.merkleTreeRoot(LeafData @@ (txs.map(_.serializedId) ++ txs.map(_.witnessSerializedId)))
+    }
+  }
 
   // Could be useful when only digest of transactions is available, not a BlockTransaction instance
   def proofValid(transactionsDigest: Digest32, proof: MerkleProof[Digest32]): Boolean = proof.valid(transactionsDigest)

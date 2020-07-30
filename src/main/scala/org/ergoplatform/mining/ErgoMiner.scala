@@ -606,7 +606,7 @@ object ErgoMiner extends ScorexLogging {
     */
   def deriveUnprovenHeader(candidate: CandidateBlock): HeaderWithoutPow = {
     val (parentId, height) = derivedHeaderFields(candidate.parentOpt)
-    val transactionsRoot = BlockTransactions.transactionsRoot(candidate.transactions)
+    val transactionsRoot = BlockTransactions.transactionsRoot(candidate.transactions, candidate.version)
     val adProofsRoot = ADProofs.proofDigest(candidate.adProofBytes)
     val extensionRoot: Digest32 = candidate.extension.digest
 

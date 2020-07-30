@@ -152,7 +152,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                  minNonce: Long = Long.MinValue,
                  maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
 
-    val transactionsRoot = BlockTransactions.transactionsRoot(transactions)
+    val transactionsRoot = BlockTransactions.transactionsRoot(transactions, version)
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
 
     prove(parentOpt, version, nBits, stateRoot, adProofsRoot, transactionsRoot,

@@ -98,7 +98,11 @@ class ErgoWalletActor(settings: ErgoSettings,
     }
   }
 
-  def scanBlock(block: ErgoFullBlock): Unit = {
+  /**
+    * Process the block transactions and update database and in-memory structures for offchain data accordingly
+    * @param block - block to scan
+    */
+  private def scanBlock(block: ErgoFullBlock): Unit = {
     log.info(s"Wallet is going to scan a block ${block.id} at height ${block.height}")
     val (reg, offReg) =
       WalletScanLogic.scanBlockTransactions(registry, offChainRegistry, stateContext, walletVars, block)

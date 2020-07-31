@@ -68,10 +68,19 @@ class ErgoWalletActor(settings: ErgoSettings,
   private def stateContext: ErgoStateContext = storage.readStateContext
 
   /**
-    * Height of full-blocks chain as reported by the state processor
+    * Height of full-blocks chain as reported by the state
+    * (i.e. height of a last block applied to the state, not the wallet)
+    * Wallet's height may be behind it.
     */
   private var fullHeight: Int = ErgoHistory.EmptyHistoryHeight
   private var parameters: Parameters = LaunchParameters
+
+  /**
+    * @return height of the last block scanned by the wallet
+    */
+  private def walletHeight(): Int = {
+    registry.fetchDigest().height
+  }
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
@@ -100,6 +109,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   /**
     * Process the block transactions and update database and in-memory structures for offchain data accordingly
+    *
     * @param block - block to scan
     */
   private def scanBlock(block: ErgoFullBlock): Unit = {
@@ -118,8 +128,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       offChainRegistry = offChainRegistry.updateOnTransaction(newWalletBoxes, inputs)
 
     case ScanInThePast(blockHeight) =>
-      val lastHeight = registry.fetchDigest().height
-      val expectedHeight = lastHeight + 1
+      val expectedHeight = walletHeight() + 1
       if (expectedHeight == blockHeight) {
         historyReader.bestFullBlockAt(blockHeight) match {
           case Some(block) =>
@@ -134,8 +143,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     //scan block transactions
     case ScanOnChain(block) =>
-      val lastHeight = registry.fetchDigest().height
-      val expectedHeight = lastHeight + 1
+      val expectedHeight = walletHeight() + 1
       if (expectedHeight == block.height) {
         scanBlock(block)
       } else if (expectedHeight < block.height) {
@@ -246,16 +254,16 @@ class ErgoWalletActor(settings: ErgoSettings,
           secretStorageOpt = Some(secretStorage)
           mnemonic
         } match {
-          case s: Success[String] =>
-            self ! UnlockWallet(pass)
-            util.Arrays.fill(entropy, 0: Byte)
-            log.info("Wallet is initialized")
-            s
-          case Failure(t) =>
-            val f = wrapLegalExc(t) //getting nicer message for illegal key size exception
-            log.error(s"Wallet initialization is failed, details: ${f.exception.getMessage}")
-            f
-        }
+        case s: Success[String] =>
+          self ! UnlockWallet(pass)
+          util.Arrays.fill(entropy, 0: Byte)
+          log.info("Wallet is initialized")
+          s
+        case Failure(t) =>
+          val f = wrapLegalExc(t) //getting nicer message for illegal key size exception
+          log.error(s"Wallet initialization is failed, details: ${f.exception.getMessage}")
+          f
+      }
       sender() ! mnemonicTry
 
     //Restore wallet with mnemonic if secret is not set yet
@@ -306,8 +314,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       secretStorageOpt.foreach(_.lock())
 
     case GetWalletStatus =>
-      val lastScannedHeight = registry.fetchDigest().height
-      val status = WalletStatus(secretIsSet, walletVars.proverOpt.isDefined, changeAddress, lastScannedHeight)
+      val status = WalletStatus(secretIsSet, walletVars.proverOpt.isDefined, changeAddress, walletHeight())
       sender() ! status
 
     case GenerateTransaction(requests, inputsRaw, dataInputsRaw) =>
@@ -654,6 +661,7 @@ object ErgoWalletActor {
 
   /**
     * A signal the wallet actor sends to itself to scan a block in the past
+    *
     * @param blockHeight - height of a block to scan
     */
   private final case class ScanInThePast(blockHeight: ErgoHistory.Height)

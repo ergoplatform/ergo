@@ -15,7 +15,7 @@ jobs:
   include:
     - stage: test
       name: "ergo"
-      script: travis_wait 45 sbt -Denv=test clean coverage test coverageReport
+      script: travis_wait 45 sbt -Denv=test clean test
     - stage: test
       name: "benchmarks"
       script: sbt -Denv=test clean benchmarks/compile

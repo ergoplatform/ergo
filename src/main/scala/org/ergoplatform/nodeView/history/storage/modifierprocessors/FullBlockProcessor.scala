@@ -103,7 +103,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       val minForkRootHeight = toApply.last.height - nodeSettings.keepVersions
       if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
 
-      if (nodeSettings.fullBlocksPruned) {
+      if (nodeSettings.isFullBlocksPruned) {
         val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
         val bestHeight: Int = newBestBlockHeader.height
         val diff = bestHeight - prevBest.header.height

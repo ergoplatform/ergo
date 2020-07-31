@@ -33,7 +33,7 @@ case class NodeConfigurationSettings(stateType: StateType,
     * Whether the node keeping all the full blocks of the blockchain or not.
     * @return true if the blockchain is pruned, false if not
     */
-  val fullBlocksPruned: Boolean = blocksToKeep >= 0
+  val isFullBlocksPruned: Boolean = blocksToKeep >= 0
 }
 
 trait NodeConfigurationReaders extends StateTypeReaders with ModifierIdReader {

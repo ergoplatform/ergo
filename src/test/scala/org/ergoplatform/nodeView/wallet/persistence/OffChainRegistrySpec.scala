@@ -18,7 +18,9 @@ class OffChainRegistrySpec
 
   //registry.updateOnTransaction is called when offchain transaction comes
   it should "calculate indexes correctly on offchain transaction" in {
-    forAll(Gen.listOf(trackedBoxGen)) { boxes =>
+  //  forAll(Gen.listOf(trackedBoxGen)) { boxes =>
+      val boxes = Gen.listOf(trackedBoxGen).sample.get
+
       //apply transaction outputs to empty offchain registry
       var registry = OffChainRegistry.empty.updateOnTransaction(boxes, Seq.empty)
       val balance = balanceAmount(boxes.map(_.box))
@@ -30,12 +32,14 @@ class OffChainRegistrySpec
       registry = registry.updateOnTransaction(Seq.empty, boxes.map(EncodedBoxId @@ _.boxId))
       registry.digest.walletBalance shouldEqual 0
       registry.digest.walletAssetBalances shouldEqual Map.empty
-    }
+   // }
   }
 
   //registry.updateOnTransaction is called when a block comes
   it should "calculate indexes correctly on a block" in {
-    forAll(Gen.listOf(trackedBoxGen)) { boxes =>
+    //forAll(Gen.listOf(trackedBoxGen)) { boxes =>
+      val boxes = Gen.listOf(trackedBoxGen).sample.get
+
       val height = Random.nextInt(500) + 1
 
       //apply block to empty registry
@@ -51,7 +55,7 @@ class OffChainRegistrySpec
       registry2.height shouldEqual height
       registry2.digest.walletBalance shouldEqual balance
       registry2.digest.walletAssetBalances shouldEqual assetsBalance
-    }
+    //}
   }
 
 }

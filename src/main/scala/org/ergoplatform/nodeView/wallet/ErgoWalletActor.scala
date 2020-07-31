@@ -646,7 +646,16 @@ class ErgoWalletActor(settings: ErgoSettings,
 
 object ErgoWalletActor {
 
-  // Signals for the wallet actor
+  // Private signals the wallet actor sends to itself
+
+  /**
+    * A signal the wallet actor sends to itself to scan a block in the past
+    * @param blockHeight - height of a block to scan
+    */
+  private final case class ScanInThePast(blockHeight: ErgoHistory.Height)
+
+
+  // Publicly available signals for the wallet actor
 
   /**
     * Command to scan offchain transaction
@@ -661,8 +670,6 @@ object ErgoWalletActor {
     * @param block - block to scan
     */
   final case class ScanOnChain(block: ErgoFullBlock)
-
-  final case class ScanInThePast(blockHeight: ErgoHistory.Height)
 
   /**
     * Rollback to previous version of the wallet, by throwing away effects of blocks after the version

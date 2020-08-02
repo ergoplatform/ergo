@@ -8,7 +8,7 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-parser" % circeVersion,
 
   "org.scalatest" %% "scalatest" % "3.0.5" % "test",
-  "org.scalacheck" %% "scalacheck" % "1.14.0" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.14.3" % "test",
 )
 
 publishMavenStyle in ThisBuild := true

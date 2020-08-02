@@ -134,7 +134,7 @@ class WalletApiRouteSpec extends FlatSpec
     Post(prefix + "/check", Json.obj("mnemonic" -> WalletActorStub.mnemonic.asJson)) ~>
       route ~> check {
       status shouldBe StatusCodes.OK
-      responseAs[Json].hcursor.downField("matched").as[Boolean] shouldBe true
+      responseAs[Json].hcursor.downField("matched").as[Boolean] shouldBe Right(true)
     }
   }
 

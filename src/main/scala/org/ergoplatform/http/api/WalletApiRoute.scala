@@ -54,7 +54,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         deriveKeyR ~
         deriveNextKeyR ~
         updateChangeAddressR ~
-        signTransactionR
+        signTransactionR ~
+        checkSeedR
     }
   }
 
@@ -75,6 +76,13 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           .map(mnemoPassOpt => (pass, mnemo, mnemoPassOpt))
         )
       )
+      .fold(_ => reject, s => provide(s))
+  }
+
+  private val checkRequest: Directive1[(String, Option[String])] = entity(as[Json]).flatMap { p =>
+    p.hcursor.downField("mnemonic").as[String]
+      .flatMap(mnemo => p.hcursor.downField("mnemonicPass").as[Option[String]]
+         .map(mnemoPassOpt => (mnemo, mnemoPassOpt)))
       .fold(_ => reject, s => provide(s))
   }
 
@@ -295,6 +303,18 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         _ => ApiResponse.toRoute(ApiResponse.OK)
       )
     }
+  }
+
+  def checkSeedR: Route = (path("check") & post & checkRequest) {
+    case (mnemo, mnemoPassOpt) =>
+      withWalletOp(_.checkSeed(mnemo, mnemoPassOpt))
+      { case matched =>
+        ApiResponse(
+          Json.obj(
+            "matched" -> matched.asJson
+          )
+        )
+      }
   }
 
   def lockWalletR: Route = (path("lock") & get) {

@@ -2316,6 +2316,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/check:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Check seed phrase
+      operationId: checkSeed
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mnemonic
+              properties:
+                mnemonic:
+                  type: string
+                  description: Mnemonic seed
+                mnemonicPass:
+                  type: string
+                  description: Optional pass to password-protect mnemonic seed
+      responses:
+        '200':
+          description: Whether passphrase match wallet
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - matched
+                properties:
+                  matched:
+                    type: boolean
+                    description: true if passphrase matches wallet, false otherwise
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/unlock:
     post:
       security:

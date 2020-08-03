@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.ErgoBox
 import scorex.util.encode.Base16
-import sigmastate.Values.{EvaluatedValue, Value}
+import sigmastate.Values.EvaluatedValue
 import sigmastate.{SType, Values}
 
 /**
@@ -56,6 +56,7 @@ case class ContainsScanningPredicate(regId: ErgoBox.RegisterId,
   * @param value - bytes to track
   */
 case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, value: EvaluatedValue[SType]) extends ScanningPredicate {
+  //todo: try to remove boilerplate below
   override def filter(box: ErgoBox): Boolean = {
     value match {
       case Values.ByteArrayConstant(bytes) =>
@@ -65,12 +66,40 @@ case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, value: EvaluatedVa
             case _ => false
           }
         }
+      case Values.GroupElementConstant(groupElement) =>
+        box.get(regId).exists {
+          _ match {
+            case Values.GroupElementConstant(ge) => groupElement == ge
+            case _ => false
+          }
+        }
+      case Values.BooleanConstant(bool) =>
+        box.get(regId).exists {
+          _ match {
+            case Values.BooleanConstant(b) => bool == b
+            case _ => false
+          }
+        }
+      case Values.IntConstant(int) =>
+        box.get(regId).exists {
+          _ match {
+            case Values.IntConstant(i) => int == i
+            case _ => false
+          }
+        }
+      case Values.LongConstant(long) =>
+        box.get(regId).exists {
+          _ match {
+            case Values.IntConstant(l) => long == l
+            case _ => false
+          }
+        }
       case _ => false
     }
   }
 
   override def equals(obj: Any): Boolean = obj match {
-    case other: EqualsScanningPredicate => other.regId == regId && other == value
+    case other: EqualsScanningPredicate => other.regId == regId && other.value == value
     case _ => false
   }
 

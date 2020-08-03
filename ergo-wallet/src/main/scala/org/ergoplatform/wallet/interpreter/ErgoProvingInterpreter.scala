@@ -10,7 +10,7 @@ import org.ergoplatform.wallet.secrets.SecretKey
 import sigmastate.basics.SigmaProtocolPrivateInput
 import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import scorex.util.encode.Base16
-import sigmastate.eval.{CompiletimeIRContext, IRContext}
+import sigmastate.eval.{RuntimeIRContext, IRContext}
 import sigmastate.interpreter.ProverInterpreter
 import sigmastate.utxo.CostTable
 
@@ -81,6 +81,15 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   }
 
   /**
+    * Produces updated instance of ErgoProvingInterpreter with updated parameters
+    * @param newParams - updated parameters
+    * @return modified prover
+    */
+  def withNewParameters(newParams: ErgoLikeParameters): ErgoProvingInterpreter = {
+    new ErgoProvingInterpreter(secretKeys, newParams, cachedHdPubKeysOpt)
+  }
+
+  /**
     * @note requires `unsignedTx` and `boxesToSpend` have the same boxIds in the same order.
     */
   def sign(unsignedTx: UnsignedErgoLikeTransaction,
@@ -147,9 +156,9 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
 object ErgoProvingInterpreter {
 
   def apply(secrets: IndexedSeq[SecretKey], params: ErgoLikeParameters): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(secrets, params)(new CompiletimeIRContext)
+    new ErgoProvingInterpreter(secrets, params)(new RuntimeIRContext)
 
   def apply(rootSecret: ExtendedSecretKey, params: ErgoLikeParameters): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(IndexedSeq(rootSecret), params)(new CompiletimeIRContext)
+    new ErgoProvingInterpreter(IndexedSeq(rootSecret), params)(new RuntimeIRContext)
 
 }

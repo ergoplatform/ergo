@@ -25,15 +25,16 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   // and also optimal number of inputs(a selector is collecting dust if transaction has less inputs than optimal).
   // Now these settings are hard-coded, however, they should be parameterized
   // https://github.com/ergoplatform/ergo/issues/856
-  val maxInputs = 48
-  val optimalInputs = 2
+  val maxInputs = 64
+  val optimalInputs = 3
 
   val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs)
 
   override type NVCT = this.type
 
   override val walletActor: ActorRef = {
-    val props = Props(classOf[ErgoWalletActor], settings, boxSelector).withDispatcher(GlobalConstants.ApiDispatcher)
+    val props = Props(classOf[ErgoWalletActor], settings, boxSelector, historyReader)
+                  .withDispatcher(GlobalConstants.ApiDispatcher)
     actorSystem.actorOf(props)
   }
 
@@ -58,16 +59,19 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
     this
   }
 
-  override def rollback(to: VersionTag): Try[ErgoWallet] = {
-    if (historyReader.heightOf(scorex.core.versionToId(to)).isDefined || to == ErgoState.genesisStateVersion) {
-      walletActor ! Rollback(to)
-      Success(this)
-    } else {
-      Failure(new Exception(s"Height of a modifier with id $to not found"))
+  override def rollback(to: VersionTag): Try[ErgoWallet] =
+    historyReader.heightOf(scorex.core.versionToId(to)) match {
+      case Some(_) =>
+        walletActor ! Rollback(to)
+        Success(this)
+      case None if to == ErgoState.genesisStateVersion =>
+        walletActor ! Rollback(to)
+        Success(this)
+      case None =>
+        Failure(new Exception(s"Height of a modifier with id $to not found"))
     }
-  }
-
 }
+
 
 object ErgoWallet {
 

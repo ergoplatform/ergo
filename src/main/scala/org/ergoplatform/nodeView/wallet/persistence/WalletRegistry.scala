@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
-
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.HybridLDBKVStore
 import org.ergoplatform.modifiers.history.PreGenesisHeader
@@ -16,6 +15,7 @@ import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import Constants.{ScanId, PaymentsScanId}
 import scorex.db.LDBVersionedStore
 import scala.util.{Failure, Success, Try}
+import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
@@ -28,7 +28,6 @@ import scala.util.{Failure, Success, Try}
 class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
-  import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
 
   private val keepHistory = ws.keepSpentBoxes
 
@@ -39,7 +38,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @return wallet related box if it is stored in the database, None otherwise
     */
   def getBox(id: BoxId): Option[TrackedBox] = {
-    store.get(boxKey(id)).flatMap(r => TrackedBoxSerializer.parseBytesTry(r).toOption)
+    store.get(boxKey(id)).flatMap(bs => TrackedBoxSerializer.parseBytesTry(bs).toOption)
   }
 
 
@@ -54,9 +53,9 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   }
 
   /**
-    * Read unspent boxes which belong to given scan
+    * Read unspent boxes which belong to all the scans
     *
-    * @return sequences of scan-related unspent boxes found in the database
+    * @return sequences of all the unspent boxes from the database
     */
   def allUnspentBoxes(): Seq[TrackedBox] = {
     store.getRange(firstUnspentBoxKey, lastUnspentBoxKey)
@@ -66,20 +65,19 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   }
 
   /**
-    * Read unspent boxes which belong to given scan
+    * Read unspent boxes which belong to a scan with given id
     *
     * @param scanId - scan identifier
     * @return sequences of scan-related unspent boxes found in the database
     */
   def unspentBoxes(scanId: ScanId): Seq[TrackedBox] = {
-    store.getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId))
-      .flatMap { case (_, boxId) =>
-        getBox(ADKey @@ boxId)
-      }
+    store.getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId)).flatMap { case (_, boxId) =>
+      getBox(ADKey @@ boxId)
+    }
   }
 
   /**
-    * Read spent boxes which belong to given scan
+    * Read spent boxes which belong to a scan with given id
     *
     * @param scanId - scan identifier
     * @return sequences of scan-related spent boxes found in the database
@@ -92,30 +90,32 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   }
 
   /**
-    * Unspent boxes belong to payments scan
+    * Unspent boxes belong to the wallet (payments scan)
     */
   def walletUnspentBoxes(): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsScanId)
 
   /**
-    * Spent boxes belong to payments scan
+    * Spent boxes belong to the wallet (payments scan)
     */
   def walletSpentBoxes(): Seq[TrackedBox] = spentBoxes(Constants.PaymentsScanId)
 
   /**
-    * Read boxes with certain number of confirmations at most, both spent or not
+    * Read boxes created at or after given height, both spent or not
     *
     * @param scanId     scan identifier
     * @param fromHeight min height when box was included into the blockchain
     * @return sequence of scan-related boxes
     */
   def confirmedBoxes(scanId: ScanId, fromHeight: Int): Seq[TrackedBox] = {
-    store.getRange(firstIncludedScanBoxSpaceKey(scanId, fromHeight), lastIncludedScanBoxSpaceKey(scanId)).flatMap { case (_, boxId) =>
+    val firstKeyInRange = firstIncludedScanBoxSpaceKey(scanId, fromHeight)
+    val lastKeyInRange = lastIncludedScanBoxSpaceKey(scanId)
+    store.getRange(firstKeyInRange, lastKeyInRange).flatMap { case (_, boxId) =>
       getBox(ADKey @@ boxId)
     }
   }
 
   /**
-    * Read boxes belong to the payment scan with certain number of confirmations at most, both spent or not
+    * Read boxes belong to the payment scan created at or after given height, both spent or not
     *
     * @param fromHeight min height when box was included into the blockchain
     * @return sequence of (P2PK-payment)-related boxes
@@ -132,7 +132,6 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     store.get(txKey(id)).flatMap(r => WalletTransactionSerializer.parseBytesTry(r).toOption)
   }
 
-  //todo: filter by scan
   /**
     * Read all the wallet-related transactions
     *
@@ -273,7 +272,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * Remove association between an application and a box.
     * Please note that in case of rollback association remains removed!
     *
-    * @param boxId box identifier
+    * @param boxId  box identifier
     * @param scanId scan identifier
     */
   def removeScan(boxId: BoxId, scanId: ScanId): Try[Unit] = {
@@ -338,8 +337,9 @@ object WalletRegistry {
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
   private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)
 
-  private val firstUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(32)(0: Byte)
-  private val lastUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(32)(-1: Byte)
+  // All the unspent boxes range, dependless on scan
+  private val firstUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(34)(0: Byte)
+  private val lastUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(34)(-1: Byte)
 
   /** Performance optimized helper, which avoid unnecessary allocations and creates the resulting
     * key bytes directly from the given parameters.

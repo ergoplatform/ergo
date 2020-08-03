@@ -1,12 +1,16 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
+import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.db.DBSpec
+import org.ergoplatform.nodeView.wallet.persistence.WalletStorage.SecretPathsKey
 import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
 import org.ergoplatform.utils.generators.WalletGenerators
+import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
 import org.scalacheck.Gen
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
+import scorex.db.LDBKVStore
 import scorex.testkit.utils.FileUtils
 
 class WalletStorageSpec
@@ -21,10 +25,19 @@ class WalletStorageSpec
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   it should "add and read derivation paths" in {
+    def addPath(store: LDBKVStore, storedPaths: Seq[DerivationPath], derivationPath: DerivationPath): Unit = {
+      val updatedPaths = (storedPaths :+ derivationPath).toSet
+      val toInsert = Ints.toByteArray(updatedPaths.size) ++ updatedPaths
+        .foldLeft(Array.empty[Byte]) { case (acc, path) =>
+          val bytes = DerivationPathSerializer.toBytes(path)
+          acc ++ Ints.toByteArray(bytes.length) ++ bytes
+        }
+      store.insert(Seq(SecretPathsKey -> toInsert))
+    }
     forAll(Gen.nonEmptyListOf(derivationPathGen)) { paths =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
-        paths.foreach(storage.addPath)
+        paths.foreach(path => addPath(store, storage.readPaths(), path))
         storage.readPaths() should contain theSameElementsAs paths.toSet
       }
     }

@@ -6,7 +6,6 @@ import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, Scan, ScanSeriali
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
-import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
 import scorex.db.{LDBFactory, LDBKVStore}
@@ -27,18 +26,6 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
                          (implicit val addressEncoder: ErgoAddressEncoder) {
 
   import WalletStorage._
-
-  //todo: pre-3.3.0 method for storing derivation paths, not used anymore, aside of test for readPaths
-  //      remove after 3.3.0 release
-  private[persistence] def addPath(derivationPath: DerivationPath): Unit = {
-    val updatedPaths = (readPaths :+ derivationPath).toSet
-    val toInsert = Ints.toByteArray(updatedPaths.size) ++ updatedPaths
-      .foldLeft(Array.empty[Byte]) { case (acc, path) =>
-        val bytes = DerivationPathSerializer.toBytes(path)
-        acc ++ Ints.toByteArray(bytes.length) ++ bytes
-      }
-    store.insert(Seq(SecretPathsKey -> toInsert))
-  }
 
   //todo: used now only for importing pre-3.3.0 wallet database, remove after while
   def readPaths(): Seq[DerivationPath] = store
@@ -91,7 +78,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
   def readStateContext: ErgoStateContext = store
     .get(StateContextKey)
     .flatMap(r => ErgoStateContextSerializer(settings.chainSettings.voting).parseBytesTry(r).toOption)
-    .getOrElse(ErgoStateContext.empty(ADDigest @@ Array.fill(32)(0: Byte), settings))
+    .getOrElse(ErgoStateContext.empty(settings))
 
   /**
     * Update address used by the wallet for change outputs
@@ -161,26 +148,38 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
 }
 
 object WalletStorage {
+
+  /**
+    * Primary prefix for entities with multiple instances, where iterating over keys space would be needed.
+    */
   val RangedKeyPrefix: Byte = 0: Byte
 
+  /**
+    * Secondary prefix byte for scans bucket
+    */
   val ScanPrefixByte: Byte = 1: Byte
+
+  /**
+    * Secondary prefix byte for public keys bucket
+    */
   val PublicKeyPrefixByte: Byte = 2: Byte
 
   val ScanPrefixArray: Array[Byte] = Array(RangedKeyPrefix, ScanPrefixByte)
   val PublicKeyPrefixArray: Array[Byte] = Array(RangedKeyPrefix, PublicKeyPrefixByte)
 
-  val SmallestPossibleScanId = ScanPrefixArray ++ Shorts.toByteArray(0)
-  val BiggestPossibleScanId = ScanPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
-
-
-  val FirstPublicKeyId = PublicKeyPrefixArray ++ Array.fill(33)(0: Byte)
-  val LastPublicKeyId = PublicKeyPrefixArray ++ Array.fill(33)(-1: Byte)
-
-  def noPrefixKey(keyString: String): Array[Byte] = Blake2b256.hash(keyString)
+  // scans key space to iterate over all of them
+  val SmallestPossibleScanId: Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(0)
+  val BiggestPossibleScanId: Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
 
   def scanPrefixKey(scanId: Short): Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(scanId)
-
   def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = PublicKeyPrefixArray ++ pk.path.bytes
+
+
+  // public keys space to iterate over all of them
+  val FirstPublicKeyId: Array[Byte] = PublicKeyPrefixArray ++ Array.fill(33)(0: Byte)
+  val LastPublicKeyId: Array[Byte] = PublicKeyPrefixArray ++ Array.fill(33)(-1: Byte)
+
+  def noPrefixKey(keyString: String): Array[Byte] = Blake2b256.hash(keyString)
 
   //following keys do not start with ranged key prefix, i.e. with 8 zero bits
   val StateContextKey: Array[Byte] = noPrefixKey("state_ctx")

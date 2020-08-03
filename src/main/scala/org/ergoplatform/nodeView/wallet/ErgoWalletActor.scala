@@ -4,24 +4,24 @@ import java.util
 
 import akka.actor.{Actor, ActorRef}
 import cats.Traverse
-import com.github.oskin1.scakoo.BaseCuckooFilter
-import com.github.oskin1.scakoo.immutable.CuckooFilter
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.persistence._
-import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest, TransactionGenerationRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey, JsonSecretStorage}
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, JsonSecretStorage}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
@@ -32,26 +32,23 @@ import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigmastate.Values.{ByteArrayConstant, IntConstant}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
-import sigmastate.Values
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 
 
-class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
+class ErgoWalletActor(settings: ErgoSettings,
+                      boxSelector: BoxSelector,
+                      historyReader: ErgoHistoryReader)
   extends Actor with ScorexLogging with ScorexEncoding {
 
-  import cats.implicits._
   import ErgoWalletActor._
+  import cats.implicits._
 
   private implicit val ec: ExecutionContextExecutor = scala.concurrent.ExecutionContext.global
 
   private val walletSettings: WalletSettings = settings.walletSettings
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
-
-  //todo: update parameters, they're used in transactions signing & minimal fee estimation
-  private val parameters: Parameters = LaunchParameters
 
   private var secretStorageOpt: Option[JsonSecretStorage] = None
   private val storage: WalletStorage = WalletStorage.readOrCreate(settings)
@@ -71,7 +68,8 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   // The state context is being updated by listening to state updates.
   private def stateContext: ErgoStateContext = storage.readStateContext
 
-  private def height: Int = stateContext.currentHeight
+  private var height: Int = ErgoHistory.GenesisHeight
+  private var parameters: Parameters = LaunchParameters
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
@@ -176,7 +174,11 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 
   private def onStateChanged: Receive = {
     case ChangedState(s: ErgoStateReader@unchecked) =>
-      storage.updateStateContext(s.stateContext)
+      val stateContext = s.stateContext
+      storage.updateStateContext(stateContext)
+      height = stateContext.currentHeight
+      parameters = stateContext.currentParameters
+
       stateReaderOpt = Some(s)
       updateUtxoSet()
   }
@@ -611,166 +613,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
 }
 
 object ErgoWalletActor {
-
-  /**
-    * Fields of WalletVars which are potentially costly to compute if there are many keys
-    */
-  final case class MutableStateCache(publicKeyAddresses: Seq[P2PKAddress],
-                                     trackedPubKeys: Seq[ExtendedPublicKey],
-                                     trackedBytes: Seq[Array[Byte]],
-                                     filter: CuckooFilter[Array[Byte]])(implicit val settings: ErgoSettings) {
-
-    implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
-
-    val miningScripts: Seq[Values.ErgoTree] = MutableStateCache.miningScripts(trackedPubKeys, settings)
-
-    val miningScriptsBytes: Seq[Array[Byte]] = miningScripts.map(_.bytes)
-
-    def withNewPubkey(newPk: ExtendedPublicKey): Try[MutableStateCache] = Try {
-      val updAddresses: Seq[P2PKAddress] = publicKeyAddresses :+ P2PKAddress(newPk.key)
-      val updTrackedPubKeys: Seq[ExtendedPublicKey] = trackedPubKeys :+ newPk
-      val newPkBytes = newPk.key.propBytes.toArray
-      val updTrackedBytes: Seq[Array[Byte]] = trackedBytes :+ newPkBytes
-      val updFilter: CuckooFilter[Array[Byte]] = filter.insert(newPkBytes).get
-
-      MutableStateCache(updAddresses, updTrackedPubKeys, updTrackedBytes, updFilter)
-    }
-
-  }
-
-  object MutableStateCache {
-    //strategy for Cuckoo filter
-    import com.github.oskin1.scakoo.TaggingStrategy.MurmurHash3Strategy
-
-    // currently only one mining key supported
-    def miningScripts(trackedPubKeys: Seq[ExtendedPublicKey],
-                      settings: ErgoSettings): Seq[Values.ErgoTree] = {
-      trackedPubKeys.headOption.map { pk =>
-        ErgoScriptPredef.rewardOutputScript(settings.miningRewardDelay, pk.key)
-      }.toSeq
-    }
-
-    def emptyFilter(settings: ErgoSettings): com.github.oskin1.scakoo.mutable.CuckooFilter[Array[Byte]] = {
-      val entriesPerBucket = settings.walletSettings.keysFilter.entriesPerBucket
-      val bucketsQty = settings.walletSettings.keysFilter.bucketsQty
-      com.github.oskin1.scakoo.mutable.CuckooFilter[Array[Byte]](entriesPerBucket, bucketsQty)
-    }
-
-    /**
-      * Construction a Cuckoo filter for scanning the boxes efficiently
-      */
-    def filter(trackedBytes: Seq[Array[Byte]],
-               miningScriptsBytes: Seq[Array[Byte]],
-               settings: ErgoSettings): CuckooFilter[Array[Byte]] = {
-      val f = emptyFilter(settings)
-      trackedBytes.foreach(bs => f.insert(bs))
-      miningScriptsBytes.foreach(msb => f.insert(msb))
-      CuckooFilter.recover(f.memTable, f.entriesCount, f.entriesPerBucket)
-    }
-
-    def trackedBytes(trackedPubKeys: Seq[ExtendedPublicKey]): Seq[Array[Byte]] =
-      trackedPubKeys.map(_.key.propBytes.toArray)
-
-    def trackedAddresses(trackedPubKeys: Seq[ExtendedPublicKey],
-                         addressEncoder: ErgoAddressEncoder): Seq[P2PKAddress] =
-      trackedPubKeys.map(pk => P2PKAddress(pk.key)(addressEncoder))
-
-    def apply(trackedPubKeys: Seq[ExtendedPublicKey], settings: ErgoSettings): MutableStateCache = {
-      val tbs = trackedBytes(trackedPubKeys)
-      val msbs = miningScripts(trackedPubKeys, settings).map(_.bytes)
-      val f = filter(tbs, msbs, settings)
-      val tas = trackedAddresses(trackedPubKeys, settings.addressEncoder)
-
-      MutableStateCache(tas, trackedPubKeys, tbs, f)(settings)
-    }
-  }
-
-  /**
-    * Inner class of the wallet actor which it encapsulating its mutable state (aside of the databases
-    * the actor modifies). The main intention behind the class is to make modifications of this part of the internal
-    * state explicit and unit-testable.
-    *
-    * @param proverOpt
-    * @param externalScans
-    * @param stateCacheProvided
-    * @param settings
-    */
-  final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
-                              externalScans: Seq[Scan],
-                              stateCacheProvided: Option[MutableStateCache] = None)
-                             (implicit val settings: ErgoSettings) extends ScorexLogging {
-
-    private[wallet] implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
-
-    val stateCacheOpt: Option[MutableStateCache] =
-      stateCacheProvided.orElse(proverOpt.map(p => MutableStateCache(p.hdPubKeys, settings)))
-
-    val trackedPubKeys: Seq[ExtendedPublicKey] = stateCacheOpt.map(_.trackedPubKeys).getOrElse(Seq.empty)
-
-    val publicKeyAddresses: Seq[P2PKAddress] = stateCacheOpt.map(_.publicKeyAddresses).getOrElse(Seq.empty)
-
-    val trackedBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.trackedBytes).getOrElse(Seq.empty)
-
-    val miningScripts: Seq[Values.ErgoTree] = stateCacheOpt.map(_.miningScripts).getOrElse(Seq.empty)
-
-    val miningScriptsBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.miningScriptsBytes).getOrElse(Seq.empty)
-
-    val filter: BaseCuckooFilter[Array[Byte]] =
-      stateCacheOpt.map(_.filter).getOrElse(MutableStateCache.emptyFilter(settings))
-
-    def removeScan(scanId: ScanId): WalletVars = {
-      this.copy(externalScans = this.externalScans.filter(_.scanId != scanId))
-    }
-
-    def addScan(app: Scan): WalletVars = {
-      this.copy(externalScans = this.externalScans :+ app)
-    }
-
-    /**
-      * Clear the prover along with its secrets.
-      *
-      * Public keys and scans still live in the new instance.
-      *
-      * @return updated WalletVars instance
-      **/
-    def resetProver(): WalletVars = this.copy(proverOpt = None, stateCacheProvided = stateCacheOpt)
-
-    def withProver(prover: ErgoProvingInterpreter): WalletVars = {
-      this.copy(proverOpt = Some(prover), stateCacheProvided = None)
-    }
-
-    /**
-      * Add new secret to the prover
-      *
-      * @param secret - secret to add to existing ones
-      * @return
-      */
-    def withExtendedKey(secret: ExtendedSecretKey): Try[WalletVars] = Try {
-      proverOpt match {
-        case Some(prover) =>
-          val (updProver, newPk) = prover.withNewExtendedSecret(secret)
-          val updCache = stateCacheOpt.get.withNewPubkey(newPk).get
-          this.copy(proverOpt = Some(updProver), stateCacheProvided = Some(updCache))
-        case None =>
-          log.warn(s"Trying to add new secret, but prover is not initialized")
-          this
-      }
-    }
-
-  }
-
-  object WalletVars {
-
-    def apply(storage: WalletStorage, settings: ErgoSettings): WalletVars = {
-      val keysRead = storage.readAllKeys()
-      val cacheOpt = if (keysRead.nonEmpty) {
-        Some(MutableStateCache(keysRead, settings))
-      } else {
-        None
-      }
-      WalletVars(None, storage.allScans, cacheOpt)(settings)
-    }
-  }
 
   // Signals for the wallet actor
 

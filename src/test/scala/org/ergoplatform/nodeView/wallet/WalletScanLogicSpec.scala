@@ -7,7 +7,6 @@ import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{MutableStateCache, WalletVars}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest}
 import org.ergoplatform.wallet.Constants
@@ -42,7 +41,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
   private val scanId: ScanId = ScanId @@ 50.toShort
 
   private val pubkeys = prover.hdPubKeys
-  private val miningScripts = MutableStateCache.miningScripts(pubkeys, s)
+  private val miningScripts = WalletCache.miningScripts(pubkeys, s)
 
   private def paymentsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.oneOf(pubkeys.map(_.key.toSigmaProp: ErgoTree)))
 
@@ -54,12 +53,13 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
   private def walletVarsGen: Gen[WalletVars] = {
     for {
+      // To check that scanning works with locked wallet, we randomly choose whether the prover is set or not
       proverSet <- Gen.oneOf(true, false)
     } yield {
       if (proverSet) {
         WalletVars(Some(prover), Seq(appReq.toScan(scanId).get), None)(s)
       } else {
-        val cache = MutableStateCache(pubkeys, s)
+        val cache = WalletCache(pubkeys, s)
         WalletVars(None, Seq(appReq.toScan(scanId).get), Some(cache))(s)
       }
     }
@@ -213,8 +213,23 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
         registry = r4
         off = o4
       }
-
     }
+  }
+
+  property("external scan prioritized over payments one") {
+    val pk = pubkeys.head.key.toSigmaProp: ErgoTree
+    val outs = IndexedSeq(new ErgoBoxCandidate(1000, pk, creationHeight = 1))
+    val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, outs)
+
+    val cache = WalletCache(pubkeys, s)
+    val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(pk.bytes))
+    val paymentScanReq = ScanRequest("Payment scan", paymentPredicate)
+    val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId).get), Some(cache))(s)
+
+    val boxes = extractWalletOutputs(tx, Some(1), walletVars)
+    boxes.size shouldBe 1
+    boxes.head.scans.size shouldBe 1
+    boxes.head.scans.head shouldBe scanId
   }
 
 }

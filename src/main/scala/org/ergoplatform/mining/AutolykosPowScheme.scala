@@ -67,7 +67,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val seed = if (version == 1) {
       Bytes.concat(msg, nonce) // Autolykos v1, Alg. 2, line4: m || nonce
     } else {
-      Bytes.concat(pkBytes, wBytes, msg, nonce) // Autolykos v1, Alg. 2, line 4: pk || w || m || nonce
+      Bytes.concat(pkBytes, wBytes, msg, nonce) // Autolykos v2, Alg. 2, line 4: pk || w || m || nonce
     }
     val indexes = genIndexes(seed)
     val f = indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx))).sum.mod(q)
@@ -117,10 +117,10 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                          w: Array[Byte],
                          indexBytes: Array[Byte]): BigInt = {
     if (version == 1) {
-      // Autolykos v. 1: H(j|M|pk|m|w) (line 4 from the Algo 2 of the spec)
+      // Autolykos v. 1: H(j|M|pk|m|w) (line 5 from the Algo 2 of the spec)
       hash(Bytes.concat(indexBytes, M, pk, m, w))
     } else {
-      // Autolykos v. 2: H(j|pk|w|M|m) (line 4 from the Algo 2 of the spec)
+      // Autolykos v. 2: H(j|pk|w|M|m) (line 5 from the Algo 2 of the spec)
       hash(Bytes.concat(indexBytes, pk, w, M, m))
     }
   }

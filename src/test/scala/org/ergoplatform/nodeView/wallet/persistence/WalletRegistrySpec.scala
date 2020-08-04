@@ -21,8 +21,7 @@ class WalletRegistrySpec
     with WalletGenerators
     with FileUtils {
 
-  implicit override val generatorDrivenConfig =
-    PropertyCheckConfiguration(minSuccessful = 5, sizeRange = 10)
+  implicit override val generatorDrivenConfig = PropertyCheckConfiguration(minSuccessful = 5, sizeRange = 10)
 
   private val emptyBag = KeyValuePairsBag.empty
   private val walletBoxStatus = Set(PaymentsScanId)

@@ -18,7 +18,7 @@ jobs:
       script: sbt +ergoWallet/test
     - stage: test
       name: "ergo"
-      script: travis_wait 45 sbt -Denv=test clean test
+      script: sbt -Denv=test clean test
     - stage: test
       name: "benchmarks"
       script: sbt -Denv=test clean benchmarks/compile

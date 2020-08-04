@@ -81,7 +81,7 @@ class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
       minerBBestBlock shouldEqual minerABestBlock
     }
 
-    Await.result(result, 15.minutes)
+    Await.result(result, 25.minutes)
 
   }
 

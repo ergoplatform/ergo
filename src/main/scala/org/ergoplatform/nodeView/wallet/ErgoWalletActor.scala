@@ -241,7 +241,6 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
       }
       sender() ! mnemonicTry
 
-
     //Restore wallet with mnemonic if secret is not set yet
     case RestoreWallet(mnemonic, passOpt, encryptionPass) if !secretIsSet =>
       val res = Try {
@@ -266,6 +265,15 @@ class ErgoWalletActor(settings: ErgoSettings, boxSelector: BoxSelector)
   }
 
   private def walletCommands: Receive = {
+    case CheckSeed(mnemonic, passOpt) =>
+      secretStorageOpt match {
+        case Some(secretStorage) =>
+          val checkResult = secretStorage.checkSeed(mnemonic, passOpt)
+          sender() ! checkResult
+        case None =>
+          sender() ! Failure(new Exception("Wallet not initialized"))
+      }
+
     case UnlockWallet(pass) =>
       secretStorageOpt match {
         case Some(secretStorage) =>
@@ -740,6 +748,8 @@ object ErgoWalletActor {
   final case class UpdateChangeAddress(address: P2PKAddress)
 
   final case class GetTransaction(id: ModifierId)
+
+  final case class CheckSeed(mnemonic: String, passOpt: Option[String])
 
   case object GetTransactions
 

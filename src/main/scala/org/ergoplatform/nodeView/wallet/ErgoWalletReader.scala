@@ -44,6 +44,8 @@ trait ErgoWalletReader extends VaultReader {
 
   def lockWallet(): Unit = walletActor ! LockWallet
 
+  def checkSeed(mnemonic: String, mnemonicPassOpt: Option[String] = None): Future[Boolean] = (walletActor ? CheckSeed(mnemonic, mnemonicPassOpt)).mapTo[Boolean]
+
   def getLockStatus: Future[(Boolean, Boolean)] =
     (walletActor ? GetLockStatus).mapTo[(Boolean, Boolean)]
 

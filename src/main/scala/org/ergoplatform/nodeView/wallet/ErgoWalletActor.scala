@@ -247,6 +247,15 @@ class ErgoWalletActor(settings: ErgoSettings,
   }
 
   private def walletCommands: Receive = {
+    case CheckSeed(mnemonic, passOpt) =>
+      secretStorageOpt match {
+        case Some(secretStorage) =>
+          val checkResult = secretStorage.checkSeed(mnemonic, passOpt)
+          sender() ! checkResult
+        case None =>
+          sender() ! Failure(new Exception("Wallet not initialized"))
+      }
+
     case UnlockWallet(encPass) =>
       secretStorageOpt match {
         case Some(secretStorage) =>
@@ -752,6 +761,8 @@ object ErgoWalletActor {
     * @param id
     */
   final case class GetTransaction(id: ModifierId)
+
+  final case class CheckSeed(mnemonic: String, passOpt: Option[String])
 
   /**
     * Get all wallet-related transaction

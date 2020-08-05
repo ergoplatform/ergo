@@ -2535,6 +2535,7 @@ paths:
                   - isInitialized
                   - isUnlocked
                   - changeAddress
+                  - walletHeight
                 properties:
                   isInitialized:
                     type: boolean
@@ -2548,6 +2549,9 @@ paths:
                                  By default change address correponds to root key address, could be set via
                                  /wallet/updateChangeAddress method.
                     example: '3WzCFq7mkykKqi4Ykdk8BK814tkh6EsPmA42pQZxU2NRwSDgd6yB'
+                  walletHeight:
+                    type: integer
+                    description: last scanned height for the wallet (and external scans)
         default:
           description: Error
           content:

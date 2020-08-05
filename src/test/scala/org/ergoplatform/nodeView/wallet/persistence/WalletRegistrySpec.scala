@@ -21,6 +21,8 @@ class WalletRegistrySpec
     with WalletGenerators
     with FileUtils {
 
+  implicit override val generatorDrivenConfig = PropertyCheckConfiguration(minSuccessful = 5, sizeRange = 10)
+
   private val emptyBag = KeyValuePairsBag.empty
   private val walletBoxStatus = Set(PaymentsScanId)
 
@@ -46,14 +48,12 @@ class WalletRegistrySpec
   }
 
   it should "read spent wallet boxes" in {
-    forAll(trackedBoxGen) { box =>
-      forAll(modifierIdGen) { txId =>
-        withHybridStore(10) { store =>
-          val uncertainBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = walletBoxStatus)
-          WalletRegistry.putBox(emptyBag, uncertainBox).transact(store)
-          val registry = new WalletRegistry(store)(settings.walletSettings)
-          registry.walletSpentBoxes() shouldBe Seq(uncertainBox)
-        }
+    forAll(trackedBoxGen, modifierIdGen) { case (box, txId) =>
+      withHybridStore(10) { store =>
+        val uncertainBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = walletBoxStatus)
+        WalletRegistry.putBox(emptyBag, uncertainBox).transact(store)
+        val registry = new WalletRegistry(store)(settings.walletSettings)
+        registry.walletSpentBoxes() shouldBe Seq(uncertainBox)
       }
     }
   }

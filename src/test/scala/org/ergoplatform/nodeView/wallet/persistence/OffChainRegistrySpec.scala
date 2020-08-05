@@ -16,9 +16,11 @@ class OffChainRegistrySpec
     with WalletGenerators
     with WalletTestOps {
 
+  implicit override val generatorDrivenConfig = PropertyCheckConfiguration(minSuccessful = 5, sizeRange = 10)
+
   //registry.updateOnTransaction is called when offchain transaction comes
   it should "calculate indexes correctly on offchain transaction" in {
-    forAll(Gen.listOf(trackedBoxGen)) { boxes =>
+  forAll(Gen.listOf(trackedBoxGen)) { boxes =>
       //apply transaction outputs to empty offchain registry
       var registry = OffChainRegistry.empty.updateOnTransaction(boxes, Seq.empty)
       val balance = balanceAmount(boxes.map(_.box))

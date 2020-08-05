@@ -61,8 +61,6 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     val settingsPks = settings.chainSettings.foundersPubkeys
       .map(str => groupElemFromBytes(Base16.decode(str).get))
       .map(pk => ProveDlog(pk))
-    println("spks: " + settingsPks)
-    println("hdpks: " + defaultProver.hdPubKeys)
     settingsPks.count(defaultProver.hdPubKeys.map(_.key).contains) shouldBe 2
 
     forAll(defaultHeaderGen) { header =>

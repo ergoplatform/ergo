@@ -28,6 +28,12 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
 
   override def secret: Option[ExtendedSecretKey] = unlockedSecret
 
+  override def checkSeed(mnemonic: String, mnemonicPassOpt: Option[String]): Boolean = {
+    val seed = Mnemonic.toSeed(mnemonic, mnemonicPassOpt)
+    val secret = ExtendedSecretKey.deriveMasterKey(seed)
+    unlockedSecret.fold(false)(s => secret.equals(s))
+  }
+
   /**
     * Makes secrets with `secretsIndices` available through `secrets` call.
     * @param pass - password to be used to decrypt secret

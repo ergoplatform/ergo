@@ -49,6 +49,8 @@ trait ErgoWalletReader extends VaultReader {
   def getWalletStatus: Future[WalletStatus] =
     (walletActor ? GetWalletStatus).mapTo[WalletStatus]
 
+  def checkSeed(mnemonic: String, mnemonicPassOpt: Option[String] = None): Future[Boolean] = (walletActor ? CheckSeed(mnemonic, mnemonicPassOpt)).mapTo[Boolean]
+
   def deriveKey(path: String): Future[Try[P2PKAddress]] =
     (walletActor ? DeriveKey(path)).mapTo[Try[P2PKAddress]]
 

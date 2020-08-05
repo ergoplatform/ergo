@@ -8,12 +8,11 @@ import scorex.utils.Random
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.{ProverResult, ContextExtension}
 import sigmastate.eval._
-import sigmastate.eval.Extensions._
+import org.ergoplatform.settings.LaunchParameters._
+import org.ergoplatform.settings.Constants._
+
 
 object FeeSimulator extends App {
-
-  import org.ergoplatform.settings.LaunchParameters._
-  import org.ergoplatform.settings.Constants._
 
   //Block size is 500Kb
   private val BlockSize = 500 * 1024
@@ -45,7 +44,7 @@ object FeeSimulator extends App {
   println(s"Min dust value of standard-size box: $minStdDust")
 
   println("=====================")
-  println(s"Assume that Ergo state have the same number of outputs($bitcoinUtxos), as Bitcoin.")
+  println(s"Assume that Ergo state has the same number of outputs($bitcoinUtxos), as Bitcoin.")
 
   def bitcoinUtxos = 60000000
 

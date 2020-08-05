@@ -3,6 +3,8 @@ import sbt._
 
 import scala.util.Try
 
+logLevel := Level.Debug
+
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
@@ -54,7 +56,7 @@ libraryDependencies ++= Seq(
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
-  "org.scalacheck" %% "scalacheck" % "1.14.0" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.13.5" % "test",
 
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",

@@ -2,12 +2,12 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
-import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, Scan, ScanSerializer}
+import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest, ScanSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.hash.Blake2b256
-import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
+import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.db.{LDBFactory, LDBKVStore}
 
 import scala.util.{Success, Try}

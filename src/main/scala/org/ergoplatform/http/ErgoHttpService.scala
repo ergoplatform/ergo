@@ -18,7 +18,8 @@ final case class ErgoHttpService(
         apiSpecR ~
         swaggerRoute.route ~
         panelRoute.route ~
-        redirectToSwaggerR
+        redirectToSwaggerR ~
+        redirectToPanelR
     }
 
   private def apiR: Route =
@@ -29,8 +30,11 @@ final case class ErgoHttpService(
       getFromResource("api/openapi.yaml")
     }
 
+  private def redirectToPanelR: Route = path("/panel/" | "/panel/*") {
+    redirect("/panel", StatusCodes.PermanentRedirect)
+  }
+
   private def redirectToSwaggerR: Route = path("" | "/") {
     redirect("/swagger", StatusCodes.PermanentRedirect)
   }
-
 }

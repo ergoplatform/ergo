@@ -202,7 +202,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         Json.obj(
           "isInitialized" -> walletStatus.initialized.asJson,
           "isUnlocked" -> walletStatus.unlocked.asJson,
-          "changeAddress" -> walletStatus.changeAddress.map(_.toString()).getOrElse("").asJson
+          "changeAddress" -> walletStatus.changeAddress.map(_.toString()).getOrElse("").asJson,
+          "walletHeight" -> walletStatus.height.asJson
         )
       )
     }

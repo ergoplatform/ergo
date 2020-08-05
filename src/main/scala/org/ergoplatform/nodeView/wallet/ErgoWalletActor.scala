@@ -68,7 +68,7 @@ class ErgoWalletActor(settings: ErgoSettings,
   private def stateContext: ErgoStateContext = storage.readStateContext
 
   /**
-    * Height of full-blocks chain as reported by the state
+    * Height of the chain as reported by the state
     * (i.e. height of a last block applied to the state, not the wallet)
     * Wallet's height may be behind it.
     */
@@ -150,7 +150,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         log.warn(s"Wallet: skipped blocks found starting from $expectedHeight, going back to scan them")
         self ! ScanInThePast(expectedHeight)
       } else {
-        log.warn(s"Wallet: $expectedHeight > block.height for a block at ${block.height}, blockId: ${block.id}")
+        log.warn(s"Wallet: block in the past reported at ${block.height}, blockId: ${block.id}")
       }
 
     case Rollback(version: VersionTag) =>

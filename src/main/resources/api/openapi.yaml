@@ -2429,7 +2429,7 @@ paths:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Check seed phrase
+      summary: Check whether mnemonic phrase is corresponding to the wallet seed
       operationId: checkSeed
       tags:
         - wallet
@@ -2444,7 +2444,7 @@ paths:
               properties:
                 mnemonic:
                   type: string
-                  description: Mnemonic seed
+                  description: Mnemonic seed (optional)
                 mnemonicPass:
                   type: string
                   description: Optional pass to password-protect mnemonic seed

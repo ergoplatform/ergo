@@ -41,4 +41,5 @@ object EmissionApiRoute {
     "totalCoinsIssued" -> Json.fromLong(ei.totalCoinsIssued),
     "totalRemainCoins" -> Json.fromLong(ei.totalRemainCoins)
   )
+
 }

@@ -41,6 +41,7 @@ final class ExtendedPublicKey(val keyBytes: Array[Byte],
   }
 
   override def toString: String = s"ExtendedPublicKey($path : $key)"
+
 }
 
 object ExtendedPublicKey {
@@ -52,10 +53,11 @@ object ExtendedPublicKey {
       .splitAt(Constants.SecretKeyLength)
     val childKeyProtoDecoded = BigIntegers.fromUnsignedByteArray(childKeyProto)
     val childKey = DLogProverInput(childKeyProtoDecoded).publicImage.value.add(parentKey.key.value)
-    if (childKeyProtoDecoded.compareTo(CryptoConstants.groupOrder) >= 0 || childKey.isInfinity)
+    if (childKeyProtoDecoded.compareTo(CryptoConstants.groupOrder) >= 0 || childKey.isInfinity) {
       deriveChildPublicKey(parentKey, idx + 1)
-    else
+    } else {
       new ExtendedPublicKey(childKey.getEncoded(true), childChainCode, parentKey.path.extended(idx))
+    }
   }
 
 }

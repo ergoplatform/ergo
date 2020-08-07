@@ -136,7 +136,7 @@ object WalletScanLogic extends ScorexLogging {
 
       val boxScript = bx.propositionBytes
 
-      val statuses: Set[ScanId] = if (walletVars.filter.lookup(boxScript)) {
+      val statuses: Set[ScanId] = if (walletVars.filter.mightContain(boxScript)) {
 
         val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
 

@@ -6,10 +6,11 @@ import org.ergoplatform._
 import org.ergoplatform.utils.ArithUtils.{addExact, multiplyExact}
 import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext, TransactionContext}
-import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, SecretKey}
-import sigmastate.basics.DLogProtocol.ProveDlog
+import org.ergoplatform.wallet.secrets.SecretKey
 import sigmastate.basics.SigmaProtocolPrivateInput
-import sigmastate.eval.{CompiletimeIRContext, IRContext}
+import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
+import scorex.util.encode.Base16
+import sigmastate.eval.{RuntimeIRContext, IRContext}
 import sigmastate.interpreter.ProverInterpreter
 import sigmastate.utxo.CostTable
 
@@ -17,12 +18,27 @@ import scala.util.{Failure, Success, Try}
 
 /**
   * A class which is holding secrets and signing transactions.
-  * Signing a transaction means spending proofs generation for all of its input boxes.
+  * Signing a transaction means producing spending proofs for all of the input boxes of the transaction.
+  *
+  * This interpreter also acts as a wallet, in the sense that it is a vault holding user's secrets.
+  *
+  * There are two basic types of secrets, hierarchical deterministic keys corresponding to BIP-32
+  * implementation, and also "primitive" keys, such as just secret exponent for a Schnorr signature
+  * scheme done in Ergo.
+  *
+  * It is considered that there could be very many hierarchical deterministic keys (for example, if
+  * we are talking about an exchange there could be thousands of them), and not so many primitive keys.
+  * Optimizations are centered around this assumption.
+  *
   *
   * @param secretKeys - secrets used by the prover
   * @param params     - ergo network parameters at the moment of proving
+  * @param cachedHdPubKeysOpt - optionally, public keys corresponding to the BIP32-related secrets
+  *                           (to not to recompute them)
   */
-class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: ErgoLikeParameters)
+class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
+                             params: ErgoLikeParameters,
+                             val cachedHdPubKeysOpt: Option[IndexedSeq[ExtendedPublicKey]] = None)
                             (implicit IR: IRContext)
   extends ErgoInterpreter(params) with ProverInterpreter {
 
@@ -39,7 +55,39 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: Ergo
   /**
     * Only public keys corresponding to hierarchical deterministic scheme (BIP-32 impl)
     */
-  val hdPubKeys: IndexedSeq[ProveDlog] = hdKeys.map(_.publicImage)
+  val hdPubKeys: IndexedSeq[ExtendedPublicKey] = cachedHdPubKeysOpt match {
+    case Some(cachedPubKeys) =>
+      if (cachedPubKeys.length != hdKeys.length) {
+        log.error(
+          s"ErgoProverInterpreter: pubkeys and secrets of different sizes: ${cachedPubKeys.length} and ${secrets.length}"
+        )
+      }
+      cachedPubKeys
+    case None =>
+      hdKeys.map(_.publicKey) // costly operation if there are many secret keys
+  }
+
+  /**
+    * Produces updated instance of ErgoProvingInterpreter with a new secret included
+    * @param secret - new secret to add
+    * @return modified prover
+    */
+  def withNewExtendedSecret(secret: ExtendedSecretKey): (ErgoProvingInterpreter, ExtendedPublicKey) = {
+    val newPk = secret.publicKey
+    val sks   = secretKeys :+ secret
+    val pks   = hdPubKeys :+ newPk
+    log.info(s"New secret created, public image: ${Base16.encode(newPk.key.pkBytes)}")
+    new ErgoProvingInterpreter(sks, params, Some(pks)) -> newPk
+  }
+
+  /**
+    * Produces updated instance of ErgoProvingInterpreter with updated parameters
+    * @param newParams - updated parameters
+    * @return modified prover
+    */
+  def withNewParameters(newParams: ErgoLikeParameters): ErgoProvingInterpreter = {
+    new ErgoProvingInterpreter(secretKeys, newParams, cachedHdPubKeysOpt)
+  }
 
   /**
     * @note requires `unsignedTx` and `boxesToSpend` have the same boxIds in the same order.
@@ -108,9 +156,9 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey], params: Ergo
 object ErgoProvingInterpreter {
 
   def apply(secrets: IndexedSeq[SecretKey], params: ErgoLikeParameters): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(secrets, params)(new CompiletimeIRContext)
+    new ErgoProvingInterpreter(secrets, params)(new RuntimeIRContext)
 
   def apply(rootSecret: ExtendedSecretKey, params: ErgoLikeParameters): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(IndexedSeq(rootSecret), params)(new CompiletimeIRContext)
+    new ErgoProvingInterpreter(IndexedSeq(rootSecret), params)(new RuntimeIRContext)
 
 }

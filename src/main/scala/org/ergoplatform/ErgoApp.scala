@@ -7,8 +7,8 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler}
 import akka.stream.ActorMaterializer
 import org.ergoplatform.http._
-import org.ergoplatform.http.api._
 import org.ergoplatform.mining.ErgoMiner.StartMining
+import org.ergoplatform.http.api.{ScanApiRoute, _}
 import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMinerRef
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
@@ -131,8 +131,10 @@ class ErgoApp(args: Args) extends ScorexLogging {
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
     UtxoApiRoute(readersHolderRef, settings.restApi),
-    ScriptApiRoute(readersHolderRef, ergoSettings)
+    ScriptApiRoute(readersHolderRef, ergoSettings),
+    ScanApiRoute(readersHolderRef, ergoSettings)
   ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
+
 
   private val swaggerRoute = SwaggerRoute(settings.restApi, swaggerConfig)
   private val panelRoute = NodePanelRoute()

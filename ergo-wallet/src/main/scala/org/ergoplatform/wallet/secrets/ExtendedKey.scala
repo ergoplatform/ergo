@@ -1,6 +1,6 @@
 package org.ergoplatform.wallet.secrets
 
-/** Description from https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki
+/** Description from https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki :
   *
   * We extend both private and public keys first with an extra 256 bits of entropy.
   * This extension, called the chain code, is identical for corresponding private and public keys

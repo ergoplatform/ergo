@@ -7,9 +7,10 @@ import org.iq80.leveldb.{DB, ReadOptions}
 import scala.collection.mutable
 
 /**
-  * Basic interface for key-value storage. Both keys and values are var-sized byte arrays.
+  * Basic interface for reading from LevelDB key-value storage.
+  * Both keys and values are var-sized byte arrays.
   */
-trait KVStore extends AutoCloseable {
+trait KVStoreReader extends AutoCloseable {
 
   type K = Array[Byte]
   type V = Array[Byte]
@@ -86,6 +87,39 @@ trait KVStore extends AutoCloseable {
       ret += key -> get(key)
     }
     ret
+  }
+
+  /**
+    * Get keys in range
+    * @param start - beginning of the range (inclusive)
+    * @param end - end of the range (inclusive)
+    * @return
+    */
+  def getRange(start: K, end: K): Seq[(K, V)] = {
+    val ro = new ReadOptions()
+    ro.snapshot(db.getSnapshot)
+    val iter = db.iterator(ro)
+    try {
+      def check(key:Array[Byte]) = {
+        if (ByteArrayUtils.compare(key, end) <= 0) {
+          true
+        } else {
+          false
+        }
+      }
+      iter.seek(start)
+      val bf = mutable.ArrayBuffer.empty[(K, V)]
+      while (iter.hasNext && check(iter.peekNext.getKey)) {
+        val next = iter.next()
+        val key = next.getKey
+        val value = next.getValue
+        bf += (key -> value)
+      }
+      bf.toArray[(K,V)]
+    } finally {
+      iter.close()
+      ro.snapshot().close()
+    }
   }
 
   /**

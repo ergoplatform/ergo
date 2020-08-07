@@ -1,10 +1,14 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 
+import scala.collection.mutable
+
 /**
-  * Holds version-agnostic indexes (such as off-chain boxes) in runtime memory.
+  * Holds version-agnostic off-chain data (such as off-chain boxes) in runtime memory.
+  * Needed to obtain wallet state in regards with unconfirmed transactions with no reprocessing them on each request.
   *
   * @param height           - latest processed block height
   * @param offChainBoxes    - boxes from off-chain transactions
@@ -19,23 +23,22 @@ case class OffChainRegistry(height: Int,
   /**
     * Off-chain index considering on-chain balances.
     */
-  val readIndex: RegistryIndex = {
+  val digest: WalletDigest = {
     val offChainBalances = offChainBoxes.map(Balance.apply)
     val balance = offChainBalances.map(_.value).sum + onChainBalances.map(_.value).sum
     val tokensBalance = (offChainBalances ++ onChainBalances)
       .flatMap(_.assets)
-      .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
-        acc.updated(id, acc.getOrElse(id, 0L) + amt)
+      .foldLeft(mutable.LinkedHashMap.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
+        acc += id -> (acc.getOrElse(id, 0L) + amt)
       }
-    RegistryIndex(height, balance, tokensBalance, Seq.empty)
+    WalletDigest(height, balance, tokensBalance)
   }
 
   /**
     * Update on receiving new off-chain transaction.
     */
-  def updated(createdBoxes: Seq[TrackedBox],
-              spentIds: Seq[EncodedBoxId]): OffChainRegistry = {
-    val unspentCertain = offChainBoxes.filterNot(x => spentIds.contains(x.boxId)) ++ createdBoxes
+  def updateOnTransaction(certainBoxes: Seq[TrackedBox], spentIds: Seq[EncodedBoxId]): OffChainRegistry = {
+    val unspentCertain = offChainBoxes.filterNot(x => spentIds.contains(x.boxId)) ++ certainBoxes
     val onChainBalancesUpdated = onChainBalances.filterNot(x => spentIds.contains(x.id))
     this.copy(
       offChainBoxes = unspentCertain.distinct,
@@ -47,8 +50,7 @@ case class OffChainRegistry(height: Int,
     * Update balances snapshot according to a new block applied
     *
     * @param newHeight       - processed block height
-    * @param allCertainBoxes - all certain boxes extracted from block
-    *                        (required to update on-chain snapshot)
+    * @param allCertainBoxes -  all the unspent boxes to the moment
     * @param onChainIds      - ids of all boxes which became on-chain in result of a current block application
     */
   def updateOnBlock(newHeight: Int,
@@ -71,9 +73,8 @@ object OffChainRegistry {
     OffChainRegistry(ErgoHistory.EmptyHistoryHeight, Seq.empty, Seq.empty)
 
   def init(walletRegistry: WalletRegistry):OffChainRegistry = {
-    val idx = walletRegistry.readIndex
-    val unspent = walletRegistry.readCertainUnspentBoxes
-    val h = idx.height
+    val unspent = walletRegistry.unspentBoxes(PaymentsScanId)
+    val h = walletRegistry.fetchDigest().height
     OffChainRegistry(h, Seq.empty, unspent.map(Balance.apply))
   }
 

@@ -123,9 +123,18 @@ class WalletApiRouteSpec extends FlatSpec
       route ~> check(status shouldBe StatusCodes.OK)
   }
 
+
   it should "unlock wallet" in {
     Post(prefix + "/unlock", Json.obj("pass" -> "1234".asJson)) ~> route ~> check {
       status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "check wallet" in {
+    Post(prefix + "/check", Json.obj("mnemonic" -> WalletActorStub.mnemonic.asJson)) ~>
+      route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("matched").as[Boolean] shouldBe Right(true)
     }
   }
 
@@ -171,7 +180,9 @@ class WalletApiRouteSpec extends FlatSpec
   it should "return unspent wallet boxes" in {
     val minConfirmations = 15
     val minInclusionHeight = 20
+
     val postfix = s"/boxes/unspent?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
+
     Get(prefix + postfix) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
@@ -179,6 +190,7 @@ class WalletApiRouteSpec extends FlatSpec
       response.head.hcursor.downField("confirmationsNum").as[Int].forall(_ >= minConfirmations) shouldBe true
       response.head.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
     }
+
     Get(prefix + "/boxes/unspent") ~> route ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]

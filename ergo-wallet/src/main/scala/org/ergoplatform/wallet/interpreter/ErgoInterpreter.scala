@@ -24,7 +24,7 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
   override type CTX = ErgoLikeContext
 
   /**
-    * Check that expired box is spent in a proper way
+    * Checks that expired box is spent in a proper way
     *
     * @param box           - box being spent
     * @param output        - newly created box when storage fee covered, otherwise any output box
@@ -32,15 +32,17 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
     * @return whether the box is spent properly according to the storage fee rule
     */
   protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate, currentHeight: Height): Boolean = {
-    val maxStorageFee = params.storageFeeFactor * box.bytes.length
+    val storageFee = params.storageFeeFactor * box.bytes.length
 
-    val storageFeeCovered = box.value - maxStorageFee <= 0
+    val storageFeeNotCovered = box.value - storageFee <= 0
     val correctCreationHeight = output.creationHeight == currentHeight
-    val correctOutValue = output.value >= box.value - maxStorageFee
+    val correctOutValue = output.value >= box.value - storageFee
+
+    // all the registers except of R0 (monetary value) and R3 (creation height and reference) must be preserved
     val correctRegisters = ErgoBox.allRegisters.tail
       .forall(rId => rId == ErgoBox.ReferenceRegId || box.get(rId) == output.get(rId))
 
-    storageFeeCovered || (correctCreationHeight && correctOutValue && correctRegisters)
+    storageFeeNotCovered || (correctCreationHeight && correctOutValue && correctRegisters)
   }
 
   /**
@@ -60,7 +62,9 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
 
     val varId = Constants.StorageIndexVarId
     val hasEnoughTimeToBeSpent = context.preHeader.height - context.self.creationHeight >= Constants.StoragePeriod
-    //no proof provided and enough time since box creation to spend it
+    // No spending proof provided and enough time since box creation to spend it
+    // In this case anyone can spend the expired box by providing in context extension variable #127 (stored in input)
+    //    an index of a recreated box (or index of any box if the value in the expired box isn't enough to pay for the storage fee)
     if (hasEnoughTimeToBeSpent && proof.length == 0 && context.extension.values.contains(varId)) {
       Try {
         val idx = context.extension.values(varId).value.asInstanceOf[Short]

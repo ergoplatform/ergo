@@ -2,13 +2,13 @@ package org.ergoplatform.wallet.crypto
 
 import org.ergoplatform.wallet.crypto
 import org.ergoplatform.wallet.utils.Generators
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
-import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 class EncryptionSpec
   extends PropSpec
     with Matchers
-    with ScalaCheckDrivenPropertyChecks
+    with GeneratorDrivenPropertyChecks
     with Generators {
 
   property("AES encryption/decryption") {

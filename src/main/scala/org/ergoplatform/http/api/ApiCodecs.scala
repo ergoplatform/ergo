@@ -7,12 +7,16 @@ import io.circe.syntax._
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.{ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
+import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
-import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
-import org.ergoplatform.settings.{Algos, ErgoAlgos}
+import org.ergoplatform.settings.ErgoAlgos
+import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
+import org.ergoplatform.settings.Algos
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import scorex.core.validation.ValidationResult
@@ -20,6 +24,7 @@ import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
 import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
+
 
 trait ApiCodecs extends JsonCodecs {
 
@@ -49,26 +54,49 @@ trait ApiCodecs extends JsonCodecs {
 
   implicit val encodedTokenIdEncoder: Encoder[EncodedTokenId] = _.asJson
 
-  implicit val balancesSnapshotEncoder: Encoder[RegistryIndex] = { v =>
+  implicit val balancesSnapshotEncoder: Encoder[WalletDigest] = { v =>
     import v._
     Json.obj(
       "height" -> height.asJson,
-      "balance" -> balance.asJson,
-      "assets" -> assetBalances.map(x => (x._1: String, x._2)).asJson
+      "balance" -> walletBalance.asJson,
+      "assets" -> walletAssetBalances.map(x => (x._1: String, x._2)).asJson
     )
+  }
+
+  // this val is named "anyRegisterIdEncoder" because parent trait already contains
+  // "registerIdEncoder" which is actually a KeyEncoder for NonMandatoryRegisterId
+  // todo: rename "registerIdEncoder" into "nonMandatoryRegisterId" in parent trait in sigma repo
+  implicit val anyRegisterIdEncoder: Encoder[RegisterId] = { regId =>
+    s"R${regId.number}".asJson
+  }
+
+  // todo: see comment for "RegisterIdEncoder" above
+  implicit val anyRegisterIdDecoder: Decoder[RegisterId] = { implicit cursor =>
+    for {
+      regId <- cursor.as[String]
+      reg <- fromOption(ErgoBox.registerByName.get(regId))
+    } yield reg
+  }
+
+  implicit val scanIdEncoder: Encoder[ScanId] = { scanId =>
+    scanId.toShort.asJson
+  }
+
+  implicit val scanIdDecoder: Decoder[ScanId] = { c: HCursor =>
+    ScanId @@ c.as[Short]
   }
 
   implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = { box =>
     val plainFields = Map(
       "spent" -> box.spendingStatus.spent.asJson,
       "onchain" -> box.chainStatus.onChain.asJson,
-      "certain" -> box.certainty.certain.asJson,
       "creationOutIndex" -> box.creationOutIndex.asJson,
       "inclusionHeight" -> box.inclusionHeightOpt.asJson,
       "spendingHeight" -> box.spendingHeightOpt.asJson,
-      "applicationId" -> box.applicationId.asJson,
+      "scans" -> box.scans.asJson,
       "box" -> box.box.asJson
     )
+
     val fieldsWithTx = if (opts.showDetails) {
       plainFields +
         ("creationTransaction" -> box.creationTxId.asJson) +

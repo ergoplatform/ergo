@@ -46,6 +46,8 @@ trait ErgoWalletReader extends VaultReader {
 
   def lockWallet(): Unit = walletActor ! LockWallet
 
+  def rescanWallet(): Unit = walletActor ! RescanWallet
+
   def getWalletStatus: Future[WalletStatus] =
     (walletActor ? GetWalletStatus).mapTo[WalletStatus]
 

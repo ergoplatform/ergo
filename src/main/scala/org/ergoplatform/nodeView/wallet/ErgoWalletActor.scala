@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.wallet.persistence._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.utils.{BoxUtils, FileUtils}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
@@ -51,7 +51,7 @@ class ErgoWalletActor(settings: ErgoSettings,
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
   private var secretStorageOpt: Option[JsonSecretStorage] = None
-  private val storage: WalletStorage = WalletStorage.readOrCreate(settings)
+  private var storage: WalletStorage = WalletStorage.readOrCreate(settings)
   private var registry: WalletRegistry = WalletRegistry.apply(settings)
   private var offChainRegistry: OffChainRegistry = OffChainRegistry.init(registry)
 
@@ -321,6 +321,10 @@ class ErgoWalletActor(settings: ErgoSettings,
     case LockWallet =>
       walletVars = walletVars.resetProver()
       secretStorageOpt.foreach(_.lock())
+
+    case RescanWallet =>
+      storage.close()
+      storage = WalletStorage.create(settings)
 
     case GetWalletStatus =>
       val status = WalletStatus(secretIsSet, walletVars.proverOpt.isDefined, changeAddress, walletHeight())
@@ -832,6 +836,11 @@ object ErgoWalletActor {
     * Lock wallet
     */
   case object LockWallet
+
+  /**
+    * Rescan wallet
+    */
+  case object RescanWallet
 
   /**
     * Get wallet status

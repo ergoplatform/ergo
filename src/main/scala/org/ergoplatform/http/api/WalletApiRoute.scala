@@ -55,7 +55,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         deriveNextKeyR ~
         updateChangeAddressR ~
         signTransactionR ~
-        checkSeedR
+        checkSeedR ~
+        rescanWalletR
     }
   }
 
@@ -336,6 +337,13 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   def updateChangeAddressR: Route = (path("updateChangeAddress") & post & p2pkAddress) { p2pk =>
     withWallet { w =>
       w.updateChangeAddress(p2pk)
+      Future.successful(())
+    }
+  }
+
+  def rescanWalletR: Route = (path("rescan") & get) {
+    withWallet { w =>
+      w.rescanWallet()
       Future.successful(())
     }
   }

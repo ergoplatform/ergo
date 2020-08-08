@@ -1,9 +1,12 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
+import java.io.File
+
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest, ScanSerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.utils.FileUtils
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.hash.Blake2b256
@@ -26,6 +29,10 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
                          (implicit val addressEncoder: ErgoAddressEncoder) {
 
   import WalletStorage._
+
+  def close(): Unit = {
+    store.close()
+  }
 
   //todo: used now only for importing pre-3.3.0 wallet database, remove after while
   def readPaths(): Seq[DerivationPath] = store
@@ -191,4 +198,11 @@ object WalletStorage {
     new WalletStorage(LDBFactory.createKvDb(s"${settings.directory}/wallet/storage"), settings)
   }
 
+  def create(settings: ErgoSettings)
+                  (implicit addressEncoder: ErgoAddressEncoder): WalletStorage = {
+    val path = s"${settings.directory}/wallet/storage"
+    val dir = new File(path)
+    FileUtils.deleteRecursive(dir)
+    new WalletStorage(LDBFactory.createKvDb(path), settings)
+  }
 }

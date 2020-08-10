@@ -5,9 +5,6 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
-import scorex.core.validation.ModifierValidator
-import scorex.core.utils.ScorexEncoding
-import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId}
 
 case class PoPoWProof(m: Byte,

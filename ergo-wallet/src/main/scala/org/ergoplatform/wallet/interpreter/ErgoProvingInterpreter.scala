@@ -5,15 +5,20 @@ import java.util
 
 import org.ergoplatform._
 import org.ergoplatform.utils.ArithUtils.{addExact, multiplyExact}
-import org.ergoplatform.validation.{SigmaValidationSettings, ValidationRules}
-import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
-import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, SecretKey}
+import org.ergoplatform.validation.SigmaValidationSettings
 import sigmastate.AvlTreeData
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.{DLogInteractiveProver, ProveDlog}
-import sigmastate.basics.{DiffieHellmanTupleInteractiveProver, FirstProverMessage, ProveDHTuple, SigmaProtocolPrivateInput}
-import sigmastate.eval.{IRContext, RuntimeIRContext}
-import sigmastate.interpreter.{ContextExtension, HintsBag, ProverInterpreter}
+import sigmastate.basics.{DiffieHellmanTupleInteractiveProver, FirstProverMessage, ProveDHTuple}
+import sigmastate.interpreter.{ContextExtension, HintsBag}
+import org.ergoplatform.validation.ValidationRules
+import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
+import org.ergoplatform.wallet.secrets.SecretKey
+import sigmastate.basics.SigmaProtocolPrivateInput
+import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
+import scorex.util.encode.Base16
+import sigmastate.eval.{RuntimeIRContext, IRContext}
+import sigmastate.interpreter.ProverInterpreter
 import sigmastate.utxo.CostTable
 import special.collection.Coll
 import special.sigma.{Header, PreHeader}
@@ -22,15 +27,29 @@ import scala.util.{Failure, Success, Try}
 
 /**
   * A class which is holding secrets and signing transactions.
-  * Signing a transaction means spending proofs generation for all of its input boxes.
+  * Signing a transaction means producing spending proofs for all of the input boxes of the transaction.
+  *
+  * This interpreter also acts as a wallet, in the sense that it is a vault holding user's secrets.
+  *
+  * There are two basic types of secrets, hierarchical deterministic keys corresponding to BIP-32
+  * implementation, and also "primitive" keys, such as just secret exponent for a Schnorr signature
+  * scheme done in Ergo.
+  *
+  * It is considered that there could be very many hierarchical deterministic keys (for example, if
+  * we are talking about an exchange there could be thousands of them), and not so many primitive keys.
+  * Optimizations are centered around this assumption.
+  *
   *
   * @param secretKeys - secrets used by the prover
   * @param params     - ergo network parameters at the moment of proving
   * @param hintsBag   - hints provided to the prover
+  * @param cachedHdPubKeysOpt - optionally, public keys corresponding to the BIP32-related secrets
+  *                           (to not to recompute them)
   */
 class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
                              params: ErgoLikeParameters,
-                             hintsBag: HintsBag = HintsBag.empty)
+                             hintsBag: HintsBag = HintsBag.empty,
+                             val cachedHdPubKeysOpt: Option[IndexedSeq[ExtendedPublicKey]] = None)
                             (implicit IR: IRContext)
   extends ErgoInterpreter(params) with ProverInterpreter {
 
@@ -38,8 +57,6 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     * Interpreter's secrets, in form of sigma protocols private inputs
     */
   val secrets: IndexedSeq[SigmaProtocolPrivateInput[_, _]] = secretKeys.map(_.privateInput)
-
-  private val pubKeys = secrets.map(_.publicImage.asInstanceOf[SigmaBoolean])
 
   /**
     * Only secrets corresponding to hierarchical deterministic scheme (BIP-32 impl)
@@ -49,7 +66,39 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   /**
     * Only public keys corresponding to hierarchical deterministic scheme (BIP-32 impl)
     */
-  val hdPubKeys: IndexedSeq[ProveDlog] = hdKeys.map(_.publicImage)
+  val hdPubKeys: IndexedSeq[ExtendedPublicKey] = cachedHdPubKeysOpt match {
+    case Some(cachedPubKeys) =>
+      if (cachedPubKeys.length != hdKeys.length) {
+        log.error(
+          s"ErgoProverInterpreter: pubkeys and secrets of different sizes: ${cachedPubKeys.length} and ${secrets.length}"
+        )
+      }
+      cachedPubKeys
+    case None =>
+      hdKeys.map(_.publicKey) // costly operation if there are many secret keys
+  }
+
+  /**
+    * Produces updated instance of ErgoProvingInterpreter with a new secret included
+    * @param secret - new secret to add
+    * @return modified prover
+    */
+  def withNewExtendedSecret(secret: ExtendedSecretKey): (ErgoProvingInterpreter, ExtendedPublicKey) = {
+    val newPk = secret.publicKey
+    val sks   = secretKeys :+ secret
+    val pks   = hdPubKeys :+ newPk
+    log.info(s"New secret created, public image: ${Base16.encode(newPk.key.pkBytes)}")
+    new ErgoProvingInterpreter(sks, params, this.hintsBag, Some(pks)) -> newPk
+  }
+
+  /**
+    * Produces updated instance of ErgoProvingInterpreter with updated parameters
+    * @param newParams - updated parameters
+    * @return modified prover
+    */
+  def withNewParameters(newParams: ErgoLikeParameters): ErgoProvingInterpreter = {
+    new ErgoProvingInterpreter(secretKeys, newParams, this.hintsBag, this.cachedHdPubKeysOpt)
+  }
 
   /**
     * Create new prover instance with additional hints added
@@ -58,16 +107,16 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     * @return updated prover
     */
   def addHints(additionalHints: HintsBag): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(secretKeys, params, hintsBag ++ additionalHints)
+    new ErgoProvingInterpreter(secretKeys, params, hintsBag ++ additionalHints, this.cachedHdPubKeysOpt)
 
   /**
     * Create new prover instance with hints provided
     *
-    * @param  hints - hints to add to the prover
+    * @param  hints - hints the prover will be created with
     * @return updated prover
     */
   def withHints(hints: HintsBag): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(secretKeys, params, hints)
+    new ErgoProvingInterpreter(secretKeys, params, hints, this.cachedHdPubKeysOpt)
 
   def signInputs(unsignedTx: UnsignedErgoLikeTransaction,
                  boxesToSpend: IndexedSeq[ErgoBox],
@@ -206,4 +255,5 @@ object ErgoProvingInterpreter {
         ???
     }
   }
+
 }

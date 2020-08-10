@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.secrets
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import scorex.util.serialization.{Reader, Writer}
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * HD key derivation path (see: https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)
@@ -22,16 +22,28 @@ final case class DerivationPath(decodedPath: Seq[Int], publicBranch: Boolean) {
   def encoded: String = {
     val masterPrefix = if (publicBranch) s"$PublicBranchMasterId/" else s"$PrivateBranchMasterId/"
     val tailPath = decodedPath.tail
-        .map(x => if (Index.isHardened(x)) s"${x - Index.HardRangeStart}'" else x.toString)
-        .mkString("/")
+      .map(x => if (Index.isHardened(x)) s"${x - Index.HardRangeStart}'" else x.toString)
+      .mkString("/")
     masterPrefix + tailPath
   }
 
   def extended(idx: Int): DerivationPath = DerivationPath(decodedPath :+ idx, publicBranch)
 
-  def toPublic: DerivationPath = this.copy(publicBranch = true)
+  /**
+    * Convert the derivation path to public branch. See BIP-32 for details.
+    * @return derivation path from the public branch
+    */
+  def toPublicBranch: DerivationPath = this.copy(publicBranch = true)
+
+  /**
+    * Convert the derivation path to private branch. See BIP-32 for details.
+    * @return derivation path from the private branch
+    */
+  def toPrivateBranch: DerivationPath = this.copy(publicBranch = false)
 
   override def toString: String = encoded
+
+  def bytes: Array[Byte] = DerivationPathSerializer.toBytes(this)
 }
 
 object DerivationPath {
@@ -54,6 +66,35 @@ object DerivationPath {
       }
       val isPublicBranch = split.head == PublicBranchMasterId
       pathTry.map(DerivationPath(_, isPublicBranch))
+    }
+  }
+
+  /**
+    * Finds next available path index for a new key.
+    */
+  def nextPath(secrets: IndexedSeq[ExtendedSecretKey]): Try[DerivationPath] = {
+
+    def pathSequence(secret: ExtendedSecretKey): Seq[Int] = secret.path.decodedPath.tail
+
+    @scala.annotation.tailrec
+    def nextPath(accPath: List[Int], remaining: Seq[Seq[Int]]): Try[DerivationPath] = {
+      if (!remaining.forall(_.isEmpty)) {
+        val maxChildIdx = remaining.flatMap(_.headOption).max
+        if (!Index.isHardened(maxChildIdx)) {
+          Success(DerivationPath(0 +: (accPath :+ maxChildIdx + 1), publicBranch = false))
+        } else {
+          nextPath(accPath :+ maxChildIdx, remaining.map(_.drop(1)))
+        }
+      } else {
+        val exc = new Exception("Out of non-hardened index space. Try to derive hardened key specifying path manually")
+        Failure(exc)
+      }
+    }
+
+    if (secrets.size == 1) {
+      Success(DerivationPath(Array(0, 1), publicBranch = false))
+    } else {
+      nextPath(List.empty, secrets.map(pathSequence))
     }
   }
 

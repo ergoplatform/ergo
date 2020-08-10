@@ -1,17 +1,16 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Longs
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
-import org.scalatestplus.scalacheck.{ScalaCheckDrivenPropertyChecks, ScalaCheckPropertyChecks}
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.hash.Blake2b256
 import scorex.db.LDBVersionedStore
 
 import scala.collection.mutable.ArrayBuffer
 
-class VersionedStorageSpecification extends PropSpec
-  with ScalaCheckPropertyChecks
-  with ScalaCheckDrivenPropertyChecks
+class LDBVersionedStoreSpecification extends PropSpec
+  with GeneratorDrivenPropertyChecks
   with Matchers
   with TestHelper {
 
@@ -38,6 +37,6 @@ class VersionedStorageSpecification extends PropSpec
     }
   }
 
-  property("LevelDB-based versioned storage") { storeTest(createVersionedStore()) }
+  property("LDBVersionedStore") { storeTest(createVersionedStore()) }
 
 }

@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
@@ -125,7 +126,7 @@ trait ErgoHistoryReader
   /**
     * @param info other's node sync info
     * @param size max return size
-    * @return Ids of headerss, that node with info should download and apply to synchronize
+    * @return Ids of headers, that node with info should download and apply to synchronize
     */
   override def continuationIds(info: ErgoSyncInfo, size: Int): ModifierIds =
     if (isEmpty) {
@@ -232,6 +233,29 @@ trait ErgoHistoryReader
         Some(ErgoFullBlock(header, txs, ext, None))
       case _ => None
     }
+  }
+
+  /**
+    * Returns full block from a best headers-chain at given height
+    * @param height - height to get the full block from
+    * @return - full block or None if there's no such a block at given height
+    */
+  def bestFullBlockAt(height: Height): Option[ErgoFullBlock] = {
+    bestHeaderIdAtHeight(height)
+      .flatMap(headerId => typedModifierById[Header](headerId))
+      .flatMap(header => getFullBlock(header))
+  }
+
+
+  /**
+    * Returns block transactions from a best headers-chain at given height
+    * @param height - height to get the block transactions from
+    * @return - block transactions or None if there's no such a block at given height
+    */
+  def bestBlockTransactionsAt(height: Height): Option[BlockTransactions] = {
+    bestHeaderIdAtHeight(height)
+      .flatMap(headerId => typedModifierById[Header](headerId))
+      .flatMap(header => typedModifierById[BlockTransactions](header.transactionsId))
   }
 
   /**

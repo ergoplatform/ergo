@@ -27,6 +27,8 @@ case class ErgoSettings(directory: String,
 
   val addressEncoder = ErgoAddressEncoder(chainSettings.addressPrefix)
 
+  val miningRewardDelay: Int = chainSettings.monetary.minerRewardDelay
+
   val miningPubKey: Option[ProveDlog] = nodeSettings.miningPubKeyHex
     .flatMap { str =>
       val keyBytes = Base16.decode(str)
@@ -165,4 +167,5 @@ object ErgoSettings extends ScorexLogging
     log.error(s"Stop application due to malformed configuration file: $msg")
     ErgoApp.forceStopApplication()
   }
+
 }

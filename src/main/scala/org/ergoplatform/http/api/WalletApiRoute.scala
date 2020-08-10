@@ -23,7 +23,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, ergoSettings: ErgoSettings)
-                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
+                         (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
 
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
   implicit val assetIssueRequestDecoder: AssetIssueRequestDecoder = new AssetIssueRequestDecoder(ergoSettings)
@@ -102,14 +102,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     "maxConfirmations".as[Int] ? Int.MaxValue
   )
 
-  private val boxParams: Directive[(Int, Int)] =
-    parameters("minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)
-
-  private val boxPredicate = { (bx: WalletBox, minConfNum: Int, minHeight: Int) =>
-    bx.confirmationsNumOpt.getOrElse(0) >= minConfNum &&
-      bx.trackedBox.inclusionHeightOpt.getOrElse(-1) >= minHeight
-  }
-
   private val p2pkAddress: Directive1[P2PKAddress] = entity(as[Json])
     .flatMap {
       _.hcursor.downField("address").as[String]
@@ -124,14 +116,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private def withFee(requests: Seq[TransactionGenerationRequest]): Seq[TransactionGenerationRequest] = {
     requests :+ PaymentRequest(Pay2SAddress(ergoSettings.chainSettings.monetary.feeProposition),
       ergoSettings.walletSettings.defaultTransactionFee, Seq.empty, Map.empty)
-  }
-
-  private def withWalletOp[T](op: ErgoWalletReader => Future[T])(toRoute: T => Route): Route = {
-    onSuccess((readersHolder ? GetReaders).mapTo[Readers].flatMap(r => op(r.w)))(toRoute)
-  }
-
-  private def withWallet[T: Encoder](op: ErgoWalletReader => Future[T]): Route = {
-    withWalletOp(op)(ApiResponse.apply[T])
   }
 
   private def generateTransactionAndProcess(requests: Seq[TransactionGenerationRequest],
@@ -238,11 +222,13 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def getWalletStatusR: Route = (path("status") & get) {
-    withWalletOp(_.getLockStatus) { case (isInit, isUnlocked) =>
+    withWalletOp(_.getWalletStatus) { walletStatus =>
       ApiResponse(
         Json.obj(
-          "isInitialized" -> isInit.asJson,
-          "isUnlocked" -> isUnlocked.asJson
+          "isInitialized" -> walletStatus.initialized.asJson,
+          "isUnlocked" -> walletStatus.unlocked.asJson,
+          "changeAddress" -> walletStatus.changeAddress.map(_.toString()).getOrElse("").asJson,
+          "walletHeight" -> walletStatus.height.asJson
         )
       )
     }
@@ -253,23 +239,23 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def addressesR: Route = (path("addresses") & get) {
-    withWallet(_.trackedAddresses)
+    withWallet(_.publicKeys(0, Int.MaxValue): Future[Seq[ErgoAddress]])
   }
 
   def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) { (minConfNum, minHeight) =>
     withWallet {
-      _.boxes(unspentOnly = true)
+      _.walletBoxes(unspentOnly = true)
         .map {
-          _.filter(boxPredicate(_, minConfNum, minHeight))
+          _.filter(boxFilterPredicate(_, minConfNum, minHeight))
         }
     }
   }
 
   def boxesR: Route = (path("boxes") & get & boxParams) { (minConfNum, minHeight) =>
     withWallet {
-      _.boxes()
+      _.walletBoxes()
         .map {
-          _.filter(boxPredicate(_, minConfNum, minHeight))
+          _.filter(boxFilterPredicate(_, minConfNum, minHeight))
         }
     }
   }

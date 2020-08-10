@@ -4,17 +4,17 @@ import org.ergoplatform.{ErgoBoxCandidate, UnsignedErgoLikeTransaction, Unsigned
 import org.ergoplatform.wallet.crypto.ErgoSignature
 import org.ergoplatform.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.utils.Generators
+import org.scalatest.prop.PropertyChecks
 import org.scalatest.{FlatSpec, Matchers}
-import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
-import sigmastate.CTHRESHOLD
-import sigmastate.interpreter.{HintsBag, OwnCommitment, RealCommitment}
-import scorex.util.{ModifierId, Random}
+import sigmastate.interpreter.{ContextExtension, HintsBag, OwnCommitment, RealCommitment}
+import scorex.util.ModifierId
 import scorex.util.encode.Base16
-import sigmastate.interpreter.ContextExtension
+import scorex.util.Random
+import sigmastate.CTHRESHOLD
 
 class ErgoProvingInterpreterSpec
   extends FlatSpec
-    with ScalaCheckDrivenPropertyChecks
+    with PropertyChecks
     with Matchers
     with Generators
     with InterpreterSpecCommon {
@@ -47,9 +47,9 @@ class ErgoProvingInterpreterSpec
     val prover1 = ErgoProvingInterpreter(obtainSecretKey(), parameters) // real
     val prover2 = ErgoProvingInterpreter(obtainSecretKey(), parameters) // simulated
 
-    val pk0 = prover0.hdPubKeys.head
-    val pk1 = prover1.hdPubKeys.head
-    val pk2 = prover2.hdPubKeys.head
+    val pk0 = prover0.hdPubKeys.head.key
+    val pk1 = prover1.hdPubKeys.head.key
+    val pk2 = prover2.hdPubKeys.head.key
 
     val prop = CTHRESHOLD(2, Seq(pk0, pk1, pk2))
 
@@ -81,7 +81,7 @@ class ErgoProvingInterpreterSpec
 
   it should "sign 50 simple inputs with default cost limit" in {
     val prover = ErgoProvingInterpreter(obtainSecretKey(), parameters)
-    val pk = prover.hdPubKeys.head
+    val pk = prover.hdPubKeys.head.key
 
     val value = 100000000L
     val creationHeight = 10000

@@ -8,24 +8,22 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
-import org.ergoplatform.nodeView.wallet.requests.{PaymentRequestDecoder, TransactionSigningRequest}
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
-import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
-import sigmastate.Values.{ErgoTree, SigmaBoolean}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree, SigmaBoolean}
 import sigmastate._
 import sigmastate.basics.DLogProtocol.{FirstDLogProverMessage, ProveDlog}
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
-import sigmastate.interpreter.RealCommitment
 import sigmastate.lang.SigmaCompiler
-import sigmastate.serialization.GroupElementSerializer
+import sigmastate.serialization.ValueSerializer
 import special.sigma.AnyValue
 
 import scala.concurrent.Future
@@ -51,9 +49,10 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       // p2shAddressR ~
       p2sAddressR ~
       addressToTreeR ~
-      executeWithContextR ~
       generateCommitmentR ~
-      extractHintsR
+      extractHintsR ~
+      addressToBytesR ~
+      executeWithContextR
     }
   }
 
@@ -185,6 +184,18 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       }
       readers.w.extractHints(tx, boxesToSpend, dataBoxes, her.real, her.simulated)
     })(hintsBag => ApiResponse(hintsBag.hints.asJson))
+  }
+
+  def addressToBytesR: Route = (get & path("addressToBytes" / Segment)) { addressStr =>
+    addressEncoder.fromString(addressStr)
+      .map(address => address.script.bytes)
+      .map(ByteArrayConstant.apply)
+      .map(ValueSerializer.serialize)
+      .map(Base16.encode)
+      .fold(
+        e => BadRequest(e.getMessage),
+        bs => ApiResponse(Map("bytes" -> bs).asJson)
+      )
   }
 
 }

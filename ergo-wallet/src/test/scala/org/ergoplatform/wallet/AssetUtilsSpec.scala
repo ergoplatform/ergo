@@ -2,9 +2,9 @@ package org.ergoplatform.wallet
 
 import org.ergoplatform.wallet.utils.WalletTestHelpers
 import org.scalatest.Matchers
-import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import org.scalatest.prop.TableDrivenPropertyChecks
 
-class AssetUtilsSpec extends WalletTestHelpers with Matchers with ScalaCheckPropertyChecks {
+class AssetUtilsSpec extends WalletTestHelpers with Matchers with TableDrivenPropertyChecks {
   import AssetUtils._
 
   val tid1 = stringToId("t1")

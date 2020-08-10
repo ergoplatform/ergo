@@ -5,14 +5,18 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
+import org.ergoplatform.ErgoBox.BoxId
+import org.ergoplatform.{ErgoBox, P2PKAddress}
 import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoLikeTransactionTemplate, P2PKAddress}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
-import org.ergoplatform.nodeView.wallet.persistence.RegistryIndex
+import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
+import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.secrets.DerivationPath
+import org.ergoplatform.wallet.Constants.ScanId
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
@@ -45,10 +49,10 @@ trait ErgoWalletReader extends VaultReader {
 
   def lockWallet(): Unit = walletActor ! LockWallet
 
-  def checkSeed(mnemonic: String, mnemonicPassOpt: Option[String] = None): Future[Boolean] = (walletActor ? CheckSeed(mnemonic, mnemonicPassOpt)).mapTo[Boolean]
+  def getWalletStatus: Future[WalletStatus] =
+    (walletActor ? GetWalletStatus).mapTo[WalletStatus]
 
-  def getLockStatus: Future[(Boolean, Boolean)] =
-    (walletActor ? GetLockStatus).mapTo[(Boolean, Boolean)]
+  def checkSeed(mnemonic: String, mnemonicPassOpt: Option[String] = None): Future[Boolean] = (walletActor ? CheckSeed(mnemonic, mnemonicPassOpt)).mapTo[Boolean]
 
   def deriveKey(path: String): Future[Try[P2PKAddress]] =
     (walletActor ? DeriveKey(path)).mapTo[Try[P2PKAddress]]
@@ -56,12 +60,12 @@ trait ErgoWalletReader extends VaultReader {
   def deriveNextKey: Future[Try[(DerivationPath, P2PKAddress)]] =
     (walletActor ? DeriveNextKey).mapTo[Try[(DerivationPath, P2PKAddress)]]
 
-  def balances(chainStatus: ChainStatus): Future[RegistryIndex] =
-    (walletActor ? ReadBalances(chainStatus)).mapTo[RegistryIndex]
+  def balances(chainStatus: ChainStatus): Future[WalletDigest] =
+    (walletActor ? ReadBalances(chainStatus)).mapTo[WalletDigest]
 
-  def confirmedBalances: Future[RegistryIndex] = balances(OnChain)
+  def confirmedBalances: Future[WalletDigest] = balances(OnChain)
 
-  def balancesWithUnconfirmed: Future[RegistryIndex] = balances(OffChain)
+  def balancesWithUnconfirmed: Future[WalletDigest] = balances(OffChain)
 
   def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] =
     (walletActor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
@@ -69,8 +73,11 @@ trait ErgoWalletReader extends VaultReader {
   def firstSecret: Future[Try[DLogProverInput]] =
     (walletActor ? GetFirstSecret).mapTo[Try[DLogProverInput]]
 
-  def boxes(unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
-    (walletActor ? GetBoxes(unspentOnly)).mapTo[Seq[WalletBox]]
+  def walletBoxes(unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
+    (walletActor ? GetWalletBoxes(unspentOnly)).mapTo[Seq[WalletBox]]
+
+  def appBoxes(scanId: ScanId, unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
+    (walletActor ? GetScanBoxes(scanId, unspentOnly)).mapTo[Seq[WalletBox]]
 
   def updateChangeAddress(address: P2PKAddress): Unit =
     walletActor ! UpdateChangeAddress(address)
@@ -80,12 +87,6 @@ trait ErgoWalletReader extends VaultReader {
 
   def transactionById(id: ModifierId): Future[Option[AugWalletTransaction]] =
     (walletActor ? GetTransaction(id)).mapTo[Option[AugWalletTransaction]]
-
-  def randomPublicKey: Future[P2PKAddress] =
-    (walletActor ? ReadRandomPublicKey).mapTo[P2PKAddress]
-
-  def trackedAddresses: Future[Seq[ErgoAddress]] =
-    (walletActor ? ReadTrackedAddresses).mapTo[Seq[ErgoAddress]]
 
   def generateTransaction(requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String] = Seq.empty,
@@ -112,5 +113,17 @@ trait ErgoWalletReader extends VaultReader {
                    real: Seq[SigmaBoolean],
                    simulated: Seq[SigmaBoolean]): Future[HintsBag] =
     (walletActor ? ExtractHints(tx, boxesToSpend, dataBoxes, real, simulated)).mapTo[HintsBag]
+
+  def addScan(appRequest: ScanRequest): Future[AddScanResponse] =
+    (walletActor ? AddScan(appRequest)).mapTo[AddScanResponse]
+
+  def removeScan(scanId: ScanId): Future[RemoveScanResponse] =
+    (walletActor ? RemoveScan(scanId)).mapTo[RemoveScanResponse]
+
+  def readScans(): Future[ReadScansResponse] =
+    (walletActor ? ReadScans).mapTo[ReadScansResponse]
+
+  def stopTracking(scanId: ScanId, boxId: BoxId): Future[StopTrackingResponse] =
+    (walletActor ? StopTracking(scanId, boxId)).mapTo[StopTrackingResponse]
 
 }

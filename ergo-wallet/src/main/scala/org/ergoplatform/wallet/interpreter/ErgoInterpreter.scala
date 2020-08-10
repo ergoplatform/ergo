@@ -24,7 +24,7 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
   override type CTX = ErgoLikeContext
 
   /**
-    * Check that expired box is spent in a proper way
+    * Checks that expired box is spent in a proper way
     *
     * @param box           - box being spent
     * @param output        - newly created box when storage fee covered, otherwise any output box

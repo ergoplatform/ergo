@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
+import java.io.File
 import java.util
 
 import akka.actor.{Actor, ActorRef}
@@ -51,12 +52,11 @@ class ErgoWalletActor(settings: ErgoSettings,
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
   private var secretStorageOpt: Option[JsonSecretStorage] = None
-  private var storage: WalletStorage = WalletStorage.readOrCreate(settings)
+  private val storage: WalletStorage = WalletStorage.readOrCreate(settings)
   private var registry: WalletRegistry = WalletRegistry.apply(settings)
   private var offChainRegistry: OffChainRegistry = OffChainRegistry.init(registry)
 
   private var walletVars = WalletVars.apply(storage, settings)
-
   //todo: temporary 3.2.x collection and readers
   private var stateReaderOpt: Option[ErgoStateReader] = None
   private var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
@@ -323,8 +323,10 @@ class ErgoWalletActor(settings: ErgoSettings,
       secretStorageOpt.foreach(_.lock())
 
     case RescanWallet =>
-      storage.close()
-      storage = WalletStorage.create(settings)
+      val path = s"${settings.directory}/wallet/registy"
+      val dir = new File(path)
+      FileUtils.deleteRecursive(dir)
+      registry = WalletRegistry.apply(settings)
 
     case GetWalletStatus =>
       val status = WalletStatus(secretIsSet, walletVars.proverOpt.isDefined, changeAddress, walletHeight())

@@ -1,7 +1,6 @@
 package org.ergoplatform.settings
 
 import com.typesafe.config.ConfigException
-import net.ceedubs.ficus.readers.ValueReader
 import org.ergoplatform.nodeView.state._
 
 trait StateTypeReaders {

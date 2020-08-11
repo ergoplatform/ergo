@@ -942,11 +942,6 @@ components:
           type: integer
           format: int32
           example: 8
-        fee:
-          description: Optional, default transaction fee from settings will be used if not defined
-          type: integer
-          format: int64
-          example: 1000000
         registers:
           description: Optional, possible values for registers R7...R9
           $ref: '#/components/schemas/Registers'

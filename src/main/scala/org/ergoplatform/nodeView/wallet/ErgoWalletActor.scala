@@ -441,6 +441,12 @@ class ErgoWalletActor(settings: ErgoSettings,
     */
   private val noFilter: FilterFn = (_: TrackedBox) => true
 
+  /**
+    * Convert requests (to make payments or to issue an asset) to transaction outputs
+    * There can be only one asset issuance request in the input sequence.
+    * @param requests - an input sequence of requests
+    * @return sequence of transaction outputs or failure if inputs are incorrect
+    */
   private def requestsToBoxCandidates(requests: Seq[TransactionGenerationRequest]): Try[Seq[ErgoBoxCandidate]] =
     Traverse[List].sequence {
       requests.toList

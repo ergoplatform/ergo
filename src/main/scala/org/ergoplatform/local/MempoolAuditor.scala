@@ -105,16 +105,15 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     log.debug("Rebroadcasting transactions")
     poolReaderOpt.foreach { pr =>
       pr.take(settings.nodeSettings.rebroadcastCount).foreach { tx =>
-        if (tx.inputs.forall(i => utxo.boxById(i.boxId).isDefined)) {
-          log.info(s"Rebroadcasting $tx")
-          val msg = Message(
-            new InvSpec(settings.scorexSettings.network.maxInvObjects),
-            Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
-            None
-          )
-          networkControllerRef ! SendToNetwork(msg, Broadcast)
-        }
+        log.info(s"Rebroadcasting $tx")
+        val msg = Message(
+          new InvSpec(settings.scorexSettings.network.maxInvObjects),
+          Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
+          None
+        )
+        networkControllerRef ! SendToNetwork(msg, Broadcast)
       }
+
     }
 
   }

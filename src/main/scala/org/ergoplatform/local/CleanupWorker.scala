@@ -116,8 +116,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
 object CleanupWorker {
 
-  case class RunCleanup(validator: TransactionValidation[ErgoTransaction],
-                        mempool: ErgoMemPoolReader)
+  case class RunCleanup(validator: TransactionValidation[ErgoTransaction], mempool: ErgoMemPoolReader)
 
   val IndexRevisionInterval: Int = 4
 

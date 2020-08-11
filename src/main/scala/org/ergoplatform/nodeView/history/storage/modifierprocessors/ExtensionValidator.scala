@@ -2,10 +2,9 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
-import org.ergoplatform.settings.ErgoValidationSettings
 import org.ergoplatform.settings.ValidationRules._
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, ValidationState}
+import scorex.core.validation.ValidationState
 import scorex.util.bytesToId
 
 /**

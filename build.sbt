@@ -40,8 +40,7 @@ libraryDependencies ++= Seq(
   "org.iq80.leveldb" % "leveldb" % "0.12",
   
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
-
-  "org.typelevel" %% "cats-free" % "1.6.0",
+  
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "com.iheart" %% "ficus" % "1.4.7",
   "ch.qos.logback" % "logback-classic" % "1.2.3",

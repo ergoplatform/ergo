@@ -467,7 +467,7 @@ class ErgoWalletActor(settings: ErgoSettings,
                   val nonMandatoryRegisters = scala.Predef.Map(
                     R4 -> ByteArrayConstant(name.getBytes("UTF-8")),
                     R5 -> ByteArrayConstant(description.getBytes("UTF-8")),
-                    R6 -> IntConstant(decimals)
+                    R6 -> ByteArrayConstant(String.valueOf(decimals).getBytes("UTF-8"))
                   ) ++ registers.getOrElse(Map())
                   (addressOpt orElse walletVars.publicKeyAddresses.headOption)
                     .fold[Try[ErgoAddress]](Failure(new Exception("No address available for box locking")))(Success(_))

@@ -119,6 +119,6 @@ object CleanupWorker {
   case class RunCleanup(validator: TransactionValidation[ErgoTransaction],
                         mempool: ErgoMemPoolReader)
 
-  val IndexRevisionInterval: Int = 16
+  val IndexRevisionInterval: Int = 4
 
 }

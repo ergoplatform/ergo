@@ -111,7 +111,7 @@ object HintCodecs extends ApiCodecs {
 
   implicit val commitmentHintEncoder: Encoder[CommitmentHint] = { ch =>
     val commonFields: Json = (ch match {
-      case own: OwnCommitment => Json.obj("hint" -> "cmtWithSecret".asJson, "secret" -> own.randomness.asJson)
+      case own: OwnCommitment => Json.obj("hint" -> "cmtWithSecret".asJson, "secret" -> own.secretRandomness.asJson)
       case _: RealCommitment => Json.obj("hint" -> "cmtReal".asJson)
       case _: SimulatedCommitment => Json.obj("hint" -> "cmtSimulated".asJson)
     }).deepMerge(Json.obj("pubkey" -> ch.image.asJson))

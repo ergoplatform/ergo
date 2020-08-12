@@ -10,7 +10,7 @@ import org.ergoplatform.settings.Constants
 import scorex.core.NodeViewHolder._
 import scorex.core.{ModifierTypeId, PersistentNodeViewModifier}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{CheckDelivery, SemanticallySuccessfulModifier}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.network.message.{InvData, Message}
 import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer, SendToRandom}
 import scorex.core.settings.NetworkSettings
@@ -43,26 +43,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     super.preStart()
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.scheduler.schedule(toDownloadCheckInterval, toDownloadCheckInterval)(self ! CheckModifiersToDownload)
-  }
-
-  //todo: pull back to Scorex with fixing this method
-  override protected def checkDelivery: Receive = {
-    case CheckDelivery(peerOpt, modifierTypeId, modifierId) =>
-      if (deliveryTracker.status(modifierId) == ModifiersStatus.Requested) {
-        peerOpt match {
-          case Some(peer) =>
-            log.info(s"Peer ${peer.toString} has not delivered asked modifier ${encoder.encodeId(modifierId)} on time")
-            penalizeNonDeliveringPeer(peer)
-            deliveryTracker.setUnknown(modifierId)
-            requestDownload(modifierTypeId, Seq(modifierId))
-          case None =>
-            // Random peer did not delivered modifier we need, ask another peer
-            // We need this modifier - no limit for number of attempts
-            log.info(s"Modifier ${encoder.encodeId(modifierId)}  (type $modifierTypeId) was not delivered on time")
-            deliveryTracker.setUnknown(modifierId)
-            requestDownload(modifierTypeId, Seq(modifierId))
-        }
-      }
   }
 
   /**

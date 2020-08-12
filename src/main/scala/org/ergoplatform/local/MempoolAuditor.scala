@@ -8,7 +8,6 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.network.Broadcast

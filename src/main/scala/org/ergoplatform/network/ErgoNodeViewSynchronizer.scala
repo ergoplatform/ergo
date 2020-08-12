@@ -30,8 +30,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider,
     Constants.modifierSerializers) {
 
-  override protected val deliveryTracker = new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks,
-    self, timeProvider)
+  override protected val deliveryTracker =
+    new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
 
   /**
     * Approximate number of modifiers to be downloaded simultaneously
@@ -57,7 +57,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val toDownload =
           h.nextModifiersToDownload(desiredSizeOfExpectingQueue - deliveryTracker.requestedSize, downloadRequired)
 
-        log.info(s"${toDownload.length} modifiers to be downloaded")
+        log.info(s"${toDownload.length} persistent modifiers to be downloaded")
 
         toDownload.groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }
@@ -111,6 +111,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 }
 
 object ErgoNodeViewSynchronizer {
+
   def props(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
@@ -127,16 +128,6 @@ object ErgoNodeViewSynchronizer {
             timeProvider: NetworkTimeProvider)
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
     context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider))
-
-  def apply(networkControllerRef: ActorRef,
-            viewHolderRef: ActorRef,
-            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-            networkSettings: NetworkSettings,
-            timeProvider: NetworkTimeProvider,
-            name: String)
-           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider), name)
-
 
   case object CheckModifiersToDownload
 

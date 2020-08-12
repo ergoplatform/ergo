@@ -10,10 +10,12 @@ import org.ergoplatform.settings.Constants
 import scorex.core.NodeViewHolder._
 import scorex.core.{ModifierTypeId, PersistentNodeViewModifier}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+import scorex.core.network.NetworkControllerSharedMessages.ReceivableMessages.DataFromPeer
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
-import scorex.core.network.message.{InvData, Message}
+import scorex.core.network.message.{InvData, InvSpec, Message}
 import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer, SendToRandom}
 import scorex.core.settings.NetworkSettings
+import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ModifierId
 
@@ -63,10 +65,49 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
+  // todo: this method is just a copy of the ancestor from Scorex, however, smarter logic is needed, not just
+  //  asking from a random peer
   override protected def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
     deliveryTracker.setRequested(modifierIds, modifierTypeId, None)
     val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
     networkControllerRef ! SendToNetwork(msg, SendToRandom)
+  }
+
+  /**
+    * Object ids coming from other node.
+    * Filter out modifier ids that are already in process (requested, received or applied),
+    * request unknown ids from peer and set this ids to requested state.
+    */
+  override protected def processInv: Receive = {
+    case DataFromPeer(spec, invData: InvData@unchecked, peer)
+      if spec.messageCode == InvSpec.MessageCode =>
+
+      (mempoolReaderOpt, historyReaderOpt) match {
+        case (Some(mempool), Some(history)) =>
+
+          val modifierTypeId = invData.typeId
+
+          val newModifierIds = modifierTypeId match {
+            case Transaction.ModifierTypeId =>
+              // We download transactions only if the chain is synced
+              if (history.isHeadersChainSynced && history.fullBlockHeight == history.headersHeight) {
+                invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
+              } else {
+                Seq.empty
+              }
+            case _ =>
+              invData.ids.filter(mid => deliveryTracker.status(mid, history) == ModifiersStatus.Unknown)
+          }
+
+          if (newModifierIds.nonEmpty) {
+            val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, newModifierIds)), None)
+            peer.handlerRef ! msg
+            deliveryTracker.setRequested(newModifierIds, modifierTypeId, Some(peer))
+          }
+
+        case _ =>
+          log.warn(s"Got data from peer while readers are not ready ${(mempoolReaderOpt, historyReaderOpt)}")
+      }
   }
 
   /**

@@ -614,6 +614,10 @@ class ErgoWalletActor(settings: ErgoSettings,
   private def processUnlock(secretStorage: JsonSecretStorage): Unit = Try {
     val rootSecretSeq = secretStorage.secret.toSeq
 
+    if (rootSecretSeq.isEmpty) {
+      log.warn("Master key is not available after unlock")
+    }
+
     // first, we're trying to find in the database paths written by clients prior 3.3.0 and convert them
     // into a new format (pubkeys with paths stored instead of paths)
     val oldPaths = storage.readPaths()
@@ -625,11 +629,13 @@ class ErgoWalletActor(settings: ErgoSettings,
       oldPubKeys.foreach(storage.addKey)
       storage.removePaths()
     }
-    val pubKeys = storage.readAllKeys().toIndexedSeq
+    var pubKeys = storage.readAllKeys().toIndexedSeq
 
     //If no public keys in the database yet, add master's public key into it
     if (pubKeys.isEmpty) {
-      rootSecretSeq.foreach(s => storage.addKey(s.publicKey))
+      val masterPubKey = rootSecretSeq.map(s => s.publicKey)
+      masterPubKey.foreach(pk => storage.addKey(pk))
+      pubKeys = masterPubKey.toIndexedSeq
     }
 
     val secrets = pubKeys.flatMap { pk =>

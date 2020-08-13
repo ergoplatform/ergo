@@ -8,8 +8,8 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 
-final case class EmissionApiRoute(ergoSettings: ErgoSettings)
-                                 (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
+case class EmissionApiRoute(ergoSettings: ErgoSettings)
+                           (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute {
 
   import EmissionApiRoute._
 

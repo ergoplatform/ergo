@@ -7,6 +7,7 @@ import scorex.core.PersistentNodeViewModifier
 trait ErgoPersistentModifier extends PersistentNodeViewModifier with ErgoNodeViewModifier
 
 object ErgoPersistentModifier {
+
   implicit val jsonEncoder: Encoder[ErgoPersistentModifier] = {
     case h: Header => Header.jsonEncoder(h)
     case bt: BlockTransactions => BlockTransactions.jsonEncoder(bt)
@@ -14,4 +15,5 @@ object ErgoPersistentModifier {
     case ext: Extension => Extension.jsonEncoder(ext)
     case other => throw new Exception(s"Unknown persistent modifier type: $other")
   }
+
 }

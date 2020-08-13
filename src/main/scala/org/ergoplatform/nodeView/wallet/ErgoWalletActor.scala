@@ -30,7 +30,7 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
-import sigmastate.Values.{ByteArrayConstant, IntConstant}
+import sigmastate.Values.ByteArrayConstant
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 
@@ -323,10 +323,18 @@ class ErgoWalletActor(settings: ErgoSettings,
       secretStorageOpt.foreach(_.lock())
 
     case RescanWallet =>
-      val path = s"${settings.directory}/wallet/registy"
-      val dir = new File(path)
-      FileUtils.deleteRecursive(dir)
-      registry = WalletRegistry.apply(settings)
+      val registryFolder = WalletRegistry.registryFolder(settings)
+
+      log.info(s"Rescanning the wallet, its registry is in $registryFolder")
+      val rescanResult = Try {
+        registry.close()
+        FileUtils.deleteRecursive(registryFolder)
+        registry = WalletRegistry.apply(settings)
+      }
+      rescanResult.recover { case t =>
+        log.error("Error during rescan attempt: ", t)
+      }
+      sender() ! rescanResult
 
     case GetWalletStatus =>
       val status = WalletStatus(secretIsSet, walletVars.proverOpt.isDefined, changeAddress, walletHeight())

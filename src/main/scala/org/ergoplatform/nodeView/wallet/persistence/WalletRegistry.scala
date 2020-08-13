@@ -31,6 +31,10 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   private val keepHistory = ws.keepSpentBoxes
 
+  def close(): Unit = {
+    store.close()
+  }
+
   /**
     * Read wallet-related box with metadata
     *
@@ -310,8 +314,10 @@ object WalletRegistry {
 
   val PreGenesisStateVersion: Array[Byte] = idToBytes(PreGenesisHeader.id)
 
+  def registryFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/registry")
+
   def apply(settings: ErgoSettings): WalletRegistry = {
-    val dir = new File(s"${settings.directory}/wallet/registry")
+    val dir = registryFolder(settings)
     dir.mkdirs()
 
     val store = new HybridLDBKVStore(dir, settings.nodeSettings.keepVersions)

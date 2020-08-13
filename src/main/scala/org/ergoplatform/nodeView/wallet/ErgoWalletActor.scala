@@ -635,7 +635,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     if (pubKeys.isEmpty) {
       val masterPubKey = rootSecretSeq.map(s => s.publicKey)
       masterPubKey.foreach(pk => storage.addKey(pk))
-      pubKeys = masterPubKey
+      pubKeys = masterPubKey.toIndexedSeq
     }
 
     val secrets = pubKeys.flatMap { pk =>

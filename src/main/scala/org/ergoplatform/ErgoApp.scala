@@ -44,22 +44,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
   implicit private val actorSystem: ActorSystem = ActorSystem(settings.network.agentName)
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
 
-  ergoSettings = ergoSettings.bootstrapSettingsOpt match {
-    case Some(bs) if isEmptyState =>
-      log.info("Entering coordinated network bootstrap procedure ..")
-      val (npmProof, genesisDigest) =
-        new BootstrapController(bs).waitForBootSettings()
-      log.info("Boot settings received. Starting the node ..")
-      ergoSettings.copy(
-        chainSettings = ergoSettings.chainSettings.copy(
-          noPremineProof = npmProof,
-          genesisStateDigestHex = genesisDigest
-        )
-      )
-    case _ =>
-      ergoSettings
-  }
-
   private val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
 
   private val timeProvider = new NetworkTimeProvider(settings.ntp)

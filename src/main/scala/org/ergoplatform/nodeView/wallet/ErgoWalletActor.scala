@@ -447,6 +447,12 @@ class ErgoWalletActor(settings: ErgoSettings,
     */
   private val noFilter: FilterFn = (_: TrackedBox) => true
 
+  /**
+    * Convert requests (to make payments or to issue an asset) to transaction outputs
+    * There can be only one asset issuance request in the input sequence.
+    * @param requests - an input sequence of requests
+    * @return sequence of transaction outputs or failure if inputs are incorrect
+    */
   private def requestsToBoxCandidates(requests: Seq[TransactionGenerationRequest]): Try[Seq[ErgoBoxCandidate]] =
     Traverse[List].sequence {
       requests.toList
@@ -473,7 +479,7 @@ class ErgoWalletActor(settings: ErgoSettings,
                   val nonMandatoryRegisters = scala.Predef.Map(
                     R4 -> ByteArrayConstant(name.getBytes("UTF-8")),
                     R5 -> ByteArrayConstant(description.getBytes("UTF-8")),
-                    R6 -> IntConstant(decimals)
+                    R6 -> ByteArrayConstant(String.valueOf(decimals).getBytes("UTF-8"))
                   ) ++ registers.getOrElse(Map())
                   (addressOpt orElse walletVars.publicKeyAddresses.headOption)
                     .fold[Try[ErgoAddress]](Failure(new Exception("No address available for box locking")))(Success(_))

@@ -27,10 +27,6 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
 
   import WalletStorage._
 
-  def close(): Unit = {
-    store.close()
-  }
-
   //todo: used now only for importing pre-3.3.0 wallet database, remove after while
   def readPaths(): Seq[DerivationPath] = store
     .get(SecretPathsKey)
@@ -194,4 +190,5 @@ object WalletStorage {
                   (implicit addressEncoder: ErgoAddressEncoder): WalletStorage = {
     new WalletStorage(LDBFactory.createKvDb(s"${settings.directory}/wallet/storage"), settings)
   }
+
 }

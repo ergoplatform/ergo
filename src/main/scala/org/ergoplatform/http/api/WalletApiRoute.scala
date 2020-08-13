@@ -341,9 +341,11 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def rescanWalletR: Route = (path("rescan") & get) {
-    withWallet { w =>
-      w.rescanWallet()
-      Future.successful(())
+    withWalletOp(_.rescanWallet()) {
+      _.fold(
+        e => BadRequest(e.getMessage),
+        _ => ApiResponse.toRoute(ApiResponse.OK)
+      )
     }
   }
 

@@ -31,6 +31,9 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
   private val keepHistory = ws.keepSpentBoxes
 
+  /**
+    * Close wallet registry storage
+    */
   def close(): Unit = {
     store.close()
   }

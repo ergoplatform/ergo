@@ -15,7 +15,6 @@ import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
@@ -272,16 +271,23 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     }
   }
 
-  def addBox(scanIds: Set[ScanId], box: ErgoBox, inclusionHeight: Height): Try[Unit] = Try {
-   val updTb = getBox(box.id) match {
+  /**
+    * Adds or updates box stored in the wallet database
+    * @param scanIds
+    * @param box
+    * @return
+    */
+  def updateScans(scanIds: Set[ScanId], box: ErgoBox): Try[Unit] = Try {
+    val bag0 = KeyValuePairsBag(toInsert = Seq.empty, toRemove = Seq.empty)
+    val (updTb, bag1) = getBox(box.id) match {
       case Some(tb) =>
-        tb.copy(scans = scanIds)
+        (tb.copy(scans = scanIds), removeBox(bag0, tb))
       case None =>
-        TrackedBox(box, inclusionHeight, scanIds)
+        (TrackedBox(box, box.creationHeight, scanIds), bag0)
     }
-    val toInsert = Seq(boxToKvPair(updTb)) ++ boxIndexes(updTb)
-    val bag = KeyValuePairsBag(toInsert, toRemove = Seq.empty)
-    store.nonVersionedPut(bag.toInsert)
+    val bag2 = putBox(bag1, updTb)
+    store.nonVersionedRemove(bag2.toRemove)
+    store.nonVersionedPut(bag2.toInsert)
   }
 
   /**

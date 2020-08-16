@@ -380,7 +380,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! AddScanResponse(res)
 
     case AddBox(scanIds: Set[ScanId], box: ErgoBox) =>
-      registry.addBox(scanIds, box, fullHeight)
+      registry.updateScans(scanIds, box)
       sender() ! AddBoxResponse(Success(()))
 
     case StopTracking(scanId: ScanId, boxId: BoxId) =>

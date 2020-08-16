@@ -38,7 +38,8 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       deregisterR ~
       listScansR ~
       unspentR ~
-      stopTrackingR
+      stopTrackingR ~
+      addBoxR
   }
 
   def registerR: Route = (path("register") & post & entity(as[ScanRequest])) { request =>
@@ -55,7 +56,6 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     }
   }
 
-  //todo: paging?
   def listScansR: Route = (path("listAll") & get) {
     withWallet(_.readScans().map(_.apps))
   }
@@ -71,6 +71,13 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     withWalletOp(_.stopTracking(scanIdBoxId.scanId, scanIdBoxId.boxId).map(_.status)) {
       case Failure(e) => BadRequest(s"Bad request ($scanIdBoxId): ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(_) => ApiResponse(scanIdBoxId)
+    }
+  }
+
+  def addBoxR: Route = (path("addBox") & post & entity(as[ScanIdsBox])) { scanIdsBox =>
+    withWalletOp(_.addBox(scanIdsBox.scanIds, scanIdsBox.box).map(_.status)) {
+      case Failure(e) => BadRequest(s"Bad request ($scanIdsBox): ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success(_) => ApiResponse(scanIdsBox.box.id)
     }
   }
 

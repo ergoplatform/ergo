@@ -379,6 +379,10 @@ class ErgoWalletActor(settings: ErgoSettings,
       res.foreach(app => walletVars = walletVars.addScan(app))
       sender() ! AddScanResponse(res)
 
+    case AddBox(scanIds: Set[ScanId], box: ErgoBox) =>
+      registry.addBox(scanIds, box, fullHeight)
+      sender() ! AddBoxResponse(Success(()))
+
     case StopTracking(scanId: ScanId, boxId: BoxId) =>
       sender() ! StopTrackingResponse(registry.removeScan(boxId, scanId))
   }
@@ -893,6 +897,22 @@ object ErgoWalletActor {
     * @param status
     */
   case class StopTrackingResponse(status: Try[Unit])
+
+
+  /**
+    * Add association between a scan and a box (and add the box to the database if it is not there)
+    *
+    * @param scanIds
+    * @param box
+    */
+  case class AddBox(scanIds: Set[ScanId], box: ErgoBox)
+
+  /**
+    * Wrapper for a result of AddBox processing
+    *
+    * @param status
+    */
+  case class AddBoxResponse(status: Try[Unit])
 
   def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
                       secrets: Seq[ExternalSecret],

@@ -850,6 +850,19 @@ components:
         boxId:
           $ref: '#/components/schemas/TransactionBoxId'
 
+    ScanIdsBox:
+      type: object
+      required:
+        - scanIds
+        - box
+      properties:
+        scanIds:
+          type: array
+          items:
+            type: integer
+        box:
+          $ref: '#/components/schemas/ErgoTransactionOutput'
+
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
       type: object
@@ -3574,6 +3587,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScanIdBoxId'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /scan/addBox:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Add scan to a box, or box associated with scans provided
+      operationId: addBox
+      tags:
+        - scan
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanIdsBox'
+      responses:
+        '200':
+          description: The box is added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionId'
         default:
           description: Error
           content:

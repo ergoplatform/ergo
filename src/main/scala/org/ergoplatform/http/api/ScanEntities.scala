@@ -2,7 +2,7 @@ package org.ergoplatform.http.api
 
 import io.circe.{Decoder, HCursor}
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.JsonCodecs
+import org.ergoplatform.{ErgoBox, JsonCodecs}
 import org.ergoplatform.wallet.Constants.ScanId
 
 /**
@@ -32,17 +32,16 @@ object ScanEntities {
 
   }
 
-  case class ScanIdBox(scanId: ScanId, boxBytes: Array[Byte])
 
-  object ScanIdBox extends JsonCodecs {
+  case class ScanIdsBox(scanIds: Set[ScanId], box: ErgoBox)
 
-    implicit val scanIdBoxDecoder: Decoder[ScanIdBox] = { c: HCursor =>
+  object ScanIdsBox extends JsonCodecs {
+    implicit val scanIdsBoxDecoder: Decoder[ScanIdsBox] = { c: HCursor =>
       for {
-        scanId <- ScanId @@ c.downField("scanId").as[Short]
-        boxBytes <- c.downField("boxBytes").as[Array[Byte]]
-      } yield ScanIdBox(scanId, boxBytes)
+        scanIds <- ScanId @@ c.downField("scanIds").as[Set[Short]]
+        box <- c.downField("box").as[ErgoBox]
+      } yield ScanIdsBox(scanIds, box)
     }
-
   }
 
 }

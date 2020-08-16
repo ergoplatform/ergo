@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
+
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.HybridLDBKVStore
 import org.ergoplatform.modifiers.history.PreGenesisHeader
@@ -12,8 +13,11 @@ import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
-import Constants.{ScanId, PaymentsScanId}
+import Constants.{PaymentsScanId, ScanId}
+import org.ergoplatform.ErgoBox
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.db.LDBVersionedStore
+
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
 
@@ -266,6 +270,18 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     } else {
       removeBoxes(bag, spentBoxes.map(_._2))
     }
+  }
+
+  def addBox(scanIds: Set[ScanId], box: ErgoBox, inclusionHeight: Height): Try[Unit] = Try {
+   val updTb = getBox(box.id) match {
+      case Some(tb) =>
+        tb.copy(scans = scanIds)
+      case None =>
+        TrackedBox(box, inclusionHeight, scanIds)
+    }
+    val toInsert = Seq(boxToKvPair(updTb)) ++ boxIndexes(updTb)
+    val bag = KeyValuePairsBag(toInsert, toRemove = Seq.empty)
+    store.nonVersionedPut(bag.toInsert)
   }
 
   /**

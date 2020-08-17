@@ -74,8 +74,8 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     }
   }
 
-  def addBoxR: Route = (path("addBox") & post & entity(as[ScanIdsBox])) { scanIdsBox =>
-    withWalletOp(_.addBox(scanIdsBox.scanIds, scanIdsBox.box).map(_.status)) {
+  def addBoxR: Route = (path("addBox") & post & entity(as[BoxWithScanIds])) { scanIdsBox =>
+    withWalletOp(_.addBox(scanIdsBox.box, scanIdsBox.scanIds).map(_.status)) {
       case Failure(e) => BadRequest(s"Bad request ($scanIdsBox): ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(_) => ApiResponse(scanIdsBox.box.id)
     }

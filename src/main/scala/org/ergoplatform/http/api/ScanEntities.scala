@@ -33,14 +33,14 @@ object ScanEntities {
   }
 
 
-  case class ScanIdsBox(scanIds: Set[ScanId], box: ErgoBox)
+  case class BoxWithScanIds(box: ErgoBox, scanIds: Set[ScanId])
 
-  object ScanIdsBox extends JsonCodecs {
-    implicit val scanIdsBoxDecoder: Decoder[ScanIdsBox] = { c: HCursor =>
+  object BoxWithScanIds extends JsonCodecs {
+    implicit val scanIdsBoxDecoder: Decoder[BoxWithScanIds] = { c: HCursor =>
       for {
-        scanIds <- ScanId @@ c.downField("scanIds").as[Set[Short]]
         box <- c.downField("box").as[ErgoBox]
-      } yield ScanIdsBox(scanIds, box)
+        scanIds <- ScanId @@ c.downField("scanIds").as[Set[Short]]
+      } yield BoxWithScanIds(box, scanIds)
     }
   }
 

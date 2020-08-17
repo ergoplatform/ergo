@@ -272,7 +272,9 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   }
 
   /**
-    * Adds or updates box stored in the wallet database
+    * Updates scans of a box stored in the wallet database,
+    * puts the box into the database if it is not there
+    *
     * @param scanIds
     * @param box
     * @return

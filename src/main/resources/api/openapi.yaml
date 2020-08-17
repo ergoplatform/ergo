@@ -3598,7 +3598,7 @@ paths:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Add scan to a box, or box associated with scans provided
+      summary: Add scan to a box, writes box to database if it is not there. You can use scan number 10 to add a box to the wallet.
       operationId: addBox
       tags:
         - scan
@@ -3611,7 +3611,7 @@ paths:
               $ref: '#/components/schemas/ScanIdsBox'
       responses:
         '200':
-          description: The box is added successfully
+          description: It the box is added successfully, then its id is returned
           content:
             application/json:
               schema:

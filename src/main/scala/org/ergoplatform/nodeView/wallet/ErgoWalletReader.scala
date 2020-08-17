@@ -108,7 +108,7 @@ trait ErgoWalletReader extends VaultReader {
   def stopTracking(scanId: ScanId, boxId: BoxId): Future[StopTrackingResponse] =
     (walletActor ? StopTracking(scanId, boxId)).mapTo[StopTrackingResponse]
 
-  def addBox(scanIds: Set[ScanId], box: ErgoBox): Future[AddBoxResponse] =
-    (walletActor ? AddBox(scanIds, box)).mapTo[AddBoxResponse]
+  def addBox(box: ErgoBox, scanIds: Set[ScanId]): Future[AddBoxResponse] =
+    (walletActor ? AddBox(box, scanIds)).mapTo[AddBoxResponse]
 
 }

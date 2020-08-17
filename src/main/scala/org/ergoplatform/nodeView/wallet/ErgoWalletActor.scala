@@ -379,7 +379,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       res.foreach(app => walletVars = walletVars.addScan(app))
       sender() ! AddScanResponse(res)
 
-    case AddBox(scanIds: Set[ScanId], box: ErgoBox) =>
+    case AddBox(box: ErgoBox, scanIds: Set[ScanId]) =>
       registry.updateScans(scanIds, box)
       sender() ! AddBoxResponse(Success(()))
 
@@ -902,10 +902,11 @@ object ErgoWalletActor {
   /**
     * Add association between a scan and a box (and add the box to the database if it is not there)
     *
-    * @param scanIds
     * @param box
+    * @param scanIds
+    *
     */
-  case class AddBox(scanIds: Set[ScanId], box: ErgoBox)
+  case class AddBox(box: ErgoBox, scanIds: Set[ScanId])
 
   /**
     * Wrapper for a result of AddBox processing

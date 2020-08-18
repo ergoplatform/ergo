@@ -323,13 +323,15 @@ class ErgoWalletActor(settings: ErgoSettings,
       secretStorageOpt.foreach(_.lock())
 
     case RescanWallet =>
-      val registryFolder = WalletRegistry.registryFolder(settings)
-
-      log.info(s"Rescanning the wallet, its registry is in $registryFolder")
+      // We do wallet rescan by closing the wallet's database, deleting it from the disk,
+      // then reopening it and sending a rescan signal.
       val rescanResult = Try {
+        val registryFolder = WalletRegistry.registryFolder(settings)
+        log.info(s"Rescanning the wallet, the registry is in $registryFolder")
         registry.close()
         FileUtils.deleteRecursive(registryFolder)
         registry = WalletRegistry.apply(settings)
+        self ! ScanInThePast(walletHeight()) // walletHeight() corresponds to empty wallet state now
       }
       rescanResult.recover { case t =>
         log.error("Error during rescan attempt: ", t)

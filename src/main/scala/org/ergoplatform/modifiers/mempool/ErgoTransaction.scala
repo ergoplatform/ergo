@@ -12,6 +12,8 @@ import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import org.ergoplatform.wallet.protocol.context.TransactionContext
+import scorex.core.EphemerealNodeViewModifier
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
@@ -53,7 +55,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val sizeOpt: Option[Int] = None)
   extends ErgoLikeTransaction(inputs, dataInputs, outputCandidates)
     with Transaction
-    with MempoolModifier
+    with EphemerealNodeViewModifier
     with ErgoNodeViewModifier
     with ScorexLogging {
 

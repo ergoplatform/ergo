@@ -3,6 +3,8 @@ import sbt._
 
 import scala.util.Try
 
+logLevel := Level.Debug
+
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
@@ -22,7 +24,7 @@ lazy val commonSettings = Seq(
   publishTo := sonatypePublishToBundle.value,
 )
 
-val scorexVersion = "master-07d30caa-SNAPSHOT"
+val scorexVersion = "master-bb48da3a-SNAPSHOT"
 val sigmaStateVersion = "3.3.0"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)

@@ -12,6 +12,7 @@ import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.wallet.Constants
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
@@ -56,7 +57,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         deriveNextKeyR ~
         updateChangeAddressR ~
         signTransactionR ~
-        checkSeedR
+        checkSeedR ~
+        rescanWalletR
     }
   }
 
@@ -266,6 +268,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         _.transactions
           .map {
             _.filter(tx =>
+              tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId) &&
               tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
                 tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
             )
@@ -353,6 +356,15 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet { w =>
       w.updateChangeAddress(p2pk)
       Future.successful(())
+    }
+  }
+
+  def rescanWalletR: Route = (path("rescan") & get) {
+    withWalletOp(_.rescanWallet()) {
+      _.fold(
+        e => BadRequest(e.getMessage),
+        _ => ApiResponse.toRoute(ApiResponse.OK)
+      )
     }
   }
 

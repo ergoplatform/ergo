@@ -15,6 +15,7 @@ import org.ergoplatform.utils.Stubs
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.{ErgoAddress, Pay2SAddress}
 import org.scalatest.{FlatSpec, Matchers}
+import org.ergoplatform.wallet.{Constants => WalletConstants}
 
 import scala.util.{Random, Try}
 import scala.concurrent.duration._
@@ -144,6 +145,13 @@ class WalletApiRouteSpec extends FlatSpec
     }
   }
 
+  it should "rescan wallet" in {
+    Get(prefix + "/rescan") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
+
   it should "derive new key according to a provided path" in {
     Post(prefix + "/deriveKey", Json.obj("derivationPath" -> "m/1/2".asJson)) ~> route ~> check {
       status shouldBe StatusCodes.OK
@@ -202,8 +210,12 @@ class WalletApiRouteSpec extends FlatSpec
     Get(prefix + "/transactions") ~> route ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
-      response.size shouldBe 2
-      responseAs[Seq[AugWalletTransaction]] shouldEqual WalletActorStub.walletTxs
+      val walletTxs = WalletActorStub.walletTxs.filter { awtx =>
+        awtx.wtx.scanIds.exists(_ <= WalletConstants.PaymentsScanId)
+      }
+
+      response.size shouldBe walletTxs.size
+      responseAs[Seq[AugWalletTransaction]] shouldEqual walletTxs
     }
   }
 

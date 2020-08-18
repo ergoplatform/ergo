@@ -145,6 +145,13 @@ class WalletApiRouteSpec extends FlatSpec
     }
   }
 
+  it should "rescan wallet" in {
+    Get(prefix + "/rescan") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
+
   it should "derive new key according to a provided path" in {
     Post(prefix + "/deriveKey", Json.obj("derivationPath" -> "m/1/2".asJson)) ~> route ~> check {
       status shouldBe StatusCodes.OK

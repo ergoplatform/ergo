@@ -2511,6 +2511,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/rescan:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Rescan wallet (all the available full blocks)
+      operationId: walletRescan
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Wallet storage recreated
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/status:
     get:
       security:

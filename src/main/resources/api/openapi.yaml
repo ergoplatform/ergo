@@ -2515,7 +2515,7 @@ paths:
     get:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Rescan wallet: remove /wallet/registry store to enforce wallet rescan
+      summary: Rescan wallet (all the available full blocks)
       operationId: walletRescan
       tags:
         - wallet

@@ -16,7 +16,7 @@ import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
+import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
@@ -24,6 +24,7 @@ import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.nodeView.wallet.scanning.Scan
+import org.scalacheck.Gen
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
@@ -248,7 +249,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         spendingTxIdOpt = Some(modifierIdGen.sample.get)
       )
     )
-    val walletTxs: Seq[AugWalletTransaction] = Seq(augWalletTransactionGen.sample.get, augWalletTransactionGen.sample.get)
+    val walletTxs: Seq[AugWalletTransaction] =
+      Gen.listOf(augWalletTransactionGen).sample.get
 
     def props(): Props = Props(new WalletActorStub)
 

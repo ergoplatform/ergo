@@ -102,7 +102,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     val (validatedIds, invalidatedIds) = validationLoop(txsToValidate, Seq.empty, Seq.empty, 0L)
 
     epochNr += 1
-    if (epochNr % CleanupWorker.IndexRevisionInterval == 0) {
+    if (epochNr % CleanupWorker.RevisionInterval == 0) {
       // drop old index in order to check potentially outdated transactions again.
       validatedIndex = TreeSet(validatedIds: _*)
     } else {
@@ -116,9 +116,22 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
 object CleanupWorker {
 
-  case class RunCleanup(validator: TransactionValidation[ErgoTransaction],
-                        mempool: ErgoMemPoolReader)
+  /**
+    * Constant which shows on how many cleanup operations (called when a new block arrives) a transaction
+    * re-check happens.
+    *
+    * If transactions set is large and stable, then about (1/RevisionInterval)-th of the pool is checked
+    *
+    */
+  val RevisionInterval: Int = 4
 
-  val IndexRevisionInterval: Int = 16
+  /**
+    *
+    * A command to run (partial) memory pool cleanup
+    *
+    * @param validator - a state implementation which provides transaction validation
+    * @param mempool - mempool reader instance
+    */
+  case class RunCleanup(validator: TransactionValidation[ErgoTransaction], mempool: ErgoMemPoolReader)
 
 }

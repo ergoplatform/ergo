@@ -851,6 +851,7 @@ components:
           $ref: '#/components/schemas/TransactionBoxId'
 
     ScanIdsBox:
+      description: Ergo box with associated scans (their respective identifiers)
       type: object
       required:
         - scanIds
@@ -3616,7 +3617,7 @@ paths:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Add scan to a box, writes box to database if it is not there. You can use scan number 10 to add a box to the wallet.
+      summary: Adds a box to scans, writes box to database if it is not there. You can use scan number 10 to add a box to the wallet.
       operationId: addBox
       tags:
         - scan

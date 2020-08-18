@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
+import java.io.File
 import java.util
 
 import akka.actor.{Actor, ActorRef}
@@ -15,7 +16,7 @@ import org.ergoplatform.nodeView.wallet.persistence._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.utils.{BoxUtils, FileUtils}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
@@ -29,7 +30,7 @@ import scorex.core.utils.ScorexEncoding
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
-import sigmastate.Values.{ByteArrayConstant, IntConstant}
+import sigmastate.Values.ByteArrayConstant
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 
@@ -56,7 +57,6 @@ class ErgoWalletActor(settings: ErgoSettings,
   private var offChainRegistry: OffChainRegistry = OffChainRegistry.init(registry)
 
   private var walletVars = WalletVars.apply(storage, settings)
-
   //todo: temporary 3.2.x collection and readers
   private var stateReaderOpt: Option[ErgoStateReader] = None
   private var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
@@ -321,6 +321,22 @@ class ErgoWalletActor(settings: ErgoSettings,
     case LockWallet =>
       walletVars = walletVars.resetProver()
       secretStorageOpt.foreach(_.lock())
+
+    case RescanWallet =>
+      // We do wallet rescan by closing the wallet's database, deleting it from the disk,
+      // then reopening it and sending a rescan signal.
+      val rescanResult = Try {
+        val registryFolder = WalletRegistry.registryFolder(settings)
+        log.info(s"Rescanning the wallet, the registry is in $registryFolder")
+        registry.close()
+        FileUtils.deleteRecursive(registryFolder)
+        registry = WalletRegistry.apply(settings)
+        self ! ScanInThePast(walletHeight()) // walletHeight() corresponds to empty wallet state now
+      }
+      rescanResult.recover { case t =>
+        log.error("Error during rescan attempt: ", t)
+      }
+      sender() ! rescanResult
 
     case GetWalletStatus =>
       val status = WalletStatus(secretIsSet, walletVars.proverOpt.isDefined, changeAddress, walletHeight())
@@ -848,6 +864,11 @@ object ErgoWalletActor {
     * Lock wallet
     */
   case object LockWallet
+
+  /**
+    * Rescan wallet
+    */
+  case object RescanWallet
 
   /**
     * Get wallet status

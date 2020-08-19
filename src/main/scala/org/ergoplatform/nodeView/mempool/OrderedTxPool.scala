@@ -121,7 +121,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
       pool.outputs.get(input.boxId).fold(pool)(wtx => {
         pool.orderedTransactions.get(wtx) match {
           case Some(parent) =>
-            val newWtx = WeightedTxId(wtx.id, wtx.weight + weight)
+            val newWtx = WeightedTxId(wtx.id, wtx.weight + weight, wtx.feePerKb, wtx.created)
             val newPool = OrderedTxPool(pool.orderedTransactions - wtx + (newWtx -> parent),
               pool.transactionsRegistry.updated(parent.id, newWtx),
               invalidated,
@@ -138,7 +138,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
 
 object OrderedTxPool {
 
-  case class WeightedTxId(id: ModifierId, weight: Long) {
+  case class WeightedTxId(id: ModifierId, weight: Long, feePerKb: Long, created: Long) {
     // `id` depends on `weight` so we can use only the former for comparison.
     override def equals(obj: Any): Boolean = obj match {
       case that: WeightedTxId => that.id == id
@@ -162,7 +162,8 @@ object OrderedTxPool {
       .map(_.value)
       .sum
     // We multiply by 1024 for better precision
-    WeightedTxId(tx.id, fee * 1024 / tx.size)
+    val feePerKb = fee * 1024 / tx.size
+    WeightedTxId(tx.id, feePerKb, feePerKb, System.currentTimeMillis())
   }
 
 }

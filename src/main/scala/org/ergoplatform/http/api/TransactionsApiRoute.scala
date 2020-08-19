@@ -1,14 +1,18 @@
 package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.{Directive, Route}
 import akka.pattern.ask
-import io.circe.Json
+import io.circe.{Encoder, Json}
 import io.circe.syntax._
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
+import org.ergoplatform.nodeView.wallet.AugWalletTransaction
+import org.ergoplatform.nodeView.wallet.AugWalletTransaction.boxEncoder
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
@@ -20,7 +24,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   override val route: Route = pathPrefix("transactions") {
-    checkTransactionR ~ getUnconfirmedTransactionsR ~ sendTransactionR
+    checkTransactionR ~ getUnconfirmedTransactionsR ~ sendTransactionR ~ getFeeHistogramR
   }
 
   private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
@@ -68,4 +72,31 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     ApiResponse(getUnconfirmedTransactions(offset, limit))
   }
 
+  val feeHistParam: Directive[(Int, Long)] = parameters("beans".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))
+
+  case class FeeHistogramBean(var nTxns: Int, var totalFee: Long)
+
+  def getFeeHistogram(nBeans : Int, maxWaitTimeMsec: Long, wtxs : Seq[WeightedTxId]): Array[FeeHistogramBean] = {
+    val histogram = new Array[FeeHistogramBean](nBeans + 1)
+    val now = System.currentTimeMillis()
+    val interval = maxWaitTimeMsec / nBeans
+    for (wtx <- wtxs) {
+      val waitTime = now - wtx.created
+      val bean = if (waitTime < maxWaitTimeMsec) (waitTime/interval).asInstanceOf[Int] else nBeans
+      histogram(bean).nTxns += 1
+      histogram(bean).totalFee += wtx.feePerKb
+    }
+    histogram
+  }
+
+  implicit val encodeHistogramBeam: Encoder[FeeHistogramBean] = new Encoder[FeeHistogramBean] {
+    final def apply(bean:FeeHistogramBean): Json = Json.obj(
+      ("nTxns", bean.nTxns.asJson),
+      ("totalFee", bean.totalFee.asJson)
+    )
+  }
+  
+  def getFeeHistogramR: Route = (path("poolhist") & get & feeHistParam) { (beans, maxtime) =>
+    ApiResponse(getMemPool.map(p => getFeeHistogram(beans, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
+  }
 }

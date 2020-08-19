@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.wallet
 
-import java.io.File
 import java.util
 
 import akka.actor.{Actor, ActorRef}
@@ -9,6 +8,7 @@ import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
@@ -120,6 +120,17 @@ class ErgoWalletActor(settings: ErgoSettings,
     offChainRegistry = offReg
   }
 
+  // expected height of a next block when the wallet is receiving a new block with the height blockHeight
+  private def expectedHeight(blockHeight: Height): Height = {
+    if (!settings.nodeSettings.isFullBlocksPruned) {
+      // Node has all the full blocks and applies them sequentially
+      walletHeight() + 1
+    } else {
+      // Node has pruned blockchainso applies blocks sequentially only
+      if (walletHeight() == 0) blockHeight else walletHeight() + 1
+    }
+  }
+
   private def scanLogic: Receive = {
     //scan mempool transaction
     case ScanOffChain(tx) =>
@@ -128,8 +139,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       offChainRegistry = offChainRegistry.updateOnTransaction(newWalletBoxes, inputs)
 
     case ScanInThePast(blockHeight) =>
-      val expectedHeight = walletHeight() + 1
-      if (expectedHeight == blockHeight) {
+      if (expectedHeight(blockHeight) == blockHeight) {
         historyReader.bestFullBlockAt(blockHeight) match {
           case Some(block) =>
             scanBlock(block)
@@ -143,12 +153,12 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     //scan block transactions
     case ScanOnChain(block) =>
-      val expectedHeight = walletHeight() + 1
-      if (expectedHeight == block.height) {
+      val expHeight = expectedHeight(block.height)
+      if (expHeight == block.height) {
         scanBlock(block)
-      } else if (expectedHeight < block.height) {
-        log.warn(s"Wallet: skipped blocks found starting from $expectedHeight, going back to scan them")
-        self ! ScanInThePast(expectedHeight)
+      } else if (expHeight < block.height) {
+        log.warn(s"Wallet: skipped blocks found starting from $expHeight, going back to scan them")
+        self ! ScanInThePast(expHeight)
       } else {
         log.warn(s"Wallet: block in the past reported at ${block.height}, blockId: ${block.id}")
       }

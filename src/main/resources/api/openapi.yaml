@@ -2077,7 +2077,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
- /transactions/poolhist:
+  /transactions/poolhist:
     parameters:
       - in: query
         name: beans

@@ -77,7 +77,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
   case class FeeHistogramBean(var nTxns: Int, var totalFee: Long)
 
   def getFeeHistogram(nBeans : Int, maxWaitTimeMsec: Long, wtxs : Seq[WeightedTxId]): Array[FeeHistogramBean] = {
-    val histogram = new Array[FeeHistogramBean](nBeans + 1)
+    val histogram = Array.fill(nBeans + 1)(FeeHistogramBean(0,0))
     val now = System.currentTimeMillis()
     val interval = maxWaitTimeMsec / nBeans
     for (wtx <- wtxs) {
@@ -95,7 +95,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
       ("totalFee", bean.totalFee.asJson)
     )
   }
-  
+
   def getFeeHistogramR: Route = (path("poolhist") & get & feeHistParam) { (beans, maxtime) =>
     ApiResponse(getMemPool.map(p => getFeeHistogram(beans, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
   }

@@ -126,7 +126,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       // Node has all the full blocks and applies them sequentially
       walletHeight() + 1
     } else {
-      // Node has pruned blockchainso applies blocks sequentially only
+      // Node has pruned blockchain
       if (walletHeight() == 0) blockHeight else walletHeight() + 1
     }
   }

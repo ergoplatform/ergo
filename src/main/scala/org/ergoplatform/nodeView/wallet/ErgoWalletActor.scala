@@ -348,7 +348,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! status
 
     case GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign) =>
-      val tx = if(sign) {
+      // generate signed or unsigned transaction
+      val tx = if (sign) {
         generateSignedTransaction(requests, inputsRaw, dataInputsRaw)
       } else {
         generateUnsignedTransaction(requests, inputsRaw, dataInputsRaw).map(_._1)
@@ -543,21 +544,21 @@ class ErgoWalletActor(settings: ErgoSettings,
   }
 
   /**
-    * Generates new unsigned transaction according to given requests using available or provided boxes.
+    * Generates new unsigned transaction according to given requests using stored or provided boxes.
     *
     * @param requests      - requests to transfer funds or to issue an asset
     * @param inputsRaw     - user-provided inputs. If empty then wallet is looking for inputs itself. If non-empty, then
     *                      the wallet is not adding anything, thus the user in this case should take care about satisfying
     *                      the (sum(inputs) == sum(outputs)) preservation rule for ergs.
-    * @param dataInputsRaw - user-provided data (read-only) inputs. Wallet is not able to provide data inputs
-    *                      (if they are needed in order to spend the spendable inputs).
+    * @param dataInputsRaw - user-provided data (read-only) inputs. Wallet is not able to figure out needed data inputs
+    *                      (to spend the spendable inputs).
     * @return generated transaction along with its inputs and data-inputs, or an error
     */
   private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
-                                             inputsRaw: Seq[String],
-                                             dataInputsRaw: Seq[String]): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = Try {
+                                          inputsRaw: Seq[String],
+                                          dataInputsRaw: Seq[String]): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = Try {
 
-    // A helper which converts Base16-encoded boxes to ErgoBox instances
+    // A helper which is deserializing Base16-encoded boxes to ErgoBox instances
     def stringsToBoxes(strings: Seq[String]): Seq[ErgoBox] =
       strings.map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry)).map(_.get)
 
@@ -631,7 +632,7 @@ class ErgoWalletActor(settings: ErgoSettings,
                                  dataInputBoxes: IndexedSeq[ErgoBox],
                                  changeAddressOpt: Option[ProveDlog]): Try[UnsignedErgoTransaction] = Try {
     require(
-      changeAddressOpt.isDefined || selectionResult.changeBoxes.isEmpty,
+      !(changeAddressOpt.isDefined && selectionResult.changeBoxes.isEmpty),
       "Does not have change address to send change to"
     )
 

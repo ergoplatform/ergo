@@ -21,7 +21,7 @@ class WalletRegistrySpec
     with WalletGenerators
     with FileUtils {
 
-  implicit override val generatorDrivenConfig = PropertyCheckConfiguration(minSuccessful = 5, sizeRange = 10)
+  implicit override val generatorDrivenConfig = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 10)
 
   private val emptyBag = KeyValuePairsBag.empty
   private val walletBoxStatus = Set(PaymentsScanId)
@@ -204,6 +204,27 @@ class WalletRegistrySpec
     }
   }
 
+  it should "update scans correctly" in {
+    val appId1: ScanId = ScanId @@ 21.toShort
+    val appId2: ScanId = ScanId @@ 22.toShort
+
+    forAll(trackedBoxGen) { tb0 =>
+      withHybridStore(10) { store =>
+        val tb1 = tb0.copy(scans = Set(appId1, appId2), spendingHeightOpt = None, spendingTxIdOpt = None)
+
+        val reg = new WalletRegistry(store)(ws)
+        WalletRegistry.putBox(emptyBag, tb1).transact(store)
+        reg.getBox(tb1.box.id).get.scans shouldBe Set(appId1, appId2)
+        reg.unspentBoxes(appId1).length shouldBe 1
+        reg.unspentBoxes(appId2).length shouldBe 1
+        reg.updateScans(Set(appId1), tb1.box)
+        reg.getBox(tb1.box.id).get.scans shouldBe Set(appId1)
+        reg.unspentBoxes(appId1).length shouldBe 1
+        reg.unspentBoxes(appId2).length shouldBe 0
+      }
+    }
+  }
+
   it should "remove application from a box correctly" in {
     val appId: ScanId = ScanId @@ 20.toShort
 
@@ -220,7 +241,7 @@ class WalletRegistrySpec
 
   }
 
-  it should "remove application and then rollback - one app" in {
+  it should "remove box-scan correspondence and then rollback - one app" in {
     val scanId: ScanId = ScanId @@ 20.toShort
 
     forAll(trackedBoxGen) { tb0 =>
@@ -239,7 +260,7 @@ class WalletRegistrySpec
     }
   }
 
-  it should "remove application and then rollback - multiple apps" in {
+  it should "remove box-scan correspondence and then rollback - multiple apps" in {
     val scanId: ScanId = ScanId @@ 20.toShort
 
     forAll(trackedBoxGen) { tb0 =>

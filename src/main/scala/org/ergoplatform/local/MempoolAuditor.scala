@@ -8,7 +8,6 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.network.Broadcast
@@ -103,31 +102,20 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
 
   private def rebroadcastTransactions(): Unit = {
     log.debug("Rebroadcasting transactions")
-    stateReaderOpt.foreach { st =>
-      poolReaderOpt.foreach { pr =>
-        pr.take(settings.nodeSettings.rebroadcastCount).foreach { tx =>
-          st match {
-            case utxo: UtxoState =>
-              //todo: currently we're rebroadcasting transactions which are spending on-chain outputs only
-              //todo: this is to be changed when most of the nodes on the network will support transactions spending
-              //todo: offchain outputs in the mempool (versions 3.2.1 and further)
-              if (tx.inputs.forall(i => utxo.boxById(i.boxId).isDefined)) {
-                log.info(s"Rebroadcasting $tx")
-                val msg = Message(
-                  new InvSpec(settings.scorexSettings.network.maxInvObjects),
-                  Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
-                  None
-                )
-                networkControllerRef ! SendToNetwork(msg, Broadcast)
-              } else {
-                log.info(s"Not all the inputs of $tx is in UTXO set")
-              }
-          }
-        }
+    poolReaderOpt.foreach { pr =>
+      pr.take(settings.nodeSettings.rebroadcastCount).foreach { tx =>
+        log.info(s"Rebroadcasting $tx")
+        val msg = Message(
+          new InvSpec(settings.scorexSettings.network.maxInvObjects),
+          Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
+          None
+        )
+        networkControllerRef ! SendToNetwork(msg, Broadcast)
       }
-    }
-  }
 
+    }
+
+  }
 }
 
 object MempoolAuditor {

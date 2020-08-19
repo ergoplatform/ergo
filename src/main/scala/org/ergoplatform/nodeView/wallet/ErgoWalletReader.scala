@@ -46,6 +46,8 @@ trait ErgoWalletReader extends VaultReader {
 
   def lockWallet(): Unit = walletActor ! LockWallet
 
+  def rescanWallet(): Future[Try[Unit]] = (walletActor ? RescanWallet).mapTo[Try[Unit]]
+
   def getWalletStatus: Future[WalletStatus] =
     (walletActor ? GetWalletStatus).mapTo[WalletStatus]
 
@@ -107,5 +109,8 @@ trait ErgoWalletReader extends VaultReader {
 
   def stopTracking(scanId: ScanId, boxId: BoxId): Future[StopTrackingResponse] =
     (walletActor ? StopTracking(scanId, boxId)).mapTo[StopTrackingResponse]
+
+  def addBox(box: ErgoBox, scanIds: Set[ScanId]): Future[AddBoxResponse] =
+    (walletActor ? AddBox(box, scanIds)).mapTo[AddBoxResponse]
 
 }

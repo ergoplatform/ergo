@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
+
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.HybridLDBKVStore
 import org.ergoplatform.modifiers.history.PreGenesisHeader
@@ -12,8 +13,10 @@ import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
-import Constants.{ScanId, PaymentsScanId}
+import Constants.{PaymentsScanId, ScanId}
+import org.ergoplatform.ErgoBox
 import scorex.db.LDBVersionedStore
+
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
 
@@ -30,6 +33,13 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   import WalletRegistry._
 
   private val keepHistory = ws.keepSpentBoxes
+
+  /**
+    * Close wallet registry storage
+    */
+  def close(): Unit = {
+    store.close()
+  }
 
   /**
     * Read wallet-related box with metadata
@@ -269,6 +279,27 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   }
 
   /**
+    * Updates scans of a box stored in the wallet database,
+    * puts the box into the database if it is not there
+    *
+    * @param scanIds
+    * @param box
+    * @return
+    */
+  def updateScans(scanIds: Set[ScanId], box: ErgoBox): Try[Unit] = Try {
+    val bag0 = KeyValuePairsBag(toInsert = Seq.empty, toRemove = Seq.empty)
+    val (updTb, bag1) = getBox(box.id) match {
+      case Some(tb) =>
+        (tb.copy(scans = scanIds), removeBox(bag0, tb))
+      case None =>
+        (TrackedBox(box, box.creationHeight, scanIds), bag0)
+    }
+    val bag2 = putBox(bag1, updTb)
+    store.nonVersionedRemove(bag2.toRemove)
+    store.nonVersionedPut(bag2.toInsert)
+  }
+
+  /**
     * Remove association between an application and a box.
     * Please note that in case of rollback association remains removed!
     *
@@ -310,8 +341,10 @@ object WalletRegistry {
 
   val PreGenesisStateVersion: Array[Byte] = idToBytes(PreGenesisHeader.id)
 
+  def registryFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/registry")
+
   def apply(settings: ErgoSettings): WalletRegistry = {
-    val dir = new File(s"${settings.directory}/wallet/registry")
+    val dir = registryFolder(settings)
     dir.mkdirs()
 
     val store = new HybridLDBKVStore(dir, settings.nodeSettings.keepVersions)

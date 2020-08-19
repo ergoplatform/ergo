@@ -12,6 +12,7 @@ import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.wallet.Constants
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
@@ -55,7 +56,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         deriveNextKeyR ~
         updateChangeAddressR ~
         signTransactionR ~
-        checkSeedR
+        checkSeedR ~
+        rescanWalletR
     }
   }
 
@@ -82,7 +84,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private val checkRequest: Directive1[(String, Option[String])] = entity(as[Json]).flatMap { p =>
     p.hcursor.downField("mnemonic").as[String]
       .flatMap(mnemo => p.hcursor.downField("mnemonicPass").as[Option[String]]
-         .map(mnemoPassOpt => (mnemo, mnemoPassOpt)))
+        .map(mnemoPassOpt => (mnemo, mnemoPassOpt)))
       .fold(_ => reject, s => provide(s))
   }
 
@@ -136,19 +138,19 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   private def sendTransaction(requests: Seq[TransactionGenerationRequest],
                               inputsRaw: Seq[String],
                               dataInputsRaw: Seq[String]): Route = {
-    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, {tx =>
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, { tx =>
       nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       ApiResponse(tx.id)
     })
   }
 
   def sendTransactionR: Route =
-    (path("transaction" / "send") & post & entity(as[RequestsHolder])){ holder =>
+    (path("transaction" / "send") & post & entity(as[RequestsHolder])) { holder =>
       sendTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
     }
 
   def generateTransactionR: Route =
-    (path("transaction" / "generate") & post & entity(as[RequestsHolder])){ holder =>
+    (path("transaction" / "generate") & post & entity(as[RequestsHolder])) { holder =>
       generateTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
     }
 
@@ -249,6 +251,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         _.transactions
           .map {
             _.filter(tx =>
+              tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId) &&
               tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
                 tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
             )
@@ -293,8 +296,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def checkSeedR: Route = (path("check") & post & checkRequest) {
     case (mnemo, mnemoPassOpt) =>
-      withWalletOp(_.checkSeed(mnemo, mnemoPassOpt))
-      { case matched =>
+      withWalletOp(_.checkSeed(mnemo, mnemoPassOpt)) { matched =>
         ApiResponse(
           Json.obj(
             "matched" -> matched.asJson
@@ -337,6 +339,15 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet { w =>
       w.updateChangeAddress(p2pk)
       Future.successful(())
+    }
+  }
+
+  def rescanWalletR: Route = (path("rescan") & get) {
+    withWalletOp(_.rescanWallet()) {
+      _.fold(
+        e => BadRequest(e.getMessage),
+        _ => ApiResponse.toRoute(ApiResponse.OK)
+      )
     }
   }
 

@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "3.3.1"
+  version: "3.3.2"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -849,6 +849,20 @@ components:
           type: integer
         boxId:
           $ref: '#/components/schemas/TransactionBoxId'
+
+    ScanIdsBox:
+      description: Ergo box with associated scans (their respective identifiers)
+      type: object
+      required:
+        - scanIds
+        - box
+      properties:
+        scanIds:
+          type: array
+          items:
+            type: integer
+        box:
+          $ref: '#/components/schemas/ErgoTransactionOutput'
 
     DlogCommitment:
       description: Randomness and commitment for the first step of the Schnorr protocol
@@ -3732,6 +3746,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+
+  /scan/addBox:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Adds a box to scans, writes box to database if it is not there. You can use scan number 10 to add a box to the wallet.
+      operationId: addBox
+      tags:
+        - scan
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanIdsBox'
+      responses:
+        '200':
+          description: It the box is added successfully, then its id is returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionId'
         default:
           description: Error
           content:

@@ -23,9 +23,9 @@ and currently the reference implementation code should be considered as the spec
 
 ## Installation
 
-You can check our [Setup A Full Node](https://github.com/ergoplatform/ergo/wiki/Set-up-a-full-node) wiki page to learn how to manually setup and configuration a node.
+You can check our [Setup A Full Node](https://github.com/ergoplatform/ergo/wiki/Set-up-a-full-node) wiki page to learn how to manually setup and configure a node.
 
-Alternatively you can run the prepared [ergo-installer.sh](ergo-installer.sh) script. With this script you will install the latest Ergo node without any hassle (only availalbe for Linux distributions):
+Alternatively you can run the prepared [ergo-installer.sh](ergo-installer.sh) script. With this script you'll have the latest Ergo node installed without any hassle (only availalbe for Linux distributions):
 
     curl -s https://raw.githubusercontent.com/ergoplatform/ergo/master/ergo-installer.sh | sh -s -- --api-key=<YOUR_API_KEY>
 

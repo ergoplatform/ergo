@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
+import com.google.common.hash.{BloomFilter, Funnels}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoContext
@@ -7,7 +8,7 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, decodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.Scan
-import org.ergoplatform.settings.{Constants, LaunchParameters}
+import org.ergoplatform.settings.{Constants, ErgoSettings, LaunchParameters}
 import org.ergoplatform.wallet.Constants.{MiningScanId, PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
@@ -64,8 +65,7 @@ object WalletScanLogic extends ScorexLogging {
                             height: Int,
                             blockId: ModifierId,
                             transactions: Seq[ErgoTransaction]): (WalletRegistry, OffChainRegistry) = {
-
-    //todo: inefficient for wallets with many outputs, replace with a Bloom/Cuckoo filter?
+    //todo: inefficient for wallets with many unspent boxes, replace with a Bloom/Cuckoo filter?
     //todo: at least, cache in RAM instead of reading from DB
     val previousBoxIds = registry.allUnspentBoxes().map(tb => encodedBoxId(tb.box.id))
 
@@ -81,10 +81,11 @@ object WalletScanLogic extends ScorexLogging {
     val initialScanResults: ScanResults = (resolvedBoxes, Seq.empty, Seq.empty)
 
     val scanRes = transactions.foldLeft((initialScanResults, previousBoxIds)) { case ((scanResults, accBoxIds), tx) =>
-      val txInputIds = tx.inputs.map(x => encodedBoxId(x.boxId))
-      val myOutputs = extractWalletOutputs(tx, Some(height), walletVars)
 
+      val myOutputs = extractWalletOutputs(tx, Some(height), walletVars)
       val boxIds: Seq[EncodedBoxId] = accBoxIds ++ myOutputs.map(x => EncodedBoxId @@ x.boxId)
+
+      val txInputIds = tx.inputs.map(x => encodedBoxId(x.boxId))
       val spendingInputIds = txInputIds.filter(x => boxIds.contains(x))
 
       if (myOutputs.nonEmpty || spendingInputIds.nonEmpty) {

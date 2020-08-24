@@ -1,7 +1,5 @@
 package org.ergoplatform.nodeView.wallet
 
-import java.util
-
 import akka.actor.{Actor, ActorRef}
 import cats.Traverse
 import org.ergoplatform.ErgoBox._
@@ -184,13 +182,13 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     case GetWalletBoxes(unspent) =>
       val currentHeight = fullHeight
-      sender() ! (if (unspent) registry.walletUnspentBoxes() else registry.walletConfirmedBoxes(0))
+      sender() ! (if (unspent) registry.walletUnspentBoxes() else registry.walletConfirmedBoxes())
         .map(tb => WalletBox(tb, currentHeight))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
     case GetScanBoxes(scanId, unspent) =>
       val currentHeight = fullHeight
-      sender() ! (if (unspent) registry.unspentBoxes(scanId) else registry.confirmedBoxes(scanId, 0))
+      sender() ! (if (unspent) registry.unspentBoxes(scanId) else registry.confirmedBoxes(scanId))
         .map(tb => WalletBox(tb, currentHeight))
         .sortBy(_.trackedBox.inclusionHeightOpt)
 
@@ -266,7 +264,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         } match {
         case s: Success[String] =>
           self ! UnlockWallet(pass)
-          util.Arrays.fill(entropy, 0: Byte)
+          java.util.Arrays.fill(entropy, 0: Byte)
           log.info("Wallet is initialized")
           s
         case Failure(t) =>

@@ -50,10 +50,24 @@ class WalletRegistrySpec
   it should "read spent wallet boxes" in {
     forAll(trackedBoxGen, modifierIdGen) { case (box, txId) =>
       withHybridStore(10) { store =>
-        val uncertainBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = walletBoxStatus)
-        WalletRegistry.putBox(emptyBag, uncertainBox).transact(store)
+        val spentBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = walletBoxStatus)
+        WalletRegistry.putBox(emptyBag, spentBox).transact(store)
         val registry = new WalletRegistry(store)(settings.walletSettings)
-        registry.walletSpentBoxes() shouldBe Seq(uncertainBox)
+        registry.walletSpentBoxes() shouldBe Seq(spentBox)
+      }
+    }
+  }
+
+  it should "read confirmed wallet boxes" in {
+    forAll(trackedBoxGen, modifierIdGen) { case (box, txId) =>
+      withHybridStore(10) { store =>
+        val unspentBox = box.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus)
+        val spentBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = walletBoxStatus)
+        WalletRegistry.putBoxes(emptyBag, Seq(unspentBox, spentBox)).transact(store)
+        val registry = new WalletRegistry(store)(settings.walletSettings)
+        registry.walletSpentBoxes() shouldBe Seq(spentBox)
+        registry.walletUnspentBoxes() shouldBe Seq(unspentBox)
+        registry.walletConfirmedBoxes() shouldBe Seq(unspentBox, spentBox)
       }
     }
   }

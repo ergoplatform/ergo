@@ -23,11 +23,13 @@ and currently the reference implementation code should be considered as the spec
 
 ## Installation
 
-You can check our [Wiki](https://github.com/ergoplatform/ergo/wiki/Set-up-a-full-node) page for node installation and configuration guide.
+You can check our [Setup A Full Node](https://github.com/ergoplatform/ergo/wiki/Set-up-a-full-node) wiki page to learn how to manually setup and configure a node.
 
-Also, reference with [Node Configuration File](https://github.com/ergoplatform/ergo/wiki/Node-Configuration-File) wiki page for creating your own configuration file.
+Alternatively you can run the prepared [ergo-installer.sh](ergo-installer.sh) script. With this script you'll have the latest Ergo node installed without any hassle (only availalbe for Linux distributions):
 
-## Build from sources
+    curl -s https://raw.githubusercontent.com/ergoplatform/ergo/master/ergo-installer.sh | sh -s -- --api-key=<YOUR_API_KEY>
+
+## Build from source
 
 In order to build the Ergo node from sources you need JDK (>= 1.8) and SBT to be 
 [installed](https://docs.scala-lang.org/getting-started/sbt-track/getting-started-with-scala-and-sbt-on-the-command-line.html) on your machine.
@@ -49,16 +51,12 @@ packager commands could be chosen (depending on desired system type you want to 
 
 ## Running the node
 
-The node could be started in a few different ways:
+The node can be started in a couple different ways:
  
- - In case you have only a jar: `java -jar /path/to/ergo-<version>.jar --<networkId> -c /path/to/local.conf`
+ - In case you only have a jar: `java -jar /path/to/ergo-<version>.jar --<networkId> -c /path/to/local.conf`
  - Using start script from sbt-native-packager: `sh /path/to/bin/ergo  --<networkId> -c /path/to/local.conf`
  
 Available `networkId` options: `mainnet`, `testnet`, `devnet`.
-
-You can run special [ergo-installer.sh](ergo-installer.sh) script, that helps you to install Ergo node without a hassle on almost every Linux OS:
-
-    curl -s https://raw.githubusercontent.com/ergoplatform/ergo/master/ergo-installer.sh | sh -s -- --api-key=<YOUR_API_KEY>
 
 ## UI
 
@@ -83,9 +81,9 @@ To run specific Ergo version `<VERSION>` as a service with custom config `/path/
         -v /path/on/host/system/to/myergo.conf:/etc/myergo.conf \
         ergoplatform/ergo:<VERSION> --<networkId> -c /etc/myergo.conf
 
-Available versions can be found on [Ergo Docker image page](https://hub.docker.com/r/ergoplatform/ergo/tags), for example, `v3.2.2`.
+Available versions can be found on [Ergo Docker image page](https://hub.docker.com/r/ergoplatform/ergo/tags), for example, `v3.3.1`.
 
-This will connect to Ergo mainnet or testnet respecting your configuration passed in `myergo.conf` and network flag `--<networkId>`. Every default config value would be overwritten with corresponding value in `myergo.conf`.
+This will connect to the Ergo mainnet or testnet following your configuration passed in `myergo.conf` and network flag `--<networkId>`. Every default config value would be overwritten with corresponding value in `myergo.conf`.
 
 This command also would store your data in `/path/on/host/to/ergo/data` on host system, and open ports `9030` (node communication) globally and `9053` (REST API) locally on host system. The `/path/on/host/to/ergo/data` directory must has `777` permissions or has owner/group numeric id equal to `9052` to be writable by container, as `ergo` user inside Docker image (please refer to [Dockerfile](Dockerfile)).
 

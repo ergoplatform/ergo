@@ -81,9 +81,9 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @return sequences of scan-related unspent boxes found in the database
     */
   def unspentBoxes(scanId: ScanId): Seq[TrackedBox] = {
-    store.getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId)).flatMap { case (_, boxId) =>
-      getBox(ADKey @@ boxId)
-    }
+    store
+      .getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId))
+      .flatMap { case (_, boxId) => getBox(ADKey @@ boxId) }
   }
 
   /**
@@ -110,27 +110,21 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   def walletSpentBoxes(): Seq[TrackedBox] = spentBoxes(Constants.PaymentsScanId)
 
   /**
-    * Read boxes created at or after given height, both spent or not
+    * Read wallet boxes, both spent or not
     *
     * @param scanId     scan identifier
-    * @param fromHeight min height when box was included into the blockchain
     * @return sequence of scan-related boxes
     */
-  def confirmedBoxes(scanId: ScanId, fromHeight: Int): Seq[TrackedBox] = {
-    val firstKeyInRange = firstIncludedScanBoxSpaceKey(scanId, fromHeight)
-    val lastKeyInRange = lastIncludedScanBoxSpaceKey(scanId)
-    store.getRange(firstKeyInRange, lastKeyInRange).flatMap { case (_, boxId) =>
-      getBox(ADKey @@ boxId)
-    }
+  def confirmedBoxes(scanId: ScanId): Seq[TrackedBox] = {
+    walletUnspentBoxes() ++ walletSpentBoxes()
   }
 
   /**
-    * Read boxes belong to the payment scan created at or after given height, both spent or not
+    * Read boxes belong to the payment scan, both spent or not
     *
-    * @param fromHeight min height when box was included into the blockchain
     * @return sequence of (P2PK-payment)-related boxes
     */
-  def walletConfirmedBoxes(fromHeight: Int): Seq[TrackedBox] = confirmedBoxes(Constants.PaymentsScanId, fromHeight)
+  def walletConfirmedBoxes(): Seq[TrackedBox] = confirmedBoxes(Constants.PaymentsScanId)
 
   /**
     * Read transaction with wallet-related metadata

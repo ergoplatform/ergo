@@ -1,6 +1,7 @@
 package org.ergoplatform.modifiers.history
 
 case class HeaderChain(headers: IndexedSeq[Header]) {
+
   headers.indices.foreach { i =>
     if (i > 0) require(headers(i).parentId == headers(i - 1).id,
       s"Incorrect chain: ${headers(i - 1)},${headers(i)}")
@@ -38,6 +39,7 @@ case class HeaderChain(headers: IndexedSeq[Header]) {
 }
 
 object HeaderChain {
+
   lazy val empty = HeaderChain(IndexedSeq.empty[Header])
 
   def apply(seq: Seq[Header]): HeaderChain = HeaderChain(seq.toIndexedSeq)

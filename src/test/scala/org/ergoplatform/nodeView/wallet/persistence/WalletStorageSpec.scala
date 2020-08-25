@@ -34,6 +34,7 @@ class WalletStorageSpec
         }
       store.insert(Seq(SecretPathsKey -> toInsert))
     }
+
     forAll(Gen.nonEmptyListOf(derivationPathGen)) { paths =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
@@ -56,13 +57,15 @@ class WalletStorageSpec
   }
 
   it should "add, remove and read scans" in {
-    forAll(Gen.nonEmptyListOf(externalAppReqGen)) { externalAppReqs =>
+    forAll(Gen.nonEmptyListOf(externalScanReqGen)) { externalScanReqs =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
-        externalAppReqs.foreach(storage.addScan)
+        externalScanReqs.foreach(req => storage.addScan(req))
         val storageApps = storage.allScans
-        val storageRequests = storageApps.map(app => ScanRequest(app.scanName, app.trackingRule))
-        storageRequests.foreach(r => externalAppReqs.contains(r) shouldBe true)
+        val storageRequests = storageApps.map { app =>
+          ScanRequest(app.scanName, app.trackingRule)
+        }
+        storageRequests.foreach(r => externalScanReqs.contains(r) shouldBe true)
         storageApps.map(_.scanId).foreach(storage.removeScan)
         storage.allScans.length shouldBe 0
       }

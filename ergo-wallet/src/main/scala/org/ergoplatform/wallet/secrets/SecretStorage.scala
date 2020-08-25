@@ -18,4 +18,6 @@ trait SecretStorage {
 
   def lock(): Unit
 
+  def checkSeed(mnemonic: String, mnemonicPassOpt: Option[String]): Boolean
+
 }

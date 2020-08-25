@@ -3,6 +3,8 @@ import sbt._
 
 import scala.util.Try
 
+logLevel := Level.Debug
+
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
@@ -22,7 +24,7 @@ lazy val commonSettings = Seq(
   publishTo := sonatypePublishToBundle.value,
 )
 
-val scorexVersion = "master-07d30caa-SNAPSHOT"
+val scorexVersion = "master-bb48da3a-SNAPSHOT"
 val sigmaStateVersion = "3.2.1"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -40,21 +42,18 @@ libraryDependencies ++= Seq(
   "org.iq80.leveldb" % "leveldb" % "0.12",
   
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
-
-  "org.typelevel" %% "cats-free" % "1.6.0",
+  
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "com.iheart" %% "ficus" % "1.4.7",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
   "com.joefkelley" %% "argyle" % "1.0.0",
 
-  "com.github.oskin1" %% "scakoo" % "0.4.1", // Cuckoo filter implementation
-
   "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
   "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
-  "org.scalacheck" %% "scalacheck" % "1.14.0" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.13.5" % "test",
 
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",

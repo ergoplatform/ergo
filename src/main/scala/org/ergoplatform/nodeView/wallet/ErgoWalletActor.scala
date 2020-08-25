@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.wallet
 
 import akka.actor.{Actor, ActorRef}
 import cats.Traverse
+import com.google.common.hash.BloomFilter
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -53,6 +54,9 @@ class ErgoWalletActor(settings: ErgoSettings,
   private val storage: WalletStorage = WalletStorage.readOrCreate(settings)
   private var registry: WalletRegistry = WalletRegistry.apply(settings)
   private var offChainRegistry: OffChainRegistry = OffChainRegistry.init(registry)
+
+  // Bloom filter for boxes not being spent to the moment
+  private var outputsFilter: Option[BloomFilter[Array[Byte]]] = None
 
   private var walletVars = WalletVars.apply(storage, settings)
   //todo: temporary 3.2.x collection and readers
@@ -111,11 +115,14 @@ class ErgoWalletActor(settings: ErgoSettings,
     * @param block - block to scan
     */
   private def scanBlock(block: ErgoFullBlock): Unit = {
+    import WalletScanLogic.scanBlockTransactions
+
     log.info(s"Wallet is going to scan a block ${block.id} at height ${block.height}")
-    val (reg, offReg) =
-      WalletScanLogic.scanBlockTransactions(registry, offChainRegistry, stateContext, walletVars, block)
+    val (reg, offReg, updatedOutputsFilter) =
+      scanBlockTransactions(registry, offChainRegistry, stateContext, walletVars, block, outputsFilter)
     registry = reg
     offChainRegistry = offReg
+    outputsFilter = Some(updatedOutputsFilter)
   }
 
   // expected height of a next block when the wallet is receiving a new block with the height blockHeight
@@ -162,8 +169,14 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case Rollback(version: VersionTag) =>
-      registry.rollback(version).fold(
-        e => log.error(s"Failed to rollback wallet registry to version $version due to: $e"), _ => ())
+      registry.rollback(version) match {
+        case Failure(t) =>
+          log.error(s"Failed to rollback wallet registry to version $version due to: $t")
+        case _: Success[Unit] =>
+          // Reset outputs Bloom filter to have it initialized again on next block scanned
+          // todo: for offchain registry, refresh is also needed, https://github.com/ergoplatform/ergo/issues/1180
+          outputsFilter = None
+      }
   }
 
   private def readers: Receive = {

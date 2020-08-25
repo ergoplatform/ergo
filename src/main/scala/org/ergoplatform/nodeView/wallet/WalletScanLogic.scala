@@ -5,10 +5,10 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, decodedBoxId, encodedBoxId}
+import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.Scan
-import org.ergoplatform.settings.{Constants, ErgoSettings, LaunchParameters}
+import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.wallet.Constants.{MiningScanId, PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
@@ -27,7 +27,7 @@ object WalletScanLogic extends ScorexLogging {
     * Tries to prove the given box in order to define whether it could be spent by this wallet.
     *
     * todo: currently used only to decide that a box with mining rewards could be spent,
-    *       do special efficient method for that? The method would just use height, not doing signing.
+    * do special efficient method for that? The method would just use height, not doing signing.
     */
   private def resolve(box: ErgoBox,
                       proverOpt: Option[ErgoProvingInterpreter],
@@ -49,10 +49,12 @@ object WalletScanLogic extends ScorexLogging {
                             offChainRegistry: OffChainRegistry,
                             stateContext: ErgoStateContext,
                             walletVars: WalletVars,
-                            block: ErgoFullBlock): (WalletRegistry, OffChainRegistry) = {
+                            block: ErgoFullBlock,
+                            cachedOutputsFilter: Option[BloomFilter[Array[Byte]]]
+                           ): (WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]]) = {
     scanBlockTransactions(
       registry, offChainRegistry, stateContext, walletVars,
-      block.height, block.id, block.transactions)
+      block.height, block.id, block.transactions, cachedOutputsFilter)
   }
 
   /**
@@ -64,46 +66,91 @@ object WalletScanLogic extends ScorexLogging {
                             walletVars: WalletVars,
                             height: Int,
                             blockId: ModifierId,
-                            transactions: Seq[ErgoTransaction]): (WalletRegistry, OffChainRegistry) = {
-    //todo: inefficient for wallets with many unspent boxes, replace with a Bloom/Cuckoo filter?
-    //todo: at least, cache in RAM instead of reading from DB
-    val previousBoxIds = registry.allUnspentBoxes().map(tb => encodedBoxId(tb.box.id))
+                            transactions: Seq[ErgoTransaction],
+                            cachedOutputsFilter: Option[BloomFilter[Array[Byte]]]
+                           ): (WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]]) = {
 
+    // Take unspent wallet outputs Bloom Filter from cache
+    // or recreate it from unspent outputs stored in the database
+    val outputsFilter = cachedOutputsFilter.getOrElse {
+      // todo: currently here and other places hardcoded values are used for Bloom filter parameters
+      // todo: consider different profiles for the config, such as "user", "wallet", "app hub"
+      val expectedKeys = 20000
+      val falsePositiveRate = 0.01
+      val bf = BloomFilter.create[Array[Byte]](Funnels.byteArrayFunnel(), expectedKeys, falsePositiveRate)
+
+      registry.allUnspentBoxes().foreach { tb =>
+        bf.put(tb.box.id)
+      }
+      bf
+    }
+
+    // Resolve boxes related to mining income
     val resolvedBoxes = registry.unspentBoxes(MiningScanId).flatMap { tb =>
       val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)
       if (spendable) Some(tb.copy(scans = Set(PaymentsScanId))) else None
     }
 
     //input tx id, input box id, tracked box
-    type InputData = Seq[(ModifierId, EncodedBoxId, TrackedBox)]
+    type InputData = Seq[(ModifierId, ModifierId, TrackedBox)]
     //outputs, input ids, related transactions
     type ScanResults = (Seq[TrackedBox], InputData, Seq[WalletTransaction])
     val initialScanResults: ScanResults = (resolvedBoxes, Seq.empty, Seq.empty)
 
-    val scanRes = transactions.foldLeft((initialScanResults, previousBoxIds)) { case ((scanResults, accBoxIds), tx) =>
+    // Wallet unspent outputs, we fetch them only when Bloom filter shows that some outputs may be spent
+    var prevUnspentBoxes: Seq[TrackedBox] = Seq.empty
 
+    val scanRes = transactions.foldLeft(initialScanResults) { case (scanResults, tx) =>
+
+      // extract wallet- (and external scans) related outputs from the transaction
       val myOutputs = extractWalletOutputs(tx, Some(height), walletVars)
-      val boxIds: Seq[EncodedBoxId] = accBoxIds ++ myOutputs.map(x => EncodedBoxId @@ x.boxId)
 
-      val txInputIds = tx.inputs.map(x => encodedBoxId(x.boxId))
-      val spendingInputIds = txInputIds.filter(x => boxIds.contains(x))
+      // add extracted outputs to the filter
+      myOutputs.foreach { out =>
+        outputsFilter.put(out.box.id)
+      }
 
-      if (myOutputs.nonEmpty || spendingInputIds.nonEmpty) {
-        val spentBoxes = spendingInputIds.map { inpId =>
-          registry.getBox(decodedBoxId(inpId))
-            .orElse(scanResults._1.find(tb => tb.box.id.sameElements(decodedBoxId(inpId)))).get //todo: .get
+      // Check with the Bloom filter that some outputs maybe spent
+      // Bloom filter is a probabilistic data structure, with false-positives may happen
+      // So we need to filter spendingInputs again
+      val spendingInputs = tx.inputs.filter(inp =>
+        outputsFilter.mightContain(inp.boxId)
+      )
+
+      if (myOutputs.nonEmpty || spendingInputs.nonEmpty) {
+
+        val spentBoxes: Seq[TrackedBox] = if (spendingInputs.nonEmpty) {
+
+          // Read unspent boxes before this block from the database
+          if (prevUnspentBoxes.isEmpty) {
+            prevUnspentBoxes = registry.allUnspentBoxes()
+          }
+          // Add unspent boxes from this block
+          val unspentBoxes = prevUnspentBoxes ++ scanResults._1
+
+          // Filter-out false positives and read the boxes being spent
+          spendingInputs.flatMap { inp =>
+            val inpId = inp.boxId
+
+            unspentBoxes.find(_.box.id.sameElements(inpId)).flatMap { _ =>
+              registry.getBox(inpId)
+                .orElse(scanResults._1.find(tb => tb.box.id.sameElements(inpId)))
+            }
+          }
+        } else {
+          Seq.empty
         }
 
         // Scans related to the transaction
         val walletscanIds = (spentBoxes ++ myOutputs).flatMap(_.scans).toSet
         val wtx = WalletTransaction(tx, height, walletscanIds.toSeq)
 
-        val newRel = (scanResults._2: InputData) ++ spendingInputIds.zip(spentBoxes).map(t => (tx.id, t._1, t._2))
-        (scanResults._1 ++ myOutputs, newRel, scanResults._3 :+ wtx) -> boxIds
+        val newRel = (scanResults._2: InputData) ++ spentBoxes.map(t => (tx.id, t.boxId, t))
+        (scanResults._1 ++ myOutputs, newRel, scanResults._3 :+ wtx)
       } else {
-        scanResults -> accBoxIds
+        scanResults
       }
-    }._1
+    }
 
     val outputs = scanRes._1
     val inputs = scanRes._2
@@ -117,7 +164,7 @@ object WalletScanLogic extends ScorexLogging {
     val newOnChainIds = outputs.map(x => encodedBoxId(x.box.id))
     val updatedOffchainRegistry = offChainRegistry.updateOnBlock(height, walletUnspent, newOnChainIds)
 
-    registry -> updatedOffchainRegistry
+    (registry, updatedOffchainRegistry, outputsFilter)
   }
 
 

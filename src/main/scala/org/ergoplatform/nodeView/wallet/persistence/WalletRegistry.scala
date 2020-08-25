@@ -5,7 +5,7 @@ import java.io.File
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.HybridLDBKVStore
 import org.ergoplatform.modifiers.history.PreGenesisHeader
-import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, EncodedTokenId}
+import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.Constants
@@ -179,7 +179,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @param blockHeight - block height
     */
   def updateOnBlock(newOutputs: Seq[TrackedBox],
-                    inputs: Seq[(ModifierId, EncodedBoxId, TrackedBox)],
+                    inputs: Seq[(ModifierId, ModifierId, TrackedBox)],
                     txs: Seq[WalletTransaction])
                    (blockId: ModifierId, blockHeight: Int): Unit = {
 

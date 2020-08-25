@@ -263,6 +263,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val h = ErgoMiner.deriveUnprovenHeader(candidate)
     val msg = msgByHeader(h)
     val b = getB(candidate.nBits)
+    val v = candidate.version
 
     val proofs = if (mandatoryTxIds.nonEmpty) {
       // constructs fake block transactions section (BlockTransactions instance) to get proofs from it
@@ -273,7 +274,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     } else {
       None
     }
-    WorkMessage(msg, b, pk, proofs)
+    WorkMessage(msg, b, pk, v, proofs)
   }
 
 }

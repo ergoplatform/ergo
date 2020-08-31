@@ -51,7 +51,7 @@ object FoundationBoxSigner extends App {
   val preSign: ACTION = 1
   val sign: ACTION = 2
 
-  val height = 253000
+  val height = 307000
 
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."

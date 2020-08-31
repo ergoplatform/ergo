@@ -342,7 +342,7 @@ object Parameters {
   }
 
   /**
-    * Check that two set of parameters are the same (contain the same records).
+    * Check that two sets of parameters are the same (contain the same records).
     *
     * @param p1 - parameters set
     * @param p2 - parameters set

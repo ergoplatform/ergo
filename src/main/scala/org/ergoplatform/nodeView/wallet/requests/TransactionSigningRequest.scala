@@ -59,11 +59,11 @@ object SigmaBooleanCodecs extends ApiCodecs {
         case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
         case tp: TrivialProp => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
         case and: CAND =>
-          Map("op" -> op, "args" -> and.sigmaBooleans.map(_.asJson).asJson).asJson
+          Map("op" -> op, "args" -> and.children.map(_.asJson).asJson).asJson
         case or: COR =>
-          Map("op" -> op, "args" -> or.sigmaBooleans.map(_.asJson).asJson).asJson
+          Map("op" -> op, "args" -> or.children.map(_.asJson).asJson).asJson
         case th: CTHRESHOLD =>
-          Map("op" -> op, "args" -> th.sigmaBooleans.map(_.asJson).asJson).asJson
+          Map("op" -> op, "args" -> th.children.map(_.asJson).asJson).asJson
       }
   }
 
@@ -111,10 +111,13 @@ object HintCodecs extends ApiCodecs {
 
   implicit val commitmentHintEncoder: Encoder[CommitmentHint] = { ch =>
     val commonFields: Json = (ch match {
-      case own: OwnCommitment => Json.obj("hint" -> "cmtWithSecret".asJson, "secret" -> own.secretRandomness.asJson)
-      case _: RealCommitment => Json.obj("hint" -> "cmtReal".asJson)
-      case _: SimulatedCommitment => Json.obj("hint" -> "cmtSimulated".asJson)
-    }).deepMerge(Json.obj("pubkey" -> ch.image.asJson))
+      case own: OwnCommitment =>
+        Json.obj("hint" -> "cmtWithSecret".asJson, "secret" -> own.secretRandomness.asJson)
+      case _: RealCommitment =>
+        Json.obj("hint" -> "cmtReal".asJson)
+      case _: SimulatedCommitment =>
+        Json.obj("hint" -> "cmtSimulated".asJson)
+    }).deepMerge(Json.obj("pubkey" -> ch.image.asJson, "position" -> ch.position.asJson))
 
     val cmt = ch.commitment.asJson
     commonFields.deepMerge(cmt)
@@ -126,18 +129,21 @@ object HintCodecs extends ApiCodecs {
         for {
           secret <- c.downField("secret").as[BigInteger]
           pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          position <- c.downField("position").as[String]
           firstMsg <- firstProverMessageDecoder.tryDecode(c)
-        } yield OwnCommitment(pubkey, secret, firstMsg)
+        } yield OwnCommitment(pubkey, secret, firstMsg, position)
       case h: String if h == "cmtReal" =>
         for {
           pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          position <- c.downField("position").as[String]
           firstMsg <- firstProverMessageDecoder.tryDecode(c)
-        } yield RealCommitment(pubkey, firstMsg)
+        } yield RealCommitment(pubkey, firstMsg, position)
       case h: String if h == "cmtSimulated" =>
         for {
+          position <- c.downField("position").as[String]
           pubkey <- c.downField("pubkey").as[SigmaBoolean]
           firstMsg <- firstProverMessageDecoder.tryDecode(c)
-        } yield SimulatedCommitment(pubkey, firstMsg)
+        } yield SimulatedCommitment(pubkey, firstMsg, position)
       case _ =>
         //only dlog is supported for now
         Left(DecodingFailure("Unsupported hint value", List()))
@@ -153,7 +159,8 @@ object HintCodecs extends ApiCodecs {
       "hint" -> proofType.asJson,
       "challenge" -> Base16.encode(sp.challenge).asJson,
       "pubkey" -> sp.image.asJson,
-      "proof" -> SigSerializer.toBytes(sp.uncheckedTree).asJson
+      "proof" -> SigSerializer.toBytes(sp.uncheckedTree).asJson,
+      "position" -> sp.position.asJson
     )
   }
 
@@ -164,19 +171,27 @@ object HintCodecs extends ApiCodecs {
           challenge <- c.downField("challenge").as[String]
           pubkey <- c.downField("pubkey").as[SigmaBoolean]
           proof <- c.downField("proof").as[String]
-        } yield RealSecretProof(pubkey,
-          Challenge @@ Base16.decode(challenge).get,
-          SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get)
-        )
+          position <- c.downField("position").as[String]
+        } yield
+          RealSecretProof(
+            pubkey,
+            Challenge @@ Base16.decode(challenge).get,
+            SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get),
+            position
+          )
       case h: String if h == "proofSimulated" =>
         for {
           challenge <- c.downField("challenge").as[String]
           pubkey <- c.downField("pubkey").as[SigmaBoolean]
           proof <- c.downField("proof").as[String]
-        } yield SimulatedSecretProof(pubkey,
-          Challenge @@ Base16.decode(challenge).get,
-          SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get)
-        )
+          position <- c.downField("position").as[String]
+        } yield
+          SimulatedSecretProof(
+            pubkey,
+            Challenge @@ Base16.decode(challenge).get,
+            SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get),
+            position
+          )
       case _ =>
         //only dlog is supported for now
         Left(DecodingFailure("Unsupported hint value", List()))

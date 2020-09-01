@@ -11,6 +11,7 @@ import scorex.util.ModifierId
 import scorex.util.encode.Base16
 import scorex.util.Random
 import sigmastate.CTHRESHOLD
+import sigmastate.Values.SigmaBoolean
 
 class ErgoProvingInterpreterSpec
   extends FlatSpec
@@ -51,7 +52,7 @@ class ErgoProvingInterpreterSpec
     val pk1 = prover1.hdPubKeys.head.key
     val pk2 = prover2.hdPubKeys.head.key
 
-    val prop = CTHRESHOLD(2, Seq(pk0, pk1, pk2))
+    val prop: SigmaBoolean = CTHRESHOLD(2, Seq(pk0, pk1, pk2))
 
     val value = 100000000L
 
@@ -65,15 +66,15 @@ class ErgoProvingInterpreterSpec
 
     val utx = new UnsignedErgoLikeTransaction(IndexedSeq(unsignedInput), IndexedSeq.empty, IndexedSeq(boxCandidate))
 
-    val (r, a) = ErgoProvingInterpreter.generateCommitmentFor(pk0)
-    val cmtHint = RealCommitment(pk0, a)
+    val aliceBag = prover0.generateCommitments(prop)
+    val (cmtHint, ownCmt) = (aliceBag.realCommitments.head, aliceBag.ownCommitments.head)
 
     val signRes = prover1.withHints(HintsBag(Seq(cmtHint))).sign(utx, IndexedSeq(inputBox), IndexedSeq(), stateContext)
     signRes.isSuccess shouldBe true
 
     val hints = prover1
       .bagForTransaction(signRes.get, IndexedSeq(inputBox), IndexedSeq(), stateContext, Seq(pk1), Seq(pk2))
-      .addHint(OwnCommitment(pk0, r, a))
+      .addHint(ownCmt)
 
     val signedTxTry = prover0.withHints(hints).sign(utx, IndexedSeq(inputBox), IndexedSeq(), stateContext)
     signedTxTry.isSuccess shouldBe true

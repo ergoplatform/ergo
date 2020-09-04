@@ -7,7 +7,6 @@ import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.{ErgoBox, P2PKAddress}
-import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoLikeTransactionTemplate, P2PKAddress}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
@@ -17,6 +16,7 @@ import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.wallet.Constants.ScanId
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
@@ -104,7 +104,7 @@ trait ErgoWalletReader extends VaultReader {
 
   def signTransaction(tx: UnsignedErgoTransaction,
                       secrets: Seq[ExternalSecret],
-                      hints: HintsBag,
+                      hints: TransactionHintsBag,
                       boxesToSpend: Seq[ErgoBox],
                       dataBoxes: Seq[ErgoBox]): Future[Try[ErgoTransaction]] =
     (walletActor ? SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes)).mapTo[Try[ErgoTransaction]]

@@ -8,10 +8,10 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
-import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
+import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, PaymentRequestDecoder}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import scorex.core.api.http.ApiError.BadRequest
@@ -49,7 +49,6 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       // p2shAddressR ~
       p2sAddressR ~
       addressToTreeR ~
-      generateCommitmentR ~
       extractHintsR ~
       addressToBytesR ~
       executeWithContextR
@@ -165,11 +164,6 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       )
   }
 
-  def generateCommitmentR: Route = (path("generateCommitment") & post & entity(as[SigmaBoolean])) { sigma =>
-    val (r, a) = ErgoProvingInterpreter.generateCommitmentFor(sigma)
-    ApiResponse(Map("r" -> r.asJson, "a" -> a.asInstanceOf[FirstDLogProverMessage].ecData.asJson).asJson)
-  }
-
   def extractHintsR: Route = (path("extractHints") & post & entity(as[HintExtractionRequest])) { her =>
     import org.ergoplatform.nodeView.wallet.requests.HintCodecs._
     val tx = her.tx
@@ -200,7 +194,9 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
 }
 
-case class HintExtractionRequest(tx: ErgoTransaction, real: Seq[SigmaBoolean], simulated: Seq[SigmaBoolean])
+case class HintExtractionRequest(tx: ErgoTransaction,
+                                 real: Seq[SigmaBoolean],
+                                 simulated: Seq[SigmaBoolean])
 
 object HintExtractionRequest extends ApiCodecs {
 
@@ -222,6 +218,29 @@ object HintExtractionRequest extends ApiCodecs {
       real <- cursor.downField("real").as[Seq[SigmaBoolean]]
       simulated <- cursor.downField("simulated").as[Seq[SigmaBoolean]]
     } yield HintExtractionRequest(tx, real, simulated)
+  }
+
+}
+
+case class CommitmentGenerationRequest(utx: UnsignedErgoTransaction,
+                                       externalKeys: Option[Seq[SigmaBoolean]])
+
+object CommitmentGenerationRequest extends ApiCodecs {
+
+  import org.ergoplatform.nodeView.wallet.requests.SigmaBooleanCodecs.{sigmaBooleanEncoder, sigmaBooleanDecoder}
+
+  implicit val commitmentGenerationRequestEncoder: Encoder[CommitmentGenerationRequest] = {hr =>
+    Map(
+      "transaction" -> hr.utx.asJson,
+      "externalKeys" -> hr.externalKeys.asJson
+    ).asJson
+  }
+
+  implicit val commitmentGenerationRequestDecoder: Decoder[CommitmentGenerationRequest] = {cursor =>
+    for {
+      tx <- cursor.downField("transaction").as[UnsignedErgoTransaction]
+      externalKeys <- cursor.downField("externalKeys").as[Option[Seq[SigmaBoolean]]]
+    } yield CommitmentGenerationRequest(tx, externalKeys)
   }
 
 }

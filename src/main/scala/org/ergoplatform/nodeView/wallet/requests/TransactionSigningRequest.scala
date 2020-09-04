@@ -5,6 +5,7 @@ import java.math.BigInteger
 import io.circe.{Decoder, DecodingFailure, Encoder, Json}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey, PrimitiveSecretKey}
 import scorex.util.encode.Base16
 import sigmastate.Values.SigmaBoolean
@@ -34,7 +35,7 @@ case class ExternalSecret(key: PrimitiveSecretKey)
   * @param dataInputs - hex-encoded data-input boxes bytes for the unsigned transaction (optional)
   */
 case class TransactionSigningRequest(unsignedTx: UnsignedErgoTransaction,
-                                     hints: Seq[Hint],
+                                     hints: TransactionHintsBag,
                                      externalSecrets: Seq[ExternalSecret],
                                      inputs: Option[Seq[String]],
                                      dataInputs: Option[Seq[String]]) {
@@ -42,8 +43,6 @@ case class TransactionSigningRequest(unsignedTx: UnsignedErgoTransaction,
   lazy val dlogs: Seq[DlogSecretKey] = externalSecrets.collect { case ExternalSecret(d: DlogSecretKey) => d }
 
   lazy val dhts: Seq[DhtSecretKey] = externalSecrets.collect { case ExternalSecret(d: DhtSecretKey) => d }
-
-  lazy val hintsBag = HintsBag(hints)
 
 }
 
@@ -219,6 +218,17 @@ object TransactionSigningRequest extends ApiCodecs {
 
   import io.circe.syntax._
 
+  implicit val txHintsEncoder: Encoder[TransactionHintsBag] = { bag =>
+    bag.bags.map { case (inputIdx, inputHints) =>
+      inputIdx -> inputHints.hints
+    }.asJson
+  }
+
+  implicit val txHintsDecoder: Decoder[TransactionHintsBag] =
+    Decoder.decodeMap[Int, Seq[Hint]].map { m =>
+      TransactionHintsBag(m.mapValues(hs => HintsBag(hs)))
+    }
+
   implicit val encoder: Encoder[TransactionSigningRequest] = { tsr =>
     Json.obj(
       "tx" -> tsr.unsignedTx.asJson,
@@ -237,11 +247,11 @@ object TransactionSigningRequest extends ApiCodecs {
       tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
       dlogs <- cursor.downField("secrets").downField("dlog").as[Option[Seq[DlogSecretKey]]]
       dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DhtSecretKey]]]
-      hints <- cursor.downField("hints").as[Option[Seq[Hint]]]
+      hints <- cursor.downField("hints").as[Option[TransactionHintsBag]]
       inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
       dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
       secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
-    } yield TransactionSigningRequest(tx, hints.getOrElse(Seq.empty), secrets, inputs, dataInputs)
+    } yield TransactionSigningRequest(tx, hints.getOrElse(TransactionHintsBag.empty), secrets, inputs, dataInputs)
   }
 
 }

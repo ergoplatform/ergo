@@ -23,6 +23,7 @@ import org.ergoplatform.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, JsonSecretStorage}
@@ -790,7 +791,7 @@ object ErgoWalletActor {
 
   final case class SignTransaction(utx: UnsignedErgoTransaction,
                                    secrets: Seq[ExternalSecret],
-                                   hints: HintsBag,
+                                   hints: TransactionHintsBag,
                                    boxesToSpend: Seq[ErgoBox],
                                    dataBoxes: Seq[ErgoBox])
 
@@ -993,16 +994,16 @@ object ErgoWalletActor {
   def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
                       tx: UnsignedErgoTransaction,
                       secrets: Seq[ExternalSecret],
-                      hints: HintsBag,
+                      hints: TransactionHintsBag,
                       boxesToSpend: Seq[ErgoBox],
                       dataBoxes: Seq[ErgoBox],
                       parameters: Parameters,
                       stateContext: ErgoStateContext): Try[ErgoTransaction] = {
     val proverSecrets = proverOpt.map(_.secretKeys).getOrElse(Seq.empty)
     val secretsWrapped = secrets.map(_.key).toIndexedSeq
-    val secretsProver = ErgoProvingInterpreter(secretsWrapped ++ proverSecrets, parameters, hints)
+    val secretsProver = ErgoProvingInterpreter(secretsWrapped ++ proverSecrets, parameters)
     secretsProver
-      .sign(tx, boxesToSpend.toIndexedSeq, dataBoxes.toIndexedSeq, stateContext)
+      .sign(tx, boxesToSpend.toIndexedSeq, dataBoxes.toIndexedSeq, stateContext, hints)
       .map(ErgoTransaction.apply)
   }
 
@@ -1011,7 +1012,7 @@ object ErgoWalletActor {
                       inputBoxes: IndexedSeq[ErgoBox],
                       dataInputBoxes: IndexedSeq[ErgoBox],
                       stateContext: ErgoLikeStateContext): Try[ErgoTransaction] = {
-    prover.sign(unsignedTx, inputBoxes, dataInputBoxes, stateContext)
+    prover.sign(unsignedTx, inputBoxes, dataInputBoxes, stateContext, TransactionHintsBag.empty)
       .map(ErgoTransaction.apply)
       .fold(
         e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputBoxes", e)),

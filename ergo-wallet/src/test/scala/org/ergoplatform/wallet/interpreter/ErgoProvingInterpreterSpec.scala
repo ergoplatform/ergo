@@ -2,6 +2,7 @@ package org.ergoplatform.wallet.interpreter
 
 import org.ergoplatform.{ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
 import org.ergoplatform.wallet.crypto.ErgoSignature
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
 import org.ergoplatform.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.utils.Generators
 import org.scalatest.prop.PropertyChecks
@@ -30,8 +31,10 @@ class ErgoProvingInterpreterSpec
     val primitiveProver = ErgoProvingInterpreter(IndexedSeq(primitiveKey), parameters)
 
     forAll(unsignedTxGen(extendedSecretKey)) { case (ins, unsignedTx) =>
-      val signedTxFull = fullProver.sign(unsignedTx, ins.toIndexedSeq, IndexedSeq(), stateContext).get
-      val signedTxUnsafe = primitiveProver.sign(unsignedTx, ins.toIndexedSeq, IndexedSeq(), stateContext).get
+      val signedTxFull = fullProver.sign(unsignedTx, ins.toIndexedSeq, IndexedSeq(),
+        stateContext, TransactionHintsBag.empty).get
+      val signedTxUnsafe = primitiveProver.sign(unsignedTx, ins.toIndexedSeq, IndexedSeq(),
+        stateContext, TransactionHintsBag.empty).get
 
       signedTxFull shouldEqual signedTxUnsafe
 
@@ -69,14 +72,17 @@ class ErgoProvingInterpreterSpec
     val aliceBag = prover0.generateCommitments(prop)
     val (cmtHint, ownCmt) = (aliceBag.realCommitments.head, aliceBag.ownCommitments.head)
 
-    val signRes = prover1.withHints(HintsBag(Seq(cmtHint))).sign(utx, IndexedSeq(inputBox), IndexedSeq(), stateContext)
+    val hintsForAlice = HintsBag(Seq(cmtHint))
+    val txHintsForAlice = TransactionHintsBag(Map(0 -> hintsForAlice))
+    val signRes = prover1.sign(utx, IndexedSeq(inputBox), IndexedSeq(), stateContext, txHintsForAlice)
     signRes.isSuccess shouldBe true
 
     val hints = prover1
       .bagForTransaction(signRes.get, IndexedSeq(inputBox), IndexedSeq(), stateContext, Seq(pk1), Seq(pk2))
-      .addHint(ownCmt)
 
-    val signedTxTry = prover0.withHints(hints).sign(utx, IndexedSeq(inputBox), IndexedSeq(), stateContext)
+    val txHintsForBob = TransactionHintsBag(Map(0 -> hints.bags(0).addHint(ownCmt)))
+
+    val signedTxTry = prover0.sign(utx, IndexedSeq(inputBox), IndexedSeq(), stateContext, txHintsForBob)
     signedTxTry.isSuccess shouldBe true
   }
 
@@ -94,7 +100,7 @@ class ErgoProvingInterpreterSpec
     val unsignedInputs = inputBoxes.map(ib => new UnsignedInput(ib.id, ContextExtension.empty))
 
     val utx = new UnsignedErgoLikeTransaction(unsignedInputs, IndexedSeq.empty, IndexedSeq(boxCandidate))
-    val signRes = prover.sign(utx, inputBoxes, IndexedSeq(), stateContext)
+    val signRes = prover.sign(utx, inputBoxes, IndexedSeq(), stateContext, TransactionHintsBag.empty)
     signRes.isSuccess shouldBe true
   }
 

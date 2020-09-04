@@ -175,7 +175,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     val tx = tsr.unsignedTx
     val secrets = tsr.externalSecrets
 
-    val hints = tsr.hintsBag
+    val hints = tsr.hints
 
     def signWithReaders(r: Readers): Future[Try[ErgoTransaction]] = {
       if (tsr.inputs.isDefined) {

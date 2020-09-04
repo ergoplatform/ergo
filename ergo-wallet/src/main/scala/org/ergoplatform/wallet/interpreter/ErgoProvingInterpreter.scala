@@ -12,12 +12,13 @@ import sigmastate.basics.DLogProtocol.{DLogInteractiveProver, ProveDlog}
 import sigmastate.basics.{DiffieHellmanTupleInteractiveProver, FirstProverMessage, ProveDHTuple}
 import sigmastate.interpreter.{ContextExtension, HintsBag}
 import org.ergoplatform.validation.ValidationRules
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
 import org.ergoplatform.wallet.secrets.SecretKey
 import sigmastate.basics.SigmaProtocolPrivateInput
 import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import scorex.util.encode.Base16
-import sigmastate.eval.{RuntimeIRContext, IRContext}
+import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.ProverInterpreter
 import sigmastate.utxo.CostTable
 import special.collection.Coll
@@ -42,13 +43,11 @@ import scala.util.{Failure, Success, Try}
   *
   * @param secretKeys - secrets used by the prover
   * @param params     - ergo network parameters at the moment of proving
-  * @param hintsBag   - hints provided to the prover
   * @param cachedHdPubKeysOpt - optionally, public keys corresponding to the BIP32-related secrets
   *                           (to not to recompute them)
   */
 class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
                              params: ErgoLikeParameters,
-                             hintsBag: HintsBag = HintsBag.empty,
                              val cachedHdPubKeysOpt: Option[IndexedSeq[ExtendedPublicKey]] = None)
                             (implicit IR: IRContext)
   extends ErgoInterpreter(params) with ProverInterpreter {
@@ -88,7 +87,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     val sks   = secretKeys :+ secret
     val pks   = hdPubKeys :+ newPk
     log.info(s"New secret created, public image: ${Base16.encode(newPk.key.pkBytes)}")
-    new ErgoProvingInterpreter(sks, params, this.hintsBag, Some(pks)) -> newPk
+    new ErgoProvingInterpreter(sks, params, Some(pks)) -> newPk
   }
 
   /**
@@ -97,31 +96,14 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     * @return modified prover
     */
   def withNewParameters(newParams: ErgoLikeParameters): ErgoProvingInterpreter = {
-    new ErgoProvingInterpreter(secretKeys, newParams, this.hintsBag, this.cachedHdPubKeysOpt)
+    new ErgoProvingInterpreter(secretKeys, newParams, this.cachedHdPubKeysOpt)
   }
-
-  /**
-    * Create new prover instance with additional hints added
-    *
-    * @param additionalHints - hints to add to the prover
-    * @return updated prover
-    */
-  def addHints(additionalHints: HintsBag): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(secretKeys, params, hintsBag ++ additionalHints, this.cachedHdPubKeysOpt)
-
-  /**
-    * Create new prover instance with hints provided
-    *
-    * @param  hints - hints the prover will be created with
-    * @return updated prover
-    */
-  def withHints(hints: HintsBag): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(secretKeys, params, hints, this.cachedHdPubKeysOpt)
 
   def signInputs(unsignedTx: UnsignedErgoLikeTransaction,
                  boxesToSpend: IndexedSeq[ErgoBox],
                  dataBoxes: IndexedSeq[ErgoBox],
-                 stateContext: ErgoLikeStateContext): Try[(IndexedSeq[Input], Long)] = {
+                 stateContext: ErgoLikeStateContext,
+                 txHints: TransactionHintsBag): Try[(IndexedSeq[Input], Long)] = {
     if (unsignedTx.inputs.length != boxesToSpend.length) {
       Failure(new Exception("Not enough boxes to spend"))
     } else if (unsignedTx.dataInputs.length != dataBoxes.length) {
@@ -158,7 +140,8 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
               totalCost
             )
 
-            prove(inputBox.ergoTree, context, unsignedTx.messageToSign, hintsBag).flatMap { proverResult =>
+            val hints = txHints.bags.getOrElse(boxIdx, HintsBag.empty)
+            prove(inputBox.ergoTree, context, unsignedTx.messageToSign, hints).flatMap { proverResult =>
               //prove is accumulating cost under the hood, so proverResult.cost = totalCost + input check cost
               val newTC = proverResult.cost
               if (newTC > context.costLimit) {
@@ -178,24 +161,37 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   def sign(unsignedTx: UnsignedErgoLikeTransaction,
            boxesToSpend: IndexedSeq[ErgoBox],
            dataBoxes: IndexedSeq[ErgoBox],
-           stateContext: ErgoLikeStateContext): Try[ErgoLikeTransaction] = {
+           stateContext: ErgoLikeStateContext,
+           txHints: TransactionHintsBag = TransactionHintsBag.empty): Try[ErgoLikeTransaction] = {
 
-    val signedInputs: Try[(IndexedSeq[Input], Long)] = signInputs(unsignedTx, boxesToSpend, dataBoxes, stateContext)
+    val signedInputs: Try[(IndexedSeq[Input], Long)] =
+      signInputs(unsignedTx, boxesToSpend, dataBoxes, stateContext, txHints)
     signedInputs.map { case (inputs, _) =>
       new ErgoLikeTransaction(inputs, unsignedTx.dataInputs, unsignedTx.outputCandidates)
     }
   }
 
+  /**
+    *
+    *
+    * @param tx
+    * @param boxesToSpend
+    * @param dataBoxes
+    * @param stateContext
+    * @param realSecretsToExtract
+    * @param simulatedSecretsToExtract
+    * @return
+    */
   def bagForTransaction(tx: ErgoLikeTransaction,
                         boxesToSpend: IndexedSeq[ErgoBox],
                         dataBoxes: IndexedSeq[ErgoBox],
                         stateContext: ErgoLikeStateContext,
                         realSecretsToExtract: Seq[SigmaBoolean],
-                        simulatedSecretsToExtract: Seq[SigmaBoolean]): HintsBag = {
+                        simulatedSecretsToExtract: Seq[SigmaBoolean]): TransactionHintsBag = {
     val augmentedInputs = tx.inputs.zipWithIndex.zip(boxesToSpend)
     require(augmentedInputs.forall { case ((input, _), box) => input.boxId.sameElements(box.id) }, "Wrong boxes")
 
-    augmentedInputs.foldLeft(HintsBag.empty) { case (bag, ((input, idx), box)) =>
+    augmentedInputs.foldLeft(TransactionHintsBag.empty) { case (bag, ((input, idx), box)) =>
       val exp = box.ergoTree
       val proof = input.spendingProof.proof
 
@@ -212,7 +208,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
       val ctx: ErgoLikeContext = new ErgoLikeContext(lastBlockUtxoRoot, headers, preHeader, dataBoxes, boxesToSpend,
         spendingTransaction, selfIndex, extension, validationSettings, costLimit, initCost)
 
-      bag ++ bagForMultisig(ctx, exp, proof, realSecretsToExtract, simulatedSecretsToExtract)
+      bag.putHints(idx, bagForMultisig(ctx, exp, proof, realSecretsToExtract, simulatedSecretsToExtract))
     }
   }
 
@@ -220,18 +216,23 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
 
 object ErgoProvingInterpreter {
 
-  def apply(secrets: IndexedSeq[SecretKey],
-            params: ErgoLikeParameters,
-            hints: HintsBag): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(secrets, params, hints)(new RuntimeIRContext)
+  case class TransactionHintsBag(bags: Map[Int, HintsBag]) {
+    def putHints(index: Int, hintsBag: HintsBag): TransactionHintsBag = {
+      TransactionHintsBag(bags.updated(index, hintsBag))
+    }
+  }
+
+  object TransactionHintsBag {
+    val empty: TransactionHintsBag = TransactionHintsBag(Map.empty)
+  }
 
   def apply(secrets: IndexedSeq[SecretKey],
             params: ErgoLikeParameters): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(secrets, params, HintsBag.empty)(new RuntimeIRContext)
+    new ErgoProvingInterpreter(secrets, params)(new RuntimeIRContext)
 
   def apply(rootSecret: ExtendedSecretKey,
             params: ErgoLikeParameters): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(IndexedSeq(rootSecret), params, HintsBag.empty)(new RuntimeIRContext)
+    new ErgoProvingInterpreter(IndexedSeq(rootSecret), params)(new RuntimeIRContext)
 
 
   /**
@@ -242,7 +243,7 @@ object ErgoProvingInterpreter {
     * @param pubkey - public image of a secret
     * @return (r, cmt), a commitment to (secret) randomness "cmt" along with the randomness "r"
     */
-  def generateCommitmentFor(pubkey: SigmaBoolean): (BigInteger, FirstProverMessage) = {
+  def generateCFor(pubkey: SigmaBoolean): (BigInteger, FirstProverMessage) = {
     pubkey match {
       case _: ProveDlog =>
         DLogInteractiveProver.firstMessage()

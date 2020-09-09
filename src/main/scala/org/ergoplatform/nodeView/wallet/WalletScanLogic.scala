@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
-import com.google.common.hash.{BloomFilter, Funnels}
+import com.google.common.hash.BloomFilter
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoContext
@@ -75,9 +75,7 @@ object WalletScanLogic extends ScorexLogging {
     val outputsFilter = cachedOutputsFilter.getOrElse {
       // todo: currently here and other places hardcoded values are used for Bloom filter parameters
       // todo: consider different profiles for the config, such as "user", "wallet", "app hub"
-      val expectedKeys = 20000
-      val falsePositiveRate = 0.01
-      val bf = BloomFilter.create[Array[Byte]](Funnels.byteArrayFunnel(), expectedKeys, falsePositiveRate)
+      val bf = WalletCache.emptyFilter(expectedKeys = 20000)
 
       registry.allUnspentBoxes().foreach { tb =>
         bf.put(tb.box.id)

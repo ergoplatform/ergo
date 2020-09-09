@@ -139,11 +139,11 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, stats : MemPoolStatistic
 
   def getRecommendedFee(expectedWaitTimeMinutes : Int, txSize : Int) : Long = {
     if (expectedWaitTimeMinutes < MemPoolStatisticsParams.nHistograsmBeans) {
-      val h = stats.histogram(expectedWaitTimeMinutes)
-      if (h.nTxns != 0) {
-        h.totalFee / h.nTxns * txSize / 1024
-      } else {
-        settings.nodeSettings.minimalFeeAmount
+      for (i <- expectedWaitTimeMinutes to 0 by -1) {
+        val h = stats.histogram(expectedWaitTimeMinutes)
+        if (h.nTxns != 0) {
+          return h.totalFee / h.nTxns * txSize / 1024
+        }
       }
     }
     settings.nodeSettings.minimalFeeAmount

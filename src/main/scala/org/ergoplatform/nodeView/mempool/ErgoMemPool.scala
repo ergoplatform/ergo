@@ -150,16 +150,16 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, stats : MemPoolStatistic
   }
 
   def getExpectedWaitTime(txFee : Long, txSize : Int): Int  = {
-    val feePerKb = txFee*1024/txSize
+    val feePerKb = txFee * 1024 / txSize
     val dummyModifierId = bytesToId(Array.fill(32)(0.toByte))
     val wtx = WeightedTxId(dummyModifierId, feePerKb, feePerKb, 0)
     val posInPool = pool.orderedTransactions.keySet.until(wtx).size
     val elapsed = System.currentTimeMillis() - stats.startMeasurement
-    val avgPoolRate = (stats.takenTxns/elapsed).asInstanceOf[Int]
-    if (avgPoolRate != 0)
-      posInPool / avgPoolRate
-    else
+    if (stats.takenTxns != 0) {
+      (elapsed * posInPool / stats.takenTxns).asInstanceOf[Int]
+    } else {
       0
+    }
   }
 }
 

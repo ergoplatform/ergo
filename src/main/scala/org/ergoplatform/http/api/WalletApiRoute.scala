@@ -47,6 +47,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         boxesR ~
         generateTransactionR ~
         generateUnsignedTransactionR ~
+        generateCommitmentsR ~
         sendPaymentTransactionR ~
         sendTransactionR ~
         initWalletR ~
@@ -168,6 +169,21 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     (path("transaction" / "generateUnsigned") & post & entity(as[RequestsHolder])){ holder =>
       generateUnsignedTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
     }
+
+  def generateCommitmentsR: Route = (path("generateCommitments")
+    & post & entity(as[GenerateCommitmentsRequest])) { gcr =>
+
+    import HintCodecs._
+
+    val utx = gcr.unsignedTx
+    val externalSecretsOpt = gcr.externalSecretsOpt
+
+    withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt).map(_.response)) {
+      case Failure(e) => BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success(thb) => ApiResponse(thb)
+    }
+  }
+
 
   def signTransactionR: Route = (path("transaction" / "sign")
     & post & entity(as[TransactionSigningRequest])) { tsr =>

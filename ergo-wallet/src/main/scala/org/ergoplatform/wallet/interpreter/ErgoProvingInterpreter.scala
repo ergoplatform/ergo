@@ -1,6 +1,5 @@
 package org.ergoplatform.wallet.interpreter
 
-import java.math.BigInteger
 import java.util
 
 import org.ergoplatform._
@@ -8,9 +7,7 @@ import org.ergoplatform.utils.ArithUtils.{addExact, multiplyExact}
 import org.ergoplatform.validation.SigmaValidationSettings
 import sigmastate.AvlTreeData
 import sigmastate.Values.SigmaBoolean
-import sigmastate.basics.DLogProtocol.{DLogInteractiveProver, ProveDlog}
-import sigmastate.basics.{DiffieHellmanTupleInteractiveProver, FirstProverMessage, ProveDHTuple}
-import sigmastate.interpreter.{ContextExtension, HintsBag}
+import sigmastate.interpreter.{ContextExtension, HintsBag, OwnCommitment, ProverInterpreter}
 import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
@@ -19,7 +16,6 @@ import sigmastate.basics.SigmaProtocolPrivateInput
 import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import scorex.util.encode.Base16
 import sigmastate.eval.{IRContext, RuntimeIRContext}
-import sigmastate.interpreter.ProverInterpreter
 import sigmastate.utxo.CostTable
 import special.collection.Coll
 import special.sigma.{Header, PreHeader}
@@ -140,7 +136,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
               totalCost
             )
 
-            val hints = txHints.bags.getOrElse(boxIdx, HintsBag.empty)
+            val hints = txHints.allHints(boxIdx)
             prove(inputBox.ergoTree, context, unsignedTx.messageToSign, hints).flatMap { proverResult =>
               //prove is accumulating cost under the hood, so proverResult.cost = totalCost + input check cost
               val newTC = proverResult.cost
@@ -169,6 +165,40 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     signedInputs.map { case (inputs, _) =>
       new ErgoLikeTransaction(inputs, unsignedTx.dataInputs, unsignedTx.outputCandidates)
     }
+  }
+
+  /**
+    * A method which is generating a commitment to randomness, which is a first step to prove
+    * knowledge of a secret. Method checks whether secret is known to the prover, and returns
+    * None if the secret is not known.
+    *
+    * @param pubkey - public image of a secret
+    * @return (r, cmt), a commitment to (secret) randomness "cmt" along with the randomness "r"
+    */
+  def generateCommitmentsFor(unsignedTx: UnsignedErgoLikeTransaction,
+                             boxesToSpend: IndexedSeq[ErgoBox],
+                             dataBoxes: IndexedSeq[ErgoBox],
+                             stateContext: ErgoLikeStateContext): Try[TransactionHintsBag] = Try {
+    val inputCmts = unsignedTx.inputs.zipWithIndex.map{ case (unsignedInput, inpIndex) =>
+
+      val context = new ErgoLikeContext(
+        ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
+        stateContext.sigmaLastHeaders,
+        stateContext.sigmaPreHeader,
+        dataBoxes,
+        boxesToSpend,
+        unsignedTx,
+        inpIndex.toShort,
+        unsignedInput.extension,
+        ValidationRules.currentSettings,
+        params.maxBlockCost,
+        0L // initial cost
+      )
+
+      val scriptToReduce = boxesToSpend(inpIndex).ergoTree
+      inpIndex -> generateCommitments(scriptToReduce, context)
+    }
+    TransactionHintsBag(inputCmts.toMap)
   }
 
   /**
@@ -216,14 +246,27 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
 
 object ErgoProvingInterpreter {
 
-  case class TransactionHintsBag(bags: Map[Int, HintsBag]) {
+  case class TransactionHintsBag(secretHints: Map[Int, HintsBag], publicHints: Map[Int, HintsBag]) {
     def putHints(index: Int, hintsBag: HintsBag): TransactionHintsBag = {
-      TransactionHintsBag(bags.updated(index, hintsBag))
+      val (secret, public) = hintsBag.hints.partition(_.isInstanceOf[OwnCommitment])
+
+      TransactionHintsBag(secretHints.updated(index, HintsBag(secret)), publicHints.updated(index, HintsBag(public)))
+    }
+
+    def allHints(index: Int): HintsBag = {
+      secretHints.getOrElse(index, HintsBag.empty) ++ publicHints.getOrElse(index, HintsBag.empty)
     }
   }
 
   object TransactionHintsBag {
-    val empty: TransactionHintsBag = TransactionHintsBag(Map.empty)
+    val empty: TransactionHintsBag = new TransactionHintsBag(Map.empty, Map.empty)
+
+    def apply(mixedHints: Map[Int, HintsBag]): TransactionHintsBag = {
+      mixedHints.keys.foldLeft(TransactionHintsBag.empty){ case (thb, idx) =>
+        thb.putHints(idx, mixedHints(idx))
+      }
+    }
+
   }
 
   def apply(secrets: IndexedSeq[SecretKey],
@@ -233,28 +276,5 @@ object ErgoProvingInterpreter {
   def apply(rootSecret: ExtendedSecretKey,
             params: ErgoLikeParameters): ErgoProvingInterpreter =
     new ErgoProvingInterpreter(IndexedSeq(rootSecret), params)(new RuntimeIRContext)
-
-
-  /**
-    * A method which is generating a commitment to randomness, which is a first step to prove
-    * knowledge of a secret. Method checks whether secret is known to the prover, and returns
-    * None if the secret is not known.
-    *
-    * @param pubkey - public image of a secret
-    * @return (r, cmt), a commitment to (secret) randomness "cmt" along with the randomness "r"
-    */
-  def generateCFor(pubkey: SigmaBoolean): (BigInteger, FirstProverMessage) = {
-    pubkey match {
-      case _: ProveDlog =>
-        DLogInteractiveProver.firstMessage()
-      case dh: ProveDHTuple =>
-        DiffieHellmanTupleInteractiveProver.firstMessage(dh)
-      case _ =>
-        // other options not supported yet but possible,
-        // e.g. a sub-tree like ("pk_A || pkC")
-        // corresponding to the complex statement ("(pk_A || pkC) && (pk_D || pkE)")
-        ???
-    }
-  }
 
 }

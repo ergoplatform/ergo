@@ -880,6 +880,7 @@ components:
           type: string
           example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
 
+
     HintExtractionRequest:
       description:
       type: object
@@ -902,7 +903,57 @@ components:
           items:
             $ref: '#/components/schemas/SigmaBoolean'
 
+    Hint:
+      description:
+      type: object
 
+    InputHints:
+      description:
+      type: object
+      additionalProperties:
+        type: array
+        items:
+          $ref: '#/components/schemas/Hint'
+
+
+    TransactionHintsBag:
+      description:
+      type: object
+      properties:
+        secretHints:
+          type: array
+          items:
+            $ref: '#/components/schemas/InputHints'
+        publicHints:
+          type: array
+          items:
+              $ref: '#/components/schemas/InputHints'
+
+    GenerateCommitmentsRequest:
+      description:
+      type: object
+      required:
+        - tx
+        - secrets
+      properties:
+        tx:
+          description: Unsigned transaction to sign
+          type: object
+          $ref: '#/components/schemas/UnsignedErgoTransaction'
+        secrets:
+          description: Secrets used for signing
+          type: object
+          properties:
+            dlog:
+              description: Sequence of secret exponents (DLOG secrets)
+              type: array
+              items:
+                $ref: '#/components/schemas/DlogSecret'
+            dht:
+              description: Sequence of secret Diffie-Hellman tuple exponents (DHT secrets)
+              type: array
+              items:
+                $ref: '#/components/schemas/DhtSecret'
 
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
@@ -3688,25 +3739,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /script/generateCommitment:
+
+  /wallet/generateCommitments:
     post:
-      summary: Generate commitment ("a" message) for a sigma-protocol
-      operationId: generateCommitment
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Generate commitments ("a" messages) for inputs of an unsigned transaction
+      operationId: generateCommitments
       tags:
-        - script
+        - wallet
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SigmaBoolean'
+              $ref: '#/components/schemas/GenerateCommitmentsRequest'
       responses:
         '200':
-          description: Commitment along with a corrisponding secret
+          description: Transaction-related hints
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DlogCommitment'
+                $ref: '#/components/schemas/TransactionHintsBag'
         '400':
           description: Error
           content:

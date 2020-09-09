@@ -1,6 +1,6 @@
 package org.ergoplatform.wallet.interpreter
 
-import org.ergoplatform.{ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
 import org.ergoplatform.wallet.crypto.ErgoSignature
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
 import org.ergoplatform.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
@@ -12,7 +12,9 @@ import scorex.util.ModifierId
 import scorex.util.encode.Base16
 import scorex.util.Random
 import sigmastate.CTHRESHOLD
-import sigmastate.Values.SigmaBoolean
+import sigmastate.Values.{GroupElementConstant, SigmaBoolean}
+import sigmastate.serialization.ErgoTreeSerializer
+
 
 class ErgoProvingInterpreterSpec
   extends FlatSpec
@@ -80,7 +82,7 @@ class ErgoProvingInterpreterSpec
     val hints = prover1
       .bagForTransaction(signRes.get, IndexedSeq(inputBox), IndexedSeq(), stateContext, Seq(pk1), Seq(pk2))
 
-    val txHintsForBob = TransactionHintsBag(Map(0 -> hints.bags(0).addHint(ownCmt)))
+    val txHintsForBob = TransactionHintsBag(Map(0 -> HintsBag(Seq(ownCmt))), Map(0 -> hints.publicHints(0)))
 
     val signedTxTry = prover0.sign(utx, IndexedSeq(inputBox), IndexedSeq(), stateContext, txHintsForBob)
     signedTxTry.isSuccess shouldBe true
@@ -102,6 +104,43 @@ class ErgoProvingInterpreterSpec
     val utx = new UnsignedErgoLikeTransaction(unsignedInputs, IndexedSeq.empty, IndexedSeq(boxCandidate))
     val signRes = prover.sign(utx, inputBoxes, IndexedSeq(), stateContext, TransactionHintsBag.empty)
     signRes.isSuccess shouldBe true
+  }
+
+  it should "produce hints" in {
+    import ErgoBox._
+    import sigmastate.eval._
+
+    val prover = ErgoProvingInterpreter(obtainSecretKey(), parameters)
+    val pk = prover.hdPubKeys.head.key
+
+    val pk2 = obtainSecretKey().publicKey.key
+    val pk3 = obtainSecretKey().publicKey.key
+
+    val ergoTreeBytes = Base16.decode("10010404987300830308cde4c6a70407cde4c6a70507cde4c6a70607").get
+    val ergoTree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(ergoTreeBytes)
+
+    val registers = Map(
+      R4 -> GroupElementConstant(CGroupElement(pk.value)),
+      R5 -> GroupElementConstant(CGroupElement(pk2.value)),
+      R6 -> GroupElementConstant(CGroupElement(pk3.value))
+    )
+
+    val transactionId = ModifierId @@ Base16.encode(Array.fill(32)(5: Byte))
+
+    val value = 1000000
+    val input = new ErgoBox(value, ergoTree, Colls.emptyColl[(TokenId, Long)], registers, transactionId, 0, 1)
+
+
+    val utx = UnsignedErgoLikeTransaction(
+      IndexedSeq(new UnsignedInput(input.id, ContextExtension.empty)),
+      IndexedSeq(input.toCandidate)
+    )
+
+    val thb = prover.generateCommitmentsFor(utx, IndexedSeq(input), IndexedSeq.empty, stateContext).get
+
+    thb.secretHints(0).hints.size shouldBe 1
+
+    thb.publicHints(0).hints.size shouldBe 1
   }
 
 }

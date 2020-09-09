@@ -13,14 +13,13 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.UtxoStateReader
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, SigmaBoolean}
 import sigmastate._
-import sigmastate.basics.DLogProtocol.{FirstDLogProverMessage, ProveDlog}
+import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
 import sigmastate.lang.SigmaCompiler
 import sigmastate.serialization.ValueSerializer
@@ -177,7 +176,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         case _ => ???
       }
       readers.w.extractHints(tx, boxesToSpend, dataBoxes, her.real, her.simulated)
-    })(hintsBag => ApiResponse(hintsBag.hints.asJson))
+    })(hintsBag => ApiResponse(hintsBag))
   }
 
   def addressToBytesR: Route = (get & path("addressToBytes" / Segment)) { addressStr =>

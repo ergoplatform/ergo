@@ -369,11 +369,31 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
       sender() ! tx
 
+    case GenerateCommitmentsFor(unsignedTx, externalSecretsOpt) =>
+      val walletSecrets = walletVars.proverOpt.map(_.secretKeys).getOrElse(Seq.empty)
+      val secrets = walletSecrets ++ externalSecretsOpt.getOrElse(Seq.empty).map(_.key)
+      val prover: ErgoProvingInterpreter = ErgoProvingInterpreter(secrets.toIndexedSeq, parameters)
+
+      val inputBoxes = utxoReaderOpt.map { utxoReader =>
+        unsignedTx.inputs.map { unsignedInput =>
+          utxoReader.boxById(unsignedInput.boxId).get
+        }
+      }.get
+
+      val dataBoxes = utxoReaderOpt.map { utxoReader =>
+        unsignedTx.dataInputs.map { dataInput =>
+          utxoReader.boxById(dataInput.boxId).get
+        }
+      }.get
+
+      val thbTry = prover.generateCommitmentsFor(unsignedTx, inputBoxes, dataBoxes, stateContext)
+      sender() ! GenerateCommitmentsResponse(thbTry)
+
     case SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes) =>
       sender() ! signTransaction(walletVars.proverOpt, tx, secrets, hints, boxesToSpend, dataBoxes, parameters, stateContext)
 
     case ExtractHints(tx, boxesToSpend, dataBoxes, real, simulated) =>
-      val prover = walletVars.proverOpt.getOrElse(ErgoProvingInterpreter(IndexedSeq.empty, LaunchParameters))
+      val prover = walletVars.proverOpt.getOrElse(ErgoProvingInterpreter(IndexedSeq.empty, parameters))
       val bag = prover.bagForTransaction(tx, boxesToSpend, dataBoxes, stateContext, real, simulated)
       sender() ! bag
 
@@ -788,6 +808,11 @@ object ErgoWalletActor {
                                        inputsRaw: Seq[String],
                                        dataInputsRaw: Seq[String],
                                        sign: Boolean)
+
+  case class GenerateCommitmentsFor(utx: UnsignedErgoTransaction,
+                                    secrets: Option[Seq[ExternalSecret]])
+
+  case class GenerateCommitmentsResponse(response: Try[TransactionHintsBag])
 
   final case class SignTransaction(utx: UnsignedErgoTransaction,
                                    secrets: Seq[ExternalSecret],

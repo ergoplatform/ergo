@@ -210,6 +210,25 @@ object HintCodecs extends ApiCodecs {
       .getOrElse(Left(DecodingFailure("Can not find suitable decoder", cursor.history)))
   }
 
+  implicit val txHintsEncoder: Encoder[TransactionHintsBag] = { bag =>
+    Json.obj(
+      "secretHints" ->
+        bag.secretHints.map { case (inputIdx, inputHints) =>
+          inputIdx -> inputHints.hints
+        }.asJson,
+      "publicHints" -> bag.publicHints.map { case (inputIdx, inputHints) =>
+        inputIdx -> inputHints.hints
+      }.asJson
+    )
+  }
+
+  implicit val txHintsDecoder: Decoder[TransactionHintsBag] = { cursor =>
+    for {
+      secretHints <- Decoder.decodeMap[Int, Seq[Hint]].tryDecode(cursor.downField("secretHints"))
+      publicHints <- Decoder.decodeMap[Int, Seq[Hint]].tryDecode(cursor.downField("publicHints"))
+    } yield TransactionHintsBag(secretHints.mapValues(HintsBag.apply), publicHints.mapValues(HintsBag.apply))
+  }
+
 }
 
 object TransactionSigningRequest extends ApiCodecs {
@@ -217,17 +236,6 @@ object TransactionSigningRequest extends ApiCodecs {
   import HintCodecs._
 
   import io.circe.syntax._
-
-  implicit val txHintsEncoder: Encoder[TransactionHintsBag] = { bag =>
-    bag.bags.map { case (inputIdx, inputHints) =>
-      inputIdx -> inputHints.hints
-    }.asJson
-  }
-
-  implicit val txHintsDecoder: Decoder[TransactionHintsBag] =
-    Decoder.decodeMap[Int, Seq[Hint]].map { m =>
-      TransactionHintsBag(m.mapValues(hs => HintsBag(hs)))
-    }
 
   implicit val encoder: Encoder[TransactionSigningRequest] = { tsr =>
     Json.obj(
@@ -252,6 +260,45 @@ object TransactionSigningRequest extends ApiCodecs {
       dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
       secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
     } yield TransactionSigningRequest(tx, hints.getOrElse(TransactionHintsBag.empty), secrets, inputs, dataInputs)
+  }
+
+}
+
+
+case class GenerateCommitmentsRequest(unsignedTx: UnsignedErgoTransaction,
+                                      externalSecretsOpt: Option[Seq[ExternalSecret]]) {
+
+  lazy val externalSecrets = externalSecretsOpt.getOrElse(Seq.empty)
+
+  lazy val dlogs: Seq[DlogSecretKey] = externalSecrets.collect { case ExternalSecret(d: DlogSecretKey) => d }
+
+  lazy val dhts: Seq[DhtSecretKey] = externalSecrets.collect { case ExternalSecret(d: DhtSecretKey) => d }
+}
+
+
+object GenerateCommitmentsRequest extends ApiCodecs {
+  import HintCodecs._
+
+  import io.circe.syntax._
+
+  implicit val encoder: Encoder[GenerateCommitmentsRequest] = { gcr =>
+    Json.obj(
+      "tx" -> gcr.unsignedTx.asJson,
+      "secrets" -> Json.obj(
+        "dlog" -> gcr.dlogs.asJson,
+        "dht" -> gcr.dhts.asJson
+      )
+    )
+  }
+
+  implicit val decoder: Decoder[GenerateCommitmentsRequest] = { cursor =>
+    for {
+      tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
+      dlogs <- cursor.downField("secrets").downField("dlog").as[Option[Seq[DlogSecretKey]]]
+      dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DhtSecretKey]]]
+      secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
+      secretsOpt = if(secrets.isEmpty) None else Some(secrets)
+    } yield GenerateCommitmentsRequest(tx, secretsOpt)
   }
 
 }

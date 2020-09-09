@@ -205,7 +205,7 @@ object HintExtractionRequest extends ApiCodecs {
 
   implicit val hintExtractionRequestEncoder: Encoder[HintExtractionRequest] = {hr =>
     Map(
-      "transaction" -> hr.tx.asJson,
+      "tx" -> hr.tx.asJson,
       "real" -> hr.real.asJson,
       "simulated" -> hr.simulated.asJson
     ).asJson
@@ -213,7 +213,7 @@ object HintExtractionRequest extends ApiCodecs {
 
   implicit val hintExtractionRequestDecoder: Decoder[HintExtractionRequest] = {cursor =>
     for {
-      tx <- cursor.downField("transaction").as[ErgoTransaction]
+      tx <- cursor.downField("tx").as[ErgoTransaction]
       real <- cursor.downField("real").as[Seq[SigmaBoolean]]
       simulated <- cursor.downField("simulated").as[Seq[SigmaBoolean]]
     } yield HintExtractionRequest(tx, real, simulated)
@@ -230,14 +230,14 @@ object CommitmentGenerationRequest extends ApiCodecs {
 
   implicit val commitmentGenerationRequestEncoder: Encoder[CommitmentGenerationRequest] = {hr =>
     Map(
-      "transaction" -> hr.utx.asJson,
+      "tx" -> hr.utx.asJson,
       "externalKeys" -> hr.externalKeys.asJson
     ).asJson
   }
 
   implicit val commitmentGenerationRequestDecoder: Decoder[CommitmentGenerationRequest] = {cursor =>
     for {
-      tx <- cursor.downField("transaction").as[UnsignedErgoTransaction]
+      tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
       externalKeys <- cursor.downField("externalKeys").as[Option[Seq[SigmaBoolean]]]
     } yield CommitmentGenerationRequest(tx, externalKeys)
   }

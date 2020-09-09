@@ -7,14 +7,46 @@ import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
-import scorex.util.ModifierId
+import scorex.util.{ModifierId, bytesToId}
 
 import scala.util.Try
 
+object MemPoolStatisticsParams {
+  val nHistograsmBeans = 60  /* one hour */
+  val measurementIntervalMsec = 60 * 1000 /* one hour */
+}
+
+case class FeeHistogramBean(var nTxns: Int, var totalFee: Long)
+
+case class MemPoolStatistics() {
+  var startMeasurement: Long = System.currentTimeMillis()
+  var takenTxns : Long = 0
+  var snapTime: Long = startMeasurement
+  var snapTakenTxns : Long = 0
+  val histogram = Array.fill(MemPoolStatisticsParams.nHistograsmBeans)(FeeHistogramBean(0,0))
+
+  def add(wtx : WeightedTxId) : Unit = {
+    val now = System.currentTimeMillis()
+    takenTxns += 1
+    if (now - snapTime > MemPoolStatisticsParams.measurementIntervalMsec) {
+      if (snapTakenTxns != 0) {
+        takenTxns -= snapTakenTxns
+        startMeasurement = snapTime
+      }
+      snapTakenTxns = takenTxns
+      snapTime = now
+    }
+    val durationMinutes = ((now - wtx.created)/(60*1000)).asInstanceOf[Int]
+    if (durationMinutes < MemPoolStatisticsParams.nHistograsmBeans) {
+      histogram(durationMinutes).nTxns += 1
+      histogram(durationMinutes).totalFee += wtx.feePerKb
+    }
+  }
+}
 /**
   * Immutable memory pool implementation.
   */
-class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoSettings)
+class ErgoMemPool private[mempool](pool: OrderedTxPool, stats : MemPoolStatistics)(implicit settings: ErgoSettings)
   extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {
 
   import ErgoMemPool._
@@ -45,19 +77,19 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
 
   override def putWithoutCheck(txs: Iterable[ErgoTransaction]): ErgoMemPool = {
     val updatedPool = txs.toSeq.distinct.foldLeft(pool) { case (acc, tx) => acc.put(tx) }
-    new ErgoMemPool(updatedPool)
+    new ErgoMemPool(updatedPool,stats)
   }
 
   override def remove(tx: ErgoTransaction): ErgoMemPool = {
-    new ErgoMemPool(pool.remove(tx))
+    new ErgoMemPool(pool.remove(tx, (wtx:WeightedTxId) => stats.add(wtx)),stats)
   }
 
   override def filter(condition: ErgoTransaction => Boolean): ErgoMemPool = {
-    new ErgoMemPool(pool.filter(condition))
+    new ErgoMemPool(pool.filter(condition),stats)
   }
 
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {
-    new ErgoMemPool(pool.invalidate(tx))
+    new ErgoMemPool(pool.invalidate(tx),stats)
   }
 
   def process(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
@@ -71,15 +103,15 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
           case utxo: UtxoState =>
             // Allow proceeded transaction to spend outputs of pooled transactions.
             utxo.withTransactions(getAll).validate(tx).fold(
-              new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
-              _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+              new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(_),
+              _ => new ErgoMemPool(pool.put(tx), stats) -> ProcessingOutcome.Accepted
             )
           case validator: TransactionValidation[ErgoTransaction@unchecked] =>
             // transaction validation currently works only for UtxoState, so this branch currently
             // will not be triggered probably
             validator.validate(tx).fold(
-              new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
-              _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+              new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(_),
+              _ => new ErgoMemPool(pool.put(tx), stats) -> ProcessingOutcome.Accepted
             )
           case _ =>
             this -> ProcessingOutcome.Declined(
@@ -105,6 +137,30 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
       .map(_.value)
       .sum
 
+  def getRecommendedFee(expectedWaitTimeMinutes : Int, txSize : Int) : Long = {
+    if (expectedWaitTimeMinutes < MemPoolStatisticsParams.nHistograsmBeans) {
+      val h = stats.histogram(expectedWaitTimeMinutes)
+      if (h.nTxns != 0) {
+        h.totalFee / h.nTxns * txSize / 1024
+      } else {
+        settings.nodeSettings.minimalFeeAmount
+      }
+    }
+    settings.nodeSettings.minimalFeeAmount
+  }
+
+  def getExpectedWaitTime(txFee : Long, txSize : Int): Int  = {
+    val feePerKb = txFee*1024/txSize
+    val dummyModifierId = bytesToId(Array.fill(32)(0.toByte))
+    val wtx = WeightedTxId(dummyModifierId, feePerKb, feePerKb, 0)
+    val posInPool = pool.orderedTransactions.keySet.until(wtx).size
+    val elapsed = System.currentTimeMillis() - stats.startMeasurement
+    val avgPoolRate = (stats.takenTxns/elapsed).asInstanceOf[Int]
+    if (avgPoolRate != 0)
+      posInPool / avgPoolRate
+    else
+      0
+  }
 }
 
 object ErgoMemPool {
@@ -126,6 +182,6 @@ object ErgoMemPool {
   type MemPoolResponse = Seq[ErgoTransaction]
 
   def empty(settings: ErgoSettings): ErgoMemPool =
-    new ErgoMemPool(OrderedTxPool.empty(settings))(settings)
+    new ErgoMemPool(OrderedTxPool.empty(settings), new MemPoolStatistics())(settings)
 
 }

@@ -8,7 +8,7 @@ import io.circe.syntax._
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, FeeHistogramBean}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.AugWalletTransaction
@@ -24,7 +24,8 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   override val route: Route = pathPrefix("transactions") {
-    checkTransactionR ~ getUnconfirmedTransactionsR ~ sendTransactionR ~ getFeeHistogramR
+    checkTransactionR ~ getUnconfirmedTransactionsR ~ sendTransactionR ~
+    getFeeHistogramR ~ getRecommendedFeeR ~ getExpectedWaitTimeR
   }
 
   private def getMemPool: Future[ErgoMemPoolReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.m)
@@ -74,8 +75,6 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
 
   val feeHistParam: Directive[(Int, Long)] = parameters("beans".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))
 
-  case class FeeHistogramBean(var nTxns: Int, var totalFee: Long)
-
   def getFeeHistogram(nBeans : Int, maxWaitTimeMsec: Long, wtxs : Seq[WeightedTxId]): Array[FeeHistogramBean] = {
     val histogram = Array.fill(nBeans + 1)(FeeHistogramBean(0,0))
     val now = System.currentTimeMillis()
@@ -98,5 +97,17 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
 
   def getFeeHistogramR: Route = (path("poolhist") & get & feeHistParam) { (beans, maxtime) =>
     ApiResponse(getMemPool.map(p => getFeeHistogram(beans, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
+  }
+
+  val feeRequest: Directive[(Int, Int)] = parameters("waitTime".as[Int] ? 1, "txSize".as[Int] ? 100)
+
+  def getRecommendedFeeR: Route = (path("getfee") & get & feeRequest) { (waitTime, txSize) =>
+    ApiResponse(getMemPool.map(_.getRecommendedFee(waitTime,txSize).asJson))
+  }
+
+  val waitTimeRequest: Directive[(Long, Int)] = parameters("fee".as[Long] ? 1000L, "txSize".as[Int] ? 100)
+
+  def getExpectedWaitTimeR: Route = (path("waittime") & get & waitTimeRequest) { (fee, txSize) =>
+    ApiResponse(getMemPool.map(_.getExpectedWaitTime(fee,txSize).asJson))
   }
 }

@@ -2132,6 +2132,84 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /transactions/getfee:
+    parameters:
+      - in: query
+        name: waitTime
+        required: true
+        description: Maximal transaction wait time in minutes
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 1
+      - in: query
+        name: txSize
+        required: true
+        description: Transaction size
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 100
+     get:
+      summary: Get recommended fee for the tranasaction with specified size to be proceeded in specified time
+      operationId: getRecommededFee
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: Recommended free for this transaction
+          content:
+            application/json:
+              schema:
+                type: integer
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/waitime:
+    parameters:
+      - in: query
+        name: fee
+        required: true
+        description: Transaction fee
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 1
+      - in: query
+        name: txSize
+        required: true
+        description: Transaction size
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 100
+     get:
+      summary: Get expected wait time for the transaction with specified fee and size
+      operationId: getExpectedWaitTime
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: Expected wait time in milliseconds
+          content:
+            application/json:
+              schema:
+                type: integer
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /peers/all:
     get:
       summary: Get all known peers

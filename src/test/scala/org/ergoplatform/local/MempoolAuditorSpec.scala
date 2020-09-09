@@ -100,6 +100,11 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
       override def getAllPrioritized: Seq[ErgoTransaction] = txs
 
       override def take(limit: Int): Iterable[ErgoTransaction] = txs.take(limit)
+
+      override def getRecommendedFee(expectedWaitTimeMinutes : Int, txSize : Int) : Long = 0
+
+      override def getExpectedWaitTime(txFee : Long, txSize : Int): Int = 0
+
     }
 
     implicit val system = ActorSystem()

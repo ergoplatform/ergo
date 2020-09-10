@@ -19,7 +19,7 @@ import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
-import org.ergoplatform.nodeView.wallet.WalletScanLogic.{InputData, ScanResults}
+import org.ergoplatform.nodeView.wallet.WalletScanLogic.{SpentInputData, ScanResults}
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes:

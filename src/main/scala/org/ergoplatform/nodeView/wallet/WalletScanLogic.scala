@@ -25,11 +25,11 @@ import scala.collection.mutable
   */
 object WalletScanLogic extends ScorexLogging {
 
-  //input tx id, input box id, tracked box
-  case class InputData(inputTxId: ModifierId, inputBoxId: ModifierId, trackedBox: TrackedBox)
+  //input tx id, tracked box
+  case class SpentInputData(inputTxId: ModifierId, trackedBox: TrackedBox)
 
   //outputs, input ids, related transactions
-  case class ScanResults(outputs: Seq[TrackedBox], inputsSpent: Seq[InputData], relatedTransactions: Seq[WalletTransaction])
+  case class ScanResults(outputs: Seq[TrackedBox], inputsSpent: Seq[SpentInputData], relatedTransactions: Seq[WalletTransaction])
 
   /**
     * Tries to prove the given box in order to define whether it could be spent by this wallet.
@@ -158,7 +158,7 @@ object WalletScanLogic extends ScorexLogging {
         val walletscanIds = (spentBoxes ++ myOutputs).flatMap(_.scans).toSet
         val wtx = WalletTransaction(tx, height, walletscanIds.toSeq)
 
-        val inputsSpent = scanResults.inputsSpent ++ spentBoxes.map(t => InputData(tx.id, t.boxId, t))
+        val inputsSpent = scanResults.inputsSpent ++ spentBoxes.map(tb => SpentInputData(tx.id, tb))
         ScanResults(scanResults.outputs ++ myOutputs, inputsSpent, scanResults.relatedTransactions :+ wtx)
       } else {
         scanResults

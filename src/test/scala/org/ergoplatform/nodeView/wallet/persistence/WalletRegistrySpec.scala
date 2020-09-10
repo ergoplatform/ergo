@@ -3,8 +3,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.db.DBSpec
-import org.ergoplatform.nodeView.wallet.IdUtils.EncodedBoxId
-import org.ergoplatform.nodeView.wallet.WalletScanLogic.{InputData, ScanResults}
+import org.ergoplatform.nodeView.wallet.WalletScanLogic.{SpentInputData, ScanResults}
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.scalacheck.Gen
@@ -122,7 +121,7 @@ class WalletRegistrySpec
       val outs = boxes.map { bx =>
         bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus)
       }
-      val inputs = outs.map(tb => InputData(fakeTxId, EncodedBoxId @@ tb.boxId, tb))
+      val inputs = outs.map(tb => SpentInputData(fakeTxId, tb))
       registry.updateOnBlock(ScanResults(outs, inputs, Seq.empty), blockId, 100)
       registry.walletUnspentBoxes() shouldBe Seq.empty
     }

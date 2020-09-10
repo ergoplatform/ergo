@@ -19,6 +19,7 @@ import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
+import org.ergoplatform.nodeView.wallet.WalletScanLogic.InputData
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
@@ -179,7 +180,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @param blockHeight - block height
     */
   def updateOnBlock(newOutputs: Seq[TrackedBox],
-                    inputs: Seq[(ModifierId, ModifierId, TrackedBox)],
+                    inputs: Seq[InputData],
                     txs: Seq[WalletTransaction])
                    (blockId: ModifierId, blockHeight: Int): Unit = {
 
@@ -188,7 +189,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     val bag2 = putTxs(bag1, txs)
 
     // process spent boxes
-    val spentBoxesWithTx = inputs.map(t => t._1 -> t._3)
+    val spentBoxesWithTx = inputs.map(t => t.inputTxId -> t.trackedBox)
     val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
 
     // and update wallet digest

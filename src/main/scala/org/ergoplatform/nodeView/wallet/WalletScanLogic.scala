@@ -25,6 +25,9 @@ import scala.collection.mutable
   */
 object WalletScanLogic extends ScorexLogging {
 
+  //input tx id, input box id, tracked box
+  case class InputData(inputTxId: ModifierId, inputBoxId: ModifierId, trackedBox: TrackedBox)
+
   /**
     * Tries to prove the given box in order to define whether it could be spent by this wallet.
     *
@@ -91,10 +94,8 @@ object WalletScanLogic extends ScorexLogging {
       if (spendable) Some(tb.copy(scans = Set(PaymentsScanId))) else None
     }
 
-    //input tx id, input box id, tracked box
-    type InputData = Seq[(ModifierId, ModifierId, TrackedBox)]
     //outputs, input ids, related transactions
-    type ScanResults = (Seq[TrackedBox], InputData, Seq[WalletTransaction])
+    type ScanResults = (Seq[TrackedBox], Seq[InputData], Seq[WalletTransaction])
     val initialScanResults: ScanResults = (resolvedBoxes, Seq.empty, Seq.empty)
 
     // Wallet unspent outputs, we fetch them only when Bloom filter shows that some outputs may be spent
@@ -156,7 +157,7 @@ object WalletScanLogic extends ScorexLogging {
         val walletscanIds = (spentBoxes ++ myOutputs).flatMap(_.scans).toSet
         val wtx = WalletTransaction(tx, height, walletscanIds.toSeq)
 
-        val inputsSpent = (scanResults._2: InputData) ++ spentBoxes.map(t => (tx.id, t.boxId, t))
+        val inputsSpent = scanResults._2 ++ spentBoxes.map(t => InputData(tx.id, t.boxId, t))
         (scanResults._1 ++ myOutputs, inputsSpent, scanResults._3 :+ wtx)
       } else {
         scanResults

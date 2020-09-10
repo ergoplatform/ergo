@@ -25,11 +25,24 @@ import scala.collection.mutable
   */
 object WalletScanLogic extends ScorexLogging {
 
-  //input tx id, tracked box
+  /**
+    * Data object collecting info about inputs spent during blocks scan
+    * @param inputTxId - id of transaction which is spending an input
+    * @param trackedBox - box being spent
+    */
   case class SpentInputData(inputTxId: ModifierId, trackedBox: TrackedBox)
 
   //outputs, input ids, related transactions
-  case class ScanResults(outputs: Seq[TrackedBox], inputsSpent: Seq[SpentInputData], relatedTransactions: Seq[WalletTransaction])
+  /**
+    * Results of block scan
+    *
+    * @param outputs - newly created boxes (transaction outputs)
+    * @param inputsSpent - wallet-related inputs spent
+    * @param relatedTransactions - transactions affected (creating wallet-related boxes or spending them)
+    */
+  case class ScanResults(outputs: Seq[TrackedBox],
+                         inputsSpent: Seq[SpentInputData],
+                         relatedTransactions: Seq[WalletTransaction])
 
   /**
     * Tries to prove the given box in order to define whether it could be spent by this wallet.
@@ -67,6 +80,16 @@ object WalletScanLogic extends ScorexLogging {
 
   /**
     * Updates wallet database by scanning and processing block transactions.
+    *
+    * @param registry - versioned wallet database which is tracking on-chain state
+    * @param offChainRegistry - in-memory snapshot of current state, including off-chain transactions
+    * @param stateContext - current blockchain and state context (used to check mining rewards only)
+    * @param walletVars - current wallet state
+    * @param height - block height
+    * @param blockId - block id
+    * @param transactions - block transactions
+    * @param cachedOutputsFilter - Bloom filter for previously created outputs
+    * @return updated wallet database, offchain snapshot and the Bloom filter for wallet outputs
     */
   def scanBlockTransactions(registry: WalletRegistry,
                             offChainRegistry: OffChainRegistry,

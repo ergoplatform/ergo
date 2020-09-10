@@ -17,6 +17,8 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction,
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
+import scorex.util.bytesToId
+import scala.collection.mutable
 
 /**
   * Functions which do scan boxes, transactions and blocks to find boxes which belong to wallet's keys.
@@ -96,7 +98,10 @@ object WalletScanLogic extends ScorexLogging {
     val initialScanResults: ScanResults = (resolvedBoxes, Seq.empty, Seq.empty)
 
     // Wallet unspent outputs, we fetch them only when Bloom filter shows that some outputs may be spent
-    var prevUnspentBoxes: Seq[TrackedBox] = Seq.empty
+    val unspentBoxes = mutable.Map[ModifierId, TrackedBox]()
+
+    // Flag which shows whether unspent boxes were fetched from the database
+    var unspentRead = false
 
     val scanRes = transactions.foldLeft(initialScanResults) { case (scanResults, tx) =>
 
@@ -120,17 +125,18 @@ object WalletScanLogic extends ScorexLogging {
         val spentBoxes: Seq[TrackedBox] = if (spendingInputs.nonEmpty) {
 
           // Read unspent boxes before this block from the database
-          if (prevUnspentBoxes.isEmpty) {
-            prevUnspentBoxes = registry.allUnspentBoxes()
+          if (!unspentRead) {
+            registry.allUnspentBoxes().foreach { tb =>
+              unspentBoxes += (tb.boxId -> tb)
+            }
+            unspentRead = true
           }
-          // Add unspent boxes from this block
-          val unspentBoxes = prevUnspentBoxes ++ scanResults._1
 
           // Filter-out false positives and read the boxes being spent
           spendingInputs.flatMap { inp =>
             val inpId = inp.boxId
 
-            unspentBoxes.find(_.box.id.sameElements(inpId)).flatMap { _ =>
+            unspentBoxes.get(bytesToId(inpId)).flatMap { _ =>
               registry.getBox(inpId)
                 .orElse(scanResults._1.find(tb => tb.box.id.sameElements(inpId)))
             }
@@ -139,12 +145,19 @@ object WalletScanLogic extends ScorexLogging {
           Seq.empty
         }
 
+        // Add unspent boxes from this block
+        if (myOutputs.nonEmpty) {
+          myOutputs.foreach { tb =>
+            unspentBoxes += (tb.boxId -> tb)
+          }
+        }
+
         // Scans related to the transaction
         val walletscanIds = (spentBoxes ++ myOutputs).flatMap(_.scans).toSet
         val wtx = WalletTransaction(tx, height, walletscanIds.toSeq)
 
-        val newRel = (scanResults._2: InputData) ++ spentBoxes.map(t => (tx.id, t.boxId, t))
-        (scanResults._1 ++ myOutputs, newRel, scanResults._3 :+ wtx)
+        val inputsSpent = (scanResults._2: InputData) ++ spentBoxes.map(t => (tx.id, t.boxId, t))
+        (scanResults._1 ++ myOutputs, inputsSpent, scanResults._3 :+ wtx)
       } else {
         scanResults
       }

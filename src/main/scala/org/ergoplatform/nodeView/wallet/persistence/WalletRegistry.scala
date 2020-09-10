@@ -19,7 +19,7 @@ import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
-import org.ergoplatform.nodeView.wallet.WalletScanLogic.InputData
+import org.ergoplatform.nodeView.wallet.WalletScanLogic.{InputData, ScanResults}
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
@@ -179,17 +179,14 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @param blockId     - block identifier
     * @param blockHeight - block height
     */
-  def updateOnBlock(newOutputs: Seq[TrackedBox],
-                    inputs: Seq[InputData],
-                    txs: Seq[WalletTransaction])
-                   (blockId: ModifierId, blockHeight: Int): Unit = {
+  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Unit = {
 
     // first, put newly created outputs and related transactions into key-value bag
-    val bag1 = putBoxes(KeyValuePairsBag.empty, newOutputs)
-    val bag2 = putTxs(bag1, txs)
+    val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
+    val bag2 = putTxs(bag1, scanResults.relatedTransactions)
 
     // process spent boxes
-    val spentBoxesWithTx = inputs.map(t => t.inputTxId -> t.trackedBox)
+    val spentBoxesWithTx = scanResults.inputsSpent.map(t => t.inputTxId -> t.trackedBox)
     val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
 
     // and update wallet digest
@@ -204,7 +201,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
-      val receivedTokensAmt = newOutputs.filter(_.scans.contains(PaymentsScanId))
+      val receivedTokensAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId))
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
@@ -224,7 +221,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
           }
         }
 
-      val receivedAmt = newOutputs.filter(_.scans.contains(PaymentsScanId)).map(_.box.value).sum
+      val receivedAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId)).map(_.box.value).sum
       val newBalance = wBalance + receivedAmt - spentAmt
       require(
         (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,

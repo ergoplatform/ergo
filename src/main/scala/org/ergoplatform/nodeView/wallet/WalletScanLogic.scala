@@ -28,6 +28,9 @@ object WalletScanLogic extends ScorexLogging {
   //input tx id, input box id, tracked box
   case class InputData(inputTxId: ModifierId, inputBoxId: ModifierId, trackedBox: TrackedBox)
 
+  //outputs, input ids, related transactions
+  case class ScanResults(outputs: Seq[TrackedBox], inputsSpent: Seq[InputData], relatedTransactions: Seq[WalletTransaction])
+
   /**
     * Tries to prove the given box in order to define whether it could be spent by this wallet.
     *
@@ -94,9 +97,7 @@ object WalletScanLogic extends ScorexLogging {
       if (spendable) Some(tb.copy(scans = Set(PaymentsScanId))) else None
     }
 
-    //outputs, input ids, related transactions
-    type ScanResults = (Seq[TrackedBox], Seq[InputData], Seq[WalletTransaction])
-    val initialScanResults: ScanResults = (resolvedBoxes, Seq.empty, Seq.empty)
+    val initialScanResults = ScanResults(resolvedBoxes, Seq.empty, Seq.empty)
 
     // Wallet unspent outputs, we fetch them only when Bloom filter shows that some outputs may be spent
     val unspentBoxes = mutable.Map[ModifierId, TrackedBox]()
@@ -139,7 +140,7 @@ object WalletScanLogic extends ScorexLogging {
 
             unspentBoxes.get(bytesToId(inpId)).flatMap { _ =>
               registry.getBox(inpId)
-                .orElse(scanResults._1.find(tb => tb.box.id.sameElements(inpId)))
+                .orElse(scanResults.outputs.find(tb => tb.box.id.sameElements(inpId)))
             }
           }
         } else {
@@ -157,23 +158,19 @@ object WalletScanLogic extends ScorexLogging {
         val walletscanIds = (spentBoxes ++ myOutputs).flatMap(_.scans).toSet
         val wtx = WalletTransaction(tx, height, walletscanIds.toSeq)
 
-        val inputsSpent = scanResults._2 ++ spentBoxes.map(t => InputData(tx.id, t.boxId, t))
-        (scanResults._1 ++ myOutputs, inputsSpent, scanResults._3 :+ wtx)
+        val inputsSpent = scanResults.inputsSpent ++ spentBoxes.map(t => InputData(tx.id, t.boxId, t))
+        ScanResults(scanResults.outputs ++ myOutputs, inputsSpent, scanResults.relatedTransactions :+ wtx)
       } else {
         scanResults
       }
     }
 
-    val outputs = scanRes._1
-    val inputs = scanRes._2
-    val affectedTransactions = scanRes._3
-
     // function effects: updating registry and offchainRegistry datasets
-    registry.updateOnBlock(outputs, inputs, affectedTransactions)(blockId, height)
+    registry.updateOnBlock(scanRes, blockId, height)
 
     //data needed to update the offchain-registry
     val walletUnspent = registry.walletUnspentBoxes()
-    val newOnChainIds = outputs.map(x => encodedBoxId(x.box.id))
+    val newOnChainIds = scanRes.outputs.map(x => encodedBoxId(x.box.id))
     val updatedOffchainRegistry = offChainRegistry.updateOnBlock(height, walletUnspent, newOnChainIds)
 
     (registry, updatedOffchainRegistry, outputsFilter)

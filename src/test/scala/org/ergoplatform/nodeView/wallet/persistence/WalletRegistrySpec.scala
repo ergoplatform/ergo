@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.db.DBSpec
-import org.ergoplatform.nodeView.wallet.IdUtils.EncodedBoxId
+import org.ergoplatform.nodeView.wallet.WalletScanLogic.{SpentInputData, ScanResults}
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.scalacheck.Gen
@@ -50,10 +50,24 @@ class WalletRegistrySpec
   it should "read spent wallet boxes" in {
     forAll(trackedBoxGen, modifierIdGen) { case (box, txId) =>
       withHybridStore(10) { store =>
-        val uncertainBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = walletBoxStatus)
-        WalletRegistry.putBox(emptyBag, uncertainBox).transact(store)
+        val spentBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = walletBoxStatus)
+        WalletRegistry.putBox(emptyBag, spentBox).transact(store)
         val registry = new WalletRegistry(store)(settings.walletSettings)
-        registry.walletSpentBoxes() shouldBe Seq(uncertainBox)
+        registry.walletSpentBoxes() shouldBe Seq(spentBox)
+      }
+    }
+  }
+
+  it should "read confirmed wallet boxes" in {
+    forAll(trackedBoxGen, modifierIdGen) { case (box, txId) =>
+      withHybridStore(10) { store =>
+        val unspentBox = box.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus)
+        val spentBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = walletBoxStatus)
+        WalletRegistry.putBoxes(emptyBag, Seq(unspentBox, spentBox)).transact(store)
+        val registry = new WalletRegistry(store)(settings.walletSettings)
+        registry.walletSpentBoxes() shouldBe Seq(spentBox)
+        registry.walletUnspentBoxes() shouldBe Seq(unspentBox)
+        registry.walletConfirmedBoxes() shouldBe Seq(unspentBox, spentBox)
       }
     }
   }
@@ -93,7 +107,7 @@ class WalletRegistrySpec
         val registry = new WalletRegistry(store)(settings.walletSettings)
         val blockId = modifierIdGen.sample.get
         val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus))
-        registry.updateOnBlock(unspentBoxes, Seq.empty, Seq.empty)(blockId, 100)
+        registry.updateOnBlock(ScanResults(unspentBoxes, Seq.empty, Seq.empty), blockId, 100)
         registry.walletUnspentBoxes().toList should contain theSameElementsAs unspentBoxes
       }
     }
@@ -107,8 +121,8 @@ class WalletRegistrySpec
       val outs = boxes.map { bx =>
         bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus)
       }
-      val inputs = outs.map(tb => (fakeTxId, EncodedBoxId @@ tb.boxId, tb))
-      registry.updateOnBlock(outs, inputs, Seq.empty)(blockId, 100)
+      val inputs = outs.map(tb => SpentInputData(fakeTxId, tb))
+      registry.updateOnBlock(ScanResults(outs, inputs, Seq.empty), blockId, 100)
       registry.walletUnspentBoxes() shouldBe Seq.empty
     }
   }

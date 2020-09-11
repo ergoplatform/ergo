@@ -47,8 +47,11 @@ object WalletCache {
     }.toSeq
   }
 
-  def emptyFilter(settings: ErgoSettings): BloomFilter[Array[Byte]] = {
-    val expectedKeys = 100000
+  /**
+    * Create empty bloom filter
+    * @return a Bloom filter instance
+    */
+  def emptyFilter(expectedKeys: Int = 100000): BloomFilter[Array[Byte]] = {
     val falsePositiveRate = 0.01
     BloomFilter.create[Array[Byte]](Funnels.byteArrayFunnel(), expectedKeys, falsePositiveRate)
   }
@@ -56,10 +59,9 @@ object WalletCache {
   /**
     * Constructing a Bloom filter for scanning the boxes efficiently
     */
-  def filter(trackedBytes: Seq[Array[Byte]],
-             miningScriptsBytes: Seq[Array[Byte]],
-             settings: ErgoSettings): BloomFilter[Array[Byte]] = {
-    val f = emptyFilter(settings)
+  def createFilter(trackedBytes: Seq[Array[Byte]],
+                   miningScriptsBytes: Seq[Array[Byte]]): BloomFilter[Array[Byte]] = {
+    val f = emptyFilter()
     trackedBytes.foreach(bs => f.put(bs))
     miningScriptsBytes.foreach(msb => f.put(msb))
     f
@@ -75,7 +77,7 @@ object WalletCache {
   def apply(trackedPubKeys: Seq[ExtendedPublicKey], settings: ErgoSettings): WalletCache = {
     val tbs = trackedBytes(trackedPubKeys)
     val msBytes = miningScripts(trackedPubKeys, settings).map(_.bytes)
-    val f = filter(tbs, msBytes, settings)
+    val f = createFilter(tbs, msBytes)
     val tas = trackedAddresses(trackedPubKeys, settings.addressEncoder)
 
     WalletCache(tas, trackedPubKeys, tbs, f)(settings)

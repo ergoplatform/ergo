@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalacheck.Gen
 import scorex.core.network.ConnectedPeer
@@ -66,7 +66,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
         ncProbe.ref,
         vhProbe.ref,
         ErgoSyncInfoMessageSpec,
-        settings.scorexSettings.network,
+        settings,
         tp,
         h,
         pool)

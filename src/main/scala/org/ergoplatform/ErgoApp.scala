@@ -33,7 +33,7 @@ import scala.util.{Failure, Success}
 
 class ErgoApp(args: Args) extends ScorexLogging {
 
-  private var ergoSettings: ErgoSettings = ErgoSettings.read(args)
+  private val ergoSettings: ErgoSettings = ErgoSettings.read(args)
 
   implicit private def settings: ScorexSettings = ergoSettings.scorexSettings
 
@@ -104,7 +104,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      settings.network, timeProvider)
+      ergoSettings, timeProvider)
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),

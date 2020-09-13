@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder._
 import scorex.core.{ModifierTypeId, PersistentNodeViewModifier}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
@@ -25,15 +25,17 @@ import scala.concurrent.duration._
 class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-                               networkSettings: NetworkSettings,
+                               settings: ErgoSettings,
                                timeProvider: NetworkTimeProvider)
                               (implicit ex: ExecutionContext)
   extends NodeViewSynchronizer[ErgoTransaction, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier,
-    ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider,
-    Constants.modifierSerializers) {
+    ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec,
+    settings.scorexSettings.network, timeProvider, Constants.modifierSerializers) {
 
   override protected val deliveryTracker =
     new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
+
+  protected val networkSettings: NetworkSettings = settings.scorexSettings.network
 
   /**
     * Approximate number of modifiers to be downloaded simultaneously
@@ -89,8 +91,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
           val newModifierIds = modifierTypeId match {
             case Transaction.ModifierTypeId =>
-              // We download transactions only if the chain is synced
-              if (history.isHeadersChainSynced && history.fullBlockHeight == history.headersHeight) {
+              // We download transactions only if the node is not needed for externally provided proofs
+              // (so having UTXO set, and the chain is synced
+              if (!settings.nodeSettings.stateType.requireProofs &&
+                    history.isHeadersChainSynced &&
+                    history.fullBlockHeight == history.headersHeight) {
                 invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
               } else {
                 Seq.empty
@@ -156,19 +161,19 @@ object ErgoNodeViewSynchronizer {
   def props(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-            networkSettings: NetworkSettings,
+            settings: ErgoSettings,
             timeProvider: NetworkTimeProvider)
            (implicit ex: ExecutionContext): Props =
-    Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings,
+    Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
       timeProvider))
 
   def apply(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-            networkSettings: NetworkSettings,
+            settings: ErgoSettings,
             timeProvider: NetworkTimeProvider)
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider))
+    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider))
 
   case object CheckModifiersToDownload
 

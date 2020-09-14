@@ -44,7 +44,7 @@ final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
   val miningScriptsBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.miningScriptsBytes).getOrElse(Seq.empty)
 
   val filter: BloomFilter[Array[Byte]] =
-    stateCacheOpt.map(_.filter).getOrElse(WalletCache.emptyFilter(settings))
+    stateCacheOpt.map(_.filter).getOrElse(WalletCache.emptyFilter())
 
   def removeScan(scanId: ScanId): WalletVars = {
     this.copy(externalScans = this.externalScans.filter(_.scanId != scanId))

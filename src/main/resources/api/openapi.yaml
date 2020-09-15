@@ -1506,7 +1506,7 @@ components:
         $ref: '#/components/schemas/ErgoTransaction'
 
     FeeHistogramBean:
-      description: Fee histogram bean
+      description: Fee histogram bin
       type: object
       properties:
         nTxns:
@@ -2094,9 +2094,9 @@ paths:
   /transactions/poolhist:
     parameters:
       - in: query
-        name: beans
+        name: bins
         required: false
-        description: The number of beans in histogram
+        description: The number of bins in histogram
         schema:
           type: integer
           format: int32
@@ -2113,8 +2113,8 @@ paths:
           default: 60000
     get:
       summary: Get histogram (waittime, (n_trans, sum(fee)) for transactions in mempool.
-        It contains "beans"+1 beans, where i-th elements corresponds to transaction with wait time [i*maxtime/beans, (i+1)*maxtime/beans),
-        and last bean corresponds to the transactions with wait time >= maxtime.
+        It contains "bins"+1 bins, where i-th elements corresponds to transaction with wait time [i*maxtime/bins, (i+1)*maxtime/bins),
+        and last bin corresponds to the transactions with wait time >= maxtime.
       operationId: getFeeHistogram
       tags:
         - transactions

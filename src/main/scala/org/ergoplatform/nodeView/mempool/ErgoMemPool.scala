@@ -12,18 +12,18 @@ import scorex.util.{ModifierId, bytesToId}
 import scala.util.Try
 
 object MemPoolStatisticsParams {
-  val nHistonHistogramBeans = 60  /* one hour */
+  val nHistogramBins = 60  /* one hour */
   val measurementIntervalMsec = 60 * 1000 /* one hour */
 }
 
-case class FeeHistogramBean(var nTxns: Int, var totalFee: Long)
+case class FeeHistogramBin(var nTxns: Int, var totalFee: Long)
 
 case class MemPoolStatistics() {
   var startMeasurement: Long = System.currentTimeMillis() // start of measurement interval
   var takenTxns : Long = 0              // amount of taken transaction since start of measurement
   var snapTime: Long = startMeasurement // last snapshot time
   var snapTakenTxns : Long = 0          // amount of transaction at the moment of last snapshot
-  val histogram = Array.fill(MemPoolStatisticsParams.nHistonHistogramBeans)(FeeHistogramBean(0,0))
+  val histogram = Array.fill(MemPoolStatisticsParams.nHistogramBins)(FeeHistogramBin(0,0))
 
   //                  <.............takenTxns...................
   //                                        <....snapTakenTxns..
@@ -52,7 +52,7 @@ case class MemPoolStatistics() {
     }
     // update histogram of average fee for wait time interval
     val durationMinutes = ((now - wtx.created)/(60*1000)).asInstanceOf[Int]
-    if (durationMinutes < MemPoolStatisticsParams.nHistonHistogramBeans) {
+    if (durationMinutes < MemPoolStatisticsParams.nHistogramBins) {
       histogram(durationMinutes).nTxns += 1
       histogram(durationMinutes).totalFee += wtx.feePerKb
     }
@@ -159,8 +159,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, stats : MemPoolStatistic
     *  @return recommended fee value for transaction to be proceeded in specified time
     */
   def getRecommendedFee(expectedWaitTimeMinutes : Int, txSize : Int) : Long = {
-    if (expectedWaitTimeMinutes < MemPoolStatisticsParams.nHistonHistogramBeans) {
-      // locate first non-empty histogram bean preceding or eqaul to the specified wait time
+    if (expectedWaitTimeMinutes < MemPoolStatisticsParams.nHistogramBins) {
+      // locate first non-empty histogram bin preceding or equal to the specified wait time
       for (i <- expectedWaitTimeMinutes to 0 by -1) {
         val h = stats.histogram(expectedWaitTimeMinutes)
         if (h.nTxns != 0) {

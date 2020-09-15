@@ -8,7 +8,7 @@ import io.circe.syntax._
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, FeeHistogramBean}
+import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, FeeHistogramBin}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.AugWalletTransaction
@@ -73,30 +73,30 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     ApiResponse(getUnconfirmedTransactions(offset, limit))
   }
 
-  val feeHistParam: Directive[(Int, Long)] = parameters("beans".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))
+  val feeHistParam: Directive[(Int, Long)] = parameters("bins".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))
 
-  def getFeeHistogram(nBeans : Int, maxWaitTimeMsec: Long, wtxs : Seq[WeightedTxId]): Array[FeeHistogramBean] = {
-    val histogram = Array.fill(nBeans + 1)(FeeHistogramBean(0,0))
+  def getFeeHistogram(nBins : Int, maxWaitTimeMsec: Long, wtxs : Seq[WeightedTxId]): Array[FeeHistogramBin] = {
+    val histogram = Array.fill(nBins + 1)(FeeHistogramBin(0,0))
     val now = System.currentTimeMillis()
-    val interval = maxWaitTimeMsec / nBeans
+    val interval = maxWaitTimeMsec / nBins
     for (wtx <- wtxs) {
       val waitTime = now - wtx.created
-      val bean = if (waitTime < maxWaitTimeMsec) (waitTime/interval).asInstanceOf[Int] else nBeans
-      histogram(bean).nTxns += 1
-      histogram(bean).totalFee += wtx.feePerKb
+      val bin = if (waitTime < maxWaitTimeMsec) (waitTime/interval).asInstanceOf[Int] else nBins
+      histogram(bin).nTxns += 1
+      histogram(bin).totalFee += wtx.feePerKb
     }
     histogram
   }
 
-  implicit val encodeHistogramBeam: Encoder[FeeHistogramBean] = new Encoder[FeeHistogramBean] {
-    final def apply(bean:FeeHistogramBean): Json = Json.obj(
-      ("nTxns", bean.nTxns.asJson),
-      ("totalFee", bean.totalFee.asJson)
+  implicit val encodeHistogramBeam: Encoder[FeeHistogramBin] = new Encoder[FeeHistogramBin] {
+    final def apply(bin:FeeHistogramBin): Json = Json.obj(
+      ("nTxns", bin.nTxns.asJson),
+      ("totalFee", bin.totalFee.asJson)
     )
   }
 
-  def getFeeHistogramR: Route = (path("poolhist") & get & feeHistParam) { (beans, maxtime) =>
-    ApiResponse(getMemPool.map(p => getFeeHistogram(beans, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
+  def getFeeHistogramR: Route = (path("poolhist") & get & feeHistParam) { (bins, maxtime) =>
+    ApiResponse(getMemPool.map(p => getFeeHistogram(bins, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
   }
 
   val feeRequest: Directive[(Int, Int)] = parameters("waitTime".as[Int] ? 1, "txSize".as[Int] ? 100)

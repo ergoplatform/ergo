@@ -2152,7 +2152,7 @@ paths:
           format: int32
           minimum: 1
           default: 100
-     get:
+    get:
       summary: Get recommended fee for the tranasaction with specified size to be proceeded in specified time
       operationId: getRecommededFee
       tags:
@@ -2191,7 +2191,7 @@ paths:
           format: int32
           minimum: 1
           default: 100
-     get:
+    get:
       summary: Get expected wait time for the transaction with specified fee and size
       operationId: getExpectedWaitTime
       tags:

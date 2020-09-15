@@ -41,13 +41,13 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
     * Get expected wait time for the transaction with specified fee and size
     * @param txFee transaction fee
     * @param txSize size of transaction (in bytes)
-    * @return average time for this transaction to be placed in block
+    * @return average time in milliseconds for this transaction to be placed in block
     */
-  def getExpectedWaitTime(txFee : Long, txSize : Int): Int
+  def getExpectedWaitTime(txFee : Long, txSize : Int): Long
 
   /**
     * Get recommended fee for transaction with specified size to be placed in pool within specified interval of time
-    * @param expectedWaitTimeMinutes maximalamoutn of time for which transaction can be kept in mempool
+    * @param expectedWaitTimeMinutes maximal amount of time for which transaction can be kept in mempool
     * @param txSize size of transaction (in bytes)
     * @return recommended fee value for transaction to be proceeded in specified time
     */

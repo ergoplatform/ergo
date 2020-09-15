@@ -2171,7 +2171,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /transactions/waitime:
+  /transactions/waittime:
     parameters:
       - in: query
         name: fee

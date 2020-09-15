@@ -103,7 +103,7 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
 
       override def getRecommendedFee(expectedWaitTimeMinutes : Int, txSize : Int) : Long = 0
 
-      override def getExpectedWaitTime(txFee : Long, txSize : Int): Int = 0
+      override def getExpectedWaitTime(txFee : Long, txSize : Int): Long = 0
 
     }
 

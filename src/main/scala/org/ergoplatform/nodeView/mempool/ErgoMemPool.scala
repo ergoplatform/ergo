@@ -12,32 +12,47 @@ import scorex.util.{ModifierId, bytesToId}
 import scala.util.Try
 
 object MemPoolStatisticsParams {
-  val nHistograsmBeans = 60  /* one hour */
+  val nHistonHistogramBeans = 60  /* one hour */
   val measurementIntervalMsec = 60 * 1000 /* one hour */
 }
 
 case class FeeHistogramBean(var nTxns: Int, var totalFee: Long)
 
 case class MemPoolStatistics() {
-  var startMeasurement: Long = System.currentTimeMillis()
-  var takenTxns : Long = 0
-  var snapTime: Long = startMeasurement
-  var snapTakenTxns : Long = 0
-  val histogram = Array.fill(MemPoolStatisticsParams.nHistograsmBeans)(FeeHistogramBean(0,0))
+  var startMeasurement: Long = System.currentTimeMillis() // start of measurement interval
+  var takenTxns : Long = 0              // amount of taken transaction since start of measurement
+  var snapTime: Long = startMeasurement // last snapshot time
+  var snapTakenTxns : Long = 0          // amount of transaction at the moment of last snapshot
+  val histogram = Array.fill(MemPoolStatisticsParams.nHistonHistogramBeans)(FeeHistogramBean(0,0))
 
+  //                  <.............takenTxns...................
+  //                                        <....snapTakenTxns..
+  // ------------------------------------------------------------> time
+  //                  ^                     ^                  ^
+  //                  |<measurementInterval>|                  |
+  // startMeasurement +            snapTime +      current time+
+
+  /**
+    * Add new entry to mempool statistics. This method is called when transaction is taken from mempool
+    * and placed in blockchain. It is not called when transaction in thrown away from the pool by replacement policy.
+    * To make statistic better represent most recent system behaviour, we periodically (each measurementIntervalMsec)
+    * prune statistic. To avoid situtation when we do not have statistic at all, we actually keep data up to
+    * 2*measurementIntervalMsec and periodically cut half of range.
+    */
   def add(wtx : WeightedTxId) : Unit = {
     val now = System.currentTimeMillis()
     takenTxns += 1
     if (now - snapTime > MemPoolStatisticsParams.measurementIntervalMsec) {
-      if (snapTakenTxns != 0) {
-        takenTxns -= snapTakenTxns
+      if (snapTakenTxns != 0) { // snapshot was taken (it is always true for time > measurementIntervalMsec)
+        takenTxns -= snapTakenTxns // cut-of statistics
         startMeasurement = snapTime
       }
-      snapTakenTxns = takenTxns
+      snapTakenTxns = takenTxns // create new snapshot
       snapTime = now
     }
+    // update histogram of average fee for wait time interval
     val durationMinutes = ((now - wtx.created)/(60*1000)).asInstanceOf[Int]
-    if (durationMinutes < MemPoolStatisticsParams.nHistograsmBeans) {
+    if (durationMinutes < MemPoolStatisticsParams.nHistonHistogramBeans) {
       histogram(durationMinutes).nTxns += 1
       histogram(durationMinutes).totalFee += wtx.feePerKb
     }
@@ -137,8 +152,15 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, stats : MemPoolStatistic
       .map(_.value)
       .sum
 
+  /**
+    * Get average fee for the specified wait time interval
+    * @param expectedWaitTimeMinutes maximal amount of time for which transaction can be kept in mempool
+    * @param txSize size of transaction (in bytes)
+    *  @return recommended fee value for transaction to be proceeded in specified time
+    */
   def getRecommendedFee(expectedWaitTimeMinutes : Int, txSize : Int) : Long = {
-    if (expectedWaitTimeMinutes < MemPoolStatisticsParams.nHistograsmBeans) {
+    if (expectedWaitTimeMinutes < MemPoolStatisticsParams.nHistonHistogramBeans) {
+      // locate first non-empty histogram bean preceding or eqaul to the specified wait time
       for (i <- expectedWaitTimeMinutes to 0 by -1) {
         val h = stats.histogram(expectedWaitTimeMinutes)
         if (h.nTxns != 0) {
@@ -149,14 +171,27 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, stats : MemPoolStatistic
     settings.nodeSettings.minimalFeeAmount
   }
 
-  def getExpectedWaitTime(txFee : Long, txSize : Int): Int  = {
+  /**
+    * Calculate position in mempool corresponding to the specified fee and
+    * estimate time of serving this transaction based on average rate of placing
+    * transactions in blockchain
+    * @param txFee transaction fee
+    * @param txSize size of transaction (in bytes)
+    * @return average time for this transaction to be placed in block
+    */
+  def getExpectedWaitTime(txFee : Long, txSize : Int): Long  = {
+    // Create dummy transaction entry
     val feePerKb = txFee * 1024 / txSize
     val dummyModifierId = bytesToId(Array.fill(32)(0.toByte))
     val wtx = WeightedTxId(dummyModifierId, feePerKb, feePerKb, 0)
+
+    // Find position of entry in mempool
     val posInPool = pool.orderedTransactions.keySet.until(wtx).size
+
+    // Time since statistics measurement interval (needed to calculate average tx rate)
     val elapsed = System.currentTimeMillis() - stats.startMeasurement
     if (stats.takenTxns != 0) {
-      (elapsed * posInPool / stats.takenTxns).asInstanceOf[Int]
+      elapsed * posInPool / stats.takenTxns
     } else {
       0
     }

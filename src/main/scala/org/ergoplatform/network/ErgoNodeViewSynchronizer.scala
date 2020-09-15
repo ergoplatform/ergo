@@ -22,6 +22,9 @@ import scorex.util.ModifierId
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
+/**
+  * Tweaks on top of Scorex' NodeViewSynchronizer made for optimizing Ergo network
+  */
 class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,

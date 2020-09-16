@@ -82,8 +82,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
               _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
             )
           case _ =>
-            this -> ProcessingOutcome.Declined(
-              new Exception("Transaction validation not supported"))
+            new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
         }
       } else {
         this -> ProcessingOutcome.Declined(

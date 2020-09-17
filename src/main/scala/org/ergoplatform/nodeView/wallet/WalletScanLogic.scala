@@ -115,14 +115,16 @@ object WalletScanLogic extends ScorexLogging {
     }
 
     // Resolve boxes related to mining income
-    val miningBoxes = registry.unspentBoxes(MiningScanId).take(5)
-    if(miningBoxes.nonEmpty) {
-      walletVars.proverOpt.foreach(_.IR.resetContext())
-      val resolvedBoxes = miningBoxes.flatMap { tb =>
+    // We take only 5 oldest boxes to avoid long scans in the testnet where one wallet
+    // (corresponding to a node generating almost all the blocks) can possess
+    // hundreds of unspent mining reward boxes.
+    val miningBoxes = registry.unspentBoxes(MiningScanId).sortBy(_.inclusionHeightOpt.getOrElse(0)).take(5)
+    val resolvedBoxes = if(miningBoxes.nonEmpty) {
+      miningBoxes.flatMap { tb =>
         val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)
         if (spendable) Some(tb.copy(scans = Set(PaymentsScanId))) else None
       }
-    }
+    } else Seq.empty
 
     val initialScanResults = ScanResults(resolvedBoxes, Seq.empty, Seq.empty)
 

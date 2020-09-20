@@ -63,25 +63,30 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
   def process(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
     val fee = extractFee(tx)
     val minFee = settings.nodeSettings.minimalFeeAmount
-    if (fee >= minFee) {
-      state match {
-        case utxo: UtxoState if pool.canAccept(tx) =>
-          // Allow proceeded transaction to spend outputs of pooled transactions.
-          utxo.withTransactions(getAll).validate(tx).fold(
-            new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
-            _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
-          )
+    val canAccept = pool.canAccept(tx)
 
-        case validator: TransactionValidation[ErgoTransaction@unchecked] if pool.canAccept(tx) =>
-          // transaction validation currently works only for UtxoState, so this branch currently
-          // will not be triggered probably
-          validator.validate(tx).fold(
-            new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
-            _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
-          )
-        case _ =>
-          this -> ProcessingOutcome.Declined(
-            new Exception("Transaction validation not supported"))
+    if (fee >= minFee) {
+      if (canAccept) {
+        state match {
+          case utxo: UtxoState =>
+            // Allow proceeded transaction to spend outputs of pooled transactions.
+            utxo.withTransactions(getAll).validate(tx).fold(
+              new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
+              _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+            )
+          case validator: TransactionValidation[ErgoTransaction@unchecked] =>
+            // transaction validation currently works only for UtxoState, so this branch currently
+            // will not be triggered probably
+            validator.validate(tx).fold(
+              new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
+              _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+            )
+          case _ =>
+            new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+        }
+      } else {
+        this -> ProcessingOutcome.Declined(
+          new Exception(s"Pool can not accept transaction ${tx.id}, it is invalidated earlier or pool is full"))
       }
     } else {
       this -> ProcessingOutcome.Declined(

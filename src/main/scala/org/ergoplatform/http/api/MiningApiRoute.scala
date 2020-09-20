@@ -5,8 +5,8 @@ import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
-import org.ergoplatform.local.ErgoMiner
-import org.ergoplatform.mining.{AutolykosSolution, ExternalCandidateBlock}
+import org.ergoplatform.mining.{AutolykosSolution, ErgoMiner, WorkMessage}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoScriptPredef, Pay2SAddress}
@@ -16,7 +16,8 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 
 import scala.concurrent.Future
 
-case class MiningApiRoute(miner: ActorRef, ergoSettings: ErgoSettings)
+case class MiningApiRoute(miner: ActorRef,
+                          ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
@@ -25,12 +26,29 @@ case class MiningApiRoute(miner: ActorRef, ergoSettings: ErgoSettings)
 
   override val route: Route = pathPrefix("mining") {
     candidateR ~
+      candidateWithTxsR ~
       solutionR ~
       rewardAddressR
   }
 
+  /**
+    * Get block candidate. Useful for external miners.
+    */
   def candidateR: Route = (path("candidate") & pathEndOrSingleSlash & get) {
-    val candidateF = (miner ? ErgoMiner.PrepareCandidate).mapTo[Future[ExternalCandidateBlock]].flatten
+    val prepareCmd = ErgoMiner.PrepareCandidate(Seq.empty)
+    val candidateF = (miner ? prepareCmd).mapTo[Future[WorkMessage]].flatten
+    ApiResponse(candidateF)
+  }
+
+  /**
+    * Get block candidate with transactions provided being included.
+    * Useful for external miners when they want to insert certain transactions.
+    */
+  def candidateWithTxsR: Route = (path("candidateWithTxs")
+    & post & entity(as[Seq[ErgoTransaction]]) & withAuth) { txs =>
+
+    val prepareCmd = ErgoMiner.PrepareCandidate(txs)
+    val candidateF = (miner ? prepareCmd).mapTo[Future[WorkMessage]].flatten
     ApiResponse(candidateF)
   }
 

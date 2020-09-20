@@ -5,8 +5,7 @@ import akka.pattern.ask
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.local.ErgoMiner.{PrepareCandidate, StartMining}
-import org.ergoplatform.local.ErgoMinerRef
+import ErgoMiner.{PrepareCandidate, StartMining}
 import org.ergoplatform.mining.Listener._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
@@ -41,7 +40,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
   implicit private val timeout: Timeout = defaultTimeout
 
   val newBlock: Class[msgType] = classOf[msgType]
-  val newBlockDuration: FiniteDuration = 30 seconds
+  val newBlockDelay: FiniteDuration = 30 seconds
 
   val defaultSettings: ErgoSettings = {
     val empty = ErgoSettings.read()
@@ -83,7 +82,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     minerRef ! StartMining
 
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
 
 
     val boxToSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
@@ -99,10 +98,14 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx))
     expectNoMessage(1 seconds)
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 1
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
+
+    //check that tx is included into UTXO set
+    val state = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
+    tx.outputs.foreach(o => state.boxById(o.id).get shouldBe o)
 
     // try to spend all the boxes with complex scripts
     val complexInputs = tx.outputs.map(o => Input(o.id, emptyProverResult))
@@ -110,22 +113,19 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val unsignedComplexTx = new UnsignedErgoTransaction(complexInputs, IndexedSeq(), IndexedSeq(complexOut))
     val complexTx = defaultProver.sign(unsignedComplexTx, tx.outputs, IndexedSeq(), r.s.stateContext).get
     tx.outputs.map(_.ergoTree.complexity).sum should be > ergoSettings.nodeSettings.maxTransactionComplexity
-    // ensure that complex transaction was included into mempool
-    var mempoolSize = 0
-    while (mempoolSize == 0) {
-      nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(complexTx))
-      mempoolSize = await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size
-    }
+    // send complex transaction to the mempool
+    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(complexTx))
 
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+
     // complex tx was removed from mempool
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
     // complex tx was not included
-    val state = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
-    tx.outputs.foreach(o => state.boxById(o.id) should not be None)
-    complexTx.outputs.foreach(o => state.boxById(o.id) shouldBe None)
+    val state2 = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
+    tx.outputs.foreach(o => state2.boxById(o.id) should not be None)
+    complexTx.outputs.foreach(o => state2.boxById(o.id) shouldBe None)
   }
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
@@ -153,11 +153,11 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     minerRef ! StartMining
 
     // wait for 1 block to be generated
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
 
     @tailrec
     def loop(toSend: Int): Unit = {
-      val toSpend: Seq[ErgoBox] = await(wallet.boxes()).map(_.trackedBox.box).toList
+      val toSpend: Seq[ErgoBox] = await(wallet.walletBoxes()).map(_.trackedBox.box).toList
       log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains," +
         s"pool size: ${requestReaders.m.size}")
       val txs: Seq[ErgoTransaction] = toSpend.take(toSend) map { boxToSend =>
@@ -182,7 +182,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
       if (toSend > toSpend.size) {
         // wait for the next block
-        testProbe.expectMsgClass(newBlockDuration, newBlock)
+        testProbe.expectMsgClass(newBlockDelay, newBlock)
         loop(toSend - toSpend.size)
       }
     }
@@ -227,7 +227,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     minerRef ! StartMining
 
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
 
     val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
@@ -250,9 +250,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 2
 
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
-    testProbe.expectMsgClass(newBlockDuration, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
 
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
 
@@ -279,13 +279,76 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     val passiveMiner: ActorRef = minerRef
 
-    await((passiveMiner ? PrepareCandidate).mapTo[Future[ExternalCandidateBlock]].flatten)
+    await((passiveMiner ? PrepareCandidate(Seq.empty)).mapTo[Future[WorkMessage]].flatten)
+    system.terminate()
+  }
+
+  it should "include mandatory transactions" in new TestKit(ActorSystem()) {
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlock)
+    val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
+
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
+
+    val minerRef: ActorRef = ErgoMinerRef(
+      ergoSettings,
+      nodeViewHolderRef,
+      readersHolderRef,
+      timeProvider,
+      Some(defaultMinerSecret)
+    )
+    expectNoMessage(1 second)
+    val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+
+    val history: ErgoHistoryReader = r.h
+    val startBlock: Option[Header] = history.bestHeaderOpt
+
+    minerRef ! StartMining
+
+    testProbe.expectMsgClass(newBlockDelay, newBlock)
+
+    val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
+    val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
+
+    val mBox: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
+    val mInput = Input(mBox.id, emptyProverResult)
+
+    val outputs1 = IndexedSeq(new ErgoBoxCandidate(mBox.value, prop1, r.s.stateContext.currentHeight))
+    val unsignedTx1 = new UnsignedErgoTransaction(IndexedSeq(mInput), IndexedSeq(), outputs1)
+    val mandatoryTxLike1 = defaultProver.sign(unsignedTx1, IndexedSeq(mBox), IndexedSeq(), r.s.stateContext).get
+    val mandatoryTx1 = ErgoTransaction(mandatoryTxLike1)
+
+    val outputs2 = IndexedSeq(new ErgoBoxCandidate(mBox.value, prop2, r.s.stateContext.currentHeight))
+    val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(mInput), IndexedSeq(), outputs2)
+    val mandatoryTxLike2 = defaultProver.sign(unsignedTx2, IndexedSeq(mBox), IndexedSeq(), r.s.stateContext).get
+    val mandatoryTx2 = ErgoTransaction(mandatoryTxLike2)
+    mandatoryTx1.bytes.sameElements(mandatoryTx2.bytes) shouldBe false
+
+    val ecb = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[WorkMessage]].flatten)
+    ecb.proofsForMandatoryTransactions.isDefined shouldBe false
+
+    val ecb1 = await((minerRef ? PrepareCandidate(Seq(mandatoryTx1))).mapTo[Future[WorkMessage]].flatten)
+    ecb1.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
+    ecb1.proofsForMandatoryTransactions.get.check() shouldBe true
+
+    val ecb2 = await((minerRef ? PrepareCandidate(Seq(mandatoryTx2))).mapTo[Future[WorkMessage]].flatten)
+    ecb2.msg.sameElements(ecb1.msg) shouldBe false
+    ecb2.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
+    ecb2.proofsForMandatoryTransactions.get.check() shouldBe true
+
+    val ecb3 = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[WorkMessage]].flatten)
+    ecb3.msg.sameElements(ecb2.msg) shouldBe true
+    ecb3.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
+    ecb3.proofsForMandatoryTransactions.get.check() shouldBe true
+
     system.terminate()
   }
 
 }
 
 class Listener extends Actor {
+
   var generatedBlocks: Int = 0
 
   override def preStart(): Unit = {
@@ -296,6 +359,7 @@ class Listener extends Actor {
     case SemanticallySuccessfulModifier(_) => generatedBlocks += 1
     case Status => sender ! generatedBlocks
   }
+
 }
 
 object Listener {

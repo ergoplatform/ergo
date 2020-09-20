@@ -3,6 +3,8 @@ import sbt._
 
 import scala.util.Try
 
+logLevel := Level.Debug
+
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
@@ -15,14 +17,14 @@ lazy val commonSettings = Seq(
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
     "Bintray" at "https://jcenter.bintray.com/", //for org.ethereum % leveldbjni-all 
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
-    "Typesafe maven releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
+    "Typesafe maven releases" at "https://dl.bintray.com/typesafe/maven-releases/",
     "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"),
   homepage := Some(url("http://ergoplatform.org/")),
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode")),
   publishTo := sonatypePublishToBundle.value,
 )
 
-val scorexVersion = "master-3946bdb5-SNAPSHOT"
+val scorexVersion = "master-bb48da3a-SNAPSHOT"
 val sigmaStateVersion = "3.2.1"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -40,8 +42,7 @@ libraryDependencies ++= Seq(
   "org.iq80.leveldb" % "leveldb" % "0.12",
   
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
-
-  "org.typelevel" %% "cats-free" % "1.6.0",
+  
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "com.iheart" %% "ficus" % "1.4.7",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
@@ -253,8 +254,8 @@ lazy val ergo = (project in file("."))
     scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
     javacOptions in(Compile, compile) ++= javacReleaseOption
   )
-  .dependsOn(ergoWallet % "compile->compile")
-  .dependsOn(avldb % "compile->compile")
+  .dependsOn(ergoWallet % "test->test;compile->compile")
+  .dependsOn(avldb % "test->test;compile->compile")
   .configs(It2Test)
 
 lazy val benchmarks = (project in file("benchmarks"))

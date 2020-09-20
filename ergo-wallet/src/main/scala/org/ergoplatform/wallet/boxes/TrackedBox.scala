@@ -1,6 +1,7 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.Constants.ScanId
+import org.ergoplatform.wallet.{Constants, TokensMap}
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
 import scorex.util.serialization.{Reader, Writer}
@@ -11,14 +12,13 @@ import org.ergoplatform.ErgoBoxAssets
   * A box tracked by a wallet that contains Ergo box itself as well as
   * its state (e.g. spent or not, confirmed or not etc).
   *
-  * @param creationTxId       - Id of transaction created the box
-  * @param creationOutIndex   - Output index in the creation transaction
-  * @param inclusionHeightOpt - Height the transaction was included into blockchain
-  * @param spendingTxIdOpt    - Id of transaction which spends the box if exists and known
-  * @param spendingHeightOpt  - Height of the spending transaction block in blockchain if known
-  * @param box                - Underlying Ergo box
-  * @param certainty          - Whether the box is definitely belongs to the user or not
-  * @param applicationId      - Identifier of the application the box refers to
+  * @param creationTxId        - Id of transaction created the box
+  * @param creationOutIndex    - Output index in the creation transaction
+  * @param inclusionHeightOpt  - Height the transaction was included into blockchain
+  * @param spendingTxIdOpt     - Id of transaction which spends the box if exists and known
+  * @param spendingHeightOpt   - Height of the spending transaction block in blockchain if known
+  * @param box                 - Underlying Ergo box
+  * @param scans               - Identifiers of scans the box refers to
   */
 case class TrackedBox(creationTxId: ModifierId,
                       creationOutIndex: Short,
@@ -26,8 +26,7 @@ case class TrackedBox(creationTxId: ModifierId,
                       spendingTxIdOpt: Option[ModifierId],
                       spendingHeightOpt: Option[Int],
                       box: ErgoBox,
-                      certainty: BoxCertainty,
-                      applicationId: Short) extends ErgoBoxAssets {
+                      scans: Set[ScanId]) extends ErgoBoxAssets {
 
   /**
     * Whether the box is spent or not
@@ -61,11 +60,13 @@ case class TrackedBox(creationTxId: ModifierId,
       spendingChainStatus == ChainStatus.OffChain) ChainStatus.OffChain
     else ChainStatus.OnChain
 
-  def boxId: ModifierId = bytesToId(box.id)
+  lazy val boxId: ModifierId = bytesToId(box.id)
 
   override def value: Long = box.value
 
-  override def tokens: Map[ModifierId, Long] = box.additionalTokens.toArray.map {
+  def isSpent: Boolean = spendingHeightOpt.isDefined
+
+  lazy val tokens: TokensMap = box.additionalTokens.toArray.map {
     case (id, amt) => bytesToId(id) -> amt
   }.toMap
 
@@ -74,14 +75,27 @@ case class TrackedBox(creationTxId: ModifierId,
     case _ => false
   }
 
-  override def hashCode(): Int = (creationTxId, creationOutIndex).hashCode()
+  override def hashCode(): Int = creationTxId.hashCode() * 31 + creationOutIndex.hashCode()
+
 }
 
 object TrackedBox {
 
   def apply(creationTx: ErgoLikeTransaction, creationOutIndex: Short, creationHeight: Option[Int],
-            box: ErgoBox, certainty: BoxCertainty, appId: Short): TrackedBox =
-    apply(creationTx.id, creationOutIndex, creationHeight, None, None, box, certainty, appId)
+            box: ErgoBox, appStatuses: Set[ScanId]): TrackedBox =
+    apply(creationTx.id, creationOutIndex, creationHeight, None, None, box, appStatuses)
+
+  /**
+    * Creates unspent box with given inclusion height and scans the box is associated with
+    * @param box
+    * @param inclusionHeight
+    * @param scans
+    * @return
+    */
+  def apply(box: ErgoBox, inclusionHeight: Int, scans: Set[ScanId]): TrackedBox = {
+    new TrackedBox(box.transactionId, box.index, Some(inclusionHeight), None, None, box, scans)
+  }
+
 }
 
 object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
@@ -92,8 +106,17 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
     w.putOption(obj.inclusionHeightOpt)(_.putInt(_))
     w.putOption(obj.spendingTxIdOpt)((bf, id) => bf.putBytes(idToBytes(id)))
     w.putOption(obj.spendingHeightOpt)(_.putInt(_))
-    w.put(if (obj.certainty.certain) 0x01 else 0x00)
-    w.putShort(obj.applicationId)
+
+    val appsCount = obj.scans.size.toShort
+
+    if (appsCount == 1 && obj.scans.head == Constants.PaymentsScanId) {
+      w.putShort(0)
+    } else {
+      w.putShort(appsCount)
+      obj.scans.foreach { scanId =>
+        w.putShort(scanId)
+      }
+    }
     ErgoBoxSerializer.serialize(obj.box, w)
   }
 
@@ -103,11 +126,16 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
     val inclusionHeightOpt = r.getOption(r.getInt())
     val spendingTxIdOpt = r.getOption(r.getBytes(Constants.ModifierIdLength)).map(bytesToId)
     val spendingHeightOpt = r.getOption(r.getInt())
-    val certainty = if (r.getByte() == 0x01) BoxCertainty.Certain else BoxCertainty.Uncertain
-    val appId = r.getShort()
+
+    val appsCount = r.getShort()
+    val appStatuses: Set[ScanId] = if (appsCount == 0){
+      Set(Constants.PaymentsScanId)
+    } else {
+      (0 until appsCount).map(_ => ScanId @@ r.getShort()).toSet
+    }
     val box = ErgoBoxSerializer.parse(r)
     TrackedBox(
-      creationTxId, creationOutIndex, inclusionHeightOpt, spendingTxIdOpt, spendingHeightOpt, box, certainty, appId)
+      creationTxId, creationOutIndex, inclusionHeightOpt, spendingTxIdOpt, spendingHeightOpt, box, appStatuses)
   }
 
 }

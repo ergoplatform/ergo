@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "3.2.3"
+  version: "3.3.0"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -138,19 +138,18 @@ components:
         - confirmationsNum
         - address
         - creationTransaction
-        - certain
         - onchain
         - creationOutIndex
         - spendingTransaction
         - spendingHeight
         - inclusionHeight
         - spent
-        - applicationId
+        - scans
       properties:
         box:
           $ref: '#/components/schemas/ErgoTransactionOutput'
         confirmationsNum:
-          description: Age of box in blocks
+          description: Number of confirmations, if the box is included into the blockchain
           type: integer
           format: int32
           minimum: 0
@@ -178,10 +177,6 @@ components:
           format: int32
           minimum: 0
           example: 147
-        certain:
-          description: A flag signalling whether the box is certainly resolved (as belonging to a wallet)
-          type: boolean
-          example: true
         onchain:
           description: A flag signalling whether the box is created on main chain
           type: boolean
@@ -191,22 +186,23 @@ components:
           type: boolean
           example: false
         creationOutIndex:
-          description: An index of a box in transaction
+          description: An index of a box in the creating transaction
           type: integer
           format: int32
           example: 2
-        applicationId:
-          description: Application identifier a box relates to
-          type: integer
-          format: int16
-          example: 1
-          default: 1
+        scans:
+          description: Scan identifiers the box relates to
+          type: array
+          items:
+            type: integer
+            example: 1
+            default: 1
 
     UnsignedErgoTransaction:
       type: object
       description: Unsigned Ergo transaction
       required:
-        - unsignedInputs
+        - inputs
         - dataInputs
         - outputs
       properties:
@@ -267,22 +263,22 @@ components:
         - outputs
         - inclusionHeight
         - numConfirmations
-        - applicationId
+        - scans
       properties:
         id:
           $ref: '#/components/schemas/TransactionId'
         inputs:
-          description: Many transaction inputs
+          description: Transaction inputs
           type: array
           items:
             $ref: '#/components/schemas/ErgoTransactionInput'
         dataInputs:
-          description: Many transaction data inputs
+          description: Transaction data inputs
           type: array
           items:
             $ref: '#/components/schemas/ErgoTransactionDataInput'
         outputs:
-          description: Many transaction outputs
+          description: Transaction outputs
           type: array
           items:
             $ref: '#/components/schemas/ErgoTransactionOutput'
@@ -296,12 +292,13 @@ components:
           type: integer
           format: int32
           example: 20998
-        applicationId:
-          description: Application identifier a transaction relates to
-          type: integer
-          format: int16
-          example: 1
-          default: 1
+        scans:
+          description: Scan identifiers the transaction relates to
+          type: array
+          items:
+            type: integer
+            example: 1
+            default: 1
         size:
           description: Size in bytes
           type: integer
@@ -322,11 +319,11 @@ components:
         elements "u", "v", such as g^w = u, h^w = v
       type: object
       required:
-        -secret
-        -g
-        -h
-        -u
-        -v
+        - secret
+        - g
+        - h
+        - u
+        - v
       properties:
         secret:
           description: Hex-encoded big-endian 256-bits secret exponent
@@ -741,6 +738,132 @@ components:
           condition: true
         cost: 10
 
+    ScanningPredicate:
+      type: object
+      required:
+        - predicate
+      properties:
+        predicate:
+          type: string
+
+    ContainsPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+          - bytes
+        - properties:
+            register:
+              type: string
+            bytes:
+              type: string
+
+    EqualsPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+            - bytes
+        - properties:
+            register:
+              type: string
+            bytes:
+              type: string
+
+    ContainsAssetPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+            - assetId
+        - properties:
+            assetId:
+              type: string
+
+    AndPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+            - args
+        - properties:
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/ScanningPredicate'
+
+    OrPredicate:
+      allOf:
+        - $ref: '#/components/schemas/ScanningPredicate'
+        - type: object
+        - required:
+            - args
+        - properties:
+            args:
+              type: array
+              items:
+                $ref: '#/components/schemas/ScanningPredicate'
+
+    ScanRequest:
+      type: object
+      properties:
+        scanName:
+          type: string
+        trackingRule:
+          $ref: '#/components/schemas/ScanningPredicate'
+      example:
+        scanName: Assets Tracker
+        trackingRule:
+          predicate: containsAsset
+          assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
+
+    Scan:
+      type: object
+      properties:
+        scanName:
+          type: string
+        scanId:
+          type: integer
+        trackingRule:
+          $ref: '#/components/schemas/ScanningPredicate'
+      example:
+        scanId: 2
+        scanName: Assets Tracker
+        trackingRule:
+          predicate: containsAsset
+          assetId: 02dada811a888cd0dc7a0a41739a3ad9b0f427741fe6ca19700cf1a51200c96bf7
+
+    ScanId:
+      type: object
+      properties:
+        scanId:
+          type: integer
+
+    ScanIdBoxId:
+      type: object
+      required:
+        - scanId
+        - boxId
+      properties:
+        scanId:
+          type: integer
+        boxId:
+          $ref: '#/components/schemas/TransactionBoxId'
+
+    ScanIdsBox:
+      description: Ergo box with associated scans (their respective identifiers)
+      type: object
+      required:
+        - scanIds
+        - box
+      properties:
+        scanIds:
+          type: array
+          items:
+            type: integer
+        box:
+          $ref: '#/components/schemas/ErgoTransactionOutput'
+
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
       type: object
@@ -793,11 +916,6 @@ components:
           type: integer
           format: int32
           example: 8
-        fee:
-          description: Optional, default transaction fee from settings will be used if not defined
-          type: integer
-          format: int64
-          example: 1000000
         registers:
           description: Optional, possible values for registers R7...R9
           $ref: '#/components/schemas/Registers'
@@ -848,25 +966,65 @@ components:
           type: integer
           example: 987654321
 
-    ExternalCandidateBlock:
-      description: Candidate block info for external miner
+    BlockHeaderWithoutPow:
       type: object
       required:
-        - msg
-        - b
-        - pk
+        - id
+        - timestamp
+        - version
+        - adProofsRoot
+        - stateRoot
+        - transactionsRoot
+        - nBits
+        - extensionHash
+        - height
+        - difficulty
+        - parentId
+        - votes
       properties:
-        msg:
-          type: string
-          description: Base16-encoded block bytes without pow
-          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
-        b:
+        id:
+          $ref: '#/components/schemas/ModifierId'
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        version:
+          $ref: '#/components/schemas/Version'
+        adProofsRoot:
+          $ref: '#/components/schemas/Digest32'
+        stateRoot:
+          $ref: '#/components/schemas/ADDigest'
+        transactionsRoot:
+          $ref: '#/components/schemas/Digest32'
+        nBits:
           type: integer
-          example: 987654321
-        pk:
-          type: string
-          description: Base16-encoded public key
-          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+          format: int64
+          minimum: 0
+          example: 19857408
+        extensionHash:
+          $ref: '#/components/schemas/Digest32'
+        height:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 667
+        difficulty:
+          type: integer
+          format: int32
+          minimum: 0
+          example: 62
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+        votes:
+          $ref: '#/components/schemas/Votes'
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
+        extensionId:
+          $ref: '#/components/schemas/ModifierId'
+        transactionsId:
+          $ref: '#/components/schemas/ModifierId'
+        adProofsId:
+          $ref: '#/components/schemas/ModifierId'
 
     BlockHeader:
       type: object
@@ -1024,6 +1182,67 @@ components:
           $ref: '#/components/schemas/Transactions'
         votes:
           $ref: '#/components/schemas/Votes'
+
+    MerkleProof:
+      type: object
+      description: Merkle proof for a leaf, which is an array of bytes (e.g. a transaction identifier)
+      required:
+        - leaf
+        - levels
+      properties:
+        leaf:
+          type: string
+          description: Base16-encoded Merkle tree leaf bytes
+          example: 'cd665e49c834b0c25574fcb19a158d836f3f2aad8e91ac195f972534c25449b3'
+        levels:
+          type: array
+          items:
+            type: string
+            description: internal node with direction byte prepended
+            example: '018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337'
+          example: ['018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337']
+
+
+    ProofOfUpcomingTransactions:
+      type: object
+      description: Proof that a block corresponding to given header without PoW contains some transactions
+      required:
+        - msgPreimage
+        - txProofs
+      properties:
+        msgPreimage:
+          type: string
+          description: Base16-encoded serialized header without Proof-of-Work
+          example: '0112e03c6d39d32509855be7cee9b62ff921f7a0cf6883e232474bd5b54d816dd056f846980d34c3b23098bdcf41222f8cdee5219224aa67750055926c3a2310a483accc4f9153e7a760615ea972ac67911cff111f8c17f563d6147205f58f85133ae695d1d4157e4aecdbbb29952cfa42b75129db55bddfce3bc53b8fd5b5465f10d8be8ddda62ed3b86afb0497ff2d381ed884bdae5287d20667def224a28d2b6e3ebfc78709780702c70bd8df0e000000'
+        txProofs:
+          type: array
+          description: Merkle proofs of transactions included into blocks (not necessarily all the block transactions)
+          items:
+            $ref: '#/components/schemas/MerkleProof'
+
+    WorkMessage:
+      description: Block candidate related data for external miner to perform work
+      type: object
+      required:
+        - msg
+        - b
+        - pk
+      properties:
+        msg:
+          type: string
+          description: Base16-encoded block header bytes without PoW solution
+          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+        b:
+          type: integer
+          description: Work target value
+          example: 987654321
+        pk:
+          type: string
+          description: Base16-encoded miner public key
+          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+        proof:
+          type: object
+          $ref: '#/components/schemas/ProofOfUpcomingTransactions'
 
     Peer:
       type: object
@@ -1220,7 +1439,7 @@ components:
         maxBlockCost:
           type: integer
           format: int32
-          description: Maximum cumulative computational complexity of input scripts in block transactions
+          description: Maximum cumulative computational cost of input scripts in block transactions
           minimum: 0
           example: 104876
           nullable: false
@@ -2215,6 +2434,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/check:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Check whether mnemonic phrase is corresponding to the wallet seed
+      operationId: checkSeed
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mnemonic
+              properties:
+                mnemonic:
+                  type: string
+                  description: Mnemonic seed (optional)
+                mnemonicPass:
+                  type: string
+                  description: Optional pass to password-protect mnemonic seed
+      responses:
+        '200':
+          description: Whether passphrase match wallet
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - matched
+                properties:
+                  matched:
+                    type: boolean
+                    description: true if passphrase matches wallet, false otherwise
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/unlock:
     post:
       security:
@@ -2263,6 +2525,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/rescan:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Rescan wallet (all the available full blocks)
+      operationId: walletRescan
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Wallet storage recreated
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/status:
     get:
       security:
@@ -2281,6 +2561,8 @@ paths:
                 required:
                   - isInitialized
                   - isUnlocked
+                  - changeAddress
+                  - walletHeight
                 properties:
                   isInitialized:
                     type: boolean
@@ -2288,6 +2570,15 @@ paths:
                   isUnlocked:
                     type: boolean
                     description: true if wallet is unlocked, false otherwise
+                  changeAddress:
+                    type: string
+                    description: address to send change to. Empty when wallet is not initialized or locked.
+                                 By default change address correponds to root key address, could be set via
+                                 /wallet/updateChangeAddress method.
+                    example: '3WzCFq7mkykKqi4Ykdk8BK814tkh6EsPmA42pQZxU2NRwSDgd6yB'
+                  walletHeight:
+                    type: integer
+                    description: last scanned height for the wallet (and external scans)
         default:
           description: Error
           content:
@@ -2815,7 +3106,35 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ExternalCandidateBlock'
+                $ref: '#/components/schemas/WorkMessage'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /mining/candidateWithTxs:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Request block candidate
+      operationId: miningRequestBlockCandidateWithMandatoryTransactions
+      tags:
+        - mining
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Transactions'
+      responses:
+        '200':
+          description: External candidate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkMessage'
         default:
           description: Error
           content:
@@ -3014,7 +3333,7 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Create P2SHAddress from Sigma source
-      operationId: scriptP2SAddress
+      operationId: scriptP2SHAddress
       tags:
         - script
       requestBody:
@@ -3076,6 +3395,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /script/addressToBytes/{address}:
+    get:
+      summary: Convert an address to hex-encoded Sigma byte array constant which contains script bytes
+      operationId: addressToBytes
+      tags:
+        - script
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address to get a script from
+          schema:
+            $ref: '#/components/schemas/ErgoAddress'
+      responses:
+        '200':
+          description: Base16-encoded Sigma byte array constant which contains script bytes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tree:
+                    type: string
+                    description: Base16-encoded bytes
+                    example: '0e0710010101d17300'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /script/executeWithContext:
     post:
       security:
@@ -3110,4 +3461,183 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /scan/register:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Register a scan
+      operationId: registerScan
+      tags:
+        - scan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanRequest'
+      responses:
+        '200':
+          description: Identifier of a scan generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanId'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 
+  /scan/deregister:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Stop tracking and deregister scan
+      operationId: deregisterScan
+      tags:
+        - scan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanId'
+      responses:
+        '200':
+          description: Identifier of a scan removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanId'
+        '400':
+          description: No scan found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /scan/listAll:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: List all the registered scans
+      operationId: listAllScans
+      tags:
+        - scan
+      responses:
+        '200':
+          description: List of scans registered
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Scan'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /scan/unspentBoxes/{scanId}:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: List boxes which are not spent.
+      operationId: listUnspentScans
+      tags:
+        - scan
+      parameters:
+        - in: path
+          name: scanId
+          required: true
+          description: identifier of a scan
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: List of unspent boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBox'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /scan/stopTracking:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Stop scan-related box tracking
+      operationId: scanStopTracking
+      tags:
+        - scan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanIdBoxId'
+      responses:
+        '200':
+          description: The box is not tracked anymore
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanIdBoxId'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /scan/addBox:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Adds a box to scans, writes box to database if it is not there. You can use scan number 10 to add a box to the wallet.
+      operationId: addBox
+      tags:
+        - scan
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanIdsBox'
+      responses:
+        '200':
+          description: It the box is added successfully, then its id is returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionId'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'

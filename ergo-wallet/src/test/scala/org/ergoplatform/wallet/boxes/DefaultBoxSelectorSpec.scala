@@ -1,5 +1,6 @@
 package org.ergoplatform.wallet.boxes
 
+import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
 import org.scalatest.{Matchers, PropSpec}
 import scorex.crypto.hash.{Blake2b256, Digest32}
@@ -7,7 +8,7 @@ import sigmastate.Values
 import sigmastate.Values.SigmaPropValue
 import scorex.util.{bytesToId, idToBytes}
 import org.scalatest.EitherValues
-import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughCoinsError
+import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughErgsError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughTokensError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughCoinsForChangeBoxesError
 
@@ -24,16 +25,16 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
 
   property("returns error when it is impossible to select coins") {
     val box = ErgoBox(1, TrueLeaf, creationHeight = StartHeight)
-    val uBox = TrackedBox(parentTx, 0, None, box, BoxCertainty.Certain, 1)
+    val uBox = TrackedBox(parentTx, 0, None, box, Set(PaymentsScanId))
 
     //target amount is too high
-    select(Seq(uBox).toIterator, noFilter, 10, Map()).left.value shouldBe a [NotEnoughCoinsError]
+    select(Seq(uBox).toIterator, noFilter, 10, Map()).left.value shouldBe a [NotEnoughErgsError]
 
     //filter(which is about selecting only onchain boxes) is preventing from picking the proper box
-    select(Seq(uBox).toIterator, onChainFilter, 1, Map()).left.value shouldBe a [NotEnoughCoinsError]
+    select(Seq(uBox).toIterator, onChainFilter, 1, Map()).left.value shouldBe a [NotEnoughErgsError]
 
     //no target asset in the input box
-    select(Seq(uBox).toIterator, noFilter, 1, Map(bytesToId(Array.fill(32)(0: Byte)) -> 1L)).left.value shouldBe 
+    select(Seq(uBox).toIterator, noFilter, 1, Map(bytesToId(Array.fill(32)(0: Byte)) -> 1L)).left.value shouldBe
       a [NotEnoughTokensError]
 
     //otherwise, everything is fine
@@ -45,9 +46,9 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
     val box2 = ErgoBox(10, TrueLeaf, creationHeight = StartHeight)
     val box3 = ErgoBox(100, TrueLeaf, creationHeight = StartHeight)
 
-    val uBox1 = TrackedBox(parentTx, 0, Option(100), box1, BoxCertainty.Certain, 1)
-    val uBox2 = TrackedBox(parentTx, 1, None, box2, BoxCertainty.Certain, 1)
-    val uBox3 = TrackedBox(parentTx, 2, Option(100), box3, BoxCertainty.Certain, 1)
+    val uBox1 = TrackedBox(parentTx, 0, Option(100), box1, Set(PaymentsScanId))
+    val uBox2 = TrackedBox(parentTx, 1, None, box2, Set(PaymentsScanId))
+    val uBox3 = TrackedBox(parentTx, 2, Option(100), box3, Set(PaymentsScanId))
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 
@@ -91,9 +92,9 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
     val box2 = ErgoBox(10 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32 @@ idToBytes(assetId2) -> 10))
     val box3 = ErgoBox(100 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32 @@ idToBytes(assetId1) -> 100))
 
-    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, BoxCertainty.Certain, 1)
-    val uBox2 = TrackedBox(parentTx, 1, None, box2, BoxCertainty.Certain, 1)
-    val uBox3 = TrackedBox(parentTx, 2, Some(100), box3, BoxCertainty.Certain, 1)
+    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
+    val uBox2 = TrackedBox(parentTx, 1, None, box2, Set(PaymentsScanId))
+    val uBox3 = TrackedBox(parentTx, 2, Some(100), box3, Set(PaymentsScanId))
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 
@@ -147,9 +148,9 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
       Seq(Digest32 @@ idToBytes(assetId3) -> 100, Digest32 @@ idToBytes(assetId4) -> 100,
         Digest32 @@ idToBytes(assetId5) -> 100, Digest32 @@ idToBytes(assetId6) -> 100))
 
-    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, BoxCertainty.Certain, 1)
-    val uBox2 = TrackedBox(parentTx, 1, None, box2, BoxCertainty.Certain, 1)
-    val uBox3 = TrackedBox(parentTx, 2, Some(100), box3, BoxCertainty.Certain, 1)
+    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
+    val uBox2 = TrackedBox(parentTx, 1, None, box2, Set(PaymentsScanId))
+    val uBox3 = TrackedBox(parentTx, 2, Some(100), box3, Set(PaymentsScanId))
 
     val uBoxes = Seq(uBox1, uBox2, uBox3)
 

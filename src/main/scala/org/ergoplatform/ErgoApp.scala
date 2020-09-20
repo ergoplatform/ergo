@@ -7,13 +7,12 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler}
 import akka.stream.ActorMaterializer
 import org.ergoplatform.http._
-import org.ergoplatform.http.api._
-import org.ergoplatform.local.ErgoMiner.StartMining
-import org.ergoplatform.local.TransactionGenerator.StartGeneration
+import org.ergoplatform.mining.ErgoMiner.StartMining
+import org.ergoplatform.http.api.{ScanApiRoute, _}
 import org.ergoplatform.local._
+import org.ergoplatform.mining.ErgoMinerRef
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
@@ -33,7 +32,9 @@ import scala.util.{Failure, Success}
 
 class ErgoApp(args: Args) extends ScorexLogging {
 
-  private var ergoSettings: ErgoSettings = ErgoSettings.read(args)
+  log.info(s"Running with args: $args")
+
+  private val ergoSettings: ErgoSettings = ErgoSettings.read(args)
 
   implicit private def settings: ScorexSettings = ergoSettings.scorexSettings
 
@@ -43,22 +44,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   implicit private val actorSystem: ActorSystem = ActorSystem(settings.network.agentName)
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
-
-  ergoSettings = ergoSettings.bootstrapSettingsOpt match {
-    case Some(bs) if isEmptyState =>
-      log.info("Entering coordinated network bootstrap procedure ..")
-      val (npmProof, genesisDigest) =
-        new BootstrapController(bs).waitForBootSettings()
-      log.info("Boot settings received. Starting the node ..")
-      ergoSettings.copy(
-        chainSettings = ergoSettings.chainSettings.copy(
-          noPremineProof = npmProof,
-          genesisStateDigestHex = genesisDigest
-        )
-      )
-    case _ =>
-      ergoSettings
-  }
 
   private val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
 
@@ -107,14 +92,20 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-  private val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
+  // Create an instance of ErgoMiner actor if "mining = true" in config
+  private val minerRefOpt: Option[ActorRef] =
+    if (ergoSettings.nodeSettings.mining) {
+      Some(ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider))
+    } else {
+      None
+    }
 
   private val statsCollectorRef: ActorRef =
     ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider)
 
   private val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      settings.network, timeProvider)
+      ergoSettings, timeProvider)
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
@@ -124,35 +115,34 @@ class ErgoApp(args: Args) extends ScorexLogging {
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
-    MiningApiRoute(minerRef, ergoSettings),
     UtxoApiRoute(readersHolderRef, settings.restApi),
-    ScriptApiRoute(readersHolderRef, ergoSettings)
-  )
+    ScriptApiRoute(readersHolderRef, ergoSettings),
+    ScanApiRoute(readersHolderRef, ergoSettings)
+  ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
+
 
   private val swaggerRoute = SwaggerRoute(settings.restApi, swaggerConfig)
   private val panelRoute = NodePanelRoute()
 
   private val httpService = ErgoHttpService(apiRoutes, swaggerRoute, panelRoute)
 
+  // Run mining immediately, i.e. without syncing if mining = true and offlineGeneration = true
+  // Useful for local blockchains (devnet)
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
-    minerRef ! StartMining
+    require(minerRefOpt.isDefined, "Miner does not exist but mining = true in config")
+    minerRefOpt.get ! StartMining
   }
 
   private val actorsToStop: Seq[ActorRef] = Seq(
-    minerRef,
     peerManagerRef,
     networkControllerRef,
     readersHolderRef,
     nodeViewSynchronizer,
     statsCollectorRef,
     nodeViewHolderRef
-  )
-  sys.addShutdownHook(ErgoApp.shutdown(actorSystem, actorsToStop))
+  ) ++ minerRefOpt.toSeq
 
-  if (ergoSettings.testingSettings.transactionGeneration) {
-    val txGen = TransactionGeneratorRef(nodeViewHolderRef, ergoSettings)
-    txGen ! StartGeneration
-  }
+  sys.addShutdownHook(ErgoApp.shutdown(actorSystem, actorsToStop))
 
   if (!ergoSettings.nodeSettings.stateType.requireProofs) {
     MempoolAuditorRef(nodeViewHolderRef, networkControllerRef, ergoSettings)
@@ -191,11 +181,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
       log.info("Exiting from the app...")
       System.exit(0)
     }
-  }
-
-  private def isEmptyState: Boolean = {
-    val dir = ErgoState.stateDir(ergoSettings)
-    Option(dir.listFiles()).fold(true)(_.isEmpty)
   }
 
 }

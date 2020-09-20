@@ -2,8 +2,8 @@ package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Longs
 import org.scalacheck.{Arbitrary, Gen}
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Matchers, PropSpec}
-import org.scalatestplus.scalacheck.{ScalaCheckDrivenPropertyChecks, ScalaCheckPropertyChecks}
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.util.encode.Base16
@@ -18,8 +18,7 @@ import scala.util.{Success, Try}
 import scala.language.implicitConversions
 
 class VersionedLDBAVLStorageSpecification extends PropSpec
-  with ScalaCheckPropertyChecks
-  with ScalaCheckDrivenPropertyChecks
+  with GeneratorDrivenPropertyChecks
   with Matchers
   with TestHelper {
 

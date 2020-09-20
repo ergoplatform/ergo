@@ -27,5 +27,6 @@ USER ergo
 EXPOSE 9020 9052
 WORKDIR /home/ergo
 VOLUME ["/home/ergo/.ergo"]
-ENTRYPOINT ["java", "-jar", "/home/ergo/ergo.jar"]
-CMD [""]
+ENV MAX_HEAP 3G
+ENTRYPOINT java -Xmx${MAX_HEAP} -jar /home/ergo/ergo.jar $0 $1 $2 $3
+CMD []

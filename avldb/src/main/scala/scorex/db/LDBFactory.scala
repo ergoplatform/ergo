@@ -114,9 +114,27 @@ object LDBFactory extends ScorexLogging {
   private val memoryPoolSize = 512 * 1024
 
   def setLevelDBParams(factory: DBFactory): Unit = {
-    val pushMemoryPool = factory.getClass().getDeclaredMethod("pushMemoryPool", classOf[Int])
+    val pushMemoryPool = factory.getClass.getDeclaredMethod("pushMemoryPool", classOf[Int])
     pushMemoryPool.invoke(null, Integer.valueOf(memoryPoolSize))
   }
+
+  def createKvDb(path: String): LDBKVStore = {
+    val dir = new File(path)
+    dir.mkdirs()
+    val options = new Options()
+    options.createIfMissing(true)
+    try {
+      val db = factory.open(dir, options)
+      new LDBKVStore(db)
+    } catch {
+      case x: Throwable =>
+        log.error(s"Failed to initialize storage: $x. Please check that directory $path could be accessed " +
+          s"and is not used by some other active node")
+        java.lang.System.exit(2)
+        null
+    }
+  }
+
 
   lazy val factory: DBFactory = {
     val loaders = List(ClassLoader.getSystemClassLoader, this.getClass.getClassLoader)

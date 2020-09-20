@@ -1,5 +1,3 @@
-import scala.util.Try
-
 val circeVersion = "0.10.0"
 
 libraryDependencies ++= Seq(
@@ -9,8 +7,8 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-generic" % circeVersion,
   "io.circe" %% "circe-parser" % circeVersion,
 
-  "org.scalatest" %% "scalatest" % "3.0.8" % "test",
-  "org.scalacheck" %% "scalacheck" % "1.14.1" % "test",
+  "org.scalatest" %% "scalatest" % "3.0.5" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.13.5" % "test",
 )
 
 publishMavenStyle in ThisBuild := true

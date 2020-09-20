@@ -15,6 +15,7 @@ import org.ergoplatform.utils.Stubs
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import org.ergoplatform.{ErgoAddress, Pay2SAddress}
 import org.scalatest.{FlatSpec, Matchers}
+import org.ergoplatform.wallet.{Constants => WalletConstants}
 
 import scala.util.{Random, Try}
 import scala.concurrent.duration._
@@ -94,7 +95,7 @@ class WalletApiRouteSpec extends FlatSpec
     }
     Post(prefix + "/transaction/sign", tsr.asJson) ~> r ~> check {
       status shouldBe StatusCodes.OK
-      responseAs[ErgoTransaction].id shouldBe tsr.utx.id
+      responseAs[ErgoTransaction].id shouldBe tsr.unsignedTx.id
     }
   }
 
@@ -123,9 +124,18 @@ class WalletApiRouteSpec extends FlatSpec
       route ~> check(status shouldBe StatusCodes.OK)
   }
 
+
   it should "unlock wallet" in {
     Post(prefix + "/unlock", Json.obj("pass" -> "1234".asJson)) ~> route ~> check {
       status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "check wallet" in {
+    Post(prefix + "/check", Json.obj("mnemonic" -> WalletActorStub.mnemonic.asJson)) ~>
+      route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("matched").as[Boolean] shouldBe Right(true)
     }
   }
 
@@ -134,6 +144,13 @@ class WalletApiRouteSpec extends FlatSpec
       status shouldBe StatusCodes.OK
     }
   }
+
+  it should "rescan wallet" in {
+    Get(prefix + "/rescan") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
 
   it should "derive new key according to a provided path" in {
     Post(prefix + "/deriveKey", Json.obj("derivationPath" -> "m/1/2".asJson)) ~> route ~> check {
@@ -171,7 +188,9 @@ class WalletApiRouteSpec extends FlatSpec
   it should "return unspent wallet boxes" in {
     val minConfirmations = 15
     val minInclusionHeight = 20
+
     val postfix = s"/boxes/unspent?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
+
     Get(prefix + postfix) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
@@ -179,6 +198,7 @@ class WalletApiRouteSpec extends FlatSpec
       response.head.hcursor.downField("confirmationsNum").as[Int].forall(_ >= minConfirmations) shouldBe true
       response.head.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
     }
+
     Get(prefix + "/boxes/unspent") ~> route ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
@@ -190,8 +210,12 @@ class WalletApiRouteSpec extends FlatSpec
     Get(prefix + "/transactions") ~> route ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
-      response.size shouldBe 2
-      responseAs[Seq[AugWalletTransaction]] shouldEqual WalletActorStub.walletTxs
+      val walletTxs = WalletActorStub.walletTxs.filter { awtx =>
+        awtx.wtx.scanIds.exists(_ <= WalletConstants.PaymentsScanId)
+      }
+
+      response.size shouldBe walletTxs.size
+      responseAs[Seq[AugWalletTransaction]] shouldEqual walletTxs
     }
   }
 

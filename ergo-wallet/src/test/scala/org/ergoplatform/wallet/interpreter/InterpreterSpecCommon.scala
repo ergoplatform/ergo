@@ -9,6 +9,7 @@ import special.collection.Coll
 import special.sigma.{Header, PreHeader}
 
 trait InterpreterSpecCommon {
+
   protected val parameters = new ErgoLikeParameters {
 
     override def storageFeeFactor: Int = 1250000
@@ -52,4 +53,5 @@ trait InterpreterSpecCommon {
       votes = Colls.emptyColl[Byte]
     )
   }
+
 }

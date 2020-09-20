@@ -42,8 +42,8 @@ case class UpcomingStateContext(override val lastHeaders: Seq[Header],
 
 /**
   * Additional data required for transactions validation.
-  * Script validation requires, that it contain at least a preHeader, so it can only be used
-  * for transaction validation if lastHeaders is not empty or in `upcoming` version.
+  * Script validation requires that it contain at least a preHeader, so it can only be used
+  * for transaction validation if lastHeaders not empty or in `upcoming` version.
   *
   * @param lastHeaders        - fixed number (10) of last headers
   * @param lastExtensionOpt   - last block extension
@@ -287,6 +287,10 @@ object ErgoStateContext {
 
   def empty(constants: StateConstants): ErgoStateContext = {
     empty(constants.settings.chainSettings.genesisStateDigest, constants.settings)
+  }
+
+  def empty(settings: ErgoSettings): ErgoStateContext = {
+    empty(settings.chainSettings.genesisStateDigest, settings)
   }
 
   /**

@@ -4,6 +4,8 @@ import org.ergoplatform.ErgoBox.{R4, R5}
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, LongConstant}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{UnsignedInput, UnsignedErgoTransaction}
 
 object PowNft extends App {
 
@@ -12,15 +14,19 @@ object PowNft extends App {
 
   val preimage = "kushti2020".getBytes("UTF-8")
 
+  val inputBox: ErgoBox = ???
+  val input: UnsignedInput = new UnsignedInput(inputBox.id)
+
+
   // todo: generate transaction with the box
-  def nftGeneratorCandidate(nonce:Long): ErgoBox = {
-    ErgoBox(1000000L, pk, creationHeight = 300000,
-      additionalRegisters = Map(R4 -> ByteArrayConstant(preimage), R5 -> LongConstant(nonce)))
+  def nftGeneratorCandidate(nonce:Long): UnsignedErgoTransaction = {
+    val candidate = new ErgoBoxCandidate(1000000L, pk, 300000, Colls.emptyColl, Map(R4 -> ByteArrayConstant(preimage), R5 -> LongConstant(nonce)))
+    val tx = new ErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(candidate))
   }
 
   def mineNftGeneratorBox(target: BigInt): (ErgoBox, Long) = {
     (0 to Int.MaxValue).foreach{nonce =>
-      val b = nftGeneratorCandidate(nonce)
+      val b = nftGeneratorCandidate(nonce).outputs.head
       val id = b.id
       println("nonce: " + nonce)
       val numId = BigInt(1, id)

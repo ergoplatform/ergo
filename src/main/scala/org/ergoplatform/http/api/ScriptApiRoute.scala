@@ -1,16 +1,18 @@
 package org.ergoplatform.http.api
 
+
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
-import io.circe.generic.auto._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
-import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
+import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, PaymentRequestDecoder}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform._
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.nodeView.state.UtxoStateReader
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -18,7 +20,6 @@ import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, SigmaBoolean}
 import sigmastate._
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.basics.ProveDHTuple
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
 import sigmastate.lang.SigmaCompiler
 import sigmastate.serialization.ValueSerializer
@@ -33,6 +34,9 @@ case class CryptoResult(value: SigmaBoolean, cost: Long)
 case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
+  import org.ergoplatform.nodeView.wallet.requests.SigmaBooleanCodecs._
+  import HintExtractionRequest._
+
   implicit val paymentRequestDecoder: PaymentRequestDecoder = new PaymentRequestDecoder(ergoSettings)
   implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
   implicit val addressJsonEncoder: Encoder[ErgoAddress] = paymentRequestDecoder.addressEncoders.encoder
@@ -44,6 +48,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       // p2shAddressR ~
       p2sAddressR ~
       addressToTreeR ~
+      extractHintsR ~
       addressToBytesR ~
       executeWithContextR
     }
@@ -122,23 +127,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   implicit val executeRequestDecoder: ExecuteRequestDecoder = new ExecuteRequestDecoder(ergoSettings)
 
-  implicit def sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
-    sigma =>
-      val op = sigma.opCode.toByte.asJson
-      sigma match {
-        case dlog: ProveDlog   => Map("op" -> op, "h" -> dlog.h.asJson).asJson
-        case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
-        case tp: TrivialProp   => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
-        case and: CAND =>
-          Map("op" -> op, "args" -> and.sigmaBooleans.map(_.asJson).asJson).asJson
-        case or: COR =>
-          Map("op" -> op, "args" -> or.sigmaBooleans.map(_.asJson).asJson).asJson
-        case th: CTHRESHOLD =>
-          Map("op" -> op, "args" -> th.sigmaBooleans.map(_.asJson).asJson).asJson
-      }
-  }
-
-  implicit def cryptResultEncoder: Encoder[CryptoResult] = {
+  implicit val cryptResultEncoder: Encoder[CryptoResult] = {
     res =>
       val fields = Map(
         "value" -> res.value.asJson,
@@ -174,6 +163,22 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       )
   }
 
+  def extractHintsR: Route = (path("extractHints") & post & entity(as[HintExtractionRequest])) { her =>
+    import org.ergoplatform.nodeView.wallet.requests.HintCodecs._
+    val tx = her.tx
+
+    onSuccess((readersHolder ? GetReaders).mapTo[Readers].flatMap{readers =>
+      val (boxesToSpend, dataBoxes) = readers.s match {
+        case utxo: UtxoStateReader =>
+          val bts = tx.inputs.map(_.boxId).flatMap(utxo.boxById)
+          val db = tx.dataInputs.map(_.boxId).flatMap(utxo.boxById)
+          (bts, db)
+        case _ => ???
+      }
+      readers.w.extractHints(tx, boxesToSpend, dataBoxes, her.real, her.simulated)
+    })(ehr => ApiResponse(ehr.transactionHintsBag))
+  }
+
   def addressToBytesR: Route = (get & path("addressToBytes" / Segment)) { addressStr =>
     addressEncoder.fromString(addressStr)
       .map(address => address.script.bytes)
@@ -184,6 +189,57 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         e => BadRequest(e.getMessage),
         bs => ApiResponse(Map("bytes" -> bs).asJson)
       )
+  }
+
+}
+
+case class HintExtractionRequest(tx: ErgoTransaction,
+                                 real: Seq[SigmaBoolean],
+                                 simulated: Seq[SigmaBoolean])
+
+object HintExtractionRequest extends ApiCodecs {
+
+  import org.ergoplatform.nodeView.wallet.requests.SigmaBooleanCodecs.{sigmaBooleanEncoder, sigmaBooleanDecoder}
+
+  //cd0354efc32652cad6cf1231be987afa29a686af30b5735995e3ce51339c4d0ca380 , cd is op, 03... is ec point
+
+  implicit val hintExtractionRequestEncoder: Encoder[HintExtractionRequest] = {hr =>
+    Map(
+      "tx" -> hr.tx.asJson,
+      "real" -> hr.real.asJson,
+      "simulated" -> hr.simulated.asJson
+    ).asJson
+  }
+
+  implicit val hintExtractionRequestDecoder: Decoder[HintExtractionRequest] = {cursor =>
+    for {
+      tx <- cursor.downField("tx").as[ErgoTransaction]
+      real <- cursor.downField("real").as[Seq[SigmaBoolean]]
+      simulated <- cursor.downField("simulated").as[Seq[SigmaBoolean]]
+    } yield HintExtractionRequest(tx, real, simulated)
+  }
+
+}
+
+case class CommitmentGenerationRequest(utx: UnsignedErgoTransaction,
+                                       externalKeys: Option[Seq[SigmaBoolean]])
+
+object CommitmentGenerationRequest extends ApiCodecs {
+
+  import org.ergoplatform.nodeView.wallet.requests.SigmaBooleanCodecs.{sigmaBooleanEncoder, sigmaBooleanDecoder}
+
+  implicit val commitmentGenerationRequestEncoder: Encoder[CommitmentGenerationRequest] = {hr =>
+    Map(
+      "tx" -> hr.utx.asJson,
+      "externalKeys" -> hr.externalKeys.asJson
+    ).asJson
+  }
+
+  implicit val commitmentGenerationRequestDecoder: Decoder[CommitmentGenerationRequest] = {cursor =>
+    for {
+      tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
+      externalKeys <- cursor.downField("externalKeys").as[Option[Seq[SigmaBoolean]]]
+    } yield CommitmentGenerationRequest(tx, externalKeys)
   }
 
 }

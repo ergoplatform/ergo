@@ -25,12 +25,6 @@ class ErgoMemPoolSpec extends FlatSpec
     txs.foreach { tx =>
       pool.process(tx, us)._2 shouldBe ProcessingOutcome.Accepted
     }
-
-    // light mode
-    val poolLight = ErgoMemPool.empty(lightModeSettings)
-    txs.foreach { tx =>
-      poolLight.process(tx, us)._2 shouldBe ProcessingOutcome.Accepted
-    }
   }
 
   it should "decline already contained transaction" in {

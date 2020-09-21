@@ -12,7 +12,7 @@ import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.wallet.Constants.{MiningScanId, PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.wallet.protocol.context.TransactionContext
+import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.interpreter.ContextExtension
@@ -59,8 +59,11 @@ object WalletScanLogic extends ScorexLogging {
       IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
     )
 
-    val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx, selfIndex = 0)
-    val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty,
+    val inputContext = InputContext(0, ContextExtension.empty)
+
+    val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx)
+
+    val context = new ErgoContext(stateContext, transactionContext, inputContext,
       LaunchParameters.maxBlockCost, CostTable.interpreterInitCost)
 
     proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined

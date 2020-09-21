@@ -16,6 +16,7 @@ import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.UnsignedInput
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
 import org.ergoplatform.wallet.utils.Generators
 import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalacheck.{Arbitrary, Gen}
@@ -329,13 +330,14 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     }
   }
 
-  def transactionSigningRequestGen(includeInputs: Boolean):Gen[TransactionSigningRequest] = for {
+  def transactionSigningRequestGen(includeInputs: Boolean): Gen[TransactionSigningRequest] = for {
     (secret, pubKey) <- dlogSecretWithPublicImageGen
     (secretDh, _) <- dhtSecretWithPublicImageGen
     (inputBoxes, utx) <- validUnsignedErgoTransactionGen(pubKey)
     inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
     secretSeq = Seq(ExternalSecret(DlogSecretKey(secret)), ExternalSecret(DhtSecretKey(secretDh)))
-  } yield TransactionSigningRequest(utx, secretSeq, if(includeInputs) Some(inputBoxesEncoded) else None, None)
+  } yield TransactionSigningRequest(utx, TransactionHintsBag.empty, secretSeq,
+    if (includeInputs) Some(inputBoxesEncoded) else None, None)
 
   def transactionSigningRequestGen(utxoSet: WrappedUtxoState): Gen[TransactionSigningRequest] = Gen.const {
     val inputBoxes = utxoSet.takeBoxes(3).toIndexedSeq
@@ -344,7 +346,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     val coin = Random.nextBoolean()
     val inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
 
-    TransactionSigningRequest(utx, Seq.empty, if(coin) Some(inputBoxesEncoded) else None, None)
+    TransactionSigningRequest(utx, TransactionHintsBag.empty, Seq.empty, if (coin) Some(inputBoxesEncoded) else None, None)
   }
 
 }

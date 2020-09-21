@@ -117,8 +117,8 @@ trait ErgoWalletReader extends VaultReader {
                    boxesToSpend: IndexedSeq[ErgoBox],
                    dataBoxes: IndexedSeq[ErgoBox],
                    real: Seq[SigmaBoolean],
-                   simulated: Seq[SigmaBoolean]): Future[TransactionHintsBag] =
-    (walletActor ? ExtractHints(tx, boxesToSpend, dataBoxes, real, simulated)).mapTo[TransactionHintsBag]
+                   simulated: Seq[SigmaBoolean]): Future[ExtractHintsResult] =
+    (walletActor ? ExtractHints(tx, boxesToSpend, dataBoxes, real, simulated)).mapTo[ExtractHintsResult]
 
   def addScan(appRequest: ScanRequest): Future[AddScanResponse] =
     (walletActor ? AddScan(appRequest)).mapTo[AddScanResponse]

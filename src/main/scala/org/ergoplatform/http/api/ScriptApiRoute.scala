@@ -176,7 +176,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         case _ => ???
       }
       readers.w.extractHints(tx, boxesToSpend, dataBoxes, her.real, her.simulated)
-    })(hintsBag => ApiResponse(hintsBag))
+    })(ehr => ApiResponse(ehr.transactionHintsBag))
   }
 
   def addressToBytesR: Route = (get & path("addressToBytes" / Segment)) { addressStr =>

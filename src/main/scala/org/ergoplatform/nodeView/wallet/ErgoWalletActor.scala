@@ -1,8 +1,5 @@
 package org.ergoplatform.nodeView.wallet
 
-import java.io.File
-import java.util
-
 import akka.actor.{Actor, ActorRef}
 import cats.Traverse
 import com.google.common.hash.BloomFilter
@@ -40,7 +37,6 @@ import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import sigmastate.interpreter.HintsBag
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
@@ -408,7 +404,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ExtractHints(tx, boxesToSpend, dataBoxes, real, simulated) =>
       val prover = walletVars.proverOpt.getOrElse(ErgoProvingInterpreter(IndexedSeq.empty, parameters))
       val bag = prover.bagForTransaction(tx, boxesToSpend, dataBoxes, stateContext, real, simulated)
-      sender() ! bag
+      sender() ! ExtractHintsResult(bag)
 
     case DeriveKey(encodedPath) =>
       withWalletLockHandler(sender()) {
@@ -1010,7 +1006,7 @@ object ErgoWalletActor {
   case class ExtractHints(tx: ErgoTransaction, boxesToSpend: IndexedSeq[ErgoBox], dataBoxes: IndexedSeq[ErgoBox],
                           real: Seq[SigmaBoolean], simulated: Seq[SigmaBoolean])
 
-  case class ExtractHintsResult()
+  case class ExtractHintsResult(transactionHintsBag: TransactionHintsBag)
 
 
   /**

@@ -1003,9 +1003,26 @@ object ErgoWalletActor {
     */
   case class StopTrackingResponse(status: Try[Unit])
 
-  case class ExtractHints(tx: ErgoTransaction, boxesToSpend: IndexedSeq[ErgoBox], dataBoxes: IndexedSeq[ErgoBox],
-                          real: Seq[SigmaBoolean], simulated: Seq[SigmaBoolean])
+  /**
+    * A request to extract hints from given transaction
+    *
+    * @param tx - transaction to extract hints from
+    * @param boxesToSpend - input boxes of the transaction (all of them)
+    * @param dataBoxes - read-only (data) input boxes
+    * @param real - public keys corresponing to the secrets known
+    * @param simulated - public keys to simulate
+    */
+  case class ExtractHints(tx: ErgoTransaction,
+                          boxesToSpend: IndexedSeq[ErgoBox],
+                          dataBoxes: IndexedSeq[ErgoBox],
+                          real: Seq[SigmaBoolean],
+                          simulated: Seq[SigmaBoolean])
 
+  /**
+    * Result of hints generation operation
+    *
+    * @param transactionHintsBag - hints for transaction
+    */
   case class ExtractHintsResult(transactionHintsBag: TransactionHintsBag)
 
 

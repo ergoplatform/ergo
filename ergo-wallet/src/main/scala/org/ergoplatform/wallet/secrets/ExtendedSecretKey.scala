@@ -16,9 +16,9 @@ import sigmastate.interpreter.CryptoConstants
   * Secret, its chain code and path in key tree.
   * (see: https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)
   */
-final class ExtendedSecretKey(val keyBytes: Array[Byte],
-                              val chainCode: Array[Byte],
-                              val path: DerivationPath)
+class ExtendedSecretKey(val keyBytes: Array[Byte],
+                        val chainCode: Array[Byte],
+                        val path: DerivationPath)
   extends ExtendedKey with SecretKey {
 
   override def privateInput: DLogProverInput = DLogProverInput(BigIntegers.fromUnsignedByteArray(keyBytes))
@@ -43,10 +43,7 @@ final class ExtendedSecretKey(val keyBytes: Array[Byte],
   })
 
   override def hashCode(): Int = {
-    var h = util.Arrays.hashCode(keyBytes)
-    h = 31 * h + util.Arrays.hashCode(chainCode)
-    h = 31 * h + path.hashCode()
-    h
+    31 * 31 * util.Arrays.hashCode(keyBytes) + 31 * util.Arrays.hashCode(chainCode) + path.hashCode()
   }
 
 }

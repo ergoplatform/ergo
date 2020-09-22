@@ -1,7 +1,6 @@
 package org.ergoplatform.wallet.interpreter
 
 import org.ergoplatform.wallet.crypto.ErgoSignature
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.wallet.utils.Generators
 import org.scalatest.prop.GeneratorDrivenPropertyChecks

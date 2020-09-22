@@ -16,12 +16,11 @@ import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.wallet.Constants.ScanId
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
+import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.DLogProverInput
-import sigmastate.interpreter.HintsBag
 
 import scala.concurrent.Future
 import scala.util.Try

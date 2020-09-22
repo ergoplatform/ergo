@@ -16,7 +16,7 @@ import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.UnsignedInput
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
+import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.utils.Generators
 import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalacheck.{Arbitrary, Gen}

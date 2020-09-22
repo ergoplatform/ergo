@@ -20,8 +20,7 @@ import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
+import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, JsonSecretStorage}

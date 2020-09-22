@@ -7,9 +7,8 @@ import org.ergoplatform.utils.ArithUtils.{addExact, multiplyExact}
 import org.ergoplatform.validation.SigmaValidationSettings
 import sigmastate.AvlTreeData
 import sigmastate.Values.SigmaBoolean
-import sigmastate.interpreter.{ContextExtension, HintsBag, OwnCommitment, ProverInterpreter}
+import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 import org.ergoplatform.validation.ValidationRules
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
 import org.ergoplatform.wallet.secrets.SecretKey
 import sigmastate.basics.SigmaProtocolPrivateInput
@@ -168,8 +167,10 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   }
 
   /**
-    * A method which is generating a commitment to randomness, which is a first step to prove
-    * knowledge of a secret. Method checks whether secret is known to the prover, and returns
+    * A method which is generating commitments to randomness. A commitment is about a first step
+    * of a zero-knowledge proof-of-knowledge knowledge protocol.
+    *
+    * Method checks whether secret is known to the prover, and returns
     * None if the secret is not known.
     *
     * @param pubkey - public image of a secret
@@ -179,7 +180,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
                              boxesToSpend: IndexedSeq[ErgoBox],
                              dataBoxes: IndexedSeq[ErgoBox],
                              stateContext: ErgoLikeStateContext): Try[TransactionHintsBag] = Try {
-    val inputCmts = unsignedTx.inputs.zipWithIndex.map{ case (unsignedInput, inpIndex) =>
+    val inputCmts = unsignedTx.inputs.zipWithIndex.map { case (unsignedInput, inpIndex) =>
 
       val context = new ErgoLikeContext(
         ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
@@ -198,6 +199,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
       val scriptToReduce = boxesToSpend(inpIndex).ergoTree
       inpIndex -> generateCommitments(scriptToReduce, context)
     }
+
     TransactionHintsBag(inputCmts.toMap)
   }
 
@@ -245,29 +247,6 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
 }
 
 object ErgoProvingInterpreter {
-
-  case class TransactionHintsBag(secretHints: Map[Int, HintsBag], publicHints: Map[Int, HintsBag]) {
-    def putHints(index: Int, hintsBag: HintsBag): TransactionHintsBag = {
-      val (secret, public) = hintsBag.hints.partition(_.isInstanceOf[OwnCommitment])
-
-      TransactionHintsBag(secretHints.updated(index, HintsBag(secret)), publicHints.updated(index, HintsBag(public)))
-    }
-
-    def allHints(index: Int): HintsBag = {
-      secretHints.getOrElse(index, HintsBag.empty) ++ publicHints.getOrElse(index, HintsBag.empty)
-    }
-  }
-
-  object TransactionHintsBag {
-    val empty: TransactionHintsBag = new TransactionHintsBag(Map.empty, Map.empty)
-
-    def apply(mixedHints: Map[Int, HintsBag]): TransactionHintsBag = {
-      mixedHints.keys.foldLeft(TransactionHintsBag.empty){ case (thb, idx) =>
-        thb.putHints(idx, mixedHints(idx))
-      }
-    }
-
-  }
 
   def apply(secrets: IndexedSeq[SecretKey],
             params: ErgoLikeParameters): ErgoProvingInterpreter =

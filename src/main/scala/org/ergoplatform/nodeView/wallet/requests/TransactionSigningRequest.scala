@@ -5,7 +5,7 @@ import java.math.BigInteger
 import io.circe.{Decoder, DecodingFailure, Encoder, Json}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter.TransactionHintsBag
+import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey, PrimitiveSecretKey}
 import scorex.util.encode.Base16
 import sigmastate.Values.SigmaBoolean
@@ -150,9 +150,10 @@ object HintCodecs extends ApiCodecs {
   }
 
   implicit val secretProofEncoder: Encoder[SecretProven] = { sp =>
-    //todo: fix .isInstanceOf with adding a flag to SecretProven
-
-    val proofType = if(sp.isInstanceOf[RealSecretProof]) "proofReal" else "proofSimulated"
+    val proofType = sp match {
+      case _: RealSecretProof => "proofReal"
+      case _: SimulatedSecretProof => "proofSimulated"
+    }
 
     Json.obj(
       "hint" -> proofType.asJson,

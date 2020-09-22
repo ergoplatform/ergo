@@ -8,7 +8,7 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
-import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, PaymentRequestDecoder}
+import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}

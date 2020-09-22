@@ -55,9 +55,11 @@ object ExtendedSecretKey {
 
   @scala.annotation.tailrec
   def deriveChildSecretKey(parentKey: ExtendedSecretKey, idx: Int): ExtendedSecretKey = {
-    val keyCoded: Array[Byte] =
-      if (Index.isHardened(idx)) (0x00: Byte) +: parentKey.keyBytes
-      else parentKey.privateInput.publicImage.value.getEncoded(true)
+    val keyCoded: Array[Byte] = if (Index.isHardened(idx)) {
+      (0x00: Byte) +: parentKey.keyBytes
+    } else {
+      parentKey.privateInput.publicImage.value.getEncoded(true)
+    }
     val (childKeyProto, childChainCode) = HmacSHA512
       .hash(parentKey.chainCode, keyCoded ++ Index.serializeIndex(idx))
       .splitAt(Constants.SecretKeyLength)
@@ -65,10 +67,12 @@ object ExtendedSecretKey {
     val childKey = childKeyProtoDecoded
       .add(BigIntegers.fromUnsignedByteArray(parentKey.keyBytes))
       .mod(CryptoConstants.groupOrder)
-    if (childKeyProtoDecoded.compareTo(CryptoConstants.groupOrder) >= 0 || childKey.equals(BigInteger.ZERO))
+
+    if (childKeyProtoDecoded.compareTo(CryptoConstants.groupOrder) >= 0 || childKey.equals(BigInteger.ZERO)) {
       deriveChildSecretKey(parentKey, idx + 1)
-    else
+    } else {
       new ExtendedSecretKey(BigIntegers.asUnsignedByteArray(childKey), childChainCode, parentKey.path.extended(idx))
+    }
   }
 
   def deriveChildPublicKey(parentKey: ExtendedSecretKey, idx: Int): ExtendedPublicKey = {

@@ -25,4 +25,15 @@ object Constants {
   // Scan which is checking mining rewards
   val MiningScanId: ScanId = ScanId @@ 9.toShort
 
+
+  /**
+    * We suggest consider "ergo" word in ASCII and calculate coin_type number as
+    *
+    * 101 + 114 + 103 + 111 = 429
+    *
+    * Following this idea we should use next scheme
+    *
+    * m / 44' / 429' / account' / change / address_index
+    */
+  val CoinType = 429
 }

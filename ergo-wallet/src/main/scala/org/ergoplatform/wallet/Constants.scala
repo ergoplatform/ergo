@@ -28,7 +28,9 @@ object Constants {
 
 
   /**
-    * We suggest consider "ergo" word in ASCII and calculate coin_type number as
+    * [See EIP-3:]
+    *
+    * For coin type, we suggest consider "ergo" word in ASCII and calculate coin_type number as
     *
     * 101 + 114 + 103 + 111 = 429
     *

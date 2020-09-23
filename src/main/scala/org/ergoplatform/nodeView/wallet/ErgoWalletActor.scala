@@ -713,7 +713,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   private def nextPath(): Try[DerivationPath] = {
     val secrets: IndexedSeq[ExtendedSecretKey] = walletVars.proverOpt.toIndexedSeq.flatMap(_.hdKeys)
-    DerivationPath.nextPath(secrets)
+    DerivationPath.nextPath(secrets, walletSettings.oldDerivation)
   }
 
 }

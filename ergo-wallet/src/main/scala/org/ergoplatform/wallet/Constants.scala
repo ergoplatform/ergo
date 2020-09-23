@@ -1,5 +1,6 @@
 package org.ergoplatform.wallet
 
+import org.ergoplatform.wallet.secrets.DerivationPath
 import supertagged.TaggedType
 
 object Constants {
@@ -36,4 +37,15 @@ object Constants {
     * m / 44' / 429' / account' / change / address_index
     */
   val CoinType = 429
+
+  /**
+    * Pre - EIP3 derivation path
+    */
+  val oldDerivation: DerivationPath = DerivationPath.fromEncoded("m/1").get
+
+  /**
+    * Post - EIP3 derivation path
+    */
+  val eip3DerivationPath: DerivationPath = DerivationPath.fromEncoded("m/44'/429'/0'/0/0").get
+
 }

@@ -1,5 +1,6 @@
 package org.ergoplatform.wallet.secrets
 
+import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import scorex.util.serialization.{Reader, Writer}
 
@@ -14,7 +15,7 @@ final case class DerivationPath(decodedPath: Seq[Int], publicBranch: Boolean) {
 
   def depth: Int = decodedPath.length
 
-  def index: Long = decodedPath.last
+  def index: Int = decodedPath.last
 
   def isMaster: Boolean = depth == 1
 
@@ -28,6 +29,8 @@ final case class DerivationPath(decodedPath: Seq[Int], publicBranch: Boolean) {
   }
 
   def extended(idx: Int): DerivationPath = DerivationPath(decodedPath :+ idx, publicBranch)
+
+  def increased: DerivationPath = DerivationPath(decodedPath.dropRight(1) :+ (index + 1), publicBranch)
 
   /**
     * Convert the derivation path to public branch. See BIP-32 for details.
@@ -72,7 +75,8 @@ object DerivationPath {
   /**
     * Finds next available path index for a new key.
     */
-  def nextPath(secrets: IndexedSeq[ExtendedSecretKey]): Try[DerivationPath] = {
+  def nextPath(secrets: IndexedSeq[ExtendedSecretKey],
+               oldDerivation: Boolean = false): Try[DerivationPath] = {
 
     def pathSequence(secret: ExtendedSecretKey): Seq[Int] = secret.path.decodedPath.tail
 
@@ -92,9 +96,18 @@ object DerivationPath {
     }
 
     if (secrets.size == 1) {
-      Success(DerivationPath(Array(0, 1), publicBranch = false))
+      val path = if(oldDerivation) {
+        Constants.oldDerivation
+      } else {
+        Constants.eip3DerivationPath
+      }
+      Success(path)
     } else {
-      nextPath(List.empty, secrets.map(pathSequence))
+      if (pathSequence(secrets.last).startsWith(Constants.eip3DerivationPath.decodedPath.tail.take(3))) {
+        Success(secrets.last.path.increased)
+      } else {
+        nextPath(List.empty, secrets.map(pathSequence))
+      }
     }
   }
 

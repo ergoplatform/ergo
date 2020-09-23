@@ -290,7 +290,8 @@ class ErgoWalletActor(settings: ErgoSettings,
     //Restore wallet with mnemonic if secret is not set yet
     case RestoreWallet(mnemonic, passOpt, encryptionPass) if !secretIsSet =>
       val res = Try {
-        JsonSecretStorage.restore(mnemonic, passOpt, encryptionPass)(settings.walletSettings.secretStorage)
+        val secretStorageSettings = settings.walletSettings.secretStorage
+        JsonSecretStorage.restore(mnemonic, passOpt, encryptionPass, secretStorageSettings)
       }.map { secretStorage =>
         secretStorageOpt = Some(secretStorage)
       } match {

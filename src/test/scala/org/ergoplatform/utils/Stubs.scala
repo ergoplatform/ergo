@@ -174,7 +174,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case DeriveKey(_) => sender() ! Success(WalletActorStub.address)
 
-      case DeriveNextKey => sender() ! Success(WalletActorStub.path -> WalletActorStub.address)
+      case DeriveNextKey => sender() ! DeriveNextKeyResult(Success(WalletActorStub.path -> WalletActorStub.address))
 
       case ReadPublicKeys(from, until) =>
         sender() ! trackedAddresses.slice(from, until)

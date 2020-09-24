@@ -390,12 +390,13 @@ class ErgoWalletActor(settings: ErgoSettings,
     case DeriveNextKey =>
       withWalletLockHandler(sender()) {
         _.secret.foreach { masterKey =>
-          sender() ! nextPath().flatMap { path =>
+          val derivationResult = nextPath().flatMap { path =>
             val secret = masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
             processSecretAddition(secret).map { _ =>
               path -> P2PKAddress(secret.publicKey.key)
             }
           }
+          sender() ! DeriveNextKeyResult(derivationResult)
         }
       }
 
@@ -881,6 +882,11 @@ object ErgoWalletActor {
     * //todo: describe procedure or provide a link
     */
   case object DeriveNextKey
+
+  /**
+    * Result of "deriveNextKey" operation
+    */
+  case class DeriveNextKeyResult(result: Try[(DerivationPath, P2PKAddress)])
 
   /**
     * Lock wallet

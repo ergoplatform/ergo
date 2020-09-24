@@ -56,8 +56,8 @@ trait ErgoWalletReader extends VaultReader {
   def deriveKey(path: String): Future[Try[P2PKAddress]] =
     (walletActor ? DeriveKey(path)).mapTo[Try[P2PKAddress]]
 
-  def deriveNextKey: Future[Try[(DerivationPath, P2PKAddress)]] =
-    (walletActor ? DeriveNextKey).mapTo[Try[(DerivationPath, P2PKAddress)]]
+  def deriveNextKey: Future[DeriveNextKeyResult] =
+    (walletActor ? DeriveNextKey).mapTo[DeriveNextKeyResult]
 
   def balances(chainStatus: ChainStatus): Future[WalletDigest] =
     (walletActor ? ReadBalances(chainStatus)).mapTo[WalletDigest]

@@ -670,20 +670,31 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     //If no public keys in the database yet, add master's public key into it
     if (pubKeys.isEmpty) {
-      val masterPubKey = masterKeySeq.map(s => s.publicKey)
-      masterPubKey.foreach(pk => storage.addKey(pk))
-      pubKeys = masterPubKey.toIndexedSeq
+      if(walletSettings.oldDerivation) {
+        val masterPubKey = masterKeySeq.map(s => s.publicKey)
+        masterPubKey.foreach(pk => storage.addKey(pk))
+        pubKeys = masterPubKey.toIndexedSeq
+      } else {
+        pubKeys = masterKeySeq.flatMap(mk => nextKey(mk).result.map(_._2).toOption).toIndexedSeq
+      }
     }
 
-    val secrets = pubKeys.flatMap { pk =>
+    val secretsPk = pubKeys.flatMap { pk =>
       val path = pk.path.toPrivateBranch
       masterKeySeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
     }
-    walletVars = walletVars.withProver(ErgoProvingInterpreter(secrets, parameters))
+
+    val secrets = if(secretsPk.headOption == masterKeySeq.headOption) {
+      secretsPk
+    } else {
+      masterKeySeq ++ secretsPk
+    }
+    val prover = ErgoProvingInterpreter(secrets, parameters)
+    walletVars = walletVars.withProver(prover)
   } match {
     case Success(_) =>
     case Failure(t) =>
-      log.error("Unlock failed: ", t)
+      log.error(  "Unlock failed: ", t)
   }
 
 

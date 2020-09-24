@@ -1,7 +1,7 @@
 package org.ergoplatform.examples
 
 import org.ergoplatform.ErgoBox.{R4, R5}
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBoxCandidate, JsonCodecs, UnsignedInput}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBoxCandidate, ErgoScriptPredef, UnsignedInput}
 import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, LongConstant}
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
@@ -13,18 +13,21 @@ import org.ergoplatform.http.api.ApiCodecs
 object PowNft extends App with ApiCodecs {
 
   val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
-  val pk = enc.fromString("9iHWcYYSPkgYbnC6aHfZcLZrKrrkpFzM2ETUZ2ikFqFwVAB2CU7").get.script
+  val pk = enc.fromString("9fUr4t5piWM7oQSjuaQRUTRWqkFTJLKuS2QuqPL9rz7gvFoGjjk").get.script
 
-  val preimage = "kushti2020-32bytes".getBytes("UTF-8")
+  val preimage = "kushti2020-32bits".getBytes("UTF-8")
 
-  val inputBoxId = ADKey @@ Base16.decode("e6095b22bf504cdb2c74385eb6bbd49ab203a8402accde8d886ff5125a5003c0").get
+  val inputBoxId = ADKey @@ Base16.decode("6f44949ca85684b0e2828905a11795a92f112e4362c793e65bed3f79c1c4c12f").get
   val input: UnsignedInput = new UnsignedInput(inputBoxId)
 
 
   // todo: generate transaction with the box
   def nftGeneratorCandidate(nonce:Long): UnsignedErgoTransaction = {
-    val candidate = new ErgoBoxCandidate(1000000L, pk, 300000, Colls.emptyColl, Map(R4 -> ByteArrayConstant(preimage), R5 -> LongConstant(nonce)))
-    new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(candidate))
+    val total = 1000000000L
+    val fee = 10000000L
+    val candidate = new ErgoBoxCandidate((total - fee), pk, 300000, Colls.emptyColl, Map(R4 -> ByteArrayConstant(preimage), R5 -> LongConstant(nonce)))
+    val feeBox = new ErgoBoxCandidate(fee, ErgoScriptPredef.feeProposition(), 300000)
+    new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(candidate, feeBox))
   }
 
   def mineNftGeneratorBox(target: BigInt): (UnsignedErgoTransaction, Long) = {

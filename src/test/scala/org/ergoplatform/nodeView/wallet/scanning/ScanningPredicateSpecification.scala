@@ -1,11 +1,12 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
-import org.ergoplatform.{ErgoBox, ErgoScriptPredef, P2PKAddress}
+import org.ergoplatform.{ErgoScriptPredef, P2PKAddress}
 import org.ergoplatform.ErgoBox.R1
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
 import scorex.crypto.hash.Digest32
 import sigmastate.Values.ByteArrayConstant
+import sigmastate.helpers.TestingHelpers._
 
 import scala.util.Random
 import scala.language.implicitConversions
@@ -29,7 +30,7 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
   property("equals - p2pk") {
     forAll(ergoAddressGen) { p2pkAddress =>
       //look for exact p2pk script bytes
-      val box = ErgoBox(value = 1, p2pkAddress.script, creationHeight = 0)
+      val box = testBox(value = 1, p2pkAddress.script, creationHeight = 0)
       val scriptBytes = p2pkAddress.script.bytes
       EqualsScanningPredicate(R1, scriptBytes).filter(box) shouldBe true
 
@@ -48,7 +49,7 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
       val mpBytes = minerProp.bytes
 
       //look for exact miner script bytes
-      val box = ErgoBox(value = 1, minerProp, creationHeight = 0)
+      val box = testBox(value = 1, minerProp, creationHeight = 0)
       EqualsScanningPredicate(R1, mpBytes).filter(box) shouldBe true
 
       //then change random byte
@@ -60,7 +61,7 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
   property("contains - p2pk") {
     forAll(ergoAddressGen) { p2pkAddress =>
       //look for exact p2pk script bytes
-      val box = ErgoBox(value = 1, p2pkAddress.script, creationHeight = 0)
+      val box = testBox(value = 1, p2pkAddress.script, creationHeight = 0)
       val pkBytes = p2pkAddress.asInstanceOf[P2PKAddress].pubkeyBytes
       ContainsScanningPredicate(R1, pkBytes).filter(box) shouldBe true
 
@@ -77,7 +78,7 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
     forAll(ergoAddressGen) { p2pkAddress =>
       //look for exact p2pk script bytes
       val minerProp = ErgoScriptPredef.rewardOutputScript(testDelay, p2pkAddress.asInstanceOf[P2PKAddress].pubkey)
-      val box = ErgoBox(value = 1, minerProp, creationHeight = 0)
+      val box = testBox(value = 1, minerProp, creationHeight = 0)
       val pkBytes = p2pkAddress.asInstanceOf[P2PKAddress].pubkeyBytes
 
       ContainsScanningPredicate(R1, pkBytes).filter(box) shouldBe true
@@ -94,10 +95,10 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
   property("containsAsset") {
     forAll(proveDlogGen) { pk =>
       forAll(assetGen) { case (tokenId, amt) =>
-        val box = ErgoBox(value = 1, pk, creationHeight = 0, additionalTokens = Seq(tokenId -> amt))
+        val box = testBox(value = 1, pk, creationHeight = 0, additionalTokens = Seq(tokenId -> amt))
         ContainsAssetPredicate(tokenId).filter(box) shouldBe true
 
-        val emptyBox = ErgoBox(value = 1, pk, creationHeight = 0)
+        val emptyBox = testBox(value = 1, pk, creationHeight = 0)
         ContainsAssetPredicate(tokenId).filter(emptyBox) shouldBe false
 
         ContainsAssetPredicate(Digest32 @@ mutateRandomByte(tokenId)).filter(box) shouldBe false
@@ -108,7 +109,7 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
   property("and") {
     forAll(ergoAddressGen) { p2pk =>
       forAll(assetGen) { case (tokenId, amt) =>
-        val box = ErgoBox(value = 1, p2pk.script, creationHeight = 0, additionalTokens = Seq(tokenId -> amt))
+        val box = testBox(value = 1, p2pk.script, creationHeight = 0, additionalTokens = Seq(tokenId -> amt))
 
         //box contains both asset and p2pk script
         AndScanningPredicate(ContainsAssetPredicate(tokenId), ContainsScanningPredicate(R1, p2pk.contentBytes))
@@ -135,7 +136,7 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
   property("or") {
     forAll(ergoAddressGen) { p2pk =>
       forAll(assetGen) { case (tokenId, amt) =>
-        val box = ErgoBox(value = 1, p2pk.script, creationHeight = 0, additionalTokens = Seq(tokenId -> amt))
+        val box = testBox(value = 1, p2pk.script, creationHeight = 0, additionalTokens = Seq(tokenId -> amt))
 
         //box contains both asset and p2pk script
         OrScanningPredicate(ContainsAssetPredicate(tokenId), ContainsScanningPredicate(R1, p2pk.contentBytes))

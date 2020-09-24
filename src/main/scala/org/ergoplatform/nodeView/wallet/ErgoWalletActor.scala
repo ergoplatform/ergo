@@ -675,7 +675,10 @@ class ErgoWalletActor(settings: ErgoSettings,
         masterPubKey.foreach(pk => storage.addKey(pk))
         pubKeys = masterPubKey.toIndexedSeq
       } else {
-        pubKeys = masterKeySeq.flatMap(mk => nextKey(mk).result.map(_._2).toOption).toIndexedSeq
+        val firstSk = masterKeySeq.flatMap(mk => nextKey(mk).result.map(_._3).toOption)
+        val firstPk = firstSk.map(_.publicKey)
+        firstPk.foreach(pk => storage.addKey(pk))
+        pubKeys = firstPk.toIndexedSeq
       }
     }
 
@@ -687,7 +690,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     val secrets = if(secretsPk.headOption == masterKeySeq.headOption) {
       secretsPk
     } else {
-      masterKeySeq ++ secretsPk
+      (masterKeySeq ++ secretsPk).toIndexedSeq
     }
     val prover = ErgoProvingInterpreter(secrets, parameters)
     walletVars = walletVars.withProver(prover)
@@ -726,7 +729,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     val derivationResult = nextPath().flatMap { path =>
       val secret = masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
       processSecretAddition(secret).map { _ =>
-        path -> P2PKAddress(secret.publicKey.key)
+        (path, P2PKAddress(secret.publicKey.key), secret)
       }
     }
     DeriveNextKeyResult(derivationResult)
@@ -901,7 +904,7 @@ object ErgoWalletActor {
   /**
     * Result of "deriveNextKey" operation
     */
-  case class DeriveNextKeyResult(result: Try[(DerivationPath, P2PKAddress)])
+  case class DeriveNextKeyResult(result: Try[(DerivationPath, P2PKAddress, ExtendedSecretKey)])
 
   /**
     * Lock wallet

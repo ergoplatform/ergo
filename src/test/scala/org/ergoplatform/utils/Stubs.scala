@@ -21,9 +21,10 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.wallet.secrets.DerivationPath
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.nodeView.wallet.scanning.Scan
+import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.scalacheck.Gen
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
@@ -174,7 +175,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case DeriveKey(_) => sender() ! Success(WalletActorStub.address)
 
-      case DeriveNextKey => sender() ! DeriveNextKeyResult(Success(WalletActorStub.path -> WalletActorStub.address))
+      case DeriveNextKey => sender() !
+        DeriveNextKeyResult(Success(WalletActorStub.path, WalletActorStub.address, WalletActorStub.secretKey))
 
       case ReadPublicKeys(from, until) =>
         sender() ! trackedAddresses.slice(from, until)
@@ -223,6 +225,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val seed: String = "walletstub"
     val mnemonic: String = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
     val path = DerivationPath(List(0, 1, 2), publicBranch = false)
+    val secretKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(mnemonic)).derive(path).asInstanceOf[ExtendedSecretKey]
     val address = P2PKAddress(proveDlogGen.sample.get)
 
     val walletBox10_10: WalletBox = WalletBox(

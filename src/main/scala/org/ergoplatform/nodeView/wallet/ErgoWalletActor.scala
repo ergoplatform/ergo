@@ -649,9 +649,9 @@ class ErgoWalletActor(settings: ErgoSettings,
   }
 
   private def processUnlock(secretStorage: JsonSecretStorage): Unit = Try {
-    val rootSecretSeq = secretStorage.secret.toSeq
+    val masterKeySeq = secretStorage.secret.toSeq
 
-    if (rootSecretSeq.isEmpty) {
+    if (masterKeySeq.isEmpty) {
       log.warn("Master key is not available after unlock")
     }
 
@@ -659,8 +659,8 @@ class ErgoWalletActor(settings: ErgoSettings,
     // into a new format (pubkeys with paths stored instead of paths)
     val oldPaths = storage.readPaths()
     if (oldPaths.nonEmpty) {
-      val oldDerivedSecrets = rootSecretSeq ++ oldPaths.flatMap { path =>
-        rootSecretSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
+      val oldDerivedSecrets = masterKeySeq ++ oldPaths.flatMap { path =>
+        masterKeySeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
       }
       val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
       oldPubKeys.foreach(storage.addKey)
@@ -670,14 +670,14 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     //If no public keys in the database yet, add master's public key into it
     if (pubKeys.isEmpty) {
-      val masterPubKey = rootSecretSeq.map(s => s.publicKey)
+      val masterPubKey = masterKeySeq.map(s => s.publicKey)
       masterPubKey.foreach(pk => storage.addKey(pk))
       pubKeys = masterPubKey.toIndexedSeq
     }
 
     val secrets = pubKeys.flatMap { pk =>
       val path = pk.path.toPrivateBranch
-      rootSecretSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
+      masterKeySeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
     }
     walletVars = walletVars.withProver(ErgoProvingInterpreter(secrets, parameters))
   } match {

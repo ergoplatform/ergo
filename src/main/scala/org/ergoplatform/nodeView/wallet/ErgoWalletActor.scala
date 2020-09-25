@@ -649,55 +649,56 @@ class ErgoWalletActor(settings: ErgoSettings,
   }
 
   private def processUnlock(secretStorage: JsonSecretStorage): Unit = Try {
-    val masterKeySeq = secretStorage.secret.toSeq
+    secretStorage.secret match {
 
-    if (masterKeySeq.isEmpty) {
-      log.warn("Master key is not available after unlock")
-    }
+      case None => throw new Exception("Master key is not available after unlock")
 
-    // first, we're trying to find in the database paths written by clients prior 3.3.0 and convert them
-    // into a new format (pubkeys with paths stored instead of paths)
-    val oldPaths = storage.readPaths()
-    if (oldPaths.nonEmpty) {
-      val oldDerivedSecrets = masterKeySeq ++ oldPaths.flatMap { path =>
-        masterKeySeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
-      }
-      val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
-      oldPubKeys.foreach(storage.addKey)
-      storage.removePaths()
-    }
-    var pubKeys = storage.readAllKeys().toIndexedSeq
+      case Some(masterKey) =>
 
-    //If no public keys in the database yet, add master's public key into it
-    if (pubKeys.isEmpty) {
-      if(walletSettings.oldDerivation) {
-        val masterPubKey = masterKeySeq.map(s => s.publicKey)
-        masterPubKey.foreach(pk => storage.addKey(pk))
-        pubKeys = masterPubKey.toIndexedSeq
-      } else {
-        val firstSk = masterKeySeq.flatMap(mk => nextKey(mk).result.map(_._3).toOption)
-        val firstPk = firstSk.map(_.publicKey)
-        firstPk.foreach(pk => storage.addKey(pk))
-        pubKeys = firstPk.toIndexedSeq
-      }
-    }
+        // first, we're trying to find in the database paths written by clients prior 3.3.0 and convert them
+        // into a new format (pubkeys with paths stored instead of paths)
+        val oldPaths = storage.readPaths()
+        if (oldPaths.nonEmpty) {
+          val oldDerivedSecrets = masterKey +: oldPaths.map {
+            path => masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
+          }
+          val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
+          oldPubKeys.foreach(storage.addKey)
+          storage.removePaths()
+        }
+        var pubKeys = storage.readAllKeys().toIndexedSeq
 
-    val secretsPk = pubKeys.flatMap { pk =>
-      val path = pk.path.toPrivateBranch
-      masterKeySeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
-    }
+        //If no public keys in the database yet, add master's public key into it
+        if (pubKeys.isEmpty) {
+          if (walletSettings.oldDerivation) {
+            val masterPubKey = masterKey.publicKey
+            storage.addKey(masterPubKey)
+            pubKeys = scala.collection.immutable.IndexedSeq(masterPubKey)
+          } else {
+            val firstSk = nextKey(masterKey).result.map(_._3).toOption
+            val firstPk = firstSk.map(_.publicKey)
+            firstPk.foreach(pk => storage.addKey(pk))
+            pubKeys = firstPk.toIndexedSeq
+          }
+        }
 
-    val secrets = if(secretsPk.headOption == masterKeySeq.headOption) {
-      secretsPk
-    } else {
-      (masterKeySeq ++ secretsPk).toIndexedSeq
+        val secretsPk = pubKeys.map { pk =>
+          val path = pk.path.toPrivateBranch
+          masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
+        }
+
+        val secrets = if (secretsPk.headOption.contains(masterKey)) {
+          secretsPk
+        } else {
+          masterKey +: secretsPk
+        }
+        val prover = ErgoProvingInterpreter(secrets, parameters)
+        walletVars = walletVars.withProver(prover)
     }
-    val prover = ErgoProvingInterpreter(secrets, parameters)
-    walletVars = walletVars.withProver(prover)
   } match {
     case Success(_) =>
     case Failure(t) =>
-      log.error(  "Unlock failed: ", t)
+      log.error("Unlock failed: ", t)
   }
 
 
@@ -725,6 +726,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     DerivationPath.nextPath(secrets, walletSettings.oldDerivation)
   }
 
+  // call nextPath and derive next key from it
   private def nextKey(masterKey: ExtendedSecretKey): DeriveNextKeyResult = {
     val derivationResult = nextPath().flatMap { path =>
       val secret = masterKey.derive(path).asInstanceOf[ExtendedSecretKey]

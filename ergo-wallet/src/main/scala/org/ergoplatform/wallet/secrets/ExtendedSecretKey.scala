@@ -16,9 +16,9 @@ import sigmastate.interpreter.CryptoConstants
   * Secret, its chain code and path in key tree.
   * (see: https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)
   */
-class ExtendedSecretKey(val keyBytes: Array[Byte],
-                        val chainCode: Array[Byte],
-                        val path: DerivationPath)
+final class ExtendedSecretKey(val keyBytes: Array[Byte],
+                              val chainCode: Array[Byte],
+                              val path: DerivationPath)
   extends ExtendedKey with SecretKey {
 
   override def privateInput: DLogProverInput = DLogProverInput(BigIntegers.fromUnsignedByteArray(keyBytes))
@@ -43,7 +43,10 @@ class ExtendedSecretKey(val keyBytes: Array[Byte],
   })
 
   override def hashCode(): Int = {
-    31 * 31 * util.Arrays.hashCode(keyBytes) + 31 * util.Arrays.hashCode(chainCode) + path.hashCode()
+    var h = util.Arrays.hashCode(keyBytes)
+    h = 31 * h + util.Arrays.hashCode(chainCode)
+    h = 31 * h + path.hashCode()
+    h
   }
 
 }
@@ -52,11 +55,9 @@ object ExtendedSecretKey {
 
   @scala.annotation.tailrec
   def deriveChildSecretKey(parentKey: ExtendedSecretKey, idx: Int): ExtendedSecretKey = {
-    val keyCoded: Array[Byte] = if (Index.isHardened(idx)) {
-      (0x00: Byte) +: parentKey.keyBytes
-    } else {
-      parentKey.privateInput.publicImage.value.getEncoded(true)
-    }
+    val keyCoded: Array[Byte] =
+      if (Index.isHardened(idx)) (0x00: Byte) +: parentKey.keyBytes
+      else parentKey.privateInput.publicImage.value.getEncoded(true)
     val (childKeyProto, childChainCode) = HmacSHA512
       .hash(parentKey.chainCode, keyCoded ++ Index.serializeIndex(idx))
       .splitAt(Constants.SecretKeyLength)
@@ -64,12 +65,10 @@ object ExtendedSecretKey {
     val childKey = childKeyProtoDecoded
       .add(BigIntegers.fromUnsignedByteArray(parentKey.keyBytes))
       .mod(CryptoConstants.groupOrder)
-
-    if (childKeyProtoDecoded.compareTo(CryptoConstants.groupOrder) >= 0 || childKey.equals(BigInteger.ZERO)) {
+    if (childKeyProtoDecoded.compareTo(CryptoConstants.groupOrder) >= 0 || childKey.equals(BigInteger.ZERO))
       deriveChildSecretKey(parentKey, idx + 1)
-    } else {
+    else
       new ExtendedSecretKey(BigIntegers.asUnsignedByteArray(childKey), childChainCode, parentKey.path.extended(idx))
-    }
   }
 
   def deriveChildPublicKey(parentKey: ExtendedSecretKey, idx: Int): ExtendedPublicKey = {

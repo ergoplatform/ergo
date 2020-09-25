@@ -15,6 +15,9 @@ final case class DerivationPath(decodedPath: Seq[Int], publicBranch: Boolean) {
 
   def depth: Int = decodedPath.length
 
+  /**
+    * @return last element of the derivation path, e.g. 2 for m/1/2
+    */
   def index: Int = decodedPath.last
 
   def isMaster: Boolean = depth == 1
@@ -30,6 +33,9 @@ final case class DerivationPath(decodedPath: Seq[Int], publicBranch: Boolean) {
 
   def extended(idx: Int): DerivationPath = DerivationPath(decodedPath :+ idx, publicBranch)
 
+  /**
+    * @return path with last element of the derivation path being increased, e.g. m/1/2 -> m/1/3
+    */
   def increased: DerivationPath = DerivationPath(decodedPath.dropRight(1) :+ (index + 1), publicBranch)
 
   /**
@@ -74,6 +80,8 @@ object DerivationPath {
 
   /**
     * Finds next available path index for a new key.
+    * @secrets - secrets previously generated generated
+    * @oldDerivation - whether to use pre-EIP3 derivation or not
     */
   def nextPath(secrets: IndexedSeq[ExtendedSecretKey],
                oldDerivation: Boolean = false): Try[DerivationPath] = {
@@ -96,6 +104,7 @@ object DerivationPath {
     }
 
     if (secrets.size == 1) {
+      // If pre-EIP generation, the first key generated after master's would be m/1, otherwise m/44'/429'/0'/0/0
       val path = if(oldDerivation) {
         Constants.oldDerivation
       } else {
@@ -103,6 +112,9 @@ object DerivationPath {
       }
       Success(path)
     } else {
+      // If last secret corresponds to EIP-3 path, do EIP-3 derivation, otherwise, old derivation
+      // For EIP-3 derivation, we increase last segment, m/44'/429'/0'/0/0 -> m/44'/429'/0'/0/1 and so on
+      // For old derivation, we increase last non-hardened segment, m/1/1 -> m/2
       if (pathSequence(secrets.last).startsWith(Constants.eip3DerivationPath.decodedPath.tail.take(3))) {
         Success(secrets.last.path.increased)
       } else {

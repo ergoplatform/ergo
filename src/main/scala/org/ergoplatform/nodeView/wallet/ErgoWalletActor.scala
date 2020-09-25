@@ -666,27 +666,38 @@ class ErgoWalletActor(settings: ErgoSettings,
           oldPubKeys.foreach(storage.addKey)
           storage.removePaths()
         }
+
+        // now we read previously stored, or just stored during the conversion procedure above, public keys
         var pubKeys = storage.readAllKeys().toIndexedSeq
 
         //If no public keys in the database yet, add master's public key into it
         if (pubKeys.isEmpty) {
           if (walletSettings.oldDerivation) {
+            // If oldDerivation flag is set in the wallet settings, the first key is the master key
             val masterPubKey = masterKey.publicKey
             storage.addKey(masterPubKey)
             pubKeys = scala.collection.immutable.IndexedSeq(masterPubKey)
           } else {
+            // If no oldDerivation flag is set, add first derived key (for m/44'/429'/0'/0/0) to the db
             val firstSk = nextKey(masterKey).result.map(_._3).toOption
             val firstPk = firstSk.map(_.publicKey)
-            firstPk.foreach(pk => storage.addKey(pk))
+            firstPk.foreach{ pk =>
+              storage.addKey(pk)
+              storage.updateChangeAddress(P2PKAddress(pk.key))
+            }
+
             pubKeys = firstPk.toIndexedSeq
           }
         }
 
+        // Secrets corresponding to public keys
         val secretsPk = pubKeys.map { pk =>
           val path = pk.path.toPrivateBranch
           masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
         }
 
+        // If no master key in the secrets corresponding to public keys,
+        // add master key so then it is not available to the user but presents in the prover
         val secrets = if (secretsPk.headOption.contains(masterKey)) {
           secretsPk
         } else {

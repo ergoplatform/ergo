@@ -86,9 +86,41 @@ class DerivationPathSpec
     dp4 shouldBe DerivationPath.fromEncoded("m/44'/429'/0'/0/1").get
   }
 
-  property("equality of old derivation"){
+  property("equality of old derivation") {
     // Check that hardcoded path from old codebase corresponds to the new string form (Constants.oldDerivation)
     DerivationPath(Array(0, 1), publicBranch = false) shouldBe Constants.oldDerivation
+  }
+
+  property("master key derivation") {
+    implicit val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
+    val masterKeyDerivation: DerivationPath = DerivationPath.fromEncoded("m/").get
+
+    val mnemonic = "liar exercise solve delay betray sheriff method empower disease river recall vacuum"
+    val address = "9hXkYAHd1hWDroNMA3w9t6st2QyS3aTVe5w6GwWPKK5q4SmpUDL"
+
+    val seed = Mnemonic.toSeed(mnemonic, None)
+
+    val masterKey = ExtendedSecretKey.deriveMasterKey(seed)
+    P2PKAddress(masterKey.publicKey.key).toString() shouldBe address
+
+    masterKey.path shouldBe masterKeyDerivation
+
+    masterKeyDerivation.isMaster shouldBe true
+
+    val sk = masterKey.derive(masterKeyDerivation).asInstanceOf[ExtendedSecretKey]
+    val pk = sk.publicKey.key
+    sk.path.isMaster shouldBe true
+    P2PKAddress(pk).toString() shouldBe address
+  }
+
+  property("isEip3 correctly distinguishing") {
+    Constants.eip3DerivationPath.isEip3 shouldBe true
+    Constants.eip3DerivationPath.toPublicBranch.isEip3 shouldBe true
+    DerivationPath.fromEncoded("m/44'/429'/0'/0/1").get.isEip3 shouldBe true
+    DerivationPath.fromEncoded("M/44'/429'/0'/0/1").get.isEip3 shouldBe true
+    DerivationPath.fromEncoded("m/44'/429'/0'/1/1").get.isEip3 shouldBe true
+    Constants.oldDerivation.isEip3 shouldBe false
+    DerivationPath.fromEncoded("m/44'/429'/1'/0/1").get.isEip3 shouldBe false
   }
 
 }

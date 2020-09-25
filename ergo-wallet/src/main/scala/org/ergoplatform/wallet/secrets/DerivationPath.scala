@@ -50,6 +50,13 @@ final case class DerivationPath(decodedPath: Seq[Int], publicBranch: Boolean) {
     */
   def toPrivateBranch: DerivationPath = this.copy(publicBranch = false)
 
+  /**
+    * @return whether derivation path corresponds to EIP-3
+    */
+  def isEip3: Boolean = {
+    decodedPath.tail.startsWith(Constants.eip3DerivationPath.decodedPath.tail.take(3))
+  }
+
   override def toString: String = encoded
 
   def bytes: Array[Byte] = DerivationPathSerializer.toBytes(this)
@@ -103,7 +110,7 @@ object DerivationPath {
       }
     }
 
-    if (secrets.size == 1) {
+    if (secrets.isEmpty) {
       // If pre-EIP generation, the first key generated after master's would be m/1, otherwise m/44'/429'/0'/0/0
       val path = if(oldDerivation) {
         Constants.oldDerivation
@@ -115,7 +122,7 @@ object DerivationPath {
       // If last secret corresponds to EIP-3 path, do EIP-3 derivation, otherwise, old derivation
       // For EIP-3 derivation, we increase last segment, m/44'/429'/0'/0/0 -> m/44'/429'/0'/0/1 and so on
       // For old derivation, we increase last non-hardened segment, m/1/1 -> m/2
-      if (pathSequence(secrets.last).startsWith(Constants.eip3DerivationPath.decodedPath.tail.take(3))) {
+      if (secrets.last.path.isEip3) {
         Success(secrets.last.path.increased)
       } else {
         nextPath(List.empty, secrets.map(pathSequence))

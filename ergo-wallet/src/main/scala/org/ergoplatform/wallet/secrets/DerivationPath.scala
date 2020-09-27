@@ -87,8 +87,8 @@ object DerivationPath {
 
   /**
     * Finds next available path index for a new key.
-    * @secrets - secrets previously generated generated
-    * @oldDerivation - whether to use pre-EIP3 derivation or not
+    * @param secrets - secrets previously generated
+    * @param oldDerivation - whether to use pre-EIP3 derivation or not
     */
   def nextPath(secrets: IndexedSeq[ExtendedSecretKey],
                oldDerivation: Boolean = false): Try[DerivationPath] = {

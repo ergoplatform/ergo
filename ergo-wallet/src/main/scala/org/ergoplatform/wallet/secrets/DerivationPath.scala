@@ -110,7 +110,7 @@ object DerivationPath {
       }
     }
 
-    if (secrets.isEmpty) {
+    if (secrets.isEmpty || (secrets.size == 1 && secrets.head.path.isMaster)) {
       // If pre-EIP generation, the first key generated after master's would be m/1, otherwise m/44'/429'/0'/0/0
       val path = if(oldDerivation) {
         Constants.oldDerivation

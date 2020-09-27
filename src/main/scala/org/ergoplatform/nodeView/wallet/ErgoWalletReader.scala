@@ -14,7 +14,6 @@ import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
-import org.ergoplatform.wallet.secrets.DerivationPath
 import org.ergoplatform.wallet.Constants.ScanId
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId

@@ -202,6 +202,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     /**
       * Just ignore all other modifiers.
       */
+    case SemanticallySuccessfulModifier(m: ErgoFullBlock) =>
+      log.debug(s"Miner: ignoring modifier at height ${m.height}")
+
     case SemanticallySuccessfulModifier(_) =>
   }
 

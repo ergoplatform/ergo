@@ -1,12 +1,11 @@
 package org.ergoplatform.mining
 
-import akka.actor.{Actor, ActorRef, ActorSystem}
+import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
 import ErgoMiner.{PrepareCandidate, StartMining}
-import org.ergoplatform.mining.Listener._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
@@ -344,26 +343,5 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     system.terminate()
   }
-
-}
-
-class Listener extends Actor {
-
-  var generatedBlocks: Int = 0
-
-  override def preStart(): Unit = {
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
-  }
-
-  override def receive: Receive = {
-    case SemanticallySuccessfulModifier(_) => generatedBlocks += 1
-    case Status => sender ! generatedBlocks
-  }
-
-}
-
-object Listener {
-
-  case object Status
 
 }

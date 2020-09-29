@@ -625,17 +625,11 @@ class ErgoWalletActor(settings: ErgoSettings,
         (boxesToFakeTracked(userInputs), noFilter, None)
       } else {
         walletVars.proverOpt match {
-          case Some(prover) =>
+          case Some(_) =>
             //inputs are to be selected by the wallet
             require(walletVars.publicKeyAddresses.nonEmpty, "No public keys in the prover to extract change address from")
             val boxesToSpend = (registry.walletUnspentBoxes() ++ offChainRegistry.offChainBoxes).distinct
-            val changeAddress = storage.readChangeAddress
-              .map(_.pubkey)
-              .getOrElse {
-                log.warn("Change address not specified. Using root address from wallet.")
-                prover.hdPubKeys.head.key
-              }
-            (boxesToSpend.toIterator, walletFilter, Some(changeAddress))
+            (boxesToSpend.toIterator, walletFilter, changeAddress.map(_.pubkey))
 
           case None =>
             throw new Exception(s"Cannot generateTransactionWithOutputs($requests, $inputsRaw): wallet is locked")
@@ -673,7 +667,7 @@ class ErgoWalletActor(settings: ErgoSettings,
                                  dataInputBoxes: IndexedSeq[ErgoBox],
                                  changeAddressOpt: Option[ProveDlog]): Try[UnsignedErgoTransaction] = Try {
     require(
-      !(changeAddressOpt.isDefined && selectionResult.changeBoxes.isEmpty),
+      selectionResult.changeBoxes.isEmpty || changeAddressOpt.isDefined,
       "Does not have change address to send change to"
     )
 

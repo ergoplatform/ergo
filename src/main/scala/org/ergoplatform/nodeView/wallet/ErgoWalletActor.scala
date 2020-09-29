@@ -295,7 +295,8 @@ class ErgoWalletActor(settings: ErgoSettings,
     //Restore wallet with mnemonic if secret is not set yet
     case RestoreWallet(mnemonic, passOpt, encryptionPass) if !secretIsSet =>
       val res = Try {
-        JsonSecretStorage.restore(mnemonic, passOpt, encryptionPass)(settings.walletSettings.secretStorage)
+        val secretStorageSettings = settings.walletSettings.secretStorage
+        JsonSecretStorage.restore(mnemonic, passOpt, encryptionPass, secretStorageSettings)
       }.map { secretStorage =>
         secretStorageOpt = Some(secretStorage)
       } match {
@@ -424,13 +425,8 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     case DeriveNextKey =>
       withWalletLockHandler(sender()) {
-        _.secret.foreach { rootSecret =>
-          sender() ! nextPath().flatMap { path =>
-            val secret = rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
-            processSecretAddition(secret).map { _ =>
-              path -> P2PKAddress(secret.publicKey.key)
-            }
-          }
+        _.secret.foreach { masterKey =>
+          sender() ! nextKey(masterKey)
         }
       }
 
@@ -705,37 +701,63 @@ class ErgoWalletActor(settings: ErgoSettings,
   }
 
   private def processUnlock(secretStorage: JsonSecretStorage): Unit = Try {
-    val rootSecretSeq = secretStorage.secret.toSeq
+    secretStorage.secret match {
 
-    if (rootSecretSeq.isEmpty) {
-      log.warn("Master key is not available after unlock")
-    }
+      case None => throw new Exception("Master key is not available after unlock")
 
-    // first, we're trying to find in the database paths written by clients prior 3.3.0 and convert them
-    // into a new format (pubkeys with paths stored instead of paths)
-    val oldPaths = storage.readPaths()
-    if (oldPaths.nonEmpty) {
-      val oldDerivedSecrets = rootSecretSeq ++ oldPaths.flatMap { path =>
-        rootSecretSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
-      }
-      val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
-      oldPubKeys.foreach(storage.addKey)
-      storage.removePaths()
-    }
-    var pubKeys = storage.readAllKeys().toIndexedSeq
+      case Some(masterKey) =>
 
-    //If no public keys in the database yet, add master's public key into it
-    if (pubKeys.isEmpty) {
-      val masterPubKey = rootSecretSeq.map(s => s.publicKey)
-      masterPubKey.foreach(pk => storage.addKey(pk))
-      pubKeys = masterPubKey.toIndexedSeq
-    }
+        // first, we're trying to find in the database paths written by clients prior 3.3.0 and convert them
+        // into a new format (pubkeys with paths stored instead of paths)
+        val oldPaths = storage.readPaths()
+        if (oldPaths.nonEmpty) {
+          val oldDerivedSecrets = masterKey +: oldPaths.map {
+            path => masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
+          }
+          val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
+          oldPubKeys.foreach(storage.addKey)
+          storage.removePaths()
+        }
 
-    val secrets = pubKeys.flatMap { pk =>
-      val path = pk.path.toPrivateBranch
-      rootSecretSeq.map(sk => sk.derive(path).asInstanceOf[ExtendedSecretKey])
+        // now we read previously stored, or just stored during the conversion procedure above, public keys
+        var pubKeys = storage.readAllKeys().toIndexedSeq
+
+        //If no public keys in the database yet, add master's public key into it
+        if (pubKeys.isEmpty) {
+          if (walletSettings.oldDerivation) {
+            // If oldDerivation flag is set in the wallet settings, the first key is the master key
+            val masterPubKey = masterKey.publicKey
+            storage.addKey(masterPubKey)
+            pubKeys = scala.collection.immutable.IndexedSeq(masterPubKey)
+          } else {
+            // If no oldDerivation flag is set, add first derived key (for m/44'/429'/0'/0/0) to the db
+            val firstSk = nextKey(masterKey).result.map(_._3).toOption
+            val firstPk = firstSk.map(_.publicKey)
+            firstPk.foreach{ pk =>
+              storage.addKey(pk)
+              storage.updateChangeAddress(P2PKAddress(pk.key))
+            }
+
+            pubKeys = firstPk.toIndexedSeq
+          }
+        }
+
+        // Secrets corresponding to public keys
+        val secretsPk = pubKeys.map { pk =>
+          val path = pk.path.toPrivateBranch
+          masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
+        }
+
+        // If no master key in the secrets corresponding to public keys,
+        // add master key so then it is not available to the user but presents in the prover
+        val secrets = if (secretsPk.headOption.contains(masterKey)) {
+          secretsPk
+        } else {
+          masterKey +: secretsPk
+        }
+        val prover = ErgoProvingInterpreter(secrets, parameters)
+        walletVars = walletVars.withProver(prover)
     }
-    walletVars = walletVars.withProver(ErgoProvingInterpreter(secrets, parameters))
   } match {
     case Success(_) =>
     case Failure(t) =>
@@ -764,7 +786,18 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   private def nextPath(): Try[DerivationPath] = {
     val secrets: IndexedSeq[ExtendedSecretKey] = walletVars.proverOpt.toIndexedSeq.flatMap(_.hdKeys)
-    DerivationPath.nextPath(secrets)
+    DerivationPath.nextPath(secrets, walletSettings.oldDerivation)
+  }
+
+  // call nextPath and derive next key from it
+  private def nextKey(masterKey: ExtendedSecretKey): DeriveNextKeyResult = {
+    val derivationResult = nextPath().flatMap { path =>
+      val secret = masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
+      processSecretAddition(secret).map { _ =>
+        (path, P2PKAddress(secret.publicKey.key), secret)
+      }
+    }
+    DeriveNextKeyResult(derivationResult)
   }
 
 }
@@ -942,6 +975,11 @@ object ErgoWalletActor {
     * //todo: describe procedure or provide a link
     */
   case object DeriveNextKey
+
+  /**
+    * Result of "deriveNextKey" operation
+    */
+  case class DeriveNextKeyResult(result: Try[(DerivationPath, P2PKAddress, ExtendedSecretKey)])
 
   /**
     * Lock wallet

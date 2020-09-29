@@ -356,7 +356,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def deriveNextKeyR: Route = (path("deriveNextKey") & get) {
     withWalletOp(_.deriveNextKey) {
-      _.fold(
+      _.result.fold(
         e => BadRequest(e.getMessage),
         x => ApiResponse(
           Json.obj(

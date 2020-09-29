@@ -67,20 +67,29 @@ object WalletCache {
     f
   }
 
-  def trackedBytes(trackedPubKeys: Seq[ExtendedPublicKey]): Seq[Array[Byte]] =
+  private def trackedBytes(trackedPubKeys: Seq[ExtendedPublicKey]): Seq[Array[Byte]] =
     trackedPubKeys.map(_.key.propBytes.toArray)
 
-  def trackedAddresses(trackedPubKeys: Seq[ExtendedPublicKey],
-                       addressEncoder: ErgoAddressEncoder): Seq[P2PKAddress] =
-    trackedPubKeys.map(pk => P2PKAddress(pk.key)(addressEncoder))
+  private def publicKeyAddresses(trackedPubKeys: Seq[ExtendedPublicKey],
+                                 addressEncoder: ErgoAddressEncoder): Seq[P2PKAddress] = {
+    // remove master key from visible addresses if following-up keys are from EIP-3 range
+    val pks = if (trackedPubKeys.size > 1
+      && trackedPubKeys.head.path.isMaster
+      && trackedPubKeys(1).path.isEip3) {
+      trackedPubKeys.tail
+    } else {
+      trackedPubKeys
+    }
+    pks.map(pk => P2PKAddress(pk.key)(addressEncoder))
+  }
 
   def apply(trackedPubKeys: Seq[ExtendedPublicKey], settings: ErgoSettings): WalletCache = {
     val tbs = trackedBytes(trackedPubKeys)
     val msBytes = miningScripts(trackedPubKeys, settings).map(_.bytes)
     val f = createFilter(tbs, msBytes)
-    val tas = trackedAddresses(trackedPubKeys, settings.addressEncoder)
+    val pka = publicKeyAddresses(trackedPubKeys, settings.addressEncoder)
 
-    WalletCache(tas, trackedPubKeys, tbs, f)(settings)
+    WalletCache(pka, trackedPubKeys, tbs, f)(settings)
   }
 
 }

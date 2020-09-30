@@ -8,7 +8,6 @@ import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.apache.commons.io.IOUtils
-import org.apache.tools.ant.util.ResourceUtils
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.nodeView.state.StateType.Digest
 import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, P2PKAddress}

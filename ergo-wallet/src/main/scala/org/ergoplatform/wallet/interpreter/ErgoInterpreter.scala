@@ -6,8 +6,8 @@ import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoLikeContext, ErgoLikeInterpreter}
 import scorex.crypto.authds.ADDigest
 import sigmastate.Values.ErgoTree
-import sigmastate.eval.{IRContext, RuntimeIRContext}
-import sigmastate.interpreter.Interpreter.{ScriptEnv, VerificationResult}
+import sigmastate.eval.{RuntimeIRContext, IRContextFactory, IRContextFactoryImpl}
+import sigmastate.interpreter.Interpreter.{VerificationResult, ScriptEnv}
 import sigmastate.{AvlTreeData, AvlTreeFlags}
 
 import scala.util.Try
@@ -16,9 +16,10 @@ import scala.util.Try
   * ErgoTree language interpreter, Ergo version. In addition to ErgoLikeInterpreter, it contains
   * rules for expired boxes spending validation.
   *
-  * @param params - current values of adjustable blockchain settings
+  * @param params    - current values of adjustable blockchain settings
+  * @param irFactory factory which will be used by this interpreter to create [[sigmastate.eval.IRContext]]s
   */
-class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
+class ErgoInterpreter(params: ErgoLikeParameters)(implicit val irFactory: IRContextFactory)
   extends ErgoLikeInterpreter {
 
   override type CTX = ErgoLikeContext
@@ -81,9 +82,11 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
 }
 
 object ErgoInterpreter {
+  /** Default factory of IRContext which is used as part of transaction validation. */
+  val DefaultIRContextFactory: IRContextFactory = new IRContextFactoryImpl(new RuntimeIRContext)
 
   def apply(params: ErgoLikeParameters): ErgoInterpreter =
-    new ErgoInterpreter(params)(new RuntimeIRContext)
+    new ErgoInterpreter(params)(DefaultIRContextFactory)
 
   def avlTreeFromDigest(digest: ADDigest): AvlTreeData = {
     val flags = AvlTreeFlags(insertAllowed = true, updateAllowed = true, removeAllowed = true)

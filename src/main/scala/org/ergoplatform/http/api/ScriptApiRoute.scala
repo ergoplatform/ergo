@@ -11,6 +11,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform._
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -19,7 +20,7 @@ import sigmastate.Values.{ByteArrayConstant, ErgoTree, SigmaBoolean}
 import sigmastate._
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.basics.ProveDHTuple
-import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
+import sigmastate.eval.{IRContextFactory, CompiletimeIRContext}
 import sigmastate.lang.SigmaCompiler
 import sigmastate.serialization.ValueSerializer
 import special.sigma.AnyValue
@@ -152,8 +153,9 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       compileSource(req.script, req.env).fold(
         e => BadRequest(e.getMessage),
         tree => {
-          implicit val irc : IRContext = new RuntimeIRContext()
-          val interpreter : ErgoLikeInterpreter = new ErgoLikeInterpreter()
+          val interpreter : ErgoLikeInterpreter = new ErgoLikeInterpreter() {
+            override protected def irFactory: IRContextFactory = ErgoInterpreter.DefaultIRContextFactory
+          }
           val prop = interpreter.propositionFromErgoTree(tree, req.ctx.asInstanceOf[interpreter.CTX])
           val res = interpreter.reduceToCrypto(req.ctx.asInstanceOf[interpreter.CTX], prop)
           res.fold(

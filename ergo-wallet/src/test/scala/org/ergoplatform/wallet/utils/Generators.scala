@@ -10,7 +10,7 @@ import org.ergoplatform.wallet.settings.EncryptionSettings
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.authds.ADKey
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, SigmaPropValue, TrueLeaf}
+import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.{SByte, SType}
 import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
@@ -24,6 +24,7 @@ import org.ergoplatform.UnsignedInput
 import sigmastate.eval.Extensions._
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.eval._
+import sigmastate.helpers.TestingHelpers._
 import org.ergoplatform.ErgoBox.TokenId
 import scorex.crypto.hash.Digest32
 
@@ -131,12 +132,12 @@ trait Generators {
     tokens <- tokensGen
     value <- valueGenOpt.getOrElse(validValueGen(prop, tokens, ar, bytesToId(transactionId), boxId))
   } yield {
-    val box = ErgoBox(value, prop, h, tokens, ar, transactionId.toModifierId, boxId)
+    val box = testBox(value, prop, h, tokens, ar, transactionId.toModifierId, boxId)
     if (box.bytes.length < ErgoBox.MaxBoxSize) {
       box
     } else {
       // is size limit is reached, generate box without registers and tokens
-      ErgoBox(value, prop, h, Seq(), Map(), transactionId.toModifierId, boxId)
+      testBox(value, prop, h, Seq(), Map(), transactionId.toModifierId, boxId)
     }
   }
 

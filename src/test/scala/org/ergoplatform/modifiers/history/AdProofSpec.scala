@@ -1,6 +1,5 @@
 package org.ergoplatform.modifiers.history
 
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.state.{Insertion, StateChanges}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.Constants
@@ -10,6 +9,7 @@ import scorex.crypto.authds._
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert}
 import scorex.crypto.hash.Digest32
 import scorex.util._
+import sigmastate.helpers.TestingHelpers._
 
 
 class AdProofSpec extends ErgoPropertyTest {
@@ -27,12 +27,12 @@ class AdProofSpec extends ErgoPropertyTest {
   (Seq[Insertion], PrevDigest, NewDigest, Proof) = {
 
     val prover = new BatchAVLProver[Digest32, HF](KL, None)
-    val zeroBox = ErgoBox(0, Constants.TrueLeaf, startHeight, Seq(), Map(), Array.fill(32)(0: Byte).toModifierId)
+    val zeroBox = testBox(0, Constants.TrueLeaf, startHeight, Seq(), Map(), Array.fill(32)(0: Byte).toModifierId)
     prover.performOneOperation(Insert(zeroBox.id, ADValue @@ zeroBox.bytes))
     prover.generateProof()
 
     val prevDigest = prover.digest
-    val boxes = (1 to howMany) map { i => ErgoBox(1, Constants.TrueLeaf, startHeight, boxIndex = i.toShort) }
+    val boxes = (1 to howMany) map { i => testBox(1, Constants.TrueLeaf, startHeight, boxIndex = i.toShort) }
     boxes.foreach(box => prover.performOneOperation(Insert(box.id, ADValue @@ box.bytes)))
     val pf = prover.generateProof()
 
@@ -66,14 +66,14 @@ class AdProofSpec extends ErgoPropertyTest {
   property("verify should be failed if there are more operations than expected") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
-    val moreInsertions = operations :+ Insertion(ErgoBox(10, Constants.TrueLeaf, creationHeight = startHeight))
+    val moreInsertions = operations :+ Insertion(testBox(10, Constants.TrueLeaf, creationHeight = startHeight))
     proof.verify(StateChanges(Seq(), moreInsertions, Seq()), prevDigest, newDigest) shouldBe 'failure
   }
 
   property("verify should be failed if there are illegal operation") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, pf)
-    val differentInsertions = operations.init :+ Insertion(ErgoBox(10, Constants.TrueLeaf, creationHeight = startHeight))
+    val differentInsertions = operations.init :+ Insertion(testBox(10, Constants.TrueLeaf, creationHeight = startHeight))
     proof.verify(StateChanges(Seq(), differentInsertions, Seq()), prevDigest, newDigest) shouldBe 'failure
   }
 

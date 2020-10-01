@@ -25,13 +25,14 @@ lazy val commonSettings = Seq(
 )
 
 val scorexVersion = "master-bb48da3a-SNAPSHOT"
-val sigmaStateVersion = "3.2.1"
+val sigmaStateVersion = "3.3.1"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
+val effectiveSigma = "org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion
 
 libraryDependencies ++= Seq(
-  ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion).force()
+  effectiveSigma.force()
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
 
@@ -227,7 +228,10 @@ lazy val ergoWallet = (project in file("ergo-wallet"))
     crossScalaVersions := Seq(scalaVersion.value, "2.11.12"),
     commonSettings,
     name := "ergo-wallet",
-    libraryDependencies += ("org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion),
+    libraryDependencies ++= Seq(
+      effectiveSigma,
+      (effectiveSigma % Test).classifier("tests")
+    ),
     scalacOptions in(Compile, compile) ++= (if(scalaBinaryVersion.value == "2.11")
         Seq.empty
       else

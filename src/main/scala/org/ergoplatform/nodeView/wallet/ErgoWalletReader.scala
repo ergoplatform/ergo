@@ -15,8 +15,10 @@ import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGen
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.Constants.ScanId
+import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
+import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.DLogProverInput
 
 import scala.concurrent.Future
@@ -89,13 +91,32 @@ trait ErgoWalletReader extends VaultReader {
   def generateTransaction(requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String] = Seq.empty,
                           dataInputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
-    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw)).mapTo[Try[ErgoTransaction]]
+    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = true)).mapTo[Try[ErgoTransaction]]
 
-  def signTransaction(secrets: Seq[ExternalSecret],
-                      tx: UnsignedErgoTransaction,
+  def generateCommitmentsFor(unsignedErgoTransaction: UnsignedErgoTransaction,
+                             externalSecretsOpt: Option[Seq[ExternalSecret]]): Future[GenerateCommitmentsResponse] =
+    (walletActor ? GenerateCommitmentsFor(unsignedErgoTransaction, externalSecretsOpt)).mapTo[GenerateCommitmentsResponse]
+
+
+  def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
+                          inputsRaw: Seq[String] = Seq.empty,
+                          dataInputsRaw: Seq[String] = Seq.empty): Future[Try[UnsignedErgoTransaction]] =
+    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = false)).mapTo[Try[UnsignedErgoTransaction]]
+
+
+  def signTransaction(tx: UnsignedErgoTransaction,
+                      secrets: Seq[ExternalSecret],
+                      hints: TransactionHintsBag,
                       boxesToSpend: Seq[ErgoBox],
                       dataBoxes: Seq[ErgoBox]): Future[Try[ErgoTransaction]] =
-    (walletActor ? SignTransaction(secrets, tx, boxesToSpend, dataBoxes)).mapTo[Try[ErgoTransaction]]
+    (walletActor ? SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes)).mapTo[Try[ErgoTransaction]]
+
+  def extractHints(tx: ErgoTransaction,
+                   boxesToSpend: IndexedSeq[ErgoBox],
+                   dataBoxes: IndexedSeq[ErgoBox],
+                   real: Seq[SigmaBoolean],
+                   simulated: Seq[SigmaBoolean]): Future[ExtractHintsResult] =
+    (walletActor ? ExtractHints(tx, boxesToSpend, dataBoxes, real, simulated)).mapTo[ExtractHintsResult]
 
   def addScan(appRequest: ScanRequest): Future[AddScanResponse] =
     (walletActor ? AddScan(appRequest)).mapTo[AddScanResponse]

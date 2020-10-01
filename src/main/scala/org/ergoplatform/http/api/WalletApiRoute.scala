@@ -46,6 +46,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         unspentBoxesR ~
         boxesR ~
         generateTransactionR ~
+        generateUnsignedTransactionR ~
+        generateCommitmentsR ~
         sendPaymentTransactionR ~
         sendTransactionR ~
         initWalletR ~
@@ -135,6 +137,15 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, tx => ApiResponse(tx))
   }
 
+  private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
+                                  inputsRaw: Seq[String],
+                                  dataInputsRaw: Seq[String]): Route = {
+    withWalletOp(_.generateUnsignedTransaction(requests, inputsRaw, dataInputsRaw)) {
+      case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success(utx) => ApiResponse(utx)
+    }
+  }
+
   private def sendTransaction(requests: Seq[TransactionGenerationRequest],
                               inputsRaw: Seq[String],
                               dataInputsRaw: Seq[String]): Route = {
@@ -154,11 +165,33 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       generateTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
     }
 
+  def generateUnsignedTransactionR: Route =
+    (path("transaction" / "generateUnsigned") & post & entity(as[RequestsHolder])){ holder =>
+      generateUnsignedTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+    }
+
+  def generateCommitmentsR: Route = (path("generateCommitments")
+    & post & entity(as[GenerateCommitmentsRequest])) { gcr =>
+
+    import HintCodecs._
+
+    val utx = gcr.unsignedTx
+    val externalSecretsOpt = gcr.externalSecretsOpt
+
+    withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt).map(_.response)) {
+      case Failure(e) => BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success(thb) => ApiResponse(thb)
+    }
+  }
+
+
   def signTransactionR: Route = (path("transaction" / "sign")
     & post & entity(as[TransactionSigningRequest])) { tsr =>
 
     val tx = tsr.unsignedTx
-    val secrets = (tsr.dlogs ++ tsr.dhts).map(ExternalSecret.apply)
+    val secrets = tsr.externalSecrets
+
+    val hints = tsr.hints
 
     def signWithReaders(r: Readers): Future[Try[ErgoTransaction]] = {
       if (tsr.inputs.isDefined) {
@@ -168,7 +201,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
 
         if (boxesToSpend.size == tx.inputs.size && dataBoxes.size == tx.dataInputs.size) {
-          r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)
+          r.w.signTransaction(tx, secrets, hints, boxesToSpend, dataBoxes)
         } else {
           Future(Failure(new Exception("Can't parse input boxes provided")))
         }
@@ -179,7 +212,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
             val utxosWithUnconfirmed = utxoSet.withTransactions(mempool.getAll)
             val boxesToSpend = tx.inputs.map(d => utxosWithUnconfirmed.boxById(d.boxId).get)
             val dataBoxes = tx.dataInputs.map(d => utxosWithUnconfirmed.boxById(d.boxId).get)
-            r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)
+            r.w.signTransaction(tx, secrets, hints, boxesToSpend, dataBoxes)
           case _ => Future(Failure(new Exception("No input boxes provided, and no UTXO set to read them from")))
         }
       }

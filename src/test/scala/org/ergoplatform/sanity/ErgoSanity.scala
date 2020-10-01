@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInf
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.scalacheck.Gen
@@ -91,7 +91,7 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
   class SyncronizerMock(networkControllerRef: ActorRef,
                         viewHolderRef: ActorRef,
                         syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-                        settings: ErgoSettings,
+                        networkSettings: NetworkSettings,
                         timeProvider: NetworkTimeProvider,
                         history: ErgoHistory,
                         pool: ErgoMemPool)
@@ -99,7 +99,7 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
     networkControllerRef,
     viewHolderRef,
     syncInfoSpec,
-    settings,
+    networkSettings,
     timeProvider)(ec) {
 
     override def preStart(): Unit = {

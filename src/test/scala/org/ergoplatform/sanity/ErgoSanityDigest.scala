@@ -71,7 +71,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
         ncProbe.ref,
         vhProbe.ref,
         ErgoSyncInfoMessageSpec,
-        settings,
+        settings.scorexSettings.network,
         tp,
         h,
         pool)

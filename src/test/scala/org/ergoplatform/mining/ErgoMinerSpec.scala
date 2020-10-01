@@ -35,10 +35,9 @@ import scala.language.postfixOps
 
 class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenerators {
 
-  type msgType = SemanticallySuccessfulModifier[_]
   implicit private val timeout: Timeout = defaultTimeout
 
-  val newBlock: Class[msgType] = classOf[msgType]
+  val newBlockSignal: Class[SemanticallySuccessfulModifier[_]] = classOf[SemanticallySuccessfulModifier[_]]
   val newBlockDelay: FiniteDuration = 30 seconds
 
   val defaultSettings: ErgoSettings = {
@@ -55,7 +54,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
   it should "not include too complex transactions" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
-    system.eventStream.subscribe(testProbe.ref, newBlock)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
     val complexScript: ErgoTree = (0 until 100).foldLeft(SigmaAnd(SigmaPropConstant(defaultMinerPk), SigmaPropConstant(defaultMinerPk))) { (l, _) =>
       SigmaAnd(SigmaPropConstant(defaultMinerPk), l)
@@ -81,8 +80,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     minerRef ! StartMining
 
-    testProbe.expectMsgClass(newBlockDelay, newBlock)
-
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     val boxToSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
     boxToSpend.propositionBytes shouldBe ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
@@ -97,9 +95,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx))
     expectNoMessage(1 seconds)
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 1
-    testProbe.expectMsgClass(newBlockDelay, newBlock)
-    testProbe.expectMsgClass(newBlockDelay, newBlock)
-    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
 
     //check that tx is included into UTXO set
@@ -115,9 +113,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     // send complex transaction to the mempool
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(complexTx))
 
-    testProbe.expectMsgClass(newBlockDelay, newBlock)
-    testProbe.expectMsgClass(newBlockDelay, newBlock)
-    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     // complex tx was removed from mempool
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
@@ -133,7 +131,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
     val testProbe = new TestProbe(system)
-    system.eventStream.subscribe(testProbe.ref, newBlock)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
@@ -152,7 +150,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     minerRef ! StartMining
 
     // wait for 1 block to be generated
-    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     @tailrec
     def loop(toSend: Int): Unit = {
@@ -181,7 +179,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
       if (toSend > toSpend.size) {
         // wait for the next block
-        testProbe.expectMsgClass(newBlockDelay, newBlock)
+        testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
         loop(toSend - toSpend.size)
       }
     }
@@ -205,7 +203,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
   it should "include only one transaction from 2 spending the same box" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
-    system.eventStream.subscribe(testProbe.ref, newBlock)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
@@ -226,7 +224,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     minerRef ! StartMining
 
-    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage
@@ -249,9 +247,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 2
 
-    testProbe.expectMsgClass(newBlockDelay, newBlock)
-    testProbe.expectMsgClass(newBlockDelay, newBlock)
-    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
 
@@ -284,7 +282,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
   it should "include mandatory transactions" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
-    system.eventStream.subscribe(testProbe.ref, newBlock)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
@@ -305,7 +303,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     minerRef ! StartMining
 
-    testProbe.expectMsgClass(newBlockDelay, newBlock)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     val prop1: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test1".getBytes())).publicImage
     val prop2: DLogProtocol.ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray("test2".getBytes())).publicImage

@@ -43,7 +43,7 @@ object Constants {
   /**
     * Pre - EIP3 derivation path
     */
-  val oldDerivation: DerivationPath = DerivationPath.fromEncoded("m/1").get
+  val preEip3DerivationPath: DerivationPath = DerivationPath.fromEncoded("m/1").get
 
   /**
     * Post - EIP3 derivation path

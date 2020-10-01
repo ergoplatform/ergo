@@ -68,7 +68,7 @@ class DerivationPathSpec
     val seed = Mnemonic.toSeed(mnemonic, None)
 
     val masterKey = ExtendedSecretKey.deriveMasterKey(seed)
-    val dp = DerivationPath.nextPath(IndexedSeq(masterKey), oldDerivation = true).get
+    val dp = DerivationPath.nextPath(IndexedSeq(masterKey), usePreEip3Derivation = true).get
     val sk = masterKey.derive(dp).asInstanceOf[ExtendedSecretKey]
     val pk = sk.publicKey.key
     P2PKAddress(pk).toString() shouldBe address
@@ -87,8 +87,8 @@ class DerivationPathSpec
   }
 
   property("equality of old derivation") {
-    // Check that hardcoded path from old codebase corresponds to the new string form (Constants.oldDerivation)
-    DerivationPath(Array(0, 1), publicBranch = false) shouldBe Constants.oldDerivation
+    // Check that hardcoded path from old codebase corresponds to the new string form (Constants.usePreEip3Derivation)
+    DerivationPath(Array(0, 1), publicBranch = false) shouldBe Constants.preEip3DerivationPath
   }
 
   property("master key derivation") {
@@ -119,7 +119,7 @@ class DerivationPathSpec
     DerivationPath.fromEncoded("m/44'/429'/0'/0/1").get.isEip3 shouldBe true
     DerivationPath.fromEncoded("M/44'/429'/0'/0/1").get.isEip3 shouldBe true
     DerivationPath.fromEncoded("m/44'/429'/0'/1/1").get.isEip3 shouldBe true
-    Constants.oldDerivation.isEip3 shouldBe false
+    Constants.preEip3DerivationPath.isEip3 shouldBe false
     DerivationPath.fromEncoded("m/44'/429'/1'/0/1").get.isEip3 shouldBe false
   }
 

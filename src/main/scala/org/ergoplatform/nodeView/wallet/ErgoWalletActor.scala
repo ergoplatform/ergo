@@ -672,13 +672,13 @@ class ErgoWalletActor(settings: ErgoSettings,
 
         //If no public keys in the database yet, add master's public key into it
         if (pubKeys.isEmpty) {
-          if (walletSettings.oldDerivation) {
-            // If oldDerivation flag is set in the wallet settings, the first key is the master key
+          if (walletSettings.usePreEip3Derivation) {
+            // If usePreEip3Derivation flag is set in the wallet settings, the first key is the master key
             val masterPubKey = masterKey.publicKey
             storage.addKey(masterPubKey)
             pubKeys = scala.collection.immutable.IndexedSeq(masterPubKey)
           } else {
-            // If no oldDerivation flag is set, add first derived key (for m/44'/429'/0'/0/0) to the db
+            // If no usePreEip3Derivation flag is set, add first derived key (for m/44'/429'/0'/0/0) to the db
             val firstSk = nextKey(masterKey).result.map(_._3).toOption
             val firstPk = firstSk.map(_.publicKey)
             firstPk.foreach{ pk =>
@@ -734,7 +734,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   private def nextPath(): Try[DerivationPath] = {
     val secrets: IndexedSeq[ExtendedSecretKey] = walletVars.proverOpt.toIndexedSeq.flatMap(_.hdKeys)
-    DerivationPath.nextPath(secrets, walletSettings.oldDerivation)
+    DerivationPath.nextPath(secrets, walletSettings.usePreEip3Derivation)
   }
 
   // call nextPath and derive next key from it

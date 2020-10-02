@@ -1,26 +1,30 @@
 {
   "files": {
-    "main.css": "/static/css/main.807deb9f.chunk.css",
-    "main.js": "/static/js/main.7847d6dd.chunk.js",
-    "main.js.map": "/static/js/main.7847d6dd.chunk.js.map",
-    "runtime-main.js": "/static/js/runtime-main.8fa4c17a.js",
-    "runtime-main.js.map": "/static/js/runtime-main.8fa4c17a.js.map",
-    "static/css/2.a94a8b68.chunk.css": "/static/css/2.a94a8b68.chunk.css",
-    "static/js/2.fb5dd63e.chunk.js": "/static/js/2.fb5dd63e.chunk.js",
-    "static/js/2.fb5dd63e.chunk.js.map": "/static/js/2.fb5dd63e.chunk.js.map",
+    "main.css": "/static/css/main.4948ef80.chunk.css",
+    "main.js": "/static/js/main.0818b132.chunk.js",
+    "main.js.map": "/static/js/main.0818b132.chunk.js.map",
+    "runtime-main.js": "/static/js/runtime-main.219240e0.js",
+    "runtime-main.js.map": "/static/js/runtime-main.219240e0.js.map",
+    "static/css/2.9338f6a1.chunk.css": "/static/css/2.9338f6a1.chunk.css",
+    "static/js/2.9ae5727a.chunk.js": "/static/js/2.9ae5727a.chunk.js",
+    "static/js/2.9ae5727a.chunk.js.map": "/static/js/2.9ae5727a.chunk.js.map",
     "index.html": "/index.html",
-    "precache-manifest.390ec077db4f02f5642a6ab85c406724.js": "/precache-manifest.390ec077db4f02f5642a6ab85c406724.js",
+    "precache-manifest.5a56762cd3298f2b85b771747b1147ae.js": "/precache-manifest.5a56762cd3298f2b85b771747b1147ae.js",
     "service-worker.js": "/service-worker.js",
-    "static/css/2.a94a8b68.chunk.css.map": "/static/css/2.a94a8b68.chunk.css.map",
-    "static/css/main.807deb9f.chunk.css.map": "/static/css/main.807deb9f.chunk.css.map",
+    "static/css/2.9338f6a1.chunk.css.map": "/static/css/2.9338f6a1.chunk.css.map",
+    "static/css/main.4948ef80.chunk.css.map": "/static/css/main.4948ef80.chunk.css.map",
     "static/media/index.scss": "/static/media/Roboto-Thin.89e2666c.ttf",
-    "static/media/logotype_white.svg": "/static/media/logotype_white.4dcfd639.svg"
+    "static/media/close.feae5a5c.svg": "/static/media/close.feae5a5c.svg",
+    "static/media/copy.icon.835ebda7.svg": "/static/media/copy.icon.835ebda7.svg",
+    "static/media/logotype_white.svg": "/static/media/logotype_white.4dcfd639.svg",
+    "static/media/redo-arrow-symbol.e801de31.svg": "/static/media/redo-arrow-symbol.e801de31.svg",
+    "static/media/remove.94c0849a.svg": "/static/media/remove.94c0849a.svg"
   },
   "entrypoints": [
-    "static/js/runtime-main.8fa4c17a.js",
-    "static/css/2.a94a8b68.chunk.css",
-    "static/js/2.fb5dd63e.chunk.js",
-    "static/css/main.807deb9f.chunk.css",
-    "static/js/main.7847d6dd.chunk.js"
+    "static/js/runtime-main.219240e0.js",
+    "static/css/2.9338f6a1.chunk.css",
+    "static/js/2.9ae5727a.chunk.js",
+    "static/css/main.4948ef80.chunk.css",
+    "static/js/main.0818b132.chunk.js"
   ]
 }

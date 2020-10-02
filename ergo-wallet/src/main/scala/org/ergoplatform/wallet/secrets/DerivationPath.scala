@@ -91,7 +91,7 @@ object DerivationPath {
     * @param usePreEip3Derivation - whether to use pre-EIP3 derivation or not
     */
   def nextPath(secrets: IndexedSeq[ExtendedSecretKey],
-               usePreEip3Derivation: Boolean = false): Try[DerivationPath] = {
+               usePreEip3Derivation: Boolean): Try[DerivationPath] = {
 
     def pathSequence(secret: ExtendedSecretKey): Seq[Int] = secret.path.decodedPath.tail
 

@@ -4,6 +4,7 @@ import sigmastate.Values
 import sigmastate.Values.SigmaPropValue
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
+import sigmastate.helpers.TestingHelpers._
 import org.ergoplatform._
 import org.scalatest.Matchers
 import org.ergoplatform.ErgoBox.TokenId
@@ -38,10 +39,10 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
   val tid1 = stringToId("t1")
   val tid2 = stringToId("t2")
 
-  def box(value: Long) = ErgoBox(value, TrueProp, currentHeight)
+  def box(value: Long) = testBox(value, TrueProp, currentHeight)
 
   def box(value: Long, tokens: Seq[(TokenId, Long)]) =
-    ErgoBox(value, TrueProp, currentHeight, tokens)
+    testBox(value, TrueProp, currentHeight, tokens)
 
   def boxCandidate(value: Long) = new ErgoBoxCandidate(value, TrueProp, currentHeight)
 

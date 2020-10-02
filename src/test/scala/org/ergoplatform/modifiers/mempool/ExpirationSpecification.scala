@@ -9,6 +9,7 @@ import org.scalatest.Assertion
 import sigmastate.Values.ShortConstant
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.eval._
+import sigmastate.helpers.TestingHelpers._
 
 class ExpirationSpecification extends ErgoPropertyTest {
 
@@ -17,7 +18,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
   def falsify(box: ErgoBox): ErgoBox = {
-    ErgoBox(box.value,
+    testBox(box.value,
       Constants.FalseLeaf,
       box.creationHeight,
       box.additionalTokens.toArray.toSeq,

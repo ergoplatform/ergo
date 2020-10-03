@@ -96,6 +96,11 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
            boxesToSpend: IndexedSeq[ErgoBox],
            dataBoxes: IndexedSeq[ErgoBox],
            stateContext: ErgoLikeStateContext): Try[ErgoLikeTransaction] = {
+
+    // We reset context on each sign operation to avoid possible memory leaks,
+    // See https://github.com/ergoplatform/ergo/issues/1189
+    IR.resetContext()
+
     if (unsignedTx.inputs.length != boxesToSpend.length) {
       Failure(new Exception("Not enough boxes to spend"))
     } else if (unsignedTx.dataInputs.length != dataBoxes.length) {

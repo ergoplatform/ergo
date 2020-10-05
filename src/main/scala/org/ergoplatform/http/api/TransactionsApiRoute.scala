@@ -105,7 +105,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     ApiResponse(getMemPool.map(_.getRecommendedFee(waitTime,txSize).asJson))
   }
 
-  val waitTimeRequest: Directive[(Long, Int)] = parameters("fee".as[Long] ? 1000L, "txSize".as[Int] ? 100)
+  val waitTimeRequestParameters: Directive[(Long, Int)] = parameters("fee".as[Long] ? 1000L, "txSize".as[Int] ? 100)
 
   def getExpectedWaitTimeR: Route = (path("waittime") & get & waitTimeRequest) { (fee, txSize) =>
     ApiResponse(getMemPool.map(_.getExpectedWaitTime(fee,txSize).asJson))

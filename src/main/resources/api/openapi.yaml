@@ -2091,7 +2091,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /transactions/poolhist:
+  /transactions/poolhistogram:
     parameters:
       - in: query
         name: bins

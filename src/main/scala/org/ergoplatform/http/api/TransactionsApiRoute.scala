@@ -95,7 +95,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     )
   }
 
-  def getFeeHistogramR: Route = (path("poolhist") & get & feeHistParam) { (bins, maxtime) =>
+  def getFeeHistogramR: Route = (path("poolhistogram") & get & feeHistParam) { (bins, maxtime) =>
     ApiResponse(getMemPool.map(p => getFeeHistogram(bins, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
   }
 

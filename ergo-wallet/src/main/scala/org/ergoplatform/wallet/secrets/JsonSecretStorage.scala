@@ -97,8 +97,10 @@ object JsonSecretStorage {
   /**
     * Initializes storage with the seed derived from an existing mnemonic phrase.
     */
-  def restore(mnemonic: String, mnemonicPassOpt: Option[String], encryptionPass: String)
-             (settings: SecretStorageSettings): JsonSecretStorage = {
+  def restore(mnemonic: String,
+              mnemonicPassOpt: Option[String],
+              encryptionPass: String,
+              settings: SecretStorageSettings): JsonSecretStorage = {
     val seed = Mnemonic.toSeed(mnemonic, mnemonicPassOpt)
     init(seed, encryptionPass)(settings)
   }

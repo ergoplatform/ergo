@@ -157,7 +157,7 @@ trait Generators {
   def extendedPubKeyListGen: Gen[Seq[ExtendedPublicKey]] = extendedSecretGen.flatMap { sk =>
     Gen.choose(1, 100).map { cnt =>
       (1 to cnt).foldLeft(IndexedSeq(sk)) { case (keys, _) =>
-        val dp = DerivationPath.nextPath(keys).get
+        val dp = DerivationPath.nextPath(keys, usePreEip3Derivation = false).get
         val newSk = sk.derive(dp).asInstanceOf[ExtendedSecretKey]
         keys :+ newSk
       }.map(_.publicKey)

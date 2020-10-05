@@ -95,19 +95,19 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     )
   }
 
-  def getFeeHistogramR: Route = (path("poolhistogram") & get & feeHistParam) { (bins, maxtime) =>
+  def getFeeHistogramR: Route = (path("poolhistogram") & get & feeHistogramParameters) { (bins, maxtime) =>
     ApiResponse(getMemPool.map(p => getFeeHistogram(bins, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
   }
 
   val feeRequestParameters: Directive[(Int, Int)] = parameters("waitTime".as[Int] ? 1, "txSize".as[Int] ? 100)
 
-  def getRecommendedFeeR: Route = (path("getfee") & get & feeRequest) { (waitTime, txSize) =>
+  def getRecommendedFeeR: Route = (path("getfee") & get & feeRequestParameters) { (waitTime, txSize) =>
     ApiResponse(getMemPool.map(_.getRecommendedFee(waitTime,txSize).asJson))
   }
 
   val waitTimeRequestParameters: Directive[(Long, Int)] = parameters("fee".as[Long] ? 1000L, "txSize".as[Int] ? 100)
 
-  def getExpectedWaitTimeR: Route = (path("waittime") & get & waitTimeRequest) { (fee, txSize) =>
+  def getExpectedWaitTimeR: Route = (path("waittime") & get & waitTimeRequestParameters) { (fee, txSize) =>
     ApiResponse(getMemPool.map(_.getExpectedWaitTime(fee,txSize).asJson))
   }
 }

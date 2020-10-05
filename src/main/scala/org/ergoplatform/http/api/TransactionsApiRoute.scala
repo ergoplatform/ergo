@@ -73,7 +73,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     ApiResponse(getUnconfirmedTransactions(offset, limit))
   }
 
-  val feeHistParam: Directive[(Int, Long)] = parameters("bins".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))
+  val feeHistogramParameters: Directive[(Int, Long)] = parameters("bins".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))
 
   def getFeeHistogram(nBins : Int, maxWaitTimeMsec: Long, wtxs : Seq[WeightedTxId]): Array[FeeHistogramBin] = {
     val histogram = Array.fill(nBins + 1)(FeeHistogramBin(0,0))

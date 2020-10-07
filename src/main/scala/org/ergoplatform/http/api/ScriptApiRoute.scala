@@ -130,11 +130,11 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
         case tp: TrivialProp   => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
         case and: CAND =>
-          Map("op" -> op, "args" -> and.sigmaBooleans.map(_.asJson).asJson).asJson
+          Map("op" -> op, "args" -> and.children.map(_.asJson).asJson).asJson
         case or: COR =>
-          Map("op" -> op, "args" -> or.sigmaBooleans.map(_.asJson).asJson).asJson
+          Map("op" -> op, "args" -> or.children.map(_.asJson).asJson).asJson
         case th: CTHRESHOLD =>
-          Map("op" -> op, "args" -> th.sigmaBooleans.map(_.asJson).asJson).asJson
+          Map("op" -> op, "args" -> th.children.map(_.asJson).asJson).asJson
       }
   }
 

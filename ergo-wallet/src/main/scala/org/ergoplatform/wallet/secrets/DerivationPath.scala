@@ -88,10 +88,10 @@ object DerivationPath {
   /**
     * Finds next available path index for a new key.
     * @param secrets - secrets previously generated
-    * @param oldDerivation - whether to use pre-EIP3 derivation or not
+    * @param usePreEip3Derivation - whether to use pre-EIP3 derivation or not
     */
   def nextPath(secrets: IndexedSeq[ExtendedSecretKey],
-               oldDerivation: Boolean = false): Try[DerivationPath] = {
+               usePreEip3Derivation: Boolean): Try[DerivationPath] = {
 
     def pathSequence(secret: ExtendedSecretKey): Seq[Int] = secret.path.decodedPath.tail
 
@@ -111,9 +111,9 @@ object DerivationPath {
     }
 
     if (secrets.isEmpty || (secrets.size == 1 && secrets.head.path.isMaster)) {
-      // If pre-EIP generation, the first key generated after master's would be m/1, otherwise m/44'/429'/0'/0/0
-      val path = if(oldDerivation) {
-        Constants.oldDerivation
+      // If pre-EIP3 generation, the first key generated after master's would be m/1, otherwise m/44'/429'/0'/0/0
+      val path = if(usePreEip3Derivation) {
+        Constants.preEip3DerivationPath
       } else {
         Constants.eip3DerivationPath
       }

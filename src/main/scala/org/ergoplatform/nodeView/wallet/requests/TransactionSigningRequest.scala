@@ -9,13 +9,15 @@ import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey, PrimitiveSecretKey}
 import scorex.util.encode.Base16
 import sigmastate.Values.SigmaBoolean
-import sigmastate.{CAND, COR, CTHRESHOLD, SigSerializer, TrivialProp}
+import sigmastate.{CAND, COR, CTHRESHOLD, NodePosition, SigSerializer, TrivialProp}
 import sigmastate.basics.DLogProtocol.{FirstDLogProverMessage, ProveDlog}
 import sigmastate.basics.VerifierMessage.Challenge
 import sigmastate.basics.{FirstDiffieHellmanTupleProverMessage, FirstProverMessage, ProveDHTuple}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import sigmastate.interpreter._
 import sigmastate.serialization.OpCodes
+
+import scala.util.{Failure, Success, Try}
 
 
 /**
@@ -108,6 +110,19 @@ object HintCodecs extends ApiCodecs {
     }
   }
 
+  implicit val positionEncoder: Encoder[NodePosition] = { np =>
+    np.positions.mkString("-").asJson
+  }
+
+  implicit val positionDecoder: Decoder[NodePosition] = { c =>
+    c.as[String].flatMap {s =>
+      Try(s.split("-").map(_.toInt)) match {
+        case Success(seq) => Right(NodePosition(seq))
+        case Failure(e) => Left(DecodingFailure.fromThrowable(e, List()))
+      }
+    }
+  }
+
   implicit val commitmentHintEncoder: Encoder[CommitmentHint] = { ch =>
     val commonFields: Json = (ch match {
       case own: OwnCommitment =>
@@ -128,18 +143,18 @@ object HintCodecs extends ApiCodecs {
         for {
           secret <- c.downField("secret").as[BigInteger]
           pubkey <- c.downField("pubkey").as[SigmaBoolean]
-          position <- c.downField("position").as[String]
+          position <- c.downField("position").as[NodePosition]
           firstMsg <- firstProverMessageDecoder.tryDecode(c)
         } yield OwnCommitment(pubkey, secret, firstMsg, position)
       case h: String if h == "cmtReal" =>
         for {
           pubkey <- c.downField("pubkey").as[SigmaBoolean]
-          position <- c.downField("position").as[String]
+          position <- c.downField("position").as[NodePosition]
           firstMsg <- firstProverMessageDecoder.tryDecode(c)
         } yield RealCommitment(pubkey, firstMsg, position)
       case h: String if h == "cmtSimulated" =>
         for {
-          position <- c.downField("position").as[String]
+          position <- c.downField("position").as[NodePosition]
           pubkey <- c.downField("pubkey").as[SigmaBoolean]
           firstMsg <- firstProverMessageDecoder.tryDecode(c)
         } yield SimulatedCommitment(pubkey, firstMsg, position)
@@ -171,7 +186,7 @@ object HintCodecs extends ApiCodecs {
           challenge <- c.downField("challenge").as[String]
           pubkey <- c.downField("pubkey").as[SigmaBoolean]
           proof <- c.downField("proof").as[String]
-          position <- c.downField("position").as[String]
+          position <- c.downField("position").as[NodePosition]
         } yield
           RealSecretProof(
             pubkey,
@@ -184,7 +199,7 @@ object HintCodecs extends ApiCodecs {
           challenge <- c.downField("challenge").as[String]
           pubkey <- c.downField("pubkey").as[SigmaBoolean]
           proof <- c.downField("proof").as[String]
-          position <- c.downField("position").as[String]
+          position <- c.downField("position").as[NodePosition]
         } yield
           SimulatedSecretProof(
             pubkey,

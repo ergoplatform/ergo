@@ -28,7 +28,7 @@ object Constants {
 
 
   /**
-    * [See EIP-3:]
+    * [See EIP-3 https://github.com/ergoplatform/eips/blob/master/eip-0003.md ]
     *
     * For coin type, we suggest consider "ergo" word in ASCII and calculate coin_type number as
     *
@@ -43,7 +43,7 @@ object Constants {
   /**
     * Pre - EIP3 derivation path
     */
-  val oldDerivation: DerivationPath = DerivationPath.fromEncoded("m/1").get
+  val preEip3DerivationPath: DerivationPath = DerivationPath.fromEncoded("m/1").get
 
   /**
     * Post - EIP3 derivation path

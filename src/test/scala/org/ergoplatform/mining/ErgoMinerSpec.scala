@@ -1,8 +1,8 @@
 package org.ergoplatform.mining
 
-import akka.actor.{Actor, ActorRef, ActorSystem}
+import akka.actor.{ActorRef, Actor, ActorSystem}
 import akka.pattern.ask
-import akka.testkit.{TestKit, TestProbe}
+import akka.testkit.{TestProbe, TestKit}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
 import ErgoMiner.{PrepareCandidate, StartMining}
@@ -15,19 +15,19 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.ergoplatform.nodeView.{ErgoReadersHolderRef, ErgoNodeViewRef}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input, ErgoScriptPredef}
 import org.scalatest.FlatSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import sigmastate.SigmaAnd
-import sigmastate.Values.{ErgoTree, SigmaPropConstant}
+import sigmastate.Values.{SigmaPropConstant, ErgoTree}
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
-import sigmastate.utxo.CostTable.Cost
+import sigmastate.utxo.CostTable
 
 import scala.annotation.tailrec
 import scala.concurrent.Future
@@ -130,7 +130,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
-    val desiredSize: Int = ((parameters.maxBlockCost / Cost.DlogDeclaration) * 2).toInt
+    val desiredSize: Int = ((parameters.maxBlockCost / CostTable.interpreterInitCost) * 2).toInt
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
     val testProbe = new TestProbe(system)

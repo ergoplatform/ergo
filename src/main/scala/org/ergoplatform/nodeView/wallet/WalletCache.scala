@@ -72,10 +72,11 @@ object WalletCache {
 
   private def publicKeyAddresses(trackedPubKeys: Seq[ExtendedPublicKey],
                                  addressEncoder: ErgoAddressEncoder): Seq[P2PKAddress] = {
-    // remove master key from visible addresses if following-up keys are from EIP-3 range
+    // Remove master key from visible addresses if following-up keys are from EIP-3 range
     val pks = if (trackedPubKeys.size > 1
       && trackedPubKeys.head.path.isMaster
       && trackedPubKeys(1).path.isEip3) {
+      // Skip master key
       trackedPubKeys.tail
     } else {
       trackedPubKeys

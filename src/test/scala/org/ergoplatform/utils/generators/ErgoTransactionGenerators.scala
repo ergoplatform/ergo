@@ -27,6 +27,7 @@ import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
+import sigmastate.helpers.TestingHelpers._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -186,7 +187,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
 
     val newBoxes = outputAmounts.zip(tokenAmounts.toIndexedSeq).map { case (amt, tokens) =>
       val normalizedTokens = tokens.toSeq.map(t => (Digest32 @@ t._1.data) -> t._2)
-      ErgoBox(amt, outputsProposition, 0, normalizedTokens)
+      testBox(amt, outputsProposition, 0, normalizedTokens)
     }
     val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
     val dataInputs = dataBoxes.map(b => DataInput(b.id))

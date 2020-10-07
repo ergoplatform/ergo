@@ -104,7 +104,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      settings.network, timeProvider)
+      ergoSettings, timeProvider)
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),

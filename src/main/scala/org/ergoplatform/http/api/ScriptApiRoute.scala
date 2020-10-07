@@ -127,23 +127,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   implicit val executeRequestDecoder: ExecuteRequestDecoder = new ExecuteRequestDecoder(ergoSettings)
 
-  implicit def sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
-    sigma =>
-      val op = sigma.opCode.toByte.asJson
-      sigma match {
-        case dlog: ProveDlog   => Map("op" -> op, "h" -> dlog.h.asJson).asJson
-        case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
-        case tp: TrivialProp   => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
-        case and: CAND =>
-          Map("op" -> op, "args" -> and.children.map(_.asJson).asJson).asJson
-        case or: COR =>
-          Map("op" -> op, "args" -> or.children.map(_.asJson).asJson).asJson
-        case th: CTHRESHOLD =>
-          Map("op" -> op, "args" -> th.children.map(_.asJson).asJson).asJson
-      }
-  }
-
-  implicit def cryptResultEncoder: Encoder[CryptoResult] = {
+  implicit val cryptResultEncoder: Encoder[CryptoResult] = {
     res =>
       val fields = Map(
         "value" -> res.value.asJson,

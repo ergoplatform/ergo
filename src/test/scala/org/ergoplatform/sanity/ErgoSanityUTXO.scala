@@ -66,7 +66,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
         ncProbe.ref,
         vhProbe.ref,
         ErgoSyncInfoMessageSpec,
-        settings.scorexSettings.network,
+        settings,
         tp,
         h,
         pool)

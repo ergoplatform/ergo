@@ -32,7 +32,7 @@ import sigmastate.SType.ErgoBoxRType
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.interpreter.ProverResult
 import special.collection.Coll
 
 import scala.annotation.tailrec
@@ -71,19 +71,19 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   // shared mutable state
 
-  // flag which is set once when first block candidate if formed
+  // flag which is set once when mining started (first block candidate is formed)
   private var isMining = false
 
   // cached block candidate
   private var candidateOpt: Option[CandidateCache] = None
 
-  // internal miner threads, if internal mining is chosen
-  private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
-
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
 
   // "miningPubkeyHex" setting in config has preference over wallet's secret key
   private var publicKeyOpt: Option[ProveDlog] = ergoSettings.miningPubKey.orElse(inSecretKeyOpt.map(_.publicImage))
+
+  // internal (CPU) miner threads, if internal mining is chosen
+  private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
   override def preStart(): Unit = {
     // in external miner mode key from wallet is used if `publicKeyOpt` is not set
@@ -112,7 +112,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       secretKeyOpt = Some(s)
       publicKeyOpt = Some(s.publicImage)
 
-    // used in /mining/rewardAddress aPI method
+    // used in /mining/rewardAddress API method
     case ReadMinerPk =>
       sender() ! publicKeyOpt
   }
@@ -293,7 +293,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       } match {
         case Some(Success(newBlock)) =>
           sendToNodeView(newBlock)
-          candidateOpt = None
           Future.successful(())
         case Some(Failure(exception)) =>
           Future.failed(new Exception(s"Improper block mined: ${exception.getMessage}", exception))

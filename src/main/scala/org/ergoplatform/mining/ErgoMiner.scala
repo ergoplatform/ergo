@@ -135,7 +135,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def startMining: Receive = {
     case StartMining if candidateOpt.isEmpty =>
-      if (secretKeyOpt.isDefined || externalMinerMode) requestCandidate()
+      if (secretKeyOpt.isDefined || externalMinerMode) {
+        requestCandidate()
+      }
       context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)
 
     case StartMining if candidateOpt.nonEmpty && !isMining && ergoSettings.nodeSettings.mining =>
@@ -155,17 +157,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
             log.warn("Got start mining command while public key is not ready")
         }
       }
-  }
-
-  // Start internal miner's threads. Called once.
-  private def startInternalMiner(candidateBlock: CandidateBlock): Unit = {
-    secretKeyOpt match {
-      case Some(sk) =>
-        miningThreads += ErgoMiningThread(ergoSettings, self, candidateBlock, sk.w, timeProvider)(context)
-        miningThreads.foreach(_ ! candidateBlock)
-      case None =>
-        log.warn("Trying to start native miner while secret key is not ready")
-    }
   }
 
   private def needNewCandidate(b: ErgoFullBlock): Boolean = {
@@ -237,6 +228,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     ext
   }
 
+  // We produce block candidate on getting readers for node's view from NodeViewHolder
   private def onReaders: Receive = {
     // Miner's node can produce block candidate only if it is working in the UTXO regime
     case Readers(h, s: UtxoStateReader, m, _) =>
@@ -417,6 +409,17 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   def requestCandidate(): Unit = {
     log.info("Requesting candidate")
     readersHolderRef ! GetReaders
+  }
+
+  // Start internal miner's threads. Called once per candidate.
+  private def startInternalMiner(candidateBlock: CandidateBlock): Unit = {
+    secretKeyOpt match {
+      case Some(sk) =>
+        miningThreads += ErgoMiningThread(ergoSettings, self, candidateBlock, sk.w, timeProvider)(context)
+        miningThreads.foreach(_ ! candidateBlock)
+      case None =>
+        log.warn("Trying to start native miner while secret key is not ready")
+    }
   }
 
 }

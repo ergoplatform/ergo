@@ -24,7 +24,7 @@ lazy val commonSettings = Seq(
   publishTo := sonatypePublishToBundle.value,
 )
 
-val scorexVersion = "master-1086cefd-SNAPSHOT"
+val scorexVersion = "i141-8a49a441-SNAPSHOT"
 val sigmaStateVersion = "3.3.1"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)

@@ -208,15 +208,15 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case ReadScans =>
         sender() ! ReadScansResponse(apps.values.toSeq)
 
-      case GenerateTransaction(_, _, _) =>
+      case GenerateTransaction(_, _, _, _) =>
         val input = ErgoTransactionGenerators.inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
         sender() ! Success(tx)
 
-      case SignTransaction(secrets, tx, boxesToSpend, dataBoxes) =>
+      case SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes) =>
         val sc = ErgoStateContext.empty(stateConstants)
         val params = LaunchParameters
-        sender() ! ErgoWalletActor.signTransaction(Some(prover), secrets, tx, boxesToSpend, dataBoxes, params, sc)
+        sender() ! ErgoWalletActor.signTransaction(Some(prover), tx, secrets, hints, boxesToSpend, dataBoxes, params, sc)
     }
   }
 

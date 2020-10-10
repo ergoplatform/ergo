@@ -68,7 +68,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      ergoSettings, timeProvider)
+      settings.network, timeProvider)
 
 }
 

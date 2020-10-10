@@ -13,6 +13,7 @@ import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMinerRef
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
+import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
@@ -32,9 +33,7 @@ import scala.util.{Failure, Success}
 
 class ErgoApp(args: Args) extends ScorexLogging {
 
-  log.info(s"Running with args: $args")
-
-  private val ergoSettings: ErgoSettings = ErgoSettings.read(args)
+  private var ergoSettings: ErgoSettings = ErgoSettings.read(args)
 
   implicit private def settings: ScorexSettings = ergoSettings.scorexSettings
 
@@ -105,7 +104,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      ergoSettings, timeProvider)
+      settings.network, timeProvider)
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
@@ -181,6 +180,11 @@ class ErgoApp(args: Args) extends ScorexLogging {
       log.info("Exiting from the app...")
       System.exit(0)
     }
+  }
+
+  private def isEmptyState: Boolean = {
+    val dir = ErgoState.stateDir(ergoSettings)
+    Option(dir.listFiles()).fold(true)(_.isEmpty)
   }
 
 }

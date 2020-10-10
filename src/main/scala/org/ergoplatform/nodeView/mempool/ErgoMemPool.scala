@@ -4,7 +4,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, MonetarySettings}
 import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.ModifierId
@@ -19,6 +19,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
 
   import ErgoMemPool._
   import EmissionRules.CoinsInOneErgo
+
+  private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
 
   override type NVCT = ErgoMemPool
 
@@ -60,6 +62,22 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     new ErgoMemPool(pool.invalidate(tx))
   }
 
+  def acceptIfNoDoubleSpend(tx: ErgoTransaction): (ErgoMemPool, ProcessingOutcome) = {
+    val doubleSpendingInputOpt = tx.inputs.find { inp =>
+      pool.inputs.contains(inp.boxId)
+    }
+    doubleSpendingInputOpt match {
+      case Some(doubleSpendingInput) =>
+        val doubleWtx = pool.inputs.get(doubleSpendingInput.boxId).get //.get
+        if (weighted(tx).weight > doubleWtx.weight) {
+          new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+        } else {
+          this -> ProcessingOutcome.DoubleSpendingLoser(doubleWtx.id)
+        }
+      case None => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+    }
+  }
+
   def process(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
     val fee = extractFee(tx)
     val minFee = settings.nodeSettings.minimalFeeAmount
@@ -72,7 +90,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
             // Allow proceeded transaction to spend outputs of pooled transactions.
             utxo.withTransactions(getAll).validate(tx).fold(
               new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
-              _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+              _ => acceptIfNoDoubleSpend(tx)
             )
           case validator: TransactionValidation[ErgoTransaction@unchecked] =>
             // transaction validation currently works only for UtxoState, so this branch currently
@@ -98,12 +116,6 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
 
   def weightedTransactionIds(limit: Int): Seq[WeightedTxId] = pool.orderedTransactions.keysIterator.take(limit).toSeq
 
-  private def extractFee(tx: ErgoTransaction): Long =
-    ErgoState.boxChanges(Seq(tx))._2
-      .filter(_.ergoTree == settings.chainSettings.monetary.feeProposition)
-      .map(_.value)
-      .sum
-
 }
 
 object ErgoMemPool {
@@ -113,6 +125,8 @@ object ErgoMemPool {
   object ProcessingOutcome {
 
     case object Accepted extends ProcessingOutcome
+
+    case class DoubleSpendingLoser(winnerTxId: ModifierId) extends ProcessingOutcome
 
     case class Declined(e: Throwable) extends ProcessingOutcome
 
@@ -126,5 +140,17 @@ object ErgoMemPool {
 
   def empty(settings: ErgoSettings): ErgoMemPool =
     new ErgoMemPool(OrderedTxPool.empty(settings))(settings)
+
+  private[mempool] def extractFee(tx: ErgoTransaction)(implicit ms: MonetarySettings): Long =
+    tx.outputs
+      .filter(_.ergoTree == ms.feeProposition)
+      .map(_.value)
+      .sum
+
+  private[mempool] def weighted(tx: ErgoTransaction)(implicit ms: MonetarySettings): WeightedTxId = {
+    val fee = extractFee(tx)
+    // We multiply by 1024 for better precision
+    WeightedTxId(tx.id, fee * 1024 / tx.size)
+  }
 
 }

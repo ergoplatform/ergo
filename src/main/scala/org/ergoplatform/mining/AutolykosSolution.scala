@@ -1,13 +1,15 @@
 package org.ergoplatform.mining
 
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, HCursor}
+import io.circe.{Encoder, Decoder, HCursor}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
+import scorex.core.serialization.{ScorexSerializer, BytesSerializable}
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
+import sigmastate.serialization.{GroupElementSerializer, ConstantStore}
+import sigmastate.utils.SigmaByteReader
 
 /**
   * Solution of Autolykos PoW puzzle
@@ -60,8 +62,9 @@ object AutolykosSolutionSerializer extends ScorexSerializer[AutolykosSolution] {
   }
 
   override def parse(r: Reader): AutolykosSolution = {
-    val pk = groupElemFromBytes(r.getBytes(PublicKeyLength))
-    val w = groupElemFromBytes(r.getBytes(PublicKeyLength))
+    val reader = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
+    val pk = GroupElementSerializer.parse(reader)
+    val w = GroupElementSerializer.parse(reader)
     val nonce = r.getBytes(8)
     val dBytesLength = r.getUByte()
     val d = BigInt(BigIntegers.fromUnsignedByteArray(r.getBytes(dBytesLength)))

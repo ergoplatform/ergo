@@ -3,10 +3,10 @@ package org.ergoplatform.wallet.interpreter
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.wallet.protocol.Constants
 import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoLikeContext, ErgoLikeInterpreter}
+import org.ergoplatform.{ErgoLikeContext, ErgoBox, ErgoBoxCandidate, ErgoLikeInterpreter}
 import scorex.crypto.authds.ADDigest
 import sigmastate.Values.ErgoTree
-import sigmastate.eval.{RuntimeIRContext, IRContextFactory, IRContextFactoryImpl}
+import sigmastate.eval.{RuntimeIRContext, ResettingIRContextManager, IRContextFactory, IRContextFactoryImpl, IRContextManager}
 import sigmastate.interpreter.Interpreter.{VerificationResult, ScriptEnv}
 import sigmastate.{AvlTreeData, AvlTreeFlags}
 
@@ -17,12 +17,15 @@ import scala.util.Try
   * rules for expired boxes spending validation.
   *
   * @param params    - current values of adjustable blockchain settings
-  * @param irFactory factory which will be used by this interpreter to create [[sigmastate.eval.IRContext]]s
   */
-class ErgoInterpreter(params: ErgoLikeParameters)(implicit val irFactory: IRContextFactory)
+class ErgoInterpreter(params: ErgoLikeParameters)
   extends ErgoLikeInterpreter {
 
   override type CTX = ErgoLikeContext
+
+  override protected def irFactory = ErgoInterpreter.DefaultIRContextManager.getIRContextFactory
+
+  override protected def getIRContextManager: IRContextManager = ErgoInterpreter.DefaultIRContextManager
 
   /**
     * Checks that expired box is spent in a proper way
@@ -83,10 +86,19 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit val irFactory: IRCont
 
 object ErgoInterpreter {
   /** Default factory of IRContext which is used as part of transaction validation. */
-  val DefaultIRContextFactory: IRContextFactory = new IRContextFactoryImpl(new RuntimeIRContext)
+  val DefaultIRContextFactory: IRContextFactory = new IRContextFactoryImpl(
+    new RuntimeIRContext {
+      override val nInitialDefs: Int = ResettingIRContextManager.DefaultCapacity
+    }
+  )
+
+  /** Default global instance shared by all ErgoInterpreter instances. */
+  val DefaultIRContextManager = new ResettingIRContextManager(
+    DefaultIRContextFactory, ResettingIRContextManager.DefaultCapacity
+  )
 
   def apply(params: ErgoLikeParameters): ErgoInterpreter =
-    new ErgoInterpreter(params)(DefaultIRContextFactory)
+    new ErgoInterpreter(params)
 
   def avlTreeFromDigest(digest: ADDigest): AvlTreeData = {
     val flags = AvlTreeFlags(insertAllowed = true, updateAllowed = true, removeAllowed = true)

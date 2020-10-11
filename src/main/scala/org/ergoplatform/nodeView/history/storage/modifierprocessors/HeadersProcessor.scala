@@ -15,9 +15,10 @@ import org.ergoplatform.settings._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.core.utils.ScorexEncoding
-import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationState}
+import scorex.core.validation.{ValidationState, ModifierValidator, ValidationResult}
 import scorex.db.ByteArrayWrapper
 import scorex.util._
+import sigmastate.utils.Helpers.concatArrays
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -45,13 +46,13 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   // todo for performance reasons we may just use key like s"score$id" but this will require to redownload blockchain
   protected def headerScoreKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("score".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash(concatArrays(HeadersProcessor.scoreBytes, idToBytes(id))))
 
   protected def headerHeightKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("height".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash(concatArrays(HeadersProcessor.heightBytes, idToBytes(id))))
 
   protected[history] def validityKey(id: ModifierId): ByteArrayWrapper =
-    ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
+    ByteArrayWrapper(Algos.hash(concatArrays(HeadersProcessor.validityBytes, idToBytes(id))))
 
   protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(bytesToId)
 
@@ -301,4 +302,10 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   }
 
+}
+
+object HeadersProcessor {
+  val scoreBytes = "score".getBytes(ErgoHistory.CharsetName)
+  val heightBytes = "height".getBytes(ErgoHistory.CharsetName)
+  val validityBytes = "validity".getBytes(ErgoHistory.CharsetName)
 }

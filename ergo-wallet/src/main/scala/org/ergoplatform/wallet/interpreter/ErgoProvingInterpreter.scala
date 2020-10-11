@@ -10,11 +10,11 @@ import org.ergoplatform.wallet.secrets.SecretKey
 import sigmastate.basics.SigmaProtocolPrivateInput
 import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import scorex.util.encode.Base16
-import sigmastate.eval.IRContextFactory
+import sigmastate.eval.{IRContextManager, ResettingIRContextManager}
 import sigmastate.interpreter.ProverInterpreter
 import sigmastate.utxo.CostTable
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
 /**
   * A class which is holding secrets and signing transactions.
@@ -35,13 +35,13 @@ import scala.util.{Failure, Success, Try}
   * @param params             ergo network parameters at the moment of proving
   * @param cachedHdPubKeysOpt optionally, public keys corresponding to the BIP32-related secrets
   *                           (to not to recompute them)
-  * @param irFactory          factory to create [[sigmastate.eval.IRContext]] instances
   */
 class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
                              params: ErgoLikeParameters,
                              val cachedHdPubKeysOpt: Option[IndexedSeq[ExtendedPublicKey]] = None)
-                            (implicit irFactory: IRContextFactory)
   extends ErgoInterpreter(params) with ProverInterpreter {
+
+  override protected def getIRContextManager: IRContextManager = ErgoProvingInterpreter.DefaultIRContextManager
 
   /**
     * Interpreter's secrets, in form of sigma protocols private inputs
@@ -157,11 +157,17 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
 
 object ErgoProvingInterpreter {
 
+  /** Default global instance shared by all ErgoProvingInterpreter instances. */
+  val DefaultIRContextManager = new ResettingIRContextManager(
+    ErgoInterpreter.DefaultIRContextFactory, ResettingIRContextManager.DefaultCapacity
+  )
+
+
   def apply(secrets: IndexedSeq[SecretKey], params: ErgoLikeParameters): ErgoProvingInterpreter = {
-    new ErgoProvingInterpreter(secrets, params)(ErgoInterpreter.DefaultIRContextFactory)
+    new ErgoProvingInterpreter(secrets, params)
   }
 
   def apply(rootSecret: ExtendedSecretKey, params: ErgoLikeParameters): ErgoProvingInterpreter =
-    new ErgoProvingInterpreter(IndexedSeq(rootSecret), params)(ErgoInterpreter.DefaultIRContextFactory)
+    new ErgoProvingInterpreter(Array(rootSecret), params)
 
 }

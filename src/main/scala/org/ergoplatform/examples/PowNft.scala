@@ -15,9 +15,9 @@ object PowNft extends App with ApiCodecs {
   val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
   val pk = enc.fromString("9fUr4t5piWM7oQSjuaQRUTRWqkFTJLKuS2QuqPL9rz7gvFoGjjk").get.script
 
-  val preimage = "kushti2020-32bits".getBytes("UTF-8")
+  val preimage = "anon92048 | anon2020* | anon_real".getBytes("UTF-8")
 
-  val inputBoxId = ADKey @@ Base16.decode("6f44949ca85684b0e2828905a11795a92f112e4362c793e65bed3f79c1c4c12f").get
+  val inputBoxId = ADKey @@ Base16.decode("b567f123260bde51eda1995906cbe50059cb91405773c5e43749622d9872daca").get
   val input: UnsignedInput = new UnsignedInput(inputBoxId)
 
 
@@ -25,8 +25,8 @@ object PowNft extends App with ApiCodecs {
   def nftGeneratorCandidate(nonce:Long): UnsignedErgoTransaction = {
     val total = 1000000000L
     val fee = 10000000L
-    val candidate = new ErgoBoxCandidate((total - fee), pk, 300000, Colls.emptyColl, Map(R4 -> ByteArrayConstant(preimage), R5 -> LongConstant(nonce)))
-    val feeBox = new ErgoBoxCandidate(fee, ErgoScriptPredef.feeProposition(), 300000)
+    val candidate = new ErgoBoxCandidate(total - fee, pk, 330000, Colls.emptyColl, Map(R4 -> ByteArrayConstant(preimage), R5 -> LongConstant(nonce)))
+    val feeBox = new ErgoBoxCandidate(fee, ErgoScriptPredef.feeProposition(), 330000)
     new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq.empty, IndexedSeq(candidate, feeBox))
   }
 

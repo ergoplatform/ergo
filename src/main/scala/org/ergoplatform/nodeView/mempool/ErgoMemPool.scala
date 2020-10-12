@@ -68,9 +68,11 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     }
     doubleSpendingInputOpt match {
       case Some(doubleSpendingInput) =>
+        val ownWtx = weighted(tx)
         val doubleWtx = pool.inputs.get(doubleSpendingInput.boxId).get //.get
-        if (weighted(tx).weight > doubleWtx.weight) {
-          new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+        if (ownWtx.weight > doubleWtx.weight) {
+          val doubleTx = pool.orderedTransactions.get(doubleWtx).get //.get
+          new ErgoMemPool(pool.put(tx).remove(doubleTx)) -> ProcessingOutcome.Accepted
         } else {
           this -> ProcessingOutcome.DoubleSpendingLoser(doubleWtx.id)
         }
@@ -143,14 +145,15 @@ object ErgoMemPool {
 
   private[mempool] def extractFee(tx: ErgoTransaction)(implicit ms: MonetarySettings): Long =
     tx.outputs
-      .filter(_.ergoTree == ms.feeProposition)
+      .filter(b => java.util.Arrays.equals(b.propositionBytes, ms.feePropositionBytes))
       .map(_.value)
       .sum
 
   private[mempool] def weighted(tx: ErgoTransaction)(implicit ms: MonetarySettings): WeightedTxId = {
     val fee = extractFee(tx)
     // We multiply by 1024 for better precision
-    WeightedTxId(tx.id, fee * 1024 / tx.size)
+    val weight = fee * 1024 / tx.size
+    WeightedTxId(tx.id, weight)
   }
 
 }

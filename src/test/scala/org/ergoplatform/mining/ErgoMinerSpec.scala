@@ -342,4 +342,55 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     system.terminate()
   }
 
+
+  it should "mine after HF" in new TestKit(ActorSystem()) {
+    val forkHeight = 3
+
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+    val forkSettings: ErgoSettings = {
+      val empty = ErgoSettings.read()
+
+      val nodeSettings = empty.nodeSettings.copy(mining = true,
+        stateType = StateType.Utxo,
+        miningDelay = 2.second,
+        offlineGeneration = true,
+        verifyTransactions = true)
+      val chainSettings = empty.chainSettings.copy(
+        blockInterval = 2.seconds,
+        epochLength = forkHeight,
+        voting = empty.chainSettings.voting.copy(version2ActivationHeight = forkHeight, votingLength = forkHeight)
+      )
+      empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings, directory = createTempDir.getAbsolutePath)
+    }
+
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(forkSettings, timeProvider)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
+
+    val minerRef: ActorRef = ErgoMinerRef(
+      forkSettings,
+      nodeViewHolderRef,
+      readersHolderRef,
+      timeProvider,
+      Some(defaultMinerSecret)
+    )
+
+    minerRef ! StartMining
+
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+
+    val wm1 = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[WorkMessage]].flatten)
+    wm1.v shouldBe 2
+
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+
+    val wm2 = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[WorkMessage]].flatten)
+    wm1.msg.sameElements(wm2.msg) shouldBe false
+    wm2.v shouldBe 2
+  }
+
 }

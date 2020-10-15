@@ -276,7 +276,8 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     val passiveMiner: ActorRef = minerRef
 
-    await((passiveMiner ? PrepareCandidate(Seq.empty)).mapTo[Future[WorkMessage]].flatten)
+    val wm = await((passiveMiner ? PrepareCandidate(Seq.empty)).mapTo[Future[WorkMessage]].flatten)
+    wm.isInstanceOf[WorkMessage] shouldBe true
     system.terminate()
   }
 
@@ -387,6 +388,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     wm1.v shouldBe 2
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    Thread.sleep(100)
 
     val wm2 = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[WorkMessage]].flatten)
     wm1.msg.sameElements(wm2.msg) shouldBe false

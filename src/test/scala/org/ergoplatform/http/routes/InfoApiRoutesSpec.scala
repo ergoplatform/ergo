@@ -38,7 +38,7 @@ class InfoApiRoutesSpec extends FlatSpec
   implicit val actorTimeout: Timeout = Timeout(15.seconds.dilated)
   implicit val routeTimeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
   val statsCollector: ActorRef = ErgoStatsCollectorRef(nodeViewRef, peerManagerRef, settings, fakeTimeProvider)
-  val route: Route = InfoApiRoute(statsCollector, settings.scorexSettings.restApi, fakeTimeProvider).route
+  val route: Route = InfoApiRoute(statsCollector, settings, fakeTimeProvider).route
   val requiredDifficulty = BigInt(1)
 
   override def beforeAll: Unit = {

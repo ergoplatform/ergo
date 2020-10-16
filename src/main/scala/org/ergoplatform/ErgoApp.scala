@@ -110,7 +110,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
     PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
-    InfoApiRoute(statsCollectorRef, settings.restApi, timeProvider),
+    InfoApiRoute(statsCollectorRef, ergoSettings, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),

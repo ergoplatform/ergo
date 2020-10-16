@@ -304,6 +304,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         } else {
           candidateOpt.map { c =>
             val newBlock = completeBlock(c.candidateBlock, solution)
+            log.info(s"New block mined, header: ${newBlock.header}")
             powScheme.validate(newBlock.header).map(_ => newBlock)
           } match {
             case Some(Success(newBlock)) =>

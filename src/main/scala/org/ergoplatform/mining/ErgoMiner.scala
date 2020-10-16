@@ -297,23 +297,30 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     case solution: AutolykosSolution =>
       log.info("Got solution: " + solution)
-      val result: Future[Unit] = candidateOpt.map { c =>
-        val newBlock = completeBlock(c.candidateBlock, solution)
-        powScheme.validate(newBlock.header).map(_ => newBlock)
-      } match {
-        case Some(Success(newBlock)) =>
-          sendToNodeView(newBlock)
-          solvedBlock = Some(newBlock)
-          candidateOpt = None
-          Future.successful(())
-        case Some(Failure(exception)) =>
-          Future.failed(new Exception(s"Improper block mined: ${exception.getMessage}", exception))
-        case None =>
-          Future.failed(new Exception("Invalid miner state"))
-      }
+      val result: Future[Unit] =
+        if (solvedBlock.nonEmpty) {
+          log.info("Duplicate solution: " + solution)
+          Future.failed(new Exception("Solution already submitted"))
+        } else {
+          candidateOpt.map { c =>
+            val newBlock = completeBlock(c.candidateBlock, solution)
+            powScheme.validate(newBlock.header).map(_ => newBlock)
+          } match {
+            case Some(Success(newBlock)) =>
+              sendToNodeView(newBlock)
+              solvedBlock = Some(newBlock)
+              candidateOpt = None
+              Future.successful(())
+            case Some(Failure(exception)) =>
+              Future.failed(new Exception(s"Improper block mined: ${exception.getMessage}", exception))
+            case None =>
+              Future.failed(new Exception("Invalid miner state"))
+          }
+        }
       log.debug(s"Processed solution $solution with the result result $result")
       if (externalMinerMode) sender() ! result
   }
+
 
   private def sendToNodeView(newBlock: ErgoFullBlock): Unit = {
     log.info(s"New block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}")

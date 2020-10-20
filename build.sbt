@@ -88,12 +88,19 @@ val opts = Seq(
   // probably can't use these with jstack and others tools
   "-XX:+PerfDisableSharedMem",
   "-XX:+ParallelRefProcEnabled",
-  "-XX:+UseStringDeduplication"
+  "-XX:+UseStringDeduplication",
 )
 
 // -J prefix is required by the bash script
 javaOptions in run ++= opts
 scalacOptions ++= Seq("-Xfatal-warnings", "-feature", "-deprecation")
+
+javaOptions in Universal ++= Seq(
+    // -J params will be added as jvm parameters
+    "--mainnet",
+    "-c setting.conf"
+)
+sources in (Compile, doc) := Seq.empty
 
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"

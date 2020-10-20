@@ -62,16 +62,16 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     new ErgoMemPool(pool.invalidate(tx))
   }
 
-  def acceptIfNoDoubleSpend(tx: ErgoTransaction): (ErgoMemPool, ProcessingOutcome) = {
+  private def acceptIfNoDoubleSpend(tx: ErgoTransaction): (ErgoMemPool, ProcessingOutcome) = {
     val doubleSpendingInputOpt = tx.inputs.find { inp =>
       pool.inputs.contains(inp.boxId)
     }
     doubleSpendingInputOpt match {
       case Some(doubleSpendingInput) =>
         val ownWtx = weighted(tx)
-        val doubleWtx = pool.inputs.get(doubleSpendingInput.boxId).get //.get
+        val doubleWtx = pool.inputs(doubleSpendingInput.boxId)
         if (ownWtx.weight > doubleWtx.weight) {
-          val doubleTx = pool.orderedTransactions.get(doubleWtx).get //.get
+          val doubleTx = pool.orderedTransactions(doubleWtx)
           new ErgoMemPool(pool.put(tx).remove(doubleTx)) -> ProcessingOutcome.Accepted
         } else {
           this -> ProcessingOutcome.DoubleSpendingLoser(doubleWtx.id)

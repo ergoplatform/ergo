@@ -61,7 +61,7 @@ class ErgoMemPoolSpec extends FlatSpec
 
     val prover = ErgoProvingInterpreter(IndexedSeq.empty, parameters)
 
-    def rndContext() = ContextExtension(Map(
+    def rndContext(): ContextExtension = ContextExtension(Map(
       (1: Byte) -> ByteArrayConstant(Array.fill(10 + Random.nextInt(50))(0: Byte)))
     )
 
@@ -81,10 +81,16 @@ class ErgoMemPoolSpec extends FlatSpec
     var pool = ErgoMemPool.empty(settings)
     pool = pool.process(tx1, us)._1
 
+    // tx1 and tx2 are spending the same input, and paying the same fee.
+    // So if tx2 is about a bigger or equal size, it should be rejected as it is paying less for a byte.
+    // Otherwise, tx2 is paying more for a byte and then it is replacing tx1.
     if(tx2.size >= tx1.size) {
       pool.process(tx2, us)._2.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
     } else {
-      pool.process(tx2, us)._2.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe false
+      val (updPool, outcome) = pool.process(tx2, us)
+      outcome.isInstanceOf[ProcessingOutcome.Accepted.type] shouldBe true
+      updPool.size shouldBe 1
+      updPool.take(1).head.id shouldBe tx2.id
     }
   }
 

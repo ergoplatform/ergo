@@ -62,22 +62,25 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     new ErgoMemPool(pool.invalidate(tx))
   }
 
-  // Check if transaction is double-spending inputs spent in the mempool
-  private def acceptIfNoDoubleSpend(tx: ErgoTransaction): (ErgoMemPool, ProcessingOutcome) = {
-    val doubleSpendingInputOpt = tx.inputs.find { inp =>
-      pool.inputs.contains(inp.boxId)
-    }
-    doubleSpendingInputOpt match {
-      case Some(doubleSpendingInput) =>
-        val ownWtx = weighted(tx)
-        val doubleWtx = pool.inputs(doubleSpendingInput.boxId)
-        if (ownWtx.weight > doubleWtx.weight) {
-          val doubleTx = pool.orderedTransactions(doubleWtx)
-          new ErgoMemPool(pool.put(tx).remove(doubleTx)) -> ProcessingOutcome.Accepted
-        } else {
-          this -> ProcessingOutcome.DoubleSpendingLoser(doubleWtx.id)
-        }
-      case None => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+  // Check if transaction is double-spending inputs spent in the mempool.
+  // If so, the new transacting is replacing older ones if it is paying more than all of them.
+  // Otherwise, the new transaction being rejected.
+  private def acceptIfNoDoubleSpend(tx: ErgoTransaction): (ErgoMemPool, ProcessingOutcome) = pool.synchronized {
+    val doubleSpendingWtxs = tx.inputs.flatMap { inp =>
+      pool.inputs.get(inp.boxId)
+    }.toSet
+
+    if(doubleSpendingWtxs.nonEmpty) {
+      val ownWtx = weighted(tx)
+      val doubleSpendingTotalWeight = doubleSpendingWtxs.map(_.weight).sum
+      if (ownWtx.weight > doubleSpendingTotalWeight) {
+        val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
+        new ErgoMemPool(pool.put(tx).remove(doubleSpendingTxs)) -> ProcessingOutcome.Accepted
+      } else {
+        this -> ProcessingOutcome.DoubleSpendingLoser(doubleSpendingWtxs.map(_.id))
+      }
+    } else {
+      new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
     }
   }
 
@@ -131,7 +134,7 @@ object ErgoMemPool {
 
     case object Accepted extends ProcessingOutcome
 
-    case class DoubleSpendingLoser(winnerTxId: ModifierId) extends ProcessingOutcome
+    case class DoubleSpendingLoser(winnerTxIds: Set[ModifierId]) extends ProcessingOutcome
 
     case class Declined(e: Throwable) extends ProcessingOutcome
 

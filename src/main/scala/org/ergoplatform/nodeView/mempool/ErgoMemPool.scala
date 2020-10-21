@@ -62,6 +62,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
     new ErgoMemPool(pool.invalidate(tx))
   }
 
+  // Check if transaction is double-spending inputs spent in the mempool
   private def acceptIfNoDoubleSpend(tx: ErgoTransaction): (ErgoMemPool, ProcessingOutcome) = {
     val doubleSpendingInputOpt = tx.inputs.find { inp =>
       pool.inputs.contains(inp.boxId)
@@ -99,14 +100,16 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
             // will not be triggered probably
             validator.validate(tx).fold(
               new ErgoMemPool(pool.invalidate(tx)) -> ProcessingOutcome.Invalidated(_),
-              _ => new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+              _ => acceptIfNoDoubleSpend(tx)
             )
           case _ =>
-            new ErgoMemPool(pool.put(tx)) -> ProcessingOutcome.Accepted
+            // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
+            // peers though, so such transactions can come from the local wallet only.
+            acceptIfNoDoubleSpend(tx)
         }
       } else {
         this -> ProcessingOutcome.Declined(
-          new Exception(s"Pool can not accept transaction ${tx.id}, it is invalidated earlier or pool is full"))
+          new Exception(s"Pool can not accept transaction ${tx.id}, it is invalidated earlier or the pool is full"))
       }
     } else {
       this -> ProcessingOutcome.Declined(

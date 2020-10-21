@@ -14,7 +14,7 @@ import scala.util.Try
 /**
   * Immutable memory pool implementation.
   */
-class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoSettings)
+class ErgoMemPool private[mempool](val pool: OrderedTxPool)(implicit settings: ErgoSettings)
   extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {
 
   import ErgoMemPool._

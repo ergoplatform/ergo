@@ -66,7 +66,11 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
       newPool
     }
   }
-  
+
+  def remove(txs: Seq[ErgoTransaction]): OrderedTxPool = {
+    txs.foldLeft(this) { case (pool, tx) => pool.remove(tx) }
+  }
+
   def remove(tx: ErgoTransaction): OrderedTxPool = {
     transactionsRegistry.get(tx.id) match {
       case Some(wtx) =>

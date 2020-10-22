@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
@@ -14,7 +15,7 @@ import scala.util.Try
 /**
   * Immutable memory pool implementation.
   */
-class ErgoMemPool private[mempool](val pool: OrderedTxPool)(implicit settings: ErgoSettings)
+class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoSettings)
   extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {
 
   import ErgoMemPool._
@@ -61,6 +62,11 @@ class ErgoMemPool private[mempool](val pool: OrderedTxPool)(implicit settings: E
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {
     new ErgoMemPool(pool.invalidate(tx))
   }
+
+  /**
+    * @return inputs spent by the mempool transactions
+    */
+  def spentInputs: Iterator[BoxId] = pool.inputs.keysIterator
 
   // Check if transaction is double-spending inputs spent in the mempool.
   // If so, the new transacting is replacing older ones if it has bigger weight (fee/byte) than them on average.

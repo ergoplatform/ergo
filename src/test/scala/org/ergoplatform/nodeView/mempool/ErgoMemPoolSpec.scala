@@ -32,7 +32,7 @@ class ErgoMemPoolSpec extends FlatSpec
       }
       p
     }
-    poolAfter.pool.inputs.size shouldBe txs.flatMap(_.inputs).size
+    poolAfter.spentInputs.size shouldBe txs.flatMap(_.inputs).size
 
     // light mode
     val poolLight = ErgoMemPool.empty(lightModeSettings)

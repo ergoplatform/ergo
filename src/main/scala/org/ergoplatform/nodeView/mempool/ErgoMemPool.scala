@@ -63,16 +63,16 @@ class ErgoMemPool private[mempool](val pool: OrderedTxPool)(implicit settings: E
   }
 
   // Check if transaction is double-spending inputs spent in the mempool.
-  // If so, the new transacting is replacing older ones if it is paying more than all of them.
+  // If so, the new transacting is replacing older ones if it has bigger weight (fee/byte) than them on average.
   // Otherwise, the new transaction being rejected.
-  private def acceptIfNoDoubleSpend(tx: ErgoTransaction): (ErgoMemPool, ProcessingOutcome) = pool.synchronized {
+  private def acceptIfNoDoubleSpend(tx: ErgoTransaction): (ErgoMemPool, ProcessingOutcome) = {
     val doubleSpendingWtxs = tx.inputs.flatMap { inp =>
       pool.inputs.get(inp.boxId)
     }.toSet
 
     if(doubleSpendingWtxs.nonEmpty) {
       val ownWtx = weighted(tx)
-      val doubleSpendingTotalWeight = doubleSpendingWtxs.map(_.weight).sum
+      val doubleSpendingTotalWeight = doubleSpendingWtxs.map(_.weight).sum / doubleSpendingWtxs.size
       if (ownWtx.weight > doubleSpendingTotalWeight) {
         val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
         new ErgoMemPool(pool.put(tx).remove(doubleSpendingTxs)) -> ProcessingOutcome.Accepted
@@ -132,12 +132,27 @@ object ErgoMemPool {
 
   object ProcessingOutcome {
 
+    /**
+      * Object signalling that a transaction is accepted to the memory pool
+      */
     case object Accepted extends ProcessingOutcome
 
+    /**
+      * Class signalling that a valid transaction was rejected as it is double-spending inputs of mempool transactions
+      * and has no bigger weight (fee/byte) than them on average.
+      * @param winnerTxIds - identifiers of transactions won in replace-by-fee auction
+      */
     case class DoubleSpendingLoser(winnerTxIds: Set[ModifierId]) extends ProcessingOutcome
 
+    /**
+      * Class signalling that a transaction declined from being accepted into the memory pool
+      */
     case class Declined(e: Throwable) extends ProcessingOutcome
 
+
+    /**
+      * Class signalling that a transaction turned out to be invalid when checked in the mempool
+      */
     case class Invalidated(e: Throwable) extends ProcessingOutcome
 
   }
@@ -146,6 +161,11 @@ object ErgoMemPool {
 
   type MemPoolResponse = Seq[ErgoTransaction]
 
+  /**
+    * Create empty mempool
+    * @param settings - node settings (to get mempool settings from)
+    * @return empty mempool
+    */
   def empty(settings: ErgoSettings): ErgoMemPool =
     new ErgoMemPool(OrderedTxPool.empty(settings))(settings)
 

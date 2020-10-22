@@ -56,8 +56,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     None,
     None,
     None,
-    networkTime(),
-    networkTime(),
+    launchTime = networkTime(),
+    lastIncomingMessageTime = networkTime(),
     None,
     LaunchParameters)
 

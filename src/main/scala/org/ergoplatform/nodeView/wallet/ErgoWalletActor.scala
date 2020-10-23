@@ -193,11 +193,30 @@ class ErgoWalletActor(settings: ErgoSettings,
         sender() ! Failure(new Exception("Wallet is locked"))
       }
 
-    case GetWalletBoxes(unspent) =>
+    /*
+     * Read wallet boxes, unspent only (if corresponding flag is set), or all (both spent and unspent).
+     * If considerUnconfirmed flag is set, mempool contents is considered as well.
+     */
+    case GetWalletBoxes(unspent, considerUnconfirmed) =>
       val currentHeight = fullHeight
-      sender() ! (if (unspent) registry.walletUnspentBoxes() else registry.walletConfirmedBoxes())
-        .map(tb => WalletBox(tb, currentHeight))
-        .sortBy(_.trackedBox.inclusionHeightOpt)
+      val boxes = if (unspent) {
+        val confirmed = registry.walletUnspentBoxes()
+        if(considerUnconfirmed) {
+          // We filter out spent boxes in the same way as wallet does when assembling a transaction
+          (confirmed ++ offChainRegistry.offChainBoxes).filter(walletFilter)
+        } else {
+          confirmed
+        }
+      } else {
+        val confirmed = registry.walletConfirmedBoxes()
+        if(considerUnconfirmed) {
+          // Just adding boxes created off-chain
+          confirmed ++ offChainRegistry.offChainBoxes
+        } else {
+          confirmed
+        }
+      }
+      sender() ! boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
 
     case GetScanBoxes(scanId, unspent) =>
       val currentHeight = fullHeight
@@ -848,9 +867,11 @@ object ErgoWalletActor {
   /**
     * Get boxes related to P2PK payments
     *
-    * @param unspentOnly
+    * @param unspentOnly - return only unspent boxes
+    * @param considerUnconfirmed - consider mempool (filter our unspent boxes spent in the pool if unspent = true, add
+    *                            boxes created in the pool for both values of unspentOnly).
     */
-  final case class GetWalletBoxes(unspentOnly: Boolean)
+  final case class GetWalletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean)
 
   /**
     * Get boxes related to a scan

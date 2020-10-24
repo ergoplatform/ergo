@@ -73,8 +73,8 @@ trait ErgoWalletReader extends VaultReader {
   def firstSecret: Future[Try[DLogProverInput]] =
     (walletActor ? GetFirstSecret).mapTo[Try[DLogProverInput]]
 
-  def walletBoxes(unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
-    (walletActor ? GetWalletBoxes(unspentOnly)).mapTo[Seq[WalletBox]]
+  def walletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean): Future[Seq[WalletBox]] =
+    (walletActor ? GetWalletBoxes(unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]
 
   def appBoxes(scanId: ScanId, unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
     (walletActor ? GetScanBoxes(scanId, unspentOnly)).mapTo[Seq[WalletBox]]

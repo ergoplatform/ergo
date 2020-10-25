@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import scorex.core.transaction.MempoolReader
@@ -36,4 +37,10 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
     * @return an ordered sequence of transaction ids with weights
     */
   def weightedTransactionIds(limit: Int): Seq[WeightedTxId]
+
+  /**
+    * @return inputs spent by the mempool transactions
+    */
+  def spentInputs: Iterator[BoxId]
+
 }

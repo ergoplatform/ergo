@@ -178,14 +178,19 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     * Method checks whether secret is known to the prover, and returns
     * None if the secret is not known.
     *
-    * @param pubkey - public image of a secret
-    * @return (r, cmt), a commitment to (secret) randomness "cmt" along with the randomness "r"
+    * @param unsignedTx
+    * @param boxesToSpend
+    * @param dataBoxes
+    * @param stateContext
+    * @return
     */
   def generateCommitmentsFor(unsignedTx: UnsignedErgoLikeTransaction,
                              boxesToSpend: IndexedSeq[ErgoBox],
                              dataBoxes: IndexedSeq[ErgoBox],
                              stateContext: ErgoLikeStateContext): Try[TransactionHintsBag] = Try {
     val inputCmts = unsignedTx.inputs.zipWithIndex.map { case (unsignedInput, inpIndex) =>
+
+      val inputBox = boxesToSpend(inpIndex)
 
       val context = new ErgoLikeContext(
         ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
@@ -200,8 +205,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
         params.maxBlockCost,
         0L // initial cost
       )
-
-      val scriptToReduce = boxesToSpend(inpIndex).ergoTree
+      val scriptToReduce = inputBox.ergoTree
       inpIndex -> generateCommitments(scriptToReduce, context)
     }
 

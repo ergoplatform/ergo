@@ -90,6 +90,7 @@ class ErgoWalletActor(settings: ErgoSettings,
   }
 
   override def preStart(): Unit = {
+    log.info("Initializing wallet actor")
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
 
@@ -206,7 +207,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       val currentHeight = fullHeight
       val boxes = if (unspent) {
         val confirmed = registry.walletUnspentBoxes()
-        if(considerUnconfirmed) {
+        if (considerUnconfirmed) {
           // We filter out spent boxes in the same way as wallet does when assembling a transaction
           (confirmed ++ offChainRegistry.offChainBoxes).filter(walletFilter)
         } else {
@@ -214,7 +215,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         }
       } else {
         val confirmed = registry.walletConfirmedBoxes()
-        if(considerUnconfirmed) {
+        if (considerUnconfirmed) {
           // Just adding boxes created off-chain
           confirmed ++ offChainRegistry.offChainBoxes
         } else {
@@ -402,17 +403,23 @@ class ErgoWalletActor(settings: ErgoSettings,
       val secrets = walletSecrets ++ externalSecretsOpt.getOrElse(Seq.empty).map(_.key)
       val prover: ErgoProvingInterpreter = ErgoProvingInterpreter(secrets.toIndexedSeq, parameters)
 
-      val inputBoxes = utxoReaderOpt.map { utxoReader =>
-        unsignedTx.inputs.map { unsignedInput =>
-          utxoReader.boxById(unsignedInput.boxId).get
+      // Read a box from UTXO set if the node has it, otherwise,from the wallet
+      def readBox(boxId: BoxId): Option[ErgoBox] = {
+        utxoReaderOpt match {
+          case Some(utxoReader) =>
+            utxoReader.boxById(boxId)
+          case None =>
+            registry.getBox(boxId).map(_.box)
         }
-      }.get
+      }
 
-      val dataBoxes = utxoReaderOpt.map { utxoReader =>
-        unsignedTx.dataInputs.map { dataInput =>
-          utxoReader.boxById(dataInput.boxId).get
-        }
-      }.get
+      val inputBoxes = unsignedTx.inputs.flatMap { unsignedInput =>
+        readBox(unsignedInput.boxId)
+      }
+
+      val dataBoxes = unsignedTx.dataInputs.flatMap { dataInput =>
+        readBox(dataInput.boxId)
+      }
 
       val thbTry = prover.generateCommitmentsFor(unsignedTx, inputBoxes, dataBoxes, stateContext)
       sender() ! GenerateCommitmentsResponse(thbTry)
@@ -513,7 +520,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     // double-check that box is not spent yet by inputs of mempool transactions
     def notInInputs: Boolean = {
       mempoolReaderOpt match {
-        case Some(mr) => !mr.getAll.flatMap(_.inputs.map(_.boxId)).exists(_.sameElements(bid))
+        case Some(mr) => !mr.spentInputs.exists(_.sameElements(bid))
         case None => true
       }
     }
@@ -536,6 +543,7 @@ class ErgoWalletActor(settings: ErgoSettings,
   /**
     * Convert requests (to make payments or to issue an asset) to transaction outputs
     * There can be only one asset issuance request in the input sequence.
+    *
     * @param requests - an input sequence of requests
     * @return sequence of transaction outputs or failure if inputs are incorrect
     */
@@ -620,7 +628,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     // A helper which is deserializing Base16-encoded boxes to ErgoBox instances
     def stringsToBoxes(strings: Seq[String]): Seq[ErgoBox] =
-      strings.map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry)).map(_.get)
+      strings.map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry)).map(_.get) //.get
 
     val userInputs = stringsToBoxes(inputsRaw)
     val dataInputs = stringsToBoxes(dataInputsRaw).toIndexedSeq
@@ -746,7 +754,7 @@ class ErgoWalletActor(settings: ErgoSettings,
             // If no usePreEip3Derivation flag is set, add first derived key (for m/44'/429'/0'/0/0) to the db
             val firstSk = nextKey(masterKey).result.map(_._3).toOption
             val firstPk = firstSk.map(_.publicKey)
-            firstPk.foreach{ pk =>
+            firstPk.foreach { pk =>
               storage.addKey(pk)
               storage.updateChangeAddress(P2PKAddress(pk.key))
             }
@@ -923,7 +931,7 @@ object ErgoWalletActor {
   /**
     * Get boxes related to P2PK payments
     *
-    * @param unspentOnly - return only unspent boxes
+    * @param unspentOnly         - return only unspent boxes
     * @param considerUnconfirmed - consider mempool (filter our unspent boxes spent in the pool if unspent = true, add
     *                            boxes created in the pool for both values of unspentOnly).
     */
@@ -1058,11 +1066,11 @@ object ErgoWalletActor {
   /**
     * A request to extract hints from given transaction
     *
-    * @param tx - transaction to extract hints from
+    * @param tx           - transaction to extract hints from
     * @param boxesToSpend - input boxes of the transaction (all of them)
-    * @param dataBoxes - read-only (data) input boxes
-    * @param real - public keys corresponing to the secrets known
-    * @param simulated - public keys to simulate
+    * @param dataBoxes    - read-only (data) input boxes
+    * @param real         - public keys corresponing to the secrets known
+    * @param simulated    - public keys to simulate
     */
   case class ExtractHints(tx: ErgoTransaction,
                           boxesToSpend: IndexedSeq[ErgoBox],

@@ -2,6 +2,7 @@ package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestActorRef, TestProbe}
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, OrderedTxPool}
@@ -18,7 +19,6 @@ import scorex.util.ModifierId
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.interpreter.Interpreter.emptyEnv
-
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -115,6 +115,9 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
       override def getAllPrioritized: Seq[ErgoTransaction] = txs
 
       override def take(limit: Int): Iterable[ErgoTransaction] = txs.take(limit)
+
+      override def spentInputs: Iterator[BoxId] = txs.flatMap(_.inputs).map(_.boxId).toIterator
+
     }
 
     implicit val system = ActorSystem()
@@ -137,4 +140,5 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
 
     probe.expectMsgType[SendToNetwork]
   }
+
 }

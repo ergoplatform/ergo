@@ -13,6 +13,7 @@ import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMinerRef
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
+import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
@@ -20,7 +21,7 @@ import scorex.core.app.{Application, ScorexContext}
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
 import scorex.core.network.message._
 import scorex.core.network.peer.PeerManagerRef
-import scorex.core.network.{NetworkControllerRef, PeerFeature, UPnP, UPnPGateway}
+import scorex.core.network.{NetworkControllerRef, PeerFeature, PeerSynchronizerRef, UPnP, UPnPGateway}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
@@ -46,6 +47,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
 
   private val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
+  private val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
 
   private val timeProvider = new NetworkTimeProvider(settings.ntp)
 
@@ -63,7 +65,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
     val invSpec = new InvSpec(settings.network.maxInvObjects)
     val requestModifierSpec = new RequestModifierSpec(settings.network.maxInvObjects)
     val modifiersSpec = new ModifiersSpec(settings.network.maxPacketSize)
-    val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
     Seq(
       GetPeersSpec,
       new PeersSpec(featureSerializers, settings.network.maxPeerSpecObjects),
@@ -106,6 +107,9 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
       ergoSettings, timeProvider)
+
+  val peerSynchronizer: ActorRef = PeerSynchronizerRef("PeerSynchronizer",
+    networkControllerRef, peerManagerRef, settings.network, featureSerializers)
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),

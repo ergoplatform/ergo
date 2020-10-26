@@ -13,7 +13,6 @@ import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMinerRef
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._

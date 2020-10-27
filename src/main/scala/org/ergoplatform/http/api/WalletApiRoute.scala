@@ -8,7 +8,6 @@ import io.circe.{Encoder, Json}
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
@@ -201,20 +200,12 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
 
         if (boxesToSpend.size == tx.inputs.size && dataBoxes.size == tx.dataInputs.size) {
-          r.w.signTransaction(tx, secrets, hints, boxesToSpend, dataBoxes)
+          r.w.signTransaction(tx, secrets, hints, Some(boxesToSpend), Some(dataBoxes))
         } else {
           Future(Failure(new Exception("Can't parse input boxes provided")))
         }
       } else {
-        r.s match {
-          case utxoSet: UtxoStateReader =>
-            val mempool = r.m
-            val utxosWithUnconfirmed = utxoSet.withTransactions(mempool.getAll)
-            val boxesToSpend = tx.inputs.map(d => utxosWithUnconfirmed.boxById(d.boxId).get)
-            val dataBoxes = tx.dataInputs.map(d => utxosWithUnconfirmed.boxById(d.boxId).get)
-            r.w.signTransaction(tx, secrets, hints, boxesToSpend, dataBoxes)
-          case _ => Future(Failure(new Exception("No input boxes provided, and no UTXO set to read them from")))
-        }
+        r.w.signTransaction(tx, secrets, hints, None, None)
       }
     }
 

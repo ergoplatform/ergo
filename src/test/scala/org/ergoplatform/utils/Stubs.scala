@@ -33,6 +33,7 @@ import scorex.core.network.{Handshake, PeerSpec}
 import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
+import scorex.db.ByteArrayWrapper
 import scorex.util.Random
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
@@ -213,9 +214,15 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
         sender() ! Success(tx)
 
-      case SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes) =>
+      case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
         val sc = ErgoStateContext.empty(stateConstants)
         val params = LaunchParameters
+        val boxesToSpend = boxesToSpendOpt.getOrElse{
+          tx.inputs.map(inp => utxoState.versionedBoxHolder.get(ByteArrayWrapper(inp.boxId)).get)
+        }
+        val dataBoxes = dataBoxesOpt.getOrElse{
+          tx.dataInputs.map(inp => utxoState.versionedBoxHolder.get(ByteArrayWrapper(inp.boxId)).get)
+        }
         sender() ! ErgoWalletActor.signTransaction(Some(prover), tx, secrets, hints, boxesToSpend, dataBoxes, params, sc)
     }
   }

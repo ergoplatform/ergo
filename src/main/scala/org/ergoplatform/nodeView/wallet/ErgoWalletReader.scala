@@ -107,16 +107,14 @@ trait ErgoWalletReader extends VaultReader {
   def signTransaction(tx: UnsignedErgoTransaction,
                       secrets: Seq[ExternalSecret],
                       hints: TransactionHintsBag,
-                      boxesToSpend: Seq[ErgoBox],
-                      dataBoxes: Seq[ErgoBox]): Future[Try[ErgoTransaction]] =
+                      boxesToSpend: Option[Seq[ErgoBox]],
+                      dataBoxes: Option[Seq[ErgoBox]]): Future[Try[ErgoTransaction]] =
     (walletActor ? SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes)).mapTo[Try[ErgoTransaction]]
 
   def extractHints(tx: ErgoTransaction,
-                   boxesToSpend: IndexedSeq[ErgoBox],
-                   dataBoxes: IndexedSeq[ErgoBox],
                    real: Seq[SigmaBoolean],
                    simulated: Seq[SigmaBoolean]): Future[ExtractHintsResult] =
-    (walletActor ? ExtractHints(tx, boxesToSpend, dataBoxes, real, simulated)).mapTo[ExtractHintsResult]
+    (walletActor ? ExtractHints(tx, real, simulated)).mapTo[ExtractHintsResult]
 
   def addScan(appRequest: ScanRequest): Future[AddScanResponse] =
     (walletActor ? AddScan(appRequest)).mapTo[AddScanResponse]

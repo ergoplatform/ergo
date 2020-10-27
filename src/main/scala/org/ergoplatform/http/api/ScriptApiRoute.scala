@@ -167,15 +167,8 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     import org.ergoplatform.nodeView.wallet.requests.HintCodecs._
     val tx = her.tx
 
-    onSuccess((readersHolder ? GetReaders).mapTo[Readers].flatMap{readers =>
-      val (boxesToSpend, dataBoxes) = readers.s match {
-        case utxo: UtxoStateReader =>
-          val bts = tx.inputs.map(_.boxId).flatMap(utxo.boxById)
-          val db = tx.dataInputs.map(_.boxId).flatMap(utxo.boxById)
-          (bts, db)
-        case _ => ???
-      }
-      readers.w.extractHints(tx, boxesToSpend, dataBoxes, her.real, her.simulated)
+    onSuccess((readersHolder ? GetReaders).mapTo[Readers].flatMap { readers =>
+      readers.w.extractHints(tx, her.real, her.simulated)
     })(ehr => ApiResponse(ehr.transactionHintsBag))
   }
 

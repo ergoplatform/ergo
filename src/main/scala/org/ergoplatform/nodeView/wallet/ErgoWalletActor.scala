@@ -336,6 +336,16 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! Failure(new Exception("Wallet is already initialized or testMnemonic is set. Clear current secret to re-init it."))
   }
 
+  // Read a box from UTXO set if the node has it, otherwise,from the wallet
+  private def readBox(boxId: BoxId): Option[ErgoBox] = {
+    utxoReaderOpt match {
+      case Some(utxoReader) =>
+        utxoReader.boxById(boxId)
+      case None =>
+        registry.getBox(boxId).map(_.box)
+    }
+  }
+
   private def walletCommands: Receive = {
     case CheckSeed(mnemonic, passOpt) =>
       secretStorageOpt match {
@@ -403,16 +413,6 @@ class ErgoWalletActor(settings: ErgoSettings,
       val secrets = walletSecrets ++ externalSecretsOpt.getOrElse(Seq.empty).map(_.key)
       val prover: ErgoProvingInterpreter = ErgoProvingInterpreter(secrets.toIndexedSeq, parameters)
 
-      // Read a box from UTXO set if the node has it, otherwise,from the wallet
-      def readBox(boxId: BoxId): Option[ErgoBox] = {
-        utxoReaderOpt match {
-          case Some(utxoReader) =>
-            utxoReader.boxById(boxId)
-          case None =>
-            registry.getBox(boxId).map(_.box)
-        }
-      }
-
       val inputBoxes = unsignedTx.inputs.flatMap { unsignedInput =>
         readBox(unsignedInput.boxId)
       }
@@ -424,12 +424,26 @@ class ErgoWalletActor(settings: ErgoSettings,
       val thbTry = prover.generateCommitmentsFor(unsignedTx, inputBoxes, dataBoxes, stateContext)
       sender() ! GenerateCommitmentsResponse(thbTry)
 
-    case SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes) =>
+    case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
+      val boxesToSpend = boxesToSpendOpt.getOrElse(tx.inputs.flatMap { input =>
+        readBox(input.boxId)
+      })
+      val dataBoxes = dataBoxesOpt.getOrElse(tx.dataInputs.flatMap { dataInput =>
+        readBox(dataInput.boxId)
+      })
       sender() ! signTransaction(walletVars.proverOpt, tx, secrets, hints, boxesToSpend, dataBoxes, parameters, stateContext)
 
-    case ExtractHints(tx, boxesToSpend, dataBoxes, real, simulated) =>
+    case ExtractHints(tx, real, simulated) =>
+      val inputBoxes = tx.inputs.flatMap { input =>
+        readBox(input.boxId)
+      }
+
+      val dataBoxes = tx.dataInputs.flatMap { dataInput =>
+        readBox(dataInput.boxId)
+      }
+
       val prover = walletVars.proverOpt.getOrElse(ErgoProvingInterpreter(IndexedSeq.empty, parameters))
-      val bag = prover.bagForTransaction(tx, boxesToSpend, dataBoxes, stateContext, real, simulated)
+      val bag = prover.bagForTransaction(tx, inputBoxes, dataBoxes, stateContext, real, simulated)
       sender() ! ExtractHintsResult(bag)
 
     case DeriveKey(encodedPath) =>
@@ -879,8 +893,8 @@ object ErgoWalletActor {
   final case class SignTransaction(utx: UnsignedErgoTransaction,
                                    secrets: Seq[ExternalSecret],
                                    hints: TransactionHintsBag,
-                                   boxesToSpend: Seq[ErgoBox],
-                                   dataBoxes: Seq[ErgoBox])
+                                   boxesToSpend: Option[Seq[ErgoBox]],
+                                   dataBoxes: Option[Seq[ErgoBox]])
 
 
   /**
@@ -1067,14 +1081,10 @@ object ErgoWalletActor {
     * A request to extract hints from given transaction
     *
     * @param tx           - transaction to extract hints from
-    * @param boxesToSpend - input boxes of the transaction (all of them)
-    * @param dataBoxes    - read-only (data) input boxes
     * @param real         - public keys corresponing to the secrets known
     * @param simulated    - public keys to simulate
     */
   case class ExtractHints(tx: ErgoTransaction,
-                          boxesToSpend: IndexedSeq[ErgoBox],
-                          dataBoxes: IndexedSeq[ErgoBox],
                           real: Seq[SigmaBoolean],
                           simulated: Seq[SigmaBoolean])
 

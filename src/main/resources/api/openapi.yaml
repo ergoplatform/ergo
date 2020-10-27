@@ -1256,7 +1256,9 @@ components:
           type: string
           example: mynode
           nullable: true
-        lastSeen:
+        lastMessage:
+          $ref: '#/components/schemas/Timestamp'
+        lastHandshake:
           $ref: '#/components/schemas/Timestamp'
         connectionType:
           type: string

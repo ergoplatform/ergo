@@ -84,6 +84,11 @@ class ErgoWalletActor(settings: ErgoSettings,
     registry.fetchDigest().height
   }
 
+  override def postRestart(reason: Throwable): Unit = {
+    log.error(s"Wallet actor restarted due to ${reason.getMessage}", reason)
+    super.postRestart(reason)
+  }
+
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])

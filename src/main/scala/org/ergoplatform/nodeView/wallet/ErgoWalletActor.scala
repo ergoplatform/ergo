@@ -89,6 +89,11 @@ class ErgoWalletActor(settings: ErgoSettings,
     super.postRestart(reason)
   }
 
+  override def postStop(): Unit = {
+    logger.info("Wallet actor stopped")
+    super.postStop()
+  }
+
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])

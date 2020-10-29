@@ -19,7 +19,7 @@ import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
-import org.ergoplatform.nodeView.wallet.WalletScanLogic.{SpentInputData, ScanResults}
+import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
@@ -173,9 +173,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     *
     * Updates indexes according to data extracted from a block and performs versioned update.
     *
-    * @param newOutputs  - newly created outputs (but could be spent by inputs)
-    * @param inputs      - spent inputs as a sequence of (input tx id, input box id, tracked box)
-    * @param txs         - transactions affected
+    * @param scanResults  - block scan data (outputs created and spent along with corresponding transactions)
     * @param blockId     - block identifier
     * @param blockHeight - block height
     */

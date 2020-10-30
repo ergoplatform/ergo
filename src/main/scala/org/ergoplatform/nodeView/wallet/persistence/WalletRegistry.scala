@@ -3,9 +3,8 @@ package org.ergoplatform.nodeView.wallet.persistence
 import java.io.File
 
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.db.HybridLDBKVStore
 import org.ergoplatform.modifiers.history.PreGenesisHeader
-import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, EncodedTokenId, encodedTokenId}
+import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, encodedTokenId}
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.Constants
@@ -19,7 +18,6 @@ import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
-import scorex.utils.Random
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
@@ -29,7 +27,7 @@ import scorex.utils.Random
   * * boxes, spent or not
   *
   */
-class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
+class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
 
@@ -340,7 +338,7 @@ object WalletRegistry {
     val dir = registryFolder(settings)
     dir.mkdirs()
 
-    val store = new HybridLDBKVStore(dir, settings.nodeSettings.keepVersions)
+    val store = new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
 
     // Create pre-genesis state checkpoint
     if (!store.versionIdExists(PreGenesisStateVersion)) store.update(PreGenesisStateVersion, Seq.empty, Seq.empty)

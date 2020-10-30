@@ -95,7 +95,7 @@ class WalletRegistrySpec
 
         WalletRegistry.putBoxes(emptyBag, unspentBoxes).transact(store)
         val registry = new WalletRegistry(store)(ws)
-        registry.processHistoricalBoxes(emptyBag, unspentBoxes.map(txId -> _), spendingHeight).transact(store)
+        registry.processSpentBoxes(emptyBag, unspentBoxes.map(txId -> _), spendingHeight).transact(store)
         registry.walletSpentBoxes().toList should contain theSameElementsAs transitedBoxes
       }
     }

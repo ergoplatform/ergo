@@ -185,7 +185,7 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
 
     // process spent boxes
     val spentBoxesWithTx = scanResults.inputsSpent.map(t => t.inputTxId -> t.trackedBox)
-    val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
+    val bag3 = processSpentBoxes(bag2, spentBoxesWithTx, blockHeight)
 
     // and update wallet digest
     val bag4 = updateDigest(bag3) { case WalletDigest(height, wBalance, wTokens) =>
@@ -236,9 +236,9 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.
     */
-  private[persistence] def processHistoricalBoxes(bag: KeyValuePairsBag,
-                                                  spentBoxes: Seq[(ModifierId, TrackedBox)],
-                                                  spendingHeight: Int): KeyValuePairsBag = {
+  private[persistence] def processSpentBoxes(bag: KeyValuePairsBag,
+                                             spentBoxes: Seq[(ModifierId, TrackedBox)],
+                                             spendingHeight: Int): KeyValuePairsBag = {
     if (keepHistory) {
       val outSpent: Seq[TrackedBox] = spentBoxes.flatMap { case (_, tb) =>
         getBox(tb.box.id).orElse {

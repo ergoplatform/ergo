@@ -5,7 +5,7 @@ import java.io.File
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.db.HybridLDBKVStore
 import org.ergoplatform.modifiers.history.PreGenesisHeader
-import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
+import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, EncodedTokenId, encodedTokenId}
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.Constants
@@ -18,8 +18,8 @@ import org.ergoplatform.ErgoBox
 import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
-import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
+import scorex.utils.Random
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
@@ -271,22 +271,43 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   /**
     * Updates scans of a box stored in the wallet database,
     * puts the box into the database if it is not there
+    * removes the box from the database if its there and scanIds are empty
     *
-    * @param scanIds
+    * @param newScans
     * @param box
     * @return
     */
-  def updateScans(scanIds: Set[ScanId], box: ErgoBox): Try[Unit] = Try {
+  def updateScans(newScans: Set[ScanId], box: ErgoBox): Try[Unit] = Try {
     val bag0 = KeyValuePairsBag(toInsert = Seq.empty, toRemove = Seq.empty)
-    val (updTb, bag1) = getBox(box.id) match {
-      case Some(tb) =>
-        (tb.copy(scans = scanIds), removeBox(bag0, tb))
-      case None =>
-        (TrackedBox(box, box.creationHeight, scanIds), bag0)
+    val oldBox = getBox(box.id)
+    val oldScans = oldBox.map(_.scans).getOrElse(Set.empty)
+
+    val newBox = TrackedBox(box, box.creationHeight, newScans)
+
+    val bag1 = (oldScans.isEmpty, newScans.isEmpty) match {
+      case (false, false) =>
+        putBox(removeBox(bag0, oldBox.get), newBox)
+      case (false, true) =>
+        removeBox(bag0, oldBox.get)
+      case (true, false) =>
+        putBox(bag0, newBox)
+      case (true, true) =>
+        throw new Exception("Can't remove a box which does not exist")
     }
-    val bag2 = putBox(bag1, updTb)
-    store.nonVersionedRemove(bag2.toRemove)
-    store.nonVersionedPut(bag2.toInsert)
+
+    val bag2 = if((oldScans.contains(Constants.PaymentsScanId) || newScans.contains(Constants.PaymentsScanId)) &&
+       !(oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId))) {
+      val digest = fetchDigest()
+
+      val updDigest = if(!oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId)){
+        digest.putBox(box)
+      } else if(oldScans.contains(Constants.PaymentsScanId) && !newScans.contains(Constants.PaymentsScanId)){
+        digest.removeBox(box)
+      } else ???
+      putDigest(bag1, updDigest)
+    } else bag1
+
+    bag2.transact(store, store.lastVersionID.getOrElse(scorex.util.Random.randomBytes(32)))
   }
 
   /**
@@ -299,26 +320,8 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   def removeScan(boxId: BoxId, scanId: ScanId): Try[Unit] = {
     getBox(boxId) match {
       case Some(tb) =>
-        (if (tb.scans.size == 1) {
-          if (tb.scans.head == scanId) {
-            val bag = WalletRegistry.removeBox(KeyValuePairsBag.empty, tb)
-            Success(bag)
-          } else {
-            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with scan $scanId"))
-          }
-        } else {
-          if (tb.scans.contains(scanId)) {
-            val updTb = tb.copy(scans = tb.scans - scanId)
-            val keyToRemove = Seq(spentIndexKey(scanId, updTb),
-              inclusionHeightScanBoxIndexKey(scanId, updTb))
-            Success(KeyValuePairsBag(Seq(boxToKvPair(updTb)), keyToRemove))
-          } else {
-            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with scan $scanId"))
-          }
-        }).map { bag =>
-          store.nonVersionedPut(bag.toInsert)
-          store.nonVersionedRemove(bag.toRemove)
-        }
+        val newScans = tb.scans - scanId
+        updateScans(newScans, tb.box)
 
       case None => Failure(new Exception(s"No box with id ${Algos.encode(boxId)} found in the wallet database"))
     }

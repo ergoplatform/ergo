@@ -13,13 +13,8 @@ import scorex.db.{LDBKVStore, LDBVersionedStore}
   *
   * Currently the only use for non-versioned data is box <-> application correspondence in EIP-1 implementation.
   */
+//todo: remove
 class HybridLDBKVStore(protected override val dir: File, keepVersions: Int)
   extends LDBVersionedStore(dir, keepVersions) {
-
-  private val nonVersionedDb = new LDBKVStore(db)
-
-  def nonVersionedPut(values: Seq[(K, V)]): Unit = nonVersionedDb.insert(values)
-
-  def nonVersionedRemove(keys: Seq[K]): Unit = nonVersionedDb.remove(keys)
 
 }

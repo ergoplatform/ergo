@@ -86,6 +86,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
       require(left == right, "Incorrect points")
     } else {
+      //TODO: fix .toBytearray, should produce 32 bytes
       require(toBigInt(hash(f.toByteArray)) == s.d, "h(f) != d")
     }
   }

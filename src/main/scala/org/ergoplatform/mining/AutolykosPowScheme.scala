@@ -86,7 +86,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
       require(left == right, "Incorrect points")
     } else {
-      require(hash(f.toByteArray) == s.d, "h(f) != d")
+      require(toBigInt(hash(f.toByteArray)) == s.d, "h(f) != d")
     }
   }
 
@@ -134,7 +134,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       hashModQ(Bytes.concat(indexBytes, M, pk, m, w))
     } else {
       // Autolykos v. 2: H(j|M|m) (line 5 from the Algo 2 of the spec)
-      hash(Bytes.concat(indexBytes, M, m))
+      toBigInt(hash(Bytes.concat(indexBytes, M, m)))
     }
   }
 
@@ -243,7 +243,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       val d = if(version == 1) {
         (x * genIndexes(seed).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i))).sum - sk).mod(q)
       } else {
-        hash(genIndexes(seed).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i))).sum.toByteArray)
+        toBigInt(hash(genIndexes(seed).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i))).sum.toByteArray))
       }
       if (d <= b) {
         log.debug(s"Solution found at $i")

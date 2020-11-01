@@ -22,7 +22,9 @@ package object mining {
 
   def hashModQ(in: Array[Byte]): BigInt = hashFn.hash(in)
 
-  def hash(in: Array[Byte]): BigInt = BigInt(BigIntegers.fromUnsignedByteArray(Blake2b256.hash(in)))
+  def toBigInt(in: Array[Byte]): BigInt = BigInt(BigIntegers.fromUnsignedByteArray(in))
+
+  def hash(in: Array[Byte]): Array[Byte] = Blake2b256.hash(in)
 
   def genPk(s: PrivateKey): EcPointType = group.exponentiate(group.generator, s.bigInteger)
 

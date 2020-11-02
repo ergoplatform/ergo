@@ -10,9 +10,6 @@ import scorex.util.serialization.{Reader, Writer}
 
 import scala.collection.mutable
 import scorex.util.Extensions._
-import scorex.util.encode.Base16
-import sigmastate.Values.ByteArrayConstant
-import sigmastate.serialization.ValueSerializer
 
 /**
   * Holds aggregate wallet data (including off-chain) with no need fo re-processing it on each request.
@@ -25,21 +22,33 @@ final case class WalletDigest(height: Int,
                               walletBalance: Long,
                               walletAssetBalances: mutable.LinkedHashMap[EncodedTokenId, Long]) {
 
+  /**
+    * Generate a new wallet digest with contents of a given box included into the digest
+    *
+    * @param box - box to include into the digest
+    * @return updated digest
+    */
   def putBox(box: ErgoBox): WalletDigest = {
     val mutMap = walletAssetBalances
 
-      box.additionalTokens.toArray.foreach{ tokenRec =>
-        val key = EncodedTokenId @@ scorex.util.encode.Base16.encode(tokenRec._1)
-        val value = mutMap.getOrElse(key, 0L) + tokenRec._2
-        mutMap.updated(key, value)
-      }
+    box.additionalTokens.toArray.foreach { tokenRec =>
+      val key = EncodedTokenId @@ scorex.util.encode.Base16.encode(tokenRec._1)
+      val value = mutMap.getOrElse(key, 0L) + tokenRec._2
+      mutMap.updated(key, value)
+    }
     this.copy(walletBalance = this.walletBalance + box.value, walletAssetBalances = mutMap)
   }
 
+  /**
+    * Exclude box from the digest
+    *
+    * @param box - box to exclude from the digest
+    * @return updated digest
+    */
   def removeBox(box: ErgoBox): WalletDigest = {
     val mutMap = walletAssetBalances
 
-    box.additionalTokens.toArray.foreach{ tokenRec =>
+    box.additionalTokens.toArray.foreach { tokenRec =>
       val key = EncodedTokenId @@ scorex.util.encode.Base16.encode(tokenRec._1)
       val value = mutMap.getOrElse(key, 0L) - tokenRec._2
       mutMap.updated(key, value)

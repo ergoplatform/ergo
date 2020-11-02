@@ -111,7 +111,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
   /**
     * Read wallet boxes, both spent or not
     *
-    * @param scanId     scan identifier
+    * @param scanId scan identifier
     * @return sequence of scan-related boxes
     */
   def confirmedBoxes(scanId: ScanId): Seq[TrackedBox] = {
@@ -171,7 +171,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     *
     * Updates indexes according to data extracted from a block and performs versioned update.
     *
-    * @param scanResults  - block scan data (outputs created and spent along with corresponding transactions)
+    * @param scanResults - block scan data (outputs created and spent along with corresponding transactions)
     * @param blockId     - block identifier
     * @param blockHeight - block height
     */
@@ -293,15 +293,17 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
         throw new Exception("Can't remove a box which does not exist")
     }
 
-    val bag2 = if((oldScans.contains(Constants.PaymentsScanId) || newScans.contains(Constants.PaymentsScanId)) &&
-       !(oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId))) {
+    val bag2 = if ((oldScans.contains(Constants.PaymentsScanId) || newScans.contains(Constants.PaymentsScanId)) &&
+      !(oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId))) {
       val digest = fetchDigest()
 
-      val updDigest = if(!oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId)){
+      val updDigest = if (!oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId)) {
         digest.putBox(box)
-      } else if(oldScans.contains(Constants.PaymentsScanId) && !newScans.contains(Constants.PaymentsScanId)){
+      } else if (oldScans.contains(Constants.PaymentsScanId) && !newScans.contains(Constants.PaymentsScanId)) {
         digest.removeBox(box)
-      } else ???
+      } else {
+        throw new Exception(s"Wallet can't update digest for a box with old scans $oldScans, new ones $newScans")
+      }
       putDigest(bag1, updDigest)
     } else bag1
 

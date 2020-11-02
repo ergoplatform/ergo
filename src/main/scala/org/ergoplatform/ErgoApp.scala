@@ -107,7 +107,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
       ergoSettings, timeProvider)
 
-  val peerSynchronizer: ActorRef = PeerSynchronizerRef("PeerSynchronizer",
+  // Launching PeerSynchronizer actor which is then registering itself at network controller
+  private val peerSynchronizer: ActorRef = PeerSynchronizerRef("PeerSynchronizer",
     networkControllerRef, peerManagerRef, settings.network, featureSerializers)
 
   private val apiRoutes: Seq[ApiRoute] = Seq(

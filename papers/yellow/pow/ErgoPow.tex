@@ -22,19 +22,60 @@
 \newcommand{\sk}{\mathsf{sk}}
 
 \begin{document}
-    \title{\Name: The Ergo Platform PoW Puzzle}
+    \title{\Name: The Ergo Platform PoW Puzzles}
 
     \author{Alexander Chepurnoy, Vasily Kharin, Dmitry Meshkov}
 
-    \date{April 6, 2019\\v1.0}
+    \date{November, 3, 2020\\v1.0}
     \maketitle
 
-    %    \begin{abstract}
-    %        This document contains the full description of \Name~-- the PoW protocol that is going to be used in Ergo platform.
-    %    \end{abstract}
+    \section{Autolykos version 2}
+
+    Autolykos version 2 is following Autolykos version 1 defined in Section~\ref{av1}, but with non-outsourceability 
+    switched off. It turns out~(based on more than 1 year of non-outsourceable PoW experience) that non-outsourceable 
+    PoW is not attractive to small miners. Thus Autolykos version 2 is aiming to have memory-hardness but not non-outsourceability.
+
+    
+    \begin{algorithm}[H]
+        \caption{Block mining}
+        \label{alg:prove}
+        \begin{algorithmic}[1]
+            \State \textbf{Input}: upcoming block header hash $m$, key pair $pk=g^{sk}$
+            \State Generate randomly a new key pair $w=g^x$
+            \State Calculate $r_{i \in [0,N)}=H(j||M||pk||m||w)$
+            \While{$true$}
+            \LetRnd{$nonce$}{$\mathsf{rand}$}
+            \Let{$J$}{$genIndexes(m||nonce)$}
+            \Let{$d$}{$\sum_{j \in J}{r_j} \cdot x - sk \mod q$}
+            \If{$d < b$}
+            \State \Return $(m,pk,w,nonce,d)$
+            \EndIf
+            \EndWhile
+        \end{algorithmic}
+    \end{algorithm}
+
+    Note that although the mining process utilizes private keys, solution itself
+    only contains public keys. Solution verification can be performed by Alg.~\ref{alg:verify}.
+
+    \begin{algorithm}[H]
+        \caption{Solution verification}
+        \label{alg:verify}
+        \begin{algorithmic}[1]
+            \State \textbf{Input}: $m,pk,w,nonce,d$
+            \State require $d < b$
+            \State require $pk,w\in \mathbb{G}$ and $pk,w \ne e$
+            \Let{$J$}{$genIndexes(m||nonce)$}
+            \Let{$f$}{$\sum_{j \in J} H(j||M||pk||m||w)$}
+            \State require $w^f = g^dpk$
+        \end{algorithmic}
+    \end{algorithm}
 
 
-    \section{Introduction}
+
+    \section{Autolykos version 1}
+    \label{av1}
+
+    \subsection{Introduction}
 
     Security of Proof-of-Work blockchains relies
     on multiple miners trying to produce new blocks by
@@ -69,7 +110,7 @@
     specification of \Name, while in Section~\ref{discussion} we discuss its
     properties. Few auxiliary algorithms are placed in~\nameref{appendix}.
 
-    \section{Ergo PoW puzzle}
+    \section{Autolykos v.1 puzzle}
     \label{puzzle}
 
     The proposed scheme requires following components:
@@ -137,7 +178,7 @@
     \end{algorithm}
 
 
-    \section{Discussion}
+    \subsection{Discussion}
     \label{discussion}
 
     First, notice that in Algorithm~\ref{alg:prove} we refer to construction

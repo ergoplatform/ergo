@@ -1,6 +1,7 @@
 package org.ergoplatform.mining
 
 import com.google.common.primitives.{Bytes, Ints, Longs}
+import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
@@ -57,12 +58,12 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val s = header.powSolution
 
     require(s.d < b, s"Incorrect d = ${s.d} for b = $b")
-    require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
-    require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
 
     val pkBytes = if (version == 1) {
+      require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
       groupElemToBytes(s.pk)
     } else {
+      require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
       Array.emptyByteArray
     }
     val wBytes = if (version == 1) {
@@ -86,8 +87,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
       require(left == right, "Incorrect points")
     } else {
-      //TODO: fix .toBytearray, should produce 32 bytes
-      require(toBigInt(hash(f.toByteArray)) == s.d, "h(f) != d")
+      // sum as byte array is always about 32 bytes
+      val array: Array[Byte] = BigIntegers.asUnsignedByteArray(32,  f.underlying())
+      require(toBigInt(hash(array)) == s.d, "h(f) != d")
     }
   }
 
@@ -135,7 +137,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       hashModQ(Bytes.concat(indexBytes, M, pk, m, w))
     } else {
       // Autolykos v. 2: H(j|M|m) (line 5 from the Algo 2 of the spec)
-      toBigInt(hash(Bytes.concat(indexBytes, M, m)))
+      toBigInt(hash(Bytes.concat(indexBytes, M, m)).drop(1))
     }
   }
 

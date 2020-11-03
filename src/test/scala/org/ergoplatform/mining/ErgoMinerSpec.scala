@@ -154,7 +154,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     @tailrec
     def loop(toSend: Int): Unit = {
-      val toSpend: Seq[ErgoBox] = await(wallet.walletBoxes()).map(_.trackedBox.box).toList
+      val toSpend: Seq[ErgoBox] = await(
+        wallet.walletBoxes(unspentOnly = false, considerUnconfirmed = false)
+      ).map(_.trackedBox.box).toList
       log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains," +
         s"pool size: ${requestReaders.m.size}")
       val txs: Seq[ErgoTransaction] = toSpend.take(toSend) map { boxToSend =>
@@ -239,13 +241,12 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val tx1 = defaultProver.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), IndexedSeq(), r.s.stateContext).get
     val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2, r.s.stateContext.currentHeight))
     val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs2)
-    val tx2 = defaultProver.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), IndexedSeq(), r.s.stateContext).get
+    val tx2 = ErgoTransaction(defaultProver.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), IndexedSeq(), r.s.stateContext).get)
 
+    // As double-spending transactions are filtered out in the mempool, the only way to push them is to order to
+    // include double-spending transaction directly via mandatoryTransactions argument of PrepareCandidate command
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx1))
-    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx2))
-    expectNoMessage(1 seconds)
-
-    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 2
+    minerRef ! PrepareCandidate(Seq(tx2))
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)

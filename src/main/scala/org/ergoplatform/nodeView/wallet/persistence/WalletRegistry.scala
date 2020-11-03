@@ -271,8 +271,8 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * puts the box into the database if it is not there
     * removes the box from the database if its there and scanIds are empty
     *
-    * @param newScans
-    * @param box
+    * @param newScans - ids of new scans box should be associated with
+    * @param box - box to be updated
     * @return
     */
   def updateScans(newScans: Set[ScanId], box: ErgoBox): Try[Unit] = Try {
@@ -284,12 +284,17 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
 
     val bag1 = (oldScans.isEmpty, newScans.isEmpty) match {
       case (false, false) =>
+        // replace scans of the box by removing it along with indexes related to old scans,
+        // and then adding the box with indexes related to the new scans
         putBox(removeBox(bag0, oldBox.get), newBox)
       case (false, true) =>
+        // if new scans are empty, remove the box along with indexes
         removeBox(bag0, oldBox.get)
       case (true, false) =>
+        // if old scans are empty, add the box along with indexes
         putBox(bag0, newBox)
       case (true, true) =>
+        //old and new scans are empty, can't do anything useful
         throw new Exception("Can't remove a box which does not exist")
     }
 

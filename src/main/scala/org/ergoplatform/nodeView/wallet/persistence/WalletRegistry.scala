@@ -276,7 +276,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @return
     */
   def updateScans(newScans: Set[ScanId], box: ErgoBox): Try[Unit] = Try {
-    val bag0 = KeyValuePairsBag(toInsert = Seq.empty, toRemove = Seq.empty)
+    val bag0 = KeyValuePairsBag.empty
     val oldBox = getBox(box.id)
     val oldScans = oldBox.map(_.scans).getOrElse(Set.empty)
 
@@ -293,8 +293,11 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
         throw new Exception("Can't remove a box which does not exist")
     }
 
-    val bag2 = if ((oldScans.contains(Constants.PaymentsScanId) || newScans.contains(Constants.PaymentsScanId)) &&
-      !(oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId))) {
+    // Flag showing that box has been added to the payments app (p2pk-wallet) or removed from it
+    val digestChanged = (oldScans.contains(Constants.PaymentsScanId) || newScans.contains(Constants.PaymentsScanId)) &&
+                        !(oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId))
+
+    val bag2 = if (digestChanged) {
       val digest = fetchDigest()
 
       val updDigest = if (!oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId)) {
@@ -305,7 +308,9 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
         throw new Exception(s"Wallet can't update digest for a box with old scans $oldScans, new ones $newScans")
       }
       putDigest(bag1, updDigest)
-    } else bag1
+    } else {
+      bag1
+    }
 
     bag2.transact(store, store.lastVersionID.getOrElse(scorex.util.Random.randomBytes(32)))
   }

@@ -204,14 +204,14 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
         }
 
       val increasedTokenBalances = receivedTokensAmt.foldLeft(wTokens) { case (acc, (encodedId, amt)) =>
-        acc += encodedId -> (acc.getOrElse(encodedId, 0L) + amt)
+        acc.updated(encodedId, acc.getOrElse(encodedId, 0L) + amt)
       }
 
       val newTokensBalance = spentTokensAmt
         .foldLeft(increasedTokenBalances) { case (acc, (encodedId, amt)) =>
           val decreasedAmt = acc.getOrElse(encodedId, 0L) - amt
           if (decreasedAmt > 0) {
-            acc += encodedId -> decreasedAmt
+            acc.updated(encodedId, decreasedAmt)
           } else {
             acc - encodedId
           }
@@ -294,6 +294,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     }
 
     // Flag showing that box has been added to the payments app (p2pk-wallet) or removed from it
+    // If true, we need to update wallet digest
     val digestChanged = (oldScans.contains(Constants.PaymentsScanId) || newScans.contains(Constants.PaymentsScanId)) &&
                         !(oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId))
 

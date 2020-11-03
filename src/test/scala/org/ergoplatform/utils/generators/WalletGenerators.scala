@@ -13,8 +13,6 @@ import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Gen
 import sigmastate.Values.ByteArrayConstant
 
-import scala.collection.mutable
-
 trait WalletGenerators extends ErgoTransactionGenerators with Generators {
 
   override def trackedBoxGen: Gen[TrackedBox] = {
@@ -103,7 +101,7 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
       amount <- Gen.choose(1L, 100000L)
       balances <- additionalTokensGen
     } yield {
-      val encodedBalances = mutable.LinkedHashMap(balances.map { case (x1, x2) => encodedTokenId(x1) -> x2 } :_*)
+      val encodedBalances = Map(balances.map { case (x1, x2) => encodedTokenId(x1) -> x2 } :_*)
       WalletDigest(height, amount, encodedBalances)
     }
   }

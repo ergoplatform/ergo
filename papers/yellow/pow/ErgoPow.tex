@@ -40,7 +40,7 @@
 
     Please note that:
     \begin{enumerate}
-        \item{} *H()* is now not *mod q* , but ordinary *blake2b256* with 256-bit outpust
+        \item{} *H()* is now not *mod q* , but ordinary *blake2b256* with 256-bit output
         \item{} *dropMsb* is dropping most significant byte (from 32 bytes array)
         \item{} sum is always about 256 bits (32 bytes)
     \end{enumerate} 
@@ -49,7 +49,7 @@
         \caption{Solution verification and proving}
         \label{alg:verify2}
         \begin{algorithmic}[1]
-            \State \textbf{Input}: $m,nonce,d$
+            \State \textbf{Input}: $m,nonce$
             \Let{$J$}{$genIndexes(m||nonce)$}
             \Let{$f$}{$\sum_{j \in J} dropMsb(H(j||M||m))$}
             \State require $hash(f) < b$

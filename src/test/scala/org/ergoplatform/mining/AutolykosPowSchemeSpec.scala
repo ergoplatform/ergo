@@ -12,7 +12,6 @@ class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
     forAll(invalidHeaderGen, Gen.choose(1, 20), Gen.choose[Byte](1, 2)) { (inHeader, difficulty, ver) =>
       val nBits = RequiredDifficulty.encodeCompactBits(difficulty)
       val h = inHeader.copy(nBits = nBits, version = ver)
-      pow.validate(h) shouldBe 'failure
       val sk = randomSecret()
       val x = randomSecret()
       val msg = pow.msgByHeader(h)

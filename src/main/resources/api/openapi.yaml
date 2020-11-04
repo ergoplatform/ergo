@@ -1356,6 +1356,17 @@ components:
             - Incoming
             - Outgoing
 
+    PeersStatus:
+      type: object
+      required:
+        - lastInomingMessage
+        - currentNetworkTime
+      properties:
+        lastIncomingMessage:
+          $ref: '#/components/schemas/Timestamp'
+        currentNetworkTime:
+          $ref: '#/components/schemas/Timestamp'
+
     NodeInfo:
       type: object
       required:
@@ -2250,6 +2261,26 @@ paths:
                 items:
                   type: string
                   description: Blacklisted node address
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /peers/status:
+    get:
+      summary: Get last incomming message timestamp and current network time
+      operationId: getPeersStatus
+      tags:
+        - peers
+      responses:
+        '200':
+          description: Network status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeersStatus'
         default:
           description: Error
           content:

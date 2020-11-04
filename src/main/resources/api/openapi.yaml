@@ -2179,8 +2179,8 @@ paths:
 
   /peers/status:
     get:
-      summary: Get last incomming message timestamp
-      operationId: getLastIncomingMessageTime
+      summary: Get last incomming message timestamp and current network time
+      operationId: getPeersStatus
       tags:
         - peers
       responses:

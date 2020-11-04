@@ -36,37 +36,40 @@
     PoW is not attractive to small miners. Thus Autolykos version 2 is aiming to have memory-hardness but not non-outsourceability.
 
     
+    Solution verification and proving are given in Alg.~\ref{alg:verify2} and Alg.~\ref{alg:prove2}.
+
+    Please note that:
+    \begin{enumerate}
+        \item{} *H()* is now not *mod q* , but ordinary *blake2b256* with 256-bit outpust
+        \item{} *dropMsb* is dropping most significant byte (from 32 bytes array)
+        \item{} sum is always about 256 bits (32 bytes)
+    \end{enumerate} 
+
     \begin{algorithm}[H]
-        \caption{Block mining}
-        \label{alg:prove}
+        \caption{Solution verification and proving}
+        \label{alg:verify2}
         \begin{algorithmic}[1]
-            \State \textbf{Input}: upcoming block header hash $m$, key pair $pk=g^{sk}$
-            \State Generate randomly a new key pair $w=g^x$
-            \State Calculate $r_{i \in [0,N)}=H(j||M||pk||m||w)$
-            \While{$true$}
-            \LetRnd{$nonce$}{$\mathsf{rand}$}
+            \State \textbf{Input}: $m,nonce,d$
             \Let{$J$}{$genIndexes(m||nonce)$}
-            \Let{$d$}{$\sum_{j \in J}{r_j} \cdot x - sk \mod q$}
-            \If{$d < b$}
-            \State \Return $(m,pk,w,nonce,d)$
-            \EndIf
-            \EndWhile
+            \Let{$f$}{$\sum_{j \in J} dropMsb(H(j||M||m))$}
+            \State require $hash(f) < b$
         \end{algorithmic}
     \end{algorithm}
 
-    Note that although the mining process utilizes private keys, solution itself
-    only contains public keys. Solution verification can be performed by Alg.~\ref{alg:verify}.
-
     \begin{algorithm}[H]
-        \caption{Solution verification}
-        \label{alg:verify}
+        \caption{Block mining}
+        \label{alg:prove2}
         \begin{algorithmic}[1]
-            \State \textbf{Input}: $m,pk,w,nonce,d$
-            \State require $d < b$
-            \State require $pk,w\in \mathbb{G}$ and $pk,w \ne e$
+            \State \textbf{Input}: upcoming block header hash $m$
+            \State Calculate $r_{i \in [0,N)} = dropMsb(H(j||M||m))$
+            \While{$true$}
+            \LetRnd{$nonce$}{$\mathsf{rand}$}
             \Let{$J$}{$genIndexes(m||nonce)$}
-            \Let{$f$}{$\sum_{j \in J} H(j||M||pk||m||w)$}
-            \State require $w^f = g^dpk$
+            \Let{$f$}{$\sum_{j \in J}{r_j}$}
+            \If{$hash(f) < b$}
+            \State \Return $(m,nonce)$
+            \EndIf
+            \EndWhile
         \end{algorithmic}
     \end{algorithm}
 

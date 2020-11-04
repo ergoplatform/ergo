@@ -57,16 +57,16 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val msg = msgByHeader(header)
     val s = header.powSolution
 
-    require(s.d < b, s"Incorrect d = ${s.d} for b = $b")
-
     val pkBytes = if (version == 1) {
+      require(s.d < b, s"Incorrect d = ${s.d} for b = $b")
       require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
       groupElemToBytes(s.pk)
     } else {
-      require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
+      //todo: fix realDifficulty (needed for nipopows) for Header
       Array.emptyByteArray
     }
     val wBytes = if (version == 1) {
+      require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
       groupElemToBytes(s.w)
     } else {
       Array.emptyByteArray
@@ -79,6 +79,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val f = if (version == 1) {
       indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx))).sum.mod(q)
     } else {
+      //pk and w not used in v2
       indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx))).sum
     }
 
@@ -89,7 +90,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     } else {
       // sum as byte array is always about 32 bytes
       val array: Array[Byte] = BigIntegers.asUnsignedByteArray(32,  f.underlying())
-      require(toBigInt(hash(array)) == s.d, "h(f) != d")
+      require(toBigInt(hash(array)) < b, "h(f) >= b")
     }
   }
 

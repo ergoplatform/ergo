@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, _}
 import org.ergoplatform.settings.Constants

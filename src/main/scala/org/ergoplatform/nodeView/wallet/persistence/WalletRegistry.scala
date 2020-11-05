@@ -5,7 +5,7 @@ import java.io.File
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, encodedTokenId}
-import org.ergoplatform.nodeView.wallet.{IdUtils, WalletTransaction, WalletTransactionSerializer}
+import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.{AssetUtils, Constants}
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
@@ -18,6 +18,7 @@ import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
+import org.ergoplatform.wallet.transactions.TransactionBuilder
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
@@ -306,9 +307,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     val bag2 = if (digestChanged) {
       val digest = fetchDigest()
 
-      val boxAssets = box.additionalTokens.toArray.map { case (id, v) =>
-        IdUtils.encodedTokenId(id) -> v
-      }.toMap
+      val boxAssets = TransactionBuilder.collTokensToMap(box.additionalTokens)
 
       val updDigest = if (!oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId)) {
         AssetUtils.mergeAssetsMut(digest.walletAssetBalances, boxAssets) //mutating digest!

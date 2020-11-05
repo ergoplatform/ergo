@@ -8,6 +8,7 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 
+import scala.collection.mutable
 import scorex.util.Extensions._
 
 /**
@@ -19,43 +20,12 @@ import scorex.util.Extensions._
   */
 final case class WalletDigest(height: Int,
                               walletBalance: Long,
-                              walletAssetBalances: Map[EncodedTokenId, Long]) {
-
-  /**
-    * Generate a new wallet digest with contents of a given box included into the digest
-    *
-    * @param box - box to include into the digest
-    * @return updated digest
-    */
-  def putBox(box: ErgoBox): WalletDigest = {
-    val updMap = box.additionalTokens.toArray.foldLeft(walletAssetBalances) { case (m, tokenRec) =>
-      val key = EncodedTokenId @@ scorex.util.encode.Base16.encode(tokenRec._1)
-      val value = m.getOrElse(key, 0L) + tokenRec._2
-      m.updated(key, value)
-    }
-    this.copy(walletBalance = this.walletBalance + box.value, walletAssetBalances = updMap)
-  }
-
-  /**
-    * Exclude box from the digest
-    *
-    * @param box - box to exclude from the digest
-    * @return updated digest
-    */
-  def removeBox(box: ErgoBox): WalletDigest = {
-    val updMap = box.additionalTokens.toArray.foldLeft(walletAssetBalances) { case (m, tokenRec) =>
-      val key = EncodedTokenId @@ scorex.util.encode.Base16.encode(tokenRec._1)
-      val value = m.getOrElse(key, 0L) - tokenRec._2
-      m.updated(key, value)
-    }
-    this.copy(walletBalance = this.walletBalance - box.value, walletAssetBalances = updMap)
-  }
-
-}
+                              walletAssetBalances: mutable.LinkedHashMap[EncodedTokenId, Long])
 
 object WalletDigest {
 
-  def empty: WalletDigest = WalletDigest(ErgoHistory.EmptyHistoryHeight, 0L, Map.empty)
+  def empty: WalletDigest =
+    WalletDigest(ErgoHistory.EmptyHistoryHeight, 0, mutable.LinkedHashMap.empty)
 
 }
 
@@ -78,13 +48,13 @@ object WalletDigestSerializer extends ScorexSerializer[WalletDigest] {
 
     val walletAssetBalancesSize = r.getUInt().toIntExact
 
-    val walletAssetBalances = scala.collection.mutable.LinkedHashMap.empty[EncodedTokenId, Long]
+    val walletAssetBalances = mutable.LinkedHashMap.empty[EncodedTokenId, Long]
     (0 until walletAssetBalancesSize).foreach { _ =>
       val kv = encodedTokenId(Digest32 @@ r.getBytes(Constants.ModifierIdSize)) -> r.getULong()
       walletAssetBalances += kv
     }
 
-    WalletDigest(height, balance, walletAssetBalances.toMap)
+    WalletDigest(height, balance, walletAssetBalances)
   }
 
 }

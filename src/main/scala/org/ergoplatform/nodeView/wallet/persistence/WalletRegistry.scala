@@ -5,9 +5,9 @@ import java.io.File
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.history.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, encodedTokenId}
-import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
+import org.ergoplatform.nodeView.wallet.{IdUtils, WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
-import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.{AssetUtils, Constants}
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
@@ -204,14 +204,14 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
         }
 
       val increasedTokenBalances = receivedTokensAmt.foldLeft(wTokens) { case (acc, (encodedId, amt)) =>
-        acc.updated(encodedId, acc.getOrElse(encodedId, 0L) + amt)
+        acc += encodedId -> (acc.getOrElse(encodedId, 0L) + amt)
       }
 
       val newTokensBalance = spentTokensAmt
         .foldLeft(increasedTokenBalances) { case (acc, (encodedId, amt)) =>
           val decreasedAmt = acc.getOrElse(encodedId, 0L) - amt
           if (decreasedAmt > 0) {
-            acc.updated(encodedId, decreasedAmt)
+            acc += encodedId -> decreasedAmt
           } else {
             acc - encodedId
           }
@@ -306,10 +306,23 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     val bag2 = if (digestChanged) {
       val digest = fetchDigest()
 
+      val boxAssets = box.additionalTokens.toArray.map { case (id, v) =>
+        IdUtils.encodedTokenId(id) -> v
+      }.toMap
+
       val updDigest = if (!oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId)) {
-        digest.putBox(box)
+        AssetUtils.mergeAssetsMut(digest.walletAssetBalances, boxAssets) //mutating digest!
+        WalletDigest(
+          digest.height,
+          digest.walletBalance + box.value,
+          digest.walletAssetBalances)
       } else if (oldScans.contains(Constants.PaymentsScanId) && !newScans.contains(Constants.PaymentsScanId)) {
-        digest.removeBox(box)
+        //mutating digest! exception can be thrown here
+        AssetUtils.subtractAssetsMut(digest.walletAssetBalances, boxAssets)
+        WalletDigest(
+          digest.height,
+          digest.walletBalance - box.value,
+          digest.walletAssetBalances)
       } else {
         throw new Exception(s"Wallet can't update digest for a box with old scans $oldScans, new ones $newScans")
       }

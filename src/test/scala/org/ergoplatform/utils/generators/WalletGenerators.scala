@@ -141,7 +141,7 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
   def externalScanReqGen: Gen[ScanRequest] = for {
     appName <- Gen.alphaNumStr
     pred <- scanningPredicateGen
-  } yield ScanRequest(appName, pred)
+  } yield ScanRequest(appName, pred, Some(false))
 
   def externalAppGen: Gen[Scan] = for {
     scanId <- Gen.posNum[Short]

@@ -218,7 +218,7 @@ object WalletScanLogic extends ScorexLogging {
     val externalScans: Seq[Scan] = walletVars.externalScans
 
     tx.outputs.flatMap { bx =>
-      val appsTriggered = externalScans.filter(_.trackingRule.filter(bx)).map(app => app.scanId)
+      val appsTriggered = externalScans.filter(_.trackingRule.filter(bx)).map(app => app.scanId -> app.shared)
 
       val boxScript = bx.propositionBytes
 
@@ -233,22 +233,26 @@ object WalletScanLogic extends ScorexLogging {
           PaymentsScanId
         }
 
-        val prePaymentStatuses = if (miningIncomeTriggered) appsTriggered :+ miningStatus else appsTriggered
+        val prePaymentStatuses = if (miningIncomeTriggered){
+          appsTriggered :+ (miningStatus -> false)
+        } else {
+          appsTriggered
+        }
 
-        if (prePaymentStatuses.nonEmpty) {
+        if (prePaymentStatuses.nonEmpty && !prePaymentStatuses.exists(t => t._2)) {
           //if other scans intercept the box, it is not being tracked by the payments app
-          prePaymentStatuses.toSet
+          prePaymentStatuses.map(_._1).toSet
         } else {
           val paymentsTriggered = trackedBytes.exists(bs => boxScript.sameElements(bs))
 
           if (paymentsTriggered) {
-            Set(PaymentsScanId)
+            Set(PaymentsScanId) ++ prePaymentStatuses.filter(_._2).map(_._1).toSet
           } else {
             Set.empty
           }
         }
       } else {
-        appsTriggered.toSet
+        appsTriggered.map(_._1).toSet
       }
 
       if (statuses.nonEmpty) {

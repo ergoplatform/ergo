@@ -18,8 +18,6 @@ import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
 import scorex.util.bytesToId
-import sigmastate.Values.ByteArrayConstant
-import sigmastate.serialization.ValueSerializer
 
 import scala.collection.mutable
 

@@ -151,7 +151,9 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ScanOffChain(tx) =>
       val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, walletVars)
       val inputs = WalletScanLogic.extractInputBoxes(tx)
-      offChainRegistry = offChainRegistry.updateOnTransaction(newWalletBoxes, inputs)
+      if (newWalletBoxes.nonEmpty || inputs.nonEmpty) {
+        offChainRegistry = offChainRegistry.updateOnTransaction(newWalletBoxes, inputs)
+      }
 
     case ScanInThePast(blockHeight) =>
       if (expectedHeight(blockHeight) == blockHeight) {

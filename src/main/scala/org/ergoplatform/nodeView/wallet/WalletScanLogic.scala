@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
-import org.ergoplatform.nodeView.wallet.scanning.Scan
+import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanWalletInteraction}
 import org.ergoplatform.settings.{Constants, LaunchParameters}
 import org.ergoplatform.wallet.Constants.{MiningScanId, PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
@@ -18,6 +18,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
 import scorex.util.bytesToId
+
 import scala.collection.mutable
 
 /**
@@ -218,7 +219,10 @@ object WalletScanLogic extends ScorexLogging {
     val externalScans: Seq[Scan] = walletVars.externalScans
 
     tx.outputs.flatMap { bx =>
-      val appsTriggered = externalScans.filter(_.trackingRule.filter(bx)).map(app => app.scanId -> app.shared)
+      val appsTriggered =
+        externalScans
+          .filter(_.trackingRule.filter(bx))
+          .map(app => app.scanId -> app.walletInteraction)
 
       val boxScript = bx.propositionBytes
 
@@ -226,33 +230,41 @@ object WalletScanLogic extends ScorexLogging {
 
         val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
 
-        //tweak for tests
-        lazy val miningStatus: ScanId = if (walletVars.settings.miningRewardDelay > 0) {
-          MiningScanId
+        lazy val miningStatus: (ScanId, ScanWalletInteraction.Value) = if (walletVars.settings.miningRewardDelay > 0) {
+          MiningScanId -> ScanWalletInteraction.Off
         } else {
-          PaymentsScanId
+          //tweak for tests
+          MiningScanId -> ScanWalletInteraction.Forced
         }
 
         val prePaymentStatuses = if (miningIncomeTriggered){
-          appsTriggered :+ (miningStatus -> false)
+          appsTriggered :+ miningStatus
         } else {
           appsTriggered
         }
 
-        if (prePaymentStatuses.nonEmpty && !prePaymentStatuses.exists(t => t._2)) {
+        if (prePaymentStatuses.nonEmpty &&
+              !prePaymentStatuses.exists(t => ScanWalletInteraction.interactingWithWallet(t._2))) {
           //if other scans intercept the box, it is not being tracked by the payments app
           prePaymentStatuses.map(_._1).toSet
         } else {
           val paymentsTriggered = trackedBytes.exists(bs => boxScript.sameElements(bs))
 
+          val otherIds = prePaymentStatuses.map(_._1).toSet
           if (paymentsTriggered) {
-            Set(PaymentsScanId) ++ prePaymentStatuses.filter(_._2).map(_._1).toSet
+            Set(PaymentsScanId) ++ otherIds
           } else {
-            Set.empty
+            otherIds
           }
         }
       } else {
-        appsTriggered.map(_._1).toSet
+        val appScans = appsTriggered.map(_._1).toSet
+
+        if(appsTriggered.exists(_._2 == ScanWalletInteraction.Forced)){
+          appScans ++ Set(PaymentsScanId)
+        } else {
+          appScans
+        }
       }
 
       if (statuses.nonEmpty) {

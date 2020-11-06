@@ -8,7 +8,7 @@ import org.ergoplatform.db.DBSpec
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
-import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.scalacheck.Gen
@@ -37,7 +37,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
   private val trueProp = org.ergoplatform.settings.Constants.TrueLeaf
   private val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(trueProp.bytes))
-  private val appReq = ScanRequest("True detector", scanningPredicate, Some(false))
+  private val appReq = ScanRequest("True detector", scanningPredicate, Some(ScanWalletInteraction.Off))
   private val scanId: ScanId = ScanId @@ 50.toShort
 
   private val pubkeys = prover.hdPubKeys
@@ -227,7 +227,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
     val cache = WalletCache(pubkeys, s)
     val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(pk.bytes))
-    val paymentScanReq = ScanRequest("Payment scan", paymentPredicate, Some(false))
+    val paymentScanReq = ScanRequest("Payment scan", paymentPredicate, Some(ScanWalletInteraction.Off))
     val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId).get), Some(cache))(s)
 
     val boxes = extractWalletOutputs(tx, Some(1), walletVars)

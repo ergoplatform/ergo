@@ -7,7 +7,7 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.http.api.{ApiCodecs, ScanApiRoute}
-import org.ergoplatform.nodeView.wallet.scanning.{ContainsScanningPredicate, Scan, ScanJsonCodecs, ScanRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{ContainsScanningPredicate, Scan, ScanJsonCodecs, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.utils.Stubs
 import org.scalatest.{FlatSpec, Matchers}
 import io.circe.syntax._
@@ -42,8 +42,8 @@ class ScanApiRouteSpec extends FlatSpec
   private val predicate0 = ContainsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array(0: Byte, 1: Byte)))
   private val predicate1 = ContainsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array(1: Byte, 1: Byte)))
 
-  val appRequest = ScanRequest("demo", predicate0, Some(false))
-  val appRequest2 = ScanRequest("demo2", predicate1, Some(false))
+  val appRequest = ScanRequest("demo", predicate0, Some(ScanWalletInteraction.Off))
+  val appRequest2 = ScanRequest("demo2", predicate1, Some(ScanWalletInteraction.Off))
 
   it should "register a scan" in {
     Post(prefix + "/register", appRequest.asJson) ~> route ~> check {

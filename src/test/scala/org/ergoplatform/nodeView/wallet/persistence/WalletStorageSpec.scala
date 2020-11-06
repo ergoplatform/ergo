@@ -4,7 +4,7 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage.SecretPathsKey
-import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
+import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
 import org.scalacheck.Gen
@@ -63,7 +63,7 @@ class WalletStorageSpec
         externalScanReqs.foreach(req => storage.addScan(req))
         val storageApps = storage.allScans
         val storageRequests = storageApps.map { app =>
-          ScanRequest(app.scanName, app.trackingRule, Some(false))
+          ScanRequest(app.scanName, app.trackingRule, Some(ScanWalletInteraction.Off))
         }
         storageRequests.foreach(r => externalScanReqs.contains(r) shouldBe true)
         storageApps.map(_.scanId).foreach(storage.removeScan)

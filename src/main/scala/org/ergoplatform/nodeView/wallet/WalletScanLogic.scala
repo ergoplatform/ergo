@@ -18,6 +18,8 @@ import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
 import scorex.util.bytesToId
+import sigmastate.Values.ByteArrayConstant
+import sigmastate.serialization.ValueSerializer
 
 import scala.collection.mutable
 
@@ -269,7 +271,7 @@ object WalletScanLogic extends ScorexLogging {
 
       if (statuses.nonEmpty) {
         val tb = TrackedBox(tx.id, bx.index, inclusionHeight, None, None, bx, statuses)
-        log.debug("New tracked box: " + tb.boxId)
+        log.debug("New tracked box: " + tb.boxId, " scans: " + tb.scans)
         Some(tb)
       } else {
         None

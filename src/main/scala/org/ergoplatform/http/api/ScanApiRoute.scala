@@ -17,7 +17,7 @@ import org.ergoplatform.wallet.Constants.ScanId
 /**
   * This class contains methods to register / deregister and list external scans, and also to serve them.
   * For serving external scans, this class has following methods:
-  *   * a method to stop tracking some box
+  *   * methods to track or stop tracking some box
   *   * a method to list boxes not spent yet
   *
   * See EIP-0001 (https://github.com/ergoplatform/eips/blob/master/eip-0001.md) for motivation behind this API.

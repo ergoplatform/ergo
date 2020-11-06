@@ -231,10 +231,10 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
 
     case GetScanBoxes(scanId, unspent) =>
+      val unconfirmed = offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
       val currentHeight = fullHeight
-      sender() ! (if (unspent) registry.unspentBoxes(scanId) else registry.confirmedBoxes(scanId))
-        .map(tb => WalletBox(tb, currentHeight))
-        .sortBy(_.trackedBox.inclusionHeightOpt)
+      val boxes = (if (unspent) registry.unspentBoxes(scanId) else registry.confirmedBoxes(scanId)) ++ unconfirmed
+      sender() ! boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
 
     case GetTransactions =>
       sender() ! registry.allWalletTxs()

@@ -56,30 +56,36 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val b = getB(header.nBits)
     val msg = msgByHeader(header)
     val s = header.powSolution
-
-    require(s.d < b, s"Incorrect d = ${s.d} for b = $b")
+    lazy val h = Ints.toByteArray(header.height)  // used in AL v.2 only
 
     val pkBytes = if (version == 1) {
+      require(s.d < b, s"Incorrect d = ${s.d} for b = $b")
       require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
       groupElemToBytes(s.pk)
     } else {
-      require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
+      //todo: fix realDifficulty (needed for nipopows) for Header
       Array.emptyByteArray
     }
     val wBytes = if (version == 1) {
+      require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
       groupElemToBytes(s.w)
     } else {
       Array.emptyByteArray
     }
     val nonce = s.n
 
-    val seed = Bytes.concat(msg, nonce) // Autolykos v1/2, Alg. 2, line4: m || nonce
+    val seed = if (version == 1) {
+      Bytes.concat(msg, nonce) // Autolykos v1, Alg. 2, line4: m || nonce
+    } else {
+      Bytes.concat(nonce, h, M, msg) // Autolykos v1, Alg. 2, line4: nonce || h || M ||m
+    }
     val indexes = genIndexes(seed)
 
     val f = if (version == 1) {
-      indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx))).sum.mod(q)
+      indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx), h)).sum.mod(q)
     } else {
-      indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx))).sum
+      //pk and w not used in v2
+      indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx), h)).sum
     }
 
     if (version == 1) {
@@ -89,7 +95,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     } else {
       // sum as byte array is always about 32 bytes
       val array: Array[Byte] = BigIntegers.asUnsignedByteArray(32,  f.underlying())
-      require(toBigInt(hash(array)) == s.d, "h(f) != d")
+      require(toBigInt(hash(array)) < b, "h(f) < b condition not met")
     }
   }
 
@@ -131,13 +137,15 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                          m: Array[Byte],
                          pk: Array[Byte],  // not used in v2
                          w: Array[Byte],   // not used in v2
-                         indexBytes: Array[Byte]): BigInt = {
+                         indexBytes: Array[Byte],
+                         heightBytes: => Array[Byte] // not used in v1
+                        ): BigInt = {
     if (version == 1) {
       // Autolykos v. 1: H(j|M|pk|m|w) (line 5 from the Algo 2 of the spec)
       hashModQ(Bytes.concat(indexBytes, M, pk, m, w))
     } else {
       // Autolykos v. 2: H(j|M|m) (line 5 from the Algo 2 of the spec)
-      toBigInt(hash(Bytes.concat(indexBytes, M, m)).drop(1))
+      toBigInt(hash(Bytes.concat(indexBytes, heightBytes, M)).drop(1))
     }
   }
 
@@ -166,7 +174,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val msg = msgByHeader(h)
     val b = getB(nBits)
     val x = randomSecret()
-    checkNonces(version, msg, sk, x, b, minNonce, maxNonce).map(solution => h.toHeader(solution))
+    val hbs = Ints.toByteArray(h.height)
+    checkNonces(version, hbs, msg, sk, x, b, minNonce, maxNonce).map(solution => h.toHeader(solution))
   }
 
   /**
@@ -226,6 +235,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Return AutolykosSolution if there is any valid nonce in this interval.
     */
   private[mining] def checkNonces(version: Block.Version,
+                                  h: Array[Byte],
                                   m: Array[Byte],
                                   sk: BigInt,
                                   x: BigInt,
@@ -242,11 +252,16 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     } else {
       if (i % 1000000 == 0 && i > 0) log.debug(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)
-      val seed = Bytes.concat(m, nonce)
-      val d = if(version == 1) {
-        (x * genIndexes(seed).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i))).sum - sk).mod(q)
+      val seed = if(version == 1) {
+        Bytes.concat(m, nonce)
       } else {
-        toBigInt(hash(genIndexes(seed).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i))).sum.toByteArray))
+        Bytes.concat(nonce, h, M, m)
+      }
+      val d = if(version == 1) {
+        (x * genIndexes(seed).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum - sk).mod(q)
+      } else {
+        val indexes = genIndexes(seed)
+        toBigInt(hash(indexes.map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum.toByteArray))
       }
       if (d <= b) {
         log.debug(s"Solution found at $i")

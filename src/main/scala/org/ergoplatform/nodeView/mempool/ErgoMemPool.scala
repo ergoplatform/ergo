@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -66,7 +67,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool)(implicit settings: ErgoS
   /**
     * @return inputs spent by the mempool transactions
     */
-  def spentInputs: Iterator[BoxId] = pool.inputs.keysIterator
+  override def spentInputs: Iterator[BoxId] = pool.inputs.keysIterator
 
   // Check if transaction is double-spending inputs spent in the mempool.
   // If so, the new transacting is replacing older ones if it has bigger weight (fee/byte) than them on average.

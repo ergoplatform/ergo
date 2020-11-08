@@ -235,7 +235,7 @@ object WalletScanLogic extends ScorexLogging {
             MiningScanId -> ScanWalletInteraction.Off
           } else {
             //tweak for tests
-            MiningScanId -> ScanWalletInteraction.Forced
+            PaymentsScanId -> ScanWalletInteraction.Off
           }
           appsTriggered :+ miningStatus
         } else {

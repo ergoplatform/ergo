@@ -221,9 +221,8 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
   }
 
   property("external scan prioritized over payments one if walletInteraction = off, otherwise shared") {
-    forAll(Gen.oneOf(true, false)) {shared =>
-      val intFlag = if(shared) ScanWalletInteraction.Shared else ScanWalletInteraction.Off
-
+    val intFlagGen = Gen.oneOf(ScanWalletInteraction.Off, ScanWalletInteraction.Shared, ScanWalletInteraction.Forced)
+    forAll(intFlagGen) { intFlag =>
       val pk = pubkeys.head.key.toSigmaProp: ErgoTree
       val outs = IndexedSeq(new ErgoBoxCandidate(1000, pk, creationHeight = 1))
       val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, outs)
@@ -235,7 +234,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
       val boxes = extractWalletOutputs(tx, Some(1), walletVars)
 
-      if(shared){
+      if (intFlag == ScanWalletInteraction.Shared || intFlag == ScanWalletInteraction.Forced) {
         boxes.size shouldBe 1
         boxes.head.scans.size shouldBe 2
         boxes.head.scans shouldBe Set(scanId, Constants.PaymentsScanId)

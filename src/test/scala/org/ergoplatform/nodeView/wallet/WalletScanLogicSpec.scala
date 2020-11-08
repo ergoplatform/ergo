@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanR
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.scalacheck.Gen
-import sigmastate.Values.{ByteArrayConstant, ErgoTree, FalseLeaf}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree, FalseLeaf, TrueLeaf}
 
 import scala.util.Random
 
@@ -244,6 +244,23 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
         boxes.head.scans.head shouldBe scanId
       }
     }
+  }
+
+  property("scan with forced flag is sharing boxes with the p2k-wallet") {
+    val trueProp = TrueLeaf.toSigmaProp.treeWithSegregation: ErgoTree
+    val outs = IndexedSeq(new ErgoBoxCandidate(1000, trueProp, creationHeight = 1))
+    val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, outs)
+
+    val cache = WalletCache(pubkeys, s)
+    val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(trueProp.bytes))
+    val paymentScanReq = ScanRequest("Payment scan", paymentPredicate, Some(ScanWalletInteraction.Forced))
+    val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId).get), Some(cache))(s)
+
+    val boxes = extractWalletOutputs(tx, Some(1), walletVars)
+
+    boxes.size shouldBe 1
+    boxes.head.scans.size shouldBe 2
+    boxes.head.scans shouldBe Set(scanId, Constants.PaymentsScanId)
   }
 
 }

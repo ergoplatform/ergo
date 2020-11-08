@@ -18,7 +18,6 @@ import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
 import scorex.util.bytesToId
-
 import scala.collection.mutable
 
 /**

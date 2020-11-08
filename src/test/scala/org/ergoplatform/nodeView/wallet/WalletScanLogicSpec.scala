@@ -220,20 +220,31 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
     }
   }
 
-  property("external scan prioritized over payments one") {
-    val pk = pubkeys.head.key.toSigmaProp: ErgoTree
-    val outs = IndexedSeq(new ErgoBoxCandidate(1000, pk, creationHeight = 1))
-    val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, outs)
+  property("external scan prioritized over payments one if walletInteraction = off, otherwise shared") {
+    forAll(Gen.oneOf(true, false)) {shared =>
+      val intFlag = if(shared) ScanWalletInteraction.Shared else ScanWalletInteraction.Off
 
-    val cache = WalletCache(pubkeys, s)
-    val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(pk.bytes))
-    val paymentScanReq = ScanRequest("Payment scan", paymentPredicate, Some(ScanWalletInteraction.Off))
-    val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId).get), Some(cache))(s)
+      val pk = pubkeys.head.key.toSigmaProp: ErgoTree
+      val outs = IndexedSeq(new ErgoBoxCandidate(1000, pk, creationHeight = 1))
+      val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, outs)
 
-    val boxes = extractWalletOutputs(tx, Some(1), walletVars)
-    boxes.size shouldBe 1
-    boxes.head.scans.size shouldBe 1
-    boxes.head.scans.head shouldBe scanId
+      val cache = WalletCache(pubkeys, s)
+      val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(pk.bytes))
+      val paymentScanReq = ScanRequest("Payment scan", paymentPredicate, Some(intFlag))
+      val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId).get), Some(cache))(s)
+
+      val boxes = extractWalletOutputs(tx, Some(1), walletVars)
+
+      if(shared){
+        boxes.size shouldBe 1
+        boxes.head.scans.size shouldBe 2
+        boxes.head.scans shouldBe Set(scanId, Constants.PaymentsScanId)
+      } else {
+        boxes.size shouldBe 1
+        boxes.head.scans.size shouldBe 1
+        boxes.head.scans.head shouldBe scanId
+      }
+    }
   }
 
 }

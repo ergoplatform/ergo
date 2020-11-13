@@ -77,7 +77,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val seed = if (version == 1) {
       Bytes.concat(msg, nonce) // Autolykos v1, Alg. 2, line4: m || nonce
     } else {
-      Bytes.concat(nonce, h, M, msg) // Autolykos v1, Alg. 2, line4: nonce || h || M ||m
+      val i = BigIntegers.asUnsignedByteArray(4, BigIntegers.fromUnsignedByteArray(hash(Bytes.concat(msg, nonce)).takeRight(8)).mod(BigInt(N).underlying()))
+      val f = Blake2b256(Bytes.concat(i, h, M)).drop(1)
+      Bytes.concat(f, msg, nonce) // Autolykos v1, Alg. 2, line4:
     }
     val indexes = genIndexes(seed)
 
@@ -255,7 +257,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       val seed = if(version == 1) {
         Bytes.concat(m, nonce)
       } else {
-        Bytes.concat(nonce, h, M, m)
+        val i = BigIntegers.asUnsignedByteArray(4, BigIntegers.fromUnsignedByteArray(hash(Bytes.concat(m, nonce)).takeRight(8)).mod(BigInt(N).underlying()))
+        val f = Blake2b256(Bytes.concat(i, h, M)).drop(1)
+        Bytes.concat(f, m, nonce)
       }
       val d = if(version == 1) {
         (x * genIndexes(seed).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum - sk).mod(q)

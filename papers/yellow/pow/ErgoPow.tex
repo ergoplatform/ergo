@@ -64,7 +64,7 @@
         \label{alg:prove2}
         \begin{algorithmic}[1]
             \State \textbf{Input}: upcoming block header hash $m$, block height $h$
-            \State Calculate $r_{i \in [0,N)} = dropMsb(H(j || h || M))$
+            \State Calculate $r_{i \in [0,N)} = takeRight(31, H(j || h || M))$
             \While{$true$}
             \LetRnd{$nonce$}{$\mathsf{rand}$}
             \Let{$i$}{$takeRight(8, H(m || nonce))\ mod\ N$}

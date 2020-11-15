@@ -64,20 +64,23 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       groupElemToBytes(s.pk)
     } else {
       //todo: fix realDifficulty (needed for nipopows) for Header
-      Array.emptyByteArray
+      Array.emptyByteArray // pk is not used in Autolykos 2
     }
     val wBytes = if (version == 1) {
       require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
       groupElemToBytes(s.w)
     } else {
-      Array.emptyByteArray
+      Array.emptyByteArray // w is not used in Autolykos 2
     }
     val nonce = s.n
 
     val seed = if (version == 1) {
       Bytes.concat(msg, nonce) // Autolykos v1, Alg. 2, line4: m || nonce
     } else {
-      Bytes.concat(nonce, h, M, msg) // Autolykos v1, Alg. 2, line4: nonce || h || M ||m
+      val prei8 = BigIntegers.fromUnsignedByteArray(hash(Bytes.concat(msg, nonce)).takeRight(8))
+      val i = BigIntegers.asUnsignedByteArray(4, prei8.mod(BigInt(N).underlying()))
+      val f = Blake2b256(Bytes.concat(i, h, M)).drop(1) // .drop(1) is the same as takeRight(31)
+      Bytes.concat(f, msg, nonce) // Autolykos v1, Alg. 2, line4:
     }
     val indexes = genIndexes(seed)
 
@@ -144,7 +147,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       // Autolykos v. 1: H(j|M|pk|m|w) (line 5 from the Algo 2 of the spec)
       hashModQ(Bytes.concat(indexBytes, M, pk, m, w))
     } else {
-      // Autolykos v. 2: H(j|M|m) (line 5 from the Algo 2 of the spec)
+      // Autolykos v. 2: H(j|h|M) (line 5 from the Algo 2 of the spec)
       toBigInt(hash(Bytes.concat(indexBytes, heightBytes, M)).drop(1))
     }
   }
@@ -255,7 +258,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       val seed = if(version == 1) {
         Bytes.concat(m, nonce)
       } else {
-        Bytes.concat(nonce, h, M, m)
+        val i = BigIntegers.asUnsignedByteArray(4, BigIntegers.fromUnsignedByteArray(hash(Bytes.concat(m, nonce)).takeRight(8)).mod(BigInt(N).underlying()))
+        val f = Blake2b256(Bytes.concat(i, h, M)).drop(1)
+        Bytes.concat(f, m, nonce)
       }
       val d = if(version == 1) {
         (x * genIndexes(seed).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum - sk).mod(q)

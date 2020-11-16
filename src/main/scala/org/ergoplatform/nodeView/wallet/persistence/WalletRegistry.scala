@@ -20,6 +20,8 @@ import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 
+import scala.collection.mutable
+
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
   *
@@ -187,7 +189,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     val bag3 = processSpentBoxes(bag2, spentBoxesWithTx, blockHeight)
 
     // and update wallet digest
-    val bag4 = updateDigest(bag3) { case WalletDigest(height, wBalance, wTokens) =>
+    val bag4 = updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
       if (height + 1 != blockHeight) {
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
@@ -203,6 +205,8 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
+
+      val wTokens = mutable.LinkedHashMap(wTokensSeq: _*)
 
       val increasedTokenBalances = receivedTokensAmt.foldLeft(wTokens) { case (acc, (encodedId, amt)) =>
         acc += encodedId -> (acc.getOrElse(encodedId, 0L) + amt)
@@ -223,7 +227,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
       require(
         (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
         "Balance could not be negative")
-      WalletDigest(blockHeight, newBalance, newTokensBalance)
+      WalletDigest(blockHeight, newBalance, newTokensBalance.toSeq)
     }
 
     bag4.transact(store, idToBytes(blockId))
@@ -307,21 +311,22 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     val bag2 = if (digestChanged) {
       val digest = fetchDigest()
 
+      val walletAssets = mutable.LinkedHashMap(digest.walletAssetBalances :_*)
       val boxAssets = TransactionBuilder.collTokensToMap(box.additionalTokens)
 
       val updDigest = if (!oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId)) {
-        AssetUtils.mergeAssetsMut(digest.walletAssetBalances, boxAssets) //mutating digest!
+        AssetUtils.mergeAssetsMut(walletAssets, boxAssets) //mutating digest!
         WalletDigest(
           digest.height,
           digest.walletBalance + box.value,
-          digest.walletAssetBalances)
+          walletAssets.toSeq)
       } else if (oldScans.contains(Constants.PaymentsScanId) && !newScans.contains(Constants.PaymentsScanId)) {
         //mutating digest! exception can be thrown here
-        AssetUtils.subtractAssetsMut(digest.walletAssetBalances, boxAssets)
+        AssetUtils.subtractAssetsMut(walletAssets, boxAssets)
         WalletDigest(
           digest.height,
           digest.walletBalance - box.value,
-          digest.walletAssetBalances)
+          walletAssets.toSeq)
       } else {
         throw new Exception(s"Wallet can't update digest for a box with old scans $oldScans, new ones $newScans")
       }

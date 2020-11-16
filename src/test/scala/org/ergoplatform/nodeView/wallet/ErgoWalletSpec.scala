@@ -4,9 +4,9 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
-import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
+import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
-import org.ergoplatform.settings.{Constants, LaunchParameters}
+import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
 import org.ergoplatform.utils._
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalatest.PropSpec
@@ -17,10 +17,21 @@ import sigmastate.eval.Extensions._
 import scala.concurrent.blocking
 import scala.util.Random
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
+import org.scalacheck.Gen
+import scorex.util.ModifierId
 
-class ErgoWalletSpec extends PropSpec with WalletTestOps {
+class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
+
+  property("assets in WalletDigest are deterministic against serialization") {
+    forAll(Gen.listOfN(5, assetGen)) {preAssets =>
+      val assets = preAssets.map{case (id, amt) => ModifierId @@ Algos.encode(id) -> amt}
+      val wd0 = WalletDigest(1, 0, assets)
+      val bs = WalletDigestSerializer.toBytes(wd0)
+      WalletDigestSerializer.parseBytes(bs).walletAssetBalances shouldBe wd0.walletAssetBalances
+    }
+  }
 
   property("do not use inputs spent in off-chain transaction") {
     withFixture { implicit w =>
@@ -343,8 +354,8 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"After spending: $balanceAfterSpending")
       log.info(s"With unconfirmed after spending: $balanceAfterSpending")
       val assets = balanceAfterSpending.walletAssetBalances
-      totalAfterSpending.walletAssetBalances shouldBe assets
-      assets(asset1Token) shouldBe asset1ToReturn
+      totalAfterSpending.walletAssetBalances.toMap shouldBe assets.toMap
+      assets.find(_._1 == asset1Token).get._2 shouldBe asset1ToReturn
       val asset2 = assets.filter(_._1 != asset1Token)
       asset2 should not be empty
       asset2.head._2 shouldBe asset2Sum
@@ -414,8 +425,11 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Balance to spent: $balanceToSpend")
       log.info(s"Balance to return back: $balanceToReturn")
       balanceAfterSpending.walletBalance shouldEqual (confirmedBalance - balanceToSpend + balanceToReturn)
-      balanceAfterSpending.walletAssetBalances shouldBe assets
-      getBalancesWithUnconfirmed shouldEqual balanceAfterSpending
+      balanceAfterSpending.walletAssetBalances.toMap shouldBe assets.toMap
+
+      getBalancesWithUnconfirmed.height shouldEqual balanceAfterSpending.height
+      getBalancesWithUnconfirmed.walletBalance shouldEqual balanceAfterSpending.walletBalance
+      getBalancesWithUnconfirmed.walletAssetBalances.toMap shouldEqual balanceAfterSpending.walletAssetBalances.toMap
     }
   }
 
@@ -634,15 +648,15 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       log.info(s"Total with unconfirmed balance after rollback: $totalAfterRollback")
 
       initialSnapshot.walletBalance shouldBe sumBalance
-      initialSnapshot.walletAssetBalances shouldBe asset1Map
+      initialSnapshot.walletAssetBalances.toMap shouldBe asset1Map
       confirmedBeforeRollback.walletBalance should be > 0L
       confirmedBeforeRollback.walletBalance shouldBe balanceToReturn
       confirmedBeforeRollback.walletAssetBalances should have size 2
       totalBeforeRollback.walletBalance shouldBe balanceToReturn
-      totalBeforeRollback.walletAssetBalances shouldBe confirmedBeforeRollback.walletAssetBalances
+      totalBeforeRollback.walletAssetBalances.toMap shouldBe confirmedBeforeRollback.walletAssetBalances.toMap
 
       confirmedAfterRollback shouldBe initialSnapshot
-      confirmedAfterRollback.walletAssetBalances shouldBe asset1Map
+      confirmedAfterRollback.walletAssetBalances.toMap shouldBe asset1Map
       totalAfterRollback.walletBalance shouldBe balanceToReturn
       totalAfterRollback.walletAssetBalances shouldBe totalBeforeRollback.walletAssetBalances
     }
@@ -693,7 +707,10 @@ class ErgoWalletSpec extends PropSpec with WalletTestOps {
       balanceToSpend shouldBe balancePicked
       confirmedBeforeRollback.walletBalance shouldBe balanceToReturn
       confirmedBeforeRollback.walletAssetBalances should have size 2
-      totalBeforeRollback shouldBe confirmedBeforeRollback
+
+      totalBeforeRollback.walletBalance shouldBe confirmedBeforeRollback.walletBalance
+      totalBeforeRollback.walletAssetBalances.toMap shouldBe confirmedBeforeRollback.walletAssetBalances.toMap
+
 
       confirmedAfterRollback.walletBalance shouldBe initialBalance
       totalAfterRollback.walletBalance shouldBe balanceToReturn

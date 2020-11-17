@@ -23,8 +23,8 @@ final case class WalletDigest(height: Int,
 
 object WalletDigest {
 
-  def empty: WalletDigest =
-    WalletDigest(ErgoHistory.EmptyHistoryHeight, 0, Seq.empty)
+  val empty: WalletDigest =
+    WalletDigest(ErgoHistory.EmptyHistoryHeight, 0, mutable.WrappedArray.empty)
 
 }
 

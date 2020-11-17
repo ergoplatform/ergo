@@ -31,7 +31,7 @@ class OffChainRegistrySpec
       //spend all the outputs
       registry = registry.updateOnTransaction(Seq.empty, boxes.map(EncodedBoxId @@ _.boxId))
       registry.digest.walletBalance shouldEqual 0
-      registry.digest.walletAssetBalances shouldEqual Map.empty
+      registry.digest.walletAssetBalances shouldEqual Seq.empty
     }
   }
 

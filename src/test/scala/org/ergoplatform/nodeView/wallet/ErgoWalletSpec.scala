@@ -25,8 +25,8 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
   property("assets in WalletDigest are deterministic against serialization") {
-    forAll(Gen.listOfN(5, assetGen)) {preAssets =>
-      val assets = preAssets.map{case (id, amt) => ModifierId @@ Algos.encode(id) -> amt}
+    forAll(Gen.listOfN(5, assetGen)) { preAssets =>
+      val assets = preAssets.map{ case (id, amt) => ModifierId @@ Algos.encode(id) -> amt }
       val wd0 = WalletDigest(1, 0, assets)
       val bs = WalletDigestSerializer.toBytes(wd0)
       WalletDigestSerializer.parseBytes(bs).walletAssetBalances shouldBe wd0.walletAssetBalances

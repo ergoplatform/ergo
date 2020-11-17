@@ -319,14 +319,14 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
         WalletDigest(
           digest.height,
           digest.walletBalance + box.value,
-          walletAssets.toSeq)
+          walletAssets.toArray[(EncodedTokenId, Long)])
       } else if (oldScans.contains(Constants.PaymentsScanId) && !newScans.contains(Constants.PaymentsScanId)) {
         //mutating digest! exception can be thrown here
         AssetUtils.subtractAssetsMut(walletAssets, boxAssets)
         WalletDigest(
           digest.height,
           digest.walletBalance - box.value,
-          walletAssets.toSeq)
+          walletAssets.toArray[(EncodedTokenId, Long)])
       } else {
         throw new Exception(s"Wallet can't update digest for a box with old scans $oldScans, new ones $newScans")
       }

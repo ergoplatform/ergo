@@ -61,7 +61,7 @@ trait WalletTestOps extends NodeViewBaseOps {
     tx.outputs.filter(_.propositionBytes.containsSlice(org.ergoplatform.mining.groupElemToBytes(pk.value)))
 
   def assetAmount(boxes: Seq[ErgoBoxCandidate]): Seq[(ModifierId, Long)] =
-    assetsByTokenId(boxes).map { case (tokenId, sum) => (bytesToId(tokenId), sum) }.toSeq
+    assetsByTokenId(boxes).map { case (tokenId, sum) => (bytesToId(tokenId), sum) }.toArray[(ModifierId, Long)]
 
   def toAssetMap(assetSeq: Seq[(TokenId, Long)]): TokensMap =
     assetSeq.map { case (tokenId, sum) => (bytesToId(tokenId), sum) }.toMap

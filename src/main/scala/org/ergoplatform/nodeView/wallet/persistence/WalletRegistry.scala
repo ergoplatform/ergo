@@ -218,7 +218,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
           if (decreasedAmt > 0) {
             acc += encodedId -> decreasedAmt
           } else {
-            acc - encodedId
+            acc -= encodedId
           }
         }
 

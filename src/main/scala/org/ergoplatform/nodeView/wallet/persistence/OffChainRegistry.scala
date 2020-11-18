@@ -31,7 +31,7 @@ case class OffChainRegistry(height: Int,
       .foldLeft(mutable.LinkedHashMap.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
         acc += id -> (acc.getOrElse(id, 0L) + amt)
       }
-    WalletDigest(height, balance, tokensBalance)
+    WalletDigest(height, balance, tokensBalance.toSeq)
   }
 
   /**

@@ -89,6 +89,16 @@ class ErgoWalletActor(settings: ErgoSettings,
     registry.fetchDigest().height
   }
 
+  override def postRestart(reason: Throwable): Unit = {
+    log.error(s"Wallet actor restarted due to ${reason.getMessage}", reason)
+    super.postRestart(reason)
+  }
+
+  override def postStop(): Unit = {
+    logger.info("Wallet actor stopped")
+    super.postStop()
+  }
+
   override def preStart(): Unit = {
     log.info("Initializing wallet actor")
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])

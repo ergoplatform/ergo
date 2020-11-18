@@ -1,11 +1,12 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.wallet.IdUtils._
+import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, _}
 import org.ergoplatform.settings.Constants
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
+
 import scala.collection.mutable
 import scorex.util.Extensions._
 
@@ -18,11 +19,12 @@ import scorex.util.Extensions._
   */
 final case class WalletDigest(height: Int,
                               walletBalance: Long,
-                              walletAssetBalances: mutable.LinkedHashMap[EncodedTokenId, Long])
+                              walletAssetBalances: Seq[(EncodedTokenId, Long)])
+
 object WalletDigest {
 
-  def empty: WalletDigest =
-    WalletDigest(ErgoHistory.EmptyHistoryHeight, 0, mutable.LinkedHashMap.empty)
+  val empty: WalletDigest =
+    WalletDigest(ErgoHistory.EmptyHistoryHeight, 0, mutable.WrappedArray.empty)
 
 }
 
@@ -51,7 +53,7 @@ object WalletDigestSerializer extends ScorexSerializer[WalletDigest] {
       walletAssetBalances += kv
     }
 
-    WalletDigest(height, balance, walletAssetBalances)
+    WalletDigest(height, balance, walletAssetBalances.toSeq)
   }
 
 }

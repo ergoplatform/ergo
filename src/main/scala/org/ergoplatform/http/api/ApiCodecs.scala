@@ -52,8 +52,6 @@ trait ApiCodecs extends JsonCodecs {
 
   implicit val proveDlogEncoder: Encoder[ProveDlog] = _.pkBytes.asJson
 
-  implicit val encodedTokenIdEncoder: Encoder[EncodedTokenId] = _.asJson
-
   implicit val balancesSnapshotEncoder: Encoder[WalletDigest] = { v =>
     import v._
     Json.obj(

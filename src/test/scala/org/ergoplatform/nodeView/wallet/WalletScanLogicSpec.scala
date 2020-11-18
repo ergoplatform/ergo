@@ -109,7 +109,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
   }
 
   property("scanBlockTransactions") {
-    withHybridStore(10) { store =>
+    withVersionedStore(10) { store =>
       val walletVars = walletVarsGen.sample.get
       val emptyReg = new WalletRegistry(store)(settings.walletSettings)
       val emptyOff = OffChainRegistry.empty

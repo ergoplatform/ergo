@@ -24,8 +24,8 @@ lazy val commonSettings = Seq(
   publishTo := sonatypePublishToBundle.value,
 )
 
-val scorexVersion = "master-4405ea45-SNAPSHOT"
-val sigmaStateVersion = "3.3.2"
+val scorexVersion = "master-b8f1c5f1-SNAPSHOT"
+val sigmaStateVersion = "optimizations-77bc7bf6-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -53,8 +53,8 @@ libraryDependencies ++= Seq(
   "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
   "org.scalactic" %% "scalactic" % "3.0.+" % "test",
-  "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
-  "org.scalacheck" %% "scalacheck" % "1.13.5" % "test",
+  "org.scalatest" %% "scalatest" % "3.1.1" % "test,it",
+  "org.scalacheck" %% "scalacheck" % "1.14.3" % "test",
 
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
   "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",

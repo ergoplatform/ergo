@@ -5,12 +5,12 @@ name := "avldb"
 libraryDependencies ++= Seq(
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "org.scorexfoundation" %% "scrypto" % "2.1.4"
+  "org.scorexfoundation" %% "scrypto" % "2.1.10"
 )
 
 libraryDependencies ++= Seq(
-  "org.scalatest" %% "scalatest" % "3.0.5" % "test",
-  "org.scalacheck" %% "scalacheck" % "1.13.5" % "test",
+  "org.scalatest" %% "scalatest" % "3.1.1" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.14.3" % "test",
   "com.storm-enroute" %% "scalameter" % "0.9" % "test"
 )
 

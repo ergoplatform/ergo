@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "3.3.0"
+  version: "3.3.5"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -1265,6 +1265,17 @@ components:
             - Incoming
             - Outgoing
 
+    PeersStatus:
+      type: object
+      required:
+        - lastInomingMessage
+        - currentNetworkTime
+      properties:
+        lastIncomingMessage:
+          $ref: '#/components/schemas/Timestamp'
+        currentNetworkTime:
+          $ref: '#/components/schemas/Timestamp'
+
     NodeInfo:
       type: object
       required:
@@ -2166,6 +2177,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /peers/status:
+    get:
+      summary: Get last incomming message timestamp and current network time
+      operationId: getPeersStatus
+      tags:
+        - peers
+      responses:
+        '200':
+          description: Network status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeersStatus'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /utils/seed:
     get:
       summary: Get random seed of 32 bytes
@@ -2814,7 +2845,7 @@ paths:
         schema:
           type: integer
           format: int32
-          minimum: 0
+          minimum: -1
           default: 0
       - in: query
         name: minInclusionHeight
@@ -2828,7 +2859,8 @@ paths:
     get:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Get a list of all wallet-related boxes
+      summary: Get a list of all wallet-related boxes, both spent and unspent. Set minConfirmations to -1 to get
+               mempool boxes included.
       operationId: walletBoxes
       tags:
         - wallet
@@ -2857,7 +2889,7 @@ paths:
         schema:
           type: integer
           format: int32
-          minimum: 0
+          minimum: -1
           default: 0
       - in: query
         name: minInclusionHeight
@@ -2871,7 +2903,7 @@ paths:
     get:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Get a list of unspent boxes
+      summary: Get a list of unspent boxes. Set minConfirmations to -1 to have mempool boxes considered.
       operationId: walletUnspentBoxes
       tags:
         - wallet

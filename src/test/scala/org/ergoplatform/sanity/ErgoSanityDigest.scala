@@ -87,6 +87,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val p: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
       pchProbe.ref,
+      lastMessage = 0,
       Some(peerInfo)
     )
     val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]

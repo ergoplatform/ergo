@@ -273,12 +273,12 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * removes the box from the database if its there and scanIds are empty
     *
     * @param newScans - ids of new scans box should be associated with
-    * @param box - box to be updated
+    * @param box - box to be updated (new version)
     * @return
     */
   def updateScans(newScans: Set[ScanId], box: ErgoBox): Try[Unit] = Try {
     val bag0 = KeyValuePairsBag.empty
-    val oldBox = getBox(box.id)
+    val oldBox = getBox(box.id) // read old version from the database
     val oldScans = oldBox.map(_.scans).getOrElse(Set.empty)
 
     val newBox = TrackedBox(box, box.creationHeight, newScans)

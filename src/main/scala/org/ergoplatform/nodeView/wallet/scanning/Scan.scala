@@ -18,6 +18,7 @@ import scala.util.{Failure, Success, Try}
   * @param scanId         - unique identifier of an scan in the local system
   * @param scanName       - scan description (255 bytes in UTF-8 encoding max)
   * @param trackingRule  - a predicate to scan the blockchain for specific scan-related boxes
+  * @param walletInteraction - a flag which is prescribing how the scan is interacting with the p2pk-wallet
   */
 case class Scan(scanId: ScanId,
                 scanName: String,
@@ -43,6 +44,8 @@ object ScanSerializer extends ScorexSerializer[Scan] {
     val appName = r.getShortString()
     val pos = r.position
 
+    // hack to read scans serialized with previous versions (they will have positive first byte)
+    // for scans written with previous versions, walletInteraction flag is set to "off"
     val interactionFlag = r.getByte() match {
       case x: Byte if x < 0 => ScanWalletInteraction.fromByte(x)
       case _ => r.position_=(pos); ScanWalletInteraction.Off

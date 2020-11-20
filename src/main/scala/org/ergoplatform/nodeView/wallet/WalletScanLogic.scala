@@ -219,6 +219,8 @@ object WalletScanLogic extends ScorexLogging {
     val externalScans: Seq[Scan] = walletVars.externalScans
 
     tx.outputs.flatMap { bx =>
+
+      // First, we check apps triggered by the tx output
       val appsTriggered =
         externalScans
           .filter(_.trackingRule.filter(bx))
@@ -226,13 +228,15 @@ object WalletScanLogic extends ScorexLogging {
 
       val boxScript = bx.propositionBytes
 
+      // then check whether Bloom filter built on top of payment & mining scripts of the p2pk-wallet
       val statuses: Set[ScanId] = if (walletVars.filter.mightContain(boxScript)) {
 
+        // first, we are checking mining script
         val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
 
         val prePaymentStatuses = if (miningIncomeTriggered) {
           val miningStatus: (ScanId, ScanWalletInteraction.Value) = if (walletVars.settings.miningRewardDelay > 0) {
-            MiningScanId -> ScanWalletInteraction.Off
+            MiningScanId -> ScanWalletInteraction.Off // scripts are different, so off is kinda overkill
           } else {
             //tweak for tests
             PaymentsScanId -> ScanWalletInteraction.Off
@@ -244,9 +248,11 @@ object WalletScanLogic extends ScorexLogging {
 
         if (prePaymentStatuses.nonEmpty &&
           !prePaymentStatuses.exists(t => ScanWalletInteraction.interactingWithWallet(t._2))) {
-          //if other scans intercept the box, it is not being tracked by the payments app
+          // if other scans intercept the box, and the scans are not sharing the box,
+          // then the box is not being tracked by the p2pk-wallet
           prePaymentStatuses.map(_._1).toSet
         } else {
+          //check whether payment is triggered (Bloom filter has false positives)
           val paymentsTriggered = trackedBytes.exists(bs => boxScript.sameElements(bs))
 
           val otherIds = prePaymentStatuses.map(_._1).toSet
@@ -259,6 +265,7 @@ object WalletScanLogic extends ScorexLogging {
       } else {
         val appScans = appsTriggered.map(_._1).toSet
 
+        // Add p2pk-wallet if there's a scan enforcing that
         if (appsTriggered.exists(_._2 == ScanWalletInteraction.Forced)) {
           appScans ++ Set(PaymentsScanId)
         } else {

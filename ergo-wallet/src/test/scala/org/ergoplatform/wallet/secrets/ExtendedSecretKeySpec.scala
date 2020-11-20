@@ -1,14 +1,16 @@
 package org.ergoplatform.wallet.secrets
 
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.scalatest.prop.TableDrivenPropertyChecks
-import org.scalatest.{Assertion, Matchers, PropSpec}
+import org.scalatest.Assertion
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.encode.Base58
 
 class ExtendedSecretKeySpec
-  extends PropSpec
+  extends AnyPropSpec
     with Matchers
-    with TableDrivenPropertyChecks {
+    with ScalaCheckPropertyChecks {
 
   val seedStr = "edge talent poet tortoise trumpet dose"
   val seed: Array[Byte] = Mnemonic.toSeed(seedStr)

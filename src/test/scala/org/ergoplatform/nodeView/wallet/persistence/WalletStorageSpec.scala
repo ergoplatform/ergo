@@ -6,18 +6,19 @@ import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage.SecretPathsKey
 import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
 import org.ergoplatform.utils.generators.WalletGenerators
-import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
+import org.ergoplatform.wallet.secrets.{DerivationPathSerializer, DerivationPath}
 import org.scalacheck.Gen
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.db.LDBKVStore
 import scorex.testkit.utils.FileUtils
 
 class WalletStorageSpec
-  extends FlatSpec
+  extends AnyFlatSpec
     with Matchers
     with WalletGenerators
-    with GeneratorDrivenPropertyChecks
+    with ScalaCheckPropertyChecks
     with DBSpec
     with FileUtils {
 

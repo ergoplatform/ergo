@@ -3,7 +3,7 @@ package org.ergoplatform.http.routes
 import akka.actor.ActorRef
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
+import akka.http.scaladsl.testkit.{ScalatestRouteTest, RouteTestTimeout}
 import akka.pattern.ask
 import akka.testkit.TestDuration
 import akka.util.Timeout
@@ -17,7 +17,8 @@ import org.ergoplatform.local.ErgoStatsCollectorRef
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.utils.Stubs
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedHistory
 import scorex.core.utils.TimeProvider.Time
 import scorex.core.utils.NetworkTimeProvider
@@ -25,7 +26,7 @@ import scorex.core.utils.NetworkTimeProvider
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class InfoApiRoutesSpec extends FlatSpec
+class InfoApiRoutesSpec extends AnyFlatSpec
   with Matchers
   with ScalatestRouteTest
   with FailFastCirceSupport

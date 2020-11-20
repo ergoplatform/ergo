@@ -11,6 +11,7 @@ libraryDependencies ++= Seq(
 libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "3.1.1" % "test",
   "org.scalacheck" %% "scalacheck" % "1.14.3" % "test",
+  "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test,
   "com.storm-enroute" %% "scalameter" % "0.9" % "test"
 )
 

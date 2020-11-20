@@ -1,8 +1,9 @@
 package org.ergoplatform.db
 
-import org.scalatest.{Matchers, PropSpec}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
 
-class VersionedStoreSpec extends PropSpec with Matchers with DBSpec {
+class VersionedStoreSpec extends AnyPropSpec with Matchers with DBSpec {
 
   private val (keyA, valA) = (byteString("A"), byteString("1"))
   private val (keyB, valB) = (byteString("B"), byteString("2"))

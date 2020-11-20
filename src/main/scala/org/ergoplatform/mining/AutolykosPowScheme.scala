@@ -288,29 +288,30 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Assembles candidate block for external miner with certain transactions included into the block
     *
-    * @param candidate      - block candidate (contained the transactions)
+    * @param blockCandidate      - block candidate (contained the transactions)
     * @param pk             - miner pubkey
     * @param mandatoryTxIds - ids of the transactions to include
     * @return - block candidate for external miner
     */
-  def deriveExternalCandidate(candidate: CandidateBlock,
+  def deriveExternalCandidate(blockCandidate: CandidateBlock,
                               pk: ProveDlog,
                               mandatoryTxIds: Seq[ModifierId]): WorkMessage = {
-    val h = ErgoMiner.deriveUnprovenHeader(candidate)
-    val msg = msgByHeader(h)
-    val b = getB(candidate.nBits)
-    val v = candidate.version
+    val headerCandidate = ErgoMiner.deriveUnprovenHeader(blockCandidate)
+    val msg = msgByHeader(headerCandidate)
+    val b = getB(blockCandidate.nBits)
+    val v = blockCandidate.version
+    val h = headerCandidate.height
 
     val proofs = if (mandatoryTxIds.nonEmpty) {
       // constructs fake block transactions section (BlockTransactions instance) to get proofs from it
       val fakeHeaderId = scorex.util.bytesToId(Array.fill(org.ergoplatform.wallet.Constants.ModifierIdLength)(0: Byte))
-      val bt = BlockTransactions(fakeHeaderId, candidate.transactions)
+      val bt = BlockTransactions(fakeHeaderId, blockCandidate.transactions)
       val ps = mandatoryTxIds.flatMap { txId => bt.proofFor(txId).map(mp => TransactionMembershipProof(txId, mp)) }
-      Some(ProofOfUpcomingTransactions(h, ps))
+      Some(ProofOfUpcomingTransactions(headerCandidate, ps))
     } else {
       None
     }
-    WorkMessage(msg, b, pk, v, proofs)
+    WorkMessage(msg, b, h, pk, v, proofs)
   }
 
 }

@@ -3652,7 +3652,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /scan/unspentBoxes/{scanId}:
+  /scan/unspentBoxes:
+    parameters:
+      - in: query
+        name: scanId
+        required: false
+        description: Identifier of scan
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal number of confirmations
+        schema:
+          type: integer
+          format: int32
+          minimum: -1
+          default: 0
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Minimal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -3660,14 +3687,6 @@ paths:
       operationId: listUnspentScans
       tags:
         - scan
-      parameters:
-        - in: path
-          name: scanId
-          required: true
-          description: identifier of a scan
-          schema:
-            type: integer
-            format: int32
       responses:
         '200':
           description: List of unspent boxes

@@ -30,11 +30,6 @@ object ScanWalletInteraction extends Enumeration {
   def interactingWithWallet(v: Value): Boolean = v == Shared || v == Forced
 }
 
-object Tester extends App {
-  println(ScanWalletInteraction.withName("forced").id)
-  println(ScanWalletInteraction.withName("shared").id)
-}
-
 /**
   * Wraps information about user scan.
   *

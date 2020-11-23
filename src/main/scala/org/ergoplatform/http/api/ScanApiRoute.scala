@@ -1,7 +1,7 @@
 package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.{Directive, Route}
 import io.circe.Encoder
 import org.ergoplatform._
 import org.ergoplatform.nodeView.wallet._
@@ -10,6 +10,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
+
 import scala.util.{Failure, Success}
 import ScanEntities._
 import org.ergoplatform.wallet.Constants.ScanId
@@ -60,9 +61,13 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     withWallet(_.readScans().map(_.apps))
   }
 
-  def unspentR: Route = (path("unspentBoxes" / IntNumber) & get & boxParams) { (scanIdInt, minConfNum, minHeight) =>
+  val scanBoxesParams: Directive[(Int, Int, Int)] =
+    parameters("scanId".as[Int], "minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)
+
+  def unspentR: Route = (path("unspentBoxes") & get & scanBoxesParams) { (scanIdInt, minConfNum, minHeight) =>
     val scanId = ScanId @@ scanIdInt.toShort
-    withWallet(_.appBoxes(scanId, unspentOnly = true).map {
+    val considerUnconfirmed = minConfNum == -1
+    withWallet(_.appBoxes(scanId, unspentOnly = true, considerUnconfirmed).map {
       _.filter(boxFilterPredicate(_, minConfNum, minHeight))
     })
   }

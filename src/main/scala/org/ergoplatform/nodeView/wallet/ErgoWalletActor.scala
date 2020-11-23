@@ -151,9 +151,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ScanOffChain(tx) =>
       val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, walletVars)
       val inputs = WalletScanLogic.extractInputBoxes(tx)
-      if (newWalletBoxes.nonEmpty || inputs.nonEmpty) {
-        offChainRegistry = offChainRegistry.updateOnTransaction(newWalletBoxes, inputs)
-      }
+      offChainRegistry = offChainRegistry.updateOnTransaction(newWalletBoxes, inputs)
 
     case ScanInThePast(blockHeight) =>
       if (expectedHeight(blockHeight) == blockHeight) {
@@ -230,10 +228,18 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
       sender() ! boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
 
-    case GetScanBoxes(scanId, unspent) =>
-      val unconfirmed = offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
+    case GetScanBoxes(scanId, unspent, considerUnconfirmed) =>
+
+      val unconfirmed = if(considerUnconfirmed) {
+        offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
+      } else Seq.empty
+
       val currentHeight = fullHeight
-      val boxes = (if (unspent) registry.unspentBoxes(scanId) else registry.confirmedBoxes(scanId)) ++ unconfirmed
+      val boxes = (if (unspent){
+        registry.unspentBoxes(scanId)
+      } else {
+        registry.confirmedBoxes(scanId)
+      }) ++ unconfirmed
       sender() ! boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
 
     case GetTransactions =>
@@ -888,9 +894,12 @@ object ErgoWalletActor {
   /**
     * Get boxes related to a scan
     *
-    * @param unspentOnly
+    * @param scanId - scan identifier
+    * @param unspentOnly - return only unspent boxes
+    * @param considerUnconfirmed - consider mempool (filter our unspent boxes spent in the pool if unspent = true, add
+    *                            boxes created in the pool for both values of unspentOnly).
     */
-  final case class GetScanBoxes(scanId: ScanId, unspentOnly: Boolean)
+  final case class GetScanBoxes(scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean)
 
   /**
     * Set or update address for change outputs. Initially the address is set to root key address

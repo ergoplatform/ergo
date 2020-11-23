@@ -199,7 +199,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! RemoveScanResponse(res)
 
-      case GetScanBoxes(_, _) =>
+      case GetScanBoxes(_, _, _) =>
         sender() ! Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
 
       case StopTracking(scanId, boxId) =>

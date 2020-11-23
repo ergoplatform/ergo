@@ -32,6 +32,9 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   implicit val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix)
   implicit val walletBoxEncoder: Encoder[WalletBox] = WalletBox.encoder
 
+  private val scanBoxesParams: Directive[(Int, Int, Int)] =
+    parameters("scanId".as[Int], "minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)
+
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   override val route: Route = (pathPrefix("scan") & withAuth) {
@@ -60,9 +63,6 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   def listScansR: Route = (path("listAll") & get) {
     withWallet(_.readScans().map(_.apps))
   }
-
-  val scanBoxesParams: Directive[(Int, Int, Int)] =
-    parameters("scanId".as[Int], "minConfirmations".as[Int] ? 0, "minInclusionHeight".as[Int] ? 0)
 
   def unspentR: Route = (path("unspentBoxes") & get & scanBoxesParams) { (scanIdInt, minConfNum, minHeight) =>
     val scanId = ScanId @@ scanIdInt.toShort

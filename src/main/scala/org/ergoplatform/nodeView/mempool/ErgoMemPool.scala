@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction

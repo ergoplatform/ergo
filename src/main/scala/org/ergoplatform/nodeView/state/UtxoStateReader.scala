@@ -131,6 +131,10 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     }
   }
 
+  /**
+    * Producing a copy of the state which takes into account pool of unconfirmed transactions.
+    * Useful when checking mempool transactions.
+    */
   def withMempool(mp: ErgoMemPoolReader): UtxoState = withTransactions(mp.getAll)
 
 }

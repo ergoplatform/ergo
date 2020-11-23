@@ -254,7 +254,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       case (Some(mr), Some(sr)) =>
         sr match {
           case u: UtxoStateReader =>
-            utxoReaderOpt = Some(u.withTransactions(mr.getAll))
+            utxoReaderOpt = Some(u.withMempool(mr))
           case _ =>
         }
       case (_, _) =>

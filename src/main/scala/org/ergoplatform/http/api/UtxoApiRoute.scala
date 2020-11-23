@@ -23,7 +23,7 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     (readersHolder ? GetReaders).mapTo[Readers].map(rs => (rs.s, rs.m))
 
   override val route: Route = pathPrefix("utxo") {
-    byId ~ serializedbyId ~ genesis ~ withPoolById ~ withPoolSerializedbyId
+    byId ~ serializedById ~ genesis ~ withPoolById ~ withPoolSerializedById
   }
 
   def withPoolById: Route = (get & path("withPool" / "byId" / Segment)) { id =>
@@ -34,7 +34,7 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     })
   }
 
-  def withPoolSerializedbyId: Route = (get & path("withPool" / "byIdBinary" / Segment)) { id =>
+  def withPoolSerializedById: Route = (get & path("withPool" / "byIdBinary" / Segment)) { id =>
     ApiResponse(
       getStateAndPool.map {
         case (usr: UtxoStateReader, mp) =>
@@ -56,7 +56,7 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     })
   }
 
-  def serializedbyId: Route = (get & path("byIdBinary" / Segment)) { id =>
+  def serializedById: Route = (get & path("byIdBinary" / Segment)) { id =>
     ApiResponse(
       getState.map {
         case usr: UtxoStateReader =>

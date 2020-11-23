@@ -1,12 +1,15 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain, PoPowAlgos}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.History._
 import scorex.crypto.hash.Digest32
+
+import scala.concurrent.duration._
 
 class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
@@ -29,12 +32,26 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     val epochLength = 3
     val useLastEpochs = 3
 
-    var history = generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0,
-      epochLength = epochLength, useLastEpochs = useLastEpochs)
+    val initDiff = BigInt(2)
+    val initDiffBits = RequiredDifficulty.encodeCompactBits(initDiff)
+
+    var history = generateHistory(
+      verifyTransactions = false,
+      StateType.Digest,
+      PoPoWBootstrap = false,
+      blocksToKeep = 0,
+      epochLength = epochLength,
+      useLastEpochs = useLastEpochs,
+      initialDiffOpt = Some(initDiff)
+    )
     val blocksBeforeRecalculate = epochLength + 1
 
-    history = applyHeaderChain(history, genHeaderChain(blocksBeforeRecalculate, history))
-    history.requiredDifficultyAfter(history.bestHeaderOpt.get) shouldBe settings.chainSettings.initialDifficulty
+    history = applyHeaderChain(history,
+      genHeaderChain(blocksBeforeRecalculate, history, diffBitsOpt = Some(initDiffBits), useRealTs = true))
+
+    val bestHeaderOpt = history.bestHeaderOpt
+
+    history.requiredDifficultyAfter(bestHeaderOpt.get) shouldBe initDiff
   }
 
   property("lastHeaders() should return correct number of blocks") {
@@ -49,11 +66,11 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
   property("History.isInBestChain") {
     var history = genHistory()
-    val common = genHeaderChain(BlocksInChain, history)
+    val common = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
     history = applyHeaderChain(history, common)
 
-    val fork1 = genHeaderChain(BlocksInChain, history)
-    val fork2 = genHeaderChain(BlocksInChain + 1, history)
+    val fork1 = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
+    val fork2 = genHeaderChain(BlocksInChain + 1, history, diffBitsOpt = None, useRealTs = false)
 
     history = applyHeaderChain(history, fork1.tail)
     history.bestHeaderOpt.get shouldBe fork1.last
@@ -63,7 +80,6 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     history.bestHeaderOpt.get shouldBe fork2.last
     fork2.headers.foreach(h => history.isInBestChain(h.id) shouldBe true)
     fork1.tail.headers.foreach(h => history.isInBestChain(h.id) shouldBe false)
-
   }
 
   property("Compare headers chain") {
@@ -71,11 +87,11 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
     def getInfo(c: HeaderChain): ErgoSyncInfo = ErgoSyncInfo(c.headers.map(_.id))
 
-    val common = genHeaderChain(BlocksInChain, history)
+    val common = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
     history = applyHeaderChain(history, common)
 
-    val fork1 = genHeaderChain(BlocksInChain, history)
-    val fork2 = genHeaderChain(BlocksInChain + 1, history)
+    val fork1 = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
+    val fork2 = genHeaderChain(BlocksInChain + 1, history, diffBitsOpt = None, useRealTs = false)
 
     history = applyHeaderChain(history, fork1.tail)
     history.bestHeaderOpt.get shouldBe fork1.last
@@ -90,14 +106,14 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
   property("continuationIds() on forks") {
     var history1 = genHistory()
     var history2 = genHistory()
-    val inChain = genHeaderChain(2, history1)
+    val inChain = genHeaderChain(2, history1, diffBitsOpt = None, useRealTs = false)
 
 
     //put genesis
     history1 = applyHeaderChain(history1, inChain)
     history2 = applyHeaderChain(history2, inChain)
-    val fork1 = genHeaderChain(BlocksInChain, history1).tail
-    val fork2 = genHeaderChain(BlocksInChain, history1).tail
+    val fork1 = genHeaderChain(BlocksInChain, history1, diffBitsOpt = None, useRealTs = false).tail
+    val fork2 = genHeaderChain(BlocksInChain, history1, diffBitsOpt = None, useRealTs = false).tail
 
     //apply 2 different forks
     history1 = applyHeaderChain(history1, fork1)
@@ -115,7 +131,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
   property("continuationIds() for empty ErgoSyncInfo should contain ids of all headers") {
     var history = genHistory()
-    val chain = genHeaderChain(BlocksInChain, history)
+    val chain = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
     history = applyHeaderChain(history, chain)
 
     val smallerLimit = 2
@@ -153,11 +169,11 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
   property("continuationHeaderChains()") {
     var history = genHistory()
     //put 2 blocks
-    val inChain = genHeaderChain(2, history)
+    val inChain = genHeaderChain(2, history, diffBitsOpt = None, useRealTs = false)
     history = applyHeaderChain(history, inChain)
     //apply 2 different forks
-    val fork1 = genHeaderChain(2, history).tail
-    val fork2 = genHeaderChain(3, history).tail
+    val fork1 = genHeaderChain(2, history, diffBitsOpt = None, useRealTs = false).tail
+    val fork2 = genHeaderChain(3, history, diffBitsOpt = None, useRealTs = false).tail
     history = applyHeaderChain(history, fork1)
     history = applyHeaderChain(history, fork2)
     //get continuationHeaderChains
@@ -170,11 +186,11 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
   property("chainToHeader()") {
     var history = genHistory()
     //put 2 blocks
-    val inChain = genHeaderChain(2, history)
+    val inChain = genHeaderChain(2, history, diffBitsOpt = None, useRealTs = false)
     history = applyHeaderChain(history, inChain)
     //apply 2 different forks
-    val fork1 = genHeaderChain(2, history).tail
-    val fork2 = genHeaderChain(3, history).tail
+    val fork1 = genHeaderChain(2, history, diffBitsOpt = None, useRealTs = false).tail
+    val fork2 = genHeaderChain(3, history, diffBitsOpt = None, useRealTs = false).tail
     history = applyHeaderChain(history, fork1)
     history = applyHeaderChain(history, fork2)
 
@@ -198,13 +214,13 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     forAll(smallInt, digest32Gen) { (forkLength: Int, extensionHash: Digest32) =>
       whenever(forkLength > forkDepth) {
 
-        val fork1 = genHeaderChain(forkLength, history).tail
+        val fork1 = genHeaderChain(forkLength, history, diffBitsOpt = None, useRealTs = false).tail
         val common = fork1.headers(forkDepth)
         val commonInterlinks = history.typedModifierById[Extension](common.extensionId)
           .map(ext => PoPowAlgos.unpackInterlinks(ext.fields).get)
           .getOrElse(Seq.empty)
         val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common), commonInterlinks,
-          defaultDifficultyControl, extensionHash)
+          defaultDifficultyControl, extensionHash, diffBitsOpt = None, useRealTs = false)
         val fork1SuffixIds = fork1.headers.drop(forkDepth + 1).map(_.encodedId)
         val fork2SuffixIds = fork2.headers.drop(forkDepth + 1).map(_.encodedId)
         (fork1SuffixIds intersect fork2SuffixIds) shouldBe empty
@@ -224,7 +240,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
   property("Append headers to best chain in history") {
     var history = genHistory()
 
-    val chain = genHeaderChain(BlocksInChain, history)
+    val chain = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
 
     chain.headers.foreach { header =>
       val inHeight = history.heightOf(header.parentId).getOrElse(ErgoHistory.EmptyHistoryHeight)

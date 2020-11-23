@@ -115,19 +115,19 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
     val missedBS = missedChain.flatMap(fb => Seq((BlockTransactions.modifierTypeId, fb.blockTransactions.encodedId),
       (Extension.modifierTypeId, fb.extension.encodedId)))
 
-    history.nextModifiersToDownload(1, _ => true).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS.take(1)
+    history.nextModifiersToDownload(1, id => !history.contains(id)).map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS.take(1)
 
-    history.nextModifiersToDownload(2 * (BlocksToKeep - 1), _ => true)
+    history.nextModifiersToDownload(2 * (BlocksToKeep - 1), id => !history.contains(id))
       .map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS
 
-    history.nextModifiersToDownload(2, id => id != missedChain.head.blockTransactions.id)
+    history.nextModifiersToDownload(2, id => !history.contains(id) && (id != missedChain.head.blockTransactions.id))
       .map(id => (id._1, Algos.encode(id._2))) shouldEqual missedBS.tail.take(2)
   }
 
   property("append header as genesis") {
     val history = genHistory()
     history.bestHeaderOpt shouldBe None
-    val header = genHeaderChain(1, history).head
+    val header = genHeaderChain(1, history, diffBitsOpt = None, useRealTs = false).head
     val updHistory = history.append(header).get._1
     updHistory.bestHeaderOpt shouldBe Some(header)
     updHistory.modifierById(header.id) shouldBe Some(header)
@@ -136,7 +136,7 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
   property("append header as genesis - via applyHeaderChain") {
     val history = genHistory()
     history.bestHeaderOpt shouldBe None
-    val header = genHeaderChain(1, history).head
+    val header = genHeaderChain(1, history, diffBitsOpt = None, useRealTs = false).head
 
     val updHistory = applyHeaderChain(history, HeaderChain(Seq(header)))
     updHistory.bestHeaderOpt shouldBe Some(header)

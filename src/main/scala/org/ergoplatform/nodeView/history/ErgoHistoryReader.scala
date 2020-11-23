@@ -3,10 +3,11 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
-import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.ScorexEncoding
@@ -28,10 +29,9 @@ trait ErgoHistoryReader
     with ScorexLogging
     with ScorexEncoding {
 
-  protected val chainSettings: ChainSettings
-  protected val config: NodeConfigurationSettings
-
   protected[history] val historyStorage: HistoryStorage
+
+  protected val settings: ErgoSettings
 
   /**
     * Is there's no history, even genesis block
@@ -126,7 +126,7 @@ trait ErgoHistoryReader
   /**
     * @param info other's node sync info
     * @param size max return size
-    * @return Ids of headerss, that node with info should download and apply to synchronize
+    * @return Ids of headers, that node with info should download and apply to synchronize
     */
   override def continuationIds(info: ErgoSyncInfo, size: Int): ModifierIds =
     if (isEmpty) {
@@ -229,10 +229,33 @@ trait ErgoHistoryReader
       typedModifierById[Extension](header.extensionId),
       typedModifierById[ADProofs](header.ADProofsId)) match {
       case (Some(txs), Some(ext), Some(proofs)) => Some(ErgoFullBlock(header, txs, ext, Some(proofs)))
-      case (Some(txs), Some(ext), None) if !config.stateType.requireProofs =>
+      case (Some(txs), Some(ext), None) if !nodeSettings.stateType.requireProofs =>
         Some(ErgoFullBlock(header, txs, ext, None))
       case _ => None
     }
+  }
+
+  /**
+    * Returns full block from a best headers-chain at given height
+    * @param height - height to get the full block from
+    * @return - full block or None if there's no such a block at given height
+    */
+  def bestFullBlockAt(height: Height): Option[ErgoFullBlock] = {
+    bestHeaderIdAtHeight(height)
+      .flatMap(headerId => typedModifierById[Header](headerId))
+      .flatMap(header => getFullBlock(header))
+  }
+
+
+  /**
+    * Returns block transactions from a best headers-chain at given height
+    * @param height - height to get the block transactions from
+    * @return - block transactions or None if there's no such a block at given height
+    */
+  def bestBlockTransactionsAt(height: Height): Option[BlockTransactions] = {
+    bestHeaderIdAtHeight(height)
+      .flatMap(headerId => typedModifierById[Header](headerId))
+      .flatMap(header => typedModifierById[BlockTransactions](header.transactionsId))
   }
 
   /**
@@ -293,8 +316,8 @@ trait ErgoHistoryReader
 
   override def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity = {
     historyStorage.getIndex(validityKey(modifierId)) match {
-      case Some(b) if b.data.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
-      case Some(b) if b.data.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
+      case Some(b) if b.headOption.contains(1.toByte) => ModifierSemanticValidity.Valid
+      case Some(b) if b.headOption.contains(0.toByte) => ModifierSemanticValidity.Invalid
       case None if contains(modifierId) => ModifierSemanticValidity.Unknown
       case None => ModifierSemanticValidity.Absent
       case m =>

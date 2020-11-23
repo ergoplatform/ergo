@@ -42,7 +42,7 @@ class ForkResolutionSpec extends FreeSpec with IntegrationSuite {
     val nodes: Try[List[Node]] = nodeConfigs
       .map(_.withFallback(specialDataDirConfig(remoteVolume)))
       .zip(volumesMapping)
-      .map { case (cfg, vol) => docker.startNode(cfg, configEnrich, Some(vol)) }
+      .map { case (cfg, vol) => docker.startDevNetNode(cfg, configEnrich, Some(vol)) }
       .sequence
     blocking(Thread.sleep(nodeConfigs.size * 3000))
     nodes
@@ -59,7 +59,7 @@ class ForkResolutionSpec extends FreeSpec with IntegrationSuite {
     val nodes: List[Node] = startNodesWithBinds(minerConfig +: onlineMiningNodesConfig).get
 
     val result = Async.async {
-      val initMaxHeight = Async.await(Future.traverse(nodes)(_.height).map(_.max))
+      val initMaxHeight = Async.await(Future.traverse(nodes)(_.fullHeight).map(_.max))
       Async.await(Future.traverse(nodes)(_.waitForHeight(initMaxHeight + commonChainLength)))
       val isolatedNodes = Async.await {
         nodes.foreach(node => docker.stopNode(node.containerId))

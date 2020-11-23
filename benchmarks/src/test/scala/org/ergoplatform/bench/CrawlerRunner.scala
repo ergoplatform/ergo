@@ -3,9 +3,10 @@ package org.ergoplatform.bench
 import java.io.File
 
 import akka.actor.ActorRef
-import org.ergoplatform.api.{BlocksApiRoute, ErgoUtilsApiRoute, InfoRoute, TransactionsApiRoute}
-import org.ergoplatform.bench.misc.CrawlerConfig
-import org.ergoplatform.local.{ErgoMinerRef, ErgoStatsCollectorRef}
+import org.ergoplatform.bench.misc.{CrawlerConfig, TempDir}
+import org.ergoplatform.http.api.{BlocksApiRoute, ErgoUtilsApiRoute, InfoApiRoute, TransactionsApiRoute}
+import org.ergoplatform.local.ErgoStatsCollectorRef
+import org.ergoplatform.mining.ErgoMinerRef
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -59,7 +60,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
   override val apiRoutes: Seq[ApiRoute] = Seq(
     ErgoUtilsApiRoute(ergoSettings),
     PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
-    InfoRoute(statsCollectorRef, settings.restApi, timeProvider),
+    InfoApiRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
 
@@ -67,7 +68,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      settings.network, timeProvider)
+      ergoSettings, timeProvider)
 
 }
 

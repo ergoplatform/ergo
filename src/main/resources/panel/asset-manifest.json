@@ -1,0 +1,30 @@
+{
+  "files": {
+    "main.css": "/static/css/main.f8799777.chunk.css",
+    "main.js": "/static/js/main.f3e4f8de.chunk.js",
+    "main.js.map": "/static/js/main.f3e4f8de.chunk.js.map",
+    "runtime-main.js": "/static/js/runtime-main.219240e0.js",
+    "runtime-main.js.map": "/static/js/runtime-main.219240e0.js.map",
+    "static/css/2.9338f6a1.chunk.css": "/static/css/2.9338f6a1.chunk.css",
+    "static/js/2.30b2170f.chunk.js": "/static/js/2.30b2170f.chunk.js",
+    "static/js/2.30b2170f.chunk.js.map": "/static/js/2.30b2170f.chunk.js.map",
+    "index.html": "/index.html",
+    "precache-manifest.ac67956815c266c4709a936402a3fd23.js": "/precache-manifest.ac67956815c266c4709a936402a3fd23.js",
+    "service-worker.js": "/service-worker.js",
+    "static/css/2.9338f6a1.chunk.css.map": "/static/css/2.9338f6a1.chunk.css.map",
+    "static/css/main.f8799777.chunk.css.map": "/static/css/main.f8799777.chunk.css.map",
+    "static/media/index.scss": "/static/media/Roboto-Thin.89e2666c.ttf",
+    "static/media/close.feae5a5c.svg": "/static/media/close.feae5a5c.svg",
+    "static/media/copy.icon.835ebda7.svg": "/static/media/copy.icon.835ebda7.svg",
+    "static/media/logotype_white.svg": "/static/media/logotype_white.4dcfd639.svg",
+    "static/media/redo-arrow-symbol.e801de31.svg": "/static/media/redo-arrow-symbol.e801de31.svg",
+    "static/media/remove.94c0849a.svg": "/static/media/remove.94c0849a.svg"
+  },
+  "entrypoints": [
+    "static/js/runtime-main.219240e0.js",
+    "static/css/2.9338f6a1.chunk.css",
+    "static/js/2.30b2170f.chunk.js",
+    "static/css/main.f8799777.chunk.css",
+    "static/js/main.f3e4f8de.chunk.js"
+  ]
+}

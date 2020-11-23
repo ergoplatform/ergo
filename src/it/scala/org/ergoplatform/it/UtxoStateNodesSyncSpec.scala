@@ -18,11 +18,11 @@ class UtxoStateNodesSyncSpec extends FreeSpec with IntegrationSuite {
   val onlineGeneratingConfigs: List[Config] = nodeSeedConfigs.slice(2, 4).map(onlineGeneratingPeerConfig.withFallback)
   val nodeConfigs: List[Config] = minerConfig +: nonGeneratingConfig +: onlineGeneratingConfigs
 
-  val nodes: List[Node] = docker.startNodes(nodeConfigs).get
+  val nodes: List[Node] = docker.startDevNetNodes(nodeConfigs).get
 
   s"Utxo state nodes synchronisation ($blocksQty blocks)" in {
     val result = for {
-      initHeight <- Future.traverse(nodes)(_.height).map(x => math.max(x.max, 1))
+      initHeight <- Future.traverse(nodes)(_.fullHeight).map(x => math.max(x.max, 1))
       _ <- Future.traverse(nodes)(_.waitForHeight(initHeight + blocksQty))
       headers <- Future.traverse(nodes)(_.headerIdsByHeight(initHeight + blocksQty - forkDepth))
     } yield {

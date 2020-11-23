@@ -10,6 +10,7 @@ import scorex.core.{ModifierTypeId, NodeViewModifier}
 import sigmastate.Values
 import sigmastate.Values.ErgoTree
 
+
 object Constants {
   val HashLength: Int = 32
 
@@ -57,6 +58,8 @@ object Constants {
 
   // Maximum extension size
   val MaxExtensionSize: Int = 32 * 1024
+
   // Maximum extension size during bytes parsing. Allows to move MaxExtensionSize to Parameters in future
   val MaxExtensionSizeMax: Int = 1024 * 1024
+
 }

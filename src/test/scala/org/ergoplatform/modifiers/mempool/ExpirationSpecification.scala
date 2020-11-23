@@ -9,6 +9,7 @@ import org.scalatest.Assertion
 import sigmastate.Values.ShortConstant
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.eval._
+import sigmastate.helpers.TestingHelpers._
 
 class ExpirationSpecification extends ErgoPropertyTest {
 
@@ -17,7 +18,7 @@ class ExpirationSpecification extends ErgoPropertyTest {
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
 
   def falsify(box: ErgoBox): ErgoBox = {
-    ErgoBox(box.value,
+    testBox(box.value,
       Constants.FalseLeaf,
       box.creationHeight,
       box.additionalTokens.toArray.toSeq,
@@ -30,26 +31,30 @@ class ExpirationSpecification extends ErgoPropertyTest {
                     heightDelta: Int,
                     outsConstructor: Height => IndexedSeq[ErgoBoxCandidate],
                     expectedValidity: Boolean): Assertion = {
-    val in = Input(from.id,
-      ProverResult(Array.emptyByteArray, ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(0)))))
+    // We are filtering out certain heights to avoid problems with improperly generated extension
+    // at the beginning of a voting epoch
+    whenever((from.creationHeight + Constants.StoragePeriod + heightDelta) % votingSettings.votingLength != 0) {
+      val in = Input(from.id,
+        ProverResult(Array.emptyByteArray, ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(0)))))
 
-    val h: Int = from.creationHeight + Constants.StoragePeriod + heightDelta
+      val h: Int = from.creationHeight + Constants.StoragePeriod + heightDelta
 
-    val oc = outsConstructor(h).map(c => updateHeight(c, h))
-    val tx = ErgoTransaction(inputs = IndexedSeq(in), dataInputs = IndexedSeq(), outputCandidates = oc)
+      val oc = outsConstructor(h).map(c => updateHeight(c, h))
+      val tx = ErgoTransaction(inputs = IndexedSeq(in), dataInputs = IndexedSeq(), outputCandidates = oc)
 
-    val fb0 = invalidErgoFullBlockGen.sample.get
-    val fakeHeader = fb0.header.copy(height = h - 1)
-    val fb = fb0.copy(fb0.header.copy(height = h, parentId = fakeHeader.id))
+      val fb0 = invalidErgoFullBlockGen.sample.get
+      val fakeHeader = fb0.header.copy(height = h - 1)
+      val fb = fb0.copy(fb0.header.copy(height = h, parentId = fakeHeader.id))
 
-    val updContext = {
-      val inContext = new ErgoStateContext(Seq(fakeHeader), None, genesisStateDigest, LaunchParameters, validationSettingsNoIl,
-        VotingData.empty)(votingSettings)
-      inContext.appendFullBlock(fb, votingSettings).get
+      val updContext = {
+        val inContext = new ErgoStateContext(Seq(fakeHeader), None, genesisStateDigest, LaunchParameters, validationSettingsNoIl,
+          VotingData.empty)(votingSettings)
+        inContext.appendFullBlock(fb, votingSettings).get
+      }
+
+      tx.statelessValidity.isSuccess shouldBe true
+      tx.statefulValidity(IndexedSeq(from), emptyDataBoxes, updContext).isSuccess shouldBe expectedValidity
     }
-
-    tx.statelessValidity.isSuccess shouldBe true
-    tx.statefulValidity(IndexedSeq(from), emptyDataBoxes, updContext).isSuccess shouldBe expectedValidity
   }
 
   property("successful spending w. same value") {
@@ -115,7 +120,14 @@ class ExpirationSpecification extends ErgoPropertyTest {
     }
   }
 
-  //todo: test register change
+  property("script changed register w. same value") {
+    forAll(unspendableErgoBoxGen()) { from =>
+      whenever(from.additionalRegisters.get(ErgoBox.R4).nonEmpty) {
+        val out = new ErgoBoxCandidate(from.value, from.ergoTree, from.creationHeight + 1, from.additionalTokens)
+        constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = false)
+      }
+    }
+  }
 
   property("spending of whole coin when its value no more than storage fee") {
     val out2 = ergoBoxGenNoProp.sample.get
@@ -128,4 +140,10 @@ class ExpirationSpecification extends ErgoPropertyTest {
     }
   }
 
+  property("destructing the whole box when its value no more than storage fee") {
+    forAll(unspendableErgoBoxGen(maxValue = parameters.storageFeeFactor)) { from =>
+      val out = new ErgoBoxCandidate(from.value, Constants.TrueLeaf, creationHeight = from.creationHeight + 1)
+      constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = true)
+    }
+  }
 }

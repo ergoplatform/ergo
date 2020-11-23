@@ -3,7 +3,6 @@ package org.ergoplatform.settings
 import com.google.common.primitives.Ints
 import io.circe.Encoder
 import io.circe.syntax._
-import org.ergoplatform.api.ApiCodecs
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.serialization.ScorexSerializer
@@ -12,12 +11,15 @@ import scorex.util.Extensions._
 
 import scala.util.Try
 import Extension.SystemParametersPrefix
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
 
 /**
   * System parameters which could be readjusted via collective miners decision.
   */
-class Parameters(val height: Height, val parametersTable: Map[Byte, Int], val proposedUpdate: ErgoValidationSettingsUpdate)
+class Parameters(val height: Height,
+                 val parametersTable: Map[Byte, Int],
+                 val proposedUpdate: ErgoValidationSettingsUpdate)
   extends ErgoLikeParameters {
 
   import Parameters._

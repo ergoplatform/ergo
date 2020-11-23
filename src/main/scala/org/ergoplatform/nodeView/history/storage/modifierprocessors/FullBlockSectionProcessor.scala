@@ -82,7 +82,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
   }
 
   private def justPutToHistory(m: BlockSection): ProgressInfo[ErgoPersistentModifier] = {
-    historyStorage.insert(Algos.idToBAW(m.id), Seq.empty, Seq(m))
+    historyStorage.insert(Seq.empty, Seq(m))
     ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
   }
 
@@ -97,7 +97,8 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
         .validate(bsCorrespondsToHeader, header.isCorrespondingModifier(m), s"header=${header.encodedId}, id=${m.encodedId}")
         .validateSemantics(bsHeaderValid, isSemanticallyValid(header.id), s"header=${header.encodedId}, id=${m.encodedId}")
         .validate(bsHeadersChainSynced, isHeadersChainSynced)
-        .validate(bsTooOld, isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height), s"header=${header.encodedId}, id=${m.encodedId}")
+        .validate(bsTooOld, isHistoryADProof(m, header) || pruningProcessor.shouldDownloadBlockAtHeight(header.height),
+          s"header=${header.encodedId}, id=${m.encodedId}")
         .result
     }
 
@@ -106,7 +107,6 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
       case _: ADProofs if contains(header.transactionsId) => true
       case _ => false
     }
-
 
   }
 

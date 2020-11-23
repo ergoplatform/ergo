@@ -2,12 +2,9 @@ package org.ergoplatform.settings
 
 import java.io.{File, FileOutputStream}
 import java.nio.channels.Channels
-
-import cats.instances.stream
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import org.apache.commons.io.IOUtils
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.nodeView.state.StateType.Digest
 import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, P2PKAddress}
@@ -15,25 +12,26 @@ import scorex.core.settings.{ScorexSettings, SettingsReaders}
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
 import sigmastate.basics.DLogProtocol.ProveDlog
-
 import scala.util.Try
 
+
 case class ErgoSettings(directory: String,
+                        networkType: NetworkType,
                         chainSettings: ChainSettings,
-                        testingSettings: TestingSettings,
                         nodeSettings: NodeConfigurationSettings,
                         scorexSettings: ScorexSettings,
                         walletSettings: WalletSettings,
                         cacheSettings: CacheSettings,
-                        bootstrapSettingsOpt: Option[BootstrapSettings] = None,
                         votingTargets: VotingTargets = VotingTargets.empty) {
 
   val addressEncoder = ErgoAddressEncoder(chainSettings.addressPrefix)
 
+  val miningRewardDelay: Int = chainSettings.monetary.minerRewardDelay
+
   val miningPubKey: Option[ProveDlog] = nodeSettings.miningPubKeyHex
     .flatMap { str =>
       val keyBytes = Base16.decode(str)
-        .fold(_ => throw new Error(s"Failed to parse miningPubKeyHex = $nodeSettings.miningPubKeyHex"), x => x)
+        .getOrElse(throw new Error(s"Failed to parse `miningPubKeyHex = ${nodeSettings.miningPubKeyHex}`"))
       Try(ProveDlog(groupElemFromBytes(keyBytes)))
         .orElse(addressEncoder.fromString(str).collect { case p2pk: P2PKAddress => p2pk.pubkey })
         .toOption
@@ -50,16 +48,16 @@ object ErgoSettings extends ScorexLogging
   val scorexConfigPath: String = "scorex"
 
   def read(args: Args = Args.empty): ErgoSettings = {
-    fromConfig(readConfigFromPath(args))
+    fromConfig(readConfig(args), args.networkTypeOpt)
   }
 
-  def fromConfig(config: Config): ErgoSettings = {
+  def fromConfig(config: Config, desiredNetworkTypeOpt: Option[NetworkType] = None): ErgoSettings = {
     val directory = config.as[String](s"$configPath.directory")
-
+    val networkTypeName = config.as[String](s"$configPath.networkType")
+    val networkType = NetworkType.fromString(networkTypeName)
+      .getOrElse(throw new Error(s"Unknown `networkType = $networkTypeName`"))
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
-    val bootstrappingSettingsOpt = config.as[Option[BootstrapSettings]](s"$configPath.bootstrap")
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
-    val testingSettings = config.as[TestingSettings](s"$configPath.testing")
     val walletSettings = config.as[WalletSettings](s"$configPath.wallet")
     val cacheSettings = config.as[CacheSettings](s"$configPath.cache")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
@@ -72,23 +70,23 @@ object ErgoSettings extends ScorexLogging
     consistentSettings(
       ErgoSettings(
         directory,
+        networkType,
         chainSettings,
-        testingSettings,
         nodeSettings,
         scorexSettings,
         walletSettings,
         cacheSettings,
-        bootstrappingSettingsOpt,
         votingTargets
-      )
+      ),
+      desiredNetworkTypeOpt
     )
   }
 
-  private def readConfigFromPath(args: Args): Config = {
+  private def readConfig(args: Args): Config = {
 
-    val networkConfigFileOpt = args.networkIdOpt
-      .flatMap { networkId =>
-        val confName = s"${networkId.verboseName}.conf"
+    val networkConfigFileOpt = args.networkTypeOpt
+      .flatMap { networkType =>
+        val confName = s"${networkType.verboseName}.conf"
         val classLoader = ClassLoader.getSystemClassLoader
         val destDir = System.getProperty("java.io.tmpdir") + "/"
 
@@ -114,7 +112,7 @@ object ErgoSettings extends ScorexLogging
       if file.exists
     } yield file
 
-    networkConfigFileOpt.flatMap(_ => args.networkIdOpt).fold(log.warn("Running without network config"))(
+    networkConfigFileOpt.flatMap(_ => args.networkTypeOpt).fold(log.warn("Running without network config"))(
       x => log.info(s"Running in ${x.verboseName} network mode"))
 
     (networkConfigFileOpt, userConfigFileOpt) match {
@@ -148,11 +146,15 @@ object ErgoSettings extends ScorexLogging
     }
   }
 
-  private def consistentSettings(settings: ErgoSettings): ErgoSettings = {
+  private def consistentSettings(settings: ErgoSettings,
+                                 desiredNetworkTypeOpt: Option[NetworkType]): ErgoSettings = {
     if (settings.nodeSettings.keepVersions < 0) {
       failWithError("nodeSettings.keepVersions should not be negative")
     } else if (!settings.nodeSettings.verifyTransactions && !settings.nodeSettings.stateType.requireProofs) {
       failWithError("Can not use UTXO state when nodeSettings.verifyTransactions is false")
+    } else if (desiredNetworkTypeOpt.exists(_ != settings.networkType)) {
+      failWithError(s"Malformed network config. Desired networkType is `${desiredNetworkTypeOpt.get}`, " +
+        s"but one declared in config is `${settings.networkType}`")
     } else {
       settings
     }
@@ -162,4 +164,5 @@ object ErgoSettings extends ScorexLogging
     log.error(s"Stop application due to malformed configuration file: $msg")
     ErgoApp.forceStopApplication()
   }
+
 }

@@ -8,9 +8,13 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.settings.NodeConfigurationSettings
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
+import scorex.core.network.Broadcast
+import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, SemanticallySuccessfulModifier}
+import scorex.core.network.message.{InvData, InvSpec, Message}
+import scorex.core.transaction.Transaction
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.ScorexLogging
 
@@ -21,7 +25,18 @@ import scala.concurrent.duration._
   * mempool cleanup task to [[CleanupWorker]] when needed.
   */
 class MempoolAuditor(nodeViewHolderRef: ActorRef,
-                     nodeSettings: NodeConfigurationSettings) extends Actor with ScorexLogging {
+                     networkControllerRef: ActorRef,
+                     settings: ErgoSettings) extends Actor with ScorexLogging {
+
+  override def postRestart(reason: Throwable): Unit = {
+    log.error(s"Mempool auditor actor restarted due to ${reason.getMessage}", reason)
+    super.postRestart(reason)
+  }
+
+  override def postStop(): Unit = {
+    logger.info("Mempool auditor stopped")
+    super.postStop()
+  }
 
   override val supervisorStrategy: OneForOneStrategy = OneForOneStrategy(
     maxNrOfRetries = 5,
@@ -40,7 +55,8 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private var stateReaderOpt: Option[TransactionValidation[ErgoTransaction]] = None
   private var poolReaderOpt: Option[ErgoMemPoolReader] = None
 
-  private val worker: ActorRef = context.actorOf(Props(new CleanupWorker(nodeViewHolderRef, nodeSettings)))
+  private val worker: ActorRef =
+    context.actorOf(Props(new CleanupWorker(nodeViewHolderRef, settings.nodeSettings)))
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
@@ -55,10 +71,12 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       nodeViewHolderRef ! GetNodeViewChanges(history = false, state = true, mempool = true, vault = false)
 
     case ChangedMempool(mp: ErgoMemPoolReader) =>
-      stateReaderOpt.fold[Any](poolReaderOpt = Some(mp))(initiateCleanup(_, mp))
+      poolReaderOpt = Some(mp)
+      stateReaderOpt.foreach(st => initiateCleanup(st, mp))
 
     case ChangedState(st: TransactionValidation[ErgoTransaction@unchecked]) =>
-      poolReaderOpt.fold[Any](stateReaderOpt = Some(st))(initiateCleanup(st, _))
+      stateReaderOpt = Some(st)
+      poolReaderOpt.foreach(mp => initiateCleanup(st, mp))
 
     case ChangedState(_) | ChangedMempool(_) => // do nothing
   }
@@ -66,6 +84,10 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private def working: Receive = {
     case CleanupDone =>
       log.info("Cleanup done. Switching to awaiting mode")
+      //rebroadcast transactions
+      rebroadcastTransactions()
+      stateReaderOpt = None
+      poolReaderOpt = None
       context become awaiting
 
     case _ => // ignore other triggers until work is done
@@ -78,20 +100,41 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     context become working // ignore other triggers until work is done
   }
 
+  private def rebroadcastTransactions(): Unit = {
+    log.debug("Rebroadcasting transactions")
+    poolReaderOpt.foreach { pr =>
+      pr.take(settings.nodeSettings.rebroadcastCount).foreach { tx =>
+        log.info(s"Rebroadcasting $tx")
+        val msg = Message(
+          new InvSpec(settings.scorexSettings.network.maxInvObjects),
+          Right(InvData(Transaction.ModifierTypeId, Seq(tx.id))),
+          None
+        )
+        networkControllerRef ! SendToNetwork(msg, Broadcast)
+      }
+
+    }
+
+  }
 }
 
 object MempoolAuditor {
+
   case object CleanupDone
+
 }
 
 object MempoolAuditorRef {
 
   def props(nodeViewHolderRef: ActorRef,
-            nodeSettings: NodeConfigurationSettings): Props =
-    Props(new MempoolAuditor(nodeViewHolderRef, nodeSettings))
+            networkControllerRef: ActorRef,
+            settings: ErgoSettings): Props =
+    Props(new MempoolAuditor(nodeViewHolderRef, networkControllerRef, settings))
 
   def apply(nodeViewHolderRef: ActorRef,
-            nodeSettings: NodeConfigurationSettings)
+            networkControllerRef: ActorRef,
+            settings: ErgoSettings)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(nodeViewHolderRef, nodeSettings))
+    context.actorOf(props(nodeViewHolderRef, networkControllerRef, settings))
+
 }

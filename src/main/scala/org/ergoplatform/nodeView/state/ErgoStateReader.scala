@@ -1,34 +1,35 @@
 package org.ergoplatform.nodeView.state
 
-import io.iohk.iodb.{ByteArrayWrapper, Store}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.settings.{Algos, VotingSettings}
 import scorex.core.transaction.state.StateReader
 import scorex.crypto.authds.ADDigest
+import scorex.crypto.hash.Digest32
+import scorex.db.LDBVersionedStore
 import scorex.util.ScorexLogging
 
 trait ErgoStateReader extends StateReader with ScorexLogging {
 
   def rootHash: ADDigest
-  val store: Store
+  val store: LDBVersionedStore
   val constants: StateConstants
 
-  private val chainSettings = constants.settings.chainSettings
+  private lazy val chainSettings = constants.settings.chainSettings
 
   protected lazy val votingSettings: VotingSettings = chainSettings.voting
 
   def stateContext: ErgoStateContext = ErgoStateReader.storageStateContext(store, constants)
 
-  def genesisboxes: Seq[ErgoBox] = ErgoState.genesisBoxes(chainSettings)
+  def genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(chainSettings)
 }
 
 object ErgoStateReader {
 
-  val ContextKey = Algos.hash("current state context")
+  val ContextKey: Digest32 = Algos.hash("current state context")
 
-  def storageStateContext(store: Store, constants: StateConstants): ErgoStateContext = {
-    store.get(ByteArrayWrapper(ErgoStateReader.ContextKey))
-      .flatMap(b => ErgoStateContextSerializer(constants.votingSettings).parseBytesTry(b.data).toOption)
+  def storageStateContext(store: LDBVersionedStore, constants: StateConstants): ErgoStateContext = {
+    store.get(ErgoStateReader.ContextKey)
+      .flatMap(b => ErgoStateContextSerializer(constants.votingSettings).parseBytesTry(b).toOption)
       .getOrElse(ErgoStateContext.empty(constants))
   }
 

@@ -1,12 +1,9 @@
 package org.ergoplatform.modifiers.mempool
 
-import io.circe._
 import io.circe.syntax._
-import io.iohk.iodb.ByteArrayWrapper
-import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
-import org.ergoplatform.ErgoConstants.{MaxBoxSize, MaxPropositionBytes}
+import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
-import org.ergoplatform.api.ApiCodecs
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
@@ -16,19 +13,17 @@ import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.wallet.protocol.context.TransactionContext
+import scorex.core.EphemerealNodeViewModifier
+import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationState}
-import scorex.crypto.authds.ADKey
+import scorex.db.ByteArrayWrapper
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.SType
-import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import sigmastate.eval.Extensions._
-import sigmastate.eval._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
@@ -60,7 +55,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val sizeOpt: Option[Int] = None)
   extends ErgoLikeTransaction(inputs, dataInputs, outputCandidates)
     with Transaction
-    with MempoolModifier
+    with EphemerealNodeViewModifier
     with ErgoNodeViewModifier
     with ScorexLogging {
 
@@ -140,7 +135,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost),
     )
     val maxCost = stateContext.currentParameters.maxBlockCost
-    //    val remainingCost = stateContext.currentParameters.maxBlockCost - accumulatedCost
 
     ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big
@@ -154,7 +148,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validateSeq(outputs) { case (validationState, out) =>
       validationState
         .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}")
-        .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s"$id: output $out")
+        .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out")
         .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
         .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
     }
@@ -205,9 +199,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
       val input = inputs(idx)
       val proof = input.spendingProof
-      val proverExtension = proof.extension
-      val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
-      val ctx = new ErgoContext(stateContext, transactionContext, proverExtension, maxCost - addExact(currentTxCost, accumulatedCost), 0)
+      val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
+      val inputContext = InputContext(idx.toShort, proof.extension)
+      val ctx = new ErgoContext(stateContext, transactionContext, inputContext, maxCost - addExact(currentTxCost, accumulatedCost), 0)
 
       val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
       costTry.recover { case t =>
@@ -280,84 +274,6 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
     ErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)
 
   val MaxAssetsPerBox = 255
-
-  implicit val extensionEncoder: Encoder[ContextExtension] = { extension =>
-    extension.values.map { case (key, value) =>
-      key -> evaluatedValueEncoder(value)
-    }.asJson
-  }
-
-  implicit val inputEncoder: Encoder[Input] = { input =>
-    Json.obj(
-      "boxId" -> input.boxId.asJson,
-      "spendingProof" -> Json.obj(
-        "proofBytes" -> byteSeqEncoder(input.spendingProof.proof),
-        "extension" -> extensionEncoder(input.spendingProof.extension)
-      )
-    )
-  }
-
-  implicit val dataInputEncoder: Encoder[DataInput] = { input =>
-    Json.obj(
-      "boxId" -> input.boxId.asJson,
-    )
-  }
-
-  implicit val proofDecoder: Decoder[ProverResult] = { cursor =>
-    for {
-      proofBytes <- cursor.downField("proofBytes").as[Array[Byte]]
-      extMap <- cursor.downField("extension").as[Map[Byte, EvaluatedValue[SType]]]
-    } yield ProverResult(proofBytes, ContextExtension(extMap))
-  }
-
-  implicit val inputDecoder: Decoder[Input] = { cursor =>
-    for {
-      boxId <- cursor.downField("boxId").as[ADKey]
-      proof <- cursor.downField("spendingProof").as[ProverResult]
-    } yield Input(boxId, proof)
-  }
-
-  implicit val dataInputDecoder: Decoder[DataInput] = { cursor =>
-    for {
-      boxId <- cursor.downField("boxId").as[ADKey]
-    } yield DataInput(boxId)
-  }
-
-  implicit val assetDecoder: Decoder[(ErgoBox.TokenId, Long)] = { cursor =>
-    for {
-      tokenId <- cursor.downField("tokenId").as[ErgoBox.TokenId]
-      amount <- cursor.downField("amount").as[Long]
-    } yield (tokenId, amount)
-  }
-
-  implicit val outputDecoder: Decoder[(ErgoBoxCandidate, Option[BoxId])] = { cursor =>
-    for {
-      maybeId <- cursor.downField("boxId").as[Option[BoxId]]
-      value <- cursor.downField("value").as[Long]
-      creationHeight <- cursor.downField("creationHeight").as[Int]
-      ergoTree <- cursor.downField("ergoTree").as[ErgoTree]
-      assets <- cursor.downField("assets").as[Seq[(ErgoBox.TokenId, Long)]] // TODO optimize: encode directly into Coll avoiding allocation of Tuple2 for each element
-      registers <- cursor.downField("additionalRegisters").as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
-    } yield (new ErgoBoxCandidate(value, ergoTree, creationHeight, assets.toColl, registers), maybeId)
-  }
-
-  implicit val transactionEncoder: Encoder[ErgoTransaction] = { tx =>
-    Json.obj(
-      "id" -> tx.id.asJson,
-      "inputs" -> tx.inputs.asJson,
-      "dataInputs" -> tx.dataInputs.asJson,
-      "outputs" -> tx.outputs.asJson,
-      "size" -> tx.size.asJson
-    )
-  }
-
-  implicit val transactionDecoder: Decoder[ErgoTransaction] = { implicit cursor =>
-    for {
-      inputs <- cursor.downField("inputs").as[IndexedSeq[Input]]
-      dataInputs <- cursor.downField("dataInputs").as[IndexedSeq[DataInput]]
-      outputsWithIndex <- cursor.downField("outputs").as[IndexedSeq[(ErgoBoxCandidate, Option[BoxId])]]
-    } yield new ErgoTransaction(inputs, dataInputs, outputsWithIndex.map(_._1))
-  }
 
 }
 

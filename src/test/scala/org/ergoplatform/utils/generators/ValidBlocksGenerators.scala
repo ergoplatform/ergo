@@ -1,9 +1,8 @@
 package org.ergoplatform.utils.generators
 
 import akka.actor.ActorRef
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.local.ErgoMiner
+import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
@@ -15,6 +14,7 @@ import org.ergoplatform.utils.LoggingUtil
 import org.scalatest.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.db.ByteArrayWrapper
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
 

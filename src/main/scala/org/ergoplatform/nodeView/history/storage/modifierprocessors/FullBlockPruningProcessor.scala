@@ -8,7 +8,7 @@ import org.ergoplatform.settings.{ChainSettings, NodeConfigurationSettings}
   * A class that keeps and calculates minimal height for full blocks starting from which we need to download these full
   * blocks from the network and keep them in our history.
   */
-class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings: ChainSettings) {
+class FullBlockPruningProcessor(nodeConfig: NodeConfigurationSettings, chainSettings: ChainSettings) {
 
   @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
   @volatile private[history] var minimalFullBlockHeightVar: Int = ErgoHistory.GenesisHeight
@@ -32,8 +32,9 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
 
   /** Check if headers chain is synchronized with the network and modifier is not too old
     */
-  def shouldDownloadBlockAtHeight(height: Int): Boolean =
-    isHeadersChainSynced && minimalFullBlockHeight <= height
+  def shouldDownloadBlockAtHeight(height: Int): Boolean = {
+    isHeadersChainSynced && height >= minimalFullBlockHeight
+  }
 
   /** Update minimal full block height and header chain synced flag
     *
@@ -41,14 +42,15 @@ class FullBlockPruningProcessor(config: NodeConfigurationSettings, chainSettings
     * @return minimal height to process best full block
     */
   def updateBestFullBlock(header: Header): Int = {
-    minimalFullBlockHeightVar = if (config.blocksToKeep < 0) {
+    minimalFullBlockHeightVar = if (!nodeConfig.isFullBlocksPruned) {
       ErgoHistory.GenesisHeight // keep all blocks in history
-    } else if (!isHeadersChainSynced && !config.stateType.requireProofs) {
+    } else if (!isHeadersChainSynced && !nodeConfig.stateType.requireProofs) {
       // just synced with the headers chain - determine first full block to apply
-      ErgoHistory.GenesisHeight //TODO start with the height of UTXO snapshot applied. Start from genesis util this is implemented
+      //TODO start with the height of UTXO snapshot applied. For now we start from genesis until this is implemented
+      ErgoHistory.GenesisHeight
     } else {
       // Start from config.blocksToKeep blocks back
-      val h = Math.max(minimalFullBlockHeight, header.height - config.blocksToKeep + 1)
+      val h = Math.max(minimalFullBlockHeight, header.height - nodeConfig.blocksToKeep + 1)
       // ... but not later than the beginning of a voting epoch
       if (h > VotingEpochLength) {
         Math.min(h, extensionWithParametersHeight(h))

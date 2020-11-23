@@ -2,21 +2,22 @@ package org.ergoplatform.nodeView.history
 
 import java.io.File
 
-import io.iohk.iodb.{ByteArrayWrapper, LSMStore}
+import org.ergoplatform.ErgoLikeContext
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.{EmptyPoPoWProofsProcessor, FullPoPoWProofsProcessor}
-import org.ergoplatform.nodeView.history.storage.{FilesObjectsStore, HistoryStorage}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.consensus.History
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.RecoverableModifierError
-import scorex.util.ScorexLogging
+import scorex.db.LDBFactory
+import scorex.util.{ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Try}
 
@@ -42,7 +43,7 @@ trait ErgoHistory
     with ErgoHistoryReader {
 
   override type NVCT = ErgoHistory
-  override protected lazy val requireProofs: Boolean = config.stateType.requireProofs
+  override protected lazy val requireProofs: Boolean = nodeSettings.stateType.requireProofs
 
   def closeStorage(): Unit = historyStorage.close()
 
@@ -82,13 +83,13 @@ trait ErgoHistory
           .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty)
 
         if (nonMarkedIds.nonEmpty) {
-          historyStorage.insert(validityKey(nonMarkedIds.head),
-            nonMarkedIds.map(id => validityKey(id) -> ByteArrayWrapper(Array(1.toByte))),
+          historyStorage.insert(
+            nonMarkedIds.map(id => validityKey(id) -> Array(1.toByte)),
             Seq.empty)
         }
       case _ =>
-        historyStorage.insert(validityKey(modifier.id),
-          Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(1.toByte))),
+        historyStorage.insert(
+          Seq(validityKey(modifier.id) -> Array(1.toByte)),
           Seq.empty)
     }
     this
@@ -110,14 +111,14 @@ trait ErgoHistory
         val invalidatedHeaders = continuationHeaderChains(invalidatedHeader, _ => true).flatten.distinct
         val invalidatedIds = invalidatedHeaders.map(_.id).toSet
         val validityRow = invalidatedHeaders.flatMap(h => Seq(h.id, h.transactionsId, h.ADProofsId)
-          .map(id => validityKey(id) -> ByteArrayWrapper(Array(0.toByte))))
+          .map(id => validityKey(id) -> Array(0.toByte)))
         log.info(s"Going to invalidate ${invalidatedHeader.encodedId} and ${invalidatedHeaders.map(_.encodedId)}")
         val bestHeaderIsInvalidated = bestHeaderIdOpt.exists(id => invalidatedIds.contains(id))
         val bestFullIsInvalidated = bestFullBlockIdOpt.exists(id => invalidatedIds.contains(id))
         (bestHeaderIsInvalidated, bestFullIsInvalidated) match {
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
-            historyStorage.insert(validityKey(modifier.id), validityRow, Seq.empty)
+            historyStorage.insert(validityRow, Seq.empty)
             this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
@@ -126,8 +127,7 @@ trait ErgoHistory
             if (!bestFullIsInvalidated) {
               //Only headers chain involved
               historyStorage.insert(
-                validityKey(modifier.id),
-                newBestHeaderOpt.map(h => BestHeaderKey -> Algos.idToBAW(h.id)).toSeq,
+                newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq,
                 Seq.empty
               )
               this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
@@ -152,10 +152,10 @@ trait ErgoHistory
                 invalidatedHeaders.map(h =>
                   FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
 
-              val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> Algos.idToBAW(b.id)) ++
-                newBestHeaderOpt.map(h => BestHeaderKey -> Algos.idToBAW(h.id)).toSeq
+              val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
+                newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow
-              historyStorage.insert(validityKey(modifier.id), toInsert, Seq.empty)
+              historyStorage.insert(toInsert, Seq.empty)
               val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
 
               this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
@@ -163,8 +163,8 @@ trait ErgoHistory
         }
       case None =>
         //No headers become invalid. Just valid this modifier as invalid
-        historyStorage.insert(validityKey(modifier.id),
-          Seq(validityKey(modifier.id) -> ByteArrayWrapper(Array(0.toByte))),
+        historyStorage.insert(
+          Seq(validityKey(modifier.id) -> Array(0.toByte)),
           Seq.empty)
         this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
     }
@@ -185,7 +185,7 @@ trait ErgoHistory
 
 object ErgoHistory extends ScorexLogging {
 
-  type Height = Int
+  type Height = ErgoLikeContext.Height // Int
   type Score = BigInt
   type Difficulty = BigInt
   type NBits = Long
@@ -203,20 +203,17 @@ object ErgoHistory extends ScorexLogging {
     dir
   }
 
-  def readOrGenerate(settings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
-    val historyFolder = historyDir(settings)
-    historyFolder.mkdirs()
-    val indexStore = new LSMStore(historyFolder, keepVersions = 0)
-    val objectsStore = new FilesObjectsStore(historyFolder.getAbsolutePath)
-    val db = new HistoryStorage(indexStore, objectsStore, settings.cacheSettings)
-    val nodeSettings = settings.nodeSettings
+  def readOrGenerate(ergoSettings: ErgoSettings, ntp: NetworkTimeProvider): ErgoHistory = {
+    val indexStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/index")
+    val objectsStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/objects")
+    val db = new HistoryStorage(indexStore, objectsStore, ergoSettings.cacheSettings)
+    val nodeSettings = ergoSettings.nodeSettings
 
     val history: ErgoHistory = (nodeSettings.verifyTransactions, nodeSettings.poPoWBootstrap) match {
       case (true, true) =>
         new ErgoHistory with FullBlockSectionProcessor
           with FullPoPoWProofsProcessor {
-          override protected val chainSettings: ChainSettings = settings.chainSettings
-          override protected val config: NodeConfigurationSettings = nodeSettings
+          override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
@@ -225,8 +222,7 @@ object ErgoHistory extends ScorexLogging {
       case (false, true) =>
         new ErgoHistory with EmptyBlockSectionProcessor
           with FullPoPoWProofsProcessor {
-          override protected val chainSettings: ChainSettings = settings.chainSettings
-          override protected val config: NodeConfigurationSettings = nodeSettings
+          override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
@@ -235,8 +231,7 @@ object ErgoHistory extends ScorexLogging {
       case (true, false) =>
         new ErgoHistory with FullBlockSectionProcessor
           with EmptyPoPoWProofsProcessor {
-          override protected val chainSettings: ChainSettings = settings.chainSettings
-          override protected val config: NodeConfigurationSettings = nodeSettings
+          override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp
@@ -245,8 +240,7 @@ object ErgoHistory extends ScorexLogging {
       case (false, false) =>
         new ErgoHistory with EmptyBlockSectionProcessor
           with EmptyPoPoWProofsProcessor {
-          override protected val chainSettings: ChainSettings = settings.chainSettings
-          override protected val config: NodeConfigurationSettings = nodeSettings
+          override protected val settings: ErgoSettings = ergoSettings
           override protected[history] val historyStorage: HistoryStorage = db
           override val powScheme: AutolykosPowScheme = chainSettings.powScheme
           override protected val timeProvider: NetworkTimeProvider = ntp

@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
+import org.ergoplatform.GlobalConstants
 import org.ergoplatform.nodeView.ErgoReadersHolder._
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
@@ -50,8 +51,7 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
     case GetDataFromHistory(f) =>
       historyReaderOpt.fold(log.warn("Trying to get data from undefined history reader"))(sender ! f(_))
 
-    case _ =>
-    //Do nothing for now. Implement when needed
+    case a: Any => log.warn(s"ErgoReadersHolder got improper input: $a")
   }
 }
 
@@ -67,14 +67,10 @@ object ErgoReadersHolder {
 
 object ErgoReadersHolderRef {
 
-  def props(viewHolderRef: ActorRef): Props = Props(new ErgoReadersHolder(viewHolderRef))
-
   def apply(viewHolderRef: ActorRef)
-           (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(viewHolderRef))
+           (implicit context: ActorRefFactory): ActorRef = {
+    val props = Props(new ErgoReadersHolder(viewHolderRef)).withDispatcher(GlobalConstants.ApiDispatcher)
+    context.actorOf(props)
+  }
 
-  def apply(viewHolderRef: ActorRef,
-            name: String)
-           (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(viewHolderRef), name)
 }

@@ -2,7 +2,6 @@ package org.ergoplatform.utils.generators
 
 import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
@@ -13,22 +12,22 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
 import org.ergoplatform.utils.ErgoTestConstants
 import org.ergoplatform.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
+import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.Matchers
-import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
-import scorex.util.{ModifierId, _}
-import sigmastate.SType
-import sigmastate.Values.{ErgoTree, EvaluatedValue}
+import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.ProverResult
+import sigmastate.interpreter.{CryptoConstants, ProverResult}
 
 import scala.util.Random
 
-trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants {
+trait ErgoGenerators extends CoreGenerators with Generators with Matchers with ErgoTestConstants {
 
   lazy val trueLeafGen: Gen[ErgoTree] = Gen.const(Constants.TrueLeaf)
   lazy val falseLeafGen: Gen[ErgoTree] = Gen.const(Constants.FalseLeaf)
@@ -37,6 +36,20 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val noProofGen: Gen[ProverResult] =
     Gen.const(emptyProverResult)
+
+  lazy val dlogSecretWithPublicImageGen: Gen[(DLogProverInput, ProveDlog)] = for {
+    secret <- genBytes(32).map(seed => BigIntegers.fromUnsignedByteArray(seed))
+    dlpi = DLogProverInput(secret)
+  } yield (dlpi, dlpi.publicImage)
+
+  lazy val dhtSecretWithPublicImageGen: Gen[(DiffieHellmanTupleProverInput, ProveDHTuple)] = for {
+    secret <- genBytes(32).map(seed => BigIntegers.fromUnsignedByteArray(seed))
+    g <- genECPoint
+    h <- genECPoint
+    u: EcPointType = CryptoConstants.dlogGroup.exponentiate(g, secret)
+    v: EcPointType = CryptoConstants.dlogGroup.exponentiate(h, secret)
+    dhtpi = DiffieHellmanTupleProverInput(secret, ProveDHTuple(g, h, u, v))
+  } yield (dhtpi, dhtpi.publicImage)
 
   lazy val proveDlogGen: Gen[ProveDlog] = for {
     seed <- genBytes(32)
@@ -48,29 +61,12 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
 
-  def validValueGen(proposition: ErgoTree,
-                    additionalTokens: Seq[(TokenId, Long)] = Seq(),
-                    additionalRegisters: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]] = Map(),
-                    transactionId: ModifierId = Array.fill[Byte](32)(0.toByte).toModifierId,
-                    boxId: Short = 0,
-                    creationHeight: Long = 0): Gen[Long] = {
-    //there are outputs in tests of 183 bytes, and maybe in some tests at least 2 outputs are required
-    //thus we put in an input a monetary value which is at least enough for storing 400 bytes of outputs
-    val minValue = parameters.minValuePerByte * 400
-    Gen.choose(minValue, coinsTotal / 1000)
-  }
-
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
   } yield ErgoSyncInfo(ids)
 
   lazy val digest32Gen: Gen[Digest32] = {
     val x = Digest32 @@ genBytes(32)
-    x
-  }
-
-  lazy val boxIdGen: Gen[BoxId] = {
-    val x = ADKey @@ genBytes(Constants.ModifierIdSize)
     x
   }
 
@@ -114,17 +110,16 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
   } yield AutolykosSolution(pk, w, n, d)
 
   /**
-    * Header generator with default miner pk in pow solution
-    */
-  lazy val defaultHeaderGen: Gen[Header] = invalidHeaderGen.map { h =>
-    h.copy(powSolution = h.powSolution.copy(pk = defaultMinerPkPoint))
-  }
-
-  /**
-    * Generates required difficulty in interval [1, 2^255]
+    * Generates required difficulty in interval [1, 2^^255]
     **/
   lazy val requiredDifficultyGen: Gen[BigInt] = Arbitrary.arbitrary[BigInt].map(_.mod(BigInt(2).pow(255)).abs + 1)
 
+  /*
+    TODO: this generator is used sometimes to construct a full block. A generator for the latter is not generating
+     a proper extension section for a beginning of a voting epoch (network parameter values should be in the  extension
+     in this case. Currently we're fixing it here with filtering out heights corresponding to the beginning of voting
+     epochs. A more careful solution would be to implement proper generators.
+   */
   lazy val invalidHeaderGen: Gen[Header] = for {
     version <- Arbitrary.arbitrary[Byte]
     parentId <- modifierIdGen
@@ -132,7 +127,7 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     adRoot <- digest32Gen
     transactionsRoot <- digest32Gen
     requiredDifficulty <- requiredDifficultyGen
-    height <- Gen.choose(1, Int.MaxValue)
+    height <- Gen.choose(1, Int.MaxValue).retryUntil(_ % settings.chainSettings.voting.votingLength != 0)
     powSolution <- powSolutionGen
     timestamp <- positiveLongGen
     extensionHash <- digest32Gen
@@ -150,6 +145,14 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
     Array.fill(3)(0: Byte),
     None
   )
+
+  /**
+    * Header generator with default miner pk in pow solution
+    */
+  lazy val defaultHeaderGen: Gen[Header] = invalidHeaderGen.map { h =>
+    h.copy(powSolution = h.powSolution.copy(pk = defaultMinerPkPoint))
+  }
+
   lazy val randomADProofsGen: Gen[ADProofs] = for {
     headerId <- modifierIdGen
     proof <- serializedAdProofGen

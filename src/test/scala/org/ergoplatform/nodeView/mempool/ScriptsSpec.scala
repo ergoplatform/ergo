@@ -2,18 +2,18 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoAddressEncoder.TestnetNetworkPrefix
 import org.ergoplatform.ErgoScriptPredef.boxCreationHeight
-import org.ergoplatform.{ErgoBox, ErgoScriptPredef, Height, Self}
-import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, UtxoState}
+import org.ergoplatform.{Height, ErgoBox, Self, ErgoScriptPredef}
+import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState, ErgoState}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.ADKey
 import sigmastate._
 import sigmastate.Values._
 import sigmastate.lang.Terms._
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.eval.{IRContext, RuntimeIRContext}
+import sigmastate.basics.DLogProtocol.ProveDlog
+import sigmastate.eval.{IRContext, CompiletimeIRContext}
 import sigmastate.interpreter.CryptoConstants.dlogGroup
-import sigmastate.lang.{SigmaCompiler, TransformingSigmaBuilder}
+import sigmastate.lang.{TransformingSigmaBuilder, SigmaCompiler}
 
 import scala.util.{Random, Try}
 
@@ -22,8 +22,13 @@ class ScriptsSpec extends ErgoPropertyTest {
   val compiler = SigmaCompiler(TestnetNetworkPrefix, TransformingSigmaBuilder)
   val delta = emission.settings.minerRewardDelay
   val fixedBox: ErgoBox = ergoBoxGen(fromString("1 == 1"), heightGen = 0).sample.get
-  implicit lazy val context: IRContext = new RuntimeIRContext
+  implicit lazy val context: IRContext = new CompiletimeIRContext
 
+  property("scripts complexity") {
+    val maxComplexity = settings.nodeSettings.maxTransactionComplexity
+    defaultMinerPk.toSigmaProp.treeWithSegregation.complexity should be <= maxComplexity
+    ErgoScriptPredef.rewardOutputScript(delta, defaultMinerPk).complexity should be <= maxComplexity
+  }
 
   property("simple operations without cryptography") {
     // true/false
@@ -45,7 +50,7 @@ class ScriptsSpec extends ErgoPropertyTest {
 
   property("simple crypto") {
     applyBlockSpendingScript(defaultMinerPk) shouldBe 'success
-    applyBlockSpendingScript(SigmaAnd(defaultProver.secrets.map(s => SigmaPropConstant(s.asInstanceOf[DLogProverInput].publicImage)))) shouldBe 'success
+    applyBlockSpendingScript(SigmaAnd(defaultProver.hdKeys.map(s => SigmaPropConstant(s.publicImage)))) shouldBe 'success
     applyBlockSpendingScript(SigmaAnd(defaultMinerPk, ProveDlog(dlogGroup.generator))) shouldBe 'failure
     applyBlockSpendingScript(SigmaOr(defaultMinerPk, ProveDlog(dlogGroup.generator))) shouldBe 'success
   }

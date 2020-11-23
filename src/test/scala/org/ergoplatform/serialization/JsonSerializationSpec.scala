@@ -4,19 +4,24 @@ import io.circe.syntax._
 import io.circe.{ACursor, Decoder, Encoder, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
-import org.ergoplatform.api.ApiCodecs
-import org.ergoplatform.api.ApiEncoderOption.HideDetails.implicitValue
-import org.ergoplatform.api.ApiEncoderOption.{Detalization, ShowDetails}
+import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
+import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._
-import org.ergoplatform.settings.{Algos, Args, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.scalatest.Inspectors
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
+
+import scala.util.Random
+
 
 class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with ApiCodecs {
 
@@ -57,7 +62,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
       restored.address shouldEqual request.address
       restored.value shouldEqual request.value
       restored.registers shouldEqual request.registers
-      Inspectors.forAll(restored.assets.getOrElse(Seq.empty).zip(request.assets.getOrElse(Seq.empty))) {
+      Inspectors.forAll(restored.assets.zip(request.assets)) {
         case ((restoredToken, restoredValue), (requestToken, requestValue)) =>
           restoredToken shouldEqual requestToken
           restoredValue shouldEqual requestValue
@@ -82,10 +87,52 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     }
   }
 
+  property("json-encoded dlog secret is always about 32 bytes") {
+    forAll(dlogSecretWithPublicImageGen) { case (secret, _) =>
+      val wrappedSecret = DlogSecretKey(secret)
+      val json = wrappedSecret.asJson
+      json.toString().length shouldBe 66 // 32-bytes hex-encoded data (64 ASCII chars) + quotes == 66 ASCII chars
+    }
+  }
+
+  property("dlog secret roundtrip") {
+    forAll(dlogSecretWithPublicImageGen) { case (secret, _) =>
+      val wrappedSecret = DlogSecretKey(secret)
+      val json = wrappedSecret.asJson
+      val parsedSecret = json.as[DlogSecretKey].toOption.get
+      parsedSecret shouldBe wrappedSecret
+    }
+  }
+
+  property("dht secret roundtrip") {
+    forAll(dhtSecretWithPublicImageGen) { case (secret, _) =>
+      val wrappedSecret = DhtSecretKey(secret)
+      val json = wrappedSecret.asJson
+      val parsedSecret = json.as[DhtSecretKey].toOption.get
+      parsedSecret shouldBe wrappedSecret
+    }
+  }
+
+  property("transactionSigningRequest roundtrip") {
+    forAll(transactionSigningRequestGen(Random.nextBoolean)) { request =>
+      val json = request.asJson
+      val parsedRequest = json.as[TransactionSigningRequest].toOption.get
+      parsedRequest shouldBe request
+    }
+  }
+
+  property("unsignedErgoTransaction roundtrip") {
+    forAll(validUnsignedErgoTransactionGen) { case (_, tx) =>
+      val json = tx.asJson
+      val parsedTx = json.as[UnsignedErgoTransaction].toOption.get
+      parsedTx shouldBe tx
+    }
+  }
+
   private def checkTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {
     c.downField("spent").as[Boolean] shouldBe Right(b.spendingStatus.spent)
     c.downField("onchain").as[Boolean] shouldBe Right(b.chainStatus.onChain)
-    c.downField("certain").as[Boolean] shouldBe Right(b.certainty.certain)
+    c.downField("scans").as[Set[ScanId]] shouldBe Right(b.scans)
     c.downField("creationOutIndex").as[Short] shouldBe Right(b.creationOutIndex)
     c.downField("inclusionHeight").as[Option[Int]] shouldBe Right(b.inclusionHeightOpt)
     c.downField("spendingHeight").as[Option[Int]] shouldBe Right(b.spendingHeightOpt)
@@ -109,7 +156,7 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
     def stringify(assets: Seq[(ErgoBox.TokenId, Long)]) = {
       assets map { case (tokenId, amount) => (Algos.encode(tokenId), amount) }
     }
-    import ErgoTransaction.assetDecoder
+
     val Right(decodedAssets) = c.as[Seq[(ErgoBox.TokenId, Long)]]
     stringify(decodedAssets) should contain theSameElementsAs stringify(assets)
   }
@@ -117,20 +164,6 @@ class JsonSerializationSpec extends ErgoPropertyTest with WalletGenerators with 
   private def checkRegisters(c: ACursor, registers: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]]) = {
     val Right(decodedRegs) = c.as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]
     decodedRegs should contain theSameElementsAs registers
-  }
-
-  private def checkTransaction(c: ACursor, txOpt: Option[ErgoTransaction]) = {
-    import ErgoTransaction.transactionDecoder
-    val Right(decodedTxOpt) = c.as[Option[ErgoTransaction]]
-    if (txOpt.isEmpty) {
-      decodedTxOpt shouldBe empty
-    } else {
-      val decoded = decodedTxOpt.get
-      val tx = txOpt.get
-      decoded.id shouldEqual tx.id
-      decoded.inputs should contain theSameElementsInOrderAs tx.inputs
-      decoded.outputs should contain theSameElementsInOrderAs tx.outputs
-    }
   }
 
 }

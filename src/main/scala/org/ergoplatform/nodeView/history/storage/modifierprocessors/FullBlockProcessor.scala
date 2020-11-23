@@ -1,11 +1,11 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Algos
 import scorex.core.consensus.History.ProgressInfo
+import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
@@ -23,13 +23,14 @@ trait FullBlockProcessor extends HeadersProcessor {
   private var nonBestChainsCache = FullBlockProcessor.emptyCache
 
   def isInBestFullChain(id: ModifierId): Boolean = historyStorage.getIndex(chainStatusKey(id))
-    .contains(FullBlockProcessor.BestChainMarker)
+    .map(ByteArrayWrapper.apply)
+    .contains(ByteArrayWrapper(FullBlockProcessor.BestChainMarker))
 
   /**
     * Id of header that contains transactions and proofs
     */
-  override def bestFullBlockIdOpt: Option[ModifierId] = historyStorage.getIndex(BestFullBlockKey)
-    .map(w => bytesToId(w.data))
+  override def bestFullBlockIdOpt: Option[ModifierId] =
+    historyStorage.getIndex(BestFullBlockKey).map(bytesToId)
 
   // todo: `getFullBlock` is frequently used to define whether some`header` have enough
   // todo: related sections - it would be far more efficient to keep such information in the indexes.
@@ -47,7 +48,7 @@ trait FullBlockProcessor extends HeadersProcessor {
                                  newMod: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
     val bestFullChainAfter = calculateBestChain(fullBlock.header)
     val newBestBlockHeader = typedModifierById[Header](bestFullChainAfter.last).ensuring(_.isDefined)
-    processing(ToProcess(fullBlock, newMod, newBestBlockHeader, config.blocksToKeep, bestFullChainAfter))
+    processing(ToProcess(fullBlock, newMod, newBestBlockHeader, bestFullChainAfter))
   }
 
   private def processing: BlockProcessing =
@@ -62,8 +63,9 @@ trait FullBlockProcessor extends HeadersProcessor {
   }
 
   private def processValidFirstBlock: BlockProcessing = {
-    case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), _, newBestChain)
+    case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), newBestChain)
       if isValidFirstFullBlock(fullBlock.header) =>
+
       val headers = headerChainBack(10, fullBlock.header, h => h.height == 1)
       val toApply = fullBlock +: newBestChain.tail
         .map(id => typedModifierById[Header](id).flatMap(getFullBlock))
@@ -76,9 +78,12 @@ trait FullBlockProcessor extends HeadersProcessor {
   }
 
   private def processBetterChain: BlockProcessing = {
-    case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), blocksToKeep, _)
+    case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), _)
       if bestFullBlockOpt.nonEmpty && isBetterChain(newBestBlockHeader.id) && isLinkable(fullBlock.header) =>
+
       val prevBest = bestFullBlockOpt.get
+
+      //find chains starting from the forking point
       val (prevChain, newChain) = commonBlockThenSuffixes(prevBest.header, newBestBlockHeader)
       val toRemove: Seq[ErgoFullBlock] = prevChain.tail.headers.flatMap(getFullBlock)
       val toApply: Seq[ErgoFullBlock] = newChain.tail.headers
@@ -89,16 +94,16 @@ trait FullBlockProcessor extends HeadersProcessor {
       logStatus(toRemove, toApply, fullBlock, Some(prevBest))
       val branchPoint = toRemove.headOption.map(_ => prevChain.head.id)
 
-      val minForkRootHeight = newBestBlockHeader.height - config.blocksToKeep
-      // remove block ids which have no chance to be applied
-      if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
-
       // insert updated chains statuses
       val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
         toRemove.map(b => chainStatusKey(b.id) -> FullBlockProcessor.NonBestChainMarker)
       updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes)
 
-      if (blocksToKeep >= 0) {
+      // remove block ids which have no chance to be applied
+      val minForkRootHeight = toApply.last.height - nodeSettings.keepVersions
+      if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
+
+      if (nodeSettings.isFullBlocksPruned) {
         val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
         val bestHeight: Int = newBestBlockHeader.height
         val diff = bestHeight - prevBest.header.height
@@ -122,12 +127,12 @@ trait FullBlockProcessor extends HeadersProcessor {
   private def nonBestBlock: BlockProcessing = {
     case params =>
       val block = params.fullBlock
-      if (block.header.height > fullBlockHeight - config.keepVersions) {
+      if (block.header.height > fullBlockHeight - nodeSettings.keepVersions) {
         nonBestChainsCache = nonBestChainsCache.add(block.id, block.parentId, block.header.height)
       }
       //Orphaned block or full chain is not initialized yet
       logStatus(Seq(), Seq(), params.fullBlock, None)
-      historyStorage.insert(storageVersion(params.newModRow), Seq.empty, Seq(params.newModRow))
+      historyStorage.insert(Seq.empty, Seq(params.newModRow))
       ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
   }
 
@@ -211,13 +216,13 @@ trait FullBlockProcessor extends HeadersProcessor {
                         prevBest: Option[ErgoFullBlock]): Unit = {
     val toRemoveStr = if (toRemove.isEmpty) "" else s" and to remove ${toRemove.length}"
     val newStatusStr = if (toApply.isEmpty) "" else {
-      s" New best block is ${toApply.last.header.encodedId} " +
+        s"New best block is ${toApply.last.header.encodedId} " +
         s"with height ${toApply.last.header.height} " +
         s"updates block ${prevBest.map(_.encodedId).getOrElse("None")} " +
         s"with height ${ErgoHistory.heightOf(prevBest.map(_.header))}"
     }
     log.info(s"Full block ${appliedBlock.encodedId} appended, " +
-      s"going to apply ${toApply.length}$toRemoveStr modifiers.$newStatusStr")
+      s"going to apply ${toApply.length}$toRemoveStr modifiers. $newStatusStr")
   }
 
   private def pruneBlockDataAt(heights: Seq[Int]): Try[Unit] = Try {
@@ -229,14 +234,12 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   private def updateStorage(newModRow: ErgoPersistentModifier,
                             bestFullHeaderId: ModifierId,
-                            additionalIndexes: Seq[(ByteArrayWrapper, ByteArrayWrapper)] = Seq.empty): Unit = {
-    val indicesToInsert = Seq(BestFullBlockKey -> Algos.idToBAW(bestFullHeaderId)) ++ additionalIndexes
-    historyStorage.insert(storageVersion(newModRow), indicesToInsert, Seq(newModRow))
+                            additionalIndexes: Seq[(ByteArrayWrapper, Array[Byte])] = Seq.empty): Unit = {
+    val indicesToInsert = Seq(BestFullBlockKey -> idToBytes(bestFullHeaderId)) ++ additionalIndexes
+    historyStorage.insert(indicesToInsert, Seq(newModRow))
       .ensuring(headersHeight >= fullBlockHeight, s"Headers height $headersHeight should be >= " +
         s"full height $fullBlockHeight")
   }
-
-  private def storageVersion(newModRow: ErgoPersistentModifier) = Algos.idToBAW(newModRow.id)
 
 }
 
@@ -247,7 +250,6 @@ object FullBlockProcessor {
   case class ToProcess(fullBlock: ErgoFullBlock,
                        newModRow: ErgoPersistentModifier,
                        newBestBlockHeaderOpt: Option[Header],
-                       blocksToKeep: Int,
                        newBestChain: Seq[ModifierId])
 
   case class CacheBlock(id: ModifierId, height: Int)
@@ -268,8 +270,8 @@ object FullBlockProcessor {
       IncompleteFullChainCache(cache.dropWhile(_._1.height < height))
   }
 
-  val BestChainMarker: ByteArrayWrapper = ByteArrayWrapper(Array(1: Byte))
-  val NonBestChainMarker: ByteArrayWrapper = ByteArrayWrapper(Array(0: Byte))
+  val BestChainMarker: Array[Byte] = Array(1: Byte)
+  val NonBestChainMarker: Array[Byte] = Array(0: Byte)
 
   private implicit val ord: Ordering[CacheBlock] = Ordering[(Int, ModifierId)].on(x => (x.height, x.id))
 

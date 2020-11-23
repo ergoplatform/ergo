@@ -1,10 +1,8 @@
 package org.ergoplatform.nodeView.history
 
-import io.iohk.iodb.ByteArrayWrapper
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.ModifierSemanticValidity
 import scorex.util.ModifierId
@@ -48,18 +46,16 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
 
     // should not be able to apply if corresponding header is marked as invalid
     history.applicableTry(section) shouldBe 'success
-    history.historyStorage.insert(randomKey, Seq(history.validityKey(header.id) -> ByteArrayWrapper(Array(0.toByte))), Seq.empty)
+    history.historyStorage.insert(Seq(history.validityKey(header.id) -> Array(0.toByte)), Seq.empty)
     history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Invalid
     history.applicableTry(section) shouldBe 'failure
-    history.historyStorage.insert(randomKey, Seq(history.validityKey(header.id) -> ByteArrayWrapper(Array(1.toByte))), Seq.empty)
+    history.historyStorage.insert(Seq(history.validityKey(header.id) -> Array(1.toByte)), Seq.empty)
 
     // should not be able to apply if already in history
     history.applicableTry(section) shouldBe 'success
     history.append(section).get
     history.applicableTry(section) shouldBe 'failure
   }
-
-  private def randomKey: ByteArrayWrapper = ByteArrayWrapper(Algos.hash(scorex.utils.Random.randomBytes(32)))
 
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)

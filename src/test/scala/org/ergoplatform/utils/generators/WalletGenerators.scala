@@ -103,7 +103,7 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
       amount <- Gen.choose(1L, 100000L)
       balances <- additionalTokensGen
     } yield {
-      val encodedBalances = mutable.LinkedHashMap(balances.map { case (x1, x2) => encodedTokenId(x1) -> x2 } :_*)
+      val encodedBalances = balances.map { case (x1, x2) => encodedTokenId(x1) -> x2 }
       WalletDigest(height, amount, encodedBalances)
     }
   }

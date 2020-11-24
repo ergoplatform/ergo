@@ -1,4 +1,4 @@
-val circeVersion = "0.10.0"
+val circeVersion = "0.13.0"
 
 libraryDependencies ++= Seq(
   "org.scodec" %% "scodec-bits" % "1.1.6",

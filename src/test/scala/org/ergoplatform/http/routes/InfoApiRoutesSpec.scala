@@ -63,7 +63,8 @@ class InfoApiRoutesSpec extends AnyFlatSpec
   it should "should return non-exponential difficulty in json response" in {
     Get("/info") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      val res = responseEntity.toString
+      val json = responseAs[Json]
+      val res = json.toString
       log.info(s"Received node info: $res")
       res should include regex """\"difficulty\" : \d+,"""
     }

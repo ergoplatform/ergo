@@ -24,8 +24,12 @@ lazy val commonSettings = Seq(
   publishTo := sonatypePublishToBundle.value,
 )
 
+val circeVersion = "0.13.0"
+val akkaVersion = "2.6.10"
+val akkaHttpVersion = "10.2.1"
+
 val scorexVersion = "master-b8f1c5f1-SNAPSHOT"
-val sigmaStateVersion = "optimizations-77bc7bf6-SNAPSHOT"
+val sigmaStateVersion = "optimizations-17dee85b-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -52,13 +56,19 @@ libraryDependencies ++= Seq(
 
   "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
-  "org.scalactic" %% "scalactic" % "3.0.+" % "test",
+  "org.scalactic" %% "scalactic" % "3.0.3" % "test",
   "org.scalatest" %% "scalatest" % "3.1.1" % "test,it",
-  "org.scalacheck" %% "scalacheck" % "1.14.3" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
   "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test,
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
-  "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",
-  "com.typesafe.akka" %% "akka-http-testkit" % "10.1.9" % "test",
+
+  "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
+  "io.circe" %% "circe-core" % circeVersion,
+  "io.circe" %% "circe-core" % circeVersion % "test",
+
+  "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
+  "com.typesafe.akka" %% "akka-http-testkit" % akkaHttpVersion % "test",
+
   "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test",
   "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded"

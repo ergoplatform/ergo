@@ -8,27 +8,7 @@ import scorex.util.serialization.{Reader, Writer}
 
 import scala.util.{Failure, Success, Try}
 
-object ScanWalletInteraction extends Enumeration {
-  type ScanWalletInteraction = Value
 
-  val Off = Value("off")
-  val Shared = Value("shared")
-  val Forced = Value("forced")
-
-  def toByte(v: Value): Byte = v match {
-    case Off => -1 : Byte
-    case Shared => -2 : Byte
-    case Forced => -3 : Byte
-  }
-
-  def fromByte(b: Byte): ScanWalletInteraction = b match {
-    case x: Byte if x == -1 => Off
-    case x: Byte if x == -2 => Shared
-    case x: Byte if x == -3 => Forced
-  }
-
-  def interactingWithWallet(v: Value): Boolean = v == Shared || v == Forced
-}
 
 /**
   * Wraps information about user scan.
@@ -38,6 +18,7 @@ object ScanWalletInteraction extends Enumeration {
   * @param scanId         - unique identifier of an scan in the local system
   * @param scanName       - scan description (255 bytes in UTF-8 encoding max)
   * @param trackingRule  - a predicate to scan the blockchain for specific scan-related boxes
+  * @param walletInteraction - a flag which is prescribing how the scan is interacting with the p2pk-wallet
   */
 case class Scan(scanId: ScanId,
                 scanName: String,
@@ -48,26 +29,6 @@ object Scan {
 
   val MaxScanNameLength = 255
 
-}
-
-/**
-  * A class that encodes an API request to create a scan.
-  *
-  * @param scanName       - scan description (255 bytes in UTF-8 encoding max)
-  * @param trackingRule  - a predicate to scan the blockchain for specific scan-related boxes
-  *
-  */
-
-case class ScanRequest(scanName: String,
-                       trackingRule: ScanningPredicate,
-                       walletInteraction: Option[ScanWalletInteraction]) {
-  def toScan(scanId: ScanId): Try[Scan] = {
-    if (scanName.getBytes("UTF-8").length > Scan.MaxScanNameLength) {
-      Failure(new Exception(s"Too long scan name: $scanName"))
-    } else {
-      Success(Scan(scanId, scanName, trackingRule, walletInteraction.getOrElse(ScanWalletInteraction.Shared)))
-    }
-  }
 }
 
 object ScanSerializer extends ScorexSerializer[Scan] {
@@ -81,14 +42,35 @@ object ScanSerializer extends ScorexSerializer[Scan] {
   override def parse(r: Reader): Scan = {
     val scanId = ScanId @@ r.getShort()
     val appName = r.getShortString()
-    val pos = r.position
 
-    val interactionFlag = r.getByte() match {
-      case x: Byte if x < 0 => ScanWalletInteraction.fromByte(x)
-      case _ => r.position_=(pos); ScanWalletInteraction.Off
+    // hack to read scans serialized with previous versions (they will have positive first byte)
+    // for scans written with previous versions, walletInteraction flag is set to "off"
+    val interactionFlag = r.peekByte() match {
+      case x: Byte if x < 0 => r.getByte(); ScanWalletInteraction.fromByte(x)
+      case _ => ScanWalletInteraction.Off
     }
     val sp = ScanningPredicateSerializer.parse(r)
     Scan(scanId, appName, sp, interactionFlag)
+  }
+}
+
+/**
+  * A class that encodes an API request to create a scan.
+  *
+  * @param scanName       - scan description (255 bytes in UTF-8 encoding max)
+  * @param trackingRule  - a predicate to scan the blockchain for specific scan-related boxes
+  * @param walletInteraction - how scan should interact with (p2pk) wallet, see @ScanWalletInteraction for details
+  *
+  */
+case class ScanRequest(scanName: String,
+                       trackingRule: ScanningPredicate,
+                       walletInteraction: Option[ScanWalletInteraction]) {
+  def toScan(scanId: ScanId): Try[Scan] = {
+    if (scanName.getBytes("UTF-8").length > Scan.MaxScanNameLength) {
+      Failure(new Exception(s"Too long scan name: $scanName"))
+    } else {
+      Success(Scan(scanId, scanName, trackingRule, walletInteraction.getOrElse(ScanWalletInteraction.Shared)))
+    }
   }
 }
 

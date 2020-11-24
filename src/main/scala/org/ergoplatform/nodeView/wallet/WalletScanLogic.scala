@@ -27,7 +27,8 @@ object WalletScanLogic extends ScorexLogging {
 
   /**
     * Data object collecting info about inputs spent during blocks scan
-    * @param inputTxId - id of transaction which is spending an input
+    *
+    * @param inputTxId  - id of transaction which is spending an input
     * @param trackedBox - box being spent
     */
   case class SpentInputData(inputTxId: ModifierId, trackedBox: TrackedBox)
@@ -36,8 +37,8 @@ object WalletScanLogic extends ScorexLogging {
   /**
     * Results of block scan
     *
-    * @param outputs - newly created boxes (transaction outputs)
-    * @param inputsSpent - wallet-related inputs spent
+    * @param outputs             - newly created boxes (transaction outputs)
+    * @param inputsSpent         - wallet-related inputs spent
     * @param relatedTransactions - transactions affected (creating wallet-related boxes or spending them)
     */
   case class ScanResults(outputs: Seq[TrackedBox],
@@ -81,13 +82,13 @@ object WalletScanLogic extends ScorexLogging {
   /**
     * Updates wallet database by scanning and processing block transactions.
     *
-    * @param registry - versioned wallet database which is tracking on-chain state
-    * @param offChainRegistry - in-memory snapshot of current state, including off-chain transactions
-    * @param stateContext - current blockchain and state context (used to check mining rewards only)
-    * @param walletVars - current wallet state
-    * @param height - block height
-    * @param blockId - block id
-    * @param transactions - block transactions
+    * @param registry            - versioned wallet database which is tracking on-chain state
+    * @param offChainRegistry    - in-memory snapshot of current state, including off-chain transactions
+    * @param stateContext        - current blockchain and state context (used to check mining rewards only)
+    * @param walletVars          - current wallet state
+    * @param height              - block height
+    * @param blockId             - block id
+    * @param transactions        - block transactions
     * @param cachedOutputsFilter - Bloom filter for previously created outputs
     * @return updated wallet database, offchain snapshot and the Bloom filter for wallet outputs
     */
@@ -115,11 +116,11 @@ object WalletScanLogic extends ScorexLogging {
     }
 
     // Resolve boxes related to mining income
-    // We choose only boxes which are mature enough to be spend
+    // We choose only boxes which are mature enough to be spent
     // (i.e. miningRewardDelay blocks passed since a mining reward box mined)
     val maxMiningHeight = height - walletVars.settings.miningRewardDelay
     val miningBoxes = registry.unspentBoxes(MiningScanId).filter(_.inclusionHeightOpt.getOrElse(0) <= maxMiningHeight)
-    val resolvedBoxes = if(miningBoxes.nonEmpty) {
+    val resolvedBoxes = if (miningBoxes.nonEmpty) {
       miningBoxes.flatMap { tb =>
         val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)
         if (spendable) Some(tb.copy(scans = Set(PaymentsScanId))) else None
@@ -218,6 +219,8 @@ object WalletScanLogic extends ScorexLogging {
     val externalScans: Seq[Scan] = walletVars.externalScans
 
     tx.outputs.flatMap { bx =>
+
+      // First, we check apps triggered by the tx output
       val appsTriggered =
         externalScans
           .filter(_.trackingRule.filter(bx))
@@ -225,28 +228,31 @@ object WalletScanLogic extends ScorexLogging {
 
       val boxScript = bx.propositionBytes
 
+      // then check whether Bloom filter built on top of payment & mining scripts of the p2pk-wallet
       val statuses: Set[ScanId] = if (walletVars.filter.mightContain(boxScript)) {
 
+        // first, we are checking mining script
         val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
 
-        lazy val miningStatus: (ScanId, ScanWalletInteraction.Value) = if (walletVars.settings.miningRewardDelay > 0) {
-          MiningScanId -> ScanWalletInteraction.Off
-        } else {
-          //tweak for tests
-          MiningScanId -> ScanWalletInteraction.Forced
-        }
-
-        val prePaymentStatuses = if (miningIncomeTriggered){
+        val prePaymentStatuses = if (miningIncomeTriggered) {
+          val miningStatus: (ScanId, ScanWalletInteraction.Value) = if (walletVars.settings.miningRewardDelay > 0) {
+            MiningScanId -> ScanWalletInteraction.Off // scripts are different, so off is kinda overkill
+          } else {
+            //tweak for tests
+            PaymentsScanId -> ScanWalletInteraction.Off
+          }
           appsTriggered :+ miningStatus
         } else {
           appsTriggered
         }
 
         if (prePaymentStatuses.nonEmpty &&
-              !prePaymentStatuses.exists(t => ScanWalletInteraction.interactingWithWallet(t._2))) {
-          //if other scans intercept the box, it is not being tracked by the payments app
+          !prePaymentStatuses.exists(t => ScanWalletInteraction.interactingWithWallet(t._2))) {
+          // if other scans intercept the box, and the scans are not sharing the box,
+          // then the box is not being tracked by the p2pk-wallet
           prePaymentStatuses.map(_._1).toSet
         } else {
+          //check whether payment is triggered (Bloom filter has false positives)
           val paymentsTriggered = trackedBytes.exists(bs => boxScript.sameElements(bs))
 
           val otherIds = prePaymentStatuses.map(_._1).toSet
@@ -259,7 +265,8 @@ object WalletScanLogic extends ScorexLogging {
       } else {
         val appScans = appsTriggered.map(_._1).toSet
 
-        if(appsTriggered.exists(_._2 == ScanWalletInteraction.Forced)){
+        // Add p2pk-wallet if there's a scan enforcing that
+        if (appsTriggered.exists(_._2 == ScanWalletInteraction.Forced)) {
           appScans ++ Set(PaymentsScanId)
         } else {
           appScans

@@ -1,8 +1,5 @@
 package org.ergoplatform.utils
 
-import java.math.BigInteger
-
-import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.history.Header
@@ -10,19 +7,19 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
-import org.ergoplatform.settings.{Constants, ErgoValidationSettings, LaunchParameters, VotingSettings}
-import org.ergoplatform.utils.FoundationBoxSigner.{boxToSpend, undersignedTx}
-import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
-import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, TransactionContext}
+import org.ergoplatform.settings.{ErgoValidationSettings, LaunchParameters, VotingSettings}
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import org.ergoplatform.wallet.protocol.context.TransactionContext
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.hash.{Blake2b256, Digest32}
-import sigmastate.interpreter.{ContextExtension, HintsBag, OtherCommitment}
+import scorex.crypto.hash.Digest32
+import sigmastate.interpreter.{ContextExtension, HintsBag}
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.lang.Terms._
 import sigmastate.interpreter._
 import scorex.util.bytesToId
 import scorex.util.encode.Base16
 
+/*
 object FounderSpender extends App {
   implicit lazy val ircontext: IRContext = new RuntimeIRContext
   implicit val ergoAddressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
@@ -58,7 +55,7 @@ object FounderSpender extends App {
 
   //outputs
   val fee = EmissionRules.CoinsInOneErgo / 10 //0.1 Erg
-  val feeBox = ErgoBox(fee, ErgoScriptPredef.feeProposition(), height)
+  val feeBox = new ErgoBox(fee, ErgoScriptPredef.feeProposition(), height)
 
   val receiverKey = ergoAddressEncoder.fromString("9f3JCikU5866Yr5JGjfK9hJpSvBu3veHyYmpVbosJ3cTCyWDJhC").get.script
   val withdrawalAmount = 1000 * EmissionRules.CoinsInOneErgo
@@ -85,3 +82,4 @@ object FounderSpender extends App {
 
   println(ErgoTransaction.transactionEncoder.apply(tx))
 }
+*/

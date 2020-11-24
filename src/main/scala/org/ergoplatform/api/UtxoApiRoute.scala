@@ -3,10 +3,10 @@ package org.ergoplatform.api
 import akka.pattern.ask
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
+import org.ergoplatform.http.api.{ApiCodecs, ErgoBaseApiRoute}
 import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
-import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.crypto.authds.ADKey
@@ -46,6 +46,6 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
   }
 
   def genesis: Route = (get & path("genesis")) {
-    ApiResponse(getState.map(_.genesisboxes))
+    ApiResponse(getState.map(_.genesisBoxes))
   }
 }

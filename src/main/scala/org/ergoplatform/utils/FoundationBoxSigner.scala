@@ -12,15 +12,16 @@ import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.{ErgoValidationSettings, LaunchParameters, VotingSettings}
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
-import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, TransactionContext}
+import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, InputContext, TransactionContext}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import sigmastate.interpreter.{ContextExtension, HintsBag, OtherCommitment}
+import sigmastate.interpreter.{ContextExtension, HintsBag}
 import sigmastate.eval.{IRContext, RuntimeIRContext}
 import sigmastate.lang.Terms._
 import sigmastate.interpreter._
 import scorex.util.bytesToId
 import scorex.util.encode.Base16
+import sigmastate.NodePosition
 import sigmastate.basics.DLogProtocol.{DLogInteractiveProver, DLogProverInput, FirstDLogProverMessage, ProveDlog}
 import sigmastate.serialization.{GroupElementSerializer, SigmaSerializer}
 
@@ -29,7 +30,7 @@ class OldProvingInterpreter(seed: String,
                             params: ErgoLikeParameters,
                             hintsBag: HintsBag)
                            (implicit IR: IRContext) extends
-  ErgoProvingInterpreter(IndexedSeq(), params: ErgoLikeParameters, hintsBag: HintsBag){
+  ErgoProvingInterpreter(IndexedSeq(), params: ErgoLikeParameters, None){
 
   val numOfSecrets = 1
   def secretsFromSeed(seedStr: String): IndexedSeq[BigInteger] = {
@@ -38,7 +39,7 @@ class OldProvingInterpreter(seed: String,
     }
   }
 
-  override lazy val secrets = secretsFromSeed(seed).map(DLogProverInput.apply)
+  override val secrets = secretsFromSeed(seed).map(DLogProverInput.apply)
 }
 
 
@@ -110,7 +111,7 @@ object FoundationBoxSigner extends App {
 
   //outputs
   val fee = EmissionRules.CoinsInOneErgo / 10 //0.1 Erg
-  val feeBox = ErgoBox(fee, ErgoScriptPredef.feeProposition(), height)
+  val feeBox = new ErgoBoxCandidate(fee, ErgoScriptPredef.feeProposition(), height)
 
   //waves gateway address for Ergo Waves account
   val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
@@ -123,24 +124,25 @@ object FoundationBoxSigner extends App {
   val foundationOutput = new ErgoBoxCandidate(gfBox.value - withdrawalAmount - fee, gfBox.ergoTree, height,
                                               gfBox.additionalTokens, gfBox.additionalRegisters)
 
-  val outputCandidates = IndexedSeq(foundationOutput) ++ withdrawalOutputs ++ IndexedSeq(feeBox.toCandidate)
+  val outputCandidates = IndexedSeq(foundationOutput) ++ withdrawalOutputs ++ IndexedSeq(feeBox)
   val undersignedTx = UnsignedErgoTransaction(IndexedSeq(input), outputCandidates)
-  val transactionContext = TransactionContext(IndexedSeq(boxToSpend), IndexedSeq(), undersignedTx, selfIndex = 0)
+  val transactionContext = TransactionContext(IndexedSeq(boxToSpend), IndexedSeq(), undersignedTx)
+  val inputContext = InputContext(0, ContextExtension.empty)
   val msgToSign = undersignedTx.messageToSign
 
-  val context = new ErgoContext(stateContext, transactionContext, ContextExtension.empty, parameters.maxBlockCost, 0)
+  val context = new ErgoContext(stateContext, transactionContext, inputContext, parameters.maxBlockCost, 0)
   val prop = gfBox.proposition.asSigmaProp
 
   // doing a requested action
   action match {
     case i: Int if i == generateCommitment =>
-      val (r, c) = DLogInteractiveProver.firstMessage(pubKeys(signerIndex))
+      val (r, c) = DLogInteractiveProver.firstMessage()
       println("randomness(store it in secret!): " + r)
       println("commitment: " + Base16.encode(GroupElementSerializer.toBytes(c.ecData)))
 
     case i: Int if i == preSign =>
       val signerPubKey = pubKeys(signerIndex)
-      val hint = OtherCommitment(signerPubKey, cmtOpt.get)
+      val hint = RealCommitment(signerPubKey, cmtOpt.get, NodePosition(Seq(0, signerIndex)))
       val bag = HintsBag(IndexedSeq(hint))
       val partialProof = prover.prove(prop, context, msgToSign, bag).get
       println("Commitment: " + commitmentStringOpt)
@@ -151,7 +153,7 @@ object FoundationBoxSigner extends App {
       val partialSig = partialSignatureOpt.get
 
       val bag = prover.bagForMultisig(context, prop, partialSig, inactiveIndexes.map(pubKeys.apply))
-        .addHint(OwnCommitment(pubKeys(signerIndex), ownRandomness, cmtOpt.get))
+        .addHint(OwnCommitment(pubKeys(signerIndex), ownRandomness, cmtOpt.get, NodePosition(Seq(0, signerIndex))))
 
       val proof = prover.prove(prop, context, msgToSign, bag).get
 

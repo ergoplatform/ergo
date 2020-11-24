@@ -5,10 +5,14 @@ import scala.util.Try
 
 logLevel := Level.Debug
 
+// this values should be in sync with ergo-wallet/build.sbt
+val scala211 = "2.11.12"
+val scala212 = "2.12.10"
+
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  scalaVersion := "2.12.10",
+  scalaVersion := scala212,
   // version is set via git tag vX.Y.Z:
   // $ git tag v3.2.0
   // $ git push origin v3.2.0
@@ -235,7 +239,7 @@ lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
 lazy val ergoWallet = (project in file("ergo-wallet"))
   .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
   .settings(
-    crossScalaVersions := Seq(scalaVersion.value, "2.11.12"),
+    crossScalaVersions := Seq(scalaVersion.value, scala211),
     commonSettings,
     name := "ergo-wallet",
     libraryDependencies ++= Seq(

@@ -59,7 +59,7 @@ object FoundationBoxSigner extends App {
   val action: ACTION = preSign
 
   // hints provided by a cosigner
-  val commitmentStringOpt: Option[String] = Some("029a04c56f1e14537e3a0326357aa23ae26030ab769a34e2827767fa2731934e56")
+  val commitmentStringOpt: Option[String] = None
   val ownRandomnessStringOpt: Option[String] = None
   val partialSignatureStringOpt: Option[String] = None
 
@@ -101,7 +101,7 @@ object FoundationBoxSigner extends App {
 
   //box and message to sign
   //copy "new out bytes" here
-  val gfBytes = Base16.decode("809cc2cbae92b804100e040004c094400580809cde91e7b0010580acc7f03704be944004808948058080c7b7e4992c0580b4c4c32104fe884804c0fd4f0580bcc1960b04befd4f05000400ea03d192c1b2a5730000958fa373019a73029c73037e997304a305958fa373059a73069c73077e997308a305958fa373099c730a7e99730ba305730cd193c2a7c2b2a5730d00d5040800c0821400010e6f98040483030808cd039bb5fe52359a64c99a60fd944fc5e388cbdc4d37ff091cc841c3ee79060b864708cd031fb52cf6e805f80d97cde289f4f757d49accf0c83fb864b27d2cf982c37f9a8b08cd0352ac2a471339b0d23b3d2c5ce0db0e81c969f77891b9edf0bda7fd39a78184e7a058c7907411947a06c18afd8176359b1ae0f6e35e53e6707c722b8e6cd8eb0500").get
+  val gfBytes = Base16.decode("80fae6d1bfc5a204100e040004c094400580809cde91e7b0010580acc7f03704be944004808948058080c7b7e4992c0580b4c4c32104fe884804c0fd4f0580bcc1960b04befd4f05000400ea03d192c1b2a5730000958fa373019a73029c73037e997304a305958fa373059a73069c73077e997308a305958fa373099c730a7e99730ba305730cd193c2a7c2b2a5730d00d5040800b0ae1500010e6f98040483030808cd039bb5fe52359a64c99a60fd944fc5e388cbdc4d37ff091cc841c3ee79060b864708cd031fb52cf6e805f80d97cde289f4f757d49accf0c83fb864b27d2cf982c37f9a8b08cd0352ac2a471339b0d23b3d2c5ce0db0e81c969f77891b9edf0bda7fd39a78184e7638a2ece3e8811b0d7af4584030438156f7c66d52f65681b84ab67e3919c5d9100").get
   val gfBox = ErgoBoxSerializer.parseBytes(gfBytes)
 
   println("Spending: " + Base16.encode(gfBox.id))
@@ -152,7 +152,9 @@ object FoundationBoxSigner extends App {
       val ownRandomness = ownRandomnessOpt.get
       val partialSig = partialSignatureOpt.get
 
-      val bag = prover.bagForMultisig(context, prop, partialSig, inactiveIndexes.map(pubKeys.apply))
+      val simulatedPubkeys = Seq(0).map(pubKeys.apply)
+      val realPubkeys = Seq(1, 2).map(pubKeys.apply)
+      val bag = prover.bagForMultisig(context, prop, partialSig, realPubkeys, simulatedPubkeys)
         .addHint(OwnCommitment(pubKeys(signerIndex), ownRandomness, cmtOpt.get, NodePosition(Seq(0, signerIndex))))
 
       val proof = prover.prove(prop, context, msgToSign, bag).get

@@ -42,13 +42,12 @@ object ScanSerializer extends ScorexSerializer[Scan] {
   override def parse(r: Reader): Scan = {
     val scanId = ScanId @@ r.getShort()
     val appName = r.getShortString()
-    val pos = r.position
 
     // hack to read scans serialized with previous versions (they will have positive first byte)
     // for scans written with previous versions, walletInteraction flag is set to "off"
-    val interactionFlag = r.getByte() match {
-      case x: Byte if x < 0 => ScanWalletInteraction.fromByte(x)
-      case _ => r.position_=(pos); ScanWalletInteraction.Off
+    val interactionFlag = r.peekByte() match {
+      case x: Byte if x < 0 => r.getByte(); ScanWalletInteraction.fromByte(x)
+      case _ => ScanWalletInteraction.Off
     }
     val sp = ScanningPredicateSerializer.parse(r)
     Scan(scanId, appName, sp, interactionFlag)

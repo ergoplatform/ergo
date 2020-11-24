@@ -37,9 +37,9 @@ object ScanWalletInteraction extends Enumeration {
   }
 
   /**
-    * Whether a box found forscan with flag provided should be added to the p2pk wallet
-    * @param v - flag
-    * @return true if box should be added to p2pk wallet, false otherwise
+    * Whether a box found for a scan with the flag provided should be added to a p2pk wallet
+    * @param v - the flag
+    * @return true if the box should be added to the p2pk wallet, false otherwise
     */
   def interactingWithWallet(v: Value): Boolean = v == Shared || v == Forced
 }

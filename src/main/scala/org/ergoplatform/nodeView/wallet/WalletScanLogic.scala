@@ -116,7 +116,7 @@ object WalletScanLogic extends ScorexLogging {
     }
 
     // Resolve boxes related to mining income
-    // We choose only boxes which are mature enough to be spend
+    // We choose only boxes which are mature enough to be spent
     // (i.e. miningRewardDelay blocks passed since a mining reward box mined)
     val maxMiningHeight = height - walletVars.settings.miningRewardDelay
     val miningBoxes = registry.unspentBoxes(MiningScanId).filter(_.inclusionHeightOpt.getOrElse(0) <= maxMiningHeight)

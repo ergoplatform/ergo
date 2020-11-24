@@ -62,7 +62,6 @@ object ScanSerializer extends ScorexSerializer[Scan] {
   * @param walletInteraction - how scan should interact with (p2pk) wallet, see @ScanWalletInteraction for details
   *
   */
-
 case class ScanRequest(scanName: String,
                        trackingRule: ScanningPredicate,
                        walletInteraction: Option[ScanWalletInteraction]) {

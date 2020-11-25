@@ -6,7 +6,7 @@ import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
@@ -17,6 +17,7 @@ import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
+import sigmastate.Values.SigmaBoolean
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -58,7 +59,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         updateChangeAddressR ~
         signTransactionR ~
         checkSeedR ~
-        rescanWalletR
+        rescanWalletR ~
+        extractHintsR
     }
   }
 
@@ -171,8 +173,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def generateCommitmentsR: Route = (path("generateCommitments")
     & post & entity(as[GenerateCommitmentsRequest])) { gcr =>
-
-    import HintCodecs._
 
     val utx = gcr.unsignedTx
     val externalSecretsOpt = gcr.externalSecretsOpt
@@ -377,4 +377,17 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
+  def extractHintsR: Route = (path("extractHints") & post & entity(as[HintExtractionRequest])) { her =>
+    withWallet { w =>
+      w.extractHints(her.tx, her.real, her.simulated).map(_.transactionHintsBag)
+    }
+  }
+
 }
+
+case class HintExtractionRequest(tx: ErgoTransaction,
+                                 real: Seq[SigmaBoolean],
+                                 simulated: Seq[SigmaBoolean])
+
+case class CommitmentGenerationRequest(utx: UnsignedErgoTransaction,
+                                       externalKeys: Option[Seq[SigmaBoolean]])

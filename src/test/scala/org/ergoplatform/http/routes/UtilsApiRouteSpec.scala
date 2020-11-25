@@ -10,14 +10,15 @@ import io.circe.Json
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{P2PKAddress, Pay2SAddress, Pay2SHAddress}
 import org.ergoplatform.http.api.ErgoUtilsApiRoute
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
 import sigmastate.serialization.ErgoTreeSerializer
 
 import scala.concurrent.duration._
 
-class UtilsApiRouteSpec extends FlatSpec
+class UtilsApiRouteSpec extends AnyFlatSpec
   with Matchers
   with ScalatestRouteTest
   with FailFastCirceSupport

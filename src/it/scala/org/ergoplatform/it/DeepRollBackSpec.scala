@@ -5,13 +5,13 @@ import java.io.File
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.scalatest.FreeSpec
+import org.scalatest.freespec.AnyFreeSpec
 
 import scala.async.Async
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 
-class DeepRollBackSpec extends FreeSpec with IntegrationSuite {
+class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
 
   val keepVersions = 350
   val chainLength = 150

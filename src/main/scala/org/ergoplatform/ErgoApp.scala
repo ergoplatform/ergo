@@ -2,26 +2,25 @@ package org.ergoplatform
 
 import java.net.InetSocketAddress
 
-import akka.actor.{ActorRef, ActorSystem, PoisonPill}
+import akka.actor.{ActorRef, PoisonPill, ActorSystem}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler}
-import akka.stream.ActorMaterializer
+import akka.stream.{Materializer, SystemMaterializer}
 import org.ergoplatform.http._
 import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.http.api.{ScanApiRoute, _}
 import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMinerRef
-import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
+import org.ergoplatform.network.{ModeFeature, ErgoNodeViewSynchronizer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.state.ErgoState
-import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
+import org.ergoplatform.nodeView.{ErgoReadersHolderRef, ErgoNodeViewRef}
+import org.ergoplatform.settings.{Args, NetworkType, ErgoSettings}
 import scorex.core.api.http._
 import scorex.core.app.{Application, ScorexContext}
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
 import scorex.core.network.message._
 import scorex.core.network.peer.PeerManagerRef
-import scorex.core.network.{NetworkControllerRef, PeerFeature, PeerSynchronizerRef, UPnP, UPnPGateway}
+import scorex.core.network.{PeerSynchronizerRef, UPnP, UPnPGateway, PeerFeature, NetworkControllerRef}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
@@ -29,11 +28,13 @@ import scorex.util.ScorexLogging
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 import scala.io.Source
-import scala.util.{Failure, Success}
+import scala.util.{Success, Failure}
 
 class ErgoApp(args: Args) extends ScorexLogging {
 
-  private var ergoSettings: ErgoSettings = ErgoSettings.read(args)
+  log.info(s"Running with args: $args")
+
+  private val ergoSettings: ErgoSettings = ErgoSettings.read(args)
 
   implicit private def settings: ScorexSettings = ergoSettings.scorexSettings
 
@@ -160,10 +161,10 @@ class ErgoApp(args: Args) extends ScorexLogging {
     log.debug(s"Max memory available: ${Runtime.getRuntime.maxMemory}")
     log.debug(s"RPC is allowed at ${settings.restApi.bindAddress.toString}")
 
-    implicit val mat: ActorMaterializer = ActorMaterializer()
+    implicit val mat: SystemMaterializer = SystemMaterializer.get(actorSystem)
     val bindAddress = settings.restApi.bindAddress
 
-    Http().bindAndHandle(httpService.compositeRoute, bindAddress.getAddress.getHostAddress, bindAddress.getPort)
+    Http().newServerAt(bindAddress.getAddress.getHostAddress, bindAddress.getPort).bindFlow(httpService.compositeRoute)
 
     //on unexpected shutdown
     Runtime.getRuntime.addShutdownHook(new Thread() {
@@ -184,11 +185,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
       log.info("Exiting from the app...")
       System.exit(0)
     }
-  }
-
-  private def isEmptyState: Boolean = {
-    val dir = ErgoState.stateDir(ergoSettings)
-    Option(dir.listFiles()).fold(true)(_.isEmpty)
   }
 
 }

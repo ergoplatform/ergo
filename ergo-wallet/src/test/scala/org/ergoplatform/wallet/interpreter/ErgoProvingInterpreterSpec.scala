@@ -4,20 +4,21 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction,
 import org.ergoplatform.wallet.crypto.ErgoSignature
 import org.ergoplatform.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.utils.Generators
-import org.scalatest.prop.PropertyChecks
-import org.scalatest.{FlatSpec, Matchers}
-import sigmastate.interpreter.{ContextExtension, HintsBag}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
 import scorex.util.Random
 import sigmastate.CTHRESHOLD
 import sigmastate.Values.{GroupElementConstant, SigmaBoolean}
+import sigmastate.interpreter.{ContextExtension, HintsBag}
 import sigmastate.serialization.ErgoTreeSerializer
 
 
 class ErgoProvingInterpreterSpec
-  extends FlatSpec
-    with PropertyChecks
+  extends AnyFlatSpec
+    with ScalaCheckPropertyChecks
     with Matchers
     with Generators
     with InterpreterSpecCommon {

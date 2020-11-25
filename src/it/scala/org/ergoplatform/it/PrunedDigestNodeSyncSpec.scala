@@ -6,13 +6,13 @@ import akka.japi.Option.Some
 import com.typesafe.config.Config
 import org.asynchttpclient.util.HttpConstants
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
-import org.scalatest.FreeSpec
+import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.async.Async
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
+class PrunedDigestNodeSyncSpec extends AnyFlatSpec with IntegrationSuite {
 
   val approxTargetHeight = 10
   val blocksToKeep: Int = approxTargetHeight / 5
@@ -41,7 +41,7 @@ class PrunedDigestNodeSyncSpec extends FreeSpec with IntegrationSuite {
   //    it does not load full block that should be pruned;
   // 4. Fetch digest node info and compare it with first node's one;
   // 5. Make sure digest node does not store full blocks with height < {targetHeight - blocksToKeep};
-  "Pruned digest node synchronization" in {
+  it should "Pruned digest node synchronization" in {
 
     val minerNode: Node = docker.startDevNetNode(minerConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 

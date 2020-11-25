@@ -2,14 +2,7 @@ package org.ergoplatform.nodeView.wallet.requests
 
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
-import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey, PrimitiveSecretKey}
-
-/**
-  * Externally provided secret (to be used once for a transaction to sign)
-  *
-  * @param key - the secret
-  */
-case class ExternalSecret(key: PrimitiveSecretKey)
+import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 
 /**
   * A request to sign a transaction
@@ -30,16 +23,5 @@ case class TransactionSigningRequest(unsignedTx: UnsignedErgoTransaction,
 
   lazy val dhts: Seq[DhtSecretKey] = externalSecrets.collect { case ExternalSecret(d: DhtSecretKey) => d }
 
-}
-
-
-case class GenerateCommitmentsRequest(unsignedTx: UnsignedErgoTransaction,
-                                      externalSecretsOpt: Option[Seq[ExternalSecret]]) {
-
-  lazy val externalSecrets = externalSecretsOpt.getOrElse(Seq.empty)
-
-  lazy val dlogs: Seq[DlogSecretKey] = externalSecrets.collect { case ExternalSecret(d: DlogSecretKey) => d }
-
-  lazy val dhts: Seq[DhtSecretKey] = externalSecrets.collect { case ExternalSecret(d: DhtSecretKey) => d }
 }
 

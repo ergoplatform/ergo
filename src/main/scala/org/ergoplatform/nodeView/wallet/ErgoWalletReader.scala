@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
-import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
+import org.ergoplatform.nodeView.wallet.requests.{BoxesRequest, ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
 import org.ergoplatform.wallet.Constants.ScanId
@@ -111,5 +111,8 @@ trait ErgoWalletReader extends VaultReader {
 
   def addBox(box: ErgoBox, scanIds: Set[ScanId]): Future[AddBoxResponse] =
     (walletActor ? AddBox(box, scanIds)).mapTo[AddBoxResponse]
+
+  def collectBoxes(request: BoxesRequest): Future[ReqBoxesResponse] =
+    ((walletActor ? CollectWalletBoxes(request.targetBalance, request.targetAssets)).mapTo[ReqBoxesResponse])
 
 }

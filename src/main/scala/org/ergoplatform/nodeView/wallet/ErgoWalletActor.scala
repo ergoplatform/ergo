@@ -28,10 +28,12 @@ import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempo
 import scorex.core.utils.ScorexEncoding
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
+import cats.syntax.either._
+import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
@@ -201,7 +203,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       val currentHeight = fullHeight
       val boxes = if (unspent) {
         val confirmed = registry.walletUnspentBoxes()
-        if(considerUnconfirmed) {
+        if (considerUnconfirmed) {
           // We filter out spent boxes in the same way as wallet does when assembling a transaction
           (confirmed ++ offChainRegistry.offChainBoxes).filter(walletFilter)
         } else {
@@ -209,7 +211,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         }
       } else {
         val confirmed = registry.walletConfirmedBoxes()
-        if(considerUnconfirmed) {
+        if (considerUnconfirmed) {
           // Just adding boxes created off-chain
           confirmed ++ offChainRegistry.offChainBoxes
         } else {
@@ -437,6 +439,10 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     case StopTracking(scanId: ScanId, boxId: BoxId) =>
       sender() ! StopTrackingResponse(registry.removeScan(boxId, scanId))
+
+    case CollectWalletBoxes(targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long]) =>
+      val res = getRequestBoxes(targetBalance, targetAssets)
+      sender() ! ReqBoxesResponse(res)
   }
 
   override def receive: Receive =
@@ -500,6 +506,7 @@ class ErgoWalletActor(settings: ErgoSettings,
   /**
     * Convert requests (to make payments or to issue an asset) to transaction outputs
     * There can be only one asset issuance request in the input sequence.
+    *
     * @param requests - an input sequence of requests
     * @return sequence of transaction outputs or failure if inputs are incorrect
     */
@@ -565,6 +572,33 @@ class ErgoWalletActor(settings: ErgoSettings,
         TrackedBox(box.transactionId, box.index, Some(1), None, None, box, Set(PaymentsScanId))
       }
       .toIterator
+  }
+
+  /**
+    * Collects boxes according to given request
+    *
+    * @param targetBalance - Balance requested by user
+    * @param targetAssets  - ID's and amounts of other tokens
+    * @return collected ErgoBoxes and ChangeBoxes
+    */
+  private def getRequestBoxes(targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long]): Try[CollectedBoxes] = {
+
+    val (inputBoxes, filter) = {
+      val boxesToSpend = (registry.walletUnspentBoxes() ++ offChainRegistry.offChainBoxes).distinct
+      (boxesToSpend.toIterator, walletFilter)
+    }
+
+    val assetsMap = targetAssets.map(t => bytesToId(t._1) -> t._2)
+
+    boxSelector
+      .select(inputBoxes, filter, targetBalance, assetsMap)
+      .leftMap(m => new Exception(m.message))
+      .map { res =>
+        val ergoBoxes = res.boxes.map(_.box)
+        val changeBoxes = res.changeBoxes.map(b => ChangeBox(b.value, b.tokens))
+        CollectedBoxes(ergoBoxes, changeBoxes)
+      }
+      .toTry
   }
 
   /**
@@ -700,7 +734,7 @@ class ErgoWalletActor(settings: ErgoSettings,
             // If no usePreEip3Derivation flag is set, add first derived key (for m/44'/429'/0'/0/0) to the db
             val firstSk = nextKey(masterKey).result.map(_._3).toOption
             val firstPk = firstSk.map(_.publicKey)
-            firstPk.foreach{ pk =>
+            firstPk.foreach { pk =>
               storage.addKey(pk)
               storage.updateChangeAddress(P2PKAddress(pk.key))
             }
@@ -867,11 +901,26 @@ object ErgoWalletActor {
   /**
     * Get boxes related to P2PK payments
     *
-    * @param unspentOnly - return only unspent boxes
+    * @param unspentOnly         - return only unspent boxes
     * @param considerUnconfirmed - consider mempool (filter our unspent boxes spent in the pool if unspent = true, add
     *                            boxes created in the pool for both values of unspentOnly).
     */
   final case class GetWalletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean)
+
+  /**
+    * Get boxes by requested params
+    *
+    * @param targetBalance - Balance requested by user
+    * @param targetAssets  - ID's and amounts of other tokens
+    */
+  final case class CollectWalletBoxes(targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long])
+
+  /**
+    * Wallet's response for requested boxes
+    *
+    * @param result
+    */
+  final case class ReqBoxesResponse(result: Try[CollectedBoxes])
 
   /**
     * Get boxes related to a scan

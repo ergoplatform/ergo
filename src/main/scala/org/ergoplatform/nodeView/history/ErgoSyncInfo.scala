@@ -8,7 +8,13 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
-case class ErgoSyncInfo(lastHeaderIds: Seq[ModifierId]) extends SyncInfo {
+/**
+  * Information on sync status to be sent to peer over the wire
+  *
+  * @param lastHeaderIds
+  * @param version - version of sync protocol
+  */
+case class ErgoSyncInfo(lastHeaderIds: Seq[ModifierId], version: Byte = 1) extends SyncInfo {
 
   override def startingPoints: Seq[(ModifierTypeId, ModifierId)] = {
     lastHeaderIds.map(b => Header.modifierTypeId -> b)

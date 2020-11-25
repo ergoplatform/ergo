@@ -346,7 +346,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! Failure(new Exception("Wallet is already initialized or testMnemonic is set. Clear current secret to re-init it."))
   }
 
-  // Read a box from UTXO set if the node has it, otherwise,from the wallet
+  // Read a box from UTXO set if the node has it, otherwise, from the wallet
   private def readBox(boxId: BoxId): Option[ErgoBox] = {
     utxoReaderOpt match {
       case Some(utxoReader) =>

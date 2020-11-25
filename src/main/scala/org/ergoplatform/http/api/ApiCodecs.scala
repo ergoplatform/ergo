@@ -433,6 +433,7 @@ trait ApiCodecs extends JsonCodecs {
       secretsOpt = if(secrets.isEmpty) None else Some(secrets)
     } yield GenerateCommitmentsRequest(tx, secretsOpt)
   }
+
 }
 
 trait ApiEncoderOption

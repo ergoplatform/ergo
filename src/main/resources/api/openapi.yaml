@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "3.3.6"
+  version: "3.3.7"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -3807,12 +3807,14 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
 
-  /script/extractHints:
+  /wallet/extractHints:
     post:
+      security:
+        - ApiKeyAuth: [api_key]
       summary: Extract hints from a transaction
       operationId: extractHints
       tags:
-        - script
+        - wallet
       requestBody:
         required: true
         content:
@@ -3821,7 +3823,7 @@ paths:
               $ref: '#/components/schemas/HintExtractionRequest'
       responses:
         '200':
-          description: Commitment along with a corrisponding secret
+          description: Commitment along with a corresponding secret
           content:
             application/json:
               schema:

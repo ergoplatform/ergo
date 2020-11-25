@@ -3,14 +3,15 @@ package org.ergoplatform.it2
 import com.typesafe.config.Config
 import org.ergoplatform.it.api.NodeApi.NodeInfo
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
-import org.scalatest.{FreeSpec, OptionValues}
+import org.scalatest.OptionValues
+import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.async.Async
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
 class TestDigestStateWithPruningOnMainNetSpec
-  extends FreeSpec
+  extends AnyFlatSpec
     with IntegrationSuite
     with OptionValues {
 
@@ -21,7 +22,7 @@ class TestDigestStateWithPruningOnMainNetSpec
 
   val node: Node = docker.startMainNetNodeYesImSure(nodeConfig).get
 
-  "Start a stateType=digest(with pruning) node on mainnet and wait for a full sync" in {
+  it should "Start a stateType=digest(with pruning) node on mainnet and wait for a full sync" in {
     val result = Async.async {
       Async.await(node.waitFor[NodeInfo](
         _.info,

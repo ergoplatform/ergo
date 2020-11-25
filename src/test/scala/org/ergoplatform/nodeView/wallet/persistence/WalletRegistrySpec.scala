@@ -7,17 +7,18 @@ import org.ergoplatform.nodeView.wallet.WalletScanLogic.{SpentInputData, ScanRes
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.scalacheck.Gen
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.core.VersionTag
 import scorex.testkit.utils.FileUtils
 import scorex.util.encode.Base16
 
 class WalletRegistrySpec
-  extends FlatSpec
+  extends AnyFlatSpec
     with Matchers
     with DBSpec
-    with GeneratorDrivenPropertyChecks
+    with ScalaCheckPropertyChecks
     with WalletGenerators
     with FileUtils {
 

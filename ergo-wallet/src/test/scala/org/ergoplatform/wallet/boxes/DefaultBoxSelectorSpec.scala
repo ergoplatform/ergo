@@ -1,19 +1,20 @@
 package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.wallet.Constants.PaymentsScanId
-import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
-import org.scalatest.{Matchers, PropSpec}
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import org.ergoplatform.{ErgoLikeTransaction, ErgoBox}
+import scorex.crypto.hash.{Digest32, Blake2b256}
 import sigmastate.Values
 import sigmastate.Values.SigmaPropValue
 import sigmastate.helpers.TestingHelpers._
-import scorex.util.{bytesToId, idToBytes}
+import scorex.util.{idToBytes, bytesToId}
 import org.scalatest.EitherValues
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughErgsError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughTokensError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughCoinsForChangeBoxesError
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
 
-class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
+class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues {
   import DefaultBoxSelector.select
   import BoxSelector.MinBoxValue
 

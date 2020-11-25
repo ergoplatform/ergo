@@ -7,17 +7,17 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ErgoGenerators
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.scalatest.FlatSpec
-import org.scalatest.prop.PropertyChecks
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.interpreter.ContextExtension
 
 import scala.util.Random
 
-class ErgoMemPoolSpec extends FlatSpec
+class ErgoMemPoolSpec extends AnyFlatSpec
   with ErgoGenerators
   with ErgoTestHelpers
-  with PropertyChecks {
+  with ScalaCheckPropertyChecks {
 
   it should "accept valid transaction" in {
     val (us, bh) = createUtxoState()

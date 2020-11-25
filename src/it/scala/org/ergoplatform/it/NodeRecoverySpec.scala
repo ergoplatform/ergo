@@ -5,13 +5,14 @@ import java.io.File
 import akka.japi.Option.Some
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
-import org.scalatest.{FreeSpec, OptionValues}
+import org.scalatest.OptionValues
+import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
 class NodeRecoverySpec
-  extends FreeSpec
+  extends AnyFlatSpec
     with IntegrationSuite
     with OptionValues {
 
@@ -33,7 +34,7 @@ class NodeRecoverySpec
   // 1. Start up one node and let it mine {shutdownAtHeight} blocks;
   // 2. Shut it down unexpectedly and then restart;
   // 3. Check that node's state is consistent;
-  "Node recovery after unexpected shutdown" in {
+  it should "Node recovery after unexpected shutdown" in {
 
     val result = node.waitForHeight(shutdownAtHeight)
       .flatMap(_ => node.headerIdsByHeight(shutdownAtHeight))

@@ -79,8 +79,8 @@ object ScanJsonCodecs extends ApiCodecs {
   import ScanningPredicateJsonCodecs._
   import io.circe._, io.circe.generic.semiauto._
 
-  implicit val intflagDecoder: Decoder[ScanWalletInteraction] = Decoder.enumDecoder(ScanWalletInteraction)
-  implicit val intflagEncoder: Encoder[ScanWalletInteraction.Value] = Encoder.enumEncoder(ScanWalletInteraction)
+  implicit val intflagDecoder: Decoder[ScanWalletInteraction] = Decoder.decodeEnumeration(ScanWalletInteraction)
+  implicit val intflagEncoder: Encoder[ScanWalletInteraction.Value] = Encoder.encodeEnumeration(ScanWalletInteraction)
 
   implicit val scanReqDecoder: Decoder[ScanRequest] = deriveDecoder[ScanRequest]
   implicit val scanReqEncoder: Encoder[ScanRequest] = deriveEncoder[ScanRequest]

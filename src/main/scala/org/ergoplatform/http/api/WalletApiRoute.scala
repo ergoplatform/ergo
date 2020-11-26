@@ -6,7 +6,8 @@ import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.http.api.requests.HintExtractionRequest
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
@@ -17,7 +18,6 @@ import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
-import sigmastate.Values.SigmaBoolean
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -182,7 +182,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       case Success(thb) => ApiResponse(thb)
     }
   }
-
 
   def signTransactionR: Route = (path("transaction" / "sign")
     & post & entity(as[TransactionSigningRequest])) { tsr =>
@@ -384,10 +383,3 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
 }
-
-case class HintExtractionRequest(tx: ErgoTransaction,
-                                 real: Seq[SigmaBoolean],
-                                 simulated: Seq[SigmaBoolean])
-
-case class CommitmentGenerationRequest(utx: UnsignedErgoTransaction,
-                                       externalKeys: Option[Seq[SigmaBoolean]])

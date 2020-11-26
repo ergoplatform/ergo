@@ -4,9 +4,8 @@ import java.math.BigInteger
 
 import io.circe._
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.{ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
+import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
@@ -29,7 +28,9 @@ import sigmastate.basics._
 import sigmastate.interpreter._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import io.circe.syntax._
+import org.ergoplatform.http.api.requests.{CommitmentGenerationRequest, CryptoResult, ExecuteRequest, HintExtractionRequest}
 import sigmastate.serialization.OpCodes
+import special.sigma.AnyValue
 
 import scala.util.{Failure, Success, Try}
 
@@ -432,6 +433,25 @@ trait ApiCodecs extends JsonCodecs {
       secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
       secretsOpt = if(secrets.isEmpty) None else Some(secrets)
     } yield GenerateCommitmentsRequest(tx, secretsOpt)
+  }
+
+  implicit val executeRequestDecoder = new Decoder[ExecuteRequest] {
+    def apply(cursor: HCursor): Decoder.Result[ExecuteRequest] = {
+      for {
+        script <- cursor.downField("script").as[String]
+        env <- cursor.downField("namedConstants").as[Map[String,AnyValue]]
+        ctx <- cursor.downField("context").as[ErgoLikeContext]
+      } yield ExecuteRequest(script, env.map({ case (k,v) => k -> v.value }), ctx)
+    }
+  }
+
+  implicit val cryptResultEncoder: Encoder[CryptoResult] = {
+    res =>
+      val fields = Map(
+        "value" -> res.value.asJson,
+        "cost" -> res.cost.asJson
+      )
+      fields.asJson
   }
 
 }

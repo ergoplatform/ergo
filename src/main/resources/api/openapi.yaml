@@ -3107,7 +3107,7 @@ paths:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Generate arbitrary unsigned transaction from array of requests.
+      summary: Generate unsigned transaction from array of requests.
       operationId: walletUnsignedTransactionGenerate
       tags:
         - wallet

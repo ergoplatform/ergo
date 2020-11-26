@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, HCursor, Json}
+import io.circe.{Encoder, Json}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
@@ -15,7 +15,7 @@ import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
-import sigmastate.Values.{ByteArrayConstant, ErgoTree, SigmaBoolean}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree}
 import sigmastate._
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
@@ -39,9 +39,9 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     toStrictEntity(10.seconds) {
       // p2shAddressR ~
       p2sAddressR ~
-      addressToTreeR ~
-      addressToBytesR ~
-      executeWithContextR
+        addressToTreeR ~
+        addressToBytesR ~
+        executeWithContextR
     }
   }
 
@@ -93,14 +93,14 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       )
     }
   }
-  
+
   def executeWithContextR: Route =
     (path("executeWithContext") & post & entity(as[ExecuteRequest])) { req =>
       compileSource(req.script, req.env).fold(
         e => BadRequest(e.getMessage),
         tree => {
-          implicit val irc : IRContext = new RuntimeIRContext()
-          val interpreter : ErgoLikeInterpreter = new ErgoLikeInterpreter()
+          implicit val irc: IRContext = new RuntimeIRContext()
+          val interpreter: ErgoLikeInterpreter = new ErgoLikeInterpreter()
           val prop = interpreter.propositionFromErgoTree(tree, req.ctx.asInstanceOf[interpreter.CTX])
           val res = interpreter.reduceToCrypto(req.ctx.asInstanceOf[interpreter.CTX], prop)
           res.fold(

@@ -139,8 +139,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
-                                  inputsRaw: Seq[String],
-                                  dataInputsRaw: Seq[String]): Route = {
+                                          inputsRaw: Seq[String],
+                                          dataInputsRaw: Seq[String]): Route = {
     withWalletOp(_.generateUnsignedTransaction(requests, inputsRaw, dataInputsRaw)) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(utx) => ApiResponse(utx)
@@ -167,7 +167,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
 
   def generateUnsignedTransactionR: Route =
-    (path("transaction" / "generateUnsigned") & post & entity(as[RequestsHolder])){ holder =>
+    (path("transaction" / "generateUnsigned") & post & entity(as[RequestsHolder])) { holder =>
       generateUnsignedTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
     }
 
@@ -277,7 +277,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           .map {
             _.filter(tx =>
               tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId) &&
-              tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
+                tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
                 tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
             )
           }

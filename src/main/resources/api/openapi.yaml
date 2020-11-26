@@ -890,15 +890,15 @@ components:
         - simulated
       properties:
         tx:
-          description:  Hex-encoded big-endian 256-bits secret exponent
-          $ref: '#/components/schemas/SigmaBoolean'
+          description:  Transaction to extract prover hints from
+          $ref: '#/components/schemas/ErgoTransaction'
         real:
-          description: Hex-encoded "g" generator for the Diffie-Hellman tuple (secp256k1 curve point)
+          description: Real signers of the transaction
           type: array
           items:
             $ref: '#/components/schemas/SigmaBoolean'
         simulated:
-          description: Hex-encoded "g" generator for the Diffie-Hellman tuple (secp256k1 curve point)
+          description: Simulated signers of the transaction
           type: array
           items:
             $ref: '#/components/schemas/SigmaBoolean'
@@ -934,14 +934,13 @@ components:
       type: object
       required:
         - tx
-        - secrets
       properties:
         tx:
           description: Unsigned transaction to sign
           type: object
           $ref: '#/components/schemas/UnsignedErgoTransaction'
         secrets:
-          description: Secrets used for signing
+          description: Optionally, external secrets used for signing
           type: object
           properties:
             dlog:
@@ -3120,7 +3119,7 @@ paths:
               $ref: '#/components/schemas/RequestsHolder'
       responses:
         '200':
-          description: Generated Ergo transaction
+          description: Generated unsigned Ergo transaction
           content:
             application/json:
               schema:
@@ -3776,7 +3775,7 @@ paths:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Generate commitments ("a" messages) for inputs of an unsigned transaction
+      summary: Generate signature commitments for inputs of an unsigned transaction
       operationId: generateCommitments
       tags:
         - wallet
@@ -3823,11 +3822,11 @@ paths:
               $ref: '#/components/schemas/HintExtractionRequest'
       responses:
         '200':
-          description: Commitment along with a corresponding secret
+          description: Hints for the transaction
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DlogCommitment'
+                $ref: '#/components/schemas/TransactionHintsBag'
         '400':
           description: Error
           content:

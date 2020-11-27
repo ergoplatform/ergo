@@ -9,7 +9,7 @@ import scorex.util.ModifierId
   * Box model for Wallet API
   *
   * @param value  - Amount of Ergs
-  * @param tokens - ID's and amounts of other tokens
+  * @param tokens - IDs and amounts of other tokens
   */
 final case class ChangeBox(value: Long, tokens: Map[ModifierId, Long])
 

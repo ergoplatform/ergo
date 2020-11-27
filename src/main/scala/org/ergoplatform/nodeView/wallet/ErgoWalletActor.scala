@@ -11,6 +11,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
+import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
 import org.ergoplatform.nodeView.wallet.persistence._
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
@@ -18,6 +19,7 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.{BoxUtils, FileUtils}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.TokensMap
+import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionError, BoxSelectionResult}
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
@@ -32,8 +34,6 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import cats.syntax.either._
-import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
@@ -441,7 +441,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! StopTrackingResponse(registry.removeScan(boxId, scanId))
 
     case CollectWalletBoxes(targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long]) =>
-      val res = getRequestBoxes(targetBalance, targetAssets)
+      val res = collectBoxes(targetBalance, targetAssets)
       sender() ! ReqBoxesResponse(res)
   }
 
@@ -578,20 +578,17 @@ class ErgoWalletActor(settings: ErgoSettings,
     * Collects boxes according to given request
     *
     * @param targetBalance - Balance requested by user
-    * @param targetAssets  - ID's and amounts of other tokens
+    * @param targetAssets  - IDs and amounts of other tokens
     * @return collected ErgoBoxes and ChangeBoxes
     */
-  private def getRequestBoxes(targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long]): Try[CollectedBoxes] = {
-
-    val (inputBoxes, filter) = {
-      val boxesToSpend = (registry.walletUnspentBoxes() ++ offChainRegistry.offChainBoxes).distinct
-      (boxesToSpend.toIterator, walletFilter)
-    }
+  private def collectBoxes(targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long]): Try[CollectedBoxes] = {
 
     val assetsMap = targetAssets.map(t => bytesToId(t._1) -> t._2)
 
+    val inputBoxes = getBoxesToSpend
+
     boxSelector
-      .select(inputBoxes, filter, targetBalance, assetsMap)
+      .select(inputBoxes, walletFilter, targetBalance, assetsMap)
       .leftMap(m => new Exception(m.message))
       .map { res =>
         val ergoBoxes = res.boxes.map(_.box)
@@ -644,9 +641,8 @@ class ErgoWalletActor(settings: ErgoSettings,
             (boxesToFakeTracked(userInputs), noFilter)
           } else {
             //inputs are to be selected by the wallet
-            require(walletVars.publicKeyAddresses.nonEmpty, "No public keys in the prover to extract change address from")
-            val boxesToSpend = (registry.walletUnspentBoxes() ++ offChainRegistry.offChainBoxes).distinct
-            (boxesToSpend.toIterator, walletFilter)
+            val boxesToSpend = getBoxesToSpend
+            (boxesToSpend, walletFilter)
           }
 
           val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
@@ -665,6 +661,15 @@ class ErgoWalletActor(settings: ErgoSettings,
         Failure(new Exception(s"Cannot generateTransactionWithOutputs($requests, $inputsRaw): wallet is locked"))
     }
   }.flatten
+
+  /**
+    * A helper method that returns unspent boxes
+    */
+  private def getBoxesToSpend: Iterator[TrackedBox] = {
+    require(walletVars.publicKeyAddresses.nonEmpty, "No public keys in the prover to extract change address from")
+    val boxesToSpend = (registry.walletUnspentBoxes() ++ offChainRegistry.offChainBoxes).distinct
+    boxesToSpend.toIterator
+  }
 
   private def prepareTransaction(prover: ErgoProvingInterpreter,
                                  payTo: Seq[ErgoBoxCandidate],
@@ -911,7 +916,7 @@ object ErgoWalletActor {
     * Get boxes by requested params
     *
     * @param targetBalance - Balance requested by user
-    * @param targetAssets  - ID's and amounts of other tokens
+    * @param targetAssets  - IDs and amounts of other tokens
     */
   final case class CollectWalletBoxes(targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long])
 

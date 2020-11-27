@@ -882,7 +882,7 @@ components:
 
 
     HintExtractionRequest:
-      description:
+      description: request to extract prover hintsfrom a transaction
       type: object
       required:
         - tx
@@ -903,12 +903,24 @@ components:
           items:
             $ref: '#/components/schemas/SigmaBoolean'
 
+    CommitmentWithSecret:
+      description:
+
+    RealCommitment:
+      description:
+
+    SimulatedCommitment:
+      description:
+
+
+
+
     Hint:
       description:
       type: object
 
     InputHints:
-      description:
+      description: hints for intputs, key is input index, values is a set of hints for the input
       type: object
       additionalProperties:
         type: array
@@ -917,7 +929,7 @@ components:
 
 
     TransactionHintsBag:
-      description:
+      description: prover hints extracted from a transaction
       type: object
       properties:
         secretHints:
@@ -930,7 +942,7 @@ components:
               $ref: '#/components/schemas/InputHints'
 
     GenerateCommitmentsRequest:
-      description:
+      description: request to generate commitments to sign a transaction
       type: object
       required:
         - tx

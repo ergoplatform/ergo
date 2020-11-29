@@ -15,10 +15,10 @@ case class NodeApiRoute(ergoSettings: ErgoSettings)(implicit system: ActorSystem
       shutdown
     }
 
-  private val shutdownDelay = 5
+  private val shutdownDelay = 5.seconds
 
   private def shutdown: Route = (pathPrefix("shutdown") & post) {
-    system.scheduler.scheduleOnce(shutdownDelay.seconds)(system.terminate())
-    ApiResponse(s"Shutting down in $shutdownDelay seconds")
+    system.scheduler.scheduleOnce(shutdownDelay)(system.terminate())
+    ApiResponse(s"Shutting down in $shutdownDelay")
   }
 }

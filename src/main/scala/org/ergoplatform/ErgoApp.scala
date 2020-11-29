@@ -121,7 +121,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
     UtxoApiRoute(readersHolderRef, settings.restApi),
     ScriptApiRoute(readersHolderRef, ergoSettings),
-    ScanApiRoute(readersHolderRef, ergoSettings)
+    ScanApiRoute(readersHolderRef, ergoSettings),
+    NodeApiRoute(ergoSettings)
   ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
 
 

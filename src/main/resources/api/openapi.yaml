@@ -3673,3 +3673,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
+  /node/shutdown:
+    post:
+      security:
+        - ApiKeyAuth: [ api_key ]
+      summary: Shuts down the node
+      operationId: nodeShutdown
+      tags:
+        - node
+      responses:
+        '200':
+          description: Shutting down in 5 seconds
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'

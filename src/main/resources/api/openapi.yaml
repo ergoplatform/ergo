@@ -369,6 +369,9 @@ components:
           items:
             type: string
             description: hex-encoded serialized box bytes
+        hints:
+          description: Optional list of hints used for signing
+          $ref: '#/components/schemas/TransactionHintsBag'
         secrets:
           description: Secrets used for signing
           type: object
@@ -880,7 +883,6 @@ components:
           type: string
           example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
 
-
     HintExtractionRequest:
       description: request to extract prover hintsfrom a transaction
       type: object
@@ -980,6 +982,23 @@ components:
               cmtSimulated: '#/components/schemas/Commitment'
               proofReal: '#/components/schemas/SecretProven'
               proofSimulated: '#/components/schemas/SecretProven'
+      example:
+        "01": [
+          {
+            "hint": "cmtWithSecret",
+            "pubkey": {
+              "op": 0,
+              "h": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+              "g": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+              "u": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+              "v": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+              "condition": true
+            },
+            "position": "string",
+            "cmtType": "dlog",
+            "a": "string",
+            "b": "string"
+          }]
 
     TransactionHintsBag:
       description: prover hints extracted from a transaction

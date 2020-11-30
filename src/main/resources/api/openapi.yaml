@@ -934,11 +934,32 @@ components:
       description: commitment to secret along with secret (!) randomness
       allOf:     # Combines the Commitment and the inline model
         - $ref: '#/components/schemas/Commitment'
-        - type: object
+          type: object
+          required:
+            - secret
+          properties:
+          secret:
+            type: string
+
+    SecretProven:
+      type: object
       required:
-        - secret
+        - hint
+        - challenge
+        - pubkey
+        - proof
+        - position
       properties:
-        secret:
+        hint:
+          type: string
+          enum: [proofReal, proofSimulated]
+        challenge:
+          type: string
+        pubkey:
+          $ref: '#/components/schemas/SigmaBoolean'
+        proof:
+          type: string
+        position:
           type: string
 
     InputHints:
@@ -950,12 +971,15 @@ components:
           oneOf:
             - $ref: '#/components/schemas/CommitmentWithSecret'
             - $ref: '#/components/schemas/Commitment'
+            - $ref: '#/components/schemas/SecretProven'
           discriminator:
             propertyName: objectType
             mapping:
               cmtWithSecret: '#/components/schemas/CommitmentWithSecret'
               cmtReal: '#/components/schemas/Commitment'
               cmtSimulated: '#/components/schemas/Commitment'
+              proofReal: '#/components/schemas/SecretProven'
+              proofSimulated: '#/components/schemas/SecretProven'
 
     TransactionHintsBag:
       description: prover hints extracted from a transaction

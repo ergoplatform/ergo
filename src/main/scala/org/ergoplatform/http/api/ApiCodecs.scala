@@ -309,7 +309,7 @@ trait ApiCodecs extends JsonCodecs {
     }
   }
 
-  implicit val secretProofEncoder: Encoder[SecretProven] = { sp =>
+  implicit val proofEncoder: Encoder[SecretProven] = { sp =>
     val proofType = sp match {
       case _: RealSecretProof => "proofReal"
       case _: SimulatedSecretProof => "proofSimulated"

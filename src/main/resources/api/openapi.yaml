@@ -903,40 +903,71 @@ components:
           items:
             $ref: '#/components/schemas/SigmaBoolean'
 
-    CommitmentWithSecret:
-      description:
-
-    RealCommitment:
-      description:
-
-    SimulatedCommitment:
-      description:
-
-
-
-
-    Hint:
-      description:
+    Commitment:
+      description: basic trait for prover commitments
       type: object
+      required:
+        - hint
+        - pubkey
+        - position
+        - cmtType
+        - a
+      properties:
+        hint:
+          type: string
+          enum: [cmtWithSecret, cmtReal, cmtSimulated]
+        pubkey:
+          $ref: '#/components/schemas/SigmaBoolean'
+        position:
+          type: string
+        cmtType:
+          type: string
+          enum: [dlog, dht]
+        a:
+          description: a group element of the commitment
+          type: string
+        b:
+          description: b group element of the commitment (needed for DHT protocol only)
+          type: string
+
+    CommitmentWithSecret:
+      description: commitment to secret along with secret (!) randomness
+      allOf:     # Combines the Commitment and the inline model
+        - $ref: '#/components/schemas/Commitment'
+        - type: object
+      required:
+        - secret
+      properties:
+        secret:
+          type: string
 
     InputHints:
-      description: hints for intputs, key is input index, values is a set of hints for the input
+      description: hints for inputs, key is input index, values is a set of hints for the input
       type: object
       additionalProperties:
         type: array
         items:
-          $ref: '#/components/schemas/Hint'
-
+          oneOf:
+            - $ref: '#/components/schemas/CommitmentWithSecret'
+            - $ref: '#/components/schemas/Commitment'
+          discriminator:
+            propertyName: objectType
+            mapping:
+              cmtWithSecret: '#/components/schemas/CommitmentWithSecret'
+              cmtReal: '#/components/schemas/Commitment'
+              cmtSimulated: '#/components/schemas/Commitment'
 
     TransactionHintsBag:
       description: prover hints extracted from a transaction
       type: object
       properties:
         secretHints:
+          description: Hints which contain secrets, do not share them!
           type: array
           items:
             $ref: '#/components/schemas/InputHints'
         publicHints:
+          description: Hints which contain public data only, share them freely!
           type: array
           items:
               $ref: '#/components/schemas/InputHints'

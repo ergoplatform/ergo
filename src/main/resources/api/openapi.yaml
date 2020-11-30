@@ -3684,7 +3684,7 @@ paths:
         - node
       responses:
         '200':
-          description: Shutting down in 5 seconds
+          description: The node will be shut down in 5 seconds
         default:
           description: Error
           content:

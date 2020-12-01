@@ -922,7 +922,7 @@ components:
           $ref: '#/components/schemas/SigmaBoolean'
         position:
           type: string
-        cmtType:
+        type:
           type: string
           enum: [dlog, dht]
         a:
@@ -987,17 +987,13 @@ components:
           {
             "hint": "cmtWithSecret",
             "pubkey": {
-              "op": 0,
-              "h": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
-              "g": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
-              "u": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
-              "v": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
-              "condition": true
+              "op": -51,
+              "h": "0327e65711a59378c59359c3e1d0f7abe906479eccb76094e50fe79d743ccc15e6"
             },
-            "position": "string",
-            "cmtType": "dlog",
-            "a": "string",
-            "b": "string"
+            "position": "0-1",
+            "type": "dlog",
+            "a": "02924d6274d1b9132fe028a0e3ac2fdbc503a1e52d1398932fa5f1bcf71909eb4b",
+            "secret": "42a2a0ae6b98ee791ac9734252e8a7a08e691b92de085138e302f64a722a4300"
           }]
 
     TransactionHintsBag:

@@ -2,18 +2,19 @@ package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
+import akka.http.scaladsl.testkit.{ScalatestRouteTest, RouteTestTimeout}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.http.api.{ApiCodecs, ScanApiRoute}
 import org.ergoplatform.nodeView.wallet.scanning.{ContainsScanningPredicate, Scan, ScanJsonCodecs, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.utils.Stubs
-import org.scalatest.{FlatSpec, Matchers}
 import io.circe.syntax._
 import org.ergoplatform.http.api.ScanEntities.{ScanIdBoxId, ScanIdWrapper}
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.wallet.Constants.ScanId
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import scorex.crypto.authds.ADKey
 import scorex.utils.Random
 import sigmastate.Values.ByteArrayConstant
@@ -21,7 +22,7 @@ import sigmastate.Values.ByteArrayConstant
 import scala.util.Try
 import scala.concurrent.duration._
 
-class ScanApiRouteSpec extends FlatSpec
+class ScanApiRouteSpec extends AnyFlatSpec
   with Matchers
   with ScalatestRouteTest
   with Stubs

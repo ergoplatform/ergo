@@ -6,13 +6,13 @@ import akka.japi.Option.Some
 import com.typesafe.config.Config
 import org.apache.commons.io.FileUtils
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
-import org.scalatest.FreeSpec
+import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.async.Async
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class StateRecoveryDigestNodeSpec extends FreeSpec with IntegrationSuite {
+class StateRecoveryDigestNodeSpec extends AnyFlatSpec with IntegrationSuite {
 
   val approxMinerTargetHeight = 20
   val approxFollowerTargetHeight: Int = approxMinerTargetHeight + 5
@@ -39,7 +39,7 @@ class StateRecoveryDigestNodeSpec extends FreeSpec with IntegrationSuite {
   // 3. Start mining node again;
   // 4. Start testing node and wait until it gets synced with the mining node + {approxFollowerTargetHeight}
   //    - it would require testing node to recover state correctly and apply new blocks on top of it;
-  "Startup with only history available" in {
+  it should "Startup with only history available" in {
 
     val minerNode: Node = docker.startDevNetNode(minerConfig, specialVolumeOpt = Some((minerLocalVolume, remoteVolume))).get
 

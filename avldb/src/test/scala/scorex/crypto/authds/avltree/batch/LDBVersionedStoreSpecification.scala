@@ -1,16 +1,17 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Longs
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Matchers, PropSpec}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.hash.Blake2b256
 import scorex.db.LDBVersionedStore
 
 import scala.collection.mutable.ArrayBuffer
 
-class LDBVersionedStoreSpecification extends PropSpec
-  with GeneratorDrivenPropertyChecks
+class LDBVersionedStoreSpecification extends AnyPropSpec
+  with ScalaCheckPropertyChecks
   with Matchers
   with TestHelper {
 

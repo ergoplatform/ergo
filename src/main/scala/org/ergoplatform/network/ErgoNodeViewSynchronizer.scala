@@ -48,7 +48,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val toDownloadCheckInterval = networkSettings.syncInterval
     super.preStart()
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
-    context.system.scheduler.schedule(toDownloadCheckInterval, toDownloadCheckInterval)(self ! CheckModifiersToDownload)
+    context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
   }
 
   /**

@@ -4,15 +4,17 @@ import org.ergoplatform.nodeView.wallet.IdUtils.EncodedBoxId
 import org.ergoplatform.utils.WalletTestOps
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.scalacheck.Gen
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+
 import scala.util.Random
 
 
 class OffChainRegistrySpec
-  extends FlatSpec
+  extends AnyFlatSpec
     with Matchers
-    with GeneratorDrivenPropertyChecks
+    with ScalaCheckPropertyChecks
     with WalletGenerators
     with WalletTestOps {
 

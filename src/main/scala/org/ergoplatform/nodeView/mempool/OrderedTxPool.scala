@@ -189,5 +189,4 @@ object OrderedTxPool {
       TreeMap.empty[BoxId, WeightedTxId],
       TreeMap.empty[BoxId, WeightedTxId])(settings)
   }
-
 }

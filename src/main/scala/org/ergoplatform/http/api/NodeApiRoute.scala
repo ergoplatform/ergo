@@ -21,4 +21,5 @@ case class NodeApiRoute(ergoSettings: ErgoSettings)(implicit system: ActorSystem
     system.scheduler.scheduleOnce(shutdownDelay)(system.terminate())
     ApiResponse(s"The node will be shut down in $shutdownDelay")
   }
+
 }

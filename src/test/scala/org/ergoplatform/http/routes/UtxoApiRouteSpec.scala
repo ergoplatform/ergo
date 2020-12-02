@@ -33,6 +33,19 @@ class UtxoApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "get mempool box with withPool/byId" in {
+    val box = memPool.getAll.flatMap(_.outputs).head
+    val boxId = Base16.encode(box.id)
+    Get(prefix + s"/byId/$boxId") ~> route ~> check {
+      status shouldBe StatusCodes.NotFound
+    }
+    Get(prefix + s"/withPool/byId/$boxId") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("value").as[Long] shouldEqual Right(box.value)
+      responseAs[Json].hcursor.downField("boxId").as[String] shouldEqual Right(boxId)
+    }
+  }
+
   it should "not found utxo box with /byId" in {
     val boxId = Base16.encode(Blake2b256(utxoState.takeBoxes(1).head.id))
     Get(prefix + s"/byId/$boxId") ~> route ~> check {
@@ -56,6 +69,21 @@ class UtxoApiRouteSpec extends AnyFlatSpec
     val boxId = Base16.encode(Blake2b256(utxoState.takeBoxes(1).head.id))
     Get(prefix + s"/byId/$boxId") ~> route ~> check {
       status shouldBe StatusCodes.NotFound
+    }
+  }
+
+  it should "get pool box with /withPool/byIdBinary" in {
+    val box = memPool.getAll.flatMap(_.outputs).head
+    val boxId = Base16.encode(box.id)
+    Get(prefix + s"/byIdBinary/$boxId") ~> route ~> check {
+      status shouldBe StatusCodes.NotFound
+    }
+    Get(prefix + s"/withPool/byIdBinary/$boxId") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("boxId").as[String] shouldEqual Right(boxId)
+      val bytes = Base16.decode(responseAs[Json].hcursor.downField("bytes").as[String].toOption.get).get
+      val boxRestored = ErgoBoxSerializer.parseBytes(bytes)
+      box shouldEqual boxRestored
     }
   }
 

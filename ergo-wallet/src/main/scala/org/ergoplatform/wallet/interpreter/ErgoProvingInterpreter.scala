@@ -178,11 +178,11 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     * Method checks whether secret is known to the prover, and returns
     * None if the secret is not known.
     *
-    * @param unsignedTx
-    * @param boxesToSpend
-    * @param dataBoxes
-    * @param stateContext
-    * @return
+    * @param unsignedTx - transaction to be signed with commitments to be generated first
+    * @param boxesToSpend - boxes the transaction is spending
+    * @param dataBoxes - read-only inputs of the transaction
+    * @param stateContext - context used for signing
+    * @return - hints for signing transaction
     */
   def generateCommitmentsFor(unsignedTx: UnsignedErgoLikeTransaction,
                              boxesToSpend: IndexedSeq[ErgoBox],
@@ -213,15 +213,15 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   }
 
   /**
+    * Extract hints from (supposedly, partially) signed transaction. Useful for distributed signing.
     *
-    *
-    * @param tx
-    * @param boxesToSpend
-    * @param dataBoxes
-    * @param stateContext
-    * @param realSecretsToExtract
-    * @param simulatedSecretsToExtract
-    * @return
+    * @param tx - signed transaction
+    * @param boxesToSpend - input boxes the transaction are spending
+    * @param dataBoxes - read-only inputs of the transaction
+    * @param stateContext - context used for signing
+    * @param realSecretsToExtract - public images of secrets used in signing
+    * @param simulatedSecretsToExtract - public images of simulated secrets
+    * @return hints for (further) transaction signing
     */
   def bagForTransaction(tx: ErgoLikeTransaction,
                         boxesToSpend: IndexedSeq[ErgoBox],

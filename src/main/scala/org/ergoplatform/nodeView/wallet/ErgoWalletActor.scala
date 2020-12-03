@@ -652,7 +652,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     // A helper which is deserializing Base16-encoded boxes to ErgoBox instances
     def stringsToBoxes(strings: Seq[String]): Seq[ErgoBox] =
-      strings.map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry)).map(_.get) //.get
+      strings.map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry)).map(_.get)
 
     val userInputs = stringsToBoxes(inputsRaw)
     val dataInputs = stringsToBoxes(dataInputsRaw).toIndexedSeq
@@ -895,16 +895,36 @@ object ErgoWalletActor {
                                        dataInputsRaw: Seq[String],
                                        sign: Boolean)
 
+  /**
+    * Request to generate commitments for an unsigned transaction
+    *
+    * @param utx - unsigned transaction
+    * @param secrets - optionally, externally provided secrets
+    */
   case class GenerateCommitmentsFor(utx: UnsignedErgoTransaction,
                                     secrets: Option[Seq[ExternalSecret]])
 
+  /**
+    * Response for commitments generation request
+    *
+    * @param response - hints to sign a transaction
+    */
   case class GenerateCommitmentsResponse(response: Try[TransactionHintsBag])
 
-  final case class SignTransaction(utx: UnsignedErgoTransaction,
-                                   secrets: Seq[ExternalSecret],
-                                   hints: TransactionHintsBag,
-                                   boxesToSpend: Option[Seq[ErgoBox]],
-                                   dataBoxes: Option[Seq[ErgoBox]])
+  /**
+    * A request to sign a transaction
+    *
+    * @param utx - unsigned transaction
+    * @param secrets - additional secrets given to the prover
+    * @param hints - hints used for transaction signing (commitments and partial proofs)
+    * @param boxesToSpend - boxes the transaction is spending
+    * @param dataBoxes - read-only inputs of the transaction
+    */
+  case class SignTransaction(utx: UnsignedErgoTransaction,
+                             secrets: Seq[ExternalSecret],
+                             hints: TransactionHintsBag,
+                             boxesToSpend: Option[Seq[ErgoBox]],
+                             dataBoxes: Option[Seq[ErgoBox]])
 
 
   /**

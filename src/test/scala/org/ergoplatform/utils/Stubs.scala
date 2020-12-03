@@ -140,7 +140,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class WalletActorStub extends Actor {
 
-    import WalletActorStub.{walletBox10_10, walletBox20_30, walletBoxSpent21_31, walletTxs}
+    import WalletActorStub.{walletBoxN_N, walletBox10_10, walletBox20_30, walletBoxSpent21_31, walletTxs}
 
     private val prover: ErgoProvingInterpreter = defaultProver
     private val trackedAddresses: Seq[P2PKAddress] = prover.hdPubKeys.map(epk => P2PKAddress(epk.key))
@@ -200,8 +200,13 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! RemoveScanResponse(res)
 
-      case GetScanBoxes(_, _) =>
-        sender() ! Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
+      case GetScanBoxes(_, _, considerUnconfirmed) =>
+        val res = if(considerUnconfirmed) {
+          Seq(walletBoxN_N, walletBox10_10, walletBox20_30, walletBoxSpent21_31)
+        } else {
+          Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
+        }
+        sender() ! res
 
       case StopTracking(scanId, boxId) =>
         sender() ! StopTrackingResponse(Success(()))
@@ -234,6 +239,19 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val path = DerivationPath(List(0, 1, 2), publicBranch = false)
     val secretKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(mnemonic)).derive(path).asInstanceOf[ExtendedSecretKey]
     val address = P2PKAddress(proveDlogGen.sample.get)
+
+    val walletBoxN_N: WalletBox = WalletBox(
+      TrackedBox(
+        creationTxId = modifierIdGen.sample.get,
+        creationOutIndex = 0,
+        inclusionHeightOpt = None,
+        spendingTxIdOpt = Some(modifierIdGen.sample.get),
+        spendingHeightOpt = None,
+        box = ergoBoxGen.sample.get,
+        scans = Set(PaymentsScanId)
+      ),
+      confirmationsNumOpt = None
+    )
 
     val walletBox10_10: WalletBox = WalletBox(
       TrackedBox(

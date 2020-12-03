@@ -14,6 +14,11 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
   override def size: Int
 
+  /**
+    * @return inputs spent by the mempool transactions
+    */
+  def spentInputs: Iterator[BoxId]
+
   def getAll: Seq[ErgoTransaction]
 
   /**

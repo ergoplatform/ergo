@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "3.3.5"
+  version: "3.3.7"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -3266,8 +3266,75 @@ paths:
 
   /utxo/byIdBinary/{boxId}:
     get:
-      summary: Get serialized box in Base16 encoding for a box with given unique identifier.
+      summary: Get serialized box from UTXO pool in Base16 encoding by an identifier.
       operationId: getBoxByIdBinary
+      tags:
+        - utxo
+      parameters:
+        - in: path
+          name: boxId
+          required: true
+          description: ID of a wanted box
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Json containing box identifier and hex-encoded box bytes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SerializedBox'
+        '404':
+          description: Box with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+
+  /utxo/withPool/byId/{boxId}:
+    get:
+      summary: Get box contents for a box by a unique identifier, from UTXO set and also the mempool.
+      operationId: getBoxWithPoolById
+      tags:
+        - utxo
+      parameters:
+        - in: path
+          name: boxId
+          required: true
+          description: ID of a box to obtain
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Box object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransactionOutput'
+        '404':
+          description: Box with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utxo/withPool/byIdBinary/{boxId}:
+    get:
+      summary: Get serialized box in Base16 encoding by an identifier, considering also the mempool.
+      operationId: getBoxWithPoolByIdBinary
       tags:
         - utxo
       parameters:
@@ -3586,6 +3653,25 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
   /scan/unspentBoxes/{scanId}:
+    parameters:
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal number of confirmations
+        schema:
+          type: integer
+          format: int32
+          minimum: -1
+          default: 0
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Minimal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
     get:
       security:
         - ApiKeyAuth: [api_key]

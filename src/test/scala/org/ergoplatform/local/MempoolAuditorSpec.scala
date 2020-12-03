@@ -2,30 +2,30 @@ package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestActorRef, TestProbe}
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, OrderedTxPool}
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Constants, Algos, ErgoSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
-import org.ergoplatform.utils.{ErgoTestHelpers, NodeViewTestOps}
-import org.scalatest.FlatSpec
+import org.ergoplatform.utils.{NodeViewTestOps, ErgoTestHelpers}
+import org.scalatest.flatspec.AnyFlatSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, FailedTransaction, SuccessfulTransaction}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction, ChangedState, ChangedMempool}
 import scorex.util.ModifierId
 import sigmastate.Values.ErgoTree
-import sigmastate.eval.{IRContext, RuntimeIRContext}
+import sigmastate.eval.{RuntimeIRContext, IRContext}
 import sigmastate.interpreter.Interpreter.emptyEnv
-
 
 import scala.concurrent.duration._
 import scala.util.Random
 import sigmastate.lang.Terms.ValueOps
 import sigmastate.serialization.ErgoTreeSerializer
 
-class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelpers {
+class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers {
   implicit lazy val context: IRContext = new RuntimeIRContext
 
   val cleanupDuration: FiniteDuration = 2.seconds
@@ -103,6 +103,8 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
       override type NVCT = this.type
 
       override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = ???
+
+      override def spentInputs: Iterator[BoxId] = ???
 
       override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ???
 

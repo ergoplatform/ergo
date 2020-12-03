@@ -12,7 +12,6 @@ import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
-import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
 import org.ergoplatform.settings.ErgoAlgos
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.settings.Algos
@@ -52,14 +51,12 @@ trait ApiCodecs extends JsonCodecs {
 
   implicit val proveDlogEncoder: Encoder[ProveDlog] = _.pkBytes.asJson
 
-  implicit val encodedTokenIdEncoder: Encoder[EncodedTokenId] = _.asJson
-
   implicit val balancesSnapshotEncoder: Encoder[WalletDigest] = { v =>
     import v._
     Json.obj(
       "height" -> height.asJson,
       "balance" -> walletBalance.asJson,
-      "assets" -> walletAssetBalances.map(x => (x._1: String, x._2)).asJson
+      "assets" -> walletAssetBalances.toMap.map(x => (x._1: String, x._2)).asJson
     )
   }
 

@@ -1,19 +1,20 @@
 package org.ergoplatform.wallet.interpreter
 
-import org.ergoplatform.{ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
+import org.ergoplatform.{UnsignedErgoLikeTransaction, ErgoBoxCandidate, UnsignedInput}
 import org.ergoplatform.wallet.crypto.ErgoSignature
-import org.ergoplatform.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
+import org.ergoplatform.wallet.secrets.{ExtendedSecretKey, DlogSecretKey}
 import org.ergoplatform.wallet.utils.Generators
-import org.scalatest.prop.PropertyChecks
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
 import sigmastate.interpreter.ContextExtension
 import scorex.util.Random
 
 class ErgoProvingInterpreterSpec
-  extends FlatSpec
-    with PropertyChecks
+  extends AnyFlatSpec
+    with ScalaCheckPropertyChecks
     with Matchers
     with Generators
     with InterpreterSpecCommon {

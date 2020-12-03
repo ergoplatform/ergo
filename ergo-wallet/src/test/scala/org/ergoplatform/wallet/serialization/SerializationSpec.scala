@@ -1,16 +1,18 @@
 package org.ergoplatform.wallet.serialization
 
 import org.ergoplatform.wallet.boxes.TrackedBoxSerializer
-import org.ergoplatform.wallet.secrets.{DerivationPathSerializer, ExtendedPublicKeySerializer, ExtendedSecretKeySerializer}
+import org.ergoplatform.wallet.secrets.{ExtendedPublicKeySerializer, ExtendedSecretKeySerializer, DerivationPathSerializer}
 import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Gen
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Assertion, Matchers, PropSpec}
+import org.scalatest.Assertion
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 class SerializationSpec
-  extends PropSpec
+  extends AnyPropSpec
     with Matchers
-    with GeneratorDrivenPropertyChecks
+    with ScalaCheckPropertyChecks
     with Generators {
 
   def checkSerializationRoundtrip[A](generator: Gen[A],

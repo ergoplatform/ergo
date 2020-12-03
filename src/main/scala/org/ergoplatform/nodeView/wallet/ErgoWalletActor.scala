@@ -84,6 +84,16 @@ class ErgoWalletActor(settings: ErgoSettings,
     registry.fetchDigest().height
   }
 
+  override def postRestart(reason: Throwable): Unit = {
+    log.error(s"Wallet actor restarted due to ${reason.getMessage}", reason)
+    super.postRestart(reason)
+  }
+
+  override def postStop(): Unit = {
+    logger.info("Wallet actor stopped")
+    super.postStop()
+  }
+
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
@@ -218,11 +228,19 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
       sender() ! boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
 
-    case GetScanBoxes(scanId, unspent) =>
+    case GetScanBoxes(scanId, unspent, considerUnconfirmed) =>
+
+      val unconfirmed = if(considerUnconfirmed) {
+        offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
+      } else Seq.empty
+
       val currentHeight = fullHeight
-      sender() ! (if (unspent) registry.unspentBoxes(scanId) else registry.confirmedBoxes(scanId))
-        .map(tb => WalletBox(tb, currentHeight))
-        .sortBy(_.trackedBox.inclusionHeightOpt)
+      val boxes = (if (unspent){
+        registry.unspentBoxes(scanId)
+      } else {
+        registry.confirmedBoxes(scanId)
+      }) ++ unconfirmed
+      sender() ! boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
 
     case GetTransactions =>
       sender() ! registry.allWalletTxs()
@@ -242,7 +260,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       case (Some(mr), Some(sr)) =>
         sr match {
           case u: UtxoStateReader =>
-            utxoReaderOpt = Some(u.withTransactions(mr.getAll))
+            utxoReaderOpt = Some(u.withMempool(mr))
           case _ =>
         }
       case (_, _) =>
@@ -876,9 +894,12 @@ object ErgoWalletActor {
   /**
     * Get boxes related to a scan
     *
-    * @param unspentOnly
+    * @param scanId - scan identifier
+    * @param unspentOnly - return only unspent boxes
+    * @param considerUnconfirmed - consider mempool (filter our unspent boxes spent in the pool if unspent = true, add
+    *                            boxes created in the pool for both values of unspentOnly).
     */
-  final case class GetScanBoxes(scanId: ScanId, unspentOnly: Boolean)
+  final case class GetScanBoxes(scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean)
 
   /**
     * Set or update address for change outputs. Initially the address is set to root key address

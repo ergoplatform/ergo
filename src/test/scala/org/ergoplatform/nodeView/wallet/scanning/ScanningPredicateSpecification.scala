@@ -189,7 +189,8 @@ class ScanningPredicateSpecification extends ErgoPropertyTest with ErgoTransacti
         |          "value": "07029f2230dbe53f6b84d8a884a3407c3dffe43daf8037445441be7cdcd261feeaa4"
         |        }
         |      ]
-        |    }
+        |    },
+        |    "walletInteraction": "off"
         |  }
       """.stripMargin
 

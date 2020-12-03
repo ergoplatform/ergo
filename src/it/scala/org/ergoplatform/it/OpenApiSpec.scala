@@ -1,16 +1,16 @@
 package org.ergoplatform.it
 
-import java.io.{File, PrintWriter}
+import java.io.{PrintWriter, File}
 
 import com.typesafe.config.Config
-import org.ergoplatform.it.container.{ApiChecker, ApiCheckerConfig, IntegrationSuite, Node}
-import org.scalatest.FreeSpec
+import org.ergoplatform.it.container.{IntegrationSuite, ApiChecker, ApiCheckerConfig, Node}
+import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.io.Source
 
-class OpenApiSpec extends FreeSpec with IntegrationSuite {
+class OpenApiSpec extends AnyFlatSpec with IntegrationSuite {
 
   val expectedHeight: Int = 2
   val paramsFilePath: String = "/tmp/parameters.yaml"
@@ -30,7 +30,7 @@ class OpenApiSpec extends FreeSpec with IntegrationSuite {
     writer.close()
   }
 
-  "OpenApi specification check" in {
+  it should "OpenApi specification check" in {
     val result: Future[Unit] = node.waitForHeight(expectedHeight)
       .flatMap { _ => node.headerIdsByHeight(expectedHeight) }
       .map { headerIds =>

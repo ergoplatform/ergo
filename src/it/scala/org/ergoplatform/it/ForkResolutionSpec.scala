@@ -6,14 +6,15 @@ import cats.implicits._
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.Docker.{ExtraConfig, noExtraConfig}
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
-import org.scalatest.FreeSpec
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.async.Async
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future, blocking}
 import scala.util.Try
 
-class ForkResolutionSpec extends FreeSpec with IntegrationSuite {
+class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite {
 
   val nodesQty: Int = 4
 
@@ -54,7 +55,7 @@ class ForkResolutionSpec extends FreeSpec with IntegrationSuite {
   // 3. Let them mine another {forkLength} blocks offline in order to create {nodesQty} forks;
   // 4. Kill all nodes again and restart with `knownPeers` filled, wait another {syncLength} blocks;
   // 5. Check that nodes reached consensus on created forks;
-  "Fork resolution after isolated mining" in {
+  it should "Fork resolution after isolated mining" in {
 
     val nodes: List[Node] = startNodesWithBinds(minerConfig +: onlineMiningNodesConfig).get
 

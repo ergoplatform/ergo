@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import scorex.core.transaction.MempoolReader
@@ -12,6 +13,11 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
   override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction]
 
   override def size: Int
+
+  /**
+    * @return inputs spent by the mempool transactions
+    */
+  def spentInputs: Iterator[BoxId]
 
   def getAll: Seq[ErgoTransaction]
 

@@ -176,7 +176,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         r.s match {
           case utxoSet: UtxoStateReader =>
             val mempool = r.m
-            val utxosWithUnconfirmed = utxoSet.withTransactions(mempool.getAll)
+            val utxosWithUnconfirmed = utxoSet.withMempool(mempool)
             val boxesToSpend = tx.inputs.map(d => utxosWithUnconfirmed.boxById(d.boxId).get)
             val dataBoxes = tx.dataInputs.map(d => utxosWithUnconfirmed.boxById(d.boxId).get)
             r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)

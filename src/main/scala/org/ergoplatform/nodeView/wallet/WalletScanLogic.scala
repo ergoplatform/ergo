@@ -275,7 +275,7 @@ object WalletScanLogic extends ScorexLogging {
 
       if (statuses.nonEmpty) {
         val tb = TrackedBox(tx.id, bx.index, inclusionHeight, None, None, bx, statuses)
-        log.debug("New tracked box: " + tb.boxId)
+        log.debug("New tracked box: " + tb.boxId, " scans: " + tb.scans)
         Some(tb)
       } else {
         None

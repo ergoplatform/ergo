@@ -2,6 +2,7 @@ package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestActorRef, TestProbe}
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, OrderedTxPool}
@@ -102,6 +103,8 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
       override type NVCT = this.type
 
       override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = ???
+
+      override def spentInputs: Iterator[BoxId] = ???
 
       override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ???
 

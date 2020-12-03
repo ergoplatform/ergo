@@ -1,15 +1,15 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest}
 import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
 import org.ergoplatform.utils._
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
-import org.scalatest.PropSpec
 import scorex.util.encode.Base16
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
@@ -17,8 +17,11 @@ import sigmastate.eval.Extensions._
 import scala.concurrent.blocking
 import scala.util.Random
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
+import org.ergoplatform.wallet.secrets.PrimitiveSecretKey
 import org.scalacheck.Gen
 import scorex.util.ModifierId
+import sigmastate.CAND
+import sigmastate.basics.DLogProtocol.DLogProverInput
 
 class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
 
@@ -772,5 +775,41 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
       tx.id shouldBe utx.id // signing preserves transaction id
     }
   }
+
+  property("co-signing (external secrets)") {
+    withFixture { implicit w =>
+
+      val secret1 = DLogProverInput.random()
+      val es1 = ExternalSecret(PrimitiveSecretKey(secret1))
+
+      val secret2 = DLogProverInput.random()
+
+      val pubKey = getPublicKeys.head.pubkey
+      val genesisBlock = makeGenesisBlock(pubKey, randomNewAsset)
+      applyBlock(genesisBlock) shouldBe 'success
+      waitForScanning(genesisBlock)
+      val confirmedBalance = getConfirmedBalances.walletBalance
+
+      //pay out all the wallet balance:
+      val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+      assetToSpend should not be empty
+      val req1 = PaymentRequest(Pay2SAddress(CAND(Seq(secret1.publicImage, secret2.publicImage))), confirmedBalance, assetToSpend, Map.empty)
+
+      val tx = await(wallet.generateTransaction(Seq(req1))).get
+
+      val in = tx.outputs.head
+
+      await(wallet.addBox(in, Set(ScanId @@ 10.toShort)))
+
+      val utx = new UnsignedErgoTransaction(IndexedSeq(new UnsignedInput(in.id)), IndexedSeq.empty, IndexedSeq(in.toCandidate))
+
+      val hints1 = await(wallet.generateCommitmentsFor(utx, Some(Seq(es1)))).response.get
+
+      val ptx1 = await(wallet.signTransaction(utx, Seq.empty, hints1, None, None)).get
+
+      println(ptx1)
+    }
+  }
+
 
 }

@@ -380,7 +380,10 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def extractHintsR: Route = (path("extractHints") & post & entity(as[HintExtractionRequest])) { her =>
     withWallet { w =>
-      w.extractHints(her.tx, her.real, her.simulated).map(_.transactionHintsBag)
+      val extInputsOpt = her.inputs.map(ErgoWalletActor.stringsToBoxes)
+      val extDataInputsOpt = her.dataInputs.map(ErgoWalletActor.stringsToBoxes)
+
+      w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
     }
   }
 

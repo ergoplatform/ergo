@@ -904,6 +904,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SigmaBoolean'
+        inputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
+        dataInputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
 
     Commitment:
       description: basic trait for prover commitments
@@ -1035,6 +1047,18 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/DhtSecret'
+        inputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
+        dataInputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
 
     PaymentRequest:
       description: Request for generation of payment transaction to a given address

@@ -28,7 +28,7 @@ import sigmastate.basics._
 import sigmastate.interpreter._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import io.circe.syntax._
-import org.ergoplatform.http.api.requests.{CommitmentGenerationRequest, CryptoResult, ExecuteRequest, HintExtractionRequest}
+import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
 import sigmastate.serialization.OpCodes
 import special.sigma.AnyValue
 
@@ -205,7 +205,9 @@ trait ApiCodecs extends JsonCodecs {
     Map(
       "tx" -> hr.tx.asJson,
       "real" -> hr.real.asJson,
-      "simulated" -> hr.simulated.asJson
+      "simulated" -> hr.simulated.asJson,
+      "inputsRaw" -> hr.inputs.asJson,
+      "dataInputsRaw" -> hr.dataInputs.asJson
     ).asJson
   }
 
@@ -214,21 +216,9 @@ trait ApiCodecs extends JsonCodecs {
       tx <- cursor.downField("tx").as[ErgoTransaction]
       real <- cursor.downField("real").as[Seq[SigmaBoolean]]
       simulated <- cursor.downField("simulated").as[Seq[SigmaBoolean]]
-    } yield HintExtractionRequest(tx, real, simulated)
-  }
-
-  implicit val commitmentGenerationRequestEncoder: Encoder[CommitmentGenerationRequest] = {hr =>
-    Map(
-      "tx" -> hr.utx.asJson,
-      "externalKeys" -> hr.externalKeys.asJson
-    ).asJson
-  }
-
-  implicit val commitmentGenerationRequestDecoder: Decoder[CommitmentGenerationRequest] = {cursor =>
-    for {
-      tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
-      externalKeys <- cursor.downField("externalKeys").as[Option[Seq[SigmaBoolean]]]
-    } yield CommitmentGenerationRequest(tx, externalKeys)
+      inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
+      dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
+    } yield HintExtractionRequest(tx, real, simulated, inputs, dataInputs)
   }
 
   implicit val firstProverMessageEncoder: Encoder[FirstProverMessage] = {

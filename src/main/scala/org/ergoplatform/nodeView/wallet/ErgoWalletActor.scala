@@ -455,13 +455,17 @@ class ErgoWalletActor(settings: ErgoSettings,
       })
       sender() ! signTransaction(walletVars.proverOpt, tx, secrets, hints, boxesToSpend, dataBoxes, parameters, stateContext)
 
-    case ExtractHints(tx, real, simulated) =>
-      val inputBoxes = tx.inputs.flatMap { input =>
-        readBox(input.boxId)
+    case ExtractHints(tx, real, simulated, boxesToSpendOpt, dataBoxesOpt) =>
+      val inputBoxes = boxesToSpendOpt.map(_.toIndexedSeq).getOrElse {
+        tx.inputs.flatMap { input =>
+          readBox(input.boxId)
+        }
       }
 
-      val dataBoxes = tx.dataInputs.flatMap { dataInput =>
-        readBox(dataInput.boxId)
+      val dataBoxes = dataBoxesOpt.map(_.toIndexedSeq).getOrElse {
+        tx.dataInputs.flatMap { dataInput =>
+          readBox(dataInput.boxId)
+        }
       }
 
       val prover = walletVars.proverOpt.getOrElse(ErgoProvingInterpreter(IndexedSeq.empty, parameters))
@@ -908,6 +912,8 @@ object ErgoWalletActor {
     *
     * @param utx - unsigned transaction
     * @param secrets - optionally, externally provided secrets
+    * @param inputsOpt - optionally, externally provided inputs
+    * @param dataInputsOpt - optionally, externally provided inputs
     */
   case class GenerateCommitmentsFor(utx: UnsignedErgoTransaction,
                                     secrets: Option[Seq[ExternalSecret]],
@@ -1126,10 +1132,14 @@ object ErgoWalletActor {
     * @param tx           - transaction to extract hints from
     * @param real         - public keys corresponing to the secrets known
     * @param simulated    - public keys to simulate
+    * @param inputsOpt - optionally, externally provided inputs
+    * @param dataInputsOpt - optionally, externally provided inputs
     */
   case class ExtractHints(tx: ErgoTransaction,
                           real: Seq[SigmaBoolean],
-                          simulated: Seq[SigmaBoolean])
+                          simulated: Seq[SigmaBoolean],
+                          inputsOpt: Option[Seq[ErgoBox]],
+                          dataInputsOpt: Option[Seq[ErgoBox]])
 
   /**
     * Result of hints generation operation

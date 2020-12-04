@@ -805,6 +805,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
 
       val ptx1 = await(wallet.signTransaction(utx, Seq(es2), hints1, Some(Seq(in)), None)).get
 
+      ptx1.statelessValidity.isSuccess shouldBe true
     }
   }
 

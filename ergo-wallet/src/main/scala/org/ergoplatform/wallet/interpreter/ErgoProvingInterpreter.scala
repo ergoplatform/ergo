@@ -140,7 +140,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
               totalCost
             )
 
-            val hints = txHints.allHints(boxIdx)
+            val hints = txHints.allHintsForInput(boxIdx)
             prove(inputBox.ergoTree, context, unsignedTx.messageToSign, hints).flatMap { proverResult =>
               //prove is accumulating cost under the hood, so proverResult.cost = totalCost + input check cost
               val newTC = proverResult.cost

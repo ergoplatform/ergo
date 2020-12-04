@@ -5,10 +5,14 @@ import scala.util.Try
 
 logLevel := Level.Debug
 
+// this values should be in sync with ergo-wallet/build.sbt
+val scala211 = "2.11.12"
+val scala212 = "2.12.10"
+
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
   name := "ergo",
-  scalaVersion := "2.12.10",
+  scalaVersion := scala212,
   // version is set via git tag vX.Y.Z:
   // $ git tag v3.2.0
   // $ git push origin v3.2.0
@@ -24,8 +28,12 @@ lazy val commonSettings = Seq(
   publishTo := sonatypePublishToBundle.value,
 )
 
-val scorexVersion = "discovery-improvs-a94e6b06-SNAPSHOT"
-val sigmaStateVersion = "3.3.1"
+val circeVersion = "0.13.0"
+val akkaVersion = "2.6.10"
+val akkaHttpVersion = "10.2.1"
+
+val scorexVersion = "master-7d7d9bb7-SNAPSHOT"
+val sigmaStateVersion = "optimizations-17dee85b-SNAPSHOT"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -52,13 +60,19 @@ libraryDependencies ++= Seq(
 
   "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",
-  "org.scalactic" %% "scalactic" % "3.0.+" % "test",
-  "org.scalatest" %% "scalatest" % "3.0.5" % "test,it",
-  "org.scalacheck" %% "scalacheck" % "1.13.5" % "test",
-
+  "org.scalactic" %% "scalactic" % "3.0.3" % "test",
+  "org.scalatest" %% "scalatest" % "3.1.1" % "test,it",
+  "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
+  "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test,
   "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
-  "com.typesafe.akka" %% "akka-testkit" % "2.5.24" % "test",
-  "com.typesafe.akka" %% "akka-http-testkit" % "10.1.9" % "test",
+
+  "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
+  "io.circe" %% "circe-core" % circeVersion,
+  "io.circe" %% "circe-core" % circeVersion % "test",
+
+  "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
+  "com.typesafe.akka" %% "akka-http-testkit" % akkaHttpVersion % "test",
+
   "org.asynchttpclient" % "async-http-client" % "2.6.+" % "test",
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-properties" % "2.9.2" % "test",
   "com.spotify" % "docker-client" % "8.14.5" % "test" classifier "shaded"
@@ -225,7 +239,7 @@ lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
 lazy val ergoWallet = (project in file("ergo-wallet"))
   .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
   .settings(
-    crossScalaVersions := Seq(scalaVersion.value, "2.11.12"),
+    crossScalaVersions := Seq(scalaVersion.value, scala211),
     commonSettings,
     name := "ergo-wallet",
     libraryDependencies ++= Seq(

@@ -37,8 +37,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
-    context.system.scheduler.schedule(10.seconds, 20.seconds)(networkController ! GetConnectedPeers)(context.system.dispatcher)
-    context.system.scheduler.schedule(45.seconds, 30.seconds)(networkController ! GetPeersStatus)(context.system.dispatcher)
+    context.system.scheduler.scheduleAtFixedRate(10.seconds, 20.seconds, networkController, GetConnectedPeers)(context.system.dispatcher)
+    context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(context.system.dispatcher)
   }
 
   private def networkTime(): Time = timeProvider.time()

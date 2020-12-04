@@ -6,7 +6,7 @@ addSbtPlugin("se.marcuslonnberg" % "sbt-docker" % "1.4.1")
 
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.6")
 
-addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.9.0")
+addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.9.2")
 
 addSbtPlugin("com.github.sbt" % "sbt-findbugs" % "2.0.0")
 

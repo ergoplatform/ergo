@@ -775,7 +775,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
     }
   }
 
-  property("co-signing (external secrets)") {
+  property("co-signing (external secrets) - 2-out-of-2") {
     withFixture { implicit w =>
 
       val secret1 = DLogProverInput.random()
@@ -809,5 +809,10 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
     }
   }
 
+  property("co-signing (external secrets) - 2-out-of-3") {
+    withFixture { implicit w =>
+      false shouldBe true
+    }
+  }
 
 }

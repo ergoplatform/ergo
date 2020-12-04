@@ -89,7 +89,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   it should "sign a transaction" in {
     val digest = Random.nextBoolean()
-    val (tsr, r) = if(digest){
+    val (tsr, r) = if (digest) {
       (ErgoTransactionGenerators.transactionSigningRequestGen(true).sample.get, route)
     } else {
       (ErgoTransactionGenerators.transactionSigningRequestGen(utxoState).sample.get, utxoRoute)

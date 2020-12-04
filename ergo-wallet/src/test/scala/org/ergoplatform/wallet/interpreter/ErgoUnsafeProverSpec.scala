@@ -22,7 +22,10 @@ class ErgoUnsafeProverSpec
     val unsafeProver = ErgoUnsafeProver
 
     forAll(unsignedTxGen(extendedSecretKey)) { case (ins, unsignedTx) =>
-      val signedTxFull = fullProver.sign(unsignedTx, ins.toIndexedSeq, IndexedSeq(), stateContext).get
+
+      val signedTxFull = fullProver.sign(unsignedTx, ins.toIndexedSeq, IndexedSeq(),
+        stateContext, TransactionHintsBag.empty).get
+
       val signedTxUnsafe = unsafeProver.prove(unsignedTx, extendedSecretKey.privateInput)
 
       signedTxFull shouldEqual signedTxUnsafe

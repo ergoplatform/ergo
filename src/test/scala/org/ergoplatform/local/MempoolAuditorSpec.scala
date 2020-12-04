@@ -104,8 +104,6 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
       override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = ???
 
-      override def spentInputs: Iterator[BoxId] = ???
-
       override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ???
 
       override def size: Int = ???
@@ -117,6 +115,9 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
       override def getAllPrioritized: Seq[ErgoTransaction] = txs
 
       override def take(limit: Int): Iterable[ErgoTransaction] = txs.take(limit)
+
+      override def spentInputs: Iterator[BoxId] = txs.flatMap(_.inputs).map(_.boxId).toIterator
+
     }
 
     implicit val system = ActorSystem()
@@ -139,4 +140,5 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
     probe.expectMsgType[SendToNetwork]
   }
+
 }

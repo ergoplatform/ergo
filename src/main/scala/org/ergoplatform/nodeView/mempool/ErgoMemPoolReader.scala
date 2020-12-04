@@ -42,4 +42,5 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
     * @return an ordered sequence of transaction ids with weights
     */
   def weightedTransactionIds(limit: Int): Seq[WeightedTxId]
+
 }

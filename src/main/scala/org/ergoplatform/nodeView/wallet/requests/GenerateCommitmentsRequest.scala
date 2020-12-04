@@ -1,27 +1,24 @@
 package org.ergoplatform.nodeView.wallet.requests
 
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
-import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 
 /**
-  * A request to sign a transaction
+  * A request to generate commitments for unsigned transaction, useful for multi-party signing.
   *
   * @param unsignedTx - unsigned transaction
-  * @param hints      - hints for interpreter (such as additional one-time secrets)
-  * @param externalSecrets - externally provided secrets
+  * @param externalSecretsOpt - optionally, externally provided secrets
   * @param inputs     - hex-encoded input boxes bytes for the unsigned transaction (optional)
   * @param dataInputs - hex-encoded data-input boxes bytes for the unsigned transaction (optional)
   */
-case class TransactionSigningRequest(unsignedTx: UnsignedErgoTransaction,
-                                     hints: TransactionHintsBag,
-                                     externalSecrets: Seq[ExternalSecret],
-                                     inputs: Option[Seq[String]],
-                                     dataInputs: Option[Seq[String]]) {
+case class GenerateCommitmentsRequest(unsignedTx: UnsignedErgoTransaction,
+                                      externalSecretsOpt: Option[Seq[ExternalSecret]],
+                                      inputs: Option[Seq[String]],
+                                      dataInputs: Option[Seq[String]]) {
+
+  lazy val externalSecrets: Seq[ExternalSecret] = externalSecretsOpt.getOrElse(Seq.empty)
 
   lazy val dlogs: Seq[DlogSecretKey] = externalSecrets.collect { case ExternalSecret(d: DlogSecretKey) => d }
 
   lazy val dhts: Seq[DhtSecretKey] = externalSecrets.collect { case ExternalSecret(d: DhtSecretKey) => d }
-
 }
-

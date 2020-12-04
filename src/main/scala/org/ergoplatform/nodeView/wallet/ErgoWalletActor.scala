@@ -426,17 +426,21 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
       sender() ! tx
 
-    case GenerateCommitmentsFor(unsignedTx, externalSecretsOpt) =>
+    case GenerateCommitmentsFor(unsignedTx, externalSecretsOpt, externalInputsOpt, externalDataInputsOpt) =>
       val walletSecrets = walletVars.proverOpt.map(_.secretKeys).getOrElse(Seq.empty)
       val secrets = walletSecrets ++ externalSecretsOpt.getOrElse(Seq.empty).map(_.key)
       val prover: ErgoProvingInterpreter = ErgoProvingInterpreter(secrets.toIndexedSeq, parameters)
 
-      val inputBoxes = unsignedTx.inputs.flatMap { unsignedInput =>
-        readBox(unsignedInput.boxId)
+      val inputBoxes = externalInputsOpt.map(_.toIndexedSeq).getOrElse {
+        unsignedTx.inputs.flatMap { unsignedInput =>
+          readBox(unsignedInput.boxId)
+        }
       }
 
-      val dataBoxes = unsignedTx.dataInputs.flatMap { dataInput =>
-        readBox(dataInput.boxId)
+      val dataBoxes = externalDataInputsOpt.map(_.toIndexedSeq).getOrElse {
+        unsignedTx.dataInputs.flatMap { dataInput =>
+          readBox(dataInput.boxId)
+        }
       }
 
       val thbTry = prover.generateCommitmentsFor(unsignedTx, inputBoxes, dataBoxes, stateContext)
@@ -657,10 +661,6 @@ class ErgoWalletActor(settings: ErgoSettings,
   private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
                                           inputsRaw: Seq[String],
                                           dataInputsRaw: Seq[String]): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = Try {
-
-    // A helper which is deserializing Base16-encoded boxes to ErgoBox instances
-    def stringsToBoxes(strings: Seq[String]): Seq[ErgoBox] =
-      strings.map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry)).map(_.get)
 
     val userInputs = stringsToBoxes(inputsRaw)
     val dataInputs = stringsToBoxes(dataInputsRaw).toIndexedSeq
@@ -910,7 +910,9 @@ object ErgoWalletActor {
     * @param secrets - optionally, externally provided secrets
     */
   case class GenerateCommitmentsFor(utx: UnsignedErgoTransaction,
-                                    secrets: Option[Seq[ExternalSecret]])
+                                    secrets: Option[Seq[ExternalSecret]],
+                                    inputsOpt: Option[Seq[ErgoBox]],
+                                    dataInputsOpt: Option[Seq[ErgoBox]])
 
   /**
     * Response for commitments generation request
@@ -1180,5 +1182,9 @@ object ErgoWalletActor {
         e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputBoxes", e)),
         tx => Success(tx))
   }
+
+  // A helper which is deserializing Base16-encoded boxes to ErgoBox instances
+  def stringsToBoxes(strings: Seq[String]): Seq[ErgoBox] =
+    strings.map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry)).map(_.get)
 
 }

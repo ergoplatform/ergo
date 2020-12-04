@@ -104,8 +104,6 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
       override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = ???
 
-      override def spentInputs: Iterator[BoxId] = ???
-
       override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction] = ???
 
       override def size: Int = ???

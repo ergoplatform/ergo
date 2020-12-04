@@ -420,7 +420,9 @@ trait ApiCodecs extends JsonCodecs {
       "tx" -> gcr.unsignedTx.asJson,
       "secrets" -> Json.obj(
         "dlog" -> gcr.dlogs.asJson,
-        "dht" -> gcr.dhts.asJson
+        "dht" -> gcr.dhts.asJson,
+        "inputsRaw" -> gcr.inputs.asJson,
+        "dataInputsRaw" -> gcr.dataInputs.asJson
       )
     )
   }
@@ -432,7 +434,9 @@ trait ApiCodecs extends JsonCodecs {
       dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DhtSecretKey]]]
       secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
       secretsOpt = if(secrets.isEmpty) None else Some(secrets)
-    } yield GenerateCommitmentsRequest(tx, secretsOpt)
+      inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
+      dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
+    } yield GenerateCommitmentsRequest(tx, secretsOpt, inputs, dataInputs)
   }
 
   implicit val executeRequestDecoder = new Decoder[ExecuteRequest] {

@@ -96,8 +96,11 @@ trait ErgoWalletReader extends VaultReader {
     (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = true)).mapTo[Try[ErgoTransaction]]
 
   def generateCommitmentsFor(unsignedErgoTransaction: UnsignedErgoTransaction,
-                             externalSecretsOpt: Option[Seq[ExternalSecret]]): Future[GenerateCommitmentsResponse] =
-    (walletActor ? GenerateCommitmentsFor(unsignedErgoTransaction, externalSecretsOpt)).mapTo[GenerateCommitmentsResponse]
+                             externalSecretsOpt: Option[Seq[ExternalSecret]],
+                             boxesToSpend: Option[Seq[ErgoBox]],
+                             dataBoxes: Option[Seq[ErgoBox]]): Future[GenerateCommitmentsResponse] =
+    (walletActor ? GenerateCommitmentsFor(unsignedErgoTransaction, externalSecretsOpt, boxesToSpend, dataBoxes))
+      .mapTo[GenerateCommitmentsResponse]
 
 
   def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],

@@ -8,7 +8,6 @@ import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestS
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSecret, PaymentRequest}
 import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
 import org.ergoplatform.utils._
-import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
 import scorex.util.encode.Base16
 import sigmastate.eval._
@@ -783,6 +782,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
       val es1 = ExternalSecret(PrimitiveSecretKey(secret1))
 
       val secret2 = DLogProverInput.random()
+      val es2 = ExternalSecret(PrimitiveSecretKey(secret2))
 
       val pubKey = getPublicKeys.head.pubkey
       val genesisBlock = makeGenesisBlock(pubKey, randomNewAsset)
@@ -799,15 +799,12 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
 
       val in = tx.outputs.head
 
-      await(wallet.addBox(in, Set(ScanId @@ 10.toShort)))
-
       val utx = new UnsignedErgoTransaction(IndexedSeq(new UnsignedInput(in.id)), IndexedSeq.empty, IndexedSeq(in.toCandidate))
 
-      val hints1 = await(wallet.generateCommitmentsFor(utx, Some(Seq(es1)))).response.get
+      val hints1 = await(wallet.generateCommitmentsFor(utx, Some(Seq(es1)), Some(Seq(in)), None)).response.get
 
-      val ptx1 = await(wallet.signTransaction(utx, Seq.empty, hints1, None, None)).get
+      val ptx1 = await(wallet.signTransaction(utx, Seq(es2), hints1, Some(Seq(in)), None)).get
 
-      println(ptx1)
     }
   }
 

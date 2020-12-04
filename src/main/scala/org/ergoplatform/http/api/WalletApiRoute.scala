@@ -176,8 +176,10 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
     val utx = gcr.unsignedTx
     val externalSecretsOpt = gcr.externalSecretsOpt
+    val extInputsOpt = gcr.inputs.map(ErgoWalletActor.stringsToBoxes)
+    val extDataInputsOpt = gcr.dataInputs.map(ErgoWalletActor.stringsToBoxes)
 
-    withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt).map(_.response)) {
+    withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt, extInputsOpt, extDataInputsOpt).map(_.response)) {
       case Failure(e) => BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(thb) => ApiResponse(thb)
     }

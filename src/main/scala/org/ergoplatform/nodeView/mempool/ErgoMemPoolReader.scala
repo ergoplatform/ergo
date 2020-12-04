@@ -43,9 +43,4 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
     */
   def weightedTransactionIds(limit: Int): Seq[WeightedTxId]
 
-  /**
-    * @return inputs spent by the mempool transactions
-    */
-  def spentInputs: Iterator[BoxId]
-
 }

@@ -15,7 +15,6 @@ import sigmastate.basics.DLogProtocol.ProveDlog
   * @param b                              - target value for mining
   * @param h                              - height of the block
   * @param pk                             - public key of a miner
-  * @param v                              - block version
   * @param proofsForMandatoryTransactions - proofs of transactions membership (optional)
   *
   */
@@ -23,7 +22,6 @@ case class WorkMessage(msg: Array[Byte],
                        b: BigInt,
                        h: Height,
                        pk: ProveDlog,
-                       v: Version,
                        proofsForMandatoryTransactions: Option[ProofOfUpcomingTransactions])
 
 object WorkMessage extends ApiCodecs {
@@ -35,7 +33,6 @@ object WorkMessage extends ApiCodecs {
         "b" -> Some(workMessage.b.asJson(bigIntEncoder)),
         "h" -> Some(workMessage.h.asJson),
         "pk" -> Some(workMessage.pk.asJson),
-        "v" -> Some(workMessage.v.asJson),
         "proof" -> workMessage.proofsForMandatoryTransactions.map(_.asJson)
       ).collect {
         //drop proof field if it is empty

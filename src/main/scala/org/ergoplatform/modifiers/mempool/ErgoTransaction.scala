@@ -9,26 +9,28 @@ import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
+import org.ergoplatform.settings.{ErgoValidationSettings, Algos}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.EphemerealNodeViewModifier
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
+import scalan.Nullable
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, ValidationState}
+import scorex.core.validation.{ValidationState, ModifierValidator}
 import scorex.db.ByteArrayWrapper
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.util.{bytesToId, ScorexLogging, ModifierId}
 import sigmastate.eval.Extensions._
+import sigmastate.interpreter.{Interpreter, VersionContext}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
 
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
 /**
   * ErgoTransaction is an atomic state transition operation. It destroys Boxes from the state
@@ -200,7 +202,15 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       val proof = input.spendingProof
       val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
       val inputContext = InputContext(idx.toShort, proof.extension)
-      val ctx = new ErgoContext(stateContext, transactionContext, inputContext, maxCost - addExact(currentTxCost, accumulatedCost), 0)
+
+      // TODO v4.0: obtain the ACTUAL activated version
+      val activatedScriptVersion = Interpreter.MaxSupportedScriptVersion
+
+      val ctx = new ErgoContext(
+        stateContext, transactionContext, inputContext,
+        costLimit = maxCost - addExact(currentTxCost, accumulatedCost),
+        initCost = 0,
+        activatedScriptVersion)
 
       val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
       costTry.recover { case t =>
@@ -284,7 +294,12 @@ object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
   }
 
   override def parse(r: Reader): ErgoTransaction = {
-    val reader = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
+    // TODO v4.0: obtain the ACTUAL versions
+    val versionContext: Nullable[VersionContext] = Nullable.None
+    val reader = new SigmaByteReader(r,
+      new ConstantStore(),
+      resolvePlaceholdersToConstants = false,
+      versionContext = versionContext)
     val elt = ErgoLikeTransactionSerializer.parse(reader)
     ErgoTransaction(elt.inputs, elt.dataInputs, elt.outputCandidates)
   }

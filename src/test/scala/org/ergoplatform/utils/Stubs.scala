@@ -82,7 +82,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val blacklistedPeers: Seq[String] = Seq("4.4.4.4:1111", "8.8.8.8:2222")
 
   val pk: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray(Random.randomBytes(32))).publicImage
-  val externalCandidateBlock = WorkMessage(Array.fill(32)(2: Byte), BigInt(9999), 1, pk, 1: Byte, None)
+  val externalCandidateBlock = WorkMessage(Array.fill(32)(2: Byte), BigInt(9999), None, pk, None)
 
   class PeersManagerStub extends Actor {
     def receive: Receive = {

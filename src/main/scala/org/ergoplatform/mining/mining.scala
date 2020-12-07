@@ -16,6 +16,7 @@ package object mining {
 
   val group: BcDlogGroup[EcPointType] = CryptoConstants.dlogGroup
 
+  // Group order, used in Autolykos V.1
   val q: BigInt = group.order
 
   private val hashFn: NumericHash = new NumericHash(q)

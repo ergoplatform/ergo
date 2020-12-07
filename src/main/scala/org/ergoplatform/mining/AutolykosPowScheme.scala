@@ -51,55 +51,79 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Checks that `header` contains correct solution of the Autolykos PoW puzzle.
     */
   def validate(header: Header): Try[Unit] = Try {
-    val version = header.version
-
     val b = getB(header.nBits)
+    if (header.version == 1) {
+      // for version 1, we check equality of left and right sides of the equation
+      require(checkPoWForVersion1(header, b), "Incorrect points")
+    } else {
+      // for version 2, we're calculating hit and compare it with target
+      require(hitForVersion2(header) < b, "h(f) < b condition not met")
+    }
+  }
+
+  /**
+    * Check PoW for Autolykos v1 header
+    *
+    * @param header - header to check PoW for
+    * @param b - PoW target
+    * @return whether PoW is valid or not
+    */
+  def checkPoWForVersion1(header: Header, b: BigInt): Boolean = {
+    val version = 1: Byte
+
     val msg = msgByHeader(header)
     val s = header.powSolution
-    lazy val h = Ints.toByteArray(header.height)  // used in AL v.2 only
 
-    val pkBytes = if (version == 1) {
+    val nonce = header.powSolution.n
+
+    val pkBytes = {
       require(s.d < b, s"Incorrect d = ${s.d} for b = $b")
       require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
       groupElemToBytes(s.pk)
-    } else {
-      //todo: fix realDifficulty (needed for nipopows) for Header
-      Array.emptyByteArray // pk is not used in Autolykos 2
     }
-    val wBytes = if (version == 1) {
+
+    val wBytes = {
       require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
       groupElemToBytes(s.w)
-    } else {
-      Array.emptyByteArray // w is not used in Autolykos 2
     }
-    val nonce = s.n
 
-    val seed = if (version == 1) {
-      Bytes.concat(msg, nonce) // Autolykos v1, Alg. 2, line4: m || nonce
-    } else {
-      val prei8 = BigIntegers.fromUnsignedByteArray(hash(Bytes.concat(msg, nonce)).takeRight(8))
-      val i = BigIntegers.asUnsignedByteArray(4, prei8.mod(BigInt(N).underlying()))
-      val f = Blake2b256(Bytes.concat(i, h, M)).drop(1) // .drop(1) is the same as takeRight(31)
-      Bytes.concat(f, msg, nonce) // Autolykos v1, Alg. 2, line4:
-    }
+    val seed = Bytes.concat(msg, nonce) // Autolykos v1, Alg. 2, line4: m || nonce
     val indexes = genIndexes(seed)
 
-    val f = if (version == 1) {
-      indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx), h)).sum.mod(q)
-    } else {
-      //pk and w not used in v2
-      indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx), h)).sum
-    }
+    //height is not used in v1
+    val f = indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx), null)).sum.mod(q)
+    val left = s.w.multiply(f.bigInteger)
+    val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
+    left == right
+  }
 
-    if (version == 1) {
-      val left = s.w.multiply(f.bigInteger)
-      val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
-      require(left == right, "Incorrect points")
-    } else {
-      // sum as byte array is always about 32 bytes
-      val array: Array[Byte] = BigIntegers.asUnsignedByteArray(32,  f.underlying())
-      require(toBigInt(hash(array)) < b, "h(f) < b condition not met")
-    }
+
+  /**
+    * Get hit for Autolykos v2 header (to test it then against PoW target)
+    *
+    * @param header - header to check PoW for
+    * @return PoW hit
+    */
+  def hitForVersion2(header: Header): BigInt = {
+    val version = 2: Byte
+
+    val msg = msgByHeader(header)
+    val nonce = header.powSolution.n
+
+    val h = Ints.toByteArray(header.height)  // used in AL v.2 only
+
+    val prei8 = BigIntegers.fromUnsignedByteArray(hash(Bytes.concat(msg, nonce)).takeRight(8))
+    val i = BigIntegers.asUnsignedByteArray(4, prei8.mod(BigInt(N).underlying()))
+    val f = Blake2b256(Bytes.concat(i, h, M)).drop(1) // .drop(1) is the same as takeRight(31)
+    val seed = Bytes.concat(f, msg, nonce) // Autolykos v1, Alg. 2, line4:
+
+    val indexes = genIndexes(seed)
+    //pk and w not used in v2
+    val f2 = indexes.map(idx => genElement(version, msg, null, null, Ints.toByteArray(idx), h)).sum
+
+    // sum as byte array is always about 32 bytes
+    val array: Array[Byte] = BigIntegers.asUnsignedByteArray(32,  f2.underlying())
+    toBigInt(hash(array))
   }
 
   /**
@@ -108,7 +132,11 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Used in NiPoPoW.
     */
   def realDifficulty(header: Header): BigInt = {
-    q / header.powSolution.d
+    if (header.version == 1) {
+      q / header.powSolution.d
+    } else {
+      q / hitForVersion2(header)
+    }
   }
 
   /**
@@ -119,7 +147,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Get target `b` from encoded difficulty `nBits`
     */
-  private[mining] def getB(nBits: Long): BigInt = q / RequiredDifficulty.decodeCompactBits(nBits)
+  private[mining] def getB(nBits: Long): BigInt = {
+    q / RequiredDifficulty.decodeCompactBits(nBits)
+  }
 
   /**
     * Hash function that takes `m` and `nonceBytes` and returns a list of size `k` with numbers in
@@ -299,8 +329,11 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val headerCandidate = ErgoMiner.deriveUnprovenHeader(blockCandidate)
     val msg = msgByHeader(headerCandidate)
     val b = getB(blockCandidate.nBits)
-    val v = blockCandidate.version
-    val h = headerCandidate.height
+    val h = if (blockCandidate.version == 1) {
+      None
+    } else {
+      Some(headerCandidate.height)
+    }
 
     val proofs = if (mandatoryTxIds.nonEmpty) {
       // constructs fake block transactions section (BlockTransactions instance) to get proofs from it
@@ -311,7 +344,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     } else {
       None
     }
-    WorkMessage(msg, b, h, pk, v, proofs)
+    WorkMessage(msg, b, h, pk, proofs)
   }
 
 }

@@ -62,9 +62,8 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
     }
   }
 
-  def remove(tx: ErgoTransaction, callback: WeightedTxId => Unit = (wtx:WeightedTxId) => ()): OrderedTxPool = {
+  def remove(tx: ErgoTransaction): OrderedTxPool = {
     transactionsRegistry.get(tx.id).fold(this)(wtx => {
-      callback(wtx)
       OrderedTxPool(orderedTransactions - wtx, transactionsRegistry - tx.id, invalidated, outputs -- tx.outputs.map(_.id)).updateFamily(tx, -wtx.weight)
     })
   }

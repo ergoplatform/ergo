@@ -81,9 +81,8 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     val interval = maxWaitTimeMsec / nBins
     for (wtx <- wtxs) {
       val waitTime = now - wtx.created
-      val bin = if (waitTime < maxWaitTimeMsec) (waitTime/interval).asInstanceOf[Int] else nBins
-      histogram(bin).nTxns += 1
-      histogram(bin).totalFee += wtx.feePerKb
+      val bin = if (waitTime < maxWaitTimeMsec) (waitTime/interval).toInt else nBins
+      histogram.update(bin, FeeHistogramBin(histogram(bin).nTxns + 1,histogram(bin).totalFee + wtx.feePerKb))
     }
     histogram
   }

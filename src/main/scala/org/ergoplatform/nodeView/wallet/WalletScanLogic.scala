@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.nodeView.wallet.IdUtils.{encodedBoxId, EncodedBoxId}
+import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanWalletInteraction}
 import org.ergoplatform.settings.{Constants, LaunchParameters}
@@ -13,12 +13,11 @@ import org.ergoplatform.wallet.Constants.{MiningScanId, PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
-import org.ergoplatform.{UnsignedErgoLikeTransaction, ErgoBox, ErgoBoxCandidate, UnsignedInput}
-import scorex.util.{ScorexLogging, ModifierId}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
+import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.interpreter.{ContextExtension, Interpreter}
 import sigmastate.utxo.CostTable
 import scorex.util.bytesToId
-
 import scala.collection.mutable
 
 /**

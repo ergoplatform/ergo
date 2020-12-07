@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{ErgoValidationSettings, Algos}
+import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.EphemerealNodeViewModifier
@@ -19,10 +19,10 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ValidationState, ModifierValidator}
+import scorex.core.validation.{ModifierValidator, ValidationState}
 import scorex.db.ByteArrayWrapper
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{bytesToId, ScorexLogging, ModifierId}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.eval.Extensions._
 import sigmastate.interpreter.{Interpreter, VersionContext}
 import sigmastate.serialization.ConstantStore
@@ -30,7 +30,7 @@ import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
 
 import scala.collection.mutable
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * ErgoTransaction is an atomic state transition operation. It destroys Boxes from the state

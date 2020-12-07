@@ -601,38 +601,29 @@ class ErgoWalletActor(settings: ErgoSettings,
               Success(())
             }
             registersCheck.flatMap { _ =>
-              val firstInputOpt = inputsFor(
-                requests
-                  .collect { case pr: PaymentRequest => pr.value }
-                  .sum
-              ).headOption
-              firstInputOpt
-                .fold[Try[ErgoBox]](Failure(new Exception("Can't issue asset with no inputs")))(Success(_))
-                .flatMap { firstInput =>
-                  val assetId = Digest32 !@@ firstInput.id
-                  val nonMandatoryRegisters = scala.Predef.Map(
-                    R4 -> ByteArrayConstant(name.getBytes("UTF-8")),
-                    R5 -> ByteArrayConstant(description.getBytes("UTF-8")),
-                    R6 -> ByteArrayConstant(String.valueOf(decimals).getBytes("UTF-8"))
-                  ) ++ registers.getOrElse(Map())
-                  (addressOpt orElse walletVars.publicKeyAddresses.headOption)
-                    .fold[Try[ErgoAddress]](Failure(new Exception("No address available for box locking")))(Success(_))
-                    .map { lockWithAddress =>
-                      val minimalErgoAmount =
-                        BoxUtils.minimalErgoAmountSimulated(
-                          lockWithAddress.script,
-                          Colls.fromItems(assetId -> amount),
-                          nonMandatoryRegisters,
-                          parameters
-                        )
-                      new ErgoBoxCandidate(
-                        minimalErgoAmount,
-                        lockWithAddress.script,
-                        fullHeight,
-                        Colls.fromItems(assetId -> amount),
-                        nonMandatoryRegisters
-                      )
-                    }
+              val fakeAssetId = Digest32 !@@ Array.fill(32)(0: Byte) //fake id for box size estimation only
+              val nonMandatoryRegisters = scala.Predef.Map(
+                R4 -> ByteArrayConstant(name.getBytes("UTF-8")),
+                R5 -> ByteArrayConstant(description.getBytes("UTF-8")),
+                R6 -> ByteArrayConstant(String.valueOf(decimals).getBytes("UTF-8"))
+              ) ++ registers.getOrElse(Map())
+              (addressOpt orElse walletVars.publicKeyAddresses.headOption)
+                .fold[Try[ErgoAddress]](Failure(new Exception("No address available for box locking")))(Success(_))
+                .map { lockWithAddress =>
+                  val minimalErgoAmount =
+                    BoxUtils.minimalErgoAmountSimulated(
+                      lockWithAddress.script,
+                      Colls.fromItems(fakeAssetId -> amount),
+                      nonMandatoryRegisters,
+                      parameters
+                    )
+                  new ErgoBoxCandidate(
+                    minimalErgoAmount,
+                    lockWithAddress.script,
+                    fullHeight,
+                    Colls.fromItems(fakeAssetId -> amount),
+                    nonMandatoryRegisters
+                  )
                 }
             }
           case other =>
@@ -821,7 +812,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       log.error("Unlock failed: ", t)
   }
 
-
+/*
   private def inputsFor(targetAmount: Long,
                         targetAssets: TokensMap = Map.empty): Seq[ErgoBox] = {
     val unspentBoxes = registry.walletUnspentBoxes()
@@ -830,7 +821,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       .toSeq
       .flatMap(_.boxes)
       .map(_.box)
-  }
+  }*/
 
   private def wrapLegalExc[T](e: Throwable): Failure[T] =
     if (e.getMessage.startsWith("Illegal key size")) {

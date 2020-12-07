@@ -13,9 +13,9 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
 import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Parameters}
 import scorex.core.api.http.PeersApiRoute.PeersStatusResponse
-import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import scorex.core.network.peer.PeerInfo
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.utils.TimeProvider.Time
 import scorex.util.ScorexLogging
@@ -69,7 +69,9 @@ class ErgoStatsCollector(readersHolder: ActorRef,
       onStateChanged orElse
       onHistoryChanged orElse
       onSemanticallySuccessfulModification orElse
-      init
+      init orElse {
+      case a: Any => log.warn(s"Stats collector got strange input: $a")
+    }
 
   private def init: Receive = {
     case Readers(h, s, _, _) =>
@@ -114,7 +116,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   }
 
   private def onConnectedPeers: Receive = {
-    case peers: Seq[ConnectedPeer@unchecked] if peers.headOption.forall(_.isInstanceOf[ConnectedPeer]) =>
+    case peers: Seq[PeerInfo@unchecked] if peers.headOption.forall(_.isInstanceOf[PeerInfo]) =>
       nodeInfo = nodeInfo.copy(peersCount = peers.length)
   }
 

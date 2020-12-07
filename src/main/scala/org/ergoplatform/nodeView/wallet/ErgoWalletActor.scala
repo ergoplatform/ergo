@@ -587,13 +587,14 @@ class ErgoWalletActor(settings: ErgoSettings,
     * @param requests - an input sequence of requests
     * @return sequence of transaction outputs or failure if inputs are incorrect
     */
-  private def requestsToBoxCandidates(requests: Seq[TransactionGenerationRequest]): Try[Seq[ErgoBoxCandidate]] =
+  private def requestsToBoxCandidates(requests: Seq[TransactionGenerationRequest],
+                                      assetId: BoxId): Try[Seq[ErgoBoxCandidate]] =
     Traverse[List].sequence {
       requests.toList
         .map {
           case PaymentRequest(address, value, assets, registers) =>
             Success(new ErgoBoxCandidate(value, address.script, fullHeight, assets.toColl, registers))
-          case AssetIssueRequest(addressOpt, amount, name, description, decimals, registers) =>
+          case AssetIssueRequest(addressOpt, valueOpt, amount, name, description, decimals, registers) =>
             // Check that auxiliary registers do not try to rewrite registers R0...R6
             val registersCheck = if (registers.exists(_.forall(_._1.number < 7))) {
               Failure(new Exception("Additional registers contain R0...R6"))
@@ -601,7 +602,6 @@ class ErgoWalletActor(settings: ErgoSettings,
               Success(())
             }
             registersCheck.flatMap { _ =>
-              val fakeAssetId = Digest32 !@@ Array.fill(32)(0: Byte) //fake id for box size estimation only
               val nonMandatoryRegisters = scala.Predef.Map(
                 R4 -> ByteArrayConstant(name.getBytes("UTF-8")),
                 R5 -> ByteArrayConstant(description.getBytes("UTF-8")),
@@ -610,18 +610,18 @@ class ErgoWalletActor(settings: ErgoSettings,
               (addressOpt orElse walletVars.publicKeyAddresses.headOption)
                 .fold[Try[ErgoAddress]](Failure(new Exception("No address available for box locking")))(Success(_))
                 .map { lockWithAddress =>
-                  val minimalErgoAmount =
+                  def minimalErgoAmount: Long =
                     BoxUtils.minimalErgoAmountSimulated(
                       lockWithAddress.script,
-                      Colls.fromItems(fakeAssetId -> amount),
+                      Colls.fromItems((Digest32 @@ assetId) -> amount),
                       nonMandatoryRegisters,
                       parameters
                     )
                   new ErgoBoxCandidate(
-                    minimalErgoAmount,
+                    valueOpt.getOrElse(minimalErgoAmount),
                     lockWithAddress.script,
                     fullHeight,
-                    Colls.fromItems(fakeAssetId -> amount),
+                    Colls.fromItems((Digest32 @@ assetId) -> amount),
                     nonMandatoryRegisters
                   )
                 }
@@ -660,7 +660,23 @@ class ErgoWalletActor(settings: ErgoSettings,
     val userInputs = stringsToBoxes(inputsRaw)
     val dataInputs = stringsToBoxes(dataInputsRaw).toIndexedSeq
 
-    requestsToBoxCandidates(requests).flatMap { outputs =>
+    val (inputBoxes, filter, changeAddressOpt: Option[ProveDlog]) = if (userInputs.nonEmpty) {
+      //inputs are provided externally, no need for filtering
+      (boxesToFakeTracked(userInputs), noFilter, None)
+    } else {
+      walletVars.proverOpt match {
+        case Some(_) =>
+          //inputs are to be selected by the wallet
+          require(walletVars.publicKeyAddresses.nonEmpty, "No public keys in the prover to extract change address from")
+          val boxesToSpend = (registry.walletUnspentBoxes() ++ offChainRegistry.offChainBoxes).distinct
+          (boxesToSpend.toIterator, walletFilter, changeAddress.map(_.pubkey))
+
+        case None =>
+          throw new Exception(s"Cannot generateTransactionWithOutputs($requests, $inputsRaw): wallet is locked")
+      }
+    }
+
+    requestsToBoxCandidates(requests, inputBoxes.take(1).next().box.id).flatMap { outputs =>
       require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
       require(outputs.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, parameters)), "Minimal ERG value not met")
       require(outputs.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
@@ -673,22 +689,6 @@ class ErgoWalletActor(settings: ErgoSettings,
 
       val targetBalance = outputs.map(_.value).sum
       val targetAssets = TransactionBuilder.collectOutputTokens(outputs.filterNot(bx => assetIssueBox.contains(bx)))
-
-      val (inputBoxes, filter, changeAddressOpt: Option[ProveDlog]) = if (userInputs.nonEmpty) {
-        //inputs are provided externally, no need for filtering
-        (boxesToFakeTracked(userInputs), noFilter, None)
-      } else {
-        walletVars.proverOpt match {
-          case Some(_) =>
-            //inputs are to be selected by the wallet
-            require(walletVars.publicKeyAddresses.nonEmpty, "No public keys in the prover to extract change address from")
-            val boxesToSpend = (registry.walletUnspentBoxes() ++ offChainRegistry.offChainBoxes).distinct
-            (boxesToSpend.toIterator, walletFilter, changeAddress.map(_.pubkey))
-
-          case None =>
-            throw new Exception(s"Cannot generateTransactionWithOutputs($requests, $inputsRaw): wallet is locked")
-        }
-      }
 
       val selectionOpt = boxSelector.select(inputBoxes, filter, targetBalance, targetAssets)
 

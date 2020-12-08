@@ -1094,6 +1094,9 @@ components:
         address:
           description: Optional, first address in the wallet will be used if not defined
           $ref: '#/components/schemas/ErgoAddress'
+        ergValue:
+          description: Optional, amount of ergs to be put into box with issued assets
+          type: integer
         amount:
           description: Supply amount
           type: integer

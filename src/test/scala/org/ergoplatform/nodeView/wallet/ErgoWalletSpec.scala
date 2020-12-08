@@ -95,7 +95,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
       val tokenDecimals: Int = 9
       val feeAmount = availableAmount / 4
       val feeReq = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), feeAmount, Seq.empty, Map.empty)
-      val req = AssetIssueRequest(address, emissionAmount, tokenName, tokenDescription, tokenDecimals)
+      val req = AssetIssueRequest(address, None, emissionAmount, tokenName, tokenDescription, tokenDecimals)
       val tx = await(wallet.generateTransaction(Seq(feeReq, req))).get
       log.info(s"Generated transaction $tx")
       val context = new ErgoStateContext(

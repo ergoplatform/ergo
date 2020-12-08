@@ -659,7 +659,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     val userInputs = stringsToBoxes(inputsRaw)
     val dataInputs = stringsToBoxes(dataInputsRaw).toIndexedSeq
 
-    val (inputBoxes, filter, changeAddressOpt: Option[ProveDlog]) = if (userInputs.nonEmpty) {
+    val (preInputBoxes, filter, changeAddressOpt: Option[ProveDlog]) = if (userInputs.nonEmpty) {
       //inputs are provided externally, no need for filtering
       (boxesToFakeTracked(userInputs), noFilter, None)
     } else {
@@ -675,7 +675,12 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
     }
 
-    requestsToBoxCandidates(requests, inputBoxes.take(1).next().box.id).flatMap { outputs =>
+    //We're getting id of the first input, it will be used in case of asset issuance (asset id == first input id)
+    val firstInput = preInputBoxes.next()
+    val assetId = firstInput.box.id
+    val inputBoxes = Iterator(firstInput) ++ preInputBoxes
+
+    requestsToBoxCandidates(requests, assetId).flatMap { outputs =>
       require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
       require(outputs.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, parameters)), "Minimal ERG value not met")
       require(outputs.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")

@@ -4,6 +4,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -129,5 +130,11 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
       }
     }
   }
+
+  /**
+    * Producing a copy of the state which takes into account pool of unconfirmed transactions.
+    * Useful when checking mempool transactions.
+    */
+  def withMempool(mp: ErgoMemPoolReader): UtxoState = withTransactions(mp.getAll)
 
 }

@@ -2,12 +2,12 @@ package org.ergoplatform.it
 
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
-import org.scalatest.FreeSpec
+import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class UtxoStateNodesSyncSpec extends FreeSpec with IntegrationSuite {
+class UtxoStateNodesSyncSpec extends AnyFlatSpec with IntegrationSuite {
 
   val blocksQty = 5
 
@@ -20,7 +20,7 @@ class UtxoStateNodesSyncSpec extends FreeSpec with IntegrationSuite {
 
   val nodes: List[Node] = docker.startDevNetNodes(nodeConfigs).get
 
-  s"Utxo state nodes synchronisation ($blocksQty blocks)" in {
+  it should s"Utxo state nodes synchronisation ($blocksQty blocks)" in {
     val result = for {
       initHeight <- Future.traverse(nodes)(_.fullHeight).map(x => math.max(x.max, 1))
       _ <- Future.traverse(nodes)(_.waitForHeight(initHeight + blocksQty))

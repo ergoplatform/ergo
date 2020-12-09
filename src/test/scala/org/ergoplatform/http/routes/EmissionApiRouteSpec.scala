@@ -2,7 +2,7 @@ package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
+import akka.http.scaladsl.testkit.{ScalatestRouteTest, RouteTestTimeout}
 import akka.testkit.TestDuration
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
@@ -10,11 +10,12 @@ import io.circe.syntax._
 import org.ergoplatform.http.api.EmissionApiRoute
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.settings.{Args, ErgoSettings}
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.duration._
 
-class EmissionApiRouteSpec extends FlatSpec
+class EmissionApiRouteSpec extends AnyFlatSpec
   with Matchers
   with ScalatestRouteTest
   with FailFastCirceSupport {

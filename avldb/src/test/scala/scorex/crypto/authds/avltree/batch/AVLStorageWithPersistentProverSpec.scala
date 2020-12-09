@@ -1,15 +1,16 @@
 package scorex.crypto.authds.avltree.batch
 
-import org.scalatest.{Matchers, PropSpec}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
 import scorex.crypto.authds.avltree.batch.benchmark.LDBVersionedStoreBenchmark.getRandomTempDir
-import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof, ADValue}
+import scorex.crypto.hash.{Digest32, Blake2b256}
 import scorex.utils.Random
 import scorex.db.LDBVersionedStore
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
-class AVLStorageWithPersistentProverSpec extends PropSpec with Matchers {
+class AVLStorageWithPersistentProverSpec extends AnyPropSpec with Matchers {
 
   type HF = Blake2b256.type
   implicit val hf: HF = Blake2b256

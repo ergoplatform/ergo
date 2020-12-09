@@ -5,19 +5,20 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
-import org.ergoplatform.{Pay2SAddress, Pay2SHAddress}
+import org.ergoplatform.Pay2SAddress
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.utils.Stubs
-import org.scalatest.{FlatSpec, Matchers}
 import io.circe.syntax._
 import org.ergoplatform.http.api.ScriptApiRoute
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import scorex.util.encode.Base16
 import sigmastate.SByte
-import sigmastate.Values.{CollectionConstant, ErgoTree, TrueLeaf}
-import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
+import sigmastate.Values.{TrueLeaf, CollectionConstant, ErgoTree}
+import sigmastate.serialization.{ValueSerializer, ErgoTreeSerializer}
 
 
-class ScriptApiRouteSpec  extends FlatSpec
+class ScriptApiRouteSpec extends AnyFlatSpec
   with Matchers
   with ScalatestRouteTest
   with Stubs

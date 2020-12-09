@@ -1,6 +1,6 @@
 package org.ergoplatform.http.routes
 
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, UniversalEntity}
+import akka.http.scaladsl.model.{ContentTypes, StatusCodes, HttpEntity, UniversalEntity}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import io.circe.Json
@@ -10,10 +10,11 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.Stubs
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import scorex.util.ModifierId
 
-class BlocksApiRouteSpec extends FlatSpec
+class BlocksApiRouteSpec extends AnyFlatSpec
   with Matchers
   with ScalatestRouteTest
   with Stubs {

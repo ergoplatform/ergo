@@ -94,7 +94,7 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
       name <- Gen.alphaUpperStr
       description <- Gen.alphaLowerStr
       decimals <- Gen.choose(4, 16)
-    } yield AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), amount, name, description, decimals)
+    } yield AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), None, amount, name, description, decimals)
   }
 
   def registrySummaryGen: Gen[WalletDigest] = {
@@ -103,7 +103,7 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
       amount <- Gen.choose(1L, 100000L)
       balances <- additionalTokensGen
     } yield {
-      val encodedBalances = mutable.LinkedHashMap(balances.map { case (x1, x2) => encodedTokenId(x1) -> x2 } :_*)
+      val encodedBalances = balances.map { case (x1, x2) => encodedTokenId(x1) -> x2 }
       WalletDigest(height, amount, encodedBalances)
     }
   }
@@ -141,7 +141,7 @@ trait WalletGenerators extends ErgoTransactionGenerators with Generators {
   def externalScanReqGen: Gen[ScanRequest] = for {
     appName <- Gen.alphaNumStr
     pred <- scanningPredicateGen
-  } yield ScanRequest(appName, pred)
+  } yield ScanRequest(appName, pred, Some(ScanWalletInteraction.Off))
 
   def externalAppGen: Gen[Scan] = for {
     scanId <- Gen.posNum[Short]

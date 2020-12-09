@@ -40,9 +40,4 @@ trait DBSpec extends FileUtils {
     try body(db) finally db.close()
   }
 
-  protected def withHybridStore(keepVersions: Int)(body: HybridLDBKVStore => Unit): Unit = {
-    val db = new HybridLDBKVStore(createTempDir, keepVersions)
-    try body(db) finally db.close()
-  }
-
 }

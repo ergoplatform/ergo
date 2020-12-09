@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "3.3.5"
+  version: "3.3.7"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -369,6 +369,9 @@ components:
           items:
             type: string
             description: hex-encoded serialized box bytes
+        hints:
+          description: Optional list of hints used for signing
+          $ref: '#/components/schemas/TransactionHintsBag'
         secrets:
           description: Secrets used for signing
           type: object
@@ -864,6 +867,199 @@ components:
         box:
           $ref: '#/components/schemas/ErgoTransactionOutput'
 
+    DlogCommitment:
+      description: Randomness and commitment for the first step of the Schnorr protocol
+      type: object
+      required:
+        - r
+        - a
+      properties:
+        r:
+          description:  Hex-encoded big-endian 256-bits secret exponent
+          type: string
+          example: '433080ff80d0d52d7f8bfffff47f00807f44f680000949b800007f7f7ff1017f'
+        a:
+          description: Hex-encoded "g" generator for the Diffie-Hellman tuple (secp256k1 curve point)
+          type: string
+          example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+
+    HintExtractionRequest:
+      description: request to extract prover hints from a transaction
+      type: object
+      required:
+        - tx
+        - real
+        - simulated
+      properties:
+        tx:
+          description:  Transaction to extract prover hints from
+          $ref: '#/components/schemas/ErgoTransaction'
+        real:
+          description: Real signers of the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/SigmaBoolean'
+        simulated:
+          description: Simulated signers of the transaction
+          type: array
+          items:
+            $ref: '#/components/schemas/SigmaBoolean'
+        inputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
+        dataInputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
+
+    Commitment:
+      description: basic trait for prover commitments
+      type: object
+      required:
+        - hint
+        - pubkey
+        - position
+        - cmtType
+        - a
+      properties:
+        hint:
+          type: string
+          enum: [cmtWithSecret, cmtReal, cmtSimulated]
+        pubkey:
+          $ref: '#/components/schemas/SigmaBoolean'
+        position:
+          type: string
+        type:
+          type: string
+          enum: [dlog, dht]
+        a:
+          description: a group element of the commitment
+          type: string
+        b:
+          description: b group element of the commitment (needed for DHT protocol only)
+          type: string
+
+    CommitmentWithSecret:
+      description: commitment to secret along with secret (!) randomness
+      allOf:     # Combines the Commitment and the inline model
+        - $ref: '#/components/schemas/Commitment'
+          type: object
+          required:
+            - secret
+          properties:
+          secret:
+            type: string
+
+    SecretProven:
+      type: object
+      required:
+        - hint
+        - challenge
+        - pubkey
+        - proof
+        - position
+      properties:
+        hint:
+          type: string
+          enum: [proofReal, proofSimulated]
+        challenge:
+          type: string
+        pubkey:
+          $ref: '#/components/schemas/SigmaBoolean'
+        proof:
+          type: string
+        position:
+          type: string
+
+    InputHints:
+      description: hints for inputs, key is input index, values is a set of hints for the input
+      type: object
+      additionalProperties:
+        type: array
+        items:
+          oneOf:
+            - $ref: '#/components/schemas/CommitmentWithSecret'
+            - $ref: '#/components/schemas/Commitment'
+            - $ref: '#/components/schemas/SecretProven'
+          discriminator:
+            propertyName: objectType
+            mapping:
+              cmtWithSecret: '#/components/schemas/CommitmentWithSecret'
+              cmtReal: '#/components/schemas/Commitment'
+              cmtSimulated: '#/components/schemas/Commitment'
+              proofReal: '#/components/schemas/SecretProven'
+              proofSimulated: '#/components/schemas/SecretProven'
+      example:
+        "01": [
+          {
+            "hint": "cmtWithSecret",
+            "pubkey": {
+              "op": -51,
+              "h": "0327e65711a59378c59359c3e1d0f7abe906479eccb76094e50fe79d743ccc15e6"
+            },
+            "position": "0-1",
+            "type": "dlog",
+            "a": "02924d6274d1b9132fe028a0e3ac2fdbc503a1e52d1398932fa5f1bcf71909eb4b",
+            "secret": "42a2a0ae6b98ee791ac9734252e8a7a08e691b92de085138e302f64a722a4300"
+          }]
+
+    TransactionHintsBag:
+      description: prover hints extracted from a transaction
+      type: object
+      properties:
+        secretHints:
+          description: Hints which contain secrets, do not share them!
+          type: array
+          items:
+            $ref: '#/components/schemas/InputHints'
+        publicHints:
+          description: Hints which contain public data only, share them freely!
+          type: array
+          items:
+              $ref: '#/components/schemas/InputHints'
+
+    GenerateCommitmentsRequest:
+      description: request to generate commitments to sign a transaction
+      type: object
+      required:
+        - tx
+      properties:
+        tx:
+          description: Unsigned transaction to sign
+          type: object
+          $ref: '#/components/schemas/UnsignedErgoTransaction'
+        secrets:
+          description: Optionally, external secrets used for signing
+          type: object
+          properties:
+            dlog:
+              description: Sequence of secret exponents (DLOG secrets)
+              type: array
+              items:
+                $ref: '#/components/schemas/DlogSecret'
+            dht:
+              description: Sequence of secret Diffie-Hellman tuple exponents (DHT secrets)
+              type: array
+              items:
+                $ref: '#/components/schemas/DhtSecret'
+        inputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
+        dataInputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
+
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
       type: object
@@ -898,6 +1094,9 @@ components:
         address:
           description: Optional, first address in the wallet will be used if not defined
           $ref: '#/components/schemas/ErgoAddress'
+        ergValue:
+          description: Optional, amount of ergs to be put into box with issued assets
+          type: integer
         amount:
           description: Supply amount
           type: integer
@@ -1264,6 +1463,17 @@ components:
           enum:
             - Incoming
             - Outgoing
+
+    PeersStatus:
+      type: object
+      required:
+        - lastInomingMessage
+        - currentNetworkTime
+      properties:
+        lastIncomingMessage:
+          $ref: '#/components/schemas/Timestamp'
+        currentNetworkTime:
+          $ref: '#/components/schemas/Timestamp'
 
     NodeInfo:
       type: object
@@ -2166,6 +2376,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /peers/status:
+    get:
+      summary: Get last incomming message timestamp and current network time
+      operationId: getPeersStatus
+      tags:
+        - peers
+      responses:
+        '200':
+          description: Network status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeersStatus'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /utils/seed:
     get:
       summary: Get random seed of 32 bytes
@@ -2981,6 +3211,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/transaction/generateUnsigned:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Generate unsigned transaction from array of requests.
+      operationId: walletUnsignedTransactionGenerate
+      tags:
+        - wallet
+      requestBody:
+        description: The same as /wallet/transaction/generate but generates unsigned transaction.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestsHolder'
+      responses:
+        '200':
+          description: Generated unsigned Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnsignedErgoTransaction'
+        '400':
+          description: Bad transaction request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+
   /wallet/transaction/sign:
     post:
       security:
@@ -3235,8 +3501,75 @@ paths:
 
   /utxo/byIdBinary/{boxId}:
     get:
-      summary: Get serialized box in Base16 encoding for a box with given unique identifier.
+      summary: Get serialized box from UTXO pool in Base16 encoding by an identifier.
       operationId: getBoxByIdBinary
+      tags:
+        - utxo
+      parameters:
+        - in: path
+          name: boxId
+          required: true
+          description: ID of a wanted box
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Json containing box identifier and hex-encoded box bytes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SerializedBox'
+        '404':
+          description: Box with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+
+  /utxo/withPool/byId/{boxId}:
+    get:
+      summary: Get box contents for a box by a unique identifier, from UTXO set and also the mempool.
+      operationId: getBoxWithPoolById
+      tags:
+        - utxo
+      parameters:
+        - in: path
+          name: boxId
+          required: true
+          description: ID of a box to obtain
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Box object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransactionOutput'
+        '404':
+          description: Box with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utxo/withPool/byIdBinary/{boxId}:
+    get:
+      summary: Get serialized box in Base16 encoding by an identifier, considering also the mempool.
+      operationId: getBoxWithPoolByIdBinary
       tags:
         - utxo
       parameters:
@@ -3555,6 +3888,25 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
   /scan/unspentBoxes/{scanId}:
+    parameters:
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal number of confirmations
+        schema:
+          type: integer
+          format: int32
+          minimum: -1
+          default: 0
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Minimal box inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
     get:
       security:
         - ApiKeyAuth: [api_key]
@@ -3613,6 +3965,76 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+
+  /wallet/generateCommitments:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Generate signature commitments for inputs of an unsigned transaction
+      operationId: generateCommitments
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateCommitmentsRequest'
+      responses:
+        '200':
+          description: Transaction-related hints
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionHintsBag'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+
+  /wallet/extractHints:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Extract hints from a transaction
+      operationId: extractHints
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HintExtractionRequest'
+      responses:
+        '200':
+          description: Hints for the transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionHintsBag'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
 
   /scan/addBox:
     post:

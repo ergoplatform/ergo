@@ -19,7 +19,7 @@ import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
 import org.ergoplatform.wallet.secrets.PrimitiveSecretKey
 import org.scalacheck.Gen
 import scorex.util.ModifierId
-import sigmastate.CAND
+import sigmastate.{CAND, CTHRESHOLD}
 import sigmastate.basics.DLogProtocol.DLogProverInput
 
 class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
@@ -829,7 +829,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
       //pay out all the wallet balance:
       val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
       assetToSpend should not be empty
-      val addr = Pay2SAddress(CAND(Seq(secret1.publicImage, secret2.publicImage, secret3.publicImage)))
+      val addr = Pay2SAddress(CTHRESHOLD(2, Seq(secret1.publicImage, secret2.publicImage, secret3.publicImage)))
       val req1 = PaymentRequest(addr, confirmedBalance, assetToSpend, Map.empty)
 
       val tx = await(wallet.generateTransaction(Seq(req1))).get
@@ -841,11 +841,17 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
 
       val cmts1 = await(wallet.generateCommitmentsFor(utx, Some(Seq(es1)), Some(Seq(in)), None)).response.get
 
-      println(cmts1)
+      val pubCmts1 = TransactionHintsBag(cmts1.publicHints)
       
-      val ptx1 = await(wallet.signTransaction(utx, Seq(es2), cmts1, Some(Seq(in)), None)).get
+      val ptx = await(wallet.signTransaction(utx, Seq(es2), pubCmts1, Some(Seq(in)), None)).get
 
-      ptx1.statelessValidity.isSuccess shouldBe true
+      val eh = wallet.extractHints(ptx, Seq(secret1.publicImage, secret2.publicImage), Seq(secret3.publicImage), Some(Seq(in)), None)
+      val hintsExtracted = await(eh).transactionHintsBag
+
+      val hints = hintsExtracted.addHintsForInput(0, cmts1.allHintsForInput(0))
+
+      val txSigned = await(wallet.signTransaction(utx, Seq(es1), hints, Some(Seq(in)), None)).get
+      txSigned.statelessValidity.isSuccess shouldBe true
     }
   }
 

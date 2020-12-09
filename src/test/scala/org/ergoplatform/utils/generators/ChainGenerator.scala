@@ -83,7 +83,7 @@ trait ChainGenerator extends ErgoTestConstants {
                  useRealTs: Boolean = false): Header =
     powScheme.prove(
       prev,
-      Header.CurrentVersion,
+      Header.InitialVersion,
       diffBitsOpt.getOrElse(settings.chainSettings.initialNBits),
       EmptyStateRoot,
       EmptyDigest32,
@@ -134,7 +134,7 @@ trait ChainGenerator extends ErgoTestConstants {
     val validExtension = extension ++ PoPowAlgos.interlinksToExtension(interlinks)
     powScheme.proveBlock(
       prev.map(_.header),
-      Header.CurrentVersion,
+      Header.InitialVersion,
       nBits,
       EmptyStateRoot,
       emptyProofs,

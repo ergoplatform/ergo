@@ -23,7 +23,7 @@ class PrunedNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps wit
     defaultSettings.copy(
       chainSettings = defaultSettings.chainSettings.copy(
         powScheme = new DefaultFakePowScheme(defaultSettings.chainSettings.powScheme.k, defaultSettings.chainSettings.powScheme.n),
-        voting = VotingSettings(10, 10, 10),
+        voting = VotingSettings(10, 10, 10, 10000),
         blockInterval = BlockInterval
       ),
       nodeSettings = defaultSettings.nodeSettings.copy(

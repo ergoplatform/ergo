@@ -1,6 +1,7 @@
 package org.ergoplatform.mining
 
 import com.google.common.primitives.{Bytes, Ints, Longs}
+import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
@@ -55,26 +56,50 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val b = getB(header.nBits)
     val msg = msgByHeader(header)
     val s = header.powSolution
+    lazy val h = Ints.toByteArray(header.height)  // used in AL v.2 only
 
-    require(s.d < b, s"Incorrect d = ${s.d} for b = $b")
-    require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
-    require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
-
-    val pkBytes = groupElemToBytes(s.pk)
-    val wBytes = groupElemToBytes(s.w)
+    val pkBytes = if (version == 1) {
+      require(s.d < b, s"Incorrect d = ${s.d} for b = $b")
+      require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
+      groupElemToBytes(s.pk)
+    } else {
+      //todo: fix realDifficulty (needed for nipopows) for Header
+      Array.emptyByteArray // pk is not used in Autolykos 2
+    }
+    val wBytes = if (version == 1) {
+      require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
+      groupElemToBytes(s.w)
+    } else {
+      Array.emptyByteArray // w is not used in Autolykos 2
+    }
     val nonce = s.n
 
     val seed = if (version == 1) {
       Bytes.concat(msg, nonce) // Autolykos v1, Alg. 2, line4: m || nonce
     } else {
-      Bytes.concat(pkBytes, wBytes, msg, nonce) // Autolykos v2, Alg. 2, line 4: pk || w || m || nonce
+      val prei8 = BigIntegers.fromUnsignedByteArray(hash(Bytes.concat(msg, nonce)).takeRight(8))
+      val i = BigIntegers.asUnsignedByteArray(4, prei8.mod(BigInt(N).underlying()))
+      val f = Blake2b256(Bytes.concat(i, h, M)).drop(1) // .drop(1) is the same as takeRight(31)
+      Bytes.concat(f, msg, nonce) // Autolykos v1, Alg. 2, line4:
     }
     val indexes = genIndexes(seed)
-    val f = indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx))).sum.mod(q)
-    val left = s.w.multiply(f.bigInteger)
-    val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
 
-    require(left == right, "Incorrect points")
+    val f = if (version == 1) {
+      indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx), h)).sum.mod(q)
+    } else {
+      //pk and w not used in v2
+      indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx), h)).sum
+    }
+
+    if (version == 1) {
+      val left = s.w.multiply(f.bigInteger)
+      val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
+      require(left == right, "Incorrect points")
+    } else {
+      // sum as byte array is always about 32 bytes
+      val array: Array[Byte] = BigIntegers.asUnsignedByteArray(32,  f.underlying())
+      require(toBigInt(hash(array)) < b, "h(f) < b condition not met")
+    }
   }
 
   /**
@@ -113,15 +138,17 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     */
   private def genElement(version: Block.Version,
                          m: Array[Byte],
-                         pk: Array[Byte],
-                         w: Array[Byte],
-                         indexBytes: Array[Byte]): BigInt = {
+                         pk: Array[Byte],  // not used in v2
+                         w: Array[Byte],   // not used in v2
+                         indexBytes: Array[Byte],
+                         heightBytes: => Array[Byte] // not used in v1
+                        ): BigInt = {
     if (version == 1) {
       // Autolykos v. 1: H(j|M|pk|m|w) (line 5 from the Algo 2 of the spec)
-      hash(Bytes.concat(indexBytes, M, pk, m, w))
+      hashModQ(Bytes.concat(indexBytes, M, pk, m, w))
     } else {
-      // Autolykos v. 2: H(j|pk|w|M|m) (line 5 from the Algo 2 of the spec)
-      hash(Bytes.concat(indexBytes, pk, w, M, m))
+      // Autolykos v. 2: H(j|h|M) (line 5 from the Algo 2 of the spec)
+      toBigInt(hash(Bytes.concat(indexBytes, heightBytes, M)).drop(1))
     }
   }
 
@@ -150,7 +177,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val msg = msgByHeader(h)
     val b = getB(nBits)
     val x = randomSecret()
-    checkNonces(version, msg, sk, x, b, minNonce, maxNonce).map(solution => h.toHeader(solution))
+    val hbs = Ints.toByteArray(h.height)
+    checkNonces(version, hbs, msg, sk, x, b, minNonce, maxNonce).map(solution => h.toHeader(solution))
   }
 
   /**
@@ -210,6 +238,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Return AutolykosSolution if there is any valid nonce in this interval.
     */
   private[mining] def checkNonces(version: Block.Version,
+                                  h: Array[Byte],
                                   m: Array[Byte],
                                   sk: BigInt,
                                   x: BigInt,
@@ -226,12 +255,19 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     } else {
       if (i % 1000000 == 0 && i > 0) log.debug(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)
-      val seed = if (version == 1) {
+      val seed = if(version == 1) {
         Bytes.concat(m, nonce)
       } else {
-        Bytes.concat(p1, p2, m, nonce)
+        val i = BigIntegers.asUnsignedByteArray(4, BigIntegers.fromUnsignedByteArray(hash(Bytes.concat(m, nonce)).takeRight(8)).mod(BigInt(N).underlying()))
+        val f = Blake2b256(Bytes.concat(i, h, M)).drop(1)
+        Bytes.concat(f, m, nonce)
       }
-      val d = (x * genIndexes(seed).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i))).sum - sk).mod(q)
+      val d = if(version == 1) {
+        (x * genIndexes(seed).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum - sk).mod(q)
+      } else {
+        val indexes = genIndexes(seed)
+        toBigInt(hash(indexes.map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum.toByteArray))
+      }
       if (d <= b) {
         log.debug(s"Solution found at $i")
         Some(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
@@ -252,29 +288,30 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Assembles candidate block for external miner with certain transactions included into the block
     *
-    * @param candidate      - block candidate (contained the transactions)
+    * @param blockCandidate      - block candidate (contained the transactions)
     * @param pk             - miner pubkey
     * @param mandatoryTxIds - ids of the transactions to include
     * @return - block candidate for external miner
     */
-  def deriveExternalCandidate(candidate: CandidateBlock,
+  def deriveExternalCandidate(blockCandidate: CandidateBlock,
                               pk: ProveDlog,
                               mandatoryTxIds: Seq[ModifierId]): WorkMessage = {
-    val h = ErgoMiner.deriveUnprovenHeader(candidate)
-    val msg = msgByHeader(h)
-    val b = getB(candidate.nBits)
-    val v = candidate.version
+    val headerCandidate = ErgoMiner.deriveUnprovenHeader(blockCandidate)
+    val msg = msgByHeader(headerCandidate)
+    val b = getB(blockCandidate.nBits)
+    val v = blockCandidate.version
+    val h = headerCandidate.height
 
     val proofs = if (mandatoryTxIds.nonEmpty) {
       // constructs fake block transactions section (BlockTransactions instance) to get proofs from it
       val fakeHeaderId = scorex.util.bytesToId(Array.fill(org.ergoplatform.wallet.Constants.ModifierIdLength)(0: Byte))
-      val bt = BlockTransactions(fakeHeaderId, candidate.transactions)
+      val bt = BlockTransactions(fakeHeaderId, blockCandidate.transactions)
       val ps = mandatoryTxIds.flatMap { txId => bt.proofFor(txId).map(mp => TransactionMembershipProof(txId, mp)) }
-      Some(ProofOfUpcomingTransactions(h, ps))
+      Some(ProofOfUpcomingTransactions(headerCandidate, ps))
     } else {
       None
     }
-    WorkMessage(msg, b, pk, v, proofs)
+    WorkMessage(msg, b, h, pk, v, proofs)
   }
 
 }

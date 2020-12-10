@@ -245,9 +245,10 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
       val validationSettings: SigmaValidationSettings = ValidationRules.currentSettings
       val costLimit: Long = params.maxBlockCost
       val initCost: Long = 0
+      val scriptVersion = params.blockVersion
 
       val ctx: ErgoLikeContext = new ErgoLikeContext(lastBlockUtxoRoot, headers, preHeader, dataBoxes, boxesToSpend,
-        spendingTransaction, selfIndex, extension, validationSettings, costLimit, initCost)
+        spendingTransaction, selfIndex, extension, validationSettings, costLimit, initCost, scriptVersion)
 
       bag.putHints(idx, bagForMultisig(ctx, exp, proof, realSecretsToExtract, simulatedSecretsToExtract))
     }

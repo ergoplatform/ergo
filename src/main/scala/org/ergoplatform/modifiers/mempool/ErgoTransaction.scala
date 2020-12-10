@@ -203,13 +203,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
       val inputContext = InputContext(idx.toShort, proof.extension)
 
-      val activatedScriptVersion = stateContext.protocolVersion
-
       val ctx = new ErgoContext(
         stateContext, transactionContext, inputContext,
         costLimit = maxCost - addExact(currentTxCost, accumulatedCost),
-        initCost = 0,
-        activatedScriptVersion)
+        initCost = 0)
 
       val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
       costTry.recover { case t =>

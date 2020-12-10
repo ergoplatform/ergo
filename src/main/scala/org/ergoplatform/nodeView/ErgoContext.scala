@@ -12,8 +12,7 @@ class ErgoContext(val stateContext: ErgoStateContext,
                   transactionContext: TransactionContext,
                   inputContext: InputContext,
                   override val costLimit: Long,
-                  override val initCost: Long,
-                  override val activatedScriptVersion: Byte)
+                  override val initCost: Long)
   extends ErgoLikeContext(ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
     stateContext.sigmaLastHeaders,
     stateContext.sigmaPreHeader,
@@ -25,5 +24,5 @@ class ErgoContext(val stateContext: ErgoStateContext,
     stateContext.validationSettings.sigmaSettings,
     costLimit,
     initCost,
-    activatedScriptVersion
+    activatedScriptVersion = stateContext.protocolVersion
   )

@@ -65,7 +65,7 @@ object WalletScanLogic extends ScorexLogging {
     val transactionContext = TransactionContext(IndexedSeq(box), IndexedSeq(), testingTx)
 
     val context = new ErgoContext(stateContext, transactionContext, inputContext,
-      LaunchParameters.maxBlockCost, CostTable.interpreterInitCost, Interpreter.MaxSupportedScriptVersion)
+      LaunchParameters.maxBlockCost, CostTable.interpreterInitCost)
 
     proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined
   }

@@ -112,5 +112,4 @@ class TransactionApiRouteSpec extends FlatSpec
       memPool.getAll.slice(offset, offset + limit) shouldBe responseAs[Seq[ErgoTransaction]]
     }
   }
-
 }

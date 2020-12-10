@@ -11,6 +11,9 @@ import scorex.util.{ModifierId, bytesToId}
 
 import scala.util.Try
 
+/**
+  *  Time parameters of mempool statistics
+  */
 object MemPoolStatisticsParams {
   val nHistogramBins = 60  /* one hour */
   val measurementIntervalMsec = 60 * 1000 /* one hour */
@@ -18,12 +21,20 @@ object MemPoolStatisticsParams {
 
 case class FeeHistogramBin(nTxns: Int, totalFee: Long)
 
-
-case class MemPoolStatistics(startMeasurement: Long = System.currentTimeMillis(),
+/**
+  * Immutable implementation of mempool statistics
+  *
+  * @param startMeasurement - start of measurement interval
+  * @param takenTxns        - amount of taken transaction since start of measurement
+  * @param snapTime         - last snapshot time
+  * @param snapTakenTxns    - amount of transaction at the moment of last snapshot
+  */
+case class MemPoolStatistics(startMeasurement: Long,
                              takenTxns: Long = 0,
-                             snapTime: Long = System.currentTimeMillis(),
+                             snapTime: Long,
                              snapTakenTxns: Long = 0,
-                             histogram: List[FeeHistogramBin] = List.fill(MemPoolStatisticsParams.nHistogramBins)(FeeHistogramBin(0, 0))) {
+                             histogram: List[FeeHistogramBin] =
+                             List.fill(MemPoolStatisticsParams.nHistogramBins)(FeeHistogramBin(0, 0))) {
 
   /**
     * Add new entry to mempool statistics. This method is called when transaction is taken from mempool
@@ -32,16 +43,15 @@ case class MemPoolStatistics(startMeasurement: Long = System.currentTimeMillis()
     * prune statistic. To avoid situtation when we do not have statistic at all, we actually keep data up to
     * 2*measurementIntervalMsec and periodically cut half of range.
     */
-  def add(wtx: WeightedTxId): MemPoolStatistics = {
-    val now = System.currentTimeMillis()
+  def add(currTime: Long, wtx: WeightedTxId): MemPoolStatistics = {
     val curTakenTx = takenTxns + 1
     val (newTakenTx, newMeasurement, newSnapTxs, newSnapTime) =
-      if (now - snapTime > MemPoolStatisticsParams.measurementIntervalMsec) {
-        if (snapTakenTxns != 0) (curTakenTx - snapTakenTxns, snapTime, curTakenTx, now)
-        else (curTakenTx, startMeasurement, curTakenTx, now)
+      if (currTime - snapTime > MemPoolStatisticsParams.measurementIntervalMsec) {
+        if (snapTakenTxns != 0) (curTakenTx - snapTakenTxns, snapTime, curTakenTx, currTime)
+        else (curTakenTx, startMeasurement, curTakenTx, currTime)
       }
       else (curTakenTx, startMeasurement, snapTakenTxns, snapTime)
-    val durationMinutes = ((now - wtx.created) / (60 * 1000)).toInt
+    val durationMinutes = ((currTime - wtx.created) / (60 * 1000)).toInt
     val newHist =
       if (durationMinutes < MemPoolStatisticsParams.nHistogramBins) {
         val (histx, hisfee) = (histogram(durationMinutes).nTxns + 1, histogram(durationMinutes).totalFee + wtx.feePerKb)
@@ -50,37 +60,14 @@ case class MemPoolStatistics(startMeasurement: Long = System.currentTimeMillis()
       else histogram
     MemPoolStatistics(newMeasurement, newTakenTx, newSnapTime, newSnapTxs, newHist)
   }
-
-
-  //                  <.............takenTxns...................
-  //                                        <....snapTakenTxns..
-  // ------------------------------------------------------------> time
-  //                  ^                     ^                  ^
-  //                  |<measurementInterval>|                  |
-  // startMeasurement +            snapTime +      current time+
-
-//  def add(wtx: WeightedTxId): Unit = {
-//    val now = System.currentTimeMillis()
-//    takenTxns += 1
-//    if (now - snapTime > MemPoolStatisticsParams.measurementIntervalMsec) {
-//      if (snapTakenTxns != 0) { // snapshot was taken (it is always true for time > measurementIntervalMsec)
-//        takenTxns -= snapTakenTxns // cut-of statistics
-//        startMeasurement = snapTime
-//      }
-//      snapTakenTxns = takenTxns // create new snapshot
-//      snapTime = now
-//    }
-//    // update histogram of average fee for wait time interval
-//    val durationMinutes = ((now - wtx.created) / (60 * 1000)).asInstanceOf[Int]
-//    if (durationMinutes < MemPoolStatisticsParams.nHistogramBins) {
-//      histogram(durationMinutes).nTxns += 1
-//      histogram(durationMinutes).totalFee += wtx.feePerKb
-//    }
-//  }
 }
 
 /**
   * Immutable memory pool implementation.
+  *
+  * @param pool     - Ordered transaction pool
+  * @param stats    - Mempool statistics
+  * @param settings - Ergo settings
   */
 class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val stats : MemPoolStatistics)(implicit settings: ErgoSettings)
   extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {
@@ -116,19 +103,22 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
     new ErgoMemPool(updatedPool,stats)
   }
 
-//  override def remove(tx: ErgoTransaction): ErgoMemPool = {
-//    new ErgoMemPool(pool.remove(tx), stats.add())
-//  }
-
   override def remove(tx: ErgoTransaction): ErgoMemPool = {
     val wtx = pool.transactionsRegistry.get(tx.id)
-    new ErgoMemPool(pool.remove(tx), wtx.map(stats.add).getOrElse(MemPoolStatistics()))
+    new ErgoMemPool(pool.remove(tx), wtx.map(wgtx => stats
+      .add(System.currentTimeMillis(), wgtx))
+      .getOrElse(MemPoolStatistics(System.currentTimeMillis(),0,System.currentTimeMillis())))
   }
 
   override def filter(condition: ErgoTransaction => Boolean): ErgoMemPool = {
     new ErgoMemPool(pool.filter(condition),stats)
   }
 
+  /**
+    * Invalidate transaction and delete it from pool
+    *
+    * @param tx - Transaction to invalidate
+    */
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {
     new ErgoMemPool(pool.invalidate(tx),stats)
   }
@@ -180,8 +170,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
 
   /**
     * Get average fee for the specified wait time interval
-    * @param expectedWaitTimeMinutes maximal amount of time for which transaction can be kept in mempool
-    * @param txSize size of transaction (in bytes)
+    * @param expectedWaitTimeMinutes - maximal amount of time for which transaction can be kept in mempool
+    * @param txSize                  - size of transaction (in bytes)
     *  @return recommended fee value for transaction to be proceeded in specified time
     */
   def getRecommendedFee(expectedWaitTimeMinutes : Int, txSize : Int) : Long = {
@@ -189,9 +179,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
       // locate first non-empty histogram bin preceding or equal to the specified wait time
       for (i <- expectedWaitTimeMinutes to 0 by -1) {
         val h = stats.histogram(expectedWaitTimeMinutes)
-        if (h.nTxns != 0) {
-          return h.totalFee / h.nTxns * txSize / 1024
-        }
+        if (h.nTxns != 0) h.totalFee / h.nTxns * txSize / 1024
       }
     }
     settings.nodeSettings.minimalFeeAmount
@@ -201,8 +189,8 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
     * Calculate position in mempool corresponding to the specified fee and
     * estimate time of serving this transaction based on average rate of placing
     * transactions in blockchain
-    * @param txFee transaction fee
-    * @param txSize size of transaction (in bytes)
+    * @param txFee  - transaction fee
+    * @param txSize - size of transaction (in bytes)
     * @return average time for this transaction to be placed in block
     */
   def getExpectedWaitTime(txFee : Long, txSize : Int): Long  = {
@@ -243,6 +231,7 @@ object ErgoMemPool {
   type MemPoolResponse = Seq[ErgoTransaction]
 
   def empty(settings: ErgoSettings): ErgoMemPool =
-    new ErgoMemPool(OrderedTxPool.empty(settings), MemPoolStatistics())(settings)
+    new ErgoMemPool(OrderedTxPool.empty(settings),
+      MemPoolStatistics(System.currentTimeMillis(),0,System.currentTimeMillis()))(settings)
 
 }

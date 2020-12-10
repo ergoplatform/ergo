@@ -37,7 +37,6 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
     transactionsRegistry.get(id).flatMap(orderedTransactions.get(_))
   }
 
-
   /**
     * Add new transaction to the pool and throw away from the pool transaction with the smallest weight
     * if pool is overflown. We should first add transaction and only after it find candidate for replacement
@@ -62,6 +61,11 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
     }
   }
 
+  /**
+    * Removes transaction from pool.
+    *
+    * @param tx - Transaction to remove
+    */
   def remove(tx: ErgoTransaction): OrderedTxPool = {
     transactionsRegistry.get(tx.id).fold(this)(wtx => {
       OrderedTxPool(orderedTransactions - wtx, transactionsRegistry - tx.id, invalidated, outputs -- tx.outputs.map(_.id)).updateFamily(tx, -wtx.weight)
@@ -104,7 +108,6 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
 
   def isInvalidated(id: ModifierId): Boolean = invalidated.contains(id)
 
-
   /**
     *
     * Form families of transactions: take in account relations between transaction when perform ordering.
@@ -139,13 +142,20 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
 
 object OrderedTxPool {
 
+  /**
+    * Weighted transaction id
+    *
+    * @param id       - Transcation id
+    * @param weight   - Weight of transaction
+    * @param feePerKb - Transaction's fee per KB
+    * @param created  - Transaction creation time
+    */
   case class WeightedTxId(id: ModifierId, weight: Long, feePerKb: Long, created: Long) {
     // `id` depends on `weight` so we can use only the former for comparison.
     override def equals(obj: Any): Boolean = obj match {
       case that: WeightedTxId => that.id == id
       case _ => false
     }
-
     override def hashCode(): Int = id.hashCode()
   }
 
@@ -166,5 +176,4 @@ object OrderedTxPool {
     val feePerKb = fee * 1024 / tx.size
     WeightedTxId(tx.id, feePerKb, feePerKb, System.currentTimeMillis())
   }
-
 }

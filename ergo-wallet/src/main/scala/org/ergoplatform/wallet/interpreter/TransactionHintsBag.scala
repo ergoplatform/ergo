@@ -5,15 +5,32 @@ import sigmastate.interpreter.{HintsBag, OwnCommitment}
 case class TransactionHintsBag(secretHints: Map[Int, HintsBag], publicHints: Map[Int, HintsBag]) {
 
   /**
-    * Adds hints for transaction input
+    * Replaces hints for transaction input
     * @param index index of the input
     * @param hintsBag - hints for the input
     * @return - updated transaction hints
     */
-  def putHints(index: Int, hintsBag: HintsBag): TransactionHintsBag = {
+  def replaceHintsForInput(index: Int, hintsBag: HintsBag): TransactionHintsBag = {
     val (secret, public) = hintsBag.hints.partition(_.isInstanceOf[OwnCommitment])
 
     TransactionHintsBag(secretHints.updated(index, HintsBag(secret)), publicHints.updated(index, HintsBag(public)))
+  }
+
+  /**
+    * Add hints for transaction input
+    * @param index index of the input
+    * @param hintsBag - hints for the input
+    * @return - updated transaction hints
+    */
+  def addHintsForInput(index: Int, hintsBag: HintsBag): TransactionHintsBag = {
+    val (secret, public) = hintsBag.hints.partition(_.isInstanceOf[OwnCommitment])
+    val oldSecret = this.secretHints.getOrElse(0, HintsBag.empty)
+    val oldPublic = this.publicHints.getOrElse(0, HintsBag.empty)
+
+    val newSecret = secretHints.updated(index, HintsBag(secret) ++ oldSecret)
+    val newPublic = publicHints.updated(index, HintsBag(public) ++ oldPublic)
+
+    TransactionHintsBag(newSecret, newPublic)
   }
 
   /**
@@ -32,7 +49,7 @@ object TransactionHintsBag {
 
   def apply(mixedHints: Map[Int, HintsBag]): TransactionHintsBag = {
     mixedHints.keys.foldLeft(TransactionHintsBag.empty){ case (thb, idx) =>
-      thb.putHints(idx, mixedHints(idx))
+      thb.replaceHintsForInput(idx, mixedHints(idx))
     }
   }
 

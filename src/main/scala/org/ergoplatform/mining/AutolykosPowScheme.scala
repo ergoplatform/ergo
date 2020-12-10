@@ -50,6 +50,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Checks that `header` contains correct solution of the Autolykos PoW puzzle.
     */
   def validate(header: Header): Try[Unit] = Try {
+    val version = header.version
+
     val b = getB(header.nBits)
     val msg = msgByHeader(header)
     val s = header.powSolution
@@ -58,9 +60,17 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
     require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
 
-    val p1 = groupElemToBytes(s.pk)
-    val p2 = groupElemToBytes(s.w)
-    val f = genIndexes(Bytes.concat(msg, s.n)).map(ib => genElement(msg, p1, p2, Ints.toByteArray(ib))).sum.mod(q)
+    val pkBytes = groupElemToBytes(s.pk)
+    val wBytes = groupElemToBytes(s.w)
+    val nonce = s.n
+
+    val seed = if (version == 1) {
+      Bytes.concat(msg, nonce) // Autolykos v1, Alg. 2, line4: m || nonce
+    } else {
+      Bytes.concat(pkBytes, wBytes, msg, nonce) // Autolykos v2, Alg. 2, line 4: pk || w || m || nonce
+    }
+    val indexes = genIndexes(seed)
+    val f = indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx))).sum.mod(q)
     val left = s.w.multiply(f.bigInteger)
     val right = group.generator.multiply(s.d.bigInteger).add(s.pk)
 
@@ -70,6 +80,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Real difficulty of `header`.
     * May occasionally exceeds required difficulty due to random nature of PoW puzzle.
+    * Used in NiPoPoW.
     */
   def realDifficulty(header: Header): BigInt = {
     q / header.powSolution.d
@@ -100,11 +111,18 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Generate element of Autolykos equation.
     */
-  private def genElement(m: Array[Byte],
+  private def genElement(version: Block.Version,
+                         m: Array[Byte],
                          pk: Array[Byte],
                          w: Array[Byte],
                          indexBytes: Array[Byte]): BigInt = {
-    hash(Bytes.concat(indexBytes, M, pk, m, w))
+    if (version == 1) {
+      // Autolykos v. 1: H(j|M|pk|m|w) (line 5 from the Algo 2 of the spec)
+      hash(Bytes.concat(indexBytes, M, pk, m, w))
+    } else {
+      // Autolykos v. 2: H(j|pk|w|M|m) (line 5 from the Algo 2 of the spec)
+      hash(Bytes.concat(indexBytes, pk, w, M, m))
+    }
   }
 
   //Proving-related code which is not critical for consensus below
@@ -132,7 +150,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val msg = msgByHeader(h)
     val b = getB(nBits)
     val x = randomSecret()
-    checkNonces(msg, sk, x, b, minNonce, maxNonce).map(solution => h.toHeader(solution))
+    checkNonces(version, msg, sk, x, b, minNonce, maxNonce).map(solution => h.toHeader(solution))
   }
 
   /**
@@ -191,7 +209,13 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Check nonces from `startNonce` to `endNonce` for message `m`, secrets `sk` and `x`, difficulty `b`.
     * Return AutolykosSolution if there is any valid nonce in this interval.
     */
-  private[mining] def checkNonces(m: Array[Byte], sk: BigInt, x: BigInt, b: BigInt, startNonce: Long, endNonce: Long): Option[AutolykosSolution] = {
+  private[mining] def checkNonces(version: Block.Version,
+                                  m: Array[Byte],
+                                  sk: BigInt,
+                                  x: BigInt,
+                                  b: BigInt,
+                                  startNonce: Long,
+                                  endNonce: Long): Option[AutolykosSolution] = {
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
     val p1 = groupElemToBytes(genPk(sk))
     val p2 = groupElemToBytes(genPk(x))
@@ -202,7 +226,12 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     } else {
       if (i % 1000000 == 0 && i > 0) log.debug(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)
-      val d = (x * genIndexes(Bytes.concat(m, nonce)).map(i => genElement(m, p1, p2, Ints.toByteArray(i))).sum - sk).mod(q)
+      val seed = if (version == 1) {
+        Bytes.concat(m, nonce)
+      } else {
+        Bytes.concat(p1, p2, m, nonce)
+      }
+      val d = (x * genIndexes(seed).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i))).sum - sk).mod(q)
       if (d <= b) {
         log.debug(s"Solution found at $i")
         Some(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
@@ -222,8 +251,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
   /**
     * Assembles candidate block for external miner with certain transactions included into the block
-    * @param candidate - block candidate (contained the transactions)
-    * @param pk - miner pubkey
+    *
+    * @param candidate      - block candidate (contained the transactions)
+    * @param pk             - miner pubkey
     * @param mandatoryTxIds - ids of the transactions to include
     * @return - block candidate for external miner
     */
@@ -233,8 +263,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val h = ErgoMiner.deriveUnprovenHeader(candidate)
     val msg = msgByHeader(h)
     val b = getB(candidate.nBits)
+    val v = candidate.version
 
-    val proofs = if(mandatoryTxIds.nonEmpty) {
+    val proofs = if (mandatoryTxIds.nonEmpty) {
       // constructs fake block transactions section (BlockTransactions instance) to get proofs from it
       val fakeHeaderId = scorex.util.bytesToId(Array.fill(org.ergoplatform.wallet.Constants.ModifierIdLength)(0: Byte))
       val bt = BlockTransactions(fakeHeaderId, candidate.version, candidate.transactions)
@@ -243,7 +274,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     } else {
       None
     }
-    WorkMessage(msg, b, pk, proofs)
+    WorkMessage(msg, b, pk, v, proofs)
   }
 
 }

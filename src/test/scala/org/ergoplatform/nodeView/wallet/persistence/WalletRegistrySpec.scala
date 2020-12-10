@@ -3,25 +3,26 @@ package org.ergoplatform.nodeView.wallet.persistence
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.db.DBSpec
-import org.ergoplatform.nodeView.wallet.IdUtils.EncodedBoxId
+import org.ergoplatform.nodeView.wallet.WalletScanLogic.{SpentInputData, ScanResults}
 import org.ergoplatform.utils.generators.WalletGenerators
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.scalacheck.Gen
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.core.VersionTag
 import scorex.testkit.utils.FileUtils
 import scorex.util.encode.Base16
 
 class WalletRegistrySpec
-  extends FlatSpec
+  extends AnyFlatSpec
     with Matchers
     with DBSpec
-    with GeneratorDrivenPropertyChecks
+    with ScalaCheckPropertyChecks
     with WalletGenerators
     with FileUtils {
 
-  implicit override val generatorDrivenConfig = PropertyCheckConfiguration(minSuccessful = 5, sizeRange = 10)
+  implicit override val generatorDrivenConfig = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 10)
 
   private val emptyBag = KeyValuePairsBag.empty
   private val walletBoxStatus = Set(PaymentsScanId)
@@ -30,7 +31,7 @@ class WalletRegistrySpec
 
   it should "read unspent wallet boxes" in {
     forAll(trackedBoxGen) { box =>
-      withHybridStore(10) { store =>
+      withVersionedStore(10) { store =>
         val unspentBox = box.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus)
         WalletRegistry.putBox(emptyBag, unspentBox).transact(store)
 
@@ -49,18 +50,32 @@ class WalletRegistrySpec
 
   it should "read spent wallet boxes" in {
     forAll(trackedBoxGen, modifierIdGen) { case (box, txId) =>
-      withHybridStore(10) { store =>
-        val uncertainBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = walletBoxStatus)
-        WalletRegistry.putBox(emptyBag, uncertainBox).transact(store)
+      withVersionedStore(10) { store =>
+        val spentBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = walletBoxStatus)
+        WalletRegistry.putBox(emptyBag, spentBox).transact(store)
         val registry = new WalletRegistry(store)(settings.walletSettings)
-        registry.walletSpentBoxes() shouldBe Seq(uncertainBox)
+        registry.walletSpentBoxes() shouldBe Seq(spentBox)
+      }
+    }
+  }
+
+  it should "read confirmed wallet boxes" in {
+    forAll(trackedBoxGen, modifierIdGen) { case (box, txId) =>
+      withVersionedStore(10) { store =>
+        val unspentBox = box.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus)
+        val spentBox = box.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = walletBoxStatus)
+        WalletRegistry.putBoxes(emptyBag, Seq(unspentBox, spentBox)).transact(store)
+        val registry = new WalletRegistry(store)(settings.walletSettings)
+        registry.walletSpentBoxes() shouldBe Seq(spentBox)
+        registry.walletUnspentBoxes() shouldBe Seq(unspentBox)
+        registry.walletConfirmedBoxes() shouldBe Seq(unspentBox, spentBox)
       }
     }
   }
 
   it should "read wallet transactions" in {
     forAll(walletTransactionGen) { wtx =>
-      withHybridStore(10) { store =>
+      withVersionedStore(10) { store =>
         WalletRegistry.putTx(emptyBag, wtx).transact(store)
         val registry = new WalletRegistry(store)(settings.walletSettings)
 
@@ -73,7 +88,7 @@ class WalletRegistrySpec
     val ws = settings.walletSettings.copy(keepSpentBoxes = true)
     val spendingHeight = 0
     forAll(Gen.nonEmptyListOf(trackedBoxGen), modifierIdGen) { (boxes, txId) =>
-      withHybridStore(10) { store =>
+      withVersionedStore(10) { store =>
         val unspentBoxes = boxes.map(
           _.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus))
         val transitedBoxes = unspentBoxes.map(
@@ -81,7 +96,7 @@ class WalletRegistrySpec
 
         WalletRegistry.putBoxes(emptyBag, unspentBoxes).transact(store)
         val registry = new WalletRegistry(store)(ws)
-        registry.processHistoricalBoxes(emptyBag, unspentBoxes.map(txId -> _), spendingHeight).transact(store)
+        registry.processSpentBoxes(emptyBag, unspentBoxes.map(txId -> _), spendingHeight).transact(store)
         registry.walletSpentBoxes().toList should contain theSameElementsAs transitedBoxes
       }
     }
@@ -89,26 +104,26 @@ class WalletRegistrySpec
 
   it should "updateOnBlock() in correct way - only outputs" in {
     forAll(Gen.nonEmptyListOf(trackedBoxGen)) { boxes =>
-      withHybridStore(10) { store =>
+      withVersionedStore(10) { store =>
         val registry = new WalletRegistry(store)(settings.walletSettings)
         val blockId = modifierIdGen.sample.get
         val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus))
-        registry.updateOnBlock(unspentBoxes, Seq.empty, Seq.empty)(blockId, 100)
+        registry.updateOnBlock(ScanResults(unspentBoxes, Seq.empty, Seq.empty), blockId, 100)
         registry.walletUnspentBoxes().toList should contain theSameElementsAs unspentBoxes
       }
     }
   }
 
   private def outputsSpentTest(keepSpent: Boolean): Unit = forAll(Gen.nonEmptyListOf(trackedBoxGen)) { boxes =>
-    withHybridStore(10) { store =>
+    withVersionedStore(10) { store =>
       val fakeTxId = modifierIdGen.sample.get
       val registry = new WalletRegistry(store)(settings.walletSettings.copy(keepSpentBoxes = keepSpent))
       val blockId = modifierIdGen.sample.get
       val outs = boxes.map { bx =>
         bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus)
       }
-      val inputs = outs.map(tb => (fakeTxId, EncodedBoxId @@ tb.boxId, tb))
-      registry.updateOnBlock(outs, inputs, Seq.empty)(blockId, 100)
+      val inputs = outs.map(tb => SpentInputData(fakeTxId, tb))
+      registry.updateOnBlock(ScanResults(outs, inputs, Seq.empty), blockId, 100)
       registry.walletUnspentBoxes() shouldBe Seq.empty
     }
   }
@@ -120,7 +135,7 @@ class WalletRegistrySpec
 
   it should "putBox/getBox/removeBox" in {
     forAll(trackedBoxGen) { tb =>
-      withHybridStore(10) { store =>
+      withVersionedStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
 
         WalletRegistry.putBox(emptyBag, tb).transact(store)
@@ -133,7 +148,7 @@ class WalletRegistrySpec
 
   it should "putBox/removeBox - 2 versions" in {
     forAll(trackedBoxGen) { tb =>
-      withHybridStore(10) { store =>
+      withVersionedStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
 
         val tb1 = tb.copy(spendingHeightOpt = None, spendingTxIdOpt = None)
@@ -150,7 +165,7 @@ class WalletRegistrySpec
 
   it should "putBoxes/getBoxes/removeBoxes" in {
     forAll(Gen.listOf(trackedBoxGen)) { tbs =>
-      withHybridStore(10) { store =>
+      withVersionedStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
 
         WalletRegistry.putBoxes(emptyBag, tbs).transact(store)
@@ -167,7 +182,7 @@ class WalletRegistrySpec
 
   it should "putTx/getTx/getAllTxs/removeTxs" in {
     forAll(walletTransactionGen) { wtx =>
-      withHybridStore(10) { store =>
+      withVersionedStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
 
         WalletRegistry.putTx(emptyBag, wtx).transact(store)
@@ -181,7 +196,7 @@ class WalletRegistrySpec
 
   it should "putTxs/getAllTxs" in {
     forAll(Gen.listOf(walletTransactionGen)) { wtxs =>
-      withHybridStore(10) { store =>
+      withVersionedStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
 
         WalletRegistry.putTxs(emptyBag, wtxs).transact(store)
@@ -192,7 +207,7 @@ class WalletRegistrySpec
 
   it should "putIndex/digest/updateIndex" in {
     forAll(registrySummaryGen) { index =>
-      withHybridStore(10) { store =>
+      withVersionedStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
 
         WalletRegistry.putDigest(emptyBag, index).transact(store)
@@ -204,12 +219,33 @@ class WalletRegistrySpec
     }
   }
 
+  it should "update scans correctly" in {
+    val appId1: ScanId = ScanId @@ 21.toShort
+    val appId2: ScanId = ScanId @@ 22.toShort
+
+    forAll(trackedBoxGen) { tb0 =>
+      withVersionedStore(10) { store =>
+        val tb1 = tb0.copy(scans = Set(appId1, appId2), spendingHeightOpt = None, spendingTxIdOpt = None)
+
+        val reg = new WalletRegistry(store)(ws)
+        WalletRegistry.putBox(emptyBag, tb1).transact(store)
+        reg.getBox(tb1.box.id).get.scans shouldBe Set(appId1, appId2)
+        reg.unspentBoxes(appId1).length shouldBe 1
+        reg.unspentBoxes(appId2).length shouldBe 1
+        reg.updateScans(Set(appId1), tb1.box)
+        reg.getBox(tb1.box.id).get.scans shouldBe Set(appId1)
+        reg.unspentBoxes(appId1).length shouldBe 1
+        reg.unspentBoxes(appId2).length shouldBe 0
+      }
+    }
+  }
+
   it should "remove application from a box correctly" in {
     val appId: ScanId = ScanId @@ 20.toShort
 
     forAll(trackedBoxGen) { tb0 =>
       val tb = tb0.copy(scans = Set(appId))
-      withHybridStore(10) { store =>
+      withVersionedStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
         WalletRegistry.putBox(emptyBag, tb).transact(store)
         reg.getBox(tb.box.id).isDefined shouldBe true
@@ -220,12 +256,12 @@ class WalletRegistrySpec
 
   }
 
-  it should "remove application and then rollback - one app" in {
+  it should "remove box-scan correspondence and then rollback - one app" in {
     val scanId: ScanId = ScanId @@ 20.toShort
 
     forAll(trackedBoxGen) { tb0 =>
       val tb = tb0.copy(scans = Set(scanId))
-      withHybridStore(10) { store =>
+      withVersionedStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
         val version = scorex.utils.Random.randomBytes()
 
@@ -239,12 +275,12 @@ class WalletRegistrySpec
     }
   }
 
-  it should "remove application and then rollback - multiple apps" in {
+  it should "remove box-scan correspondence and then rollback - multiple apps" in {
     val scanId: ScanId = ScanId @@ 20.toShort
 
     forAll(trackedBoxGen) { tb0 =>
       val tb = tb0.copy(scans = Set(PaymentsScanId, scanId))
-      withHybridStore(10) { store =>
+      withVersionedStore(10) { store =>
         val reg = new WalletRegistry(store)(ws)
         val version = scorex.utils.Random.randomBytes()
 

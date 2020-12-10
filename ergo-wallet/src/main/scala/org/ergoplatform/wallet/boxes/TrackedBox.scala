@@ -20,14 +20,13 @@ import org.ergoplatform.ErgoBoxAssets
   * @param box                 - Underlying Ergo box
   * @param scans               - Identifiers of scans the box refers to
   */
-final case class TrackedBox(creationTxId: ModifierId,
-                            creationOutIndex: Short,
-                            inclusionHeightOpt: Option[Int],
-                            spendingTxIdOpt: Option[ModifierId],
-                            spendingHeightOpt: Option[Int],
-                            box: ErgoBox,
-                            scans: Set[ScanId]) extends ErgoBoxAssets {
-
+case class TrackedBox(creationTxId: ModifierId,
+                      creationOutIndex: Short,
+                      inclusionHeightOpt: Option[Int],
+                      spendingTxIdOpt: Option[ModifierId],
+                      spendingHeightOpt: Option[Int],
+                      box: ErgoBox,
+                      scans: Set[ScanId]) extends ErgoBoxAssets {
 
   /**
     * Whether the box is spent or not
@@ -85,6 +84,17 @@ object TrackedBox {
   def apply(creationTx: ErgoLikeTransaction, creationOutIndex: Short, creationHeight: Option[Int],
             box: ErgoBox, appStatuses: Set[ScanId]): TrackedBox =
     apply(creationTx.id, creationOutIndex, creationHeight, None, None, box, appStatuses)
+
+  /**
+    * Creates unspent box with given inclusion height and scans the box is associated with
+    * @param box
+    * @param inclusionHeight
+    * @param scans
+    * @return
+    */
+  def apply(box: ErgoBox, inclusionHeight: Int, scans: Set[ScanId]): TrackedBox = {
+    new TrackedBox(box.transactionId, box.index, Some(inclusionHeight), None, None, box, scans)
+  }
 
 }
 

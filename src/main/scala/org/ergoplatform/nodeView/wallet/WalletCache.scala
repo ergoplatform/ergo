@@ -1,11 +1,12 @@
 package org.ergoplatform.nodeView.wallet
 
-import com.github.oskin1.scakoo.immutable.CuckooFilter
+import com.google.common.hash.{BloomFilter, Funnels}
 import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef, P2PKAddress}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.wallet.secrets.ExtendedPublicKey
 import sigmastate.Values
 import sigmastate.eval._
+
 import scala.util.Try
 
 /**
@@ -14,7 +15,7 @@ import scala.util.Try
 final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
                              trackedPubKeys: Seq[ExtendedPublicKey],
                              trackedBytes: Seq[Array[Byte]],
-                             filter: CuckooFilter[Array[Byte]])(implicit val settings: ErgoSettings) {
+                             filter: BloomFilter[Array[Byte]])(implicit val settings: ErgoSettings) {
 
   implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
@@ -27,16 +28,16 @@ final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
     val updTrackedPubKeys: Seq[ExtendedPublicKey] = trackedPubKeys :+ newPk
     val newPkBytes = newPk.key.propBytes.toArray
     val updTrackedBytes: Seq[Array[Byte]] = trackedBytes :+ newPkBytes
-    val updFilter: CuckooFilter[Array[Byte]] = filter.insert(newPkBytes).get
 
-    WalletCache(updAddresses, updTrackedPubKeys, updTrackedBytes, updFilter)
+    // update filter
+    filter.put(newPkBytes)
+
+    WalletCache(updAddresses, updTrackedPubKeys, updTrackedBytes, filter)
   }
 
 }
 
 object WalletCache {
-  //strategy for Cuckoo filter
-  import com.github.oskin1.scakoo.TaggingStrategy.MurmurHash3Strategy
 
   // currently only one mining key supported
   def miningScripts(trackedPubKeys: Seq[ExtendedPublicKey],
@@ -46,38 +47,50 @@ object WalletCache {
     }.toSeq
   }
 
-  def emptyFilter(settings: ErgoSettings): com.github.oskin1.scakoo.mutable.CuckooFilter[Array[Byte]] = {
-    val entriesPerBucket = settings.walletSettings.keysFilter.entriesPerBucket
-    val bucketsQty = settings.walletSettings.keysFilter.bucketsQty
-    com.github.oskin1.scakoo.mutable.CuckooFilter[Array[Byte]](entriesPerBucket, bucketsQty)
+  /**
+    * Create empty bloom filter
+    * @return a Bloom filter instance
+    */
+  def emptyFilter(expectedKeys: Int = 100000): BloomFilter[Array[Byte]] = {
+    val falsePositiveRate = 0.01
+    BloomFilter.create[Array[Byte]](Funnels.byteArrayFunnel(), expectedKeys, falsePositiveRate)
   }
 
   /**
-    * Construction a Cuckoo filter for scanning the boxes efficiently
+    * Constructing a Bloom filter for scanning the boxes efficiently
     */
-  def filter(trackedBytes: Seq[Array[Byte]],
-             miningScriptsBytes: Seq[Array[Byte]],
-             settings: ErgoSettings): CuckooFilter[Array[Byte]] = {
-    val f = emptyFilter(settings)
-    trackedBytes.foreach(bs => f.insert(bs))
-    miningScriptsBytes.foreach(msb => f.insert(msb))
-    CuckooFilter.recover(f.memTable, f.entriesCount, f.entriesPerBucket)
+  def createFilter(trackedBytes: Seq[Array[Byte]],
+                   miningScriptsBytes: Seq[Array[Byte]]): BloomFilter[Array[Byte]] = {
+    val f = emptyFilter()
+    trackedBytes.foreach(bs => f.put(bs))
+    miningScriptsBytes.foreach(msb => f.put(msb))
+    f
   }
 
-  def trackedBytes(trackedPubKeys: Seq[ExtendedPublicKey]): Seq[Array[Byte]] =
+  private def trackedBytes(trackedPubKeys: Seq[ExtendedPublicKey]): Seq[Array[Byte]] =
     trackedPubKeys.map(_.key.propBytes.toArray)
 
-  def trackedAddresses(trackedPubKeys: Seq[ExtendedPublicKey],
-                       addressEncoder: ErgoAddressEncoder): Seq[P2PKAddress] =
-    trackedPubKeys.map(pk => P2PKAddress(pk.key)(addressEncoder))
+  private def publicKeyAddresses(trackedPubKeys: Seq[ExtendedPublicKey],
+                                 addressEncoder: ErgoAddressEncoder): Seq[P2PKAddress] = {
+    // Remove master key from visible addresses if following-up keys are from EIP-3 range
+    val pks = if (trackedPubKeys.size > 1
+      && trackedPubKeys.head.path.isMaster
+      && trackedPubKeys(1).path.isEip3) {
+      // Skip master key
+      trackedPubKeys.tail
+    } else {
+      trackedPubKeys
+    }
+    pks.map(pk => P2PKAddress(pk.key)(addressEncoder))
+  }
 
   def apply(trackedPubKeys: Seq[ExtendedPublicKey], settings: ErgoSettings): WalletCache = {
     val tbs = trackedBytes(trackedPubKeys)
     val msBytes = miningScripts(trackedPubKeys, settings).map(_.bytes)
-    val f = filter(tbs, msBytes, settings)
-    val tas = trackedAddresses(trackedPubKeys, settings.addressEncoder)
+    val f = createFilter(tbs, msBytes)
+    val pka = publicKeyAddresses(trackedPubKeys, settings.addressEncoder)
 
-    WalletCache(tas, trackedPubKeys, tbs, f)(settings)
+    WalletCache(pka, trackedPubKeys, tbs, f)(settings)
   }
 
 }

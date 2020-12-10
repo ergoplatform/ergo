@@ -16,14 +16,16 @@ import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.sanity.ErgoSanity.HT
 import org.ergoplatform.settings.Constants.HashLength
-import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
+import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators, ErgoTransactionGenerators}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.ergoplatform.wallet.secrets.DerivationPath
+import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.nodeView.wallet.scanning.Scan
+import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.scalacheck.Gen
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
@@ -31,6 +33,7 @@ import scorex.core.network.{Handshake, PeerSpec}
 import scorex.core.settings.ScorexSettings
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
+import scorex.db.ByteArrayWrapper
 import scorex.util.Random
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
@@ -79,7 +82,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   val blacklistedPeers: Seq[String] = Seq("4.4.4.4:1111", "8.8.8.8:2222")
 
   val pk: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray(Random.randomBytes(32))).publicImage
-  val externalCandidateBlock = WorkMessage(Array.fill(32)(2: Byte), BigInt(9999), pk, None)
+  val externalCandidateBlock = WorkMessage(Array.fill(32)(2: Byte), BigInt(9999), pk, 1: Byte, None)
 
   class PeersManagerStub extends Actor {
     def receive: Receive = {
@@ -137,7 +140,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
   class WalletActorStub extends Actor {
 
-    import WalletActorStub.{walletBox10_10, walletBox20_30, walletBoxSpent21_31, walletTxs}
+    import WalletActorStub.{walletBoxN_N, walletBox10_10, walletBox20_30, walletBoxSpent21_31, walletTxs}
 
     private val prover: ErgoProvingInterpreter = defaultProver
     private val trackedAddresses: Seq[P2PKAddress] = prover.hdPubKeys.map(epk => P2PKAddress(epk.key))
@@ -154,9 +157,13 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case LockWallet => ()
 
+      case RescanWallet => sender ! Success(())
+
       case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistory.GenesisHeight)
 
-      case GetWalletBoxes(unspentOnly) =>
+      case _: CheckSeed => sender() ! true
+
+      case GetWalletBoxes(unspentOnly, _) =>
         val boxes = if (unspentOnly) {
           Seq(walletBox10_10, walletBox20_30)
         } else {
@@ -169,13 +176,14 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case DeriveKey(_) => sender() ! Success(WalletActorStub.address)
 
-      case DeriveNextKey => sender() ! Success(WalletActorStub.path -> WalletActorStub.address)
+      case DeriveNextKey => sender() !
+        DeriveNextKeyResult(Success(WalletActorStub.path, WalletActorStub.address, WalletActorStub.secretKey))
 
       case ReadPublicKeys(from, until) =>
         sender() ! trackedAddresses.slice(from, until)
 
       case ReadBalances(chainStatus) =>
-        sender() ! WalletDigest(0, WalletActorStub.balance(chainStatus), mutable.LinkedHashMap.empty)
+        sender() ! WalletDigest(0, WalletActorStub.balance(chainStatus), mutable.WrappedArray.empty)
 
       case AddScan(req) =>
         val scanId = ScanId @@ (apps.lastOption.map(_._1).getOrElse(100: Short) + 1).toShort
@@ -192,8 +200,13 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! RemoveScanResponse(res)
 
-      case GetScanBoxes(_, _) =>
-        sender() ! Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
+      case GetScanBoxes(_, _, considerUnconfirmed) =>
+        val res = if(considerUnconfirmed) {
+          Seq(walletBoxN_N, walletBox10_10, walletBox20_30, walletBoxSpent21_31)
+        } else {
+          Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
+        }
+        sender() ! res
 
       case StopTracking(scanId, boxId) =>
         sender() ! StopTrackingResponse(Success(()))
@@ -201,15 +214,21 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case ReadScans =>
         sender() ! ReadScansResponse(apps.values.toSeq)
 
-      case GenerateTransaction(_, _, _) =>
+      case GenerateTransaction(_, _, _, _) =>
         val input = ErgoTransactionGenerators.inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
         sender() ! Success(tx)
 
-      case SignTransaction(secrets, tx, boxesToSpend, dataBoxes) =>
+      case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
         val sc = ErgoStateContext.empty(stateConstants)
         val params = LaunchParameters
-        sender() ! ErgoWalletActor.signTransaction(Some(prover), secrets, tx, boxesToSpend, dataBoxes, params, sc)
+        val boxesToSpend = boxesToSpendOpt.getOrElse{
+          tx.inputs.map(inp => utxoState.versionedBoxHolder.get(ByteArrayWrapper(inp.boxId)).get)
+        }
+        val dataBoxes = dataBoxesOpt.getOrElse{
+          tx.dataInputs.map(inp => utxoState.versionedBoxHolder.get(ByteArrayWrapper(inp.boxId)).get)
+        }
+        sender() ! ErgoWalletActor.signTransaction(Some(prover), tx, secrets, hints, boxesToSpend, dataBoxes, params, sc)
     }
   }
 
@@ -218,7 +237,21 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val seed: String = "walletstub"
     val mnemonic: String = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon"
     val path = DerivationPath(List(0, 1, 2), publicBranch = false)
+    val secretKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(mnemonic)).derive(path).asInstanceOf[ExtendedSecretKey]
     val address = P2PKAddress(proveDlogGen.sample.get)
+
+    val walletBoxN_N: WalletBox = WalletBox(
+      TrackedBox(
+        creationTxId = modifierIdGen.sample.get,
+        creationOutIndex = 0,
+        inclusionHeightOpt = None,
+        spendingTxIdOpt = Some(modifierIdGen.sample.get),
+        spendingHeightOpt = None,
+        box = ergoBoxGen.sample.get,
+        scans = Set(PaymentsScanId)
+      ),
+      confirmationsNumOpt = None
+    )
 
     val walletBox10_10: WalletBox = WalletBox(
       TrackedBox(
@@ -244,7 +277,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         spendingTxIdOpt = Some(modifierIdGen.sample.get)
       )
     )
-    val walletTxs: Seq[AugWalletTransaction] = Seq(augWalletTransactionGen.sample.get, augWalletTransactionGen.sample.get)
+    val walletTxs: Seq[AugWalletTransaction] =
+      Gen.listOf(augWalletTransactionGen).sample.get
 
     def props(): Props = Props(new WalletActorStub)
 

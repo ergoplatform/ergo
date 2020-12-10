@@ -2,10 +2,16 @@ package org.ergoplatform.wallet.protocol.context
 
 import org.ergoplatform.{ErgoBox, ErgoLikeTransactionTemplate, UnsignedInput}
 
-final case class TransactionContext(boxesToSpend: IndexedSeq[ErgoBox],
-                                    dataBoxes: IndexedSeq[ErgoBox],
-                                    spendingTransaction: ErgoLikeTransactionTemplate[_ <: UnsignedInput],
-                                    selfIndex: Short) {
+/**
+  * Part of the execution context in regards with spending transaction
+  *
+  * @param boxesToSpend - inputs of the transaction
+  * @param dataBoxes - data (read-only) inputs of the transaction
+  * @param spendingTransaction - spending transaction
+  */
 
-  val self: ErgoBox = boxesToSpend(selfIndex)
-}
+// TODO: it seems spendingTransaction is needed only to get output candidates in ErgoLikeContext.
+// After ErgoLikeContext refactoring in sigma, this class can be simplified.
+case class TransactionContext(boxesToSpend: IndexedSeq[ErgoBox],
+                              dataBoxes: IndexedSeq[ErgoBox],
+                              spendingTransaction: ErgoLikeTransactionTemplate[_ <: UnsignedInput])

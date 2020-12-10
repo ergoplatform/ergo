@@ -106,7 +106,6 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
       case _ => false
     }
 
-
   }
 
 }

@@ -6,32 +6,38 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder._
 import scorex.core.{ModifierTypeId, PersistentNodeViewModifier}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{CheckDelivery, SemanticallySuccessfulModifier}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.network.message.{InvData, Message}
-import scorex.core.network.{ModifiersStatus, NodeViewSynchronizer, SendToRandom}
+import scorex.core.network.{ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToRandom}
 import scorex.core.settings.NetworkSettings
+import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ModifierId
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
+/**
+  * Tweaks on top of Scorex' NodeViewSynchronizer made for optimizing Ergo network
+  */
 class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-                               networkSettings: NetworkSettings,
+                               settings: ErgoSettings,
                                timeProvider: NetworkTimeProvider)
                               (implicit ex: ExecutionContext)
   extends NodeViewSynchronizer[ErgoTransaction, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier,
-    ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider,
-    Constants.modifierSerializers) {
+    ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec,
+    settings.scorexSettings.network, timeProvider, Constants.modifierSerializers) {
 
-  override protected val deliveryTracker = new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks,
-    self, timeProvider)
+  override protected val deliveryTracker =
+    new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
+
+  protected val networkSettings: NetworkSettings = settings.scorexSettings.network
 
   /**
     * Approximate number of modifiers to be downloaded simultaneously
@@ -42,27 +48,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val toDownloadCheckInterval = networkSettings.syncInterval
     super.preStart()
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
-    context.system.scheduler.schedule(toDownloadCheckInterval, toDownloadCheckInterval)(self ! CheckModifiersToDownload)
-  }
-
-  //todo: pull back to Scorex with fixing this method
-  override protected def checkDelivery: Receive = {
-    case CheckDelivery(peerOpt, modifierTypeId, modifierId) =>
-      if (deliveryTracker.status(modifierId) == ModifiersStatus.Requested) {
-        peerOpt match {
-          case Some(peer) =>
-            log.info(s"Peer ${peer.toString} has not delivered asked modifier ${encoder.encodeId(modifierId)} on time")
-            penalizeNonDeliveringPeer(peer)
-            deliveryTracker.setUnknown(modifierId)
-            requestDownload(modifierTypeId, Seq(modifierId))
-          case None =>
-            // Random peer did not delivered modifier we need, ask another peer
-            // We need this modifier - no limit for number of attempts
-            log.info(s"Modifier ${encoder.encodeId(modifierId)}  (type $modifierTypeId) was not delivered on time")
-            deliveryTracker.setUnknown(modifierId)
-            requestDownload(modifierTypeId, Seq(modifierId))
-        }
-      }
+    context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
   }
 
   /**
@@ -77,16 +63,55 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val toDownload =
           h.nextModifiersToDownload(desiredSizeOfExpectingQueue - deliveryTracker.requestedSize, downloadRequired)
 
-        log.info(s"${toDownload.length} modifiers to be downloaded")
+        log.info(s"${toDownload.length} persistent modifiers to be downloaded")
 
         toDownload.groupBy(_._1).foreach(ids => requestDownload(ids._1, ids._2.map(_._2)))
       }
   }
 
+  // todo: this method is just a copy of the ancestor from Scorex, however, smarter logic is needed, not just
+  //  asking from a random peer
   override protected def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
     deliveryTracker.setRequested(modifierIds, modifierTypeId, None)
     val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
     networkControllerRef ! SendToNetwork(msg, SendToRandom)
+  }
+
+  /**
+    * Object ids coming from other node.
+    * Filter out modifier ids that are already in process (requested, received or applied),
+    * request unknown ids from peer and set this ids to requested state.
+    */
+  override protected def processInv(invData: InvData, peer: ConnectedPeer): Unit = {
+    (mempoolReaderOpt, historyReaderOpt) match {
+      case (Some(mempool), Some(history)) =>
+
+        val modifierTypeId = invData.typeId
+
+        val newModifierIds = modifierTypeId match {
+          case Transaction.ModifierTypeId =>
+            // We download transactions only if the node is not needed for externally provided proofs
+            // (so having UTXO set, and the chain is synced
+            if (!settings.nodeSettings.stateType.requireProofs &&
+              history.isHeadersChainSynced &&
+              history.fullBlockHeight == history.headersHeight) {
+              invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
+            } else {
+              Seq.empty
+            }
+          case _ =>
+            invData.ids.filter(mid => deliveryTracker.status(mid, history) == ModifiersStatus.Unknown)
+        }
+
+        if (newModifierIds.nonEmpty) {
+          val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, newModifierIds)), None)
+          peer.handlerRef ! msg
+          deliveryTracker.setRequested(newModifierIds, modifierTypeId, Some(peer))
+        }
+
+      case _ =>
+        log.warn(s"Got data from peer while readers are not ready ${(mempoolReaderOpt, historyReaderOpt)}")
+    }
   }
 
   /**
@@ -131,32 +156,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 }
 
 object ErgoNodeViewSynchronizer {
+
   def props(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-            networkSettings: NetworkSettings,
+            settings: ErgoSettings,
             timeProvider: NetworkTimeProvider)
            (implicit ex: ExecutionContext): Props =
-    Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings,
+    Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
       timeProvider))
 
   def apply(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-            networkSettings: NetworkSettings,
+            settings: ErgoSettings,
             timeProvider: NetworkTimeProvider)
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider))
-
-  def apply(networkControllerRef: ActorRef,
-            viewHolderRef: ActorRef,
-            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-            networkSettings: NetworkSettings,
-            timeProvider: NetworkTimeProvider,
-            name: String)
-           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, networkSettings, timeProvider), name)
-
+    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider))
 
   case object CheckModifiersToDownload
 

@@ -3,6 +3,7 @@ package org.ergoplatform.mining
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.http.api.ApiCodecs
+import scorex.core.block.Block.Version
 import sigmastate.basics.DLogProtocol.ProveDlog
 
 
@@ -12,23 +13,26 @@ import sigmastate.basics.DLogProtocol.ProveDlog
   * @param msg                            - message for external miner to work on (serialized header)
   * @param b                              - target value for mining
   * @param pk                             - public key of a miner
+  * @param v                              - block version
   * @param proofsForMandatoryTransactions - proofs of transactions membership (optional)
   *
   */
 case class WorkMessage(msg: Array[Byte],
                        b: BigInt,
                        pk: ProveDlog,
+                       v: Version,
                        proofsForMandatoryTransactions: Option[ProofOfUpcomingTransactions])
 
 object WorkMessage extends ApiCodecs {
 
-  implicit val encoder: Encoder[WorkMessage] = { c: WorkMessage =>
+  implicit val encoder: Encoder[WorkMessage] = { workMessage: WorkMessage =>
     Json.obj(
       List(
-        "msg" -> Some(c.msg.asJson),
-        "b" -> Some(c.b.asJson(bigIntEncoder)),
-        "pk" -> Some(c.pk.asJson),
-        "proof" -> c.proofsForMandatoryTransactions.map(_.asJson)
+        "msg" -> Some(workMessage.msg.asJson),
+        "b" -> Some(workMessage.b.asJson(bigIntEncoder)),
+        "pk" -> Some(workMessage.pk.asJson),
+        "v" -> Some(workMessage.v.asJson),
+        "proof" -> workMessage.proofsForMandatoryTransactions.map(_.asJson)
       ).collect {
         //drop proof field if it is empty
         case (name, Some(value)) => name -> value

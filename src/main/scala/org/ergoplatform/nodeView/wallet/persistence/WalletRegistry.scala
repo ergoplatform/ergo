@@ -1,21 +1,26 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import java.io.File
+
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.db.HybridLDBKVStore
 import org.ergoplatform.modifiers.history.PreGenesisHeader
-import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, EncodedTokenId}
+import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, encodedTokenId}
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletTransactionSerializer}
 import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
-import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.{AssetUtils, Constants}
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import scorex.core.VersionTag
 import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
-import Constants.{ScanId, PaymentsScanId}
+import Constants.{PaymentsScanId, ScanId}
+import org.ergoplatform.ErgoBox
 import scorex.db.LDBVersionedStore
+
 import scala.util.{Failure, Success, Try}
-import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
+import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
+import org.ergoplatform.wallet.transactions.TransactionBuilder
+
+import scala.collection.mutable
 
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
@@ -25,11 +30,18 @@ import org.ergoplatform.nodeView.wallet.IdUtils.encodedTokenId
   * * boxes, spent or not
   *
   */
-class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends ScorexLogging {
+class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
 
   private val keepHistory = ws.keepSpentBoxes
+
+  /**
+    * Close wallet registry storage
+    */
+  def close(): Unit = {
+    store.close()
+  }
 
   /**
     * Read wallet-related box with metadata
@@ -71,9 +83,9 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     * @return sequences of scan-related unspent boxes found in the database
     */
   def unspentBoxes(scanId: ScanId): Seq[TrackedBox] = {
-    store.getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId)).flatMap { case (_, boxId) =>
-      getBox(ADKey @@ boxId)
-    }
+    store
+      .getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId))
+      .flatMap { case (_, boxId) => getBox(ADKey @@ boxId) }
   }
 
   /**
@@ -100,27 +112,21 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   def walletSpentBoxes(): Seq[TrackedBox] = spentBoxes(Constants.PaymentsScanId)
 
   /**
-    * Read boxes created at or after given height, both spent or not
+    * Read wallet boxes, both spent or not
     *
-    * @param scanId     scan identifier
-    * @param fromHeight min height when box was included into the blockchain
+    * @param scanId scan identifier
     * @return sequence of scan-related boxes
     */
-  def confirmedBoxes(scanId: ScanId, fromHeight: Int): Seq[TrackedBox] = {
-    val firstKeyInRange = firstIncludedScanBoxSpaceKey(scanId, fromHeight)
-    val lastKeyInRange = lastIncludedScanBoxSpaceKey(scanId)
-    store.getRange(firstKeyInRange, lastKeyInRange).flatMap { case (_, boxId) =>
-      getBox(ADKey @@ boxId)
-    }
+  def confirmedBoxes(scanId: ScanId): Seq[TrackedBox] = {
+    walletUnspentBoxes() ++ walletSpentBoxes()
   }
 
   /**
-    * Read boxes belong to the payment scan created at or after given height, both spent or not
+    * Read boxes belong to the payment scan, both spent or not
     *
-    * @param fromHeight min height when box was included into the blockchain
     * @return sequence of (P2PK-payment)-related boxes
     */
-  def walletConfirmedBoxes(fromHeight: Int): Seq[TrackedBox] = confirmedBoxes(Constants.PaymentsScanId, fromHeight)
+  def walletConfirmedBoxes(): Seq[TrackedBox] = confirmedBoxes(Constants.PaymentsScanId)
 
   /**
     * Read transaction with wallet-related metadata
@@ -168,27 +174,22 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
     *
     * Updates indexes according to data extracted from a block and performs versioned update.
     *
-    * @param newOutputs  - newly created outputs (but could be spent by inputs)
-    * @param inputs      - spent inputs as a sequence of (input tx id, input box id, tracked box)
-    * @param txs         - transactions affected
+    * @param scanResults - block scan data (outputs created and spent along with corresponding transactions)
     * @param blockId     - block identifier
     * @param blockHeight - block height
     */
-  def updateOnBlock(newOutputs: Seq[TrackedBox],
-                    inputs: Seq[(ModifierId, EncodedBoxId, TrackedBox)],
-                    txs: Seq[WalletTransaction])
-                   (blockId: ModifierId, blockHeight: Int): Unit = {
+  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Unit = {
 
     // first, put newly created outputs and related transactions into key-value bag
-    val bag1 = putBoxes(KeyValuePairsBag.empty, newOutputs)
-    val bag2 = putTxs(bag1, txs)
+    val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
+    val bag2 = putTxs(bag1, scanResults.relatedTransactions)
 
     // process spent boxes
-    val spentBoxesWithTx = inputs.map(t => t._1 -> t._3)
-    val bag3 = processHistoricalBoxes(bag2, spentBoxesWithTx, blockHeight)
+    val spentBoxesWithTx = scanResults.inputsSpent.map(t => t.inputTxId -> t.trackedBox)
+    val bag3 = processSpentBoxes(bag2, spentBoxesWithTx, blockHeight)
 
     // and update wallet digest
-    val bag4 = updateDigest(bag3) { case WalletDigest(height, wBalance, wTokens) =>
+    val bag4 = updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
       if (height + 1 != blockHeight) {
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
@@ -199,11 +200,13 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
-      val receivedTokensAmt = newOutputs.filter(_.scans.contains(PaymentsScanId))
+      val receivedTokensAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId))
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
+
+      val wTokens = mutable.LinkedHashMap(wTokensSeq: _*)
 
       val increasedTokenBalances = receivedTokensAmt.foldLeft(wTokens) { case (acc, (encodedId, amt)) =>
         acc += encodedId -> (acc.getOrElse(encodedId, 0L) + amt)
@@ -215,16 +218,16 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
           if (decreasedAmt > 0) {
             acc += encodedId -> decreasedAmt
           } else {
-            acc - encodedId
+            acc -= encodedId
           }
         }
 
-      val receivedAmt = newOutputs.filter(_.scans.contains(PaymentsScanId)).map(_.box.value).sum
+      val receivedAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId)).map(_.box.value).sum
       val newBalance = wBalance + receivedAmt - spentAmt
       require(
         (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
         "Balance could not be negative")
-      WalletDigest(blockHeight, newBalance, newTokensBalance)
+      WalletDigest(blockHeight, newBalance, newTokensBalance.toSeq)
     }
 
     bag4.transact(store, idToBytes(blockId))
@@ -236,9 +239,9 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.
     */
-  private[persistence] def processHistoricalBoxes(bag: KeyValuePairsBag,
-                                                  spentBoxes: Seq[(ModifierId, TrackedBox)],
-                                                  spendingHeight: Int): KeyValuePairsBag = {
+  private[persistence] def processSpentBoxes(bag: KeyValuePairsBag,
+                                             spentBoxes: Seq[(ModifierId, TrackedBox)],
+                                             spendingHeight: Int): KeyValuePairsBag = {
     if (keepHistory) {
       val outSpent: Seq[TrackedBox] = spentBoxes.flatMap { case (_, tb) =>
         getBox(tb.box.id).orElse {
@@ -269,6 +272,73 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   }
 
   /**
+    * Updates scans of a box stored in the wallet database,
+    * puts the box into the database if it is not there
+    * removes the box from the database if its there and scanIds are empty
+    *
+    * @param newScans - ids of new scans box should be associated with
+    * @param box - box to be updated (new version)
+    * @return
+    */
+  def updateScans(newScans: Set[ScanId], box: ErgoBox): Try[Unit] = Try {
+    val bag0 = KeyValuePairsBag.empty
+    val oldBox = getBox(box.id) // read old version from the database
+    val oldScans = oldBox.map(_.scans).getOrElse(Set.empty)
+
+    val newBox = TrackedBox(box, box.creationHeight, newScans)
+
+    val bag1 = (oldScans.isEmpty, newScans.isEmpty) match {
+      case (false, false) =>
+        // replace scans of the box by removing it along with indexes related to old scans,
+        // and then adding the box with indexes related to the new scans
+        putBox(removeBox(bag0, oldBox.get), newBox)
+      case (false, true) =>
+        // if new scans are empty, remove the box along with indexes
+        removeBox(bag0, oldBox.get)
+      case (true, false) =>
+        // if old scans are empty, add the box along with indexes
+        putBox(bag0, newBox)
+      case (true, true) =>
+        //old and new scans are empty, can't do anything useful
+        throw new Exception("Can't remove a box which does not exist")
+    }
+
+    // Flag showing that box has been added to the payments app (p2pk-wallet) or removed from it
+    // If true, we need to update wallet digest
+    val digestChanged = (oldScans.contains(Constants.PaymentsScanId) || newScans.contains(Constants.PaymentsScanId)) &&
+                        !(oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId))
+
+    val bag2 = if (digestChanged) {
+      val digest = fetchDigest()
+
+      val walletAssets = mutable.LinkedHashMap(digest.walletAssetBalances :_*)
+      val boxAssets = TransactionBuilder.collTokensToMap(box.additionalTokens)
+
+      val updDigest = if (!oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId)) {
+        AssetUtils.mergeAssetsMut(walletAssets, boxAssets) //mutating digest!
+        WalletDigest(
+          digest.height,
+          digest.walletBalance + box.value,
+          walletAssets.toArray[(EncodedTokenId, Long)])
+      } else if (oldScans.contains(Constants.PaymentsScanId) && !newScans.contains(Constants.PaymentsScanId)) {
+        //mutating digest! exception can be thrown here
+        AssetUtils.subtractAssetsMut(walletAssets, boxAssets)
+        WalletDigest(
+          digest.height,
+          digest.walletBalance - box.value,
+          walletAssets.toArray[(EncodedTokenId, Long)])
+      } else {
+        throw new Exception(s"Wallet can't update digest for a box with old scans $oldScans, new ones $newScans")
+      }
+      putDigest(bag1, updDigest)
+    } else {
+      bag1
+    }
+
+    bag2.transact(store, store.lastVersionID.getOrElse(scorex.util.Random.randomBytes(32)))
+  }
+
+  /**
     * Remove association between an application and a box.
     * Please note that in case of rollback association remains removed!
     *
@@ -278,26 +348,8 @@ class WalletRegistry(store: HybridLDBKVStore)(ws: WalletSettings) extends Scorex
   def removeScan(boxId: BoxId, scanId: ScanId): Try[Unit] = {
     getBox(boxId) match {
       case Some(tb) =>
-        (if (tb.scans.size == 1) {
-          if (tb.scans.head == scanId) {
-            val bag = WalletRegistry.removeBox(KeyValuePairsBag.empty, tb)
-            Success(bag)
-          } else {
-            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with scan $scanId"))
-          }
-        } else {
-          if (tb.scans.contains(scanId)) {
-            val updTb = tb.copy(scans = tb.scans - scanId)
-            val keyToRemove = Seq(spentIndexKey(scanId, updTb),
-              inclusionHeightScanBoxIndexKey(scanId, updTb))
-            Success(KeyValuePairsBag(Seq(boxToKvPair(updTb)), keyToRemove))
-          } else {
-            Failure(new Exception(s"Box ${Algos.encode(boxId)} is not associated with scan $scanId"))
-          }
-        }).map { bag =>
-          store.nonVersionedPut(bag.toInsert)
-          store.nonVersionedRemove(bag.toRemove)
-        }
+        val newScans = tb.scans - scanId
+        updateScans(newScans, tb.box)
 
       case None => Failure(new Exception(s"No box with id ${Algos.encode(boxId)} found in the wallet database"))
     }
@@ -310,11 +362,13 @@ object WalletRegistry {
 
   val PreGenesisStateVersion: Array[Byte] = idToBytes(PreGenesisHeader.id)
 
+  def registryFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/registry")
+
   def apply(settings: ErgoSettings): WalletRegistry = {
-    val dir = new File(s"${settings.directory}/wallet/registry")
+    val dir = registryFolder(settings)
     dir.mkdirs()
 
-    val store = new HybridLDBKVStore(dir, settings.nodeSettings.keepVersions)
+    val store = new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
 
     // Create pre-genesis state checkpoint
     if (!store.versionIdExists(PreGenesisStateVersion)) store.update(PreGenesisStateVersion, Seq.empty, Seq.empty)

@@ -2,18 +2,19 @@ package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
+import akka.http.scaladsl.testkit.{ScalatestRouteTest, RouteTestTimeout}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.http.api.{ApiCodecs, ScanApiRoute}
-import org.ergoplatform.nodeView.wallet.scanning.{ContainsScanningPredicate, Scan, ScanJsonCodecs, ScanRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{ContainsScanningPredicate, Scan, ScanJsonCodecs, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.utils.Stubs
-import org.scalatest.{FlatSpec, Matchers}
 import io.circe.syntax._
 import org.ergoplatform.http.api.ScanEntities.{ScanIdBoxId, ScanIdWrapper}
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.wallet.Constants.ScanId
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import scorex.crypto.authds.ADKey
 import scorex.utils.Random
 import sigmastate.Values.ByteArrayConstant
@@ -21,7 +22,7 @@ import sigmastate.Values.ByteArrayConstant
 import scala.util.Try
 import scala.concurrent.duration._
 
-class ScanApiRouteSpec extends FlatSpec
+class ScanApiRouteSpec extends AnyFlatSpec
   with Matchers
   with ScalatestRouteTest
   with Stubs
@@ -42,8 +43,8 @@ class ScanApiRouteSpec extends FlatSpec
   private val predicate0 = ContainsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array(0: Byte, 1: Byte)))
   private val predicate1 = ContainsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array(1: Byte, 1: Byte)))
 
-  val appRequest = ScanRequest("demo", predicate0)
-  val appRequest2 = ScanRequest("demo2", predicate1)
+  val appRequest = ScanRequest("demo", predicate0, Some(ScanWalletInteraction.Off))
+  val appRequest2 = ScanRequest("demo2", predicate1, Some(ScanWalletInteraction.Off))
 
   it should "register a scan" in {
     Post(prefix + "/register", appRequest.asJson) ~> route ~> check {
@@ -115,6 +116,28 @@ class ScanApiRouteSpec extends FlatSpec
         json.hcursor.downField("confirmationsNum").as[Int].forall(_ >= minConfirmations) shouldBe true
         json.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
       }
+
+      // unconfirmed box not returned
+      response.get.flatMap(_.hcursor.downField("confirmationsNum").as[Option[Int]].toOption)
+        .exists(_.isDefined == false) shouldBe false
+    }
+  }
+
+  it should "list unspent and unconfirmed boxes for a scan" in {
+    val minConfirmations = -1
+    val minInclusionHeight = 0
+
+    val suffix = s"/unspentBoxes/101?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
+
+    Get(prefix + suffix) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = Try(responseAs[List[Json]])
+      response shouldBe 'success
+      response.get.nonEmpty shouldBe true
+
+      // unconfirmed box returned
+      response.get.flatMap(_.hcursor.downField("confirmationsNum").as[Option[Int]].toOption)
+        .exists(_.isDefined == false) shouldBe true
     }
   }
 

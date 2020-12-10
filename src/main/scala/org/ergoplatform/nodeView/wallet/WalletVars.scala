@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
-import com.github.oskin1.scakoo.BaseCuckooFilter
+import com.google.common.hash.BloomFilter
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
 import org.ergoplatform.nodeView.wallet.scanning.Scan
@@ -43,8 +43,8 @@ final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
 
   val miningScriptsBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.miningScriptsBytes).getOrElse(Seq.empty)
 
-  val filter: BaseCuckooFilter[Array[Byte]] =
-    stateCacheOpt.map(_.filter).getOrElse(WalletCache.emptyFilter(settings))
+  val filter: BloomFilter[Array[Byte]] =
+    stateCacheOpt.map(_.filter).getOrElse(WalletCache.emptyFilter())
 
   def removeScan(scanId: ScanId): WalletVars = {
     this.copy(externalScans = this.externalScans.filter(_.scanId != scanId))

@@ -1,11 +1,11 @@
 package org.ergoplatform.wallet.secrets
 
 import org.ergoplatform.wallet.utils.Generators
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 class ExtendedPublicKeySpec
   extends ExtendedSecretKeySpec
-    with GeneratorDrivenPropertyChecks
+    with ScalaCheckPropertyChecks
     with Generators {
 
   val rootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(seed)

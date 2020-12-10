@@ -6,12 +6,13 @@ import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
+import org.ergoplatform.http.api.requests.HintExtractionRequest
 import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.wallet.Constants
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
@@ -45,6 +46,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         unspentBoxesR ~
         boxesR ~
         generateTransactionR ~
+        generateUnsignedTransactionR ~
+        generateCommitmentsR ~
         sendPaymentTransactionR ~
         sendTransactionR ~
         initWalletR ~
@@ -54,7 +57,10 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         deriveKeyR ~
         deriveNextKeyR ~
         updateChangeAddressR ~
-        signTransactionR
+        signTransactionR ~
+        checkSeedR ~
+        rescanWalletR ~
+        extractHintsR
     }
   }
 
@@ -75,6 +81,13 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           .map(mnemoPassOpt => (pass, mnemo, mnemoPassOpt))
         )
       )
+      .fold(_ => reject, s => provide(s))
+  }
+
+  private val checkRequest: Directive1[(String, Option[String])] = entity(as[Json]).flatMap { p =>
+    p.hcursor.downField("mnemonic").as[String]
+      .flatMap(mnemo => p.hcursor.downField("mnemonicPass").as[Option[String]]
+        .map(mnemoPassOpt => (mnemo, mnemoPassOpt)))
       .fold(_ => reject, s => provide(s))
   }
 
@@ -125,30 +138,60 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, tx => ApiResponse(tx))
   }
 
+  private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
+                                          inputsRaw: Seq[String],
+                                          dataInputsRaw: Seq[String]): Route = {
+    withWalletOp(_.generateUnsignedTransaction(requests, inputsRaw, dataInputsRaw)) {
+      case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success(utx) => ApiResponse(utx)
+    }
+  }
+
   private def sendTransaction(requests: Seq[TransactionGenerationRequest],
                               inputsRaw: Seq[String],
                               dataInputsRaw: Seq[String]): Route = {
-    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, {tx =>
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, { tx =>
       nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
       ApiResponse(tx.id)
     })
   }
 
   def sendTransactionR: Route =
-    (path("transaction" / "send") & post & entity(as[RequestsHolder])){ holder =>
+    (path("transaction" / "send") & post & entity(as[RequestsHolder])) { holder =>
       sendTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
     }
 
   def generateTransactionR: Route =
-    (path("transaction" / "generate") & post & entity(as[RequestsHolder])){ holder =>
+    (path("transaction" / "generate") & post & entity(as[RequestsHolder])) { holder =>
       generateTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
     }
+
+  def generateUnsignedTransactionR: Route =
+    (path("transaction" / "generateUnsigned") & post & entity(as[RequestsHolder])) { holder =>
+      generateUnsignedTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+    }
+
+  def generateCommitmentsR: Route = (path("generateCommitments")
+    & post & entity(as[GenerateCommitmentsRequest])) { gcr =>
+
+    val utx = gcr.unsignedTx
+    val externalSecretsOpt = gcr.externalSecretsOpt
+    val extInputsOpt = gcr.inputs.map(ErgoWalletActor.stringsToBoxes)
+    val extDataInputsOpt = gcr.dataInputs.map(ErgoWalletActor.stringsToBoxes)
+
+    withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt, extInputsOpt, extDataInputsOpt).map(_.response)) {
+      case Failure(e) => BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success(thb) => ApiResponse(thb)
+    }
+  }
 
   def signTransactionR: Route = (path("transaction" / "sign")
     & post & entity(as[TransactionSigningRequest])) { tsr =>
 
     val tx = tsr.unsignedTx
-    val secrets = (tsr.dlogs ++ tsr.dhts).map(ExternalSecret.apply)
+    val secrets = tsr.externalSecrets
+
+    val hints = tsr.hints
 
     def signWithReaders(r: Readers): Future[Try[ErgoTransaction]] = {
       if (tsr.inputs.isDefined) {
@@ -158,20 +201,12 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
 
         if (boxesToSpend.size == tx.inputs.size && dataBoxes.size == tx.dataInputs.size) {
-          r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)
+          r.w.signTransaction(tx, secrets, hints, Some(boxesToSpend), Some(dataBoxes))
         } else {
           Future(Failure(new Exception("Can't parse input boxes provided")))
         }
       } else {
-        r.s match {
-          case utxoSet: UtxoStateReader =>
-            val mempool = r.m
-            val utxosWithUnconfirmed = utxoSet.withTransactions(mempool.getAll)
-            val boxesToSpend = tx.inputs.map(d => utxosWithUnconfirmed.boxById(d.boxId).get)
-            val dataBoxes = tx.dataInputs.map(d => utxosWithUnconfirmed.boxById(d.boxId).get)
-            r.w.signTransaction(secrets, tx, boxesToSpend, dataBoxes)
-          case _ => Future(Failure(new Exception("No input boxes provided, and no UTXO set to read them from")))
-        }
+        r.w.signTransaction(tx, secrets, hints, None, None)
       }
     }
 
@@ -218,8 +253,9 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) { (minConfNum, minHeight) =>
+    val considerUnconfirmed = minConfNum == -1
     withWallet {
-      _.walletBoxes(unspentOnly = true)
+      _.walletBoxes(unspentOnly = true, considerUnconfirmed)
         .map {
           _.filter(boxFilterPredicate(_, minConfNum, minHeight))
         }
@@ -227,8 +263,9 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def boxesR: Route = (path("boxes") & get & boxParams) { (minConfNum, minHeight) =>
+    val considerUnconfirmed = minConfNum == -1
     withWallet {
-      _.walletBoxes()
+      _.walletBoxes(unspentOnly = false, considerUnconfirmed = considerUnconfirmed)
         .map {
           _.filter(boxFilterPredicate(_, minConfNum, minHeight))
         }
@@ -241,7 +278,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         _.transactions
           .map {
             _.filter(tx =>
-              tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
+              tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId) &&
+                tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
                 tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
             )
           }
@@ -283,6 +321,17 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
+  def checkSeedR: Route = (path("check") & post & checkRequest) {
+    case (mnemo, mnemoPassOpt) =>
+      withWalletOp(_.checkSeed(mnemo, mnemoPassOpt)) { matched =>
+        ApiResponse(
+          Json.obj(
+            "matched" -> matched.asJson
+          )
+        )
+      }
+  }
+
   def lockWalletR: Route = (path("lock") & get) {
     withWallet { w =>
       w.lockWallet()
@@ -301,7 +350,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def deriveNextKeyR: Route = (path("deriveNextKey") & get) {
     withWalletOp(_.deriveNextKey) {
-      _.fold(
+      _.result.fold(
         e => BadRequest(e.getMessage),
         x => ApiResponse(
           Json.obj(
@@ -317,6 +366,24 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     withWallet { w =>
       w.updateChangeAddress(p2pk)
       Future.successful(())
+    }
+  }
+
+  def rescanWalletR: Route = (path("rescan") & get) {
+    withWalletOp(_.rescanWallet()) {
+      _.fold(
+        e => BadRequest(e.getMessage),
+        _ => ApiResponse.toRoute(ApiResponse.OK)
+      )
+    }
+  }
+
+  def extractHintsR: Route = (path("extractHints") & post & entity(as[HintExtractionRequest])) { her =>
+    withWallet { w =>
+      val extInputsOpt = her.inputs.map(ErgoWalletActor.stringsToBoxes)
+      val extDataInputsOpt = her.dataInputs.map(ErgoWalletActor.stringsToBoxes)
+
+      w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
     }
   }
 

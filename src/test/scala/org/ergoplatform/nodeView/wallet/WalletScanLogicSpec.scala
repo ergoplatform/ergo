@@ -8,11 +8,11 @@ import org.ergoplatform.db.DBSpec
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
-import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest}
+import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.scalacheck.Gen
-import sigmastate.Values.{ByteArrayConstant, ErgoTree, FalseLeaf}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree, FalseLeaf, TrueLeaf}
 
 import scala.util.Random
 
@@ -37,7 +37,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
   private val trueProp = org.ergoplatform.settings.Constants.TrueLeaf
   private val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(trueProp.bytes))
-  private val appReq = ScanRequest("True detector", scanningPredicate)
+  private val appReq = ScanRequest("True detector", scanningPredicate, Some(ScanWalletInteraction.Off))
   private val scanId: ScanId = ScanId @@ 50.toShort
 
   private val pubkeys = prover.hdPubKeys
@@ -109,7 +109,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
   }
 
   property("scanBlockTransactions") {
-    withHybridStore(10) { store =>
+    withVersionedStore(10) { store =>
       val walletVars = walletVarsGen.sample.get
       val emptyReg = new WalletRegistry(store)(settings.walletSettings)
       val emptyOff = OffChainRegistry.empty
@@ -117,7 +117,8 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
 
       val height0 = 5
       //simplest case - we're scanning an empty block
-      val (r0, o0) = scanBlockTransactions(emptyReg, emptyOff, emptyStateContext, walletVars, height0, blockId, Seq.empty)
+      val (r0, o0, f0) =
+        scanBlockTransactions(emptyReg, emptyOff, emptyStateContext, walletVars, height0, blockId, Seq.empty, None)
       val r0digest = r0.fetchDigest()
       r0digest.walletBalance shouldBe 0
       r0digest.walletAssetBalances.size shouldBe 0
@@ -140,7 +141,8 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
         val regDigestBefore = registry.fetchDigest().walletBalance
         val offDigestBefore = off.digest.walletBalance
 
-        val (r1, o1) = scanBlockTransactions(registry, off, emptyStateContext, walletVars, height1, blockId, txs)
+        val (r1, o1, f1) =
+          scanBlockTransactions(registry, off, emptyStateContext, walletVars, height1, blockId, txs, Some(f0))
         val r1digest = r1.fetchDigest()
         r1digest.walletBalance shouldBe (regDigestBefore + trackedTransaction.paymentValues.sum)
         r1digest.walletAssetBalances.size shouldBe 0
@@ -159,7 +161,8 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
         val inputs = tx.outputs.map(_.id).map(id => Input(id, emptyProverResult))
         val spendingTx = ErgoTransaction(inputs, IndexedSeq.empty, tx.outputCandidates)
 
-        val (r2, o2) = scanBlockTransactions(registry, off, emptyStateContext, walletVars, height1 + 1, blockId, Seq(spendingTx))
+        val (r2, o2, f2) =
+          scanBlockTransactions(registry, off, emptyStateContext, walletVars, height1 + 1, blockId, Seq(spendingTx), Some(f1))
 
         val r2digest = r2.fetchDigest()
         r2digest.walletBalance shouldBe (regDigestBefore + trackedTransaction.paymentValues.sum)
@@ -179,7 +182,8 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
         val outputs2 = IndexedSeq(new ErgoBoxCandidate(spendingTx.outputs.map(_.value).sum, FalseLeaf.toSigmaProp, height1))
         val spendingTx2 = new ErgoTransaction(inputs2, IndexedSeq.empty, outputs2)
 
-        val (r3, o3) = scanBlockTransactions(registry, off, emptyStateContext, walletVars, height1 + 2, blockId, Seq(spendingTx2))
+        val (r3, o3, f3) =
+          scanBlockTransactions(registry, off, emptyStateContext, walletVars, height1 + 2, blockId, Seq(spendingTx2), Some(f2))
 
         val r3digest = r3.fetchDigest()
         r3digest.walletBalance shouldBe regDigestBefore
@@ -197,7 +201,7 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
         //applying all the three previous transactions
         val threeTxs = Seq(creatingTx, spendingTx, spendingTx2)
 
-        val (r4, o4) = scanBlockTransactions(registry, off, emptyStateContext, walletVars, height1 + 3, blockId, threeTxs)
+        val (r4, o4, f4) = scanBlockTransactions(registry, off, emptyStateContext, walletVars, height1 + 3, blockId, threeTxs, Some(f3))
 
         val r4digest = r4.fetchDigest()
         r4digest.walletBalance shouldBe regDigestBefore
@@ -216,20 +220,47 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
     }
   }
 
-  property("external scan prioritized over payments one") {
-    val pk = pubkeys.head.key.toSigmaProp: ErgoTree
-    val outs = IndexedSeq(new ErgoBoxCandidate(1000, pk, creationHeight = 1))
+  property("external scan prioritized over payments one if walletInteraction = off, otherwise shared") {
+    val intFlagGen = Gen.oneOf(ScanWalletInteraction.Off, ScanWalletInteraction.Shared, ScanWalletInteraction.Forced)
+    forAll(intFlagGen) { intFlag =>
+      val pk = pubkeys.head.key.toSigmaProp: ErgoTree
+      val outs = IndexedSeq(new ErgoBoxCandidate(1000, pk, creationHeight = 1))
+      val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, outs)
+
+      val cache = WalletCache(pubkeys, s)
+      val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(pk.bytes))
+      val paymentScanReq = ScanRequest("Payment scan", paymentPredicate, Some(intFlag))
+      val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId).get), Some(cache))(s)
+
+      val boxes = extractWalletOutputs(tx, Some(1), walletVars)
+
+      if (intFlag == ScanWalletInteraction.Shared || intFlag == ScanWalletInteraction.Forced) {
+        boxes.size shouldBe 1
+        boxes.head.scans.size shouldBe 2
+        boxes.head.scans shouldBe Set(scanId, Constants.PaymentsScanId)
+      } else {
+        boxes.size shouldBe 1
+        boxes.head.scans.size shouldBe 1
+        boxes.head.scans.head shouldBe scanId
+      }
+    }
+  }
+
+  property("scan with forced flag is sharing boxes with the p2k-wallet") {
+    val trueProp = TrueLeaf.toSigmaProp.treeWithSegregation: ErgoTree
+    val outs = IndexedSeq(new ErgoBoxCandidate(1000, trueProp, creationHeight = 1))
     val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, outs)
 
     val cache = WalletCache(pubkeys, s)
-    val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(pk.bytes))
-    val paymentScanReq = ScanRequest("Payment scan", paymentPredicate)
+    val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(trueProp.bytes))
+    val paymentScanReq = ScanRequest("Payment scan", paymentPredicate, Some(ScanWalletInteraction.Forced))
     val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId).get), Some(cache))(s)
 
     val boxes = extractWalletOutputs(tx, Some(1), walletVars)
+
     boxes.size shouldBe 1
-    boxes.head.scans.size shouldBe 1
-    boxes.head.scans.head shouldBe scanId
+    boxes.head.scans.size shouldBe 2
+    boxes.head.scans shouldBe Set(scanId, Constants.PaymentsScanId)
   }
 
 }

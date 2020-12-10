@@ -38,7 +38,6 @@ case class BlockTransactions(headerId: ModifierId,
 
   lazy val txIds: Seq[Array[Byte]] = txs.map(_.serializedId)
 
-  //todo: add extra byte to separate from txIds?
   lazy val witnessIds: Seq[Array[Byte]] = txs.map(_.witnessSerializedId)
 
   /**
@@ -93,7 +92,6 @@ object BlockTransactions extends ApiCodecs {
     if (blockVersion == Header.InitialVersion) {
       Algos.merkleTreeRoot(LeafData @@ txs.map(_.serializedId))
     } else {
-      //todo: add extra byte to separate from txIds?
       Algos.merkleTreeRoot(LeafData @@ (txs.map(_.serializedId) ++ txs.map(_.witnessSerializedId)))
     }
   }

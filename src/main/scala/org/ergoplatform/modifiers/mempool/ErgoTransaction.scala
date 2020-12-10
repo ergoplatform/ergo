@@ -24,7 +24,7 @@ import scorex.db.ByteArrayWrapper
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.eval.Extensions._
-import sigmastate.interpreter.{Interpreter, VersionContext}
+import sigmastate.interpreter.VersionContext
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
@@ -203,8 +203,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
       val inputContext = InputContext(idx.toShort, proof.extension)
 
-      // TODO v4.0: obtain the ACTUAL activated version
-      val activatedScriptVersion = Interpreter.MaxSupportedScriptVersion
+      val activatedScriptVersion = stateContext.protocolVersion
 
       val ctx = new ErgoContext(
         stateContext, transactionContext, inputContext,

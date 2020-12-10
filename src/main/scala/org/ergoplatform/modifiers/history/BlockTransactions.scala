@@ -22,8 +22,8 @@ import scorex.util.Extensions._
   * Section of a block which contains transactions.
   *
   * @param headerId     - identifier of a header of a corresponding block
-  * @param blockVersion - block version
-  * @param txs          - transactions of a block
+  * @param blockVersion - protocol version for the block
+  * @param txs          - transactions of the block
   * @param sizeOpt      - (optional) size of the section (cached to not be calculated again)
   */
 case class BlockTransactions(headerId: ModifierId,
@@ -123,11 +123,11 @@ object BlockTransactions extends ApiCodecs {
 
 object BlockTransactionsSerializer extends ScorexSerializer[BlockTransactions] {
   // See a comment in the parse() function
-  val MagicNumber = 1000000
+  val MaxTransactionsInBlock = 10000000
 
   override def serialize(bt: BlockTransactions, w: Writer): Unit = {
     w.putBytes(idToBytes(bt.headerId))
-    w.putUInt(MagicNumber + bt.blockVersion)
+    w.putUInt(MaxTransactionsInBlock + bt.blockVersion)
     w.putUInt(bt.txs.size)
     bt.txs.foreach { tx =>
       ErgoTransactionSerializer.serialize(tx, w)
@@ -143,16 +143,16 @@ object BlockTransactionsSerializer extends ScorexSerializer[BlockTransactions] {
       * A hack to avoid need for a database rescan if older version of the serializer was used to put.
       * block transactions into.
       *
-      * We consider that in the version 1 of the protocol there could not be a block with more
-      * than 1,000,000 transactions.
+      * We consider that in a block there could be no more than 10,000,000 transactions.
       *
-      * Then the new serializer puts 1,000,000 + block version (while the old one just puts tx count with no version),
+      * Then the new serializer puts 10,000,000 + block version (while the old one just puts tx count with no version),
       * and the reader knows that a new serializer was used if the first unsigned integer read is more than 1,000,000.
       */
-    val (blockVersion, txCount) = if (verOrCount > MagicNumber) {
-      ((verOrCount - MagicNumber).toByte, r.getUInt().toIntExact)
-    } else {
-      (1: Byte, verOrCount)
+    var blockVersion = 1: Byte
+    var txCount = verOrCount
+    if (verOrCount > MaxTransactionsInBlock) {
+      blockVersion = (verOrCount - MaxTransactionsInBlock).toByte
+      txCount = r.getUInt().toIntExact
     }
 
     val txs = (1 to txCount).map { _ =>

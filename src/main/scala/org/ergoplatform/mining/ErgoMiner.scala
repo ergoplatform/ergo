@@ -32,7 +32,7 @@ import sigmastate.SType.ErgoBoxRType
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
-import sigmastate.interpreter.{ContextExtension, ProverResult}
+import sigmastate.interpreter.ProverResult
 import special.collection.Coll
 
 import scala.annotation.tailrec

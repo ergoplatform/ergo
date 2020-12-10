@@ -62,6 +62,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
+  /**
+    * Id of transaction "witness" (taken from Bitcoin jargon, means commitment to signatures of a transaction)
+    */
   lazy val witnessSerializedId: Array[Byte] =
     Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof)))
 

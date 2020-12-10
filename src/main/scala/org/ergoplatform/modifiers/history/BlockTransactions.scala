@@ -36,8 +36,14 @@ case class BlockTransactions(headerId: ModifierId,
 
   override val modifierTypeId: ModifierTypeId = BlockTransactions.modifierTypeId
 
+  /**
+    * Ids of block transactions
+    */
   lazy val txIds: Seq[Array[Byte]] = txs.map(_.serializedId)
 
+  /**
+    * Ids of transaction witnesses (signatures aka spending proofs)
+    */
   lazy val witnessIds: Seq[Array[Byte]] = txs.map(_.witnessSerializedId)
 
   /**

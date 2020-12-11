@@ -1,23 +1,26 @@
 package org.ergoplatform.wallet.boxes
 
-import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
+import org.ergoplatform.wallet.Constants.PaymentsScanId
+import org.ergoplatform.ErgoLikeTransaction
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
-import org.scalatest.{Matchers, PropSpec}
 import sigmastate.Values
 import sigmastate.Values.SigmaPropValue
+import sigmastate.helpers.TestingHelpers._
 import org.scalatest.EitherValues
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
 
-class ReplaceCompactCollectBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
+class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues {
 
   private val noFilter: TrackedBox => Boolean = _ => true
   val parentTx = ErgoLikeTransaction(IndexedSeq(), IndexedSeq())
 
   val TrueLeaf: SigmaPropValue = Values.TrueLeaf.toSigmaProp
 
-  def box(value:Long) = ErgoBox(value, TrueLeaf, 0)
-  def trackedBox(value:Long) = TrackedBox(parentTx, 0, None, box(value), BoxCertainty.Certain, 1)
+  def box(value:Long) = testBox(value, TrueLeaf, 0)
+  def trackedBox(value:Long) = TrackedBox(parentTx, 0, None, box(value), Set(PaymentsScanId))
 
-  property("compress() done propery") {
+  property("compress() done properly") {
     val selector = new ReplaceCompactCollectBoxSelector(3, 2)
 
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)

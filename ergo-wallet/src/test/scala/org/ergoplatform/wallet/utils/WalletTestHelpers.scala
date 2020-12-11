@@ -1,13 +1,13 @@
 package org.ergoplatform.wallet.utils
 
 import org.ergoplatform.settings.ErgoAlgos
-import org.scalatest.PropSpec
+import org.scalatest.propspec.AnyPropSpec
 import scorex.util.ModifierId
 
 import scala.annotation.tailrec
 
 /** Implements various helper methods to use in specifications of [[org.ergoplatform.wallet]] package. */
-trait WalletTestHelpers extends PropSpec {
+trait WalletTestHelpers extends AnyPropSpec {
 
   /** Runs the given `fun` block, catches a [[Throwable]] and checks the given assertion is true.
     *

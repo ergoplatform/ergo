@@ -6,6 +6,8 @@ import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
 import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlockSerializer, RegistryIndexSerializer}
+import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
+import org.ergoplatform.nodeView.wallet.persistence.WalletDigestSerializer
 import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsSerializer, ErgoValidationSettingsUpdateSerializer}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.utils.generators.WalletGenerators
@@ -96,15 +98,9 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
     }
   }
 
-  property("RegistryIndex serialization") {
-    forAll(registryIndexGen) { index =>
-      RegistryIndexSerializer.parseBytes(RegistryIndexSerializer.toBytes(index)) shouldEqual index
-    }
-  }
-
-  property("PostponedBlock serialization") {
-    forAll(postponedBlockGen) { block =>
-      PostponedBlockSerializer.parseBytes(PostponedBlockSerializer.toBytes(block)) shouldEqual block
+  property("WalletDigest serialization") {
+    forAll(registrySummaryGen) { index =>
+      WalletDigestSerializer.parseBytes(WalletDigestSerializer.toBytes(index)) shouldEqual index
     }
   }
 

@@ -3,8 +3,8 @@ package org.ergoplatform.utils.fixtures
 import java.util.concurrent.atomic.AtomicInteger
 
 import akka.actor.ActorSystem
-import akka.testkit.{ImplicitSender, TestKit}
-import org.scalatest.{Outcome, fixture}
+import akka.testkit.{TestKit, ImplicitSender}
+import org.scalatest.{Outcome, propspec}
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -13,7 +13,7 @@ object SequentialAkkaFixture {
   val sysId = new AtomicInteger()
 }
 
-trait SequentialAkkaFixture extends fixture.PropSpec {
+trait SequentialAkkaFixture extends propspec.FixtureAnyPropSpec {
   import SequentialAkkaFixture._
   type Fixture <: TestKit
   type FixtureParam = Fixture

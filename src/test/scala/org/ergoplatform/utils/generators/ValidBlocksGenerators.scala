@@ -5,13 +5,13 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
+import org.ergoplatform.modifiers.history.{ExtensionCandidate, PoPowAlgos, Header, Extension}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
+import org.ergoplatform.settings.{Constants, Algos, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.db.ByteArrayWrapper
@@ -19,7 +19,7 @@ import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Random, Success, Failure, Try}
 
 trait ValidBlocksGenerators
   extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {

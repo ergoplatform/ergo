@@ -28,7 +28,7 @@ final class ExtendedSecretKey(val keyBytes: Array[Byte],
   def child(idx: Int): ExtendedSecretKey = ExtendedSecretKey.deriveChildSecretKey(this, idx)
 
   def publicKey: ExtendedPublicKey =
-    new ExtendedPublicKey(privateInput.publicImage.value.getEncoded(true), chainCode, path.toPublic)
+    new ExtendedPublicKey(privateInput.publicImage.value.getEncoded(true), chainCode, path.toPublicBranch)
 
   def isErased: Boolean = keyBytes.forall(_ == 0x00)
 
@@ -60,7 +60,7 @@ object ExtendedSecretKey {
       else parentKey.privateInput.publicImage.value.getEncoded(true)
     val (childKeyProto, childChainCode) = HmacSHA512
       .hash(parentKey.chainCode, keyCoded ++ Index.serializeIndex(idx))
-      .splitAt(Constants.KeyLen)
+      .splitAt(Constants.SecretKeyLength)
     val childKeyProtoDecoded = BigIntegers.fromUnsignedByteArray(childKeyProto)
     val childKey = childKeyProtoDecoded
       .add(BigIntegers.fromUnsignedByteArray(parentKey.keyBytes))
@@ -79,7 +79,7 @@ object ExtendedSecretKey {
   }
 
   def deriveMasterKey(seed: Array[Byte]): ExtendedSecretKey = {
-    val (masterKey, chainCode) = HmacSHA512.hash(Constants.BitcoinSeed, seed).splitAt(Constants.KeyLen)
+    val (masterKey, chainCode) = HmacSHA512.hash(Constants.BitcoinSeed, seed).splitAt(Constants.SecretKeyLength)
     new ExtendedSecretKey(masterKey, chainCode, DerivationPath.MasterPath)
   }
 
@@ -98,8 +98,8 @@ object ExtendedSecretKeySerializer extends ErgoWalletSerializer[ExtendedSecretKe
   }
 
   override def parse(r: Reader): ExtendedSecretKey = {
-    val keyBytes = r.getBytes(Constants.KeyLen)
-    val chainCode = r.getBytes(Constants.KeyLen)
+    val keyBytes = r.getBytes(Constants.SecretKeyLength)
+    val chainCode = r.getBytes(Constants.SecretKeyLength)
     val pathLen = r.getUInt().toIntExact
     val path = DerivationPathSerializer.parseBytes(r.getBytes(pathLen))
     new ExtendedSecretKey(keyBytes, chainCode, path)

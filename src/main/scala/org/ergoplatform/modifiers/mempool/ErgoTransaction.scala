@@ -12,7 +12,8 @@ import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.wallet.protocol.context.TransactionContext
+import scorex.core.EphemerealNodeViewModifier
+import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
@@ -53,7 +54,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val sizeOpt: Option[Int] = None)
   extends ErgoLikeTransaction(inputs, dataInputs, outputCandidates)
     with Transaction
-    with MempoolModifier
+    with EphemerealNodeViewModifier
     with ErgoNodeViewModifier
     with ScorexLogging {
 
@@ -192,9 +193,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
       val input = inputs(idx)
       val proof = input.spendingProof
-      val proverExtension = proof.extension
-      val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this, idx.toShort)
-      val ctx = new ErgoContext(stateContext, transactionContext, proverExtension, maxCost - addExact(currentTxCost, accumulatedCost), 0)
+      val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
+      val inputContext = InputContext(idx.toShort, proof.extension)
+      val ctx = new ErgoContext(stateContext, transactionContext, inputContext, maxCost - addExact(currentTxCost, accumulatedCost), 0)
 
       val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
       costTry.recover { case t =>

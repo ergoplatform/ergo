@@ -22,10 +22,11 @@ case class ErgoSettings(directory: String,
                         scorexSettings: ScorexSettings,
                         walletSettings: WalletSettings,
                         cacheSettings: CacheSettings,
-                        bootstrapSettingsOpt: Option[BootstrapSettings] = None,
                         votingTargets: VotingTargets = VotingTargets.empty) {
 
   val addressEncoder = ErgoAddressEncoder(chainSettings.addressPrefix)
+
+  val miningRewardDelay: Int = chainSettings.monetary.minerRewardDelay
 
   val miningPubKey: Option[ProveDlog] = nodeSettings.miningPubKeyHex
     .flatMap { str =>
@@ -56,7 +57,6 @@ object ErgoSettings extends ScorexLogging
     val networkType = NetworkType.fromString(networkTypeName)
       .getOrElse(throw new Error(s"Unknown `networkType = $networkTypeName`"))
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
-    val bootstrappingSettingsOpt = config.as[Option[BootstrapSettings]](s"$configPath.bootstrap")
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
     val walletSettings = config.as[WalletSettings](s"$configPath.wallet")
     val cacheSettings = config.as[CacheSettings](s"$configPath.cache")
@@ -76,7 +76,6 @@ object ErgoSettings extends ScorexLogging
         scorexSettings,
         walletSettings,
         cacheSettings,
-        bootstrappingSettingsOpt,
         votingTargets
       ),
       desiredNetworkTypeOpt
@@ -165,4 +164,5 @@ object ErgoSettings extends ScorexLogging
     log.error(s"Stop application due to malformed configuration file: $msg")
     ErgoApp.forceStopApplication()
   }
+
 }

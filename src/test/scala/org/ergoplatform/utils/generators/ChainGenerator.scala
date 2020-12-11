@@ -7,12 +7,13 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
-import org.ergoplatform.{ErgoBox, Input}
+import org.ergoplatform.Input
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.eval._
+import sigmastate.helpers.TestingHelpers._
 import scala.util.Random
 
 trait ChainGenerator extends ErgoTestConstants {
@@ -114,7 +115,7 @@ trait ChainGenerator extends ErgoTestConstants {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
     val minimalAmount = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, Colls.emptyColl, Map(), parameters)
-    val outputs = IndexedSeq(ErgoBox(minimalAmount, Constants.TrueLeaf, creationHeight = startHeight))
+    val outputs = IndexedSeq(testBox(minimalAmount, Constants.TrueLeaf, creationHeight = startHeight))
 
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
 

@@ -2,16 +2,19 @@ package org.ergoplatform.wallet.utils
 
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId}
 import org.ergoplatform.wallet.Constants
-import org.ergoplatform.wallet.boxes.{BoxCertainty, TrackedBox}
+import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.mnemonic.{Mnemonic, WordList}
+import org.ergoplatform.wallet.secrets.ExtendedPublicKey
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, Index, SecretKey}
 import org.ergoplatform.wallet.settings.EncryptionSettings
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.authds.ADKey
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, SigmaPropValue, TrueLeaf}
+import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.{SByte, SType}
+import org.ergoplatform.wallet.Constants.{ScanId, PaymentsScanId}
+import scorex.util._
 import scala.collection.IndexedSeq
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBoxCandidate
@@ -21,6 +24,7 @@ import org.ergoplatform.UnsignedInput
 import sigmastate.eval.Extensions._
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.eval._
+import sigmastate.helpers.TestingHelpers._
 import org.ergoplatform.ErgoBox.TokenId
 import scorex.crypto.hash.Digest32
 
@@ -57,18 +61,19 @@ trait Generators {
     v <- Gen.chooseNum(0, Short.MaxValue)
   } yield v.toShort
 
-  def genBoundedBytes(minSize: Int, maxSize: Int): Gen[Array[Byte]] = {
+
+  def genLimitedSizedBytes(minSize: Int, maxSize: Int): Gen[Array[Byte]] = {
     Gen.choose(minSize, maxSize) flatMap { sz => Gen.listOfN(sz, Arbitrary.arbitrary[Byte]).map(_.toArray) }
   }
 
-  def genBytes(size: Int): Gen[Array[Byte]] = genBoundedBytes(size, size)
+  def genExactSizeBytes(size: Int): Gen[Array[Byte]] = genLimitedSizedBytes(size, size)
 
   val boxIdGen: Gen[BoxId] = {
-    val x = ADKey @@ genBytes(Constants.ModifierIdLength)
+    val x = ADKey @@ genExactSizeBytes(Constants.ModifierIdLength)
     x
   }
 
-  val modIdGen: Gen[ModifierId] = genBytes(Constants.ModifierIdLength).map(bytesToId)
+  val modIdGen: Gen[ModifierId] = genExactSizeBytes(Constants.ModifierIdLength).map(bytesToId)
 
   val assetGen: Gen[(TokenId, Long)] = for {
     id <- boxIdGen
@@ -78,7 +83,7 @@ trait Generators {
   def additionalTokensGen(cnt: Int): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
 
   def additionalTokensGen: Gen[Seq[(TokenId, Long)]] = for {
-    cnt <- Gen.chooseNum[Int](0, 20)
+    cnt <- Gen.chooseNum[Int](0, 10)
     assets <- additionalTokensGen(cnt)
   } yield assets
 
@@ -115,18 +120,26 @@ trait Generators {
     Gen.choose(minValue, CoinsTotalTest / 1000)
   }
 
-  def ergoBoxGen(propGen: Gen[SigmaPropValue] = Gen.const(TrueLeaf.toSigmaProp),
+  def ergoBoxGen(propGen: Gen[ErgoTree] = Gen.const(TrueLeaf.toSigmaProp),
                  tokensGen: Gen[Seq[(TokenId, Long)]] = additionalTokensGen,
                  valueGenOpt: Option[Gen[Long]] = None,
                  heightGen: Gen[Int] = heightGen): Gen[ErgoBox] = for {
     h <- heightGen
     prop <- propGen
-    transactionId: Array[Byte] <- genBytes(Constants.ModifierIdLength)
+    transactionId: Array[Byte] <- genExactSizeBytes(Constants.ModifierIdLength)
     boxId: Short <- boxIndexGen
     ar <- additionalRegistersGen
     tokens <- tokensGen
     value <- valueGenOpt.getOrElse(validValueGen(prop, tokens, ar, bytesToId(transactionId), boxId))
-  } yield ErgoBox(value, prop, h, tokens, ar, bytesToId(transactionId), boxId)
+  } yield {
+    val box = testBox(value, prop, h, tokens, ar, transactionId.toModifierId, boxId)
+    if (box.bytes.length < ErgoBox.MaxBoxSize) {
+      box
+    } else {
+      // is size limit is reached, generate box without registers and tokens
+      testBox(value, prop, h, Seq(), Map(), transactionId.toModifierId, boxId)
+    }
+  }
 
   val ergoBoxGen: Gen[ErgoBox] = ergoBoxGen()
 
@@ -136,8 +149,30 @@ trait Generators {
   } yield DerivationPath(0 +: indices, isPublic)
 
   def extendedSecretGen: Gen[ExtendedSecretKey] = for {
-    seed <- Gen.const(Constants.KeyLen).map(scorex.utils.Random.randomBytes)
+    seed <- Gen.const(Constants.SecretKeyLength).map(scorex.utils.Random.randomBytes)
   } yield ExtendedSecretKey.deriveMasterKey(seed)
+
+  def extendedPubKeyGen: Gen[ExtendedPublicKey] = extendedSecretGen.map(_.publicKey)
+
+  def extendedPubKeyListGen: Gen[Seq[ExtendedPublicKey]] = extendedSecretGen.flatMap { sk =>
+    Gen.choose(1, 100).map { cnt =>
+      (1 to cnt).foldLeft(IndexedSeq(sk)) { case (keys, _) =>
+        val dp = DerivationPath.nextPath(keys, usePreEip3Derivation = false).get
+        val newSk = sk.derive(dp).asInstanceOf[ExtendedSecretKey]
+        keys :+ newSk
+      }.map(_.publicKey)
+    }
+  }
+
+  def appStatusesGen: Gen[Set[ScanId]] = {
+    if(scala.util.Random.nextBoolean()) {
+      // simulate complex usage scenario
+      Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.map { id: Short => ScanId @@ id }.toSet)
+    } else {
+      // simulate simple payment
+      Set(PaymentsScanId)
+    }
+  }
 
   def trackedBoxGen: Gen[TrackedBox] = for {
     creationTxId <- modIdGen
@@ -146,14 +181,14 @@ trait Generators {
     spendingTxIdOpt <- Gen.option(modIdGen)
     spendingHeightOpt <- Gen.option(heightGen)
     box <- ergoBoxGen
-    certainty <- Gen.oneOf(Seq(BoxCertainty.Certain, BoxCertainty.Uncertain))
+    appStatuses <- appStatusesGen
   } yield TrackedBox(
-    creationTxId, creationOutIndex, inclusionHeightOpt, spendingTxIdOpt, spendingHeightOpt, box, certainty, 1)
+    creationTxId, creationOutIndex, inclusionHeightOpt, spendingTxIdOpt, spendingHeightOpt, box, appStatuses)
 
-  def dlogPropGen(dlog: ProveDlog): Gen[SigmaPropValue] = Gen.const(dlog.toSigmaProp)
 
   def unsignedTxGen(secret: SecretKey): Gen[(IndexedSeq[ErgoBox], UnsignedErgoLikeTransaction)] = {
-    val dlog = dlogPropGen(secret.privateInput.publicImage.asInstanceOf[ProveDlog])
+    val dlog: Gen[ErgoTree] = Gen.const(secret.privateInput.publicImage.asInstanceOf[ProveDlog].toSigmaProp)
+
     for {
       ins <- Gen.listOfN(2, ergoBoxGen(dlog))
       value <- Gen.posNum[Long]

@@ -42,7 +42,7 @@ class FullBlockPruningProcessor(nodeConfig: NodeConfigurationSettings, chainSett
     * @return minimal height to process best full block
     */
   def updateBestFullBlock(header: Header): Int = {
-    minimalFullBlockHeightVar = if (nodeConfig.blocksToKeep < 0) {
+    minimalFullBlockHeightVar = if (!nodeConfig.isFullBlocksPruned) {
       ErgoHistory.GenesisHeight // keep all blocks in history
     } else if (!isHeadersChainSynced && !nodeConfig.stateType.requireProofs) {
       // just synced with the headers chain - determine first full block to apply

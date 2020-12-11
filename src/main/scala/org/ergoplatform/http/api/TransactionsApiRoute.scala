@@ -39,7 +39,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
       getStateAndPool
         .map {
           case (utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
-            utxo.withTransactions(mp.getAll).validate(tx)
+            utxo.withMempool(mp).validate(tx)
           case _ =>
             tx.statelessValidity()
         }

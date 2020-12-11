@@ -11,10 +11,10 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends sbt
 COPY ["build.sbt", "/ergo/"]
 COPY ["project", "/ergo/project"]
-RUN sbt update
+RUN sbt -Dsbt.rootdir=true update
 COPY . /ergo
 WORKDIR /ergo
-RUN sbt assembly
+RUN sbt -Dsbt.rootdir=true assembly
 RUN mv `find . -name ergo-*.jar` /ergo.jar
 CMD ["java", "-jar", "/ergo.jar"]
 
@@ -27,5 +27,6 @@ USER ergo
 EXPOSE 9020 9052
 WORKDIR /home/ergo
 VOLUME ["/home/ergo/.ergo"]
-ENTRYPOINT ["java", "-jar", "/home/ergo/ergo.jar"]
-CMD [""]
+ENV MAX_HEAP 3G
+ENTRYPOINT java -Xmx${MAX_HEAP} -jar /home/ergo/ergo.jar $0 $1 $2 $3
+CMD []

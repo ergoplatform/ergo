@@ -94,7 +94,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
       val (txs, lastOut) = genTransactions(last.map(_.height).getOrElse(ErgoHistory.GenesisHeight),
         initBox, state.stateContext)
 
-      val candidate = genCandidate(prover.hdPubKeys.head, last, time, txs, state)
+      val candidate = genCandidate(prover.hdPubKeys.head.key, last, time, txs, state)
       val block = proveCandidate(candidate.get)
 
       history.append(block.header).get

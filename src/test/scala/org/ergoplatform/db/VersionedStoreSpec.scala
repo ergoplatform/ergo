@@ -1,8 +1,9 @@
 package org.ergoplatform.db
 
-import org.scalatest.{Matchers, PropSpec}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
 
-class VersionedStoreSpec extends PropSpec with Matchers with DBSpec {
+class VersionedStoreSpec extends AnyPropSpec with Matchers with DBSpec {
 
   private val (keyA, valA) = (byteString("A"), byteString("1"))
   private val (keyB, valB) = (byteString("B"), byteString("2"))
@@ -31,6 +32,9 @@ class VersionedStoreSpec extends PropSpec with Matchers with DBSpec {
 
       store.getAll.toSeq.toBs should contain allElementsOf Seq(keyA -> valA, keyB -> valB, keyC -> valC).toBs
       store.get(keyD) shouldBe None
+      store.get(keyA).get.sameElements(valA) shouldBe true
+
+      store.lastVersionID shouldBe Some(v2)
     }
   }
 

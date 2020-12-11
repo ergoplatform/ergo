@@ -32,5 +32,4 @@ final case class ErgoHttpService(
   private def redirectToSwaggerR: Route = path("" | "/") {
     redirect("/swagger", StatusCodes.PermanentRedirect)
   }
-
 }

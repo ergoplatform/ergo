@@ -2,34 +2,32 @@ package org.ergoplatform.utils.generators
 
 import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
+import org.ergoplatform.modifiers.history.{Header, ADProofs, Extension}
 import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
+import org.ergoplatform.settings.{Constants, ErgoValidationSettingsUpdate, ErgoValidationSettings, ValidationRules}
 import org.ergoplatform.utils.ErgoTestConstants
-import org.ergoplatform.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
+import org.ergoplatform.validation.{DisabledRule, ChangedRule, ReplacedRule, EnabledRule}
+import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.Matchers
-import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
+import org.scalatest.matchers.should.Matchers
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
-import scorex.util.{ModifierId, _}
-import sigmastate.SType
-import sigmastate.Values.{ErgoTree, EvaluatedValue}
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
+import sigmastate.Values.ErgoTree
+import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
+import sigmastate.basics.{ProveDHTuple, DiffieHellmanTupleProverInput}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{CryptoConstants, ProverResult}
+import sigmastate.interpreter.{ProverResult, CryptoConstants}
 
 import scala.util.Random
 
-trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants {
+trait ErgoGenerators extends CoreGenerators with Generators with Matchers with ErgoTestConstants {
 
   lazy val trueLeafGen: Gen[ErgoTree] = Gen.const(Constants.TrueLeaf)
   lazy val falseLeafGen: Gen[ErgoTree] = Gen.const(Constants.FalseLeaf)
@@ -63,29 +61,12 @@ trait ErgoGenerators extends CoreGenerators with Matchers with ErgoTestConstants
 
   lazy val positiveIntGen: Gen[Int] = Gen.choose(1, Int.MaxValue)
 
-  def validValueGen(proposition: ErgoTree,
-                    additionalTokens: Seq[(TokenId, Long)] = Seq(),
-                    additionalRegisters: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]] = Map(),
-                    transactionId: ModifierId = Array.fill[Byte](32)(0.toByte).toModifierId,
-                    boxId: Short = 0,
-                    creationHeight: Long = 0): Gen[Long] = {
-    //there are outputs in tests of 183 bytes, and maybe in some tests at least 2 outputs are required
-    //thus we put in an input a monetary value which is at least enough for storing 400 bytes of outputs
-    val minValue = parameters.minValuePerByte * 400
-    Gen.choose(minValue, coinsTotal / 1000)
-  }
-
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
   } yield ErgoSyncInfo(ids)
 
   lazy val digest32Gen: Gen[Digest32] = {
     val x = Digest32 @@ genBytes(32)
-    x
-  }
-
-  lazy val boxIdGen: Gen[BoxId] = {
-    val x = ADKey @@ genBytes(Constants.ModifierIdSize)
     x
   }
 

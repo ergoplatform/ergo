@@ -20,6 +20,7 @@ import scorex.db.ByteArrayWrapper
 import scorex.util._
 
 import scala.annotation.tailrec
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 /**
@@ -80,7 +81,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
 
-  private def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
+  def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
 
   /**
     * @param h - header to process
@@ -189,25 +190,25 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     */
   def headerChainBack(limit: Int, startHeader: Header, until: Header => Boolean): HeaderChain = {
     @tailrec
-    def loop(header: Header, acc: Seq[Header]): Seq[Header] = {
+    def loop(header: Header, acc: scala.collection.mutable.Buffer[Header]): Seq[Header] = {
       if (acc.lengthCompare(limit) == 0 || until(header)) {
         acc
       } else {
         typedModifierById[Header](header.parentId) match {
           case Some(parent: Header) =>
-            loop(parent, acc :+ parent)
+            loop(parent, acc += parent)
           case None if acc.contains(header) =>
             acc
           case _ =>
-            acc :+ header
+            acc += header
         }
       }
     }
 
     if (bestHeaderIdOpt.isEmpty || (limit == 0)) {
-      HeaderChain(Seq.empty)
+      HeaderChain(ArrayBuffer.empty)
     } else {
-      HeaderChain(loop(startHeader, Seq(startHeader)).reverse)
+      HeaderChain(loop(startHeader, ArrayBuffer.empty += startHeader).reverse)
     }
   }
 

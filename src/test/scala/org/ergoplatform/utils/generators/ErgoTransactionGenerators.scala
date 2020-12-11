@@ -1,6 +1,6 @@
 package org.ergoplatform.utils.generators
 
-import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
@@ -13,34 +13,32 @@ import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
-import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress, UnsignedInput}
-import org.scalacheck.Arbitrary.arbByte
+import org.ergoplatform.UnsignedInput
+import org.ergoplatform.wallet.interpreter.TransactionHintsBag
+import org.ergoplatform.wallet.utils.Generators
+import org.ergoplatform.{DataInput, ErgoAddress, ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input, P2PKAddress}
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.ByteArrayWrapper
-import scorex.util._
 import scorex.util.encode.Base16
-import sigmastate.Values.{ByteArrayConstant, CollectionConstant, ErgoTree, EvaluatedValue, FalseLeaf, TrueLeaf}
-import sigmastate._
+import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
+import sigmastate.helpers.TestingHelpers._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
-trait ErgoTransactionGenerators extends ErgoGenerators {
+trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
 
   protected implicit val ergoAddressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   val creationHeightGen: Gen[Int] = Gen.choose(0, Int.MaxValue / 2)
-
-  val boxIndexGen: Gen[Short] = for {
-    v <- Gen.chooseNum(0, Short.MaxValue)
-  } yield v.toShort
 
   lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
     h <- creationHeightGen
@@ -59,29 +57,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     value <- validValueGen(prop, tokens, ar)
   } yield new ErgoBoxCandidate(value, prop, h, tokens.toColl, ar)
 
-  def ergoBoxGen(propGen: Gen[ErgoTree] = ergoPropositionGen,
-                 tokensGen: Gen[Seq[(TokenId, Long)]] = additionalTokensGen,
-                 valueGenOpt: Option[Gen[Long]] = None,
-                 heightGen: Gen[Int] = creationHeightGen): Gen[ErgoBox] = for {
-    h <- heightGen
-    prop <- propGen
-    transactionId: Array[Byte] <- genBytes(Constants.ModifierIdSize)
-    boxId: Short <- boxIndexGen
-    ar <- additionalRegistersGen
-    tokens <- tokensGen
-    value <- valueGenOpt.getOrElse(validValueGen(prop, tokens, ar, transactionId.toModifierId, boxId))
-  } yield {
-    val box = ErgoBox(value, prop, h, tokens, ar, transactionId.toModifierId, boxId)
-    if (box.bytes.length < ErgoBox.MaxBoxSize) {
-      box
-    } else {
-      // is size limit is reached, generate box without registers and tokens
-      ErgoBox(value, prop, h, Seq(), Map(), transactionId.toModifierId, boxId)
-    }
-  }
-
-  lazy val ergoBoxGen: Gen[ErgoBox] = ergoBoxGen()
-
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = ergoBoxGen(propGen = trueLeafGen)
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
@@ -93,39 +68,6 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
                             maxValue: Long = coinsTotal): Gen[ErgoBox] = {
     ergoBoxGen(propGen = falseLeafGen, valueGenOpt = Some(Gen.choose(minValue, maxValue)))
   }
-
-  val byteArrayConstGen: Gen[CollectionConstant[SByte.type]] = for {
-    length <- Gen.chooseNum(1, 100)
-    bytes <- Gen.listOfN(length, arbByte.arbitrary)
-  } yield ByteArrayConstant(bytes.toArray)
-
-  def additionalRegistersGen: Gen[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]] = for {
-    cnt <- Gen.choose(0: Byte, ErgoBox.nonMandatoryRegistersCount)
-    registers <- additionalRegistersGen(cnt)
-  } yield registers
-
-  def additionalRegistersGen(cnt: Byte): Gen[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]] = {
-    Gen.listOfN(cnt, evaluatedValueGen) map { values =>
-      ErgoBox.nonMandatoryRegisters.take(cnt).zip(values).toMap
-    }
-  }
-
-  def evaluatedValueGen: Gen[EvaluatedValue[SType]] = for {
-    arr <- byteArrayConstGen
-    v <- Gen.oneOf(TrueLeaf, FalseLeaf, arr)
-  } yield v.asInstanceOf[EvaluatedValue[SType]]
-
-  def additionalTokensGen: Gen[Seq[(TokenId, Long)]] = for {
-    cnt <- Gen.chooseNum[Int](0, 10)
-    assets <- additionalTokensGen(cnt)
-  } yield assets
-
-  def additionalTokensGen(cnt: Int): Gen[Seq[(TokenId, Long)]] = Gen.listOfN(cnt, assetGen)
-
-  def assetGen: Gen[(TokenId, Long)] = for {
-    id <- boxIdGen
-    amt <- Gen.oneOf(1, 500, 20000, 10000000, Long.MaxValue)
-  } yield Digest32 @@ id -> amt
 
   lazy val inputGen: Gen[Input] = for {
     boxId <- boxIdGen
@@ -153,8 +95,8 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
   lazy val walletTransactionGen: Gen[WalletTransaction] = for {
     tx <- invalidErgoTransactionGen
     inclusionHeight <- Gen.posNum[Int]
-    appId <- Gen.posNum[Short]
-  } yield WalletTransaction(tx, inclusionHeight, appId)
+    scanId <- ScanId @@ Gen.posNum[Short]
+  } yield WalletTransaction(tx, inclusionHeight, Seq(scanId))
 
   lazy val augWalletTransactionGen: Gen[AugWalletTransaction] = for {
     tx <- walletTransactionGen
@@ -245,7 +187,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
 
     val newBoxes = outputAmounts.zip(tokenAmounts.toIndexedSeq).map { case (amt, tokens) =>
       val normalizedTokens = tokens.toSeq.map(t => (Digest32 @@ t._1.data) -> t._2)
-      ErgoBox(amt, outputsProposition, 0, normalizedTokens)
+      testBox(amt, outputsProposition, 0, normalizedTokens)
     }
     val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
     val dataInputs = dataBoxes.map(b => DataInput(b.id))
@@ -389,13 +331,14 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     }
   }
 
-  def transactionSigningRequestGen(includeInputs: Boolean):Gen[TransactionSigningRequest] = for {
+  def transactionSigningRequestGen(includeInputs: Boolean): Gen[TransactionSigningRequest] = for {
     (secret, pubKey) <- dlogSecretWithPublicImageGen
     (secretDh, _) <- dhtSecretWithPublicImageGen
     (inputBoxes, utx) <- validUnsignedErgoTransactionGen(pubKey)
     inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
     secretSeq = Seq(ExternalSecret(DlogSecretKey(secret)), ExternalSecret(DhtSecretKey(secretDh)))
-  } yield TransactionSigningRequest(utx, secretSeq, if(includeInputs) Some(inputBoxesEncoded) else None, None)
+  } yield TransactionSigningRequest(utx, TransactionHintsBag.empty, secretSeq,
+    if (includeInputs) Some(inputBoxesEncoded) else None, None)
 
   def transactionSigningRequestGen(utxoSet: WrappedUtxoState): Gen[TransactionSigningRequest] = Gen.const {
     val inputBoxes = utxoSet.takeBoxes(3).toIndexedSeq
@@ -404,7 +347,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators {
     val coin = Random.nextBoolean()
     val inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
 
-    TransactionSigningRequest(utx, Seq.empty, if(coin) Some(inputBoxesEncoded) else None, None)
+    TransactionSigningRequest(utx, TransactionHintsBag.empty, Seq.empty, if (coin) Some(inputBoxesEncoded) else None, None)
   }
 
 }

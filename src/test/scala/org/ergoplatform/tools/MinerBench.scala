@@ -67,7 +67,7 @@ object MinerBench extends App with ErgoTestHelpers {
     val nBits = RequiredDifficulty.encodeCompactBits(difficulty)
     val h = inHeader.copy(nBits = nBits)
 
-    val candidate = new CandidateBlock(None, Header.CurrentVersion, nBits: Long, h.stateRoot,
+    val candidate = new CandidateBlock(None, Header.InitialVersion, nBits: Long, h.stateRoot,
       fb.adProofs.get.proofBytes,
       fb.blockTransactions.txs,
       System.currentTimeMillis(),

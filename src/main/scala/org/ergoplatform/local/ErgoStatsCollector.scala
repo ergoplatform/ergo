@@ -12,7 +12,6 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
 import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Parameters}
-import scorex.core.api.http.PeersApiRoute.PeersStatusResponse
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._

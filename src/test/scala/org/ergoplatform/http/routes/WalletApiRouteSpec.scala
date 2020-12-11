@@ -8,7 +8,7 @@ import io.circe.syntax._
 import io.circe.{Json, Decoder}
 import org.ergoplatform.http.api.{WalletApiRoute, ApiCodecs}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequestEncoder, PaymentRequest, AssetIssueRequest, PaymentRequestEncoder, _}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
 import org.ergoplatform.nodeView.wallet.{ErgoAddressJsonEncoder, AugWalletTransaction}
 import org.ergoplatform.settings.{Constants, Args, ErgoSettings}
 import org.ergoplatform.utils.Stubs
@@ -44,7 +44,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
   implicit val addressJsonDecoder: Decoder[ErgoAddress] = ErgoAddressJsonEncoder(settings).decoder
 
   val paymentRequest = PaymentRequest(Pay2SAddress(Constants.FalseLeaf), 100L, Seq.empty, Map.empty)
-  val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), 100L, "TEST", "Test", 8)
+  val assetIssueRequest = AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), None, 100L, "TEST", "Test", 8)
   val requestsHolder = RequestsHolder(
     (0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)),
     Some(10000L),

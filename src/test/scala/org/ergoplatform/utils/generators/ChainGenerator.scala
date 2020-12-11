@@ -8,12 +8,15 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
 import org.ergoplatform.Input
+import org.ergoplatform.{ErgoBox, Input}
+import scorex.core.block.Block.Version
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 import sigmastate.interpreter.{ContextExtension, ProverResult}
 import sigmastate.eval._
 import sigmastate.helpers.TestingHelpers._
+
 import scala.util.Random
 
 trait ChainGenerator extends ErgoTestConstants {
@@ -83,7 +86,7 @@ trait ChainGenerator extends ErgoTestConstants {
                  useRealTs: Boolean = false): Header =
     powScheme.prove(
       prev,
-      Header.CurrentVersion,
+      Header.InitialVersion,
       diffBitsOpt.getOrElse(settings.chainSettings.initialNBits),
       EmptyStateRoot,
       EmptyDigest32,
@@ -103,13 +106,15 @@ trait ChainGenerator extends ErgoTestConstants {
 
   def genChain(height: Int,
                history: ErgoHistory,
+               blockVersion: Version = Header.InitialVersion,
                nBits: Long = settings.chainSettings.initialNBits,
                extension: ExtensionCandidate = defaultExtension): Seq[ErgoFullBlock] = {
     val prefix = history.bestFullBlockOpt
-    blockStream(prefix, nBits, extension).take(height + prefix.size)
+    blockStream(prefix, blockVersion, nBits, extension).take(height + prefix.size)
   }
 
   protected def blockStream(prefix: Option[ErgoFullBlock],
+                            blockVersion: Version = Header.InitialVersion,
                             nBits: Long = settings.chainSettings.initialNBits,
                             extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
@@ -120,21 +125,24 @@ trait ChainGenerator extends ErgoTestConstants {
     def txs(i: Long) = Seq(ErgoTransaction(inputs, outputs))
 
     lazy val blocks: Stream[ErgoFullBlock] =
-      nextBlock(prefix, txs(1), extension, nBits) #::
-        blocks.zip(Stream.from(2)).map({ case (prev, i) => nextBlock(Option(prev), txs(i), extension, nBits) })
+      nextBlock(prefix, txs(1), extension, blockVersion, nBits) #::
+        blocks.zip(Stream.from(2)).map { case (prev, i) =>
+          nextBlock(Option(prev), txs(i), extension, blockVersion, nBits)
+        }
     prefix ++: blocks
   }
 
   def nextBlock(prev: Option[ErgoFullBlock],
                 txs: Seq[ErgoTransaction],
                 extension: ExtensionCandidate,
+                blockVersion: Version = Header.InitialVersion,
                 nBits: Long = settings.chainSettings.initialNBits): ErgoFullBlock = {
     val interlinks = prev.toSeq.flatMap(x =>
       PoPowAlgos.updateInterlinks(x.header, PoPowAlgos.unpackInterlinks(x.extension.fields).get))
     val validExtension = extension ++ PoPowAlgos.interlinksToExtension(interlinks)
     powScheme.proveBlock(
       prev.map(_.header),
-      Header.CurrentVersion,
+      blockVersion,
       nBits,
       EmptyStateRoot,
       emptyProofs,

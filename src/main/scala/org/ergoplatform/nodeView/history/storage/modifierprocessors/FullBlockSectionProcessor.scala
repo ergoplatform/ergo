@@ -42,16 +42,14 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
   }
 
   override protected def validate(m: BlockSection): Try[Unit] = {
-    typedModifierById[Header](m.headerId) map { header =>
-      new PayloadValidator(initialValidationState)
-        .validate(m, header)
-        .toTry
-    } getOrElse {
+    typedModifierById[Header](m.headerId).map(header =>
+      new PayloadValidator(initialValidationState).validate(m, header)
+    ).getOrElse(
+      // Block section can not be validated without a corresponding header
       initialValidationState
-        .validate(bsNoHeader, condition = false, Algos.encode(m.id))
+        .validate(bsNoHeader, condition = false, s"Block section id: ${Algos.encode(m.id)}")
         .result
-        .toTry
-    }
+    ).toTry
   }
 
   /**

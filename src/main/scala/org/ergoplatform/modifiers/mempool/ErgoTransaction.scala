@@ -19,7 +19,7 @@ import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationState}
-import scorex.db.ByteArrayWrapper
+import scorex.db.{ByteArrayUtils, ByteArrayWrapper}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.eval.Extensions._
@@ -61,6 +61,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   override val serializedId: Array[Byte] = Algos.hash(messageToSign)
 
   override lazy val id: ModifierId = bytesToId(serializedId)
+
+  /**
+    * Id of transaction "witness" (taken from Bitcoin jargon, means commitment to signatures of a transaction)
+    */
+  lazy val witnessSerializedId: Array[Byte] =
+    Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof)))
+
+  lazy val witnessId: ModifierId = bytesToId(witnessSerializedId)
 
   lazy val outAssetsTry: Try[(Map[ByteArrayWrapper, Long], Int)] = ErgoTransaction.extractAssets(outputCandidates)
 

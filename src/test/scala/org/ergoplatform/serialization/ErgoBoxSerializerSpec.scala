@@ -34,7 +34,7 @@ class ErgoBoxSerializerSpec extends ErgoPropertyTest {
 
     forAll(ergoBoxGen){b: ErgoBox =>
       val h = Int.MaxValue
-      val ob = ErgoBox(b.value, b.ergoTree, h, b.additionalTokens.toMap.toSeq, b.additionalRegisters, b.transactionId, b.index)
+      val ob = new ErgoBox(b.value, b.ergoTree, b.additionalTokens, b.additionalRegisters, b.transactionId, b.index, h)
       val ob2 = overflowHeight(ob)
       (ob2.creationHeight < 0) shouldBe true
     }

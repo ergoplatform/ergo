@@ -5,8 +5,6 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
 import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
-import org.ergoplatform.nodeView.wallet.persistence.{PostponedBlockSerializer, RegistryIndexSerializer}
-import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigestSerializer
 import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsSerializer, ErgoValidationSettingsUpdateSerializer}
 import org.ergoplatform.utils.ErgoPropertyTest

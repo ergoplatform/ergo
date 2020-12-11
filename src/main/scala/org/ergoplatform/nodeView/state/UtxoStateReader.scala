@@ -4,7 +4,6 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF

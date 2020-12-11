@@ -6,8 +6,8 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import org.ergoplatform.http.api.UtxoApiRoute
-import org.ergoplatform.modifiers.mempool.ErgoBoxSerializer
 import org.ergoplatform.utils.Stubs
+import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.crypto.hash.Blake2b256

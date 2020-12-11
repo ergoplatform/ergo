@@ -10,11 +10,10 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInf
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.scalacheck.Gen
-import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{PersistentNodeViewModifier, bytesToId}

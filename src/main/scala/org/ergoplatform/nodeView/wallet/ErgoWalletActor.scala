@@ -817,17 +817,6 @@ class ErgoWalletActor(settings: ErgoSettings,
       log.error("Unlock failed: ", t)
   }
 
-  /*
-    private def inputsFor(targetAmount: Long,
-                          targetAssets: TokensMap = Map.empty): Seq[ErgoBox] = {
-      val unspentBoxes = registry.walletUnspentBoxes()
-      boxSelector
-        .select(unspentBoxes.toIterator, walletFilter, targetAmount, targetAssets)
-        .toSeq
-        .flatMap(_.boxes)
-        .map(_.box)
-    }*/
-
   private def wrapLegalExc[T](e: Throwable): Failure[T] =
     if (e.getMessage.startsWith("Illegal key size")) {
       val dkLen = settings.walletSettings.secretStorage.encryption.dkLen

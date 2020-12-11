@@ -644,7 +644,7 @@ object ErgoMiner extends ScorexLogging {
     */
   def deriveUnprovenHeader(candidate: CandidateBlock): HeaderWithoutPow = {
     val (parentId, height) = derivedHeaderFields(candidate.parentOpt)
-    val transactionsRoot = BlockTransactions.transactionsRoot(candidate.transactions)
+    val transactionsRoot = BlockTransactions.transactionsRoot(candidate.transactions, candidate.version)
     val adProofsRoot = ADProofs.proofDigest(candidate.adProofBytes)
     val extensionRoot: Digest32 = candidate.extension.digest
 
@@ -668,7 +668,7 @@ object ErgoMiner extends ScorexLogging {
   def completeBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
     val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
     val adProofs = ADProofs(header.id, candidate.adProofBytes)
-    val blockTransactions = BlockTransactions(header.id, candidate.transactions)
+    val blockTransactions = BlockTransactions(header.id, candidate.version, candidate.transactions)
     val extension = Extension(header.id, candidate.extension.fields)
     new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
   }

@@ -10,7 +10,9 @@ import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
 /**
-  * Solution of Autolykos PoW puzzle
+  * Solution for an Autolykos PoW puzzle.
+  *
+  * In Autolykos v.1 all the four fields are used, in Autolykos v.2 only pk and n fields are used.
   *
   * @param pk - miner public key. Should be used to collect block rewards
   * @param w  - one-time public key. Prevents revealing of miners secret
@@ -18,7 +20,10 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
   * @param d  - distance between pseudo-random number, corresponding to nonce `n` and a secret,
   *           corresponding to `pk`. The lower `d` is, the harder it was to find this solution.
   */
-case class AutolykosSolution(pk: EcPointType, w: EcPointType, n: Array[Byte], d: BigInt) extends BytesSerializable {
+case class AutolykosSolution(pk: EcPointType,
+                             w: EcPointType,
+                             n: Array[Byte],
+                             d: BigInt) extends BytesSerializable {
   override type M = AutolykosSolution
 
   val encodedPk: Array[Byte] = groupElemToBytes(pk)

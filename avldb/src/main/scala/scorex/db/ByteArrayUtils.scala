@@ -41,7 +41,7 @@ object ByteArrayUtils {
   @inline final def putReplicated(buf: Array[Byte], pos: Int, n: Int, v: Byte): Unit = {
     val limit = pos + n
     var i = pos
-    while(i < limit) {
+    while (i < limit) {
       buf(i) = v
       i += 1
     }
@@ -50,6 +50,16 @@ object ByteArrayUtils {
   /** Put the given bytes at the given position in the buffer array. */
   @inline final def putBytes(buf: Array[Byte], pos: Int, bytes: Array[Byte]): Unit = {
     System.arraycopy(bytes, 0, buf, pos, bytes.length)
+  }
+
+  @inline final def mergeByteArrays(byteArrays: Seq[Array[Byte]]): Array[Byte] = {
+    val resultingLength = byteArrays.foldLeft(0) { case (l, arr) => l + arr.length }
+    val result = new Array[Byte](resultingLength)
+    byteArrays.foldLeft(0) { case (pos, arr) =>
+      putBytes(result, pos, arr)
+      pos + arr.length
+    }
+    result
   }
 
 }

@@ -12,7 +12,7 @@ import sigmastate.basics.DLogProtocol.ProveDlog
   *
   * @param msg                            - message for external miner to work on (serialized header)
   * @param b                              - target value for mining
-  * @param h                              - height of the block (presetned in V2 only)
+  * @param h                              - height of the block (presented in V2 only)
   * @param pk                             - public key of a miner
   * @param proofsForMandatoryTransactions - proofs of transactions membership (optional)
   *

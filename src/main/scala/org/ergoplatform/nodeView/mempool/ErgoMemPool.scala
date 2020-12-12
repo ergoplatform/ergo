@@ -1,5 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
+import io.circe.{Encoder, Json}
+import io.circe.syntax._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
@@ -9,6 +11,7 @@ import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, bytesToId}
 
+import scala.annotation.tailrec
 import scala.util.Try
 
 /**
@@ -20,6 +23,14 @@ object MemPoolStatisticsParams {
 }
 
 case class FeeHistogramBin(nTxns: Int, totalFee: Long)
+
+object FeeHistogramBin {
+
+  implicit val encodeHistogramBin: Encoder[FeeHistogramBin] = (bin: FeeHistogramBin) => Json.obj(
+    ("nTxns", bin.nTxns.asJson),
+    ("totalFee", bin.totalFee.asJson)
+  )
+}
 
 /**
   * Immutable implementation of mempool statistics
@@ -100,18 +111,18 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
 
   override def putWithoutCheck(txs: Iterable[ErgoTransaction]): ErgoMemPool = {
     val updatedPool = txs.toSeq.distinct.foldLeft(pool) { case (acc, tx) => acc.put(tx) }
-    new ErgoMemPool(updatedPool,stats)
+    new ErgoMemPool(updatedPool, stats)
   }
 
   override def remove(tx: ErgoTransaction): ErgoMemPool = {
     val wtx = pool.transactionsRegistry.get(tx.id)
     new ErgoMemPool(pool.remove(tx), wtx.map(wgtx => stats
       .add(System.currentTimeMillis(), wgtx))
-      .getOrElse(MemPoolStatistics(System.currentTimeMillis(),0,System.currentTimeMillis())))
+      .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis())))
   }
 
   override def filter(condition: ErgoTransaction => Boolean): ErgoMemPool = {
-    new ErgoMemPool(pool.filter(condition),stats)
+    new ErgoMemPool(pool.filter(condition), stats)
   }
 
   /**
@@ -120,7 +131,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
     * @param tx - Transaction to invalidate
     */
   def invalidate(tx: ErgoTransaction): ErgoMemPool = {
-    new ErgoMemPool(pool.invalidate(tx),stats)
+    new ErgoMemPool(pool.invalidate(tx), stats)
   }
 
   def process(tx: ErgoTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
@@ -170,19 +181,20 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
 
   /**
     * Get average fee for the specified wait time interval
+    *
     * @param expectedWaitTimeMinutes - maximal amount of time for which transaction can be kept in mempool
     * @param txSize                  - size of transaction (in bytes)
     *  @return recommended fee value for transaction to be proceeded in specified time
     */
-  def getRecommendedFee(expectedWaitTimeMinutes : Int, txSize : Int) : Long = {
-    if (expectedWaitTimeMinutes < MemPoolStatisticsParams.nHistogramBins) {
-      // locate first non-empty histogram bin preceding or equal to the specified wait time
-      for (i <- expectedWaitTimeMinutes to 0 by -1) {
-        val h = stats.histogram(expectedWaitTimeMinutes)
-        if (h.nTxns != 0) h.totalFee / h.nTxns * txSize / 1024
+  def getRecommendedFee(expectedWaitTimeMinutes: Int, txSize: Int): Long = {
+    @tailrec def loop(waitMinutes: Int): Option[Long] =
+      Try(stats.histogram(waitMinutes)).toOption match {
+        case Some(bin) if bin.nTxns != 0 => Some(bin.totalFee / bin.nTxns * txSize / 1024)
+        case _ if waitMinutes < expectedWaitTimeMinutes => loop(waitMinutes + 1)
+        case _ => None
       }
-    }
-    settings.nodeSettings.minimalFeeAmount
+
+    loop(waitMinutes = 0).getOrElse(settings.nodeSettings.minimalFeeAmount)
   }
 
   /**
@@ -232,6 +244,6 @@ object ErgoMemPool {
 
   def empty(settings: ErgoSettings): ErgoMemPool =
     new ErgoMemPool(OrderedTxPool.empty(settings),
-      MemPoolStatistics(System.currentTimeMillis(),0,System.currentTimeMillis()))(settings)
+      MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))(settings)
 
 }

@@ -72,13 +72,6 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
 
   val feeHistogramParameters: Directive[(Int, Long)] = parameters("bins".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))
 
-  implicit val encodeHistogramBin: Encoder[FeeHistogramBin] = new Encoder[FeeHistogramBin] {
-    final def apply(bin:FeeHistogramBin): Json = Json.obj(
-      ("nTxns", bin.nTxns.asJson),
-      ("totalFee", bin.totalFee.asJson)
-    )
-  }
-
   def getFeeHistogramR: Route = (path("poolhistogram") & get & feeHistogramParameters) { (bins, maxtime) =>
     ApiResponse(getMemPool.map(p => getFeeHistogram(System.currentTimeMillis(), bins, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
   }

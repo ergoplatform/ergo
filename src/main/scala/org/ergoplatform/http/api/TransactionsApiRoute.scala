@@ -3,12 +3,12 @@ package org.ergoplatform.http.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive, Route}
 import akka.pattern.ask
+import io.circe.Json
 import io.circe.syntax._
-import io.circe.{Encoder, Json}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
-import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, FeeHistogramBin}
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest

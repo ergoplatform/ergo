@@ -107,9 +107,12 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     * @return scan or error (e.g. if scan identifier space is exhausted)
     */
   def addScan(scanReq: ScanRequest): Try[Scan] = {
-    val id = ScanId @@ (lastUsedscanId + 1).toShort
+    val id = ScanId @@ (lastUsedScanId + 1).toShort
     scanReq.toScan(id).flatMap { app =>
-      Try(store.insert(Seq(scanPrefixKey(id) -> ScanSerializer.toBytes(app)))).map(_ => app)
+      Try(store.insert(Seq(
+        scanPrefixKey(id) -> ScanSerializer.toBytes(app),
+        lastUsedScanIdKey -> Shorts.toByteArray(id)
+      ))).map(_ => app)
     }
   }
 
@@ -141,8 +144,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     * Last inserted scan identifier (as they are growing sequentially)
     * @return identifier of last inserted scan
     */
-  def lastUsedscanId: Short = store.lastKeyInRange(SmallestPossibleScanId, BiggestPossibleScanId)
-    .map(bs => Shorts.fromByteArray(bs.takeRight(2)))
+  def lastUsedScanId: Short = store.get(lastUsedScanIdKey)
+    .map(bs => Shorts.fromByteArray(bs))
     .getOrElse(PaymentsScanId)
 
 }
@@ -185,6 +188,7 @@ object WalletStorage {
   val StateContextKey: Array[Byte] = noPrefixKey("state_ctx")
   val SecretPathsKey: Array[Byte] = noPrefixKey("secret_paths")
   val ChangeAddressKey: Array[Byte] = noPrefixKey("change_address")
+  val lastUsedScanIdKey: Array[Byte] = noPrefixKey("last_scan_id")
 
   def readOrCreate(settings: ErgoSettings)
                   (implicit addressEncoder: ErgoAddressEncoder): WalletStorage = {

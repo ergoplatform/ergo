@@ -7,19 +7,19 @@ import org.ergoplatform.utils.ArithUtils.{addExact, multiplyExact}
 import org.ergoplatform.validation.SigmaValidationSettings
 import sigmastate.AvlTreeData
 import sigmastate.Values.SigmaBoolean
-import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
+import sigmastate.interpreter.{ContextExtension, ProverInterpreter, Interpreter}
 import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
 import org.ergoplatform.wallet.secrets.SecretKey
 import sigmastate.basics.SigmaProtocolPrivateInput
 import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import scorex.util.encode.Base16
-import sigmastate.eval.{IRContext, RuntimeIRContext}
+import sigmastate.eval.{RuntimeIRContext, IRContext}
 import sigmastate.utxo.CostTable
 import special.collection.Coll
-import special.sigma.{Header, PreHeader}
+import special.sigma.{PreHeader, Header}
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
 /**
   * A class which is holding secrets and signing transactions.
@@ -71,6 +71,12 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     case None =>
       hdKeys.map(_.publicKey) // costly operation if there are many secret keys
   }
+
+  // TODO this should probably be min(MaxSupportedScriptVersion, <the current activated version>)
+  // however it is not clear how the current version should be accessed from here
+  // The principled way to do this would be adding activatedVersion as a parameter
+  // and then requiring the application layer to take care of providing it.
+  val activatedVersion = Interpreter.MaxSupportedScriptVersion
 
   /**
     * Produces updated instance of ErgoProvingInterpreter with a new secret included
@@ -137,7 +143,8 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
               unsignedInput.extension,
               ValidationRules.currentSettings,
               params.maxBlockCost,
-              totalCost
+              totalCost,
+              activatedVersion
             )
 
             val hints = txHints.allHintsForInput(boxIdx)
@@ -203,7 +210,8 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
         unsignedInput.extension,
         ValidationRules.currentSettings,
         params.maxBlockCost,
-        0L // initial cost
+        0L, // initial cost
+        activatedVersion
       )
       val scriptToReduce = inputBox.ergoTree
       inpIndex -> generateCommitments(scriptToReduce, context)

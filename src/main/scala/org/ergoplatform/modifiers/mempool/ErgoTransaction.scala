@@ -291,7 +291,7 @@ object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
 
   override def parse(r: Reader): ErgoTransaction = {
     // TODO v4.0: obtain the ACTUAL versions
-    val versionContext: Nullable[VersionContext] = Nullable.None
+    val versionContext = VersionContext(0) // v3.x
     val reader = new SigmaByteReader(r,
       new ConstantStore(),
       resolvePlaceholdersToConstants = false,

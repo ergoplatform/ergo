@@ -8,6 +8,7 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionVal
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Constants, _}
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
+import scorex.core.block.Block
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, ValidationState}
@@ -77,6 +78,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   } else {
     genesisStateDigest
   }
+
+  def currentProtocolVersion: Block.Version = currentParameters.blockVersion
 
   /* NOHF PROOF:
   Changed: removed returning ErgoHistory.EmptyHistoryHeight if sigmaPreHeader is null.

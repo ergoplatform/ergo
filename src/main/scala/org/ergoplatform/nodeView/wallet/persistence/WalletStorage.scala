@@ -144,9 +144,17 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     * Last inserted scan identifier (as they are growing sequentially)
     * @return identifier of last inserted scan
     */
-  def lastUsedScanId: Short = store.get(lastUsedScanIdKey)
-    .map(bs => Shorts.fromByteArray(bs))
-    .getOrElse(PaymentsScanId)
+  def lastUsedScanId: Short = {
+    // pre-3.3.7 method to get last used scan id, now useful to read pre-3.3.7 databases
+    def oldScanId: Option[Short] =
+      store.lastKeyInRange(SmallestPossibleScanId, BiggestPossibleScanId)
+        .map(bs => Shorts.fromByteArray(bs.takeRight(2)))
+
+    store.get(lastUsedScanIdKey)
+      .map(bs => Shorts.fromByteArray(bs))
+      .orElse(oldScanId)
+      .getOrElse(PaymentsScanId)
+  }
 
 }
 

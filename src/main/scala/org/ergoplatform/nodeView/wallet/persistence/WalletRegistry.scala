@@ -118,7 +118,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @return sequence of scan-related boxes
     */
   def confirmedBoxes(scanId: ScanId): Seq[TrackedBox] = {
-    walletUnspentBoxes() ++ walletSpentBoxes()
+    unspentBoxes(scanId) ++ spentBoxes(scanId)
   }
 
   /**

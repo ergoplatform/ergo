@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
@@ -16,6 +16,7 @@ import sigmastate.eval.Extensions._
 import scala.concurrent.blocking
 import scala.util.Random
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
+import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.secrets.PrimitiveSecretKey
 import org.scalacheck.Gen
 import scorex.util.ModifierId

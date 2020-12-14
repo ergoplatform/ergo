@@ -12,14 +12,12 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
 import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Parameters}
-import scorex.core.api.http.PeersApiRoute.PeersStatusResponse
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.utils.TimeProvider.Time
 import scorex.util.ScorexLogging
-import akka.actor.AllDeadLetters
 import scorex.core.network.peer.PeersStatus
 
 import scala.concurrent.ExecutionContextExecutor
@@ -44,9 +42,6 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
     context.system.scheduler.scheduleAtFixedRate(10.seconds, 20.seconds, networkController, GetConnectedPeers)(ec, self)
     context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(ec, self)
-
-    // Subscribe for dead letters from all the actors
-    context.system.eventStream.subscribe(self, classOf[AllDeadLetters])
   }
 
   private def networkTime(): Time = timeProvider.time()

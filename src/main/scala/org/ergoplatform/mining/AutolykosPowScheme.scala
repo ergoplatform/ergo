@@ -170,13 +170,13 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                  minNonce: Long = Long.MinValue,
                  maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
 
-    val transactionsRoot = BlockTransactions.transactionsRoot(transactions)
+    val transactionsRoot = BlockTransactions.transactionsRoot(transactions, version)
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
 
     prove(parentOpt, version, nBits, stateRoot, adProofsRoot, transactionsRoot,
       timestamp, extensionCandidate.digest, votes, sk, minNonce, maxNonce).map { h =>
       val adProofs = ADProofs(h.id, adProofBytes)
-      val blockTransactions = BlockTransactions(h.id, transactions)
+      val blockTransactions = BlockTransactions(h.id, version, transactions)
       val extension = extensionCandidate.toExtension(h.id)
       new ErgoFullBlock(h, blockTransactions, extension, Some(adProofs))
     }
@@ -268,7 +268,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val proofs = if (mandatoryTxIds.nonEmpty) {
       // constructs fake block transactions section (BlockTransactions instance) to get proofs from it
       val fakeHeaderId = scorex.util.bytesToId(Array.fill(org.ergoplatform.wallet.Constants.ModifierIdLength)(0: Byte))
-      val bt = BlockTransactions(fakeHeaderId, candidate.transactions)
+      val bt = BlockTransactions(fakeHeaderId, candidate.version, candidate.transactions)
       val ps = mandatoryTxIds.flatMap { txId => bt.proofFor(txId).map(mp => TransactionMembershipProof(txId, mp)) }
       Some(ProofOfUpcomingTransactions(h, ps))
     } else {

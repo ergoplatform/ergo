@@ -660,16 +660,17 @@ class ErgoWalletActor(settings: ErgoSettings,
     val userInputs = stringsToBoxes(inputsRaw)
     val dataInputs = stringsToBoxes(dataInputsRaw).toIndexedSeq
 
-    val (preInputBoxes, filter, changeAddressOpt: Option[ProveDlog]) = if (userInputs.nonEmpty) {
+    val changeAddressOpt: Option[ProveDlog] = changeAddress.map(_.pubkey)
+
+    val (preInputBoxes, filter) = if (userInputs.nonEmpty) {
       //inputs are provided externally, no need for filtering
-      (boxesToFakeTracked(userInputs), noFilter, None)
+      (boxesToFakeTracked(userInputs), noFilter)
     } else {
       walletVars.proverOpt match {
         case Some(_) =>
           //inputs are to be selected by the wallet
-          require(walletVars.publicKeyAddresses.nonEmpty, "No public keys in the prover to extract change address from")
           val boxesToSpend = (registry.walletUnspentBoxes() ++ offChainRegistry.offChainBoxes).distinct
-          (boxesToSpend.toIterator, walletFilter, changeAddress.map(_.pubkey))
+          (boxesToSpend.toIterator, walletFilter)
 
         case None =>
           throw new Exception(s"Cannot generateTransactionWithOutputs($requests, $inputsRaw): wallet is locked")

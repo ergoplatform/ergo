@@ -21,9 +21,10 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val toRemove = changes.toRemove.map(_.boxId)
       toRemove.count(boxId => java.util.Arrays.equals(toRemove.head, boxId)) shouldBe 2
 
-      val dsRoot = BlockTransactions.transactionsRoot(dsTxs)
+      val dsRoot = BlockTransactions.transactionsRoot(dsTxs, Header.InitialVersion)
       val dsHeader = validBlock.header.copy(transactionsRoot = dsRoot)
-      val doubleSpendBlock = ErgoFullBlock(dsHeader, BlockTransactions(dsHeader.id, dsTxs), validBlock.extension, validBlock.adProofs)
+      val bt = BlockTransactions(dsHeader.id, Header.InitialVersion, dsTxs)
+      val doubleSpendBlock = ErgoFullBlock(dsHeader, bt, validBlock.extension, validBlock.adProofs)
 
       us.applyModifier(doubleSpendBlock) shouldBe 'failure
       us.applyModifier(validBlock) shouldBe 'success

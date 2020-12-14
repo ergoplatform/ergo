@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSeria
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core._
+import scorex.core.block.Block.Version
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.{Leaf, MerkleProof, MerkleTree}
@@ -20,11 +21,13 @@ import scorex.util.Extensions._
 /**
   * Section of a block which contains transactions.
   *
-  * @param headerId - identifier of a header of a corresponding block
-  * @param txs - transactions of a block
-  * @param sizeOpt - (optional) size of the section (cached to not be calculated again)
+  * @param headerId     - identifier of a header of a corresponding block
+  * @param blockVersion - protocol version for the block
+  * @param txs          - transactions of the block
+  * @param sizeOpt      - (optional) size of the section (cached to not be calculated again)
   */
 case class BlockTransactions(headerId: ModifierId,
+                             blockVersion: Version,
                              txs: Seq[ErgoTransaction],
                              override val sizeOpt: Option[Int] = None)
   extends BlockSection with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
@@ -33,12 +36,24 @@ case class BlockTransactions(headerId: ModifierId,
 
   override val modifierTypeId: ModifierTypeId = BlockTransactions.modifierTypeId
 
+  /**
+    * Ids of block transactions
+    */
   lazy val txIds: Seq[Array[Byte]] = txs.map(_.serializedId)
+
+  /**
+    * Ids of transaction witnesses (signatures aka spending proofs)
+    */
+  lazy val witnessIds: Seq[Array[Byte]] = txs.map(_.witnessSerializedId)
 
   /**
     * Non-empty (because there's at least 1 transaction) Merkle tree of the block transactions
     */
-  lazy val merkleTree: MerkleTree[Digest32] = Algos.merkleTree(LeafData @@ txIds)
+  lazy val merkleTree: MerkleTree[Digest32] = if (blockVersion == Header.InitialVersion) {
+    Algos.merkleTree(LeafData @@ txIds)
+  } else {
+    Algos.merkleTree(LeafData @@ (txIds ++ witnessIds))
+  }
 
   /**
     * Root hash of the Merkle tree of block transactions
@@ -47,6 +62,7 @@ case class BlockTransactions(headerId: ModifierId,
 
   /**
     * Calculates Merkle-tree based membership proof for a given transaction identifier
+    *
     * @param txId - transaction identifier
     * @return Some(proof) or None (if transaction with given id is not in the block)
     */
@@ -78,7 +94,13 @@ object BlockTransactions extends ApiCodecs {
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (102: Byte)
 
   // Used in the miner when a BlockTransaction instance is not generated yet (because a header is not known)
-  def transactionsRoot(txs: Seq[ErgoTransaction]): Digest32 = Algos.merkleTreeRoot(LeafData @@ txs.map(_.serializedId))
+  def transactionsRoot(txs: Seq[ErgoTransaction], blockVersion: Version): Digest32 = {
+    if (blockVersion == Header.InitialVersion) {
+      Algos.merkleTreeRoot(LeafData @@ txs.map(_.serializedId))
+    } else {
+      Algos.merkleTreeRoot(LeafData @@ (txs.map(_.serializedId) ++ txs.map(_.witnessSerializedId)))
+    }
+  }
 
   // Could be useful when only digest of transactions is available, not a BlockTransaction instance
   def proofValid(transactionsDigest: Digest32, proof: MerkleProof[Digest32]): Boolean = proof.valid(transactionsDigest)
@@ -90,6 +112,7 @@ object BlockTransactions extends ApiCodecs {
     Map(
       "headerId" -> Algos.encode(bt.headerId).asJson,
       "transactions" -> bt.txs.map(_.asJson).asJson,
+      "blockVersion" -> bt.blockVersion.asJson,
       "size" -> bt.size.asJson
     ).asJson
   }
@@ -98,17 +121,21 @@ object BlockTransactions extends ApiCodecs {
     for {
       headerId <- c.downField("headerId").as[ModifierId]
       transactions <- c.downField("transactions").as[List[ErgoTransaction]]
+      blockVersion <- c.downField("blockVersion").as[Version]
       size <- c.downField("size").as[Int]
-    } yield BlockTransactions(headerId, transactions, Some(size))
+    } yield BlockTransactions(headerId, blockVersion, transactions, Some(size))
   }
 }
 
 object BlockTransactionsSerializer extends ScorexSerializer[BlockTransactions] {
+  // See a comment in the parse() function
+  val MaxTransactionsInBlock = 10000000
 
-  override def serialize(obj: BlockTransactions, w: Writer): Unit = {
-    w.putBytes(idToBytes(obj.headerId))
-    w.putUInt(obj.txs.size)
-    obj.txs.foreach { tx =>
+  override def serialize(bt: BlockTransactions, w: Writer): Unit = {
+    w.putBytes(idToBytes(bt.headerId))
+    w.putUInt(MaxTransactionsInBlock + bt.blockVersion)
+    w.putUInt(bt.txs.size)
+    bt.txs.foreach { tx =>
       ErgoTransactionSerializer.serialize(tx, w)
     }
   }
@@ -116,10 +143,27 @@ object BlockTransactionsSerializer extends ScorexSerializer[BlockTransactions] {
   override def parse(r: Reader): BlockTransactions = {
     val startPos = r.position
     val headerId: ModifierId = bytesToId(r.getBytes(Constants.ModifierIdSize))
-    val size = r.getUInt().toIntExact
-    val txs = (1 to size).map { _ =>
+    val verOrCount = r.getUInt().toIntExact
+
+    /**
+      * A hack to avoid need for a database rescan if older version of the serializer was used to put.
+      * block transactions into.
+      *
+      * We consider that in a block there could be no more than 10,000,000 transactions.
+      *
+      * Then the new serializer puts 10,000,000 + block version (while the old one just puts tx count with no version),
+      * and the reader knows that a new serializer was used if the first unsigned integer read is more than 1,000,000.
+      */
+    var blockVersion = 1: Byte
+    var txCount = verOrCount
+    if (verOrCount > MaxTransactionsInBlock) {
+      blockVersion = (verOrCount - MaxTransactionsInBlock).toByte
+      txCount = r.getUInt().toIntExact
+    }
+
+    val txs = (1 to txCount).map { _ =>
       ErgoTransactionSerializer.parse(r)
     }
-    BlockTransactions(headerId, txs, Some(r.position - startPos))
+    BlockTransactions(headerId, blockVersion, txs, Some(r.position - startPos))
   }
 }

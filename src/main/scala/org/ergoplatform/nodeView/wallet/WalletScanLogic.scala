@@ -15,7 +15,7 @@ import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
 import scorex.util.{ModifierId, ScorexLogging}
-import sigmastate.interpreter.{ContextExtension, Interpreter}
+import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
 import scorex.util.bytesToId
 import scala.collection.mutable

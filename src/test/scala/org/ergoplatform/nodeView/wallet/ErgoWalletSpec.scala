@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
@@ -16,10 +16,11 @@ import sigmastate.eval.Extensions._
 import scala.concurrent.blocking
 import scala.util.Random
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
+import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.secrets.PrimitiveSecretKey
 import org.scalacheck.Gen
 import scorex.util.ModifierId
-import sigmastate.CAND
+import sigmastate.{CAND, CTHRESHOLD}
 import sigmastate.basics.DLogProtocol.DLogProverInput
 
 class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
@@ -803,15 +804,55 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps {
 
       val hints1 = await(wallet.generateCommitmentsFor(utx, Some(Seq(es1)), Some(Seq(in)), None)).response.get
 
-      val ptx1 = await(wallet.signTransaction(utx, Seq(es2), hints1, Some(Seq(in)), None)).get
+      val txSigned = await(wallet.signTransaction(utx, Seq(es2), hints1, Some(Seq(in)), None)).get
 
-      ptx1.statelessValidity.isSuccess shouldBe true
+      txSigned.statelessValidity.isSuccess shouldBe true
     }
   }
 
   property("co-signing (external secrets) - 2-out-of-3") {
     withFixture { implicit w =>
-      false shouldBe true
+      val secret1 = DLogProverInput.random()
+      val es1 = ExternalSecret(PrimitiveSecretKey(secret1))
+
+      val secret2 = DLogProverInput.random()
+      val es2 = ExternalSecret(PrimitiveSecretKey(secret2))
+
+      val secret3 = DLogProverInput.random()
+      val es3 = ExternalSecret(PrimitiveSecretKey(secret3))
+
+      val pubKey = getPublicKeys.head.pubkey
+      val genesisBlock = makeGenesisBlock(pubKey, randomNewAsset)
+      applyBlock(genesisBlock) shouldBe 'success
+      waitForScanning(genesisBlock)
+      val confirmedBalance = getConfirmedBalances.walletBalance
+
+      //pay out all the wallet balance:
+      val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+      assetToSpend should not be empty
+      val addr = Pay2SAddress(CTHRESHOLD(2, Seq(secret1.publicImage, secret2.publicImage, secret3.publicImage)))
+      val req1 = PaymentRequest(addr, confirmedBalance, assetToSpend, Map.empty)
+
+      val tx = await(wallet.generateTransaction(Seq(req1))).get
+
+      val in = tx.outputs.head
+
+      // secret1 and secret2 are signing
+      val utx = new UnsignedErgoTransaction(IndexedSeq(new UnsignedInput(in.id)), IndexedSeq.empty, IndexedSeq(in.toCandidate))
+
+      val cmts1 = await(wallet.generateCommitmentsFor(utx, Some(Seq(es1)), Some(Seq(in)), None)).response.get
+
+      val pubCmts1 = TransactionHintsBag(cmts1.publicHints)
+      
+      val ptx = await(wallet.signTransaction(utx, Seq(es2), pubCmts1, Some(Seq(in)), None)).get
+
+      val eh = wallet.extractHints(ptx, Seq(secret1.publicImage, secret2.publicImage), Seq(secret3.publicImage), Some(Seq(in)), None)
+      val hintsExtracted = await(eh).transactionHintsBag
+
+      val hints = hintsExtracted.addHintsForInput(0, cmts1.allHintsForInput(0))
+
+      val txSigned = await(wallet.signTransaction(utx, Seq(es1), hints, Some(Seq(in)), None)).get
+      txSigned.statelessValidity.isSuccess shouldBe true
     }
   }
 

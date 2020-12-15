@@ -258,7 +258,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
       val ctx: ErgoLikeContext = new ErgoLikeContext(lastBlockUtxoRoot, headers, preHeader, dataBoxes, boxesToSpend,
         spendingTransaction, selfIndex, extension, validationSettings, costLimit, initCost, scriptVersion)
 
-      bag.putHints(idx, bagForMultisig(ctx, exp, proof, realSecretsToExtract, simulatedSecretsToExtract))
+      bag.replaceHintsForInput(idx, bagForMultisig(ctx, exp, proof, realSecretsToExtract, simulatedSecretsToExtract))
     }
   }
 

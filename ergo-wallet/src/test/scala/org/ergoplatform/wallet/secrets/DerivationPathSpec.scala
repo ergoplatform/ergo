@@ -4,13 +4,14 @@ import org.ergoplatform.wallet.Constants
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.utils.Generators
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Matchers, PropSpec}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 class DerivationPathSpec
-  extends PropSpec
+  extends AnyPropSpec
     with Matchers
-    with GeneratorDrivenPropertyChecks
+    with ScalaCheckPropertyChecks
     with Generators {
 
   property("derivation from encoded path") {

@@ -2,12 +2,12 @@ package org.ergoplatform.it
 
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
-import org.scalatest.FreeSpec
+import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class LongChainSyncSpec extends FreeSpec with IntegrationSuite {
+class LongChainSyncSpec extends AnyFlatSpec with IntegrationSuite {
 
   val chainLength = 300
 
@@ -16,7 +16,7 @@ class LongChainSyncSpec extends FreeSpec with IntegrationSuite {
 
   val miner: Node = docker.startDevNetNode(minerConfig).get
 
-  s"Long chain ($chainLength blocks) synchronization" in {
+  it should s"Long chain ($chainLength blocks) synchronization" in {
 
     val result: Future[Int] = miner.waitForHeight(chainLength)
       .flatMap { _ =>

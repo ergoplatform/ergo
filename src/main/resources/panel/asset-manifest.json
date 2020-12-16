@@ -1,18 +1,18 @@
 {
   "files": {
-    "main.css": "/static/css/main.4948ef80.chunk.css",
-    "main.js": "/static/js/main.1f01b859.chunk.js",
-    "main.js.map": "/static/js/main.1f01b859.chunk.js.map",
+    "main.css": "/static/css/main.f8799777.chunk.css",
+    "main.js": "/static/js/main.21d700f0.chunk.js",
+    "main.js.map": "/static/js/main.21d700f0.chunk.js.map",
     "runtime-main.js": "/static/js/runtime-main.219240e0.js",
     "runtime-main.js.map": "/static/js/runtime-main.219240e0.js.map",
     "static/css/2.9338f6a1.chunk.css": "/static/css/2.9338f6a1.chunk.css",
-    "static/js/2.9ae5727a.chunk.js": "/static/js/2.9ae5727a.chunk.js",
-    "static/js/2.9ae5727a.chunk.js.map": "/static/js/2.9ae5727a.chunk.js.map",
+    "static/js/2.a70e2b52.chunk.js": "/static/js/2.a70e2b52.chunk.js",
+    "static/js/2.a70e2b52.chunk.js.map": "/static/js/2.a70e2b52.chunk.js.map",
     "index.html": "/index.html",
-    "precache-manifest.570d2debbd0366e26bebc96337879ce4.js": "/precache-manifest.570d2debbd0366e26bebc96337879ce4.js",
+    "precache-manifest.9e1f9a16e912d1b7260f11b0d57d38ef.js": "/precache-manifest.9e1f9a16e912d1b7260f11b0d57d38ef.js",
     "service-worker.js": "/service-worker.js",
     "static/css/2.9338f6a1.chunk.css.map": "/static/css/2.9338f6a1.chunk.css.map",
-    "static/css/main.4948ef80.chunk.css.map": "/static/css/main.4948ef80.chunk.css.map",
+    "static/css/main.f8799777.chunk.css.map": "/static/css/main.f8799777.chunk.css.map",
     "static/media/index.scss": "/static/media/Roboto-Thin.89e2666c.ttf",
     "static/media/close.feae5a5c.svg": "/static/media/close.feae5a5c.svg",
     "static/media/copy.icon.835ebda7.svg": "/static/media/copy.icon.835ebda7.svg",
@@ -23,8 +23,8 @@
   "entrypoints": [
     "static/js/runtime-main.219240e0.js",
     "static/css/2.9338f6a1.chunk.css",
-    "static/js/2.9ae5727a.chunk.js",
-    "static/css/main.4948ef80.chunk.css",
-    "static/js/main.1f01b859.chunk.js"
+    "static/js/2.a70e2b52.chunk.js",
+    "static/css/main.f8799777.chunk.css",
+    "static/js/main.21d700f0.chunk.js"
   ]
 }

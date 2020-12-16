@@ -2,18 +2,18 @@ package org.ergoplatform.it
 
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
-import org.scalatest.FreeSpec
+import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class KnownNodesSpec extends FreeSpec with IntegrationSuite {
+class KnownNodesSpec extends AnyFlatSpec with IntegrationSuite {
 
   val nodeConfigs: List[Config] = nodeSeedConfigs.take(3).map(nonGeneratingPeerConfig.withFallback)
   val nodes: List[Node] = docker.startDevNetNodes(nodeConfigs, sequentialTopologyConfig).get
 
   // todo: https://github.com/ergoplatform/ergo/issues/653
-  s"The third node knows first node" ignore {
+  it should s"The third node knows first node" ignore {
 
     val node03 = nodes.find(_.nodeName == "node03").value
     val targetPeersCount = nodes.length - 1 /* self */

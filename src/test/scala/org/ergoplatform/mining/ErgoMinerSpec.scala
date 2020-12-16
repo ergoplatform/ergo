@@ -386,14 +386,14 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     val wm1 = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[WorkMessage]].flatten)
-    wm1.v shouldBe 2
+    (wm1.h.get >= forkHeight) shouldBe true
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     Thread.sleep(100)
 
     val wm2 = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[WorkMessage]].flatten)
+    (wm2.h.get >= forkHeight) shouldBe true
     wm1.msg.sameElements(wm2.msg) shouldBe false
-    wm2.v shouldBe 2
   }
 
 }

@@ -75,28 +75,12 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
   /**
-    * Same as `validateStateless`, but result is returned as Try[Long]
-    **/
-  def statelessValidity: Try[Unit] = validateStateless.result.toTry
-
-  /**
-    * Same as `validateStateful`, but result is returned as Try[Long]
-    **/
-  def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
-                       dataBoxes: IndexedSeq[ErgoBox],
-                       stateContext: ErgoStateContext,
-                       accumulatedCost: Long = 0L)
-                      (implicit verifier: ErgoInterpreter): Try[Long] = {
-    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry
-  }
-
-  /**
     * Stateless transaction validation with result returned as `ValidationResult`
     * to accumulate further validation results
     *
     * @note Consensus-critical!
     */
-  def validateStateless: ValidationState[Unit] = {
+  def validateStateless(): ValidationState[Unit] = {
     ModifierValidator(ErgoValidationSettings.initial)
       .validate(txNoInputs, inputs.nonEmpty, s"$id")
       .validate(txNoOutputs, outputCandidates.nonEmpty, s"$id")
@@ -107,6 +91,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validateNoFailure(txOutputSum, outputsSumTry)
       .validate(txInputsUnique, inputs.distinct.size == inputs.size, s"$id: ${inputs.distinct.size} == ${inputs.size}")
   }
+
+  /**
+    * Same as `validateStateless`, but result is returned as Try[Unit]
+    **/
+  def statelessValidity(): Try[Unit] = {
+    validateStateless().result.toTry
+  }
+
 
   /**
     * Checks whether transaction is valid against input boxes to spend, and
@@ -133,6 +125,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
+    val protocolVersion = stateContext.currentProtocolVersion
+
     // Cost of transaction initialization: we should read and parse all inputs and data inputs,
     // and also iterate through all outputs to check rules
     val initialCost: Long = addExact(
@@ -156,6 +150,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       validationState
         .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}")
         .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out")
+        .validate(txNegHeight, (protocolVersion == 1) || out.creationHeight >= 0, s" ${out.creationHeight} >= 0 is not true, output id: $id: output $out")
         .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
         .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
     }
@@ -228,6 +223,17 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     }
   }
 
+  /**
+    * Same as `validateStateful`, but result is returned as Try[Long]
+    **/
+  def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
+                       dataBoxes: IndexedSeq[ErgoBox],
+                       stateContext: ErgoStateContext,
+                       accumulatedCost: Long = 0L)
+                      (implicit verifier: ErgoInterpreter): Try[Long] = {
+    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry
+  }
+
   override type M = ErgoTransaction
 
   override def serializer: ScorexSerializer[ErgoTransaction] = ErgoTransactionSerializer
@@ -251,6 +257,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 }
 
 object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding {
+
+  val MaxAssetsPerBox = 255
 
   /**
     * Extracts a mapping (assets -> total amount) from a set of boxes passed as a parameter.
@@ -279,8 +287,6 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
 
   def apply(tx: ErgoLikeTransaction): ErgoTransaction =
     ErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)
-
-  val MaxAssetsPerBox = 255
 
 }
 

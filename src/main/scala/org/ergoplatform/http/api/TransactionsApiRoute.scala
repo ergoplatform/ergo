@@ -41,7 +41,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
           case (utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
             utxo.withMempool(mp).validate(tx)
           case _ =>
-            tx.statelessValidity
+            tx.statelessValidity()
         }
     } {
       _.fold(

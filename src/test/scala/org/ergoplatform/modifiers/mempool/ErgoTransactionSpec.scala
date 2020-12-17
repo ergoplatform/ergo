@@ -92,7 +92,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
   property("a valid transaction is valid") {
     forAll(validErgoTransactionGen) { case (from, tx) =>
-      tx.statelessValidity.isSuccess shouldBe true
+      tx.statelessValidity().isSuccess shouldBe true
       tx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe true
     }
   }
@@ -104,7 +104,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val wrongTx = tx.copy(outputCandidates =
         modifyValue(tx.outputCandidates.head, delta) +: tx.outputCandidates.tail)
 
-      wrongTx.statelessValidity.isSuccess &&
+      wrongTx.statelessValidity().isSuccess &&
         wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
     }
   }
@@ -115,7 +115,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val wrongTx = tx.copy(outputCandidates =
         modifyValue(tx.outputCandidates.head, -(tx.outputCandidates.head.value + negValue)) +: tx.outputCandidates.tail)
 
-      wrongTx.statelessValidity.isSuccess shouldBe false
+      wrongTx.statelessValidity().isSuccess shouldBe false
       wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
     }
   }
@@ -127,7 +127,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val wrongTx = tx.copy(outputCandidates =
         modifyValue(tx.outputCandidates.head, overflowSurplus) +: tx.outputCandidates.tail)
 
-      wrongTx.statelessValidity.isSuccess shouldBe false
+      wrongTx.statelessValidity().isSuccess shouldBe false
       wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe false
     }
   }
@@ -192,7 +192,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     val propositionGen = Gen.const(Constants.FalseLeaf)
     val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
     forAll(gen) { case (from, tx) =>
-      tx.statelessValidity.isSuccess shouldBe true
+      tx.statelessValidity().isSuccess shouldBe true
       val validity = tx.statefulValidity(from, emptyDataBoxes, emptyStateContext)
       validity.isSuccess shouldBe false
       val e = validity.failed.get
@@ -295,7 +295,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
     val gen = validErgoTransactionGenTemplate(0, 0, 1000, 1000, trueLeafGen)
     val (from, tx) = gen.sample.get
-    tx.statelessValidity.isSuccess shouldBe true
+    tx.statelessValidity().isSuccess shouldBe true
 
     //check that spam transaction is being rejected quickly
     implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
@@ -335,7 +335,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
     val gen = validErgoTransactionGenTemplate(0, 0, 10, 10, trueLeafGen)
     val (from, tx) = gen.sample.get
-    tx.statelessValidity.isSuccess shouldBe true
+    tx.statelessValidity().isSuccess shouldBe true
 
     // calculate costs manually
     val initialCost: Long =
@@ -393,7 +393,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   }
 
   private def checkTx(from: IndexedSeq[ErgoBox], wrongTx: ErgoTransaction): Try[Long] = {
-    wrongTx.statelessValidity.flatMap(_ => wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext))
+    wrongTx.statelessValidity().flatMap(_ => wrongTx.statefulValidity(from, emptyDataBoxes, emptyStateContext))
   }
 
 }

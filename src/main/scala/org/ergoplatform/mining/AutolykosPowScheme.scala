@@ -2,6 +2,7 @@ package org.ergoplatform.mining
 
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
@@ -9,7 +10,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import scorex.core.block.Block
-import scorex.core.block.Block.Timestamp
+import scorex.core.block.Block.{Timestamp, Version}
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
@@ -40,7 +41,30 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Total number of elements
     */
-  private val N: Int = Math.pow(2, n).toInt
+  val NBase: Int = Math.pow(2, n).toInt
+
+  val HeightMax = 9216000
+
+  val IncreasePeriodForN = 50 * 1024
+
+  def calcN(version: Version, headerHeight: Height): Int = {
+    val increaseStart = 600 * 1024
+    if (version == Header.InitialVersion) {
+      NBase
+    } else {
+      val height = Math.min(HeightMax, headerHeight)
+      if (height < increaseStart) {
+        NBase
+      } else {
+        val itersNumber = (height - increaseStart) / IncreasePeriodForN + 1
+        (1 to itersNumber).foldLeft(NBase) { case (step, _) =>
+          step / 100 * 105
+        }
+      }
+    }
+  }
+
+  def calcN(header: HeaderWithoutPow): Int = calcN(header.version, header.height)
 
   /**
     * Constant data to be added to hash function to increase its calculation time
@@ -76,6 +100,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
     val nonce = header.powSolution.n
 
+    val N = calcN(header)
+
     val pkBytes = {
       require(s.d < b, s"Incorrect d = ${s.d} for b = $b")
       require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
@@ -88,7 +114,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     }
 
     val seed = Bytes.concat(msg, nonce) // Autolykos v1, Alg. 2, line4: m || nonce
-    val indexes = genIndexes(seed)
+    val indexes = genIndexes(seed, N)
 
     //height is not used in v1
     val f = indexes.map(idx => genElement(version, msg, pkBytes, wBytes, Ints.toByteArray(idx), null)).sum.mod(q)
@@ -112,12 +138,14 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
     val h = Ints.toByteArray(header.height)  // used in AL v.2 only
 
+    val N = calcN(header)
+
     val prei8 = BigIntegers.fromUnsignedByteArray(hash(Bytes.concat(msg, nonce)).takeRight(8))
     val i = BigIntegers.asUnsignedByteArray(4, prei8.mod(BigInt(N).underlying()))
     val f = Blake2b256(Bytes.concat(i, h, M)).drop(1) // .drop(1) is the same as takeRight(31)
     val seed = Bytes.concat(f, msg, nonce) // Autolykos v1, Alg. 2, line4:
 
-    val indexes = genIndexes(seed)
+    val indexes = genIndexes(seed, N)
     //pk and w not used in v2
     val f2 = indexes.map(idx => genElement(version, msg, null, null, Ints.toByteArray(idx), h)).sum
 
@@ -155,7 +183,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Hash function that takes `m` and `nonceBytes` and returns a list of size `k` with numbers in
     * [0,`N`)
     */
-  private def genIndexes(seed: Array[Byte]): Seq[Int] = {
+  private def genIndexes(seed: Array[Byte], N: Int): Seq[Int] = {
     val hash = Blake2b256(seed)
     val extendedHash = Bytes.concat(hash, hash.take(3))
     (0 until k).map { i =>
@@ -208,7 +236,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val b = getB(nBits)
     val x = randomSecret()
     val hbs = Ints.toByteArray(h.height)
-    checkNonces(version, hbs, msg, sk, x, b, minNonce, maxNonce).map(solution => h.toHeader(solution))
+    val N = calcN(h)
+    checkNonces(version, hbs, msg, sk, x, b, N, minNonce, maxNonce).map(solution => h.toHeader(solution))
   }
 
   /**
@@ -273,6 +302,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                                   sk: BigInt,
                                   x: BigInt,
                                   b: BigInt,
+                                  N: Int,
                                   startNonce: Long,
                                   endNonce: Long): Option[AutolykosSolution] = {
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
@@ -293,9 +323,9 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
         Bytes.concat(f, m, nonce)
       }
       val d = if(version == 1) {
-        (x * genIndexes(seed).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum - sk).mod(q)
+        (x * genIndexes(seed, N).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum - sk).mod(q)
       } else {
-        val indexes = genIndexes(seed)
+        val indexes = genIndexes(seed, N)
         toBigInt(hash(indexes.map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum.toByteArray))
       }
       if (d <= b) {
@@ -362,5 +392,33 @@ object AutolykosPowScheme {
 
     (parentId, height)
   }
+
+}
+
+
+
+object NPrinter extends App {
+
+  def N(version: Version, headerHeight: Height) =
+    new AutolykosPowScheme(32, 26).calcN(version, headerHeight)
+
+  (1 to 1).foreach(i => println("----------------------------"))
+
+  println(N(1, 700000))
+
+  println(N(2, 500000))
+
+  println(N(2, 600000))
+
+  println(N(2, 600 * 1024))
+
+  println(N(2, 700000))
+
+  println(N(2, 788400)) // 3 years
+
+  println(N(2, 1051200)) // 4 years
+
+  println(N(2, 9216000))
+  println(N(2, 29216000))
 
 }

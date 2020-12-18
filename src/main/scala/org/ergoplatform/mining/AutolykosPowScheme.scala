@@ -43,20 +43,20 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     */
   val NBase: Int = Math.pow(2, n).toInt
 
-  val HeightMax = 9216000
+  val NIncreasementHeightMax: Height = 9216000
 
-  val IncreasePeriodForN = 50 * 1024
+  val IncreaseStart: Height = 600 * 1024
+  val IncreasePeriodForN: Height = 50 * 1024
 
   def calcN(version: Version, headerHeight: Height): Int = {
-    val increaseStart = 600 * 1024
     if (version == Header.InitialVersion) {
       NBase
     } else {
-      val height = Math.min(HeightMax, headerHeight)
-      if (height < increaseStart) {
+      val height = Math.min(NIncreasementHeightMax, headerHeight)
+      if (height < IncreaseStart) {
         NBase
       } else {
-        val itersNumber = (height - increaseStart) / IncreasePeriodForN + 1
+        val itersNumber = (height - IncreaseStart) / IncreasePeriodForN + 1
         (1 to itersNumber).foldLeft(NBase) { case (step, _) =>
           step / 100 * 105
         }

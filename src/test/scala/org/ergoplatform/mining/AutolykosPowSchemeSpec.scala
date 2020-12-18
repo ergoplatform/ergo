@@ -1,7 +1,6 @@
 package org.ergoplatform.mining
 
 import com.google.common.primitives.Ints
-import org.ergoplatform.mining.NPrinter.N
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen

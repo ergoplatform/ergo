@@ -394,31 +394,3 @@ object AutolykosPowScheme {
   }
 
 }
-
-
-
-object NPrinter extends App {
-
-  def N(version: Version, headerHeight: Height) =
-    new AutolykosPowScheme(32, 26).calcN(version, headerHeight)
-
-  (1 to 1).foreach(i => println("----------------------------"))
-
-  println(N(1, 700000))
-
-  println(N(2, 500000))
-
-  println(N(2, 600000))
-
-  println(N(2, 600 * 1024))
-
-  println(N(2, 700000))
-
-  println(N(2, 788400)) // 3 years
-
-  println(N(2, 1051200)) // 4 years
-
-  println(N(2, 9216000))
-  println(N(2, 29216000))
-
-}

@@ -31,14 +31,21 @@
 
     \abstract{
         This document describes family of Autolykos Proof-of-Work algorithms used in Ergo cryptocurrency.
+        From block 1 until 414,720 Autolykos version 1 is used on Ergo mainnet. Since block 414,720
+        Autolykos version 2 is used.
     }
 
     \section{Autolykos version 2}
 
-    Autolykos version 2 is following Autolykos version 1 defined in Section~\ref{av1}, but with non-outsourceability 
-    switched off. It turns out~(based on more than 1 year of non-outsourceable PoW experience) that non-outsourceable 
-    PoW is not attractive to small miners. Thus Autolykos version 2 is aiming to have memory-hardness but not non-outsourceability.
-
+    Autolykos version 2 is following Autolykos version 1 defined in Section~\ref{av1}, but with certain modifications made:
+     \begin{itemize}
+        \item{} non-outsourceability switched off. It turns out~(based on more than 1 year of non-outsourceable PoW experience) that non-outsourceable
+                PoW is not attractive to small miners.
+        \item{} now algorithm is trying to bind an efficient solving procedure with a single table of ~2 GB
+        \item{} table size (memory requirements of a solving algorithm) grows with time
+        \item{} now table is depending on block height only, so there is no penalization for recalculating
+                block candidate for the same height
+     \end{itemize}
     
     Solution verification and proving are given in Alg.~\ref{alg:verify2} and Alg.~\ref{alg:prove2}.
 
@@ -48,6 +55,12 @@
         \item{} $takeRight(n, \cdot)$ is taking $n$ least significant (right) bytes (from 32 bytes array)
         \item{} $sum$ is always about 256 bits (32 bytes)
         \item{} $h$ is height of a block (32 bits = 4 bytes)
+        \item{} $N$ value is growing with time as follows. Until block $614,400$, $N = 2^{26} = 67,108,864$.
+                From this block, and until block $9,216,000$, every 51,200 blocks $N$ is increased by 5 percent.
+                Since block $9,216,000$, value of $N$ is fixed and equals to $2,147,387,550$. Test vectors for
+                $N$ values are provided in Table \ref{ntbl}.
+
+        \item{} $M$ is still equal to $8 * 1,024$ (bytes)
     \end{enumerate} 
 
     \begin{algorithm}[H]
@@ -81,6 +94,24 @@
             \EndWhile
         \end{algorithmic}
     \end{algorithm}
+
+    \begin{table}[h]
+    \begin{tabular}{| l | l |}
+    \hline
+    Height & $N$ value  \\
+    500,000 & 67,108,864 \\
+    600,000 & 67,108,864 \\
+    614,400 & 70,464,240 \\
+    700,000 & 73,987,410 \\
+    788,400 & 81,571,035 \\
+    1,051,200 & 104,107,290 \\
+    9,216,000 & 2,147,387,550 \\
+    29,216,000 & 2,147,387,550 \\
+    \hline
+    \end{tabular}
+    \label{ntbl}
+    \caption{Test vectors for $N$ values}
+    \end{table}
 
 
 

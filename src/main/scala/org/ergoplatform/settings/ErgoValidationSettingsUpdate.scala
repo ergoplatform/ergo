@@ -3,7 +3,6 @@ package org.ergoplatform.settings
 import org.ergoplatform.validation.RuleStatusSerializer
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.interpreter.VersionContext
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 
@@ -40,13 +39,9 @@ object ErgoValidationSettingsUpdateSerializer extends ScorexSerializer[ErgoValid
   }
 
   override def parse(r: Reader): ErgoValidationSettingsUpdate = {
-    // TODO v4.0: obtain the ACTUAL versions
-    val versionContext = VersionContext(0) // v3.x
-
     val sigmaReader = new SigmaByteReader(r,
       new ConstantStore(),
-      resolvePlaceholdersToConstants = false,
-      versionContext)
+      resolvePlaceholdersToConstants = false)
 
     val disabledRulesNum = r.getUInt().toInt
     val disabledRules = (0 until disabledRulesNum).map { _ =>

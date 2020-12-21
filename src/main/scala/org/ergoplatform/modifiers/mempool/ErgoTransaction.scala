@@ -24,7 +24,6 @@ import scorex.db.{ByteArrayUtils, ByteArrayWrapper}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.eval.Extensions._
-import sigmastate.interpreter.VersionContext
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
@@ -304,12 +303,9 @@ object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
   }
 
   override def parse(r: Reader): ErgoTransaction = {
-    // TODO v4.0: obtain the ACTUAL versions
-    val versionContext = VersionContext(0) // v3.x
     val reader = new SigmaByteReader(r,
       new ConstantStore(),
-      resolvePlaceholdersToConstants = false,
-      versionContext = versionContext)
+      resolvePlaceholdersToConstants = false)
     val elt = ErgoLikeTransactionSerializer.parse(reader)
     ErgoTransaction(elt.inputs, elt.dataInputs, elt.outputCandidates)
   }

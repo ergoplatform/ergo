@@ -130,7 +130,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 
   def onSemanticallySuccessfulModification: Receive = {
     case SemanticallySuccessfulModifier(fb: ErgoFullBlock) =>
-      nodeInfo = nodeInfo.copy(stateRoot = Some(Algos.encode(fb.header.stateRoot)), stateVersion = Some(fb.encodedId))
+      nodeInfo = nodeInfo.copy(stateRoot = Some(Algos.encode(fb.header.stateRoot)),
+        stateVersion = Some(fb.encodedId))
   }
 
 }

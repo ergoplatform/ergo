@@ -3,7 +3,7 @@ package org.ergoplatform.mining
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.http.api.ApiCodecs
-import scorex.core.block.Block.Version
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import sigmastate.basics.DLogProtocol.ProveDlog
 
 
@@ -12,15 +12,15 @@ import sigmastate.basics.DLogProtocol.ProveDlog
   *
   * @param msg                            - message for external miner to work on (serialized header)
   * @param b                              - target value for mining
+  * @param h                              - height of the block (presented in V2 only)
   * @param pk                             - public key of a miner
-  * @param v                              - block version
   * @param proofsForMandatoryTransactions - proofs of transactions membership (optional)
   *
   */
 case class WorkMessage(msg: Array[Byte],
                        b: BigInt,
+                       h: Option[Height],
                        pk: ProveDlog,
-                       v: Version,
                        proofsForMandatoryTransactions: Option[ProofOfUpcomingTransactions])
 
 object WorkMessage extends ApiCodecs {
@@ -30,8 +30,8 @@ object WorkMessage extends ApiCodecs {
       List(
         "msg" -> Some(workMessage.msg.asJson),
         "b" -> Some(workMessage.b.asJson(bigIntEncoder)),
+        "h" -> workMessage.h.map(_.asJson),
         "pk" -> Some(workMessage.pk.asJson),
-        "v" -> Some(workMessage.v.asJson),
         "proof" -> workMessage.proofsForMandatoryTransactions.map(_.asJson)
       ).collect {
         //drop proof field if it is empty

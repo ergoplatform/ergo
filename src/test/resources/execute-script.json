@@ -3,6 +3,7 @@
   "namedConstants": {"deadline": {"type": "Int", "value": 1},
     "pkA": { "type": "String", "value": "12345678" } },
   "context": {
+    "scriptVersion": 2,
     "lastBlockUtxoRoot" : {
       "digest" : "000000000000000000000000000000000000000000000000000000000000000000",
       "treeFlags" : 7,

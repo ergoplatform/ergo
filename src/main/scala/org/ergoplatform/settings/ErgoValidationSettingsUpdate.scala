@@ -39,10 +39,7 @@ object ErgoValidationSettingsUpdateSerializer extends ScorexSerializer[ErgoValid
   }
 
   override def parse(r: Reader): ErgoValidationSettingsUpdate = {
-    val sigmaReader = new SigmaByteReader(r,
-      new ConstantStore(),
-      resolvePlaceholdersToConstants = false)
-
+    val sigmaReader = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
     val disabledRulesNum = r.getUInt().toInt
     val disabledRules = (0 until disabledRulesNum).map { _ =>
       r.getUShort().toShort

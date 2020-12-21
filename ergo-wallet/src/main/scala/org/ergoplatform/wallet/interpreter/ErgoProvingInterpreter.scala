@@ -7,7 +7,7 @@ import org.ergoplatform.utils.ArithUtils.{addExact, multiplyExact}
 import org.ergoplatform.validation.SigmaValidationSettings
 import sigmastate.AvlTreeData
 import sigmastate.Values.SigmaBoolean
-import sigmastate.interpreter.{ContextExtension, ProverInterpreter, Interpreter}
+import sigmastate.interpreter.{ContextExtension, ProverInterpreter}
 import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, ErgoLikeStateContext}
 import org.ergoplatform.wallet.secrets.SecretKey
@@ -72,11 +72,11 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
       hdKeys.map(_.publicKey) // costly operation if there are many secret keys
   }
 
-  // TODO this should probably be min(MaxSupportedScriptVersion, <the current activated version>)
-  // however it is not clear how the current version should be accessed from here
-  // The principled way to do this would be adding activatedVersion as a parameter
-  // and then requiring the application layer to take care of providing it.
-  val activatedVersion = Interpreter.MaxSupportedScriptVersion
+  /**
+    * Activated protocol version, 1 is for Ergo mainnet since block #1 until 414,720, 2 for Ergo mainnet since 414,720,
+    * etc
+    */
+  val activatedVersion: Byte = params.blockVersion
 
   /**
     * Produces updated instance of ErgoProvingInterpreter with a new secret included

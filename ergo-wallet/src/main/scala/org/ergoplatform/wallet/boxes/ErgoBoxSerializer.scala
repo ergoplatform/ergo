@@ -14,9 +14,7 @@ object ErgoBoxSerializer extends ErgoWalletSerializer[ErgoBox] {
   }
 
   override def parse(r: Reader): ErgoBox = {
-    val reader = new SigmaByteReader(r,
-      new ConstantStore(),
-      resolvePlaceholdersToConstants = false)
+    val reader = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
     ErgoBox.sigmaSerializer.parse(reader)
   }
 

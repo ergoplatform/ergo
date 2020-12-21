@@ -130,7 +130,7 @@ class Parameters(val height: Height,
 
     if (height == votingSettings.version2ActivationHeight) {
       require(table(BlockVersion) == 1, "Protocol version is not 1 on the hard-fork")
-      table  = table.updated(BlockVersion, table(BlockVersion) + 1)
+      table = table.updated(BlockVersion, table(BlockVersion) + 1)
     }
     (table, activatedUpdate)
   }

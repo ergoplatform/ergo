@@ -20,12 +20,15 @@ class VotingSpecification extends ErgoPropertyTest {
 
   private val hfActivationHeight = 100
 
+  private val hfActivationDifficultyHex = "01"
+
   override implicit val votingSettings: VotingSettings =
     VotingSettings(
       votingEpochLength,
       softForkEpochs = 2,
       activationEpochs = 3,
-      version2ActivationHeight = hfActivationHeight
+      version2ActivationHeight = hfActivationHeight,
+      version2ActivationDifficultyHex = hfActivationDifficultyHex
     )
 
   private val proposedUpdate = ErgoValidationSettingsUpdate(

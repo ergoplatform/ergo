@@ -203,7 +203,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       val proof = input.spendingProof
       val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
       val inputContext = InputContext(idx.toShort, proof.extension)
-      val ctx = new ErgoContext(stateContext, transactionContext, inputContext, maxCost - addExact(currentTxCost, accumulatedCost), 0)
+
+      val ctx = new ErgoContext(
+        stateContext, transactionContext, inputContext,
+        costLimit = maxCost - addExact(currentTxCost, accumulatedCost),
+        initCost = 0)
 
       val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
       costTry.recover { case t =>
@@ -298,7 +302,9 @@ object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
   }
 
   override def parse(r: Reader): ErgoTransaction = {
-    val reader = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
+    val reader = new SigmaByteReader(r,
+      new ConstantStore(),
+      resolvePlaceholdersToConstants = false)
     val elt = ErgoLikeTransactionSerializer.parse(reader)
     ErgoTransaction(elt.inputs, elt.dataInputs, elt.outputCandidates)
   }

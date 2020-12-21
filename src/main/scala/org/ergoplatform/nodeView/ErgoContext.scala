@@ -23,5 +23,6 @@ class ErgoContext(val stateContext: ErgoStateContext,
     inputContext.extension,
     stateContext.validationSettings.sigmaSettings,
     costLimit,
-    initCost
+    initCost,
+    activatedScriptVersion = stateContext.protocolVersion
   )

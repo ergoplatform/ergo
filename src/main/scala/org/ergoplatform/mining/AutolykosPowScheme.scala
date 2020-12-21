@@ -23,13 +23,16 @@ import scala.util.Try
 /**
   * Autolykos PoW puzzle scheme reference implementation.
   *
+  * Based on k-sum problem, so general idea is to find k numbers in a table of size N, such that
+  * sum of numbers (or a hash of the sum) is less than target value.
+  *
   * See https://docs.ergoplatform.com/ErgoPow.pdf for details
   *
-  * Mining process is implemented in inefficient way and should not be used in real environment.
+  * CPU Mining process is implemented in inefficient way and should not be used in real environment.
   *
   * @see papers/yellow/pow/ErgoPow.tex for full description
   * @param k - number of elements in one solution
-  * @param n - power of number of elements in a list
+  * @param n - initially, N = 2^^n
   */
 class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
@@ -58,7 +61,14 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     */
   val NIncreasementHeightMax: Height = 9216000
 
-
+  /**
+    * Calculates table size (N value) for a given height (moment of time)
+    *
+    * @see papers/yellow/pow/ErgoPow.tex for full description and test vectors
+    * @param version - protocol version
+    * @param headerHeight - height of a header to mine
+    * @return - N value
+    */
   def calcN(version: Version, headerHeight: Height): Int = {
     if (version == Header.InitialVersion) {
       NBase

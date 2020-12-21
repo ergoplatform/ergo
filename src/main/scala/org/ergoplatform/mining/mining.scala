@@ -16,14 +16,15 @@ package object mining {
 
   val group: BcDlogGroup[EcPointType] = CryptoConstants.dlogGroup
 
-  // Group order, used in Autolykos V.1
+  // Group order, used in Autolykos V.1 for non-outsourceability,
+  // and also to obtain target in both Autolykos v1 and v2
   val q: BigInt = group.order
 
   private val hashFn: NumericHash = new NumericHash(q)
 
   /**
     * Hash function which output is in Zq. Used in Autolykos v.1
-    * @param in - input (bitstring)
+    * @param in - input (bit-string)
     * @return - output(in Zq)
     */
   def hashModQ(in: Array[Byte]): BigInt = hashFn.hash(in)
@@ -37,7 +38,7 @@ package object mining {
 
   /**
     * Blake2b256 hash function invocation
-    * @param in - input bitstring
+    * @param in - input bit-string
     * @return - 256 bits (32 bytes) array
     */
   def hash(in: Array[Byte]): Array[Byte] = Blake2b256.hash(in)

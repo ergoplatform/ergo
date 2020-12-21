@@ -39,14 +39,25 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   //Consensus-critical code below
 
   /**
-    * Total number of elements
+    * Number of elements in a table to find k-sum problem solution on top of
     */
   val NBase: Int = Math.pow(2, n).toInt
 
+  /**
+    * Initial height since which table (`N` value) starting to increase by 5% per `IncreasePeriodForN` blocks
+    */
+  val IncreaseStart: Height = 600 * 1024
+
+  /**
+    * Table size (`N`) increased every 50 * 1024 blocks
+    */
+  val IncreasePeriodForN: Height = 50 * 1024
+
+  /**
+    * On this height, the table (`N` value) will stop to grow
+    */
   val NIncreasementHeightMax: Height = 9216000
 
-  val IncreaseStart: Height = 600 * 1024
-  val IncreasePeriodForN: Height = 50 * 1024
 
   def calcN(version: Version, headerHeight: Height): Int = {
     if (version == Header.InitialVersion) {

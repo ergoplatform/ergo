@@ -243,6 +243,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       inputsNotSpent(tx, s)
     }
 
+    // We clear cached solved block if it so not continuing last block applied
     if (solvedBlock.nonEmpty && (solvedBlock.map(_.parentId) != h.bestFullBlockOpt.map(_.id))) {
       solvedBlock = None
     }
@@ -298,6 +299,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         sender() ! candBlockFuture
       }
 
+    // solution found externally (by e.g. GPU miner)
     case solution: AutolykosSolution =>
       log.info("Got solution: " + solution)
       val result: Future[Unit] =

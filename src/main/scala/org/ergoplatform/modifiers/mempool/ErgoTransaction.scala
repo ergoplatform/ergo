@@ -63,12 +63,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   override lazy val id: ModifierId = bytesToId(serializedId)
 
   /**
-    * Id of transaction "witness" (taken from Bitcoin jargon, means commitment to signatures of a transaction)
+    * Id of transaction "witness" (taken from Bitcoin jargon, means commitment to signatures of a transaction).
+    * Id is 248-bit long, to distinguish transaction ids from witness ids in Merkle tree of transactions,
+    * where both kinds of ids are written into leafs of the tree.
     */
   lazy val witnessSerializedId: Array[Byte] =
-    Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof)))
+    Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof))).tail
 
-  lazy val witnessId: ModifierId = bytesToId(witnessSerializedId)
 
   lazy val outAssetsTry: Try[(Map[ByteArrayWrapper, Long], Int)] = ErgoTransaction.extractAssets(outputCandidates)
 

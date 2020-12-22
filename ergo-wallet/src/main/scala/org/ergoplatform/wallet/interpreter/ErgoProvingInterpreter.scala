@@ -73,10 +73,11 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   }
 
   /**
-    * Activated protocol version, 1 is for Ergo mainnet since block #1 until 414,720, 2 for Ergo mainnet since 414,720,
-    * etc
+    * Activated script version, 0 is for Ergo mainnet since block #1 until 414,720, 1 for Ergo mainnet since 414,720,
+    * etc.
+    * Note: version N of ErgoProtocol corresponds to version N-1 of ErgoTree (aka script version)
     */
-  val activatedVersion: Byte = params.blockVersion
+  val activatedScriptVersion: Byte = params.blockVersion - 1
 
   /**
     * Produces updated instance of ErgoProvingInterpreter with a new secret included
@@ -144,7 +145,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
               ValidationRules.currentSettings,
               params.maxBlockCost,
               totalCost,
-              activatedVersion
+              activatedScriptVersion
             )
 
             val hints = txHints.allHintsForInput(boxIdx)
@@ -211,7 +212,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
         ValidationRules.currentSettings,
         params.maxBlockCost,
         0L, // initial cost
-        activatedVersion
+        activatedScriptVersion
       )
       val scriptToReduce = inputBox.ergoTree
       inpIndex -> generateCommitments(scriptToReduce, context)
@@ -253,10 +254,9 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
       val validationSettings: SigmaValidationSettings = ValidationRules.currentSettings
       val costLimit: Long = params.maxBlockCost
       val initCost: Long = 0
-      val scriptVersion = params.blockVersion
 
       val ctx: ErgoLikeContext = new ErgoLikeContext(lastBlockUtxoRoot, headers, preHeader, dataBoxes, boxesToSpend,
-        spendingTransaction, selfIndex, extension, validationSettings, costLimit, initCost, scriptVersion)
+        spendingTransaction, selfIndex, extension, validationSettings, costLimit, initCost, activatedScriptVersion)
 
       bag.replaceHintsForInput(idx, bagForMultisig(ctx, exp, proof, realSecretsToExtract, simulatedSecretsToExtract))
     }

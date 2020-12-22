@@ -362,7 +362,10 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
       val chainSettings = empty.chainSettings.copy(
         blockInterval = 2.seconds,
         epochLength = forkHeight,
-        voting = empty.chainSettings.voting.copy(version2ActivationHeight = forkHeight, votingLength = forkHeight)
+        voting = empty.chainSettings.voting.copy(
+          version2ActivationHeight = forkHeight,
+          version2ActivationDifficultyHex = "10",
+          votingLength = forkHeight)
       )
       empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings, directory = createTempDir.getAbsolutePath)
     }

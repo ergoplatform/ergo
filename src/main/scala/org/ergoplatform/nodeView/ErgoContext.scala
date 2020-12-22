@@ -24,5 +24,5 @@ class ErgoContext(val stateContext: ErgoStateContext,
     stateContext.validationSettings.sigmaSettings,
     costLimit,
     initCost,
-    activatedScriptVersion = stateContext.protocolVersion
+    activatedScriptVersion = stateContext.protocolVersion - 1 // version N of ErgoProtocol corresponds to version N-1 of ErgoTree (aka script version)
   )

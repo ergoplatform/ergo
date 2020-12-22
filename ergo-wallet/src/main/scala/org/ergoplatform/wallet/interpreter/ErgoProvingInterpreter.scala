@@ -77,7 +77,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     * etc.
     * Note: version N of ErgoProtocol corresponds to version N-1 of ErgoTree (aka script version)
     */
-  val activatedScriptVersion: Byte = params.blockVersion - 1
+  val activatedScriptVersion: Byte = (params.blockVersion - 1).toByte
 
   /**
     * Produces updated instance of ErgoProvingInterpreter with a new secret included

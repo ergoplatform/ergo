@@ -3,16 +3,13 @@ package org.ergoplatform.http.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive, Route}
 import akka.pattern.ask
-import io.circe.{Encoder, Json}
+import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, FeeHistogramBin}
-import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
-import org.ergoplatform.nodeView.wallet.AugWalletTransaction
-import org.ergoplatform.nodeView.wallet.AugWalletTransaction.boxEncoder
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
@@ -75,28 +72,8 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
 
   val feeHistogramParameters: Directive[(Int, Long)] = parameters("bins".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))
 
-  def getFeeHistogram(nBins : Int, maxWaitTimeMsec: Long, wtxs : Seq[WeightedTxId]): Array[FeeHistogramBin] = {
-    val histogram = Array.fill(nBins + 1)(FeeHistogramBin(0,0))
-    val now = System.currentTimeMillis()
-    val interval = maxWaitTimeMsec / nBins
-    for (wtx <- wtxs) {
-      val waitTime = now - wtx.created
-      val bin = if (waitTime < maxWaitTimeMsec) (waitTime/interval).asInstanceOf[Int] else nBins
-      histogram(bin).nTxns += 1
-      histogram(bin).totalFee += wtx.feePerKb
-    }
-    histogram
-  }
-
-  implicit val encodeHistogramBeam: Encoder[FeeHistogramBin] = new Encoder[FeeHistogramBin] {
-    final def apply(bin:FeeHistogramBin): Json = Json.obj(
-      ("nTxns", bin.nTxns.asJson),
-      ("totalFee", bin.totalFee.asJson)
-    )
-  }
-
   def getFeeHistogramR: Route = (path("poolhistogram") & get & feeHistogramParameters) { (bins, maxtime) =>
-    ApiResponse(getMemPool.map(p => getFeeHistogram(bins, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
+    ApiResponse(getMemPool.map(p => getFeeHistogram(System.currentTimeMillis(), bins, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
   }
 
   val feeRequestParameters: Directive[(Int, Int)] = parameters("waitTime".as[Int] ? 1, "txSize".as[Int] ? 100)

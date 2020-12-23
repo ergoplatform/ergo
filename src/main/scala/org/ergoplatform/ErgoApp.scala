@@ -5,7 +5,7 @@ import java.net.InetSocketAddress
 import akka.actor.{ActorRef, PoisonPill, ActorSystem}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler}
-import akka.stream.{Materializer, SystemMaterializer}
+import akka.stream.SystemMaterializer
 import org.ergoplatform.http._
 import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.http.api.{ScanApiRoute, _}

@@ -80,5 +80,4 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       case Success(_) => ApiResponse(scanIdsBox.box.id)
     }
   }
-
 }

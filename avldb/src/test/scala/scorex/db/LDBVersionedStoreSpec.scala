@@ -1,14 +1,15 @@
 package scorex.db
 
 import com.google.common.primitives.Longs
-import org.scalatest.{Matchers, PropSpec}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
 import scorex.crypto.authds.avltree.batch.benchmark.LDBVersionedStoreBenchmark.getRandomTempDir
 
 import scala.collection.mutable
 import scala.util.Random
 
 //todo: rollbacks and pruning are checked in VersionedStoreSpec, merge both tests?
-class LDBVersionedStoreSpec extends PropSpec with Matchers {
+class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
 
   private val dir = getRandomTempDir
   private val store = new LDBVersionedStore(dir, 100)

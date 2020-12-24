@@ -7,17 +7,17 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ErgoGenerators
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
-import org.scalatest.FlatSpec
-import org.scalatest.prop.PropertyChecks
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.interpreter.ContextExtension
 
 import scala.util.Random
 
-class ErgoMemPoolSpec extends FlatSpec
+class ErgoMemPoolSpec extends AnyFlatSpec
   with ErgoGenerators
   with ErgoTestHelpers
-  with PropertyChecks {
+  with ScalaCheckPropertyChecks {
 
   it should "accept valid transaction" in {
     val (us, bh) = createUtxoState()
@@ -294,4 +294,42 @@ class ErgoMemPoolSpec extends FlatSpec
 
     conformingTxs.flatMap(_.inputs).map(_.boxId).forall(bIb => stateWithTxs.boxById(bIb).isDefined) shouldBe true
   }
+
+  it should "add removed transaction in mempool statistics" in {
+    val (us, bh) = createUtxoState()
+    val genesis = validFullBlock(None, us, bh, Random)
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    var txs = validTransactionsFromUtxoState(wus, Random)
+    var allTxs = txs
+    val family_depth = 10
+    val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
+    var pool = ErgoMemPool.empty(limitedPoolSettings)
+    txs.foreach { tx =>
+      pool = pool.putWithoutCheck(Seq(tx))
+    }
+    for (i <- 1 to family_depth) {
+      txs = txs.map(tx => {
+        val spendingBox = tx.outputs.head
+        val newTx = tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
+          outputCandidates = IndexedSeq(spendingBox))
+        val (newPool, outcome) = pool.process(newTx, us)
+        outcome shouldBe ProcessingOutcome.Accepted
+        pool = newPool
+        allTxs = allTxs :+ newTx
+        newTx
+      })
+    }
+    pool.size shouldBe (family_depth + 1) * txs.size
+    pool.stats.histogram shouldBe MemPoolStatistics(System.currentTimeMillis(),0,System.currentTimeMillis()).histogram
+    pool.stats.takenTxns shouldBe MemPoolStatistics(System.currentTimeMillis(),0,System.currentTimeMillis()).takenTxns
+    pool.stats.snapTakenTxns shouldBe MemPoolStatistics(System.currentTimeMillis(),0,System.currentTimeMillis()).snapTakenTxns
+
+    allTxs.foreach { tx =>
+      pool = pool.remove(tx)
+    }
+    pool.size shouldBe 0
+    pool.stats.takenTxns shouldBe (family_depth + 1) * txs.size
+  }
 }
+
+

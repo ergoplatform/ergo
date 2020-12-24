@@ -1,18 +1,20 @@
 package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.wallet.Constants.PaymentsScanId
-import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
-import org.scalatest.{Matchers, PropSpec}
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import org.ergoplatform.{ErgoLikeTransaction, ErgoBox}
+import scorex.crypto.hash.{Digest32, Blake2b256}
 import sigmastate.Values
 import sigmastate.Values.SigmaPropValue
-import scorex.util.{bytesToId, idToBytes}
+import sigmastate.helpers.TestingHelpers._
+import scorex.util.{idToBytes, bytesToId}
 import org.scalatest.EitherValues
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughErgsError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughTokensError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughCoinsForChangeBoxesError
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
 
-class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
+class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues {
   import DefaultBoxSelector.select
   import BoxSelector.MinBoxValue
 
@@ -24,7 +26,7 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
   val StartHeight: Int = 0
 
   property("returns error when it is impossible to select coins") {
-    val box = ErgoBox(1, TrueLeaf, creationHeight = StartHeight)
+    val box = testBox(1, TrueLeaf, creationHeight = StartHeight)
     val uBox = TrackedBox(parentTx, 0, None, box, Set(PaymentsScanId))
 
     //target amount is too high
@@ -42,9 +44,9 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
   }
 
   property("properly selects coins - simple case with no assets") {
-    val box1 = ErgoBox(1, TrueLeaf, creationHeight = StartHeight)
-    val box2 = ErgoBox(10, TrueLeaf, creationHeight = StartHeight)
-    val box3 = ErgoBox(100, TrueLeaf, creationHeight = StartHeight)
+    val box1 = testBox(1, TrueLeaf, creationHeight = StartHeight)
+    val box2 = testBox(10, TrueLeaf, creationHeight = StartHeight)
+    val box3 = testBox(100, TrueLeaf, creationHeight = StartHeight)
 
     val uBox1 = TrackedBox(parentTx, 0, Option(100), box1, Set(PaymentsScanId))
     val uBox2 = TrackedBox(parentTx, 1, None, box2, Set(PaymentsScanId))
@@ -88,9 +90,9 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
     val assetId2 = bytesToId(Blake2b256("world"))
 
     val parentTx = ErgoLikeTransaction(IndexedSeq(), IndexedSeq())
-    val box1 = ErgoBox(1 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32 @@ idToBytes(assetId1) -> 1))
-    val box2 = ErgoBox(10 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32 @@ idToBytes(assetId2) -> 10))
-    val box3 = ErgoBox(100 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32 @@ idToBytes(assetId1) -> 100))
+    val box1 = testBox(1 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32 @@ idToBytes(assetId1) -> 1))
+    val box2 = testBox(10 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32 @@ idToBytes(assetId2) -> 10))
+    val box3 = testBox(100 * MinBoxValue, TrueLeaf, StartHeight, Seq(Digest32 @@ idToBytes(assetId1) -> 100))
 
     val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
     val uBox2 = TrackedBox(parentTx, 1, None, box2, Set(PaymentsScanId))
@@ -136,15 +138,15 @@ class DefaultBoxSelectorSpec extends PropSpec with Matchers with EitherValues {
     val assetId7 = bytesToId(Blake2b256("7"))
     val assetId8 = bytesToId(Blake2b256("8"))
 
-    val box1 = ErgoBox(1 * MinBoxValue, TrueLeaf, StartHeight,
+    val box1 = testBox(1 * MinBoxValue, TrueLeaf, StartHeight,
       Seq(Digest32 @@ idToBytes(assetId1) -> 1, Digest32 @@ idToBytes(assetId2) -> 1,
         Digest32 @@ idToBytes(assetId3) -> 1, Digest32 @@ idToBytes(assetId4) -> 1))
 
-    val box2 = ErgoBox(10 * MinBoxValue, TrueLeaf, StartHeight,
+    val box2 = testBox(10 * MinBoxValue, TrueLeaf, StartHeight,
       Seq(Digest32 @@ idToBytes(assetId5) -> 10, Digest32 @@ idToBytes(assetId6) -> 10,
         Digest32 @@ idToBytes(assetId7) -> 10, Digest32 @@ idToBytes(assetId8) -> 10))
 
-    val box3 = ErgoBox(100 * MinBoxValue, TrueLeaf, StartHeight,
+    val box3 = testBox(100 * MinBoxValue, TrueLeaf, StartHeight,
       Seq(Digest32 @@ idToBytes(assetId3) -> 100, Digest32 @@ idToBytes(assetId4) -> 100,
         Digest32 @@ idToBytes(assetId5) -> 100, Digest32 @@ idToBytes(assetId6) -> 100))
 

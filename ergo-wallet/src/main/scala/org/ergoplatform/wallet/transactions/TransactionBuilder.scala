@@ -29,7 +29,7 @@ object TransactionBuilder {
       maps = outputCandidates.map(b => collTokensToMap(b.additionalTokens)):_*)
 
   def collTokensToMap(tokens: Coll[(TokenId, Long)]): TokensMap =
-    tokens.toArray.toSeq.map(t => bytesToId(t._1) -> t._2).toMap
+    tokens.toArray.map(t => bytesToId(t._1) -> t._2).toMap
 
   def tokensMapToColl(tokens: TokensMap): Coll[(TokenId, Long)] =
     tokens.toSeq.map {t => (Digest32 @@ idToBytes(t._1)) -> t._2}.toArray.toColl

@@ -1,29 +1,43 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.{ErgoBoxCandidate, Input}
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.{ErgoBoxCandidate, Input, UnsignedInput}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ErgoGenerators
-import org.scalatest.FlatSpec
-import org.scalatest.prop.PropertyChecks
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import sigmastate.Values.ByteArrayConstant
+import sigmastate.interpreter.ContextExtension
 
 import scala.util.Random
 
-class ErgoMemPoolSpec extends FlatSpec
+class ErgoMemPoolSpec extends AnyFlatSpec
   with ErgoGenerators
   with ErgoTestHelpers
-  with PropertyChecks {
+  with ScalaCheckPropertyChecks {
 
   it should "accept valid transaction" in {
     val (us, bh) = createUtxoState()
     val genesis = validFullBlock(None, us, bh, Random)
     val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
     val txs = validTransactionsFromUtxoState(wus, Random)
-    val pool = ErgoMemPool.empty(settings)
+    val pool0 = ErgoMemPool.empty(settings)
+    val poolAfter = txs.foldLeft(pool0) { case (pool, tx) =>
+      val (p, outcome) = pool.process(tx, us)
+      if (outcome != ProcessingOutcome.Accepted) {
+        throw new Exception("Transaction not accepted")
+      }
+      p
+    }
+    poolAfter.spentInputs.size shouldBe txs.flatMap(_.inputs).size
+
+    // light mode
+    val poolLight = ErgoMemPool.empty(lightModeSettings)
     txs.foreach { tx =>
-      pool.process(tx, us)._2 shouldBe ProcessingOutcome.Accepted
+      poolLight.process(tx, us)._2 shouldBe ProcessingOutcome.Accepted
     }
   }
 
@@ -38,6 +52,56 @@ class ErgoMemPoolSpec extends FlatSpec
     }
     txs.foreach { tx =>
       pool.process(tx, us)._2.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
+    }
+  }
+
+  it should "reject double-spending transaction if it is paying no more than one already sitting in the pool" in {
+    forAll(smallPositiveInt, smallPositiveInt) { case (n1, n2) =>
+      whenever(n1 != n2) {
+        val (us, bh) = createUtxoState()
+        val genesis = validFullBlock(None, us, bh, Random)
+        val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+
+        val feeProp = settings.chainSettings.monetary.feeProposition
+        val inputBox = wus.takeBoxes(1).head
+        val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
+
+        val prover = ErgoProvingInterpreter(IndexedSeq.empty, parameters)
+
+        def rndContext(n: Int): ContextExtension = ContextExtension(Map(
+          (1: Byte) -> ByteArrayConstant(Array.fill(1 + n)(0: Byte)))
+        )
+
+        val tx1Like = prover.sign(UnsignedErgoTransaction(
+          IndexedSeq(new UnsignedInput(inputBox.id, rndContext(n1))),
+          IndexedSeq(feeOut)
+        ), IndexedSeq(inputBox), IndexedSeq.empty, emptyStateContext).get
+
+        val tx2Like = prover.sign(UnsignedErgoTransaction(
+          IndexedSeq(new UnsignedInput(inputBox.id, rndContext(n2))),
+          IndexedSeq(feeOut)
+        ), IndexedSeq(inputBox), IndexedSeq.empty, emptyStateContext).get
+
+        val tx1 = ErgoTransaction(tx1Like.inputs, tx1Like.outputCandidates)
+        val tx2 = ErgoTransaction(tx2Like.inputs, tx2Like.outputCandidates)
+
+        val pool0 = ErgoMemPool.empty(settings)
+        val (pool, tx1Outcome) = pool0.process(tx1, us)
+
+        tx1Outcome shouldBe ProcessingOutcome.Accepted
+
+        // tx1 and tx2 are spending the same input, and paying the same fee.
+        // So if tx2 is about a bigger or equal size, it should be rejected as it is paying less for a byte.
+        // Otherwise, tx2 is paying more for a byte and then it is replacing tx1.
+        if (tx2.size >= tx1.size) {
+          pool.process(tx2, us)._2.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
+        } else {
+          val (updPool, outcome) = pool.process(tx2, us)
+          outcome shouldBe ProcessingOutcome.Accepted
+          updPool.size shouldBe 1
+          updPool.take(1).head.id shouldBe tx2.id
+        }
+      }
     }
   }
 

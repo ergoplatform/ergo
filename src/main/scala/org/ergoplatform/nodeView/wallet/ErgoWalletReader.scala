@@ -20,7 +20,6 @@ import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.DLogProverInput
-
 import scala.concurrent.Future
 import scala.util.Try
 

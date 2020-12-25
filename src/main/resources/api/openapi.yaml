@@ -2301,7 +2301,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /transactions/poolhistogram:
+  /transactions/poolHistogram:
     parameters:
       - in: query
         name: bins
@@ -2342,7 +2342,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /transactions/getfee:
+  /transactions/getFee:
     parameters:
       - in: query
         name: waitTime
@@ -2381,7 +2381,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /transactions/waittime:
+  /transactions/waitTime:
     parameters:
       - in: query
         name: fee

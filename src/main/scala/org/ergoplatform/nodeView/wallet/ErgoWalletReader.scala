@@ -138,5 +138,4 @@ trait ErgoWalletReader extends VaultReader {
   def addBox(box: ErgoBox, scanIds: Set[ScanId]): Future[AddBoxResponse] =
     (walletActor ? AddBox(box, scanIds)).mapTo[AddBoxResponse]
 
-
 }

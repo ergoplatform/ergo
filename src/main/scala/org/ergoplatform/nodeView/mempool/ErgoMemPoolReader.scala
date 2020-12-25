@@ -8,7 +8,7 @@ import scorex.util.ModifierId
 
 trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
-   def contains(id: ModifierId): Boolean
+  override def contains(id: ModifierId): Boolean
 
   override def getAll(ids: Seq[ModifierId]): Seq[ErgoTransaction]
 
@@ -53,7 +53,7 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
   /**
     * Get recommended fee for transaction with specified size to be placed in pool within specified interval of time
-    * @param expectedWaitTimeMinutes maximal amount of time for which transaction can be kept in mempool
+    * @param expectedWaitTimeMinutes maximum delay for transaction to get out of the mempool
     * @param txSize size of transaction (in bytes)
     * @return recommended fee value for transaction to be proceeded in specified time
     */

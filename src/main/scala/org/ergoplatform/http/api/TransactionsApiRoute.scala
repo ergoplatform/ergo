@@ -72,19 +72,20 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
 
   val feeHistogramParameters: Directive[(Int, Long)] = parameters("bins".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))
 
-  def getFeeHistogramR: Route = (path("poolhistogram") & get & feeHistogramParameters) { (bins, maxtime) =>
+  def getFeeHistogramR: Route = (path("poolHistogram") & get & feeHistogramParameters) { (bins, maxtime) =>
     ApiResponse(getMemPool.map(p => getFeeHistogram(System.currentTimeMillis(), bins, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
   }
 
   val feeRequestParameters: Directive[(Int, Int)] = parameters("waitTime".as[Int] ? 1, "txSize".as[Int] ? 100)
 
-  def getRecommendedFeeR: Route = (path("getfee") & get & feeRequestParameters) { (waitTime, txSize) =>
+  def getRecommendedFeeR: Route = (path("getFee") & get & feeRequestParameters) { (waitTime, txSize) =>
     ApiResponse(getMemPool.map(_.getRecommendedFee(waitTime,txSize).asJson))
   }
 
   val waitTimeRequestParameters: Directive[(Long, Int)] = parameters("fee".as[Long] ? 1000L, "txSize".as[Int] ? 100)
 
-  def getExpectedWaitTimeR: Route = (path("waittime") & get & waitTimeRequestParameters) { (fee, txSize) =>
+  def getExpectedWaitTimeR: Route = (path("waitTime") & get & waitTimeRequestParameters) { (fee, txSize) =>
     ApiResponse(getMemPool.map(_.getExpectedWaitTime(fee,txSize).asJson))
   }
+
 }

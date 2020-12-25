@@ -295,7 +295,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     conformingTxs.flatMap(_.inputs).map(_.boxId).forall(bIb => stateWithTxs.boxById(bIb).isDefined) shouldBe true
   }
 
-  it should "add removed transaction in mempool statistics" in {
+  it should "add removed transaction to mempool statistics" in {
     val (us, bh) = createUtxoState()
     val genesis = validFullBlock(None, us, bh, Random)
     val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get

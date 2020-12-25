@@ -118,7 +118,6 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
       override def spentInputs: Iterator[BoxId] = txs.flatMap(_.inputs).map(_.boxId).toIterator
 
-
       override def getRecommendedFee(expectedWaitTimeMinutes : Int, txSize : Int) : Long = 0
 
       override def getExpectedWaitTime(txFee : Long, txSize : Int): Long = 0

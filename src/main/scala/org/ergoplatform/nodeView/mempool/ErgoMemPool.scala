@@ -1,8 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoBox.BoxId
-import io.circe.{Encoder, Json}
-import io.circe.syntax._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
@@ -16,64 +14,6 @@ import OrderedTxPool.weighted
 import scala.annotation.tailrec
 import scala.util.Try
 
-/**
-  *  Time parameters of mempool statistics
-  */
-object MemPoolStatisticsParams {
-  val nHistogramBins = 60  /* one hour */
-  val measurementIntervalMsec = 60 * 1000 /* one hour */
-}
-
-case class FeeHistogramBin(nTxns: Int, totalFee: Long)
-
-object FeeHistogramBin {
-
-  implicit val encodeHistogramBin: Encoder[FeeHistogramBin] = (bin: FeeHistogramBin) => Json.obj(
-    ("nTxns", bin.nTxns.asJson),
-    ("totalFee", bin.totalFee.asJson)
-  )
-}
-
-/**
-  * Immutable implementation of mempool statistics
-  *
-  * @param startMeasurement - start of measurement interval
-  * @param takenTxns        - amount of taken transaction since start of measurement
-  * @param snapTime         - last snapshot time
-  * @param snapTakenTxns    - amount of transaction at the moment of last snapshot
-  */
-case class MemPoolStatistics(startMeasurement: Long,
-                             takenTxns: Long = 0,
-                             snapTime: Long,
-                             snapTakenTxns: Long = 0,
-                             histogram: List[FeeHistogramBin] =
-                             List.fill(MemPoolStatisticsParams.nHistogramBins)(FeeHistogramBin(0, 0))) {
-
-  /**
-    * Add new entry to mempool statistics. This method is called when transaction is taken from mempool
-    * and placed in blockchain. It is not called when transaction in thrown away from the pool by replacement policy.
-    * To make statistic better represent most recent system behaviour, we periodically (each measurementIntervalMsec)
-    * prune statistic. To avoid situtation when we do not have statistic at all, we actually keep data up to
-    * 2*measurementIntervalMsec and periodically cut half of range.
-    */
-  def add(currTime: Long, wtx: WeightedTxId): MemPoolStatistics = {
-    val curTakenTx = takenTxns + 1
-    val (newTakenTx, newMeasurement, newSnapTxs, newSnapTime) =
-      if (currTime - snapTime > MemPoolStatisticsParams.measurementIntervalMsec) {
-        if (snapTakenTxns != 0) (curTakenTx - snapTakenTxns, snapTime, curTakenTx, currTime)
-        else (curTakenTx, startMeasurement, curTakenTx, currTime)
-      }
-      else (curTakenTx, startMeasurement, snapTakenTxns, snapTime)
-    val durationMinutes = ((currTime - wtx.created) / (60 * 1000)).toInt
-    val newHist =
-      if (durationMinutes < MemPoolStatisticsParams.nHistogramBins) {
-        val (histx, hisfee) = (histogram(durationMinutes).nTxns + 1, histogram(durationMinutes).totalFee + wtx.feePerKb)
-        histogram.updated(durationMinutes, FeeHistogramBin(histx, hisfee))
-      }
-      else histogram
-    MemPoolStatistics(newMeasurement, newTakenTx, newSnapTime, newSnapTxs, newHist)
-  }
-}
 
 /**
   * Immutable memory pool implementation.

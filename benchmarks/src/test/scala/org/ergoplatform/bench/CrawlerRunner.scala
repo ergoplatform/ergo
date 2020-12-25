@@ -55,7 +55,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 
-  val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, peerManagerRef, ergoSettings, timeProvider)
+  val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, ergoSettings, timeProvider)
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     ErgoUtilsApiRoute(ergoSettings),
@@ -68,7 +68,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      settings.network, timeProvider)
+      ergoSettings, timeProvider)
 
 }
 

@@ -24,7 +24,7 @@ trait WalletApiOperations extends ErgoBaseApiRoute {
     */
   val boxFilterPredicate: (WalletBox, Int, Int) => Boolean = { (bx: WalletBox, minConfNum: Int, minHeight: Int) =>
     bx.confirmationsNumOpt.getOrElse(0) >= minConfNum &&
-      bx.trackedBox.inclusionHeightOpt.getOrElse(-1) >= minHeight
+      bx.trackedBox.inclusionHeightOpt.getOrElse(0) >= minHeight
   }
 
 

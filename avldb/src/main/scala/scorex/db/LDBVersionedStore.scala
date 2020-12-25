@@ -209,7 +209,7 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
         }
       })
       for ((key, v) <- toUpdate) {
-        assert(key.length != 0) // empty keys are now allowed
+        assert(key.length != 0) // empty keys are not allowed
         if (keepVersions > 0) {
           val old = db.get(key)
           undoBatch.put(newLSN(), serializeUndo(versionID, key, old))

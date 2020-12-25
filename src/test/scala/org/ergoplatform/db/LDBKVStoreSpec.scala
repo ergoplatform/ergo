@@ -1,8 +1,9 @@
 package org.ergoplatform.db
 
-import org.scalatest.{Matchers, PropSpec}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
 
-class LDBKVStoreSpec extends PropSpec with Matchers with DBSpec {
+class LDBKVStoreSpec extends AnyPropSpec with Matchers with DBSpec {
 
   property("put/get/getAll/delete") {
     withStore { store =>

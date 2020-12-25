@@ -66,7 +66,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
         ncProbe.ref,
         vhProbe.ref,
         ErgoSyncInfoMessageSpec,
-        settings.scorexSettings.network,
+        settings,
         tp,
         h,
         pool)
@@ -81,6 +81,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     val p: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
       pchProbe.ref,
+      lastMessage = 0,
       Some(peerInfo)
     )
     val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]

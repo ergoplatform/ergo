@@ -3,13 +3,14 @@ package org.ergoplatform.wallet.interpreter
 import org.ergoplatform.wallet.crypto.ErgoSignature
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.wallet.utils.Generators
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.Random
 
 class ErgoUnsafeProverSpec
-  extends FlatSpec
-    with GeneratorDrivenPropertyChecks
+  extends AnyFlatSpec
+    with ScalaCheckPropertyChecks
     with Matchers
     with Generators
     with InterpreterSpecCommon {
@@ -21,7 +22,10 @@ class ErgoUnsafeProverSpec
     val unsafeProver = ErgoUnsafeProver
 
     forAll(unsignedTxGen(extendedSecretKey)) { case (ins, unsignedTx) =>
-      val signedTxFull = fullProver.sign(unsignedTx, ins.toIndexedSeq, IndexedSeq(), stateContext).get
+
+      val signedTxFull = fullProver.sign(unsignedTx, ins.toIndexedSeq, IndexedSeq(),
+        stateContext, TransactionHintsBag.empty).get
+
       val signedTxUnsafe = unsafeProver.prove(unsignedTx, extendedSecretKey.privateInput)
 
       signedTxFull shouldEqual signedTxUnsafe

@@ -12,12 +12,15 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
 import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Parameters}
-import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
+import scorex.core.network.ConnectedPeer
+import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
-import scorex.core.network.peer.PeerInfo
 import scorex.core.utils.NetworkTimeProvider
+import scorex.core.utils.TimeProvider.Time
 import scorex.util.ScorexLogging
+import scorex.core.network.peer.PeersStatus
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 
 /**
@@ -30,13 +33,18 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   extends Actor with ScorexLogging {
 
   override def preStart(): Unit = {
+    val ec: ExecutionContextExecutor = context.dispatcher
+
     readersHolder ! GetReaders
     context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
-    context.system.scheduler.schedule(10.seconds, 10.seconds)(networkController ! GetConnectedPeers)(context.system.dispatcher)
+    context.system.scheduler.scheduleAtFixedRate(10.seconds, 20.seconds, networkController, GetConnectedPeers)(ec, self)
+    context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(ec, self)
   }
+
+  private def networkTime(): Time = timeProvider.time()
 
   private var nodeInfo = NodeInfo(
     settings.scorexSettings.network.nodeName,
@@ -51,12 +59,22 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     None,
     None,
     None,
-    timeProvider.time(),
+    launchTime = networkTime(),
+    lastIncomingMessageTime = networkTime(),
     None,
     LaunchParameters)
 
-  override def receive: Receive = onConnectedPeers orElse getInfo orElse onMempoolChanged orElse onStateChanged orElse
-    onHistoryChanged orElse onSemanticallySuccessfulModification orElse init
+  override def receive: Receive =
+    onConnectedPeers orElse
+      onPeersStatus orElse
+      getInfo orElse
+      onMempoolChanged orElse
+      onStateChanged orElse
+      onHistoryChanged orElse
+      onSemanticallySuccessfulModification orElse
+      init orElse {
+        case a: Any => log.warn(s"Stats collector got strange input: $a")
+      }
 
   private def init: Receive = {
     case Readers(h, s, _, _) =>
@@ -101,8 +119,13 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   }
 
   private def onConnectedPeers: Receive = {
-    case peers: Seq[PeerInfo@unchecked] if peers.headOption.forall(_.isInstanceOf[PeerInfo]) =>
+    case peers: Seq[ConnectedPeer@unchecked] if peers.headOption.forall(_.isInstanceOf[ConnectedPeer]) =>
       nodeInfo = nodeInfo.copy(peersCount = peers.length)
+  }
+
+  private def onPeersStatus: Receive = {
+    case p2pStatus: PeersStatus =>
+      nodeInfo = nodeInfo.copy(lastIncomingMessageTime = p2pStatus.lastIncomingMessage)
   }
 
   def onSemanticallySuccessfulModification: Receive = {
@@ -130,6 +153,7 @@ object ErgoStatsCollector {
                       bestFullBlockOpt: Option[ErgoFullBlock],
                       fullBlocksScore: Option[BigInt],
                       launchTime: Long,
+                      lastIncomingMessageTime: Long,
                       genesisBlockIdOpt: Option[String],
                       parameters: Parameters)
 
@@ -155,6 +179,7 @@ object ErgoStatsCollector {
         "isMining" -> ni.isMining.asJson,
         "peersCount" -> ni.peersCount.asJson,
         "launchTime" -> ni.launchTime.asJson,
+        "lastSeenMessageTime" -> ni.lastIncomingMessageTime.asJson,
         "genesisBlockId" -> ni.genesisBlockIdOpt.asJson,
         "parameters" -> ni.parameters.asJson
       ).asJson

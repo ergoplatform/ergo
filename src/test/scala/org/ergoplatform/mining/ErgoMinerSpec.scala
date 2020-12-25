@@ -1,8 +1,8 @@
 package org.ergoplatform.mining
 
-import akka.actor.{Actor, ActorRef, ActorSystem}
+import akka.actor.{ActorRef, Actor, ActorSystem}
 import akka.pattern.ask
-import akka.testkit.{TestKit, TestProbe}
+import akka.testkit.{TestProbe, TestKit}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
 import ErgoMiner.{PrepareCandidate, StartMining}
@@ -15,26 +15,26 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.ergoplatform.nodeView.{ErgoReadersHolderRef, ErgoNodeViewRef}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
-import org.scalatest.FlatSpec
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input, ErgoScriptPredef}
+import org.scalatest.flatspec.AnyFlatSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import sigmastate.SigmaAnd
-import sigmastate.Values.{ErgoTree, SigmaPropConstant}
+import sigmastate.Values.{SigmaPropConstant, ErgoTree}
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
-import sigmastate.utxo.CostTable.Cost
+import sigmastate.utxo.CostTable
 
 import scala.annotation.tailrec
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenerators {
+class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGenerators {
 
   type msgType = SemanticallySuccessfulModifier[_]
   implicit private val timeout: Timeout = defaultTimeout
@@ -130,7 +130,7 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
-    val desiredSize: Int = ((parameters.maxBlockCost / Cost.DlogDeclaration) * 2).toInt
+    val desiredSize: Int = ((parameters.maxBlockCost / CostTable.interpreterInitCost) * 2).toInt
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
     val testProbe = new TestProbe(system)
@@ -157,7 +157,9 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
 
     @tailrec
     def loop(toSend: Int): Unit = {
-      val toSpend: Seq[ErgoBox] = await(wallet.walletBoxes()).map(_.trackedBox.box).toList
+      val toSpend: Seq[ErgoBox] = await(
+        wallet.walletBoxes(unspentOnly = false, considerUnconfirmed = false)
+      ).map(_.trackedBox.box).toList
       log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains," +
         s"pool size: ${requestReaders.m.size}")
       val txs: Seq[ErgoTransaction] = toSpend.take(toSend) map { boxToSend =>
@@ -242,13 +244,12 @@ class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenera
     val tx1 = defaultProver.sign(unsignedTx1, IndexedSeq(boxToDoubleSpend), IndexedSeq(), r.s.stateContext).get
     val outputs2 = IndexedSeq(new ErgoBoxCandidate(boxToDoubleSpend.value, prop2, r.s.stateContext.currentHeight))
     val unsignedTx2 = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs2)
-    val tx2 = defaultProver.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), IndexedSeq(), r.s.stateContext).get
+    val tx2 = ErgoTransaction(defaultProver.sign(unsignedTx2, IndexedSeq(boxToDoubleSpend), IndexedSeq(), r.s.stateContext).get)
 
+    // As double-spending transactions are filtered out in the mempool, the only way to push them is to order to
+    // include double-spending transaction directly via mandatoryTransactions argument of PrepareCandidate command
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx1))
-    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx2))
-    expectNoMessage(1 seconds)
-
-    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 2
+    minerRef ! PrepareCandidate(Seq(tx2))
 
     testProbe.expectMsgClass(newBlockDelay, newBlock)
     testProbe.expectMsgClass(newBlockDelay, newBlock)

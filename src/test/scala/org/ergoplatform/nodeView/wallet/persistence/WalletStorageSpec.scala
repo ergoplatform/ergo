@@ -4,20 +4,21 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage.SecretPathsKey
-import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
+import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.utils.generators.WalletGenerators
-import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
+import org.ergoplatform.wallet.secrets.{DerivationPathSerializer, DerivationPath}
 import org.scalacheck.Gen
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.db.LDBKVStore
 import scorex.testkit.utils.FileUtils
 
 class WalletStorageSpec
-  extends FlatSpec
+  extends AnyFlatSpec
     with Matchers
     with WalletGenerators
-    with GeneratorDrivenPropertyChecks
+    with ScalaCheckPropertyChecks
     with DBSpec
     with FileUtils {
 
@@ -63,11 +64,29 @@ class WalletStorageSpec
         externalScanReqs.foreach(req => storage.addScan(req))
         val storageApps = storage.allScans
         val storageRequests = storageApps.map { app =>
-          ScanRequest(app.scanName, app.trackingRule)
+          ScanRequest(app.scanName, app.trackingRule, Some(ScanWalletInteraction.Off))
         }
         storageRequests.foreach(r => externalScanReqs.contains(r) shouldBe true)
         storageApps.map(_.scanId).foreach(storage.removeScan)
         storage.allScans.length shouldBe 0
+      }
+    }
+  }
+
+  it should "always increase ids" in {
+    forAll(externalScanReqGen) { externalScanReq =>
+      withStore { store =>
+        val storage = new WalletStorage(store, settings)
+        val scan = storage.addScan(externalScanReq).get
+
+        storage.lastUsedScanId shouldBe scan.scanId
+
+        storage.removeScan(scan.scanId)
+        storage.lastUsedScanId shouldBe scan.scanId
+
+        val scan2 = storage.addScan(externalScanReq).get
+        storage.lastUsedScanId shouldBe scan2.scanId
+        storage.lastUsedScanId shouldBe (scan.scanId +1)
       }
     }
   }

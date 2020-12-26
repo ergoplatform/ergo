@@ -1,12 +1,13 @@
 package org.ergoplatform.modifiers.history
 
 import Extension.InterlinksVectorPrefix
-import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators}
+import org.ergoplatform.utils.generators.{ErgoGenerators, ChainGenerator}
 import org.scalacheck.Gen
-import org.scalatest.{Matchers, PropSpec}
-import scorex.util.{ModifierId, bytesToId}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
+import scorex.util.{bytesToId, ModifierId}
 
-class PoPowAlgosSpec extends PropSpec with Matchers with ChainGenerator with ErgoGenerators {
+class PoPowAlgosSpec extends AnyPropSpec with Matchers with ChainGenerator with ErgoGenerators {
 
   import PoPowAlgos._
 

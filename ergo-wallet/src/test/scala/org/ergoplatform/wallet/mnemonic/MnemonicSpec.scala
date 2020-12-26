@@ -4,17 +4,17 @@ import java.text.Normalizer.Form.NFKD
 import java.text.Normalizer.normalize
 
 import org.ergoplatform.wallet.utils.Generators
-import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.encode.Base16
 
 import scala.util.Try
 
 class MnemonicSpec
-  extends FlatSpec
+  extends AnyFlatSpec
     with Matchers
-    with TableDrivenPropertyChecks
-    with GeneratorDrivenPropertyChecks
+    with ScalaCheckPropertyChecks
     with Generators {
 
   it should "pass https://github.com/trezor/python-mnemonic/blob/master/vectors.json" in {

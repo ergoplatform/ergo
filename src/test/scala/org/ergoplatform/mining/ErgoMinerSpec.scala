@@ -20,7 +20,7 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input, ErgoScriptPredef}
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import sigmastate.SigmaAnd
@@ -34,7 +34,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-class ErgoMinerSpec extends FlatSpec with ErgoTestHelpers with ValidBlocksGenerators {
+class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGenerators {
 
   type msgType = SemanticallySuccessfulModifier[_]
   implicit private val timeout: Timeout = defaultTimeout

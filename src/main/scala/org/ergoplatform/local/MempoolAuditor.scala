@@ -29,7 +29,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
                      settings: ErgoSettings) extends Actor with ScorexLogging {
 
   override def postRestart(reason: Throwable): Unit = {
-    log.warn(s"Mempool auditor actor restarted due to ${reason.getMessage}", reason)
+    log.error(s"Mempool auditor actor restarted due to ${reason.getMessage}", reason)
     super.postRestart(reason)
   }
 

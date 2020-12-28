@@ -3,6 +3,7 @@ package org.ergoplatform.http.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive, Directive1, Route}
 import akka.pattern.ask
+import io.circe.generic.decoding.DerivedDecoder.decodeIncompleteCaseClass
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
@@ -45,6 +46,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         transactionsR ~
         unspentBoxesR ~
         boxesR ~
+        collectBoxesR ~
         generateTransactionR ~
         generateUnsignedTransactionR ~
         generateCommitmentsR ~
@@ -225,6 +227,16 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   def sendPaymentTransactionR: Route = (path("payment" / "send") & post
     & entity(as[Seq[PaymentRequest]])) { requests =>
     sendTransaction(withFee(requests), Seq.empty, Seq.empty)
+  }
+
+  def collectBoxesR: Route = (path("boxes" / "collect") & post
+    & entity(as[BoxesRequest])) { request =>
+    withWalletOp(_.collectBoxes(request)) {
+      _.result.fold(
+        e => NotExists(s"No wallet boxes found due to ${e.getMessage}"),
+        boxes => ApiResponse(boxes.asJson)
+      )
+    }
   }
 
   def balancesR: Route = (path("balances") & get) {

@@ -1715,7 +1715,7 @@ components:
       items:
         $ref: '#/components/schemas/ErgoTransaction'
 
-    FeeHistogramBean:
+    FeeHistogramBin:
       description: Fee histogram bin
       type: object
       properties:
@@ -1730,7 +1730,7 @@ components:
       description: Fee histogram for transactions in mempool
       type: array
       items:
-        $ref: '#/components/schemas/FeeHistogramBean'
+        $ref: '#/components/schemas/FeeHistogramBin'
 
     Asset:
       description: Token detail in the transaction

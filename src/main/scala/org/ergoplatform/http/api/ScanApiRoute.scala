@@ -23,7 +23,6 @@ import org.ergoplatform.wallet.Constants.ScanId
   *
   * See EIP-0001 (https://github.com/ergoplatform/eips/blob/master/eip-0001.md) for motivation behind this API.
   */
-
 case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                        (implicit val context: ActorRefFactory) extends WalletApiOperations with ApiCodecs {
 
@@ -82,5 +81,4 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       case Success(_) => ApiResponse(scanIdsBox.box.id)
     }
   }
-
 }

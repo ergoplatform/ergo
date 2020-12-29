@@ -10,6 +10,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
+
 import scala.util.{Failure, Success}
 import ScanEntities._
 import org.ergoplatform.wallet.Constants.ScanId

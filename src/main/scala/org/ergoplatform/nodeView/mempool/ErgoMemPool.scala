@@ -60,9 +60,9 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
 
   override def remove(tx: ErgoTransaction): ErgoMemPool = {
     val wtx = pool.transactionsRegistry.get(tx.id)
-    new ErgoMemPool(pool.remove(tx), wtx.map(wgtx => stats
-      .add(System.currentTimeMillis(), wgtx))
-      .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis())))
+    val updStats = wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
+      .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))
+    new ErgoMemPool(pool.remove(tx), updStats)
   }
 
   override def filter(condition: ErgoTransaction => Boolean): ErgoMemPool = {
@@ -156,7 +156,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
     *
     * @param expectedWaitTimeMinutes - maximal amount of time for which transaction can be kept in mempool
     * @param txSize                  - size of transaction (in bytes)
-    *  @return recommended fee value for transaction to be proceeded in specified time
+    * @return recommended fee value for transaction to be proceeded in specified time
     */
   def getRecommendedFee(expectedWaitTimeMinutes: Int, txSize: Int): Long = {
     @tailrec def loop(waitMinutes: Int): Option[Long] =

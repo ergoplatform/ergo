@@ -15,8 +15,7 @@ case class MemPoolStatistics(startMeasurement: Long,
                              takenTxns: Long = 0,
                              snapTime: Long,
                              snapTakenTxns: Long = 0,
-                             histogram: List[FeeHistogramBin] =
-                             List.fill(MemPoolStatistics.nHistogramBins)(FeeHistogramBin(0, 0))) {
+                             histogram: List[FeeHistogramBin] = MemPoolStatistics.defaultPoolHistogram) {
 
   /**
     * Add new entry to mempool statistics. This method is called when transaction is taken from mempool
@@ -53,4 +52,6 @@ object MemPoolStatistics {
   // Time parameters of mempool statistics
   val nHistogramBins: Int = 60  /* one hour */
   val measurementIntervalMsec: Int = 60 * 1000 /* one hour */
+
+  val defaultPoolHistogram: List[FeeHistogramBin] = List.fill(MemPoolStatistics.nHistogramBins)(FeeHistogramBin(0, 0))
 }

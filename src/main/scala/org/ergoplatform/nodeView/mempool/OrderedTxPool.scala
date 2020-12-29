@@ -72,7 +72,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
   }
 
   /**
-    * Removes transaction from pool.
+    * Removes transaction from the pool
     *
     * @param tx - Transaction to remove
     */

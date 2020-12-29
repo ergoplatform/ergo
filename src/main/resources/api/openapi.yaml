@@ -2347,7 +2347,7 @@ paths:
       - in: query
         name: waitTime
         required: true
-        description: Maximal transaction wait time in minutes
+        description: Maximum transaction wait time in minutes
         schema:
           type: integer
           format: int32
@@ -2363,13 +2363,13 @@ paths:
           minimum: 1
           default: 100
     get:
-      summary: Get recommended fee for the tranasaction with specified size to be proceeded in specified time
-      operationId: getRecommededFee
+      summary: Get recommended fee for a transaction with specified size to be proceeded in specified time (in nanoErgs)
+      operationId: getRecommendedFee
       tags:
         - transactions
       responses:
         '200':
-          description: Recommended free for this transaction
+          description: Recommended fee for the transaction (in nanoErgs)
           content:
             application/json:
               schema:
@@ -2386,7 +2386,7 @@ paths:
       - in: query
         name: fee
         required: true
-        description: Transaction fee
+        description: Transaction fee (in nanoErgs)
         schema:
           type: integer
           format: int32

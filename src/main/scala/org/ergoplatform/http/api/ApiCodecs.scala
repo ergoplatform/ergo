@@ -66,7 +66,7 @@ trait ApiCodecs extends JsonCodecs {
     Json.obj(
       "height" -> height.asJson,
       "balance" -> walletBalance.asJson,
-      "assets" -> walletAssetBalances.toMap.map(x => (x._1: String, x._2)).asJson
+      "assets" -> walletAssetBalances.toMap.map(x => (x._1: String, x._2)).asJson //toMap to have assets as JSON map
     )
   }
 

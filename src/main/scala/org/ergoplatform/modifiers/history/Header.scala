@@ -228,7 +228,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
 
   override def serialize(h: Header, w: Writer): Unit = {
     serializeWithoutPow(h, w)
-    AutolykosSolutionSerializer.serialize(h.powSolution, w)
+    AutolykosSolutionSerializer.serialize(h, w)
   }
 
   def serializeWithoutPow(h: HeaderWithoutPow, w: Writer): Unit = {
@@ -268,7 +268,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
 
   override def parse(r: Reader): Header = {
     val headerWithoutPow = parseWithoutPow(r)
-    val powSolution = AutolykosSolutionSerializer.parse(r)
+    val powSolution = AutolykosSolutionSerializer.parse(r, headerWithoutPow.version)
     headerWithoutPow.toHeader(powSolution, Some(r.consumed))
   }
 

@@ -4,9 +4,12 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.http.api.ApiCodecs
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
-import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
+import scorex.core.block.Block.Version
+import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
+import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.CryptoConstants.EcPointType
 
 /**
@@ -23,15 +26,13 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
 case class AutolykosSolution(pk: EcPointType,
                              w: EcPointType,
                              n: Array[Byte],
-                             d: BigInt) extends BytesSerializable {
-  override type M = AutolykosSolution
-
+                             d: BigInt) {
   val encodedPk: Array[Byte] = groupElemToBytes(pk)
-
-  override def serializer: ScorexSerializer[AutolykosSolution] = AutolykosSolutionSerializer
 }
 
 object AutolykosSolution extends ApiCodecs {
+  val wForV2: EcPointType = CryptoConstants.dlogGroup.generator
+  val dForV2: BigInt = 0
 
   implicit val jsonEncoder: Encoder[AutolykosSolution] = { s: AutolykosSolution =>
     Map(
@@ -45,15 +46,17 @@ object AutolykosSolution extends ApiCodecs {
   implicit val jsonDecoder: Decoder[AutolykosSolution] = { c: HCursor =>
     for {
       pk <- c.downField("pk").as[EcPointType]
-      w <- c.downField("w").as[EcPointType]
+      wOpt <- c.downField("w").as[Option[EcPointType]]
       n <- c.downField("n").as[Array[Byte]]
-      d <- c.downField("d").as[BigInt]
-    } yield AutolykosSolution(pk, w, n, d)
+      dOpt <- c.downField("d").as[Option[BigInt]]
+    } yield {
+      AutolykosSolution(pk, wOpt.getOrElse(wForV2), n, dOpt.getOrElse(dForV2))
+    }
   }
 
 }
 
-object AutolykosSolutionSerializer extends ScorexSerializer[AutolykosSolution] {
+class AutolykosV1SolutionSerializer extends ScorexSerializer[AutolykosSolution] {
 
   override def serialize(obj: AutolykosSolution, w: Writer): Unit = {
     val dBytes = BigIntegers.asUnsignedByteArray(obj.d.bigInteger)
@@ -75,3 +78,43 @@ object AutolykosSolutionSerializer extends ScorexSerializer[AutolykosSolution] {
 
 }
 
+class AutolykosV2SolutionSerializer extends ScorexSerializer[AutolykosSolution] {
+  import AutolykosSolution.{wForV2, dForV2}
+
+  override def serialize(obj: AutolykosSolution, w: Writer): Unit = {
+    w.putBytes(groupElemToBytes(obj.pk))
+    w.putBytes(obj.n)
+  }
+
+  override def parse(r: Reader): AutolykosSolution = {
+    val pk = groupElemFromBytes(r.getBytes(PublicKeyLength))
+    val nonce = r.getBytes(8)
+    require(r.remaining == 0, "Extra bytes written to Autolykos v2 solution")
+    AutolykosSolution(pk, wForV2, nonce, dForV2)
+  }
+}
+
+object AutolykosSolutionSerializer {
+  val v1Serializer = new AutolykosV1SolutionSerializer
+  val v2Serializer = new AutolykosV2SolutionSerializer
+
+  def serialize(h: Header, w: Writer): Unit = {
+    val blockVersion = h.version
+    val serializer = if(blockVersion == 1){
+      v1Serializer
+    } else {
+      v2Serializer
+    }
+    serializer.serialize(h.powSolution, w)
+  }
+
+  def parse(r: Reader, blockVersion: Version): AutolykosSolution = {
+    val serializer = if(blockVersion == 1){
+      v1Serializer
+    } else {
+      v2Serializer
+    }
+    serializer.parse(r)
+  }
+
+}

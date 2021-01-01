@@ -89,7 +89,6 @@ class AutolykosV2SolutionSerializer extends ScorexSerializer[AutolykosSolution] 
   override def parse(r: Reader): AutolykosSolution = {
     val pk = groupElemFromBytes(r.getBytes(PublicKeyLength))
     val nonce = r.getBytes(8)
-    require(r.remaining == 0, "Extra bytes written to Autolykos v2 solution")
     AutolykosSolution(pk, wForV2, nonce, dForV2)
   }
 }

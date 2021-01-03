@@ -317,7 +317,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val digest = us.proofsForTransactions(txs).get._2
       val wBlock = invalidErgoFullBlockGen.sample.get
       val block = wBlock.copy(header = wBlock.header.copy(height = 1))
-      val newSC = us.stateContext.appendFullBlock(block, votingSettings).get
+      val newSC = us.stateContext.appendFullBlock(block).get
       us.applyTransactions(txs, digest, newSC).get
     }
   }
@@ -343,7 +343,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val header = invalidHeaderGen.sample.get.copy(stateRoot = digest, height = 1)
       val bt = new BlockTransactions(header.id, 1: Byte, txs)
       val fb = new ErgoFullBlock(header, bt, genExtension(header, us.stateContext), None)
-      val newSC = us.stateContext.appendFullBlock(fb, votingSettings).get
+      val newSC = us.stateContext.appendFullBlock(fb).get
       us.applyTransactions(txs, digest, newSC).get
     }
   }
@@ -464,7 +464,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
 
 
   private def genExtension(header: Header, sc: ErgoStateContext): Extension = {
-    interlinksToExtension(updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt)).toExtension(header.id)
+    interlinksToExtension(popowAlgos.updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt)).toExtension(header.id)
   }
 
 }

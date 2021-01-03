@@ -10,7 +10,6 @@ import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.PoPowAlgos._
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -66,6 +65,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val votingEpochLength = votingSettings.votingLength
   private val protocolVersion = ergoSettings.chainSettings.protocolVersion
   private val powScheme = ergoSettings.chainSettings.powScheme
+  private var popowAlgos = new PoPowAlgos(powScheme)
   private val externalMinerMode = ergoSettings.nodeSettings.useExternalMiner
   private val maxTransactionComplexity: Int = ergoSettings.nodeSettings.maxTransactionComplexity
 
@@ -375,7 +375,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       .getOrElse(ergoSettings.chainSettings.initialNBits)
 
     // Obtain NiPoPoW interlinks vector to pack it into the extension section
-    val interlinksExtension = PoPowAlgos.interlinksToExtension(updateInterlinks(bestHeaderOpt, bestExtensionOpt))
+    val updInterlinks = popowAlgos.updateInterlinks(bestHeaderOpt, bestExtensionOpt)
+    val interlinksExtension = PoPowAlgos.interlinksToExtension(updInterlinks)
 
     val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt.map { header =>
       val newHeight = header.height + 1

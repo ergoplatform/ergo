@@ -48,8 +48,8 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
       val updContext = {
         val inContext = new ErgoStateContext(Seq(fakeHeader), None, genesisStateDigest, LaunchParameters, validationSettingsNoIl,
-          VotingData.empty)(votingSettings)
-        inContext.appendFullBlock(fb, votingSettings).get
+          VotingData.empty)(settings)
+        inContext.appendFullBlock(fb).get
       }
 
       //serialization roundtrip

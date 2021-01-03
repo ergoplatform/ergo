@@ -176,16 +176,23 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
+    *
+    */
+  def realTarget(header: Header): BigInt = {
+    if (header.version == 1) {
+      header.powSolution.d
+    } else {
+      hitForVersion2(header)
+    }
+  }
+
+  /**
     * Real difficulty of `header`.
     * May occasionally exceeds required difficulty due to random nature of PoW puzzle.
     * Used in NiPoPoW.
     */
   def realDifficulty(header: Header): BigInt = {
-    if (header.version == 1) {
-      q / header.powSolution.d
-    } else {
-      q / hitForVersion2(header)
-    }
+      q / realTarget(header)
   }
 
   /**

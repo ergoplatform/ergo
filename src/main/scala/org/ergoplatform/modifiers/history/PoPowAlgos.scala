@@ -7,13 +7,53 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 import Extension.InterlinksVectorPrefix
+import org.ergoplatform.mining.AutolykosPowScheme
+import org.ergoplatform.modifiers.history.PoPowAlgos.unpackInterlinks
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.hash.Digest32
 
 /**
   * A set of utilities for working with PoPoW security protocol.
   */
-object PoPowAlgos {
+class PoPowAlgos(powScheme: AutolykosPowScheme) {
+
+  /**
+    * Computes max level (μ) of the given [[Header]], such that μ = log(T) − log(id(B))
+    */
+  private def maxLevelOf(header: Header): Int = {
+    if (!header.isGenesis) {
+      def log2(x: Double) = math.log(x) / math.log(2)
+
+      val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
+      val level = log2(requiredTarget.doubleValue) - log2(powScheme.realTarget(header).doubleValue)
+      level.toInt
+    } else {
+      Int.MaxValue
+    }
+  }
+
+  /**
+    * Computes interlinks vector for the next level after `prevHeader`.
+    */
+  @inline def updateInterlinks(prevHeader: Header, prevInterlinks: Seq[ModifierId]): Seq[ModifierId] = {
+    if (!prevHeader.isGenesis) {
+      require(prevInterlinks.nonEmpty, "Interlinks vector could not be empty in case of non-genesis header")
+      val genesis = prevInterlinks.head
+      val tail = prevInterlinks.tail
+      val prevLevel = maxLevelOf(prevHeader)
+      if (prevLevel > 0) {
+        println("prevLeve: " + prevLevel)
+        if(prevLevel > 10){
+          println("ph: " + prevHeader)
+        }
+        (genesis +: tail.dropRight(prevLevel)) ++ Seq.fill(prevLevel)(prevHeader.id)
+      } else {
+        prevInterlinks
+      }
+    } else {
+      Seq(prevHeader.id)
+    }
+  }
 
   /**
     * Computes interlinks vector for the next level after `prevHeader`.
@@ -28,24 +68,10 @@ object PoPowAlgos {
       .getOrElse(Seq.empty)
   }
 
-  /**
-    * Computes interlinks vector for the next level after `prevHeader`.
-    */
-  @inline def updateInterlinks(prevHeader: Header, prevInterlinks: Seq[ModifierId]): Seq[ModifierId] = {
-    if (!prevHeader.isGenesis) {
-      require(prevInterlinks.nonEmpty, "Interlinks vector could not be empty in case of non-genesis header")
-      val genesis = prevInterlinks.head
-      val tail = prevInterlinks.tail
-      val prevLevel = maxLevelOf(prevHeader)
-      if (prevLevel > 0) {
-        (genesis +: tail.dropRight(prevLevel)) ++ Seq.fill(prevLevel)(prevHeader.id)
-      } else {
-        prevInterlinks
-      }
-    } else {
-      Seq(prevHeader.id)
-    }
-  }
+}
+
+
+object PoPowAlgos {
 
   /**
     * Packs interlinks into extension key-value format.
@@ -102,22 +128,6 @@ object PoPowAlgos {
     }
 
     loop(fields.filter(_._1.headOption.contains(InterlinksVectorPrefix)).toList)
-  }
-
-  /**
-    * Computes max level (μ) of the given [[Header]], such that μ = log(T) − log(id(B))
-    */
-  private def maxLevelOf(header: Header): Int = {
-    if (!header.isGenesis) {
-      def log2(x: Double) = math.log(x) / math.log(2)
-
-      val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
-      val realTarget = header.powSolution.d
-      val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
-      level.toInt
-    } else {
-      Int.MaxValue
-    }
   }
 
 }

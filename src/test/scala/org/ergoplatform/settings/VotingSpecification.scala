@@ -36,7 +36,7 @@ class VotingSpecification extends ErgoPropertyTest {
     Seq(VR.CheckDeserializedScriptType.id -> DisabledRule, VR.CheckValidOpCode.id -> ReplacedRule((VR.FirstRuleId + 11).toShort)))
   private val proposedUpdate2 = ErgoValidationSettingsUpdate(Seq(ValidationRules.fbOperationFailed), Seq())
   val ctx: ErgoStateContext = {
-    new ErgoStateContext(Seq.empty, None, genesisStateDigest, LaunchParameters, validationSettingsNoIl, VotingData.empty)(votingSettings)
+    new ErgoStateContext(Seq.empty, None, genesisStateDigest, LaunchParameters, validationSettingsNoIl, VotingData.empty)(settings)
       .upcoming(org.ergoplatform.mining.group.generator, 0L, settings.chainSettings.initialNBits, Array.fill(3)(0.toByte), emptyVSUpdate, 0.toByte)
   }
   val initialVs: ErgoValidationSettings = ctx.validationSettings
@@ -88,11 +88,11 @@ class VotingSpecification extends ErgoPropertyTest {
     val invalidExtBlock3 = { // extension does not contain params at all
       lastBlock.copy(extension = lastBlock.extension.copy(fields = Seq()))
     }
-    val validCtx = validChain.foldLeft(ctx)((acc, mod) => acc.appendFullBlock(mod, votingSettings).get)
-    validCtx.appendFullBlock(invalidExtBlock1, votingSettings) shouldBe 'failure
-    validCtx.appendFullBlock(invalidExtBlock2, votingSettings) shouldBe 'failure
-    validCtx.appendFullBlock(invalidExtBlock3, votingSettings) shouldBe 'failure
-    validCtx.appendFullBlock(lastBlock, votingSettings) shouldBe 'success
+    val validCtx = validChain.foldLeft(ctx)((acc, mod) => acc.appendFullBlock(mod).get)
+    validCtx.appendFullBlock(invalidExtBlock1) shouldBe 'failure
+    validCtx.appendFullBlock(invalidExtBlock2) shouldBe 'failure
+    validCtx.appendFullBlock(invalidExtBlock3) shouldBe 'failure
+    validCtx.appendFullBlock(lastBlock) shouldBe 'success
   }
 
 

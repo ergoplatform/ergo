@@ -42,10 +42,6 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
       val tail = prevInterlinks.tail
       val prevLevel = maxLevelOf(prevHeader)
       if (prevLevel > 0) {
-        println("prevLeve: " + prevLevel)
-        if(prevLevel > 10){
-          println("ph: " + prevHeader)
-        }
         (genesis +: tail.dropRight(prevLevel)) ++ Seq.fill(prevLevel)(prevHeader.id)
       } else {
         prevInterlinks

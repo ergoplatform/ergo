@@ -10,7 +10,7 @@ import scorex.util.bytesToId
 /**
   * Class that implements extension validation based on current to ErgoValidationSettings
   */
-class ExtensionValidator[T](validationState: ValidationState[T], poPowAlgos: PoPowAlgos) extends ScorexEncoding {
+class ExtensionValidator[T](validationState: ValidationState[T], popowAlgos: PoPowAlgos) extends ScorexEncoding {
 
   def validateExtension(extension: Extension,
                         header: Header,
@@ -33,7 +33,7 @@ class ExtensionValidator[T](validationState: ValidationState[T], poPowAlgos: PoP
         val currentLinksTry = unpackInterlinks(extension.fields)
 
         val expectedLinksTry = parentLinksTry
-          .map { prev => poPowAlgos.updateInterlinks(parent, prev) }
+          .map { prev => popowAlgos.updateInterlinks(parent, prev) }
 
         validationState
           .validateNoFailure(exIlEncoding, currentLinksTry)

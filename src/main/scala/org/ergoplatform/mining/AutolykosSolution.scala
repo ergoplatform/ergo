@@ -88,6 +88,7 @@ class AutolykosV1SolutionSerializer extends ScorexSerializer[AutolykosSolution] 
   * Binary serializer for Autolykos v2 solution, serializing and parsing "pk" and "nonce" values
   */
 class AutolykosV2SolutionSerializer extends ScorexSerializer[AutolykosSolution] {
+
   import AutolykosSolution.{wForV2, dForV2}
 
   override def serialize(obj: AutolykosSolution, w: Writer): Unit = {
@@ -100,6 +101,7 @@ class AutolykosV2SolutionSerializer extends ScorexSerializer[AutolykosSolution] 
     val nonce = r.getBytes(8)
     AutolykosSolution(pk, wForV2, nonce, dForV2)
   }
+
 }
 
 
@@ -112,7 +114,7 @@ object AutolykosSolutionSerializer {
 
   def serialize(h: Header, w: Writer): Unit = {
     val blockVersion = h.version
-    val serializer = if(blockVersion == 1){
+    val serializer = if (blockVersion == 1) {
       v1Serializer
     } else {
       v2Serializer
@@ -121,7 +123,7 @@ object AutolykosSolutionSerializer {
   }
 
   def parse(r: Reader, blockVersion: Version): AutolykosSolution = {
-    val serializer = if(blockVersion == 1){
+    val serializer = if (blockVersion == 1) {
       v1Serializer
     } else {
       v2Serializer

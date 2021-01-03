@@ -31,6 +31,7 @@ case class AutolykosSolution(pk: EcPointType,
 }
 
 object AutolykosSolution extends ApiCodecs {
+  // "w" and "d" values for Autolykos v2 solution, where they not used
   val wForV2: EcPointType = CryptoConstants.dlogGroup.generator
   val dForV2: BigInt = 0
 
@@ -56,6 +57,11 @@ object AutolykosSolution extends ApiCodecs {
 
 }
 
+
+/**
+  * Binary serializer for Autolykos v1 solution,
+  * serializing and parsing "pk", "w", "nonce", and "d" values
+  */
 class AutolykosV1SolutionSerializer extends ScorexSerializer[AutolykosSolution] {
 
   override def serialize(obj: AutolykosSolution, w: Writer): Unit = {
@@ -78,6 +84,9 @@ class AutolykosV1SolutionSerializer extends ScorexSerializer[AutolykosSolution] 
 
 }
 
+/**
+  * Binary serializer for Autolykos v2 solution, serializing and parsing "pk" and "nonce" values
+  */
 class AutolykosV2SolutionSerializer extends ScorexSerializer[AutolykosSolution] {
   import AutolykosSolution.{wForV2, dForV2}
 
@@ -93,6 +102,10 @@ class AutolykosV2SolutionSerializer extends ScorexSerializer[AutolykosSolution] 
   }
 }
 
+
+/**
+  * Serializing facade for both Autolykos v1 and v2 solutions
+  */
 object AutolykosSolutionSerializer {
   val v1Serializer = new AutolykosV1SolutionSerializer
   val v2Serializer = new AutolykosV2SolutionSerializer

@@ -176,7 +176,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
-    *
+    * Target for PoW
     */
   def realTarget(header: Header): BigInt = {
     if (header.version == 1) {

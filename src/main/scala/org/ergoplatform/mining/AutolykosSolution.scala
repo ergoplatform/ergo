@@ -19,7 +19,7 @@ import sigmastate.interpreter.CryptoConstants.EcPointType
   *
   * @param pk - miner public key. Should be used to collect block rewards
   * @param w  - one-time public key. Prevents revealing of miners secret
-  * @param n  - nonce
+  * @param n  - nonce (8 bytes)
   * @param d  - distance between pseudo-random number, corresponding to nonce `n` and a secret,
   *           corresponding to `pk`. The lower `d` is, the harder it was to find this solution.
   */

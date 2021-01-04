@@ -176,9 +176,10 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   }
 
   /**
-    * Target for PoW
+    * Pow puzzle is solved if hit < target. This function calculates the hit.
+    * It is also used as "real target" in NiPoPoWs.
     */
-  def realTarget(header: Header): BigInt = {
+  def powHit(header: Header): BigInt = {
     if (header.version == 1) {
       header.powSolution.d
     } else {
@@ -192,7 +193,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Used in NiPoPoW.
     */
   def realDifficulty(header: Header): BigInt = {
-      q / realTarget(header)
+      q / powHit(header)
   }
 
   /**

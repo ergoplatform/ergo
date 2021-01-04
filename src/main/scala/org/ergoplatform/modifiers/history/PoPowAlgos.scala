@@ -25,7 +25,7 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
       def log2(x: Double) = math.log(x) / math.log(2)
 
       val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
-      val level = log2(requiredTarget.doubleValue) - log2(powScheme.realTarget(header).doubleValue)
+      val level = log2(requiredTarget.doubleValue) - log2(powScheme.powHit(header).doubleValue)
       level.toInt
     } else {
       Int.MaxValue

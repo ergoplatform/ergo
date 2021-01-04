@@ -31,7 +31,7 @@ case class AutolykosSolution(pk: EcPointType,
 }
 
 object AutolykosSolution extends ApiCodecs {
-  // "w" and "d" values for Autolykos v2 solution, where they not used
+  // "pk", "w" and "d" values for Autolykos v2 solution, where they not passed from outside
   val pkForV2 = CryptoConstants.dlogGroup.identity
   val wForV2: EcPointType = CryptoConstants.dlogGroup.generator
   val dForV2: BigInt = 0

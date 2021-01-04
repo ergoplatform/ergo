@@ -32,6 +32,7 @@ case class AutolykosSolution(pk: EcPointType,
 
 object AutolykosSolution extends ApiCodecs {
   // "w" and "d" values for Autolykos v2 solution, where they not used
+  val pkForV2 = CryptoConstants.dlogGroup.identity
   val wForV2: EcPointType = CryptoConstants.dlogGroup.generator
   val dForV2: BigInt = 0
 
@@ -46,12 +47,12 @@ object AutolykosSolution extends ApiCodecs {
 
   implicit val jsonDecoder: Decoder[AutolykosSolution] = { c: HCursor =>
     for {
-      pk <- c.downField("pk").as[EcPointType]
+      pkOpt <- c.downField("pk").as[Option[EcPointType]]
       wOpt <- c.downField("w").as[Option[EcPointType]]
       n <- c.downField("n").as[Array[Byte]]
       dOpt <- c.downField("d").as[Option[BigInt]]
     } yield {
-      AutolykosSolution(pk, wOpt.getOrElse(wForV2), n, dOpt.getOrElse(dForV2))
+      AutolykosSolution(pkOpt.getOrElse(pkForV2), wOpt.getOrElse(wForV2), n, dOpt.getOrElse(dForV2))
     }
   }
 

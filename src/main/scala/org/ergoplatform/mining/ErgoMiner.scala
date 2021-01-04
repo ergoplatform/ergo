@@ -65,7 +65,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val votingEpochLength = votingSettings.votingLength
   private val protocolVersion = ergoSettings.chainSettings.protocolVersion
   private val powScheme = ergoSettings.chainSettings.powScheme
-  private var popowAlgos = new PoPowAlgos(powScheme)
+  private val popowAlgos = new PoPowAlgos(powScheme)
   private val externalMinerMode = ergoSettings.nodeSettings.useExternalMiner
   private val maxTransactionComplexity: Int = ergoSettings.nodeSettings.maxTransactionComplexity
 
@@ -300,12 +300,23 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       }
 
     // solution found externally (by e.g. GPU miner)
-    case solution: AutolykosSolution =>
+    case preSolution: AutolykosSolution =>
+      val solution = if (preSolution.pk.isInfinity) {
+        publicKeyOpt match {
+          case Some(pk) => AutolykosSolution(pk.value, preSolution.w, preSolution.n, preSolution.d)
+          case None => preSolution
+        }
+      } else {
+        preSolution
+      }
       log.info("Got solution: " + solution)
       val result: Future[Unit] =
         if (solvedBlock.nonEmpty) {
           log.info("Duplicate solution: " + solution)
           Future.failed(new Exception("Solution already submitted"))
+        } else if (publicKeyOpt.isEmpty) {
+          log.warn("Got a solution, but no pubkey is set")
+          Future.failed(new Exception("No pubkey is set"))
         } else {
           candidateOpt.map { c =>
             val newBlock = completeBlock(c.candidateBlock, solution)

@@ -31,7 +31,7 @@ class VotingSpecification extends ErgoPropertyTest {
       version2ActivationDifficultyHex = hfActivationDifficultyHex
     )
 
-  val updSettings = settings.copy(chainSettings = settings.chainSettings.copy(voting = votingSettings))
+  private val updSettings = settings.copy(chainSettings = settings.chainSettings.copy(voting = votingSettings))
 
   private val proposedUpdate = ErgoValidationSettingsUpdate(
     Seq(ValidationRules.exDuplicateKeys, ValidationRules.exValueLength),

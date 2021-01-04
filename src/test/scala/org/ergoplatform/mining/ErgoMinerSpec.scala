@@ -344,7 +344,6 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     system.terminate()
   }
 
-
   it should "mine after HF" in new TestKit(ActorSystem()) {
     val forkHeight = 3
 
@@ -397,6 +396,12 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val wm2 = await((minerRef ? PrepareCandidate(Seq())).mapTo[Future[WorkMessage]].flatten)
     (wm2.h.get >= forkHeight) shouldBe true
     wm1.msg.sameElements(wm2.msg) shouldBe false
+
+    val v2Block = testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+
+    val h2 = v2Block.modifier.asInstanceOf[ErgoFullBlock].header
+    h2.version shouldBe 2
+    h2.minerPk shouldBe defaultMinerPk.value
   }
 
 }

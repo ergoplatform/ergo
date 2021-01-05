@@ -242,6 +242,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   def requiredDifficultyAfter(parent: Header,
                               nextBlockTimestampOpt: Option[Long] = None): Difficulty = {
     if (parent.height + 1 == settings.chainSettings.voting.version2ActivationHeight) {
+      // Set difficulty for version 2 activation height (where specific difficulty is needed due to PoW change)
       settings.chainSettings.initialDifficultyVersion2
     } else {
       //todo: it is slow to read thousands headers from database for each header

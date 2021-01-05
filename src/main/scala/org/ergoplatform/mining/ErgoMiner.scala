@@ -199,7 +199,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       * Just ignore all other modifiers.
       */
     case SemanticallySuccessfulModifier(m: ErgoFullBlock) =>
-      log.debug(s"Miner: ignoring modifier at height ${m.height}")
+      log.debug(s"Miner: ignoring block at height ${m.height}")
 
     case SemanticallySuccessfulModifier(_) =>
   }
@@ -243,7 +243,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       inputsNotSpent(tx, s)
     }
 
-    // We clear cached solved block if it so not continuing last block applied
+    // We clear cached solved block if it is not continuing last block applied
     if (solvedBlock.nonEmpty && (solvedBlock.map(_.parentId) != h.bestFullBlockOpt.map(_.id))) {
       solvedBlock = None
     }
@@ -301,6 +301,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     // solution found externally (by e.g. GPU miner)
     case preSolution: AutolykosSolution =>
+      // Inject node pk if it is not externally set (in Autolykos 2)
       val solution = if (preSolution.pk.isInfinity) {
         publicKeyOpt match {
           case Some(pk) => AutolykosSolution(pk.value, preSolution.w, preSolution.n, preSolution.d)

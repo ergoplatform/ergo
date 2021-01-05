@@ -32,7 +32,7 @@ case class AutolykosSolution(pk: EcPointType,
 
 object AutolykosSolution extends ApiCodecs {
   // "pk", "w" and "d" values for Autolykos v2 solution, where they not passed from outside
-  val pkForV2 = CryptoConstants.dlogGroup.identity
+  val pkForV2: EcPointType = CryptoConstants.dlogGroup.identity
   val wForV2: EcPointType = CryptoConstants.dlogGroup.generator
   val dForV2: BigInt = 0
 
@@ -113,23 +113,20 @@ object AutolykosSolutionSerializer {
   val v1Serializer = new AutolykosV1SolutionSerializer
   val v2Serializer = new AutolykosV2SolutionSerializer
 
-  def serialize(h: Header, w: Writer): Unit = {
-    val blockVersion = h.version
-    val serializer = if (blockVersion == 1) {
+  private def serializer(blockVersion: Version): ScorexSerializer[AutolykosSolution] = {
+    if (blockVersion == 1) {
       v1Serializer
     } else {
       v2Serializer
     }
-    serializer.serialize(h.powSolution, w)
+  }
+
+  def serialize(h: Header, w: Writer): Unit = {
+    serializer(h.version).serialize(h.powSolution, w)
   }
 
   def parse(r: Reader, blockVersion: Version): AutolykosSolution = {
-    val serializer = if (blockVersion == 1) {
-      v1Serializer
-    } else {
-      v2Serializer
-    }
-    serializer.parse(r)
+    serializer(blockVersion).parse(r)
   }
 
 }

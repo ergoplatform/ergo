@@ -94,9 +94,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   def currentHeight: Int = sigmaPreHeader.height
 
   /**
-    * @return version of the protocol
+    * @return block version of the protocol
     */
-  def protocolVersion: Byte = currentParameters.blockVersion
+  def blockVersion: Byte = currentParameters.blockVersion
 
   private def votingEpochLength: Int = votingSettings.votingLength
 

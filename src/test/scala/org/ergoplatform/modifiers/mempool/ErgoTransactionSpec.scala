@@ -310,7 +310,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     import Parameters._
     val ps = Parameters(0, DefaultParameters.updated(MaxBlockCostIncrease, Int.MaxValue), emptyVSUpdate)
     val sc = new ErgoStateContext(Seq.empty, None, genesisStateDigest, ps, ErgoValidationSettings.initial,
-      VotingData.empty)(settings.chainSettings.voting)
+      VotingData.empty)(settings)
       .upcoming(org.ergoplatform.mining.group.generator,
         0L,
         settings.chainSettings.initialNBits,
@@ -330,7 +330,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       val params2 = new Parameters(height = 0,
         parametersTable = table2,
         proposedUpdate = ErgoValidationSettingsUpdate.empty)
-      emptyStateContext.copy(currentParameters = params2)
+      emptyStateContext.copy(currentParameters = params2)(settings)
     }
 
     val gen = validErgoTransactionGenTemplate(0, 0, 10, 10, trueLeafGen)

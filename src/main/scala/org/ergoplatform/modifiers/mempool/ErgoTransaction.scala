@@ -63,12 +63,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   override lazy val id: ModifierId = bytesToId(serializedId)
 
   /**
-    * Id of transaction "witness" (taken from Bitcoin jargon, means commitment to signatures of a transaction)
+    * Id of transaction "witness" (taken from Bitcoin jargon, means commitment to signatures of a transaction).
+    * Id is 248-bit long, to distinguish transaction ids from witness ids in Merkle tree of transactions,
+    * where both kinds of ids are written into leafs of the tree.
     */
   lazy val witnessSerializedId: Array[Byte] =
-    Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof)))
+    Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof))).tail
 
-  lazy val witnessId: ModifierId = bytesToId(witnessSerializedId)
 
   lazy val outAssetsTry: Try[(Map[ByteArrayWrapper, Long], Int)] = ErgoTransaction.extractAssets(outputCandidates)
 
@@ -203,7 +204,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       val proof = input.spendingProof
       val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
       val inputContext = InputContext(idx.toShort, proof.extension)
-      val ctx = new ErgoContext(stateContext, transactionContext, inputContext, maxCost - addExact(currentTxCost, accumulatedCost), 0)
+
+      val ctx = new ErgoContext(
+        stateContext, transactionContext, inputContext,
+        costLimit = maxCost - addExact(currentTxCost, accumulatedCost),
+        initCost = 0)
 
       val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
       costTry.recover { case t =>
@@ -298,7 +303,9 @@ object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
   }
 
   override def parse(r: Reader): ErgoTransaction = {
-    val reader = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
+    val reader = new SigmaByteReader(r,
+      new ConstantStore(),
+      resolvePlaceholdersToConstants = false)
     val elt = ErgoLikeTransactionSerializer.parse(reader)
     ErgoTransaction(elt.inputs, elt.dataInputs, elt.outputCandidates)
   }

@@ -67,7 +67,7 @@ class DigestState protected(override val version: VersionTag,
         case Some(proofs) if !java.util.Arrays.equals(ADProofs.proofDigest(proofs.proofBytes), fb.header.ADProofsRoot) =>
           Failure(new Exception("Incorrect proofs digest"))
         case Some(proofs) =>
-          stateContext.appendFullBlock(fb, votingSettings).flatMap { currentStateContext =>
+          stateContext.appendFullBlock(fb).flatMap { currentStateContext =>
             val txs = fb.blockTransactions.txs
             val declaredHash = fb.header.stateRoot
             validateTransactions(txs, declaredHash, proofs, currentStateContext)
@@ -106,7 +106,7 @@ class DigestState protected(override val version: VersionTag,
       validate(fb)
         .flatMap { _ =>
           val version: VersionTag = idToVersion(fb.header.id)
-          stateContext.appendFullBlock(fb, votingSettings) match {
+          stateContext.appendFullBlock(fb) match {
             case Success(sc) => update(version, fb.header.stateRoot, sc)
             case Failure(e) =>
               log.error(s"Can't modify state context due to ${e.getMessage} ", e)

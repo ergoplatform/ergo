@@ -127,6 +127,14 @@ class Parameters(val height: Height,
       table = table.updated(BlockVersion, table(BlockVersion) + 1)
       activatedUpdate = proposedUpdate
     }
+
+    // Forced version update to version 2 at height provided in settings
+    if (height == votingSettings.version2ActivationHeight) {
+      // Forced update should happen, but some soft-fork update happened before.
+      // Node should fail at this point, as the situation is unclear
+      require(table(BlockVersion) == 1, "Protocol version is not 1 on the hard-fork")
+      table = table.updated(BlockVersion, table(BlockVersion) + 1)
+    }
     (table, activatedUpdate)
   }
 
@@ -342,7 +350,7 @@ object Parameters {
   }
 
   /**
-    * Check that two set of parameters are the same (contain the same records).
+    * Check that two sets of parameters are the same (contain the same records).
     *
     * @param p1 - parameters set
     * @param p2 - parameters set

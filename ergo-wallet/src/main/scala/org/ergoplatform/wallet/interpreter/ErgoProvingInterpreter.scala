@@ -14,12 +14,12 @@ import org.ergoplatform.wallet.secrets.SecretKey
 import sigmastate.basics.SigmaProtocolPrivateInput
 import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import scorex.util.encode.Base16
-import sigmastate.eval.{IRContext, RuntimeIRContext}
+import sigmastate.eval.{RuntimeIRContext, IRContext}
 import sigmastate.utxo.CostTable
 import special.collection.Coll
-import special.sigma.{Header, PreHeader}
+import special.sigma.{PreHeader, Header}
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
 /**
   * A class which is holding secrets and signing transactions.
@@ -71,6 +71,13 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     case None =>
       hdKeys.map(_.publicKey) // costly operation if there are many secret keys
   }
+
+  /**
+    * Activated script version, 0 is for Ergo mainnet since block #1 until 414,720, 1 for Ergo mainnet since 414,720,
+    * etc.
+    * Note: version N of ErgoProtocol corresponds to version N-1 of ErgoTree (aka script version)
+    */
+  val activatedScriptVersion: Byte = (params.blockVersion - 1).toByte
 
   /**
     * Produces updated instance of ErgoProvingInterpreter with a new secret included
@@ -137,7 +144,8 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
               unsignedInput.extension,
               ValidationRules.currentSettings,
               params.maxBlockCost,
-              totalCost
+              totalCost,
+              activatedScriptVersion
             )
 
             val hints = txHints.allHintsForInput(boxIdx)
@@ -203,7 +211,8 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
         unsignedInput.extension,
         ValidationRules.currentSettings,
         params.maxBlockCost,
-        0L // initial cost
+        0L, // initial cost
+        activatedScriptVersion
       )
       val scriptToReduce = inputBox.ergoTree
       inpIndex -> generateCommitments(scriptToReduce, context)
@@ -247,7 +256,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
       val initCost: Long = 0
 
       val ctx: ErgoLikeContext = new ErgoLikeContext(lastBlockUtxoRoot, headers, preHeader, dataBoxes, boxesToSpend,
-        spendingTransaction, selfIndex, extension, validationSettings, costLimit, initCost)
+        spendingTransaction, selfIndex, extension, validationSettings, costLimit, initCost, activatedScriptVersion)
 
       bag.replaceHintsForInput(idx, bagForMultisig(ctx, exp, proof, realSecretsToExtract, simulatedSecretsToExtract))
     }

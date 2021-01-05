@@ -42,9 +42,9 @@ case class BlockTransactions(headerId: ModifierId,
   lazy val txIds: Seq[Array[Byte]] = txs.map(_.serializedId)
 
   /**
-    * Ids of transaction witnesses (signatures aka spending proofs)
+    * Ids of transaction witnesses (signatures aka spending proofs).
     */
-  lazy val witnessIds: Seq[Array[Byte]] = txs.map(_.witnessSerializedId)
+  lazy val witnessIds: Seq[Array[Byte]] = txs.map(tx => tx.witnessSerializedId)
 
   /**
     * Non-empty (because there's at least 1 transaction) Merkle tree of the block transactions

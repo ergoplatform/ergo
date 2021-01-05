@@ -4,7 +4,6 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import scorex.core.block.Block.Version
 import scorex.core.serialization.ScorexSerializer
@@ -69,6 +68,7 @@ class AutolykosV1SolutionSerializer extends ScorexSerializer[AutolykosSolution] 
     val dBytes = BigIntegers.asUnsignedByteArray(obj.d.bigInteger)
     w.putBytes(groupElemToBytes(obj.pk))
     w.putBytes(groupElemToBytes(obj.w))
+    require(obj.n.length == 8)
     w.putBytes(obj.n)
     w.putUByte(dBytes.length)
     w.putBytes(dBytes)
@@ -94,6 +94,7 @@ class AutolykosV2SolutionSerializer extends ScorexSerializer[AutolykosSolution] 
 
   override def serialize(obj: AutolykosSolution, w: Writer): Unit = {
     w.putBytes(groupElemToBytes(obj.pk))
+    require(obj.n.length == 8)
     w.putBytes(obj.n)
   }
 
@@ -110,8 +111,8 @@ class AutolykosV2SolutionSerializer extends ScorexSerializer[AutolykosSolution] 
   * Serializing facade for both Autolykos v1 and v2 solutions
   */
 object AutolykosSolutionSerializer {
-  val v1Serializer = new AutolykosV1SolutionSerializer
-  val v2Serializer = new AutolykosV2SolutionSerializer
+  private val v1Serializer = new AutolykosV1SolutionSerializer
+  private val v2Serializer = new AutolykosV2SolutionSerializer
 
   private def serializer(blockVersion: Version): ScorexSerializer[AutolykosSolution] = {
     if (blockVersion == 1) {
@@ -121,8 +122,8 @@ object AutolykosSolutionSerializer {
     }
   }
 
-  def serialize(h: Header, w: Writer): Unit = {
-    serializer(h.version).serialize(h.powSolution, w)
+  def serialize(blockVersion: Version, solution: AutolykosSolution, w: Writer): Unit = {
+    serializer(blockVersion).serialize(solution, w)
   }
 
   def parse(r: Reader, blockVersion: Version): AutolykosSolution = {

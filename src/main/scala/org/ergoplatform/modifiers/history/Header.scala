@@ -228,7 +228,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
 
   override def serialize(h: Header, w: Writer): Unit = {
     serializeWithoutPow(h, w)
-    AutolykosSolutionSerializer.serialize(h, w)
+    AutolykosSolutionSerializer.serialize(h.version, h.powSolution, w)
   }
 
   def serializeWithoutPow(h: HeaderWithoutPow, w: Writer): Unit = {

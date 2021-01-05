@@ -18,7 +18,8 @@ import scorex.crypto.hash.Digest32
 class PoPowAlgos(powScheme: AutolykosPowScheme) {
 
   /**
-    * Computes max level (μ) of the given [[Header]], such that μ = log(T) − log(id(B))
+    * Computes max level (μ) of the given [[Header]], such that μ = log(T) − log(id(B)),
+    *   where T is required target for pow puzzle, B is hit (min target), so B < T
     */
   private def maxLevelOf(header: Header): Int = {
     if (!header.isGenesis) {

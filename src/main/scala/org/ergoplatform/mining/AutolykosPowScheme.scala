@@ -119,20 +119,17 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val msg = msgByHeader(header)
     val s = header.powSolution
 
-    val nonce = header.powSolution.n
+    val nonce = s.n
 
     val N = calcN(header)
 
-    val pkBytes = {
-      require(s.d < b, s"Incorrect d = ${s.d} for b = $b")
-      require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
-      groupElemToBytes(s.pk)
-    }
+    require(s.d < b, s"Incorrect d = ${s.d} for b = $b")
+    require(s.pk.getCurve == group.curve && !s.pk.isInfinity, "pk is incorrect")
+    require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
 
-    val wBytes = {
-      require(s.w.getCurve == group.curve && !s.w.isInfinity, "w is incorrect")
-      groupElemToBytes(s.w)
-    }
+    val pkBytes = groupElemToBytes(s.pk)
+    val wBytes = groupElemToBytes(s.w)
+
 
     val seed = Bytes.concat(msg, nonce) // Autolykos v1, Alg. 2, line4: m || nonce
     val indexes = genIndexes(seed, N)
@@ -171,7 +168,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val f2 = indexes.map(idx => genElement(version, msg, null, null, Ints.toByteArray(idx), h)).sum
 
     // sum as byte array is always about 32 bytes
-    val array: Array[Byte] = BigIntegers.asUnsignedByteArray(32,  f2.underlying())
+    val array: Array[Byte] = BigIntegers.asUnsignedByteArray(32, f2.underlying())
     toBigInt(hash(array))
   }
 

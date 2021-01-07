@@ -126,7 +126,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
-    val protocolVersion = stateContext.currentProtocolVersion
+    val blockVersion = stateContext.blockVersion
 
     // Cost of transaction initialization: we should read and parse all inputs and data inputs,
     // and also iterate through all outputs to check rules
@@ -151,7 +151,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       validationState
         .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}")
         .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out")
-        .validate(txNegHeight, (protocolVersion == 1) || out.creationHeight >= 0, s" ${out.creationHeight} >= 0 is not true, output id: $id: output $out")
+        .validate(txNegHeight, (blockVersion == 1) || out.creationHeight >= 0, s" ${out.creationHeight} >= 0 is not true, output id: $id: output $out")
         .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
         .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
     }

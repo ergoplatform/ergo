@@ -83,8 +83,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     genesisStateDigest
   }
 
-  def currentProtocolVersion: Block.Version = currentParameters.blockVersion
-
   /* NOHF PROOF:
   Changed: removed returning ErgoHistory.EmptyHistoryHeight if sigmaPreHeader is null.
   Motivation: sigmaPreHeader no longer can be null, returning PreHeader.fake.
@@ -96,7 +94,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   /**
     * @return block version of the protocol
     */
-  def blockVersion: Byte = currentParameters.blockVersion
+  def blockVersion: Block.Version = currentParameters.blockVersion
 
   private def votingEpochLength: Int = votingSettings.votingLength
 

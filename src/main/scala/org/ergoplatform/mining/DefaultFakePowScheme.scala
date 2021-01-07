@@ -12,7 +12,7 @@ import scala.util.{Random, Success, Try}
 
 /**
   * Fake Pow Scheme for tests.
-  * Fill solution with random values, any block is valid during validation
+  * Fill solution with random values, as any block is valid during validation
   */
 class DefaultFakePowScheme(k: Int, n: Int) extends AutolykosPowScheme(k, n) {
   override def validate(header: Header): Try[Unit] = Success(Unit)

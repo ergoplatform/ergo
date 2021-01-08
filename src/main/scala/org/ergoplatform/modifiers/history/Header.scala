@@ -242,6 +242,12 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     RequiredDifficulty.serialize(h.nBits, w)
     w.putUInt(h.height)
     w.putBytes(h.votes)
+
+    // For block version >= 2, this new byte encodes length of possible new fields.
+    // Set to 0 for now, so no new fields.
+    if (h.version > Header.InitialVersion) {
+      w.putUByte(0: Byte)
+    }
   }
 
   def bytesWithoutPow(header: HeaderWithoutPow): Array[Byte] = {
@@ -261,6 +267,15 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     val nBits = RequiredDifficulty.parse(r)
     val height = r.getUInt().toIntExact
     val votes = r.getBytes(3)
+
+    // For block version >= 2, a new byte encodes length of possible new fields.
+    // If this byte > 0, we read new fields but do nothing, as semantics of the fields is not known.
+    if (version > Header.InitialVersion) {
+      val newFieldsSize = r.getUByte()
+      if (newFieldsSize > 0) {
+        r.getBytes(newFieldsSize)
+      }
+    }
 
     HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionHash, votes)

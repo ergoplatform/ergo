@@ -3,13 +3,13 @@ package org.ergoplatform.sanity
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{BlockTransactions, HeaderSerializer}
+import org.ergoplatform.modifiers.history.{BlockTransactions, Header, HeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalacheck.Gen
 import scorex.core.network.ConnectedPeer
@@ -92,7 +92,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     val boxHolder = boxesHolderGen.sample.get
     val txs = validTransactionsFromBoxHolder(boxHolder)._1
     val id = modifierIdGen.sample.get
-    BlockTransactions(id, 1: Byte, txs)
+    BlockTransactions(id, Header.InitialVersion, txs)
   }
 
 }

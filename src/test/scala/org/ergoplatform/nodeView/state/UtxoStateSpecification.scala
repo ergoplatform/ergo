@@ -76,7 +76,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         height = height,
         parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId))
       val adProofs = ADProofs(realHeader.id, adProofBytes)
-      val bt = BlockTransactions(realHeader.id, 1: Byte, txs)
+      val bt = BlockTransactions(realHeader.id, Header.InitialVersion, txs)
       val fb = ErgoFullBlock(realHeader, bt, genExtension(realHeader, us.stateContext), Some(adProofs))
       us = us.applyModifier(fb).get
       val remaining = emission.remainingFoundationRewardAtHeight(height)

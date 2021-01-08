@@ -56,7 +56,7 @@ object FoundationBoxSigner extends App {
 
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
-  val action: ACTION = generateCommitment
+  val action: ACTION = preSign
 
   // hints provided by a cosigner
   val commitmentStringOpt: Option[String] = Some("03661af7189cb8afdb36336dd141585497f3688582263fa0561f5a1a140acd3432")

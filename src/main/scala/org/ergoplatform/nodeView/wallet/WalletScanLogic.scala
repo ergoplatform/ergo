@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanWalletInteraction}
-import org.ergoplatform.settings.{Constants, LaunchParameters}
+import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
 import org.ergoplatform.wallet.Constants.{MiningScanId, PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
@@ -18,6 +18,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
 import scorex.util.bytesToId
+
 import scala.collection.mutable
 
 /**
@@ -55,6 +56,7 @@ object WalletScanLogic extends ScorexLogging {
                       proverOpt: Option[ErgoProvingInterpreter],
                       stateContext: ErgoStateContext,
                       height: Int): Boolean = {
+    log.info(s"Resolving box ${Algos.encode(box.id)}")
     val testingTx = UnsignedErgoLikeTransaction(
       IndexedSeq(new UnsignedInput(box.id)),
       IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
@@ -126,7 +128,12 @@ object WalletScanLogic extends ScorexLogging {
     val resolvedBoxes = if (miningBoxes.nonEmpty) {
       miningBoxes.flatMap { tb =>
         val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)
-        if (spendable) Some(tb.copy(scans = Set(PaymentsScanId))) else None
+        if (spendable) {
+          registry.removeScan(tb.boxId, MiningScanId)
+          Some(tb.copy(scans = Set(PaymentsScanId)))
+        } else {
+          None
+        }
       }
     } else Seq.empty
 

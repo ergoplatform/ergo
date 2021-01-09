@@ -129,7 +129,7 @@ object WalletScanLogic extends ScorexLogging {
       miningBoxes.flatMap { tb =>
         val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)
         if (spendable) {
-          registry.removeScan(tb.boxId, MiningScanId)
+          registry.removeScan(tb.box.id, MiningScanId)
           Some(tb.copy(scans = Set(PaymentsScanId)))
         } else {
           None

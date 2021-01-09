@@ -80,7 +80,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   /**
     * Cached solved block
     */
-  private var solvedBlock: Option[ErgoFullBlock] = None
+  private var solvedBlock: Option[Header] = None
 
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
 
@@ -326,7 +326,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           } match {
             case Some(Success(newBlock)) =>
               sendToNodeView(newBlock)
-              solvedBlock = Some(newBlock)
+              solvedBlock = Some(newBlock.header)
               candidateOpt = None
               Future.successful(())
             case Some(Failure(exception)) =>

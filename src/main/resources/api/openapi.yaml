@@ -3419,7 +3419,7 @@ paths:
         - mining
       responses:
         '200':
-          description: External candidate
+          description: Miner Reward Script (P2S format)
           content:
             application/json:
               schema:
@@ -3429,6 +3429,34 @@ paths:
                 properties:
                   rewardAddress:
                     $ref: '#/components/schemas/ErgoAddress'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /mining/rewardPublicKey:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Read public key associated with miner rewards
+      operationId: miningReadMinerRewardPubkey
+      tags:
+        - mining
+      responses:
+        '200':
+          description: External candidate
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - rewardPubkey
+                properties:
+                  rewardAddress:
+                    type: string
+                    example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
         default:
           description: Error
           content:

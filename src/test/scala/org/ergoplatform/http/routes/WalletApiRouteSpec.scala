@@ -49,7 +49,8 @@ class WalletApiRouteSpec extends AnyFlatSpec
     (0 to 10).flatMap(_ => Seq(paymentRequest, assetIssueRequest)),
     Some(10000L),
     Seq.empty,
-    Seq.empty
+    Seq.empty,
+    minerRewardDelay = 720
   )
 
 

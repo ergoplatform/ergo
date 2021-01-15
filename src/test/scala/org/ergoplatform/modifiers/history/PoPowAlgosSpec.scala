@@ -17,7 +17,11 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with ChainGenerator with 
     val chain = genChain(ChainLength)
     val genesis = chain.head
     val interlinks = chain.foldLeft(Seq.empty[Seq[ModifierId]]) { case (acc, b) =>
-      acc :+ (if (acc.isEmpty) updateInterlinks(b.header, Seq.empty) else updateInterlinks(b.header, acc.last))
+      acc :+ (if (acc.isEmpty){
+        popowAlgos.updateInterlinks(b.header, Seq.empty)
+      } else {
+        popowAlgos.updateInterlinks(b.header, acc.last)
+      })
     }
 
     interlinks.foreach { links =>

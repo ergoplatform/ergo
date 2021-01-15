@@ -4,6 +4,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.utils.ErgoPropertyTest
+import org.scalacheck.Gen
 import scorex.core.bytesToVersion
 
 import scala.util.Random
@@ -11,7 +12,7 @@ import scala.util.Random
 class ErgoStateSpecification extends ErgoPropertyTest {
 
   property("applyModifier() - double spending") {
-    forAll(boxesHolderGen) { bh =>
+    forAll(boxesHolderGen, Gen.choose(1: Byte, 2: Byte)) { case (bh, version) =>
       val us = createUtxoState(bh)
       val ds = createDigestState(bytesToVersion(Array.fill(32)(100: Byte)), us.rootHash)
 
@@ -21,9 +22,10 @@ class ErgoStateSpecification extends ErgoPropertyTest {
       val toRemove = changes.toRemove.map(_.boxId)
       toRemove.count(boxId => java.util.Arrays.equals(toRemove.head, boxId)) shouldBe 2
 
-      val dsRoot = BlockTransactions.transactionsRoot(dsTxs)
+      val dsRoot = BlockTransactions.transactionsRoot(dsTxs, version)
       val dsHeader = validBlock.header.copy(transactionsRoot = dsRoot)
-      val doubleSpendBlock = ErgoFullBlock(dsHeader, BlockTransactions(dsHeader.id, dsTxs), validBlock.extension, validBlock.adProofs)
+      val bt = BlockTransactions(dsHeader.id, version, dsTxs)
+      val doubleSpendBlock = ErgoFullBlock(dsHeader, bt, validBlock.extension, validBlock.adProofs)
 
       us.applyModifier(doubleSpendBlock) shouldBe 'failure
       us.applyModifier(validBlock) shouldBe 'success

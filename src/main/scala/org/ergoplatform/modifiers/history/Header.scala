@@ -102,8 +102,13 @@ case class Header(override val version: Version,
 
   override def minerPk: EcPointType = powSolution.pk
 
-  lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] = Seq((ADProofs.modifierTypeId, ADProofsId),
-    (BlockTransactions.modifierTypeId, transactionsId), (Extension.modifierTypeId, extensionId))
+  /**
+    * Expected identifiers of the block sections
+    */
+  lazy val sectionIds: Seq[(ModifierTypeId, ModifierId)] = Seq(
+    (ADProofs.modifierTypeId, ADProofsId),
+    (BlockTransactions.modifierTypeId, transactionsId),
+    (Extension.modifierTypeId, extensionId))
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
@@ -172,7 +177,7 @@ object Header extends ApiCodecs {
       votes = header.votes.toColl
     )
 
-  val CurrentVersion: Byte = 1
+  val InitialVersion: Byte = 1
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (101: Byte)
 
@@ -223,7 +228,7 @@ object HeaderSerializer extends ScorexSerializer[Header] {
 
   override def serialize(h: Header, w: Writer): Unit = {
     serializeWithoutPow(h, w)
-    AutolykosSolutionSerializer.serialize(h.powSolution, w)
+    AutolykosSolutionSerializer.serialize(h.version, h.powSolution, w)
   }
 
   def serializeWithoutPow(h: HeaderWithoutPow, w: Writer): Unit = {
@@ -237,6 +242,12 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     RequiredDifficulty.serialize(h.nBits, w)
     w.putUInt(h.height)
     w.putBytes(h.votes)
+
+    // For block version >= 2, this new byte encodes length of possible new fields.
+    // Set to 0 for now, so no new fields.
+    if (h.version > Header.InitialVersion) {
+      w.putUByte(0: Byte)
+    }
   }
 
   def bytesWithoutPow(header: HeaderWithoutPow): Array[Byte] = {
@@ -257,13 +268,22 @@ object HeaderSerializer extends ScorexSerializer[Header] {
     val height = r.getUInt().toIntExact
     val votes = r.getBytes(3)
 
+    // For block version >= 2, a new byte encodes length of possible new fields.
+    // If this byte > 0, we read new fields but do nothing, as semantics of the fields is not known.
+    if (version > Header.InitialVersion) {
+      val newFieldsSize = r.getUByte()
+      if (newFieldsSize > 0) {
+        r.getBytes(newFieldsSize)
+      }
+    }
+
     HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionHash, votes)
   }
 
   override def parse(r: Reader): Header = {
     val headerWithoutPow = parseWithoutPow(r)
-    val powSolution = AutolykosSolutionSerializer.parse(r)
+    val powSolution = AutolykosSolutionSerializer.parse(r, headerWithoutPow.version)
     headerWithoutPow.toHeader(powSolution, Some(r.consumed))
   }
 

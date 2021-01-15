@@ -29,7 +29,7 @@ object ErgoStateReader {
 
   def storageStateContext(store: LDBVersionedStore, constants: StateConstants): ErgoStateContext = {
     store.get(ErgoStateReader.ContextKey)
-      .flatMap(b => ErgoStateContextSerializer(constants.votingSettings).parseBytesTry(b).toOption)
+      .flatMap(b => ErgoStateContextSerializer(constants.settings).parseBytesTry(b).toOption)
       .getOrElse(ErgoStateContext.empty(constants))
   }
 

@@ -103,7 +103,7 @@ object ErgoState extends ScorexLogging {
 
         lazy val boxes: Try[(List[ErgoBox], List[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
 
-        val vs = tx.validateStateless
+        val vs = tx.validateStateless()
           .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
           .validateNoFailure(txDataBoxes, dataBoxesTry)
           .payload[Long](r.value)

@@ -3419,7 +3419,7 @@ paths:
         - mining
       responses:
         '200':
-          description: Miner Reward Script (P2S format)
+          description: Miner Reward Script (in P2S format)
           content:
             application/json:
               schema:
@@ -3446,7 +3446,7 @@ paths:
         - mining
       responses:
         '200':
-          description: External candidate
+          description: Public key for miner rewards (as hex-encoded secp256k1 point)
           content:
             application/json:
               schema:

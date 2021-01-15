@@ -68,7 +68,7 @@ class AutolykosV1SolutionSerializer extends ScorexSerializer[AutolykosSolution] 
     val dBytes = BigIntegers.asUnsignedByteArray(obj.d.bigInteger)
     w.putBytes(groupElemToBytes(obj.pk))
     w.putBytes(groupElemToBytes(obj.w))
-    require(obj.n.length == 8)
+    require(obj.n.length == 8) // non-consensus check on prover side
     w.putBytes(obj.n)
     w.putUByte(dBytes.length)
     w.putBytes(dBytes)
@@ -94,7 +94,7 @@ class AutolykosV2SolutionSerializer extends ScorexSerializer[AutolykosSolution] 
 
   override def serialize(obj: AutolykosSolution, w: Writer): Unit = {
     w.putBytes(groupElemToBytes(obj.pk))
-    require(obj.n.length == 8)
+    require(obj.n.length == 8) // non-consensus check on prover side
     w.putBytes(obj.n)
   }
 

@@ -152,7 +152,7 @@ object BlockTransactionsSerializer extends ScorexSerializer[BlockTransactions] {
       * We consider that in a block there could be no more than 10,000,000 transactions.
       *
       * Then the new serializer puts 10,000,000 + block version (while the old one just puts tx count with no version),
-      * and the reader knows that a new serializer was used if the first unsigned integer read is more than 1,000,000.
+      * and the reader knows that a new serializer was used if the first unsigned integer read is more than 10,000,000.
       */
     var blockVersion = 1: Byte
     var txCount = verOrCount

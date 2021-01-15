@@ -73,7 +73,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   }
 
   /**
-    * Activated script version, 0 is for Ergo mainnet since block #1 until 414,720, 1 for Ergo mainnet since 414,720,
+    * Activated script version, 0 is for Ergo mainnet since block #1 until 417,792, 1 for Ergo mainnet since 417,792,
     * etc.
     * Note: version N of ErgoProtocol corresponds to version N-1 of ErgoTree (aka script version)
     */

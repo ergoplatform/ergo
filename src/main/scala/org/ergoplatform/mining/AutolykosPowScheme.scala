@@ -130,7 +130,6 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val pkBytes = groupElemToBytes(s.pk)
     val wBytes = groupElemToBytes(s.w)
 
-
     val seed = Bytes.concat(msg, nonce) // Autolykos v1, Alg. 2, line4: m || nonce
     val indexes = genIndexes(seed, N)
 
@@ -174,7 +173,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
   /**
     * Pow puzzle is solved if hit < target. This function calculates the hit.
-    * It is also used as "real target" in NiPoPoWs.
+    * The hit is also used as "real target" in NiPoPoWs.
     */
   def powHit(header: Header): BigInt = {
     if (header.version == 1) {
@@ -385,7 +384,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val headerCandidate = ErgoMiner.deriveUnprovenHeader(blockCandidate)
     val msg = msgByHeader(headerCandidate)
     val b = getB(blockCandidate.nBits)
-    val h = if (blockCandidate.version == 1) {
+    val hOpt = if (blockCandidate.version == 1) {
       None
     } else {
       Some(headerCandidate.height)
@@ -400,7 +399,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     } else {
       None
     }
-    WorkMessage(msg, b, h, pk, proofs)
+    WorkMessage(msg, b, hOpt, pk, proofs)
   }
 
 }

@@ -73,4 +73,22 @@ class WalletStorageSpec
     }
   }
 
+  it should "always increase ids" in {
+    forAll(externalScanReqGen) { externalScanReq =>
+      withStore { store =>
+        val storage = new WalletStorage(store, settings)
+        val scan = storage.addScan(externalScanReq).get
+
+        storage.lastUsedScanId shouldBe scan.scanId
+
+        storage.removeScan(scan.scanId)
+        storage.lastUsedScanId shouldBe scan.scanId
+
+        val scan2 = storage.addScan(externalScanReq).get
+        storage.lastUsedScanId shouldBe scan2.scanId
+        storage.lastUsedScanId shouldBe (scan.scanId +1)
+      }
+    }
+  }
+
 }

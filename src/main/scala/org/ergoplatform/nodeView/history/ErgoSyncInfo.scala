@@ -39,6 +39,7 @@ object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] {
 
   override def parse(r: Reader): ErgoSyncInfo = {
     val length = r.getUShort()
+    require(length <= ErgoSyncInfo.MaxBlockIds + 1, "Too many block ids in sync info")
     val ids = (1 to length).map(_ => bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize)))
     ErgoSyncInfo(ids)
   }

@@ -4,9 +4,8 @@ import java.math.BigInteger
 
 import io.circe._
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.{ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
+import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
@@ -29,7 +28,9 @@ import sigmastate.basics._
 import sigmastate.interpreter._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import io.circe.syntax._
+import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
 import sigmastate.serialization.OpCodes
+import special.sigma.AnyValue
 
 import scala.util.{Failure, Success, Try}
 
@@ -65,7 +66,7 @@ trait ApiCodecs extends JsonCodecs {
     Json.obj(
       "height" -> height.asJson,
       "balance" -> walletBalance.asJson,
-      "assets" -> walletAssetBalances.toMap.map(x => (x._1: String, x._2)).asJson
+      "assets" -> walletAssetBalances.toMap.map(x => (x._1: String, x._2)).asJson //toMap to have assets as JSON map
     )
   }
 
@@ -204,7 +205,9 @@ trait ApiCodecs extends JsonCodecs {
     Map(
       "tx" -> hr.tx.asJson,
       "real" -> hr.real.asJson,
-      "simulated" -> hr.simulated.asJson
+      "simulated" -> hr.simulated.asJson,
+      "inputsRaw" -> hr.inputs.asJson,
+      "dataInputsRaw" -> hr.dataInputs.asJson
     ).asJson
   }
 
@@ -213,21 +216,9 @@ trait ApiCodecs extends JsonCodecs {
       tx <- cursor.downField("tx").as[ErgoTransaction]
       real <- cursor.downField("real").as[Seq[SigmaBoolean]]
       simulated <- cursor.downField("simulated").as[Seq[SigmaBoolean]]
-    } yield HintExtractionRequest(tx, real, simulated)
-  }
-
-  implicit val commitmentGenerationRequestEncoder: Encoder[CommitmentGenerationRequest] = {hr =>
-    Map(
-      "tx" -> hr.utx.asJson,
-      "externalKeys" -> hr.externalKeys.asJson
-    ).asJson
-  }
-
-  implicit val commitmentGenerationRequestDecoder: Decoder[CommitmentGenerationRequest] = {cursor =>
-    for {
-      tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
-      externalKeys <- cursor.downField("externalKeys").as[Option[Seq[SigmaBoolean]]]
-    } yield CommitmentGenerationRequest(tx, externalKeys)
+      inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
+      dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
+    } yield HintExtractionRequest(tx, real, simulated, inputs, dataInputs)
   }
 
   implicit val firstProverMessageEncoder: Encoder[FirstProverMessage] = {
@@ -308,7 +299,7 @@ trait ApiCodecs extends JsonCodecs {
     }
   }
 
-  implicit val secretProofEncoder: Encoder[SecretProven] = { sp =>
+  implicit val proofEncoder: Encoder[SecretProven] = { sp =>
     val proofType = sp match {
       case _: RealSecretProof => "proofReal"
       case _: SimulatedSecretProof => "proofSimulated"
@@ -419,7 +410,9 @@ trait ApiCodecs extends JsonCodecs {
       "tx" -> gcr.unsignedTx.asJson,
       "secrets" -> Json.obj(
         "dlog" -> gcr.dlogs.asJson,
-        "dht" -> gcr.dhts.asJson
+        "dht" -> gcr.dhts.asJson,
+        "inputsRaw" -> gcr.inputs.asJson,
+        "dataInputsRaw" -> gcr.dataInputs.asJson
       )
     )
   }
@@ -431,7 +424,28 @@ trait ApiCodecs extends JsonCodecs {
       dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DhtSecretKey]]]
       secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
       secretsOpt = if(secrets.isEmpty) None else Some(secrets)
-    } yield GenerateCommitmentsRequest(tx, secretsOpt)
+      inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
+      dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
+    } yield GenerateCommitmentsRequest(tx, secretsOpt, inputs, dataInputs)
+  }
+
+  implicit val executeRequestDecoder = new Decoder[ExecuteRequest] {
+    def apply(cursor: HCursor): Decoder.Result[ExecuteRequest] = {
+      for {
+        script <- cursor.downField("script").as[String]
+        env <- cursor.downField("namedConstants").as[Map[String,AnyValue]]
+        ctx <- cursor.downField("context").as[ErgoLikeContext]
+      } yield ExecuteRequest(script, env.map({ case (k,v) => k -> v.value }), ctx)
+    }
+  }
+
+  implicit val cryptResultEncoder: Encoder[CryptoResult] = {
+    res =>
+      val fields = Map(
+        "value" -> res.value.asJson,
+        "cost" -> res.cost.asJson
+      )
+      fields.asJson
   }
 
 }

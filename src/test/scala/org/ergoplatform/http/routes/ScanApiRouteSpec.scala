@@ -116,6 +116,28 @@ class ScanApiRouteSpec extends AnyFlatSpec
         json.hcursor.downField("confirmationsNum").as[Int].forall(_ >= minConfirmations) shouldBe true
         json.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
       }
+
+      // unconfirmed box not returned
+      response.get.flatMap(_.hcursor.downField("confirmationsNum").as[Option[Int]].toOption)
+        .exists(_.isDefined == false) shouldBe false
+    }
+  }
+
+  it should "list unspent and unconfirmed boxes for a scan" in {
+    val minConfirmations = -1
+    val minInclusionHeight = 0
+
+    val suffix = s"/unspentBoxes/101?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
+
+    Get(prefix + suffix) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = Try(responseAs[List[Json]])
+      response shouldBe 'success
+      response.get.nonEmpty shouldBe true
+
+      // unconfirmed box returned
+      response.get.flatMap(_.hcursor.downField("confirmationsNum").as[Option[Int]].toOption)
+        .exists(_.isDefined == false) shouldBe true
     }
   }
 

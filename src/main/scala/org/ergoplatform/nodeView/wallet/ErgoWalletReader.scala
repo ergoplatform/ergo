@@ -76,8 +76,10 @@ trait ErgoWalletReader extends VaultReader {
   def walletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean): Future[Seq[WalletBox]] =
     (walletActor ? GetWalletBoxes(unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]
 
-  def appBoxes(scanId: ScanId, unspentOnly: Boolean = false): Future[Seq[WalletBox]] =
-    (walletActor ? GetScanBoxes(scanId, unspentOnly)).mapTo[Seq[WalletBox]]
+  def appBoxes(scanId: ScanId,
+               unspentOnly: Boolean = false,
+               considerUnconfirmed: Boolean = false): Future[Seq[WalletBox]] =
+    (walletActor ? GetScanBoxes(scanId, unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]
 
   def updateChangeAddress(address: P2PKAddress): Unit =
     walletActor ! UpdateChangeAddress(address)
@@ -94,8 +96,11 @@ trait ErgoWalletReader extends VaultReader {
     (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = true)).mapTo[Try[ErgoTransaction]]
 
   def generateCommitmentsFor(unsignedErgoTransaction: UnsignedErgoTransaction,
-                             externalSecretsOpt: Option[Seq[ExternalSecret]]): Future[GenerateCommitmentsResponse] =
-    (walletActor ? GenerateCommitmentsFor(unsignedErgoTransaction, externalSecretsOpt)).mapTo[GenerateCommitmentsResponse]
+                             externalSecretsOpt: Option[Seq[ExternalSecret]],
+                             boxesToSpend: Option[Seq[ErgoBox]],
+                             dataBoxes: Option[Seq[ErgoBox]]): Future[GenerateCommitmentsResponse] =
+    (walletActor ? GenerateCommitmentsFor(unsignedErgoTransaction, externalSecretsOpt, boxesToSpend, dataBoxes))
+      .mapTo[GenerateCommitmentsResponse]
 
 
   def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
@@ -113,8 +118,10 @@ trait ErgoWalletReader extends VaultReader {
 
   def extractHints(tx: ErgoTransaction,
                    real: Seq[SigmaBoolean],
-                   simulated: Seq[SigmaBoolean]): Future[ExtractHintsResult] =
-    (walletActor ? ExtractHints(tx, real, simulated)).mapTo[ExtractHintsResult]
+                   simulated: Seq[SigmaBoolean],
+                   boxesToSpend: Option[Seq[ErgoBox]],
+                   dataBoxes: Option[Seq[ErgoBox]]): Future[ExtractHintsResult] =
+    (walletActor ? ExtractHints(tx, real, simulated, boxesToSpend, dataBoxes)).mapTo[ExtractHintsResult]
 
   def addScan(appRequest: ScanRequest): Future[AddScanResponse] =
     (walletActor ? AddScan(appRequest)).mapTo[AddScanResponse]

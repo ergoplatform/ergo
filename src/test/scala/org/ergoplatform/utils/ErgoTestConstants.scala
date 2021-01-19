@@ -4,7 +4,7 @@ import akka.util.Timeout
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
-import org.ergoplatform.modifiers.history.ExtensionCandidate
+import org.ergoplatform.modifiers.history.{ExtensionCandidate, PoPowAlgos}
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UpcomingStateContext}
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
@@ -28,7 +28,7 @@ import scala.concurrent.duration._
 
 trait ErgoTestConstants extends ScorexLogging {
 
-  implicit val votingSettings: VotingSettings = VotingSettings(1024, 32, 128)
+  implicit val votingSettings: VotingSettings = VotingSettings(1024, 32, 128, 32 * 1024, "01")
   val validationSettings: ErgoValidationSettings = ErgoValidationSettings.initial
   implicit val validationSettingsNoIl: ErgoValidationSettings = validationSettings
     .updated(ErgoValidationSettingsUpdate(Seq(exIlUnableToValidate, exIlEncoding, exIlStructure, exEmpty), Seq()))
@@ -37,7 +37,9 @@ trait ErgoTestConstants extends ScorexLogging {
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(Args(Some("src/test/resources/application.conf"), None))
 
-  val settings: ErgoSettings = initSettings
+  implicit val settings: ErgoSettings = initSettings
+
+  val popowAlgos = new PoPowAlgos(powScheme)
 
   val lightModeSettings: ErgoSettings = initSettings.copy(
     nodeSettings = initSettings.nodeSettings.copy(stateType = StateType.Digest)

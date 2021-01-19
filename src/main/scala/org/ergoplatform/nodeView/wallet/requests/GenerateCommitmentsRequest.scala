@@ -8,9 +8,13 @@ import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
   *
   * @param unsignedTx - unsigned transaction
   * @param externalSecretsOpt - optionally, externally provided secrets
+  * @param inputs     - hex-encoded input boxes bytes for the unsigned transaction (optional)
+  * @param dataInputs - hex-encoded data-input boxes bytes for the unsigned transaction (optional)
   */
 case class GenerateCommitmentsRequest(unsignedTx: UnsignedErgoTransaction,
-                                      externalSecretsOpt: Option[Seq[ExternalSecret]]) {
+                                      externalSecretsOpt: Option[Seq[ExternalSecret]],
+                                      inputs: Option[Seq[String]],
+                                      dataInputs: Option[Seq[String]]) {
 
   lazy val externalSecrets: Seq[ExternalSecret] = externalSecretsOpt.getOrElse(Seq.empty)
 

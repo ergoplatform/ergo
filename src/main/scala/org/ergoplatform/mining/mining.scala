@@ -1,5 +1,7 @@
 package org.ergoplatform
 
+import org.bouncycastle.util.BigIntegers
+import scorex.crypto.hash.Blake2b256
 import sigmastate.basics.BcDlogGroup
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.interpreter.CryptoConstants
@@ -14,11 +16,32 @@ package object mining {
 
   val group: BcDlogGroup[EcPointType] = CryptoConstants.dlogGroup
 
+  // Group order, used in Autolykos V.1 for non-outsourceability,
+  // and also to obtain target in both Autolykos v1 and v2
   val q: BigInt = group.order
 
   private val hashFn: NumericHash = new NumericHash(q)
 
-  def hash(in: Array[Byte]): BigInt = hashFn.hash(in)
+  /**
+    * Hash function which output is in Zq. Used in Autolykos v.1
+    * @param in - input (bit-string)
+    * @return - output(in Zq)
+    */
+  def hashModQ(in: Array[Byte]): BigInt = hashFn.hash(in)
+
+  /**
+    * Convert byte array to unsigned integer
+    * @param in - byte array
+    * @return - unsigned integer
+    */
+  def toBigInt(in: Array[Byte]): BigInt = BigInt(BigIntegers.fromUnsignedByteArray(in))
+
+  /**
+    * Blake2b256 hash function invocation
+    * @param in - input bit-string
+    * @return - 256 bits (32 bytes) array
+    */
+  def hash(in: Array[Byte]): Array[Byte] = Blake2b256.hash(in)
 
   def genPk(s: PrivateKey): EcPointType = group.exponentiate(group.generator, s.bigInteger)
 
@@ -27,4 +50,5 @@ package object mining {
   def groupElemToBytes(ge: EcPointType): Array[Byte] = GroupElementSerializer.toBytes(ge)
 
   def groupElemFromBytes(bytes: Array[Byte]): EcPointType = GroupElementSerializer.parse(SigmaSerializer.startReader(bytes))
+
 }

@@ -6,18 +6,19 @@ import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.http.api.requests.HintExtractionRequest
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
-import sigmastate.Values.SigmaBoolean
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -139,8 +140,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
-                                  inputsRaw: Seq[String],
-                                  dataInputsRaw: Seq[String]): Route = {
+                                          inputsRaw: Seq[String],
+                                          dataInputsRaw: Seq[String]): Route = {
     withWalletOp(_.generateUnsignedTransaction(requests, inputsRaw, dataInputsRaw)) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(utx) => ApiResponse(utx)
@@ -167,7 +168,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
 
   def generateUnsignedTransactionR: Route =
-    (path("transaction" / "generateUnsigned") & post & entity(as[RequestsHolder])){ holder =>
+    (path("transaction" / "generateUnsigned") & post & entity(as[RequestsHolder])) { holder =>
       generateUnsignedTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
     }
 
@@ -176,13 +177,14 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
     val utx = gcr.unsignedTx
     val externalSecretsOpt = gcr.externalSecretsOpt
+    val extInputsOpt = gcr.inputs.map(ErgoWalletActor.stringsToBoxes)
+    val extDataInputsOpt = gcr.dataInputs.map(ErgoWalletActor.stringsToBoxes)
 
-    withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt).map(_.response)) {
+    withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt, extInputsOpt, extDataInputsOpt).map(_.response)) {
       case Failure(e) => BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(thb) => ApiResponse(thb)
     }
   }
-
 
   def signTransactionR: Route = (path("transaction" / "sign")
     & post & entity(as[TransactionSigningRequest])) { tsr =>
@@ -278,7 +280,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           .map {
             _.filter(tx =>
               tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId) &&
-              tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
+                tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
                 tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
             )
           }
@@ -379,15 +381,11 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def extractHintsR: Route = (path("extractHints") & post & entity(as[HintExtractionRequest])) { her =>
     withWallet { w =>
-      w.extractHints(her.tx, her.real, her.simulated).map(_.transactionHintsBag)
+      val extInputsOpt = her.inputs.map(ErgoWalletActor.stringsToBoxes)
+      val extDataInputsOpt = her.dataInputs.map(ErgoWalletActor.stringsToBoxes)
+
+      w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
     }
   }
 
 }
-
-case class HintExtractionRequest(tx: ErgoTransaction,
-                                 real: Seq[SigmaBoolean],
-                                 simulated: Seq[SigmaBoolean])
-
-case class CommitmentGenerationRequest(utx: UnsignedErgoTransaction,
-                                       externalKeys: Option[Seq[SigmaBoolean]])

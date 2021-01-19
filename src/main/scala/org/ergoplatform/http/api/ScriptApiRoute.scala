@@ -4,29 +4,27 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route}
 import akka.pattern.ask
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, HCursor, Json}
+import io.circe.{Encoder, Json}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform._
+import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest}
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
 import scorex.util.encode.Base16
-import sigmastate.Values.{ByteArrayConstant, ErgoTree, SigmaBoolean}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree}
 import sigmastate._
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
 import sigmastate.lang.SigmaCompiler
 import sigmastate.serialization.ValueSerializer
-import special.sigma.AnyValue
-
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-case class CryptoResult(value: SigmaBoolean, cost: Long)
 
 case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
@@ -41,9 +39,9 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     toStrictEntity(10.seconds) {
       // p2shAddressR ~
       p2sAddressR ~
-      addressToTreeR ~
-      addressToBytesR ~
-      executeWithContextR
+        addressToTreeR ~
+        addressToBytesR ~
+        executeWithContextR
     }
   }
 
@@ -96,45 +94,13 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     }
   }
 
- /**
-   * Represent a request for execution of a script in a given context.
-   * @param script  ErgoScript source code of the contract to execute
-   * @param env      environment map of named constants used to compile the script
-   * @param ctx      script execution context
-   */
-  case class ExecuteRequest(script: String,
-                            env: Map[String,Any],
-                            ctx: ErgoLikeContext)
-
-
-  class ExecuteRequestDecoder(settings: ErgoSettings) extends Decoder[ExecuteRequest] with JsonCodecs {
-    def apply(cursor: HCursor): Decoder.Result[ExecuteRequest] = {
-      for {
-        script <- cursor.downField("script").as[String]
-        env <- cursor.downField("namedConstants").as[Map[String,AnyValue]]
-        ctx <- cursor.downField("context").as[ErgoLikeContext]
-      } yield ExecuteRequest(script, env.map({ case (k,v) => k -> v.value }), ctx)
-    }
-  }
-
-  implicit val executeRequestDecoder: ExecuteRequestDecoder = new ExecuteRequestDecoder(ergoSettings)
-
-  implicit val cryptResultEncoder: Encoder[CryptoResult] = {
-    res =>
-      val fields = Map(
-        "value" -> res.value.asJson,
-        "cost" -> res.cost.asJson
-      )
-      fields.asJson
-  }
-  
   def executeWithContextR: Route =
     (path("executeWithContext") & post & entity(as[ExecuteRequest])) { req =>
       compileSource(req.script, req.env).fold(
         e => BadRequest(e.getMessage),
         tree => {
-          implicit val irc : IRContext = new RuntimeIRContext()
-          val interpreter : ErgoLikeInterpreter = new ErgoLikeInterpreter()
+          implicit val irc: IRContext = new RuntimeIRContext()
+          val interpreter: ErgoLikeInterpreter = new ErgoLikeInterpreter()
           val prop = interpreter.propositionFromErgoTree(tree, req.ctx.asInstanceOf[interpreter.CTX])
           val res = interpreter.reduceToCrypto(req.ctx.asInstanceOf[interpreter.CTX], prop)
           res.fold(

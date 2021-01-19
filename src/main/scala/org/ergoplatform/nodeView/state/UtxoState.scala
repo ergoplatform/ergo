@@ -106,7 +106,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
         val inRoot = rootHash
 
-        val stateTry = stateContext.appendFullBlock(fb, votingSettings).flatMap { newStateContext =>
+        val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
           applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)

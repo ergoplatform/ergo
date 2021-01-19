@@ -133,7 +133,9 @@ object BlockTransactionsSerializer extends ScorexSerializer[BlockTransactions] {
 
   override def serialize(bt: BlockTransactions, w: Writer): Unit = {
     w.putBytes(idToBytes(bt.headerId))
-    w.putUInt(MaxTransactionsInBlock + bt.blockVersion)
+    if (bt.blockVersion > 1) {
+      w.putUInt(MaxTransactionsInBlock + bt.blockVersion)
+    }
     w.putUInt(bt.txs.size)
     bt.txs.foreach { tx =>
       ErgoTransactionSerializer.serialize(tx, w)

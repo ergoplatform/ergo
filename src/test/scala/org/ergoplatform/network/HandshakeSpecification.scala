@@ -34,6 +34,16 @@ class HandshakeSpecification extends ErgoPropertyTest {
     res
   }
 
+  def decodeZigZagInt(n: Int): Int = {
+    // source: http://github.com/google/protobuf/blob/a7252bf42df8f0841cf3a0c85fdbf1a5172adecb/java/core/src/main/java/com/google/protobuf/CodedInputStream.java#L553
+    (n >>> 1) ^ -(n & 1)
+  }
+
+  def getInt(buf: ByteBuffer): Int = {
+    // should only be changed simultaneously with `putInt`
+    decodeZigZagInt(getULong(buf).toInt)
+  }
+
   property("handshake test vectors") {
     // bytes got from a real node
     val hsBase16 = "bcd2919cee2e076572676f726566030306126572676f2d6d61696e6e65742d332e332e36000210040001000102067f000001ae46"
@@ -55,6 +65,8 @@ class HandshakeSpecification extends ErgoPropertyTest {
     hs1.time shouldBe 1610134874428L
     val mf = hs1.peerSpec.features.find(_.isInstanceOf[ModeFeature]).head.asInstanceOf[ModeFeature]
     mf.stateType shouldBe StateType.Utxo
+
+    // Byte-by-byte parsing below, according to the spec https://github.com/ergoplatform/ergo/wiki/P2P-Handshaking
 
     val bb = ByteBuffer.wrap(hsBytes)
     val time = getULong(bb)
@@ -93,8 +105,27 @@ class HandshakeSpecification extends ErgoPropertyTest {
 
     firstFeatureLength shouldBe 4
 
-    println(firstFeatureLength)
+    val stateTypeCode = getUByte(bb).toByte
 
+    val stateType = StateType.fromCode(stateTypeCode)
+
+    stateType shouldBe StateType.Utxo
+
+    val verifyTransactions = getUByte(bb).toByte
+
+    verifyTransactions shouldBe 1 // true
+
+    val nipopowSuffixLength = getUByte(bb).toByte
+
+    nipopowSuffixLength shouldBe 0 // no nipopow suffix, the peer has full header-chain
+
+    val blocksToKeep = getInt(bb)
+
+    blocksToKeep shouldBe -1 // all the full blocks stored
+
+    val secondFeatureId = getUByte(bb)
+
+    secondFeatureId shouldBe 2 // local address feature id
   }
 
 }

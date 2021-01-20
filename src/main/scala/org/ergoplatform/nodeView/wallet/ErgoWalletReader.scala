@@ -141,7 +141,7 @@ trait ErgoWalletReader extends VaultReader {
   def collectBoxes(request: BoxesRequest): Future[ReqBoxesResponse] =
     (walletActor ? CollectWalletBoxes(request.targetBalance, request.targetAssets)).mapTo[ReqBoxesResponse]
 
-  def transactionByScanId(scanId: ScanId): Future[ScanRelatedTxsResponse] =
+  def transactionsByScanId(scanId: ScanId): Future[ScanRelatedTxsResponse] =
     (walletActor ? GetScanTransactions(scanId)).mapTo[ScanRelatedTxsResponse]
 
 }

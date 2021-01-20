@@ -306,8 +306,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
-  def getTransactionsByScanIdR: Route = (path("transactionByScanId") & get & entity(as[ScanId])) { id =>
-    withWalletOp(_.transactionByScanId(id)) {
+  def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get) { id =>
+    withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort)) {
       resp => ApiResponse(resp.result.asJson)
     }
   }

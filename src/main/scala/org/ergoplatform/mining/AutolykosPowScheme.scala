@@ -102,7 +102,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       require(checkPoWForVersion1(header, b), "Incorrect points")
     } else {
       // for version 2, we're calculating hit and compare it with target
-      require(hitForVersion2(header) < b, "h(f) < b condition not met")
+      val hit = hitForVersion2(header)
+      require(hit < b, "h(f) < b condition not met")
     }
   }
 
@@ -164,7 +165,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
     val indexes = genIndexes(seed, N)
     //pk and w not used in v2
-    val f2 = indexes.map(idx => genElement(version, msg, null, null, Ints.toByteArray(idx), h)).sum
+    val elems = indexes.map(idx => genElement(version, msg, null, null, Ints.toByteArray(idx), h))
+    val f2 = elems.sum
 
     // sum as byte array is always about 32 bytes
     val array: Array[Byte] = BigIntegers.asUnsignedByteArray(32, f2.underlying())

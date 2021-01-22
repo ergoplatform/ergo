@@ -281,23 +281,22 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     // Send cached candidate if it is available and (non-empty) list of transactions to include hasn't been changed
     case PrepareCandidate(txsToInclude) =>
-      if (cachedFor(txsToInclude)) {
-        val candBlockFuture = candidateOpt
+      val candBlockFuture = if (cachedFor(txsToInclude)) {
+        candidateOpt
           .map(_.externalVersion)
           .fold[Future[WorkMessage]](
           Future.failed(new Exception("Failed to create candidate")))(Future.successful)
-        sender() ! candBlockFuture
       } else {
         log.info("Generating new candidate requested by external miner")
         val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
-        val candBlockFuture = readersR.flatMap {
+        readersR.flatMap {
           case Readers(h, s: UtxoStateReader, m, _) =>
             Future.fromTry(generateCandidate(h, m, s, Some(txsToInclude)).map(_.externalVersion))
           case _ =>
             Future.failed(new Exception("Invalid readers state, mining is possible in UTXO mode only"))
         }
-        sender() ! candBlockFuture
       }
+      sender() ! candBlockFuture
 
     // solution found externally (by e.g. GPU miner)
     case preSolution: AutolykosSolution =>

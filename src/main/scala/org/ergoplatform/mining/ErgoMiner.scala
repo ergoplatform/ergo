@@ -451,7 +451,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     }
   }.flatten
 
-  def refreshCandidate(): Unit = {
+  private def refreshCandidate(): Unit = {
     log.info("Requesting candidate")
     candidateOpt = None
     self ! PrepareCandidate(candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty), reply = false)

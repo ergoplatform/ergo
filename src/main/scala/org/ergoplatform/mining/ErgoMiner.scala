@@ -276,7 +276,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     case PrepareCandidate(txsToInclude, reply) =>
       val candF: Future[CandidateCache] = if (candidateGenerating) {
-        Future.failed(new Exception("Candidate generation is in progress"))
+        Future.failed(new Exception("Skipping candidate generation, one is already in progress"))
       } else {
         candidateGenerating = true
         val f = if (cachedFor(txsToInclude)) {

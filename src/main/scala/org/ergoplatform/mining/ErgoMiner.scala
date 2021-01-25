@@ -74,6 +74,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   // flag which is set once when mining started (first block candidate is formed)
   private var isMining = false
 
+  // Flag which is set when a future with block candidate generation is running
+  private var candidateGenerating: Boolean = false
+
   // cached block candidate
   private var candidateOpt: Option[CandidateCache] = None
 
@@ -107,7 +110,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def unknownMessage: Receive = {
     case _: scala.runtime.BoxedUnit =>
-      // ignore, this message is caused by way of interaction with NodeViewHolder.
+    // ignore, this message is caused by way of interaction with NodeViewHolder.
     case m =>
       log.warn(s"Unexpected message $m of class: ${m.getClass}")
   }
@@ -141,7 +144,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def startMining: Receive = {
     case StartMining if candidateOpt.isEmpty =>
       if (secretKeyOpt.isDefined || externalMinerMode) {
-        requestCandidate()
+        refreshCandidate()
       }
       context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)
 
@@ -156,7 +159,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
             } else {
               log.info("Ready to serve external miner")
               // Refresh candidate block if it was formed before NVH state restore in response to API requests
-              requestCandidate()
+              refreshCandidate()
             }
           case None =>
             log.warn("Got start mining command while public key is not ready")
@@ -182,7 +185,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       */
     case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if isMining && needNewCandidate(mod) =>
       log.info(s"Producing new candidate on getting new block at ${mod.height}")
-      requestCandidate()
+      refreshCandidate()
 
     /**
       * Non obvious but case when mining is enabled, but miner isn't started yet. Initialization case.
@@ -207,7 +210,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   override def receive: Receive =
     receiveSemanticallySuccessfulModifier orElse
       startMining orElse
-      onReaders orElse
       keysManagement orElse
       mining orElse
       queryWallet orElse
@@ -250,13 +252,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     publicKeyOpt match {
       case Some(pk) =>
-        if(solvedBlock.isEmpty && h.bestFullBlockOpt.map(_.id) == s.stateContext.lastHeaderOpt.map(_.id)) {
+        if (solvedBlock.isEmpty && h.bestFullBlockOpt.map(_.id) == s.stateContext.lastHeaderOpt.map(_.id)) {
           createCandidate(pk, h, m, desiredUpdate, s, txsToInclude) match {
             case Success(candidate) =>
               Success(updateCandidate(candidate, pk, txsToInclude))
             case Failure(e) =>
               log.warn("Failed to produce candidate block.", e)
-              //candidate cleared, included mandatory transactions to include
+              //candidate cleared, including its mandatory transactions
               candidateOpt = None
               Failure(new Exception("Failed to produce candidate block.", e))
           }
@@ -268,35 +270,33 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     }
   }
 
-  // We produce block candidate on getting readers for node's view from NodeViewHolder
-  private def onReaders: Receive = {
-    // Miner's node can produce block candidate only if it is working in the UTXO regime
-    case Readers(h, s: UtxoStateReader, m, _) =>
-     generateCandidate(h, m, s, None)
-  }
-
   private def mining: Receive = {
-    case PrepareCandidate(_) if !ergoSettings.nodeSettings.mining =>
+    case PrepareCandidate(_, _) if !ergoSettings.nodeSettings.mining =>
       sender() ! Future.failed(new Exception("Candidate creation is not supported when mining is disabled"))
 
-    // Send cached candidate if it is available and (non-empty) list of transactions to include hasn't been changed
-    case PrepareCandidate(txsToInclude) =>
-      if (cachedFor(txsToInclude)) {
-        val candBlockFuture = candidateOpt
-          .map(_.externalVersion)
-          .fold[Future[WorkMessage]](
-          Future.failed(new Exception("Failed to create candidate")))(Future.successful)
-        sender() ! candBlockFuture
+    case PrepareCandidate(txsToInclude, reply) =>
+      val candF: Future[CandidateCache] = if (candidateGenerating) {
+        Future.failed(new Exception("Skipping candidate generation, one is already in progress"))
       } else {
-        log.info("Generating new candidate requested by external miner")
-        val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
-        val candBlockFuture = readersR.flatMap {
-          case Readers(h, s: UtxoStateReader, m, _) =>
-            Future.fromTry(generateCandidate(h, m, s, Some(txsToInclude)).map(_.externalVersion))
-          case _ =>
-            Future.failed(new Exception("Invalid readers state, mining is possible in UTXO mode only"))
+        candidateGenerating = true
+        val f = if (cachedFor(txsToInclude)) {
+          candidateOpt.fold[Future[CandidateCache]](
+            Future.failed(new Exception("Failed to create candidate")))(Future.successful)
+        } else {
+          log.info("Generating new candidate requested by external miner")
+          val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
+          readersR.flatMap {
+            case Readers(h, s: UtxoStateReader, m, _) =>
+              Future.fromTry(generateCandidate(h, m, s, Some(txsToInclude)))
+            case _ =>
+              Future.failed(new Exception("Invalid readers state, mining is possible in UTXO mode only"))
+          }
         }
-        sender() ! candBlockFuture
+        f.onComplete(_ => candidateGenerating = false)
+        f
+      }
+      if (reply) {
+        sender() ! candF.map(_.externalVersion)
       }
 
     // solution found externally (by e.g. GPU miner)
@@ -327,7 +327,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
             case Some(Success(newBlock)) =>
               sendToNodeView(newBlock)
               solvedBlock = Some(newBlock.header)
-              candidateOpt = None
               Future.successful(())
             case Some(Failure(exception)) =>
               Future.failed(new Exception(s"Invalid block mined: ${exception.getMessage}", exception))
@@ -354,11 +353,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   /**
     * Assemble correct block candidate based on
     *
-    * @param minerPk - public key of the miner
-    * @param history - blockchain reader (to extract parent)
-    * @param pool - memory pool reader
-    * @param proposedUpdate - votes for parameters and soft-fork
-    * @param state - UTXO set reader
+    * @param minerPk                 - public key of the miner
+    * @param history                 - blockchain reader (to extract parent)
+    * @param pool                    - memory pool reader
+    * @param proposedUpdate          - votes for parameters and soft-fork
+    * @param state                   - UTXO set reader
     * @param prioritizedTransactions - transactions which are going into the block in the first place
     *                                (before transactions from the pool). No guarantee of inclusion in general case.
     * @return - block candidate or an error
@@ -452,9 +451,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     }
   }.flatten
 
-  def requestCandidate(): Unit = {
+  private def refreshCandidate(): Unit = {
     log.info("Requesting candidate")
-    readersHolderRef ! GetReaders
+    candidateOpt = None
+    self ! PrepareCandidate(candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty), reply = false)
   }
 
   // Start internal miner's threads. Called once per block candidate.
@@ -482,9 +482,9 @@ object ErgoMiner extends ScorexLogging {
     * Holder for both candidate block and data for external miners derived from it
     * (to avoid possibly costly recalculation)
     *
-    * @param candidateBlock - block candidate
+    * @param candidateBlock  - block candidate
     * @param externalVersion - message for external miner
-    * @param txsToInclude - transactions which were prioritized for inclusion in the block candidate
+    * @param txsToInclude    - transactions which were prioritized for inclusion in the block candidate
     */
   private case class CandidateCache(candidateBlock: CandidateBlock,
                                     externalVersion: WorkMessage,
@@ -695,7 +695,7 @@ object ErgoMiner extends ScorexLogging {
 
   case object QueryWallet
 
-  case class PrepareCandidate(toInclude: Seq[ErgoTransaction])
+  case class PrepareCandidate(toInclude: Seq[ErgoTransaction], reply: Boolean = true)
 
   case object ReadMinerPk
 

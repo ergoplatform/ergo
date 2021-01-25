@@ -13,7 +13,7 @@ import scorex.util.encode.Base16
 class ErgoSyncInfoSpecification extends ErgoPropertyTest with DecodingUtils {
 
   property("sync info reference parser") {
-    val magic = Array(1: Byte, 0: Byte, 2: Byte, 4: Byte)
+    val magic = Array(1: Byte, 0: Byte, 2: Byte, 4: Byte) // mainnet magic
     val syncSpec = ErgoSyncInfoMessageSpec
 
     val lastHeaderId = Array.fill(16)(1: Byte) ++ Array.fill(16)(2: Byte)

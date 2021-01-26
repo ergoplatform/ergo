@@ -14,6 +14,7 @@ import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.Constants.ScanId
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
@@ -47,6 +48,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         unspentBoxesR ~
         boxesR ~
         collectBoxesR ~
+        getTransactionsByScanIdR ~
         generateTransactionR ~
         generateUnsignedTransactionR ~
         generateCommitmentsR ~
@@ -301,6 +303,12 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   def getTransactionR: Route = (path("transactionById") & modifierIdGet & get) { id =>
     withWalletOp(_.transactionById(id)) {
       _.fold[Route](NotExists)(tx => ApiResponse(tx.asJson))
+    }
+  }
+
+  def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get) { id =>
+    withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort)) {
+      resp => ApiResponse(resp.result.asJson)
     }
   }
 

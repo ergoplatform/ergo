@@ -3171,6 +3171,43 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/transactionsByScanId:
+    parameters:
+      - in: query
+        name: scanId
+        required: true
+        description: Scan id
+        schema:
+          type: string
+    get:
+      security:
+        - ApiKeyAuth: [ api_key ]
+      summary: Get scan-related transactions by scan id
+      operationId: walletTransactionsByScanId
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Scan-related transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletTransaction'
+        '404':
+          description: Transactions with related scan id not found in wallet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/boxes:
     parameters:
       - in: query

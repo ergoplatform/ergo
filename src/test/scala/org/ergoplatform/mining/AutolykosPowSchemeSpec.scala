@@ -58,9 +58,8 @@ class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
     pow.calcN(2, 700000) shouldBe 73987410
     pow.calcN(2, 788400) shouldBe 81571035 // 3 years
     pow.calcN(2, 1051200) shouldBe 104107290 // 4 years
-    pow.calcN(2, 9216000) shouldBe 2147387550 // max height
-    pow.calcN(2, 29216000) shouldBe 2147387550
-    pow.calcN(2, 292160000) shouldBe 2147387550
+    pow.calcN(2, 4198400) shouldBe 2143944600 // max height
+    pow.calcN(2, 41984000) shouldBe 2143944600
   }
 
   // testing an invalid header got from a pool

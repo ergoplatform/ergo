@@ -59,7 +59,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * On this height, the table (`N` value) will stop to grow
     */
-  val NIncreasementHeightMax: Height = 9216000
+  val NIncreasementHeightMax: Height = 4198400
 
   /**
     * Calculates table size (N value) for a given height (moment of time)

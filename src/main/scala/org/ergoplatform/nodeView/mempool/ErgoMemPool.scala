@@ -18,9 +18,10 @@ import scala.util.Try
 /**
   * Immutable memory pool implementation.
   *
-  * @param pool     - Ordered transaction pool
-  * @param stats    - Mempool statistics
-  * @param settings - Ergo settings
+  * @param pool     - Ordered transaction pool. Acts as related transaction storage, and is
+  *                 used for implementing all transaction-related methods
+  * @param stats    - Mempool statistics, that allows to track
+  *                 information about mempool's state and transactions in it.
   */
 class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val stats : MemPoolStatistics)(implicit settings: ErgoSettings)
   extends MemoryPool[ErgoTransaction, ErgoMemPool] with ErgoMemPoolReader {

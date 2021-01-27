@@ -5,15 +5,16 @@ import java.nio.ByteBuffer
 import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.utils.ErgoPropertyTest
-import scorex.core.network.message.{InvData, InvSpec, Message, MessageSerializer}
+import scorex.core.network.message.{InvData, Message, MessageSerializer, RequestModifierSpec}
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
 
-class InvSpecification extends ErgoPropertyTest with DecodingUtils {
+class RequestModifiersSpecification extends ErgoPropertyTest with DecodingUtils {
 
-  property("inv reference parser") {
+  property("requestModifiers reference parser") {
+
     val magic = Array(1: Byte, 0: Byte, 2: Byte, 4: Byte) // mainnet magic
-    val invSpec = new InvSpec(maxInvObjects = 100)
+    val rmSpec = new RequestModifierSpec(maxInvObjects = 100)
 
     val headerId = Array.fill(16)(1: Byte) ++ Array.fill(16)(2: Byte)
 
@@ -21,14 +22,14 @@ class InvSpecification extends ErgoPropertyTest with DecodingUtils {
 
     val invData = InvData(Header.modifierTypeId, Seq(headerIdEncoded))
 
-    val invMessage = Message(invSpec, Right(invData), None)
+    val rmMessage = Message(rmSpec, Right(invData), None)
 
-    val ms = new MessageSerializer(Seq(invSpec), magic)
+    val ms = new MessageSerializer(Seq(rmSpec), magic)
 
-    val bs = ms.serialize(invMessage).toArray
+    val bs = ms.serialize(rmMessage).toArray
     val bsString = Base16.encode(bs)
 
-    bsString shouldBe "0100020437000000226abfdbf565010101010101010101010101010101010102020202020202020202020202020202"
+    bsString shouldBe "0100020416000000226abfdbf565010101010101010101010101010101010102020202020202020202020202020202"
 
     val bb = ByteBuffer.wrap(bs)
 
@@ -36,7 +37,7 @@ class InvSpecification extends ErgoPropertyTest with DecodingUtils {
     magicRead.toIndexedSeq shouldBe magic.toIndexedSeq
 
     val messageCode = getByte(bb)
-    messageCode shouldBe invSpec.messageCode  // 55 (in dec)
+    messageCode shouldBe rmSpec.messageCode  // 22 (in dec)
 
     val messageLength = Ints.fromByteArray(getBytes(bb,4))
 

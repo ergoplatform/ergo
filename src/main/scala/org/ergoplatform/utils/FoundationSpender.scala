@@ -4,7 +4,7 @@ import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.{ErgoValidationSettings, LaunchParameters, VotingSettings}

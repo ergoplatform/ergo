@@ -7,10 +7,11 @@ import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
-import org.ergoplatform.settings.{ErgoValidationSettings, LaunchParameters, VotingSettings}
+import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettings, LaunchParameters}
+import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
 import org.ergoplatform.wallet.protocol.context.{ErgoLikeParameters, InputContext, TransactionContext}
 import scorex.crypto.authds.ADDigest
@@ -52,14 +53,14 @@ object FoundationBoxSigner extends App {
   val preSign: ACTION = 1
   val sign: ACTION = 2
 
-  val height = 400000
+  val height = 410000
 
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
-  val action: ACTION = generateCommitment
+  val action: ACTION = preSign
 
   // hints provided by a cosigner
-  val commitmentStringOpt: Option[String] = None
+  val commitmentStringOpt: Option[String] = Some("03b34f275a476dd0276ddf7e19e5a76bd23e9301eab8ac1395bd3e2baa15a38116")
   val ownRandomnessStringOpt: Option[String] = None
   val partialSignatureStringOpt: Option[String] = None
 
@@ -85,7 +86,7 @@ object FoundationBoxSigner extends App {
       .map(ProveDlog.apply)
 
   //forming a context. Only height matters for the foundation box.
-  implicit val vs = VotingSettings(64, 32, 128)
+  implicit val settings = ErgoSettings.read()
   val parameters = LaunchParameters
   val genesisStateDigest = ADDigest @@ Array.fill(33)(0: Byte)
   val sol = AutolykosSolution(

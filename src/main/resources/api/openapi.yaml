@@ -2363,7 +2363,7 @@ paths:
           minimum: 1
           default: 100
     get:
-      summary: Get recommended fee for a transaction with specified size to be proceeded in specified time (in nanoErgs)
+      summary: Get recommended fee (in nanoErgs) for a transaction with specified size (in bytes) to be proceeded in specified time (in minutes)
       operationId: getRecommendedFee
       tags:
         - transactions

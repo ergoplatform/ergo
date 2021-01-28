@@ -147,7 +147,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
   def weightedTransactionIds(limit: Int): Seq[WeightedTxId] = pool.orderedTransactions.keysIterator.take(limit).toSeq
 
   private def extractFee(tx: ErgoTransaction): Long =
-    ErgoState.boxChanges(Seq(tx))._2
+    ErgoState.boxChanges(Array(tx))._2
       .filter(_.ergoTree == settings.chainSettings.monetary.feeProposition)
       .map(_.value)
       .sum

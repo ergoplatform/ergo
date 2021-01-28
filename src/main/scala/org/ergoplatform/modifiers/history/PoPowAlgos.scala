@@ -7,25 +7,30 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 import Extension.InterlinksVectorPrefix
+import org.ergoplatform.mining.AutolykosPowScheme
+import org.ergoplatform.modifiers.history.PoPowAlgos.unpackInterlinks
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.hash.Digest32
 
 /**
   * A set of utilities for working with PoPoW security protocol.
   */
-object PoPowAlgos {
+class PoPowAlgos(powScheme: AutolykosPowScheme) {
 
   /**
-    * Computes interlinks vector for the next level after `prevHeader`.
+    * Computes max level (μ) of the given [[Header]], such that μ = log(T) − log(id(B)),
+    *   where T is required target for pow puzzle, B is hit (min target), so B < T
     */
-  @inline def updateInterlinks(prevHeaderOpt: Option[Header], prevExtensionOpt: Option[Extension]): Seq[ModifierId] = {
-    prevHeaderOpt
-      .flatMap { h =>
-        prevExtensionOpt
-          .flatMap(ext => unpackInterlinks(ext.fields).toOption)
-          .map(updateInterlinks(h, _))
-      }
-      .getOrElse(Seq.empty)
+  private def maxLevelOf(header: Header): Int = {
+    if (!header.isGenesis) {
+      def log2(x: Double) = math.log(x) / math.log(2)
+
+      val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
+      val level = log2(requiredTarget.doubleValue) - log2(powScheme.powHit(header).doubleValue)
+      level.toInt
+    } else {
+      Int.MaxValue
+    }
   }
 
   /**
@@ -46,6 +51,24 @@ object PoPowAlgos {
       Seq(prevHeader.id)
     }
   }
+
+  /**
+    * Computes interlinks vector for the next level after `prevHeader`.
+    */
+  @inline def updateInterlinks(prevHeaderOpt: Option[Header], prevExtensionOpt: Option[Extension]): Seq[ModifierId] = {
+    prevHeaderOpt
+      .flatMap { h =>
+        prevExtensionOpt
+          .flatMap(ext => unpackInterlinks(ext.fields).toOption)
+          .map(updateInterlinks(h, _))
+      }
+      .getOrElse(Seq.empty)
+  }
+
+}
+
+
+object PoPowAlgos {
 
   /**
     * Packs interlinks into extension key-value format.
@@ -102,22 +125,6 @@ object PoPowAlgos {
     }
 
     loop(fields.filter(_._1.headOption.contains(InterlinksVectorPrefix)).toList)
-  }
-
-  /**
-    * Computes max level (μ) of the given [[Header]], such that μ = log(T) − log(id(B))
-    */
-  private def maxLevelOf(header: Header): Int = {
-    if (!header.isGenesis) {
-      def log2(x: Double) = math.log(x) / math.log(2)
-
-      val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
-      val realTarget = header.powSolution.d
-      val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
-      level.toInt
-    } else {
-      Int.MaxValue
-    }
   }
 
 }

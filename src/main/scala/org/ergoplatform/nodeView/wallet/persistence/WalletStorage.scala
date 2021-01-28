@@ -77,7 +77,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     */
   def readStateContext: ErgoStateContext = store
     .get(StateContextKey)
-    .flatMap(r => ErgoStateContextSerializer(settings.chainSettings.voting).parseBytesTry(r).toOption)
+    .flatMap(r => ErgoStateContextSerializer(settings).parseBytesTry(r).toOption)
     .getOrElse(ErgoStateContext.empty(settings))
 
   /**

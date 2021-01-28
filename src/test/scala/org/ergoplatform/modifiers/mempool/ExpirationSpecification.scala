@@ -48,11 +48,15 @@ class ExpirationSpecification extends ErgoPropertyTest {
 
       val updContext = {
         val inContext = new ErgoStateContext(Seq(fakeHeader), None, genesisStateDigest, LaunchParameters, validationSettingsNoIl,
-          VotingData.empty)(votingSettings)
-        inContext.appendFullBlock(fb, votingSettings).get
+          VotingData.empty)(settings)
+        inContext.appendFullBlock(fb).get
       }
 
-      tx.statelessValidity.isSuccess shouldBe true
+      //serialization roundtrip
+      val bs = ErgoTransactionSerializer.toBytes(tx)
+      ErgoTransactionSerializer.parseBytes(bs) shouldBe tx
+
+      tx.statelessValidity().isSuccess shouldBe true
       tx.statefulValidity(IndexedSeq(from), emptyDataBoxes, updContext).isSuccess shouldBe expectedValidity
     }
   }
@@ -146,4 +150,5 @@ class ExpirationSpecification extends ErgoPropertyTest {
       constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = true)
     }
   }
+
 }

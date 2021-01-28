@@ -86,6 +86,9 @@ object ValidationRules {
     txBoxPropositionSize -> RuleStatus(s => fatal(s"Box proposition size should not exceed ${MaxPropositionBytes.value}. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
+    txNegHeight -> RuleStatus(s => fatal(s"Transaction outputs should have non-negative creationHeight. $s"),
+      Seq(classOf[ErgoTransaction]),
+      mayBeDisabled = false),
 
     // header validation
     hdrGenesisParent -> RuleStatus(s => fatal(s"Genesis header should have genesis parent id. $s"),
@@ -236,6 +239,7 @@ object ValidationRules {
   val txScriptValidation: Short = 119
   val txBoxSize: Short = 120
   val txBoxPropositionSize: Short = 121
+  val txNegHeight: Short = 122
 
   // header validation
   val hdrGenesisParent: Short = 200

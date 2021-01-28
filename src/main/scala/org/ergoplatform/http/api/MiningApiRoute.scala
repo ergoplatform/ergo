@@ -28,7 +28,8 @@ case class MiningApiRoute(miner: ActorRef,
     candidateR ~
       candidateWithTxsR ~
       solutionR ~
-      rewardAddressR
+      rewardAddressR ~
+      rewardPublicKeyR
   }
 
   /**
@@ -70,6 +71,11 @@ case class MiningApiRoute(miner: ActorRef,
         })
       }
     ApiResponse(addressF.map(address => Json.obj("rewardAddress" -> address.asJson)))
+  }
+
+  def rewardPublicKeyR: Route = (path("rewardPublicKey") & get) {
+    val pkF = (miner ? ErgoMiner.ReadMinerPk).mapTo[Option[ProveDlog]]
+    ApiResponse(pkF.map(pk => Json.obj("rewardPubkey" -> pk.asJson)))
   }
 
 }

@@ -3,26 +3,36 @@ package org.ergoplatform.http.api
 import java.math.BigInteger
 
 import io.circe._
-import io.circe.syntax._
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.{ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
+import org.ergoplatform.{ErgoBox, ErgoLikeContext, ErgoLikeTransaction, JsonCodecs, UnsignedErgoLikeTransaction}
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
-import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.ErgoAlgos
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
+import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, GenerateCommitmentsRequest, TransactionSigningRequest}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import scorex.core.validation.ValidationResult
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
-import sigmastate.interpreter.CryptoConstants
+import scorex.util.encode.Base16
+import sigmastate.{CAND, COR, CTHRESHOLD, NodePosition, SigSerializer, TrivialProp}
+import sigmastate.Values.SigmaBoolean
+import sigmastate.basics.DLogProtocol.{DLogProverInput, FirstDLogProverMessage, ProveDlog}
+import sigmastate.basics.VerifierMessage.Challenge
+import sigmastate.basics._
+import sigmastate.interpreter._
 import sigmastate.interpreter.CryptoConstants.EcPointType
+import io.circe.syntax._
+import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
+import sigmastate.serialization.OpCodes
+import special.sigma.AnyValue
+
+import scala.util.{Failure, Success, Try}
 
 
 trait ApiCodecs extends JsonCodecs {
@@ -56,7 +66,7 @@ trait ApiCodecs extends JsonCodecs {
     Json.obj(
       "height" -> height.asJson,
       "balance" -> walletBalance.asJson,
-      "assets" -> walletAssetBalances.toMap.map(x => (x._1: String, x._2)).asJson
+      "assets" -> walletAssetBalances.toMap.map(x => (x._1: String, x._2)).asJson //toMap to have assets as JSON map
     )
   }
 
@@ -162,6 +172,280 @@ trait ApiCodecs extends JsonCodecs {
     for {
       ergoLikeTx <- cursor.as[ErgoLikeTransaction]
     } yield ErgoTransaction(ergoLikeTx)
+  }
+
+
+  implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = {
+    sigma =>
+      val op = sigma.opCode.toByte.asJson
+      sigma match {
+        case dlog: ProveDlog => Map("op" -> op, "h" -> dlog.h.asJson).asJson
+        case dht: ProveDHTuple => Map("op" -> op, "g" -> dht.g.asJson, "h" -> dht.h.asJson, "u" -> dht.u.asJson, "v" -> dht.v.asJson).asJson
+        case tp: TrivialProp => Map("op" -> op, "condition" -> tp.condition.asJson).asJson
+        case and: CAND =>
+          Map("op" -> op, "args" -> and.children.map(_.asJson).asJson).asJson
+        case or: COR =>
+          Map("op" -> op, "args" -> or.children.map(_.asJson).asJson).asJson
+        case th: CTHRESHOLD =>
+          Map("op" -> op, "args" -> th.children.map(_.asJson).asJson).asJson
+      }
+  }
+
+  implicit val sigmaBooleanDecoder: Decoder[SigmaBoolean] = Decoder.instance { c =>
+    c.downField("op").as[Byte].flatMap {
+      case b: Byte if b == OpCodes.ProveDlogCode =>
+        c.downField("h").as[EcPointType].map(h => ProveDlog(h))
+      case _ =>
+        //only dlog is supported for now
+        Left(DecodingFailure("Unsupported value", List()))
+    }
+  }
+
+  implicit val hintExtractionRequestEncoder: Encoder[HintExtractionRequest] = {hr =>
+    Map(
+      "tx" -> hr.tx.asJson,
+      "real" -> hr.real.asJson,
+      "simulated" -> hr.simulated.asJson,
+      "inputsRaw" -> hr.inputs.asJson,
+      "dataInputsRaw" -> hr.dataInputs.asJson
+    ).asJson
+  }
+
+  implicit val hintExtractionRequestDecoder: Decoder[HintExtractionRequest] = {cursor =>
+    for {
+      tx <- cursor.downField("tx").as[ErgoTransaction]
+      real <- cursor.downField("real").as[Seq[SigmaBoolean]]
+      simulated <- cursor.downField("simulated").as[Seq[SigmaBoolean]]
+      inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
+      dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
+    } yield HintExtractionRequest(tx, real, simulated, inputs, dataInputs)
+  }
+
+  implicit val firstProverMessageEncoder: Encoder[FirstProverMessage] = {
+    case cmtDlog: FirstDLogProverMessage =>
+      Json.obj("type" -> "dlog".asJson, "a" -> cmtDlog.ecData.asJson)
+    case cmtDht: FirstDiffieHellmanTupleProverMessage =>
+      Json.obj("type" -> "dht".asJson, "a" -> cmtDht.a.asJson, "b" -> cmtDht.b.asJson)
+    case _ => ???
+  }
+
+  implicit val firstProverMessageDecoder: Decoder[FirstProverMessage] = { c =>
+    c.downField("type").as[String].flatMap {
+      case h: String if h == "dlog" =>
+        for {
+          a <- c.downField("a").as[EcPointType]
+        } yield FirstDLogProverMessage(a)
+      case h: String if h == "dht" =>
+        for {
+          a <- c.downField("a").as[EcPointType]
+          b <- c.downField("b").as[EcPointType]
+        } yield FirstDiffieHellmanTupleProverMessage(a, b)
+      case _ =>
+        Left(DecodingFailure("Unsupported sigma-protocol type value", List()))
+    }
+  }
+
+  implicit val positionEncoder: Encoder[NodePosition] = { np =>
+    np.positions.mkString("-").asJson
+  }
+
+  implicit val positionDecoder: Decoder[NodePosition] = { c =>
+    c.as[String].flatMap {s =>
+      Try(s.split("-").map(_.toInt)) match {
+        case Success(seq) => Right(NodePosition(seq))
+        case Failure(e) => Left(DecodingFailure.fromThrowable(e, List()))
+      }
+    }
+  }
+
+  implicit val commitmentHintEncoder: Encoder[CommitmentHint] = { ch =>
+    val commonFields: Json = (ch match {
+      case own: OwnCommitment =>
+        Json.obj("hint" -> "cmtWithSecret".asJson, "secret" -> own.secretRandomness.asJson)
+      case _: RealCommitment =>
+        Json.obj("hint" -> "cmtReal".asJson)
+      case _: SimulatedCommitment =>
+        Json.obj("hint" -> "cmtSimulated".asJson)
+    }).deepMerge(Json.obj("pubkey" -> ch.image.asJson, "position" -> ch.position.asJson))
+
+    val cmt = ch.commitment.asJson
+    commonFields.deepMerge(cmt)
+  }
+
+  implicit val commitmentHintDecoder: Decoder[CommitmentHint] = Decoder.instance { c =>
+    c.downField("hint").as[String].flatMap {
+      case h: String if h == "cmtWithSecret" =>
+        for {
+          secret <- c.downField("secret").as[BigInteger]
+          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          position <- c.downField("position").as[NodePosition]
+          firstMsg <- firstProverMessageDecoder.tryDecode(c)
+        } yield OwnCommitment(pubkey, secret, firstMsg, position)
+      case h: String if h == "cmtReal" =>
+        for {
+          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          position <- c.downField("position").as[NodePosition]
+          firstMsg <- firstProverMessageDecoder.tryDecode(c)
+        } yield RealCommitment(pubkey, firstMsg, position)
+      case h: String if h == "cmtSimulated" =>
+        for {
+          position <- c.downField("position").as[NodePosition]
+          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          firstMsg <- firstProverMessageDecoder.tryDecode(c)
+        } yield SimulatedCommitment(pubkey, firstMsg, position)
+      case _ =>
+        //only dlog is supported for now
+        Left(DecodingFailure("Unsupported hint value", List()))
+    }
+  }
+
+  implicit val proofEncoder: Encoder[SecretProven] = { sp =>
+    val proofType = sp match {
+      case _: RealSecretProof => "proofReal"
+      case _: SimulatedSecretProof => "proofSimulated"
+    }
+
+    Json.obj(
+      "hint" -> proofType.asJson,
+      "challenge" -> Base16.encode(sp.challenge).asJson,
+      "pubkey" -> sp.image.asJson,
+      "proof" -> SigSerializer.toBytes(sp.uncheckedTree).asJson,
+      "position" -> sp.position.asJson
+    )
+  }
+
+  implicit val secretProofDecoder: Decoder[SecretProven] = { c =>
+    c.downField("hint").as[String].flatMap {
+      case h: String if h == "proofReal" =>
+        for {
+          challenge <- c.downField("challenge").as[String]
+          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          proof <- c.downField("proof").as[String]
+          position <- c.downField("position").as[NodePosition]
+        } yield
+          RealSecretProof(
+            pubkey,
+            Challenge @@ Base16.decode(challenge).get,
+            SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get),
+            position
+          )
+      case h: String if h == "proofSimulated" =>
+        for {
+          challenge <- c.downField("challenge").as[String]
+          pubkey <- c.downField("pubkey").as[SigmaBoolean]
+          proof <- c.downField("proof").as[String]
+          position <- c.downField("position").as[NodePosition]
+        } yield
+          SimulatedSecretProof(
+            pubkey,
+            Challenge @@ Base16.decode(challenge).get,
+            SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get),
+            position
+          )
+      case _ =>
+        //only dlog is supported for now
+        Left(DecodingFailure("Unsupported hint value", List()))
+    }
+  }
+
+  implicit val hintEncoder: Encoder[Hint] = {
+    case cmt: CommitmentHint => cmt.asJson
+    case proof: SecretProven => proof.asJson
+    case _ => ???
+  }
+
+  implicit val hintDecoder: Decoder[Hint] = { cursor =>
+    Seq(commitmentHintDecoder, secretProofDecoder)
+      .map(_.apply(cursor))
+      .find(_.isRight)
+      .getOrElse(Left(DecodingFailure("Can not find suitable decoder", cursor.history)))
+  }
+
+  implicit val txHintsEncoder: Encoder[TransactionHintsBag] = { bag =>
+    Json.obj(
+      "secretHints" ->
+        bag.secretHints.map { case (inputIdx, inputHints) =>
+          inputIdx -> inputHints.hints
+        }.asJson,
+      "publicHints" -> bag.publicHints.map { case (inputIdx, inputHints) =>
+        inputIdx -> inputHints.hints
+      }.asJson
+    )
+  }
+
+  implicit val txHintsDecoder: Decoder[TransactionHintsBag] = { cursor =>
+    for {
+      secretHints <- Decoder.decodeMap[Int, Seq[Hint]].tryDecode(cursor.downField("secretHints"))
+      publicHints <- Decoder.decodeMap[Int, Seq[Hint]].tryDecode(cursor.downField("publicHints"))
+    } yield TransactionHintsBag(secretHints.mapValues(HintsBag.apply), publicHints.mapValues(HintsBag.apply))
+  }
+
+  implicit val transactionSigningRequestEncoder: Encoder[TransactionSigningRequest] = { tsr =>
+    Json.obj(
+      "tx" -> tsr.unsignedTx.asJson,
+      "secrets" -> Json.obj(
+        "dlog" -> tsr.dlogs.asJson,
+        "dht" -> tsr.dhts.asJson
+      ),
+      "hints" -> tsr.hints.asJson,
+      "inputsRaw" -> tsr.inputs.asJson,
+      "dataInputsRaw" -> tsr.dataInputs.asJson
+    )
+  }
+
+  implicit val transactionSigningRequestDecoder: Decoder[TransactionSigningRequest] = { cursor =>
+    for {
+      tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
+      dlogs <- cursor.downField("secrets").downField("dlog").as[Option[Seq[DlogSecretKey]]]
+      dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DhtSecretKey]]]
+      hints <- cursor.downField("hints").as[Option[TransactionHintsBag]]
+      inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
+      dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
+      secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
+    } yield TransactionSigningRequest(tx, hints.getOrElse(TransactionHintsBag.empty), secrets, inputs, dataInputs)
+  }
+
+  implicit val generateCommitmentsRequestEncoder: Encoder[GenerateCommitmentsRequest] = { gcr =>
+    Json.obj(
+      "tx" -> gcr.unsignedTx.asJson,
+      "secrets" -> Json.obj(
+        "dlog" -> gcr.dlogs.asJson,
+        "dht" -> gcr.dhts.asJson,
+        "inputsRaw" -> gcr.inputs.asJson,
+        "dataInputsRaw" -> gcr.dataInputs.asJson
+      )
+    )
+  }
+
+  implicit val generateCommitmentsRequestDecoder: Decoder[GenerateCommitmentsRequest] = { cursor =>
+    for {
+      tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
+      dlogs <- cursor.downField("secrets").downField("dlog").as[Option[Seq[DlogSecretKey]]]
+      dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DhtSecretKey]]]
+      secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
+      secretsOpt = if(secrets.isEmpty) None else Some(secrets)
+      inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
+      dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
+    } yield GenerateCommitmentsRequest(tx, secretsOpt, inputs, dataInputs)
+  }
+
+  implicit val executeRequestDecoder = new Decoder[ExecuteRequest] {
+    def apply(cursor: HCursor): Decoder.Result[ExecuteRequest] = {
+      for {
+        script <- cursor.downField("script").as[String]
+        env <- cursor.downField("namedConstants").as[Map[String,AnyValue]]
+        ctx <- cursor.downField("context").as[ErgoLikeContext]
+      } yield ExecuteRequest(script, env.map({ case (k,v) => k -> v.value }), ctx)
+    }
+  }
+
+  implicit val cryptResultEncoder: Encoder[CryptoResult] = {
+    res =>
+      val fields = Map(
+        "value" -> res.value.asJson,
+        "cost" -> res.cost.asJson
+      )
+      fields.asJson
   }
 
 }

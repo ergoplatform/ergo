@@ -2,10 +2,11 @@ package scorex.db
 
 import com.google.common.primitives.{Ints, Shorts}
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Matchers, PropSpec}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-class ByteArrayUtilsSpec extends PropSpec with GeneratorDrivenPropertyChecks with Matchers {
+class ByteArrayUtilsSpec extends AnyPropSpec with ScalaCheckPropertyChecks with Matchers {
 
   lazy val nonEmptyBytesGen: Gen[Array[Byte]] = Gen.nonEmptyListOf(Arbitrary.arbitrary[Byte])
     .map(_.toArray).suchThat(_.length > 0)
@@ -39,6 +40,14 @@ class ByteArrayUtilsSpec extends PropSpec with GeneratorDrivenPropertyChecks wit
       val ba = Array.fill(2)(0: Byte)
       ByteArrayUtils.putShort(ba, 0, i)
       Shorts.fromByteArray(ba) shouldBe i // check with Guava
+    }
+  }
+
+  property("mergeByteArrays") {
+    forAll(Gen.nonEmptyListOf(nonEmptyBytesGen)){ byteArrays =>
+      val merged = ByteArrayUtils.mergeByteArrays(byteArrays)
+      val simpleMerge = byteArrays.foldLeft(Array.emptyByteArray){case (acc, arr) => acc ++ arr}
+      merged.sameElements(simpleMerge) shouldBe true
     }
   }
 

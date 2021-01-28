@@ -7,8 +7,8 @@ import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
-import org.ergoplatform.nodeView.wallet.scanning.Scan
-import org.ergoplatform.settings.{Constants, LaunchParameters}
+import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanWalletInteraction}
+import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
 import org.ergoplatform.wallet.Constants.{MiningScanId, PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
@@ -18,6 +18,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.interpreter.ContextExtension
 import sigmastate.utxo.CostTable
 import scorex.util.bytesToId
+
 import scala.collection.mutable
 
 /**
@@ -27,7 +28,8 @@ object WalletScanLogic extends ScorexLogging {
 
   /**
     * Data object collecting info about inputs spent during blocks scan
-    * @param inputTxId - id of transaction which is spending an input
+    *
+    * @param inputTxId  - id of transaction which is spending an input
     * @param trackedBox - box being spent
     */
   case class SpentInputData(inputTxId: ModifierId, trackedBox: TrackedBox)
@@ -36,8 +38,8 @@ object WalletScanLogic extends ScorexLogging {
   /**
     * Results of block scan
     *
-    * @param outputs - newly created boxes (transaction outputs)
-    * @param inputsSpent - wallet-related inputs spent
+    * @param outputs             - newly created boxes (transaction outputs)
+    * @param inputsSpent         - wallet-related inputs spent
     * @param relatedTransactions - transactions affected (creating wallet-related boxes or spending them)
     */
   case class ScanResults(outputs: Seq[TrackedBox],
@@ -54,6 +56,7 @@ object WalletScanLogic extends ScorexLogging {
                       proverOpt: Option[ErgoProvingInterpreter],
                       stateContext: ErgoStateContext,
                       height: Int): Boolean = {
+    log.info(s"Resolving box ${Algos.encode(box.id)}")
     val testingTx = UnsignedErgoLikeTransaction(
       IndexedSeq(new UnsignedInput(box.id)),
       IndexedSeq(new ErgoBoxCandidate(1L, Constants.TrueLeaf, creationHeight = height))
@@ -66,7 +69,10 @@ object WalletScanLogic extends ScorexLogging {
     val context = new ErgoContext(stateContext, transactionContext, inputContext,
       LaunchParameters.maxBlockCost, CostTable.interpreterInitCost)
 
-    proverOpt.flatMap(_.prove(box.ergoTree, context, testingTx.messageToSign).toOption).isDefined
+    proverOpt.flatMap { prover =>
+      prover.IR.resetContext()
+      prover.prove(box.ergoTree, context, testingTx.messageToSign).toOption
+    }.isDefined
   }
 
   def scanBlockTransactions(registry: WalletRegistry,
@@ -84,13 +90,13 @@ object WalletScanLogic extends ScorexLogging {
   /**
     * Updates wallet database by scanning and processing block transactions.
     *
-    * @param registry - versioned wallet database which is tracking on-chain state
-    * @param offChainRegistry - in-memory snapshot of current state, including off-chain transactions
-    * @param stateContext - current blockchain and state context (used to check mining rewards only)
-    * @param walletVars - current wallet state
-    * @param height - block height
-    * @param blockId - block id
-    * @param transactions - block transactions
+    * @param registry            - versioned wallet database which is tracking on-chain state
+    * @param offChainRegistry    - in-memory snapshot of current state, including off-chain transactions
+    * @param stateContext        - current blockchain and state context (used to check mining rewards only)
+    * @param walletVars          - current wallet state
+    * @param height              - block height
+    * @param blockId             - block id
+    * @param transactions        - block transactions
     * @param cachedOutputsFilter - Bloom filter for previously created outputs
     * @return updated wallet database, offchain snapshot and the Bloom filter for wallet outputs
     */
@@ -118,14 +124,19 @@ object WalletScanLogic extends ScorexLogging {
     }
 
     // Resolve boxes related to mining income
-    // We choose only boxes which are mature enough to be spend
+    // We choose only boxes which are mature enough to be spent
     // (i.e. miningRewardDelay blocks passed since a mining reward box mined)
     val maxMiningHeight = height - walletVars.settings.miningRewardDelay
     val miningBoxes = registry.unspentBoxes(MiningScanId).filter(_.inclusionHeightOpt.getOrElse(0) <= maxMiningHeight)
-    val resolvedBoxes = if(miningBoxes.nonEmpty) {
+    val resolvedBoxes = if (miningBoxes.nonEmpty) {
       miningBoxes.flatMap { tb =>
         val spendable = resolve(tb.box, walletVars.proverOpt, stateContext, height)
-        if (spendable) Some(tb.copy(scans = Set(PaymentsScanId))) else None
+        if (spendable) {
+          registry.removeScan(tb.box.id, MiningScanId)
+          Some(tb.copy(scans = Set(PaymentsScanId)))
+        } else {
+          None
+        }
       }
     } else Seq.empty
 
@@ -221,42 +232,63 @@ object WalletScanLogic extends ScorexLogging {
     val externalScans: Seq[Scan] = walletVars.externalScans
 
     tx.outputs.flatMap { bx =>
-      val appsTriggered = externalScans.filter(_.trackingRule.filter(bx)).map(app => app.scanId)
+
+      // First, we check apps triggered by the tx output
+      val appsTriggered =
+        externalScans
+          .filter(_.trackingRule.filter(bx))
+          .map(app => app.scanId -> app.walletInteraction)
 
       val boxScript = bx.propositionBytes
 
+      // then check whether Bloom filter built on top of payment & mining scripts of the p2pk-wallet
       val statuses: Set[ScanId] = if (walletVars.filter.mightContain(boxScript)) {
 
+        // first, we are checking mining script
         val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
 
-        //tweak for tests
-        lazy val miningStatus: ScanId = if (walletVars.settings.miningRewardDelay > 0) {
-          MiningScanId
+        val prePaymentStatuses = if (miningIncomeTriggered) {
+          val miningStatus: (ScanId, ScanWalletInteraction.Value) = if (walletVars.settings.miningRewardDelay > 0) {
+            MiningScanId -> ScanWalletInteraction.Off // scripts are different, so off is kinda overkill
+          } else {
+            //tweak for tests
+            PaymentsScanId -> ScanWalletInteraction.Off
+          }
+          appsTriggered :+ miningStatus
         } else {
-          PaymentsScanId
+          appsTriggered
         }
 
-        val prePaymentStatuses = if (miningIncomeTriggered) appsTriggered :+ miningStatus else appsTriggered
-
-        if (prePaymentStatuses.nonEmpty) {
-          //if other scans intercept the box, it is not being tracked by the payments app
-          prePaymentStatuses.toSet
+        if (prePaymentStatuses.nonEmpty &&
+          !prePaymentStatuses.exists(t => ScanWalletInteraction.interactingWithWallet(t._2))) {
+          // if other scans intercept the box, and the scans are not sharing the box,
+          // then the box is not being tracked by the p2pk-wallet
+          prePaymentStatuses.map(_._1).toSet
         } else {
+          //check whether payment is triggered (Bloom filter has false positives)
           val paymentsTriggered = trackedBytes.exists(bs => boxScript.sameElements(bs))
 
+          val otherIds = prePaymentStatuses.map(_._1).toSet
           if (paymentsTriggered) {
-            Set(PaymentsScanId)
+            Set(PaymentsScanId) ++ otherIds
           } else {
-            Set.empty
+            otherIds
           }
         }
       } else {
-        appsTriggered.toSet
+        val appScans = appsTriggered.map(_._1).toSet
+
+        // Add p2pk-wallet if there's a scan enforcing that
+        if (appsTriggered.exists(_._2 == ScanWalletInteraction.Forced)) {
+          appScans ++ Set(PaymentsScanId)
+        } else {
+          appScans
+        }
       }
 
       if (statuses.nonEmpty) {
         val tb = TrackedBox(tx.id, bx.index, inclusionHeight, None, None, bx, statuses)
-        log.debug("New tracked box: " + tb.boxId)
+        log.debug("New tracked box: " + tb.boxId, " scans: " + tb.scans)
         Some(tb)
       } else {
         None

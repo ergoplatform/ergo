@@ -12,7 +12,6 @@ import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.wallet.protocol.context.TransactionContext
 import scorex.core.EphemerealNodeViewModifier
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
 import scorex.core.serialization.ScorexSerializer
@@ -20,7 +19,7 @@ import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationState}
-import scorex.db.ByteArrayWrapper
+import scorex.db.{ByteArrayUtils, ByteArrayWrapper}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.eval.Extensions._
@@ -63,25 +62,18 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
+  /**
+    * Id of transaction "witness" (taken from Bitcoin jargon, means commitment to signatures of a transaction).
+    * Id is 248-bit long, to distinguish transaction ids from witness ids in Merkle tree of transactions,
+    * where both kinds of ids are written into leafs of the tree.
+    */
+  lazy val witnessSerializedId: Array[Byte] =
+    Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof))).tail
+
+
   lazy val outAssetsTry: Try[(Map[ByteArrayWrapper, Long], Int)] = ErgoTransaction.extractAssets(outputCandidates)
 
   lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
-
-  /**
-    * Same as `validateStateless`, but result is returned as Try[Long]
-    **/
-  def statelessValidity: Try[Unit] = validateStateless.result.toTry
-
-  /**
-    * Same as `validateStateful`, but result is returned as Try[Long]
-    **/
-  def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
-                       dataBoxes: IndexedSeq[ErgoBox],
-                       stateContext: ErgoStateContext,
-                       accumulatedCost: Long = 0L)
-                      (implicit verifier: ErgoInterpreter): Try[Long] = {
-    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry
-  }
 
   /**
     * Stateless transaction validation with result returned as `ValidationResult`
@@ -89,7 +81,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     *
     * @note Consensus-critical!
     */
-  def validateStateless: ValidationState[Unit] = {
+  def validateStateless(): ValidationState[Unit] = {
     ModifierValidator(ErgoValidationSettings.initial)
       .validate(txNoInputs, inputs.nonEmpty, s"$id")
       .validate(txNoOutputs, outputCandidates.nonEmpty, s"$id")
@@ -100,6 +92,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validateNoFailure(txOutputSum, outputsSumTry)
       .validate(txInputsUnique, inputs.distinct.size == inputs.size, s"$id: ${inputs.distinct.size} == ${inputs.size}")
   }
+
+  /**
+    * Same as `validateStateless`, but result is returned as Try[Unit]
+    **/
+  def statelessValidity(): Try[Unit] = {
+    validateStateless().result.toTry
+  }
+
 
   /**
     * Checks whether transaction is valid against input boxes to spend, and
@@ -126,6 +126,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
+    val blockVersion = stateContext.blockVersion
+
     // Cost of transaction initialization: we should read and parse all inputs and data inputs,
     // and also iterate through all outputs to check rules
     val initialCost: Long = addExact(
@@ -149,6 +151,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       validationState
         .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}")
         .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out")
+        .validate(txNegHeight, (blockVersion == 1) || out.creationHeight >= 0, s" ${out.creationHeight} >= 0 is not true, output id: $id: output $out")
         .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
         .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
     }
@@ -201,7 +204,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       val proof = input.spendingProof
       val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
       val inputContext = InputContext(idx.toShort, proof.extension)
-      val ctx = new ErgoContext(stateContext, transactionContext, inputContext, maxCost - addExact(currentTxCost, accumulatedCost), 0)
+
+      val ctx = new ErgoContext(
+        stateContext, transactionContext, inputContext,
+        costLimit = maxCost - addExact(currentTxCost, accumulatedCost),
+        initCost = 0)
 
       val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
       costTry.recover { case t =>
@@ -219,6 +226,17 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         .validate(bsBlockTransactionsCost, maxCost >= addExact(currentTxCost, accumulatedCost, scriptCost), s"$id: cost exceeds limit after input #$idx")
         .map(c => addExact(c, scriptCost))
     }
+  }
+
+  /**
+    * Same as `validateStateful`, but result is returned as Try[Long]
+    **/
+  def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
+                       dataBoxes: IndexedSeq[ErgoBox],
+                       stateContext: ErgoStateContext,
+                       accumulatedCost: Long = 0L)
+                      (implicit verifier: ErgoInterpreter): Try[Long] = {
+    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry
   }
 
   override type M = ErgoTransaction
@@ -244,6 +262,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 }
 
 object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding {
+
+  val MaxAssetsPerBox = 255
 
   /**
     * Extracts a mapping (assets -> total amount) from a set of boxes passed as a parameter.
@@ -273,8 +293,6 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
   def apply(tx: ErgoLikeTransaction): ErgoTransaction =
     ErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)
 
-  val MaxAssetsPerBox = 255
-
 }
 
 object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
@@ -285,7 +303,9 @@ object ErgoTransactionSerializer extends ScorexSerializer[ErgoTransaction] {
   }
 
   override def parse(r: Reader): ErgoTransaction = {
-    val reader = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
+    val reader = new SigmaByteReader(r,
+      new ConstantStore(),
+      resolvePlaceholdersToConstants = false)
     val elt = ErgoLikeTransactionSerializer.parse(reader)
     ErgoTransaction(elt.inputs, elt.dataInputs, elt.outputCandidates)
   }

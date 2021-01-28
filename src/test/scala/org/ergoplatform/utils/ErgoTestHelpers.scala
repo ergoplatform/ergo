@@ -4,7 +4,7 @@ import java.net.InetSocketAddress
 import java.util.concurrent.Executors
 
 import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, VotingSettings}
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.scalactic.{Prettifier, source}
 import org.scalatest.enablers.{Collecting, InspectorAsserting}

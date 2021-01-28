@@ -67,11 +67,11 @@ object MinerBench extends App with ErgoTestHelpers {
     val nBits = RequiredDifficulty.encodeCompactBits(difficulty)
     val h = inHeader.copy(nBits = nBits)
 
-    val candidate = new CandidateBlock(None, Header.CurrentVersion, nBits: Long, h.stateRoot,
+    val candidate = new CandidateBlock(None, Header.InitialVersion, nBits: Long, h.stateRoot,
       fb.adProofs.get.proofBytes,
       fb.blockTransactions.txs,
       System.currentTimeMillis(),
-      ExtensionCandidate(Seq()),
+      ExtensionCandidate(Seq.empty),
       Array())
     val newHeader = pow.proveCandidate(candidate, sk).get.header
 
@@ -85,6 +85,5 @@ object MinerBench extends App with ErgoTestHelpers {
 
     println(s"M = ${pow.M.length / 1024} Kb:${(System.currentTimeMillis() - st).toDouble / Steps} ms")
   }
-
 
 }

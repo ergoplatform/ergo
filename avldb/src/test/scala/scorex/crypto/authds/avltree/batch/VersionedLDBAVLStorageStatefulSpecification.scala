@@ -3,16 +3,16 @@ package scorex.crypto.authds.avltree.batch
 import com.google.common.primitives.Longs
 import org.scalacheck.Test.Parameters
 import org.scalacheck.commands.Commands
-import org.scalacheck.{Gen, Prop}
-import org.scalatest.PropSpec
+import org.scalacheck.{Prop, Gen}
+import org.scalatest.propspec.AnyPropSpec
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.authds._
 import scorex.crypto.hash.Digest32
 import scorex.utils.{Random => RandomBytes}
 
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Random, Success, Failure, Try}
 
-class VersionedLDBAVLStorageStatefulSpecification extends PropSpec {
+class VersionedLDBAVLStorageStatefulSpecification extends AnyPropSpec {
   val params = Parameters.default
     .withMinSize(10)
     .withMaxSize(50)

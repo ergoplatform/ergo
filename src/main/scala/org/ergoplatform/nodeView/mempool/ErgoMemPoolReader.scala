@@ -14,6 +14,11 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
 
   override def size: Int
 
+  /**
+    * @return inputs spent by the mempool transactions
+    */
+  def spentInputs: Iterator[BoxId]
+
   def getAll: Seq[ErgoTransaction]
 
   /**
@@ -37,10 +42,5 @@ trait ErgoMemPoolReader extends MempoolReader[ErgoTransaction] {
     * @return an ordered sequence of transaction ids with weights
     */
   def weightedTransactionIds(limit: Int): Seq[WeightedTxId]
-
-  /**
-    * @return inputs spent by the mempool transactions
-    */
-  def spentInputs: Iterator[BoxId]
 
 }

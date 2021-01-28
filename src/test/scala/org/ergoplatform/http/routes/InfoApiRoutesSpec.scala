@@ -3,7 +3,7 @@ package org.ergoplatform.http.routes
 import akka.actor.ActorRef
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
+import akka.http.scaladsl.testkit.{ScalatestRouteTest, RouteTestTimeout}
 import akka.pattern.ask
 import akka.testkit.TestDuration
 import akka.util.Timeout
@@ -15,9 +15,11 @@ import org.ergoplatform.local.ErgoStatsCollector.NodeInfo.difficultyEncoder
 import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.local.ErgoStatsCollectorRef
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.utils.Stubs
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedHistory
 import scorex.core.utils.TimeProvider.Time
 import scorex.core.utils.NetworkTimeProvider
@@ -25,7 +27,7 @@ import scorex.core.utils.NetworkTimeProvider
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class InfoApiRoutesSpec extends FlatSpec
+class InfoApiRoutesSpec extends AnyFlatSpec
   with Matchers
   with ScalatestRouteTest
   with FailFastCirceSupport
@@ -37,7 +39,7 @@ class InfoApiRoutesSpec extends FlatSpec
 
   implicit val actorTimeout: Timeout = Timeout(15.seconds.dilated)
   implicit val routeTimeout: RouteTestTimeout = RouteTestTimeout(15.seconds.dilated)
-  val statsCollector: ActorRef = ErgoStatsCollectorRef(nodeViewRef, peerManagerRef, settings, fakeTimeProvider)
+  val statsCollector: ActorRef = ErgoStatsCollectorRef(nodeViewRef, networkControllerRef, settings, fakeTimeProvider)
   val route: Route = InfoApiRoute(statsCollector, settings.scorexSettings.restApi, fakeTimeProvider).route
   val requiredDifficulty = BigInt(1)
 
@@ -62,7 +64,8 @@ class InfoApiRoutesSpec extends FlatSpec
   it should "should return non-exponential difficulty in json response" in {
     Get("/info") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      val res = responseEntity.toString
+      val json = responseAs[Json]
+      val res = json.toString
       log.info(s"Received node info: $res")
       res should include regex """\"difficulty\" : \d+,"""
     }
@@ -81,7 +84,7 @@ class InfoApiRoutesSpec extends FlatSpec
       blocksToKeep = settings.nodeSettings.blocksToKeep
     )
     val nBits = RequiredDifficulty.encodeCompactBits(difficulty)
-    val chain = genChain(height = 5, emptyHistory, nBits)
+    val chain = genChain(height = 5, emptyHistory, Header.InitialVersion, nBits)
     val history = applyChain(emptyHistory, chain)
     val generatedDifficulty = history.bestFullBlockOpt
       .map(_.header.requiredDifficulty)

@@ -5,13 +5,13 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.PoPowAlgos._
-import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, PoPowAlgos}
+import org.ergoplatform.modifiers.history.{ExtensionCandidate, PoPowAlgos, Header, Extension}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
+import org.ergoplatform.settings.{Constants, Algos, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.db.ByteArrayWrapper
@@ -19,7 +19,7 @@ import scorex.testkit.TestkitHelpers
 import scorex.testkit.utils.FileUtils
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Random, Success, Failure, Try}
 
 trait ValidBlocksGenerators
   extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
@@ -91,7 +91,7 @@ trait ValidBlocksGenerators
             // disable tokens generation to avoid situation with too many tokens
             val boxesToSpend = (consumedSelfBoxes ++ consumedBoxesFromState).toIndexedSeq
             val tx = validTransactionFromBoxes(boxesToSpend, rnd, issueNew, dataBoxes = dataBoxesToUse)
-            tx.statelessValidity match {
+            tx.statelessValidity() match {
               case Failure(e) =>
                 log.warn(s"Failed to generate valid transaction: ${LoggingUtil.getReasonMsg(e)}")
                 loop(remainingCost, stateBoxes, selfBoxes, acc, rnd)
@@ -106,7 +106,7 @@ trait ValidBlocksGenerators
 
             val tx = validTransactionFromBoxes(boxesToSpend.toIndexedSeq, rnd, issueNew, dataBoxes = dataBoxesToUse)
             val cost: Long = getTxCost(tx, boxesToSpend, dataBoxesToUse)
-            tx.statelessValidity match {
+            tx.statelessValidity() match {
               case Success(_) if cost <= remainingCost =>
                 ((tx +: acc).reverse, remainedSelfBoxes ++ tx.outputs ++ createdEmissionBox)
               case Failure(e) =>
@@ -145,7 +145,7 @@ trait ValidBlocksGenerators
 
     assert(boxes.nonEmpty, s"Was unable to take at least 1 box from box holder $boxHolder")
     val (txs, createdBoxes) = validTransactionsFromBoxes(txSizeLimit, boxes, dataBoxes, rnd)
-    txs.foreach(_.statelessValidity.get)
+    txs.foreach(_.statelessValidity().get)
     val bs = new BoxHolder(drainedBh.boxes ++ createdBoxes.map(b => ByteArrayWrapper(b.id) -> b))
     txs -> bs
   }
@@ -203,13 +203,13 @@ trait ValidBlocksGenerators
 
     val time = timeOpt.orElse(parentOpt.map(_.header.timestamp + 1)).getOrElse(timeProvider.time())
     val interlinks = parentOpt.toSeq.flatMap { block =>
-      PoPowAlgos.updateInterlinks(block.header, PoPowAlgos.unpackInterlinks(block.extension.fields).get)
+      popowAlgos.updateInterlinks(block.header, PoPowAlgos.unpackInterlinks(block.extension.fields).get)
     }
     val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate ++ interlinksToExtension(interlinks) ++
       utxoState.stateContext.validationSettings.toExtensionCandidate
     val votes = Array.fill(3)(0: Byte)
 
-    powScheme.proveBlock(parentOpt.map(_.header), Header.CurrentVersion, settings.chainSettings.initialNBits, updStateDigest, adProofBytes,
+    powScheme.proveBlock(parentOpt.map(_.header), Header.InitialVersion, settings.chainSettings.initialNBits, updStateDigest, adProofBytes,
       transactions, time, extension, votes, defaultMinerSecretNumber).get
   }
 
@@ -229,16 +229,16 @@ trait ValidBlocksGenerators
     val (adProofBytes, updStateDigest) = wrappedState.proofsForTransactions(transactions).get
 
     val time = timeOpt.orElse(parentOpt.map(_.timestamp + 1)).getOrElse(timeProvider.time())
-    val interlinksExtension = interlinksToExtension(updateInterlinks(parentOpt, parentExtensionOpt))
+    val interlinksExtension = interlinksToExtension(popowAlgos.updateInterlinks(parentOpt, parentExtensionOpt))
     val extension: ExtensionCandidate = LaunchParameters.toExtensionCandidate ++ interlinksExtension
     val votes = Array.fill(3)(0: Byte)
 
-    powScheme.proveBlock(parentOpt, Header.CurrentVersion, settings.chainSettings.initialNBits, updStateDigest,
+    powScheme.proveBlock(parentOpt, Header.InitialVersion, settings.chainSettings.initialNBits, updStateDigest,
       adProofBytes, transactions, time, extension, votes, defaultMinerSecretNumber).get
   }
 
   private def checkPayload(transactions: Seq[ErgoTransaction], us: UtxoState): Unit = {
-    transactions.foreach(_.statelessValidity shouldBe 'success)
+    transactions.foreach(_.statelessValidity() shouldBe 'success)
     transactions.nonEmpty shouldBe true
     ErgoState.boxChanges(transactions)._1.foreach { boxId: ADKey =>
       assert(us.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")

@@ -94,7 +94,7 @@ object WalletScanLogic extends ScorexLogging {
     val miningBoxes = registry.unspentBoxes(MiningScanId).filter(_.inclusionHeightOpt.getOrElse(0) <= maxMiningHeight)
     val resolvedBoxes = miningBoxes.map { tb =>
       registry.removeScan(tb.box.id, MiningScanId)
-      Some(tb.copy(scans = Set(PaymentsScanId)))
+      tb.copy(scans = Set(PaymentsScanId))
     }
 
     val initialScanResults = ScanResults(resolvedBoxes, Seq.empty, Seq.empty)

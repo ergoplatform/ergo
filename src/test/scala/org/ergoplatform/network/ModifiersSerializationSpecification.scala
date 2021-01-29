@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoPropertyTest
 import scorex.crypto.authds.ADDigest
-import scorex.crypto.hash.Digest32
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
 import sigmastate.interpreter.CryptoConstants.EcPointType
@@ -40,6 +40,10 @@ class ModifiersSerializationSpecification extends ErgoPropertyTest with Decoding
                     height, extensionRoot, powSolution, votes)
 
     h.id shouldBe "8cf6dca6b9505243e36192fa107735024c0000cf4594b1daa2dc4e13ee86f26f"
+
+    val bytes = h.bytes
+
+    h.id shouldBe Base16.encode(Blake2b256(bytes)) // header id is blake2b256 of its bytes
   }
 
 }

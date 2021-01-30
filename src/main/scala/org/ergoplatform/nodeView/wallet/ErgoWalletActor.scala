@@ -476,7 +476,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         _.secret.foreach { rootSecret =>
           DerivationPath.fromEncoded(encodedPath).foreach {
             case path if !path.publicBranch =>
-              val secret = rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
+              val secret = rootSecret.derive(path)
               processSecretAddition(secret) match {
                 case Success(_) => sender() ! Success(P2PKAddress(secret.publicKey.key))
                 case f: Failure[Unit] => sender() ! f
@@ -766,7 +766,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         val oldPaths = storage.readPaths()
         if (oldPaths.nonEmpty) {
           val oldDerivedSecrets = masterKey +: oldPaths.map {
-            path => masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
+            path => masterKey.derive(path)
           }
           val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
           oldPubKeys.foreach(storage.addKey)
@@ -799,7 +799,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         // Secrets corresponding to public keys
         val secretsPk = pubKeys.map { pk =>
           val path = pk.path.toPrivateBranch
-          masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
+          masterKey.derive(path)
         }
 
         // If no master key in the secrets corresponding to public keys,
@@ -835,7 +835,7 @@ class ErgoWalletActor(settings: ErgoSettings,
   // call nextPath and derive next key from it
   private def nextKey(masterKey: ExtendedSecretKey): DeriveNextKeyResult = {
     val derivationResult = nextPath().flatMap { path =>
-      val secret = masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
+      val secret = masterKey.derive(path)
       processSecretAddition(secret).map { _ =>
         (path, P2PKAddress(secret.publicKey.key), secret)
       }

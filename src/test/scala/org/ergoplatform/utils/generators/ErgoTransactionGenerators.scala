@@ -2,7 +2,7 @@ package org.ergoplatform.utils.generators
 
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -277,13 +277,13 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   lazy val invalidBlockTransactionsGen: Gen[BlockTransactions] = for {
     headerId <- modifierIdGen
     txs <- Gen.nonEmptyListOf(invalidErgoTransactionGen)
-  } yield BlockTransactions(headerId, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
+  } yield BlockTransactions(headerId, Header.InitialVersion, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
     if ((acc :+ tx).map(_.size).sum < (Parameters.MaxBlockSizeDefault - 150)) acc :+ tx else acc))
 
   def invalidBlockTransactionsGen(prop: ProveDlog, txQty: Int): Gen[BlockTransactions] = for {
     headerId <- modifierIdGen
     txs <- Gen.listOfN(txQty, invalidErgoTransactionGen(prop))
-  } yield BlockTransactions(headerId, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
+  } yield BlockTransactions(headerId, Header.InitialVersion, txs.foldLeft(Seq.empty[ErgoTransaction])((acc, tx) =>
     if ((acc :+ tx).map(_.size).sum < (Parameters.MaxBlockSizeDefault - 150)) acc :+ tx else acc))
 
   lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
@@ -324,7 +324,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
         val sc = new ErgoStateContext(Seq(), None, startDigest, parameters, validationSettingsNoIl, VotingData.empty)
         blocks.foldLeft(sc -> 1) { case ((c, h), b) =>
           val block = b.copy(header = b.header.copy(height = h, votes = votes(h - 1)))
-          c.appendFullBlock(block, votingSettings).get -> (h + 1)
+          c.appendFullBlock(block).get -> (h + 1)
         }._1
       case _ =>
         ErgoStateContext.empty(stateRoot, settings)

@@ -15,6 +15,7 @@ import org.ergoplatform.local.ErgoStatsCollector.NodeInfo.difficultyEncoder
 import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.local.ErgoStatsCollectorRef
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
@@ -83,7 +84,7 @@ class InfoApiRoutesSpec extends AnyFlatSpec
       blocksToKeep = settings.nodeSettings.blocksToKeep
     )
     val nBits = RequiredDifficulty.encodeCompactBits(difficulty)
-    val chain = genChain(height = 5, emptyHistory, nBits)
+    val chain = genChain(height = 5, emptyHistory, Header.InitialVersion, nBits)
     val history = applyChain(emptyHistory, chain)
     val generatedDifficulty = history.bestFullBlockOpt
       .map(_.header.requiredDifficulty)

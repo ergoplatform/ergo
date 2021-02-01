@@ -241,18 +241,23 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     */
   def requiredDifficultyAfter(parent: Header,
                               nextBlockTimestampOpt: Option[Long] = None): Difficulty = {
-    //todo: it is slow to read thousands headers from database for each header
-    //todo; consider caching here
-    //todo: https://github.com/ergoplatform/ergo/issues/872
-    val parentHeight = parent.height
-    val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
-      .ensuring(_.last == parentHeight)
-    if (heights.lengthCompare(1) == 0) {
-      difficultyCalculator.calculate(Seq(parent))
+    if (parent.height + 1 == settings.chainSettings.voting.version2ActivationHeight) {
+      // Set difficulty for version 2 activation height (where specific difficulty is needed due to PoW change)
+      settings.chainSettings.initialDifficultyVersion2
     } else {
-      val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
-      val headers = chain.headers.filter(p => heights.contains(p.height))
-      difficultyCalculator.calculate(headers)
+      //todo: it is slow to read thousands headers from database for each header
+      //todo; consider caching here
+      //todo: https://github.com/ergoplatform/ergo/issues/872
+      val parentHeight = parent.height
+      val heights = difficultyCalculator.previousHeadersRequiredForRecalculation(parentHeight + 1)
+        .ensuring(_.last == parentHeight)
+      if (heights.lengthCompare(1) == 0) {
+        difficultyCalculator.calculate(Seq(parent))
+      } else {
+        val chain = headerChainBack(heights.max - heights.min + 1, parent, _ => false)
+        val headers = chain.headers.filter(p => heights.contains(p.height))
+        difficultyCalculator.calculate(headers)
+      }
     }
   }
 

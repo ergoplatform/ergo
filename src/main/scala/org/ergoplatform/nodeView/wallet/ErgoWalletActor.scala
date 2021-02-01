@@ -6,7 +6,7 @@ import com.google.common.hash.BloomFilter
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
@@ -19,7 +19,7 @@ import org.ergoplatform.settings._
 import org.ergoplatform.utils.{BoxUtils, FileUtils}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
-import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, TrackedBox}
+import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, ErgoBoxSerializer, TrackedBox}
 import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
@@ -234,12 +234,12 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     case GetScanBoxes(scanId, unspent, considerUnconfirmed) =>
 
-      val unconfirmed = if(considerUnconfirmed) {
+      val unconfirmed = if (considerUnconfirmed) {
         offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
       } else Seq.empty
 
       val currentHeight = fullHeight
-      val boxes = (if (unspent){
+      val boxes = (if (unspent) {
         registry.unspentBoxes(scanId)
       } else {
         registry.confirmedBoxes(scanId)
@@ -624,6 +624,7 @@ class ErgoWalletActor(settings: ErgoSettings,
                       nonMandatoryRegisters,
                       parameters
                     )
+
                   new ErgoBoxCandidate(
                     valueOpt.getOrElse(minimalErgoAmount),
                     lockWithAddress.script,
@@ -857,17 +858,6 @@ class ErgoWalletActor(settings: ErgoSettings,
       log.error("Unlock failed: ", t)
   }
 
-/*
-  private def inputsFor(targetAmount: Long,
-                        targetAssets: TokensMap = Map.empty): Seq[ErgoBox] = {
-    val unspentBoxes = registry.walletUnspentBoxes()
-    boxSelector
-      .select(unspentBoxes.toIterator, walletFilter, targetAmount, targetAssets)
-      .toSeq
-      .flatMap(_.boxes)
-      .map(_.box)
-  }*/
-
   private def wrapLegalExc[T](e: Throwable): Failure[T] =
     if (e.getMessage.startsWith("Illegal key size")) {
       val dkLen = settings.walletSettings.secretStorage.encryption.dkLen
@@ -946,9 +936,9 @@ object ErgoWalletActor {
   /**
     * Request to generate commitments for an unsigned transaction
     *
-    * @param utx - unsigned transaction
-    * @param secrets - optionally, externally provided secrets
-    * @param inputsOpt - optionally, externally provided inputs
+    * @param utx           - unsigned transaction
+    * @param secrets       - optionally, externally provided secrets
+    * @param inputsOpt     - optionally, externally provided inputs
     * @param dataInputsOpt - optionally, externally provided inputs
     */
   case class GenerateCommitmentsFor(utx: UnsignedErgoTransaction,
@@ -966,11 +956,11 @@ object ErgoWalletActor {
   /**
     * A request to sign a transaction
     *
-    * @param utx - unsigned transaction
-    * @param secrets - additional secrets given to the prover
-    * @param hints - hints used for transaction signing (commitments and partial proofs)
+    * @param utx          - unsigned transaction
+    * @param secrets      - additional secrets given to the prover
+    * @param hints        - hints used for transaction signing (commitments and partial proofs)
     * @param boxesToSpend - boxes the transaction is spending
-    * @param dataBoxes - read-only inputs of the transaction
+    * @param dataBoxes    - read-only inputs of the transaction
     */
   case class SignTransaction(utx: UnsignedErgoTransaction,
                              secrets: Seq[ExternalSecret],
@@ -1065,8 +1055,8 @@ object ErgoWalletActor {
   /**
     * Get boxes related to a scan
     *
-    * @param scanId - scan identifier
-    * @param unspentOnly - return only unspent boxes
+    * @param scanId              - scan identifier
+    * @param unspentOnly         - return only unspent boxes
     * @param considerUnconfirmed - consider mempool (filter our unspent boxes spent in the pool if unspent = true, add
     *                            boxes created in the pool for both values of unspentOnly).
     */
@@ -1194,10 +1184,10 @@ object ErgoWalletActor {
   /**
     * A request to extract hints from given transaction
     *
-    * @param tx           - transaction to extract hints from
-    * @param real         - public keys corresponing to the secrets known
-    * @param simulated    - public keys to simulate
-    * @param inputsOpt - optionally, externally provided inputs
+    * @param tx            - transaction to extract hints from
+    * @param real          - public keys corresponing to the secrets known
+    * @param simulated     - public keys to simulate
+    * @param inputsOpt     - optionally, externally provided inputs
     * @param dataInputsOpt - optionally, externally provided inputs
     */
   case class ExtractHints(tx: ErgoTransaction,

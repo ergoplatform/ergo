@@ -19,7 +19,7 @@ import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
-import sigmastate.basics.DLogProtocol.DLogProverInput
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -69,6 +69,9 @@ trait ErgoWalletReader extends VaultReader {
 
   def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] =
     (walletActor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
+
+  def miningPubkey: Future[Option[ProveDlog]] =
+    (walletActor ? GetMiningPubKey).mapTo[Option[ProveDlog]]
 
   def firstSecret: Future[Try[DLogProverInput]] =
     (walletActor ? GetFirstSecret).mapTo[Try[DLogProverInput]]

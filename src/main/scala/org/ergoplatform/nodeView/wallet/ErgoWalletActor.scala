@@ -200,6 +200,9 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ReadPublicKeys(from, until) =>
       sender() ! walletVars.publicKeyAddresses.slice(from, until)
 
+    case GetMiningPubKey =>
+      sender() ! walletVars.trackedPubKeys.headOption.map(_.key)
+
     case GetFirstSecret =>
       if (walletVars.proverOpt.nonEmpty) {
         walletVars.proverOpt.foreach(_.hdKeys.headOption.foreach(s => sender() ! Success(s.privateInput)))
@@ -1154,6 +1157,8 @@ object ErgoWalletActor {
     * Get root secret key (used in miner)
     */
   case object GetFirstSecret
+
+  case object GetMiningPubKey
 
   /**
     * Get registered scans list

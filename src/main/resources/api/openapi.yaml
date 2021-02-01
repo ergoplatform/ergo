@@ -1715,6 +1715,23 @@ components:
       items:
         $ref: '#/components/schemas/ErgoTransaction'
 
+    FeeHistogramBin:
+      description: Fee histogram bin
+      type: object
+      properties:
+        nTxns:
+          type: integer
+          format: int32
+        totalFee:
+          type: integer
+          format: int64
+
+    FeeHistogram:
+      description: Fee histogram for transactions in mempool
+      type: array
+      items:
+        $ref: '#/components/schemas/FeeHistogramBin'
+
     Asset:
       description: Token detail in the transaction
       type: object
@@ -2277,6 +2294,125 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Transactions'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/poolHistogram:
+    parameters:
+      - in: query
+        name: bins
+        required: false
+        description: The number of bins in histogram
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 10
+      - in: query
+        name: maxtime
+        required: false
+        description: Maximal wait time in milliseconds
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+          default: 60000
+    get:
+      summary: Get histogram (waittime, (n_trans, sum(fee)) for transactions in mempool.
+        It contains "bins"+1 bins, where i-th elements corresponds to transaction with wait time [i*maxtime/bins, (i+1)*maxtime/bins),
+        and last bin corresponds to the transactions with wait time >= maxtime.
+      operationId: getFeeHistogram
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: Array with fee histogram
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeeHistogram'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/getFee:
+    parameters:
+      - in: query
+        name: waitTime
+        required: true
+        description: Maximum transaction wait time in minutes
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 1
+      - in: query
+        name: txSize
+        required: true
+        description: Transaction size
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 100
+    get:
+      summary: Get recommended fee (in nanoErgs) for a transaction with specified size (in bytes) to be proceeded in specified time (in minutes)
+      operationId: getRecommendedFee
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: Recommended fee for the transaction (in nanoErgs)
+          content:
+            application/json:
+              schema:
+                type: integer
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /transactions/waitTime:
+    parameters:
+      - in: query
+        name: fee
+        required: true
+        description: Transaction fee (in nanoErgs)
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 1
+      - in: query
+        name: txSize
+        required: true
+        description: Transaction size
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 100
+    get:
+      summary: Get expected wait time for the transaction with specified fee and size
+      operationId: getExpectedWaitTime
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: Expected wait time in milliseconds
+          content:
+            application/json:
+              schema:
+                type: integer
         default:
           description: Error
           content:
@@ -3024,6 +3160,43 @@ paths:
                   $ref: '#/components/schemas/WalletTransaction'
         '404':
           description: Transaction with specified id not found in wallet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/transactionsByScanId:
+    parameters:
+      - in: query
+        name: scanId
+        required: true
+        description: Scan id
+        schema:
+          type: string
+    get:
+      security:
+        - ApiKeyAuth: [ api_key ]
+      summary: Get scan-related transactions by scan id
+      operationId: walletTransactionsByScanId
+      tags:
+        - wallet
+      responses:
+        '200':
+          description: Scan-related transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletTransaction'
+        '404':
+          description: Transactions with related scan id not found in wallet
           content:
             application/json:
               schema:
@@ -4086,6 +4259,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransactionId'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /node/shutdown:
+    post:
+      security:
+        - ApiKeyAuth: [ api_key ]
+      summary: Shuts down the node
+      operationId: nodeShutdown
+      tags:
+        - node
+      responses:
+        '200':
+          description: The node will be shut down in 5 seconds
         default:
           description: Error
           content:

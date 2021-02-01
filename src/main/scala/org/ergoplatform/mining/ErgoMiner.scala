@@ -88,16 +88,18 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
 
   // "miningPubkeyHex" setting in config has preference over wallet's secret key
-  private var publicKeyOpt: Option[ProveDlog] = ergoSettings.miningPubKey.orElse(inSecretKeyOpt.map(_.publicImage))
+  private var publicKeyOpt: Option[ProveDlog] = ergoSettings.miningPubKey
 
   // internal (CPU) miner threads, if internal mining is chosen
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
   override def preStart(): Unit = {
     // in external miner mode key from wallet is used if `publicKeyOpt` is not set
-    if ((publicKeyOpt.isEmpty && externalMinerMode) || (secretKeyOpt.isEmpty && !externalMinerMode)) {
+    if (secretKeyOpt.isEmpty && !externalMinerMode) {
+      self ! QueryWallet(secret = true)
+    } else if (publicKeyOpt.isEmpty && externalMinerMode) {
       log.info("Trying to use key from wallet for mining")
-      self ! QueryWallet
+      self ! QueryWallet(secret = false)
     }
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
   }
@@ -120,22 +122,35 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       secretKeyOpt = Some(s)
       publicKeyOpt = Some(s.publicImage)
 
+    case UpdatePublicKey(pkOpt) =>
+      publicKeyOpt = pkOpt
+
     // used in /mining/rewardAddress API method
     case ReadMinerPk =>
       sender() ! publicKeyOpt
   }
 
   private def queryWallet: Receive = {
-    case QueryWallet =>
+    case QueryWallet(secret) =>
       val callback = self
       viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        v.vault.firstSecret.onComplete {
-          _.flatten match {
+        if(secret) {
+          v.vault.firstSecret.onComplete {
+            _.flatten match {
+              case Failure(t) =>
+                log.warn(s"Miner can't load secret key from wallet: ${t.getMessage} ")
+                context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet(secret))(context.system.dispatcher)
+              case Success(proverInput: DLogProverInput) =>
+                callback ! UpdateSecret(proverInput)
+            }
+          }
+        } else {
+          v.vault.miningPubkey.onComplete {
             case Failure(t) =>
-              log.warn(s"Miner can't load key from wallet: ${t.getMessage} ")
-              context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet)(context.system.dispatcher)
-            case Success(proverInput: DLogProverInput) =>
-              callback ! UpdateSecret(proverInput)
+              log.warn(s"Miner can't load public key from wallet: ${t.getMessage} ")
+              context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet(secret))(context.system.dispatcher)
+            case Success(miningPubKeyOpt) =>
+              callback ! UpdatePublicKey(miningPubKeyOpt)
           }
         }
       }
@@ -697,13 +712,15 @@ object ErgoMiner extends ScorexLogging {
 
   case object StartMining
 
-  case object QueryWallet
+  case class QueryWallet(secret: Boolean)
 
   case class PrepareCandidate(toInclude: Seq[ErgoTransaction], reply: Boolean = true)
 
   case object ReadMinerPk
 
   case class UpdateSecret(s: DLogProverInput)
+
+  case class UpdatePublicKey(pkOpt: Option[ProveDlog])
 
 }
 

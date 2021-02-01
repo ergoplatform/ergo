@@ -314,6 +314,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       val result: Future[Unit] =
         if (solvedBlock.nonEmpty) {
           log.info("Duplicate solution: " + solution)
+          refreshCandidate()
           Future.failed(new Exception("Solution already submitted"))
         } else if (publicKeyOpt.isEmpty) {
           log.warn("Got a solution, but no pubkey is set")
@@ -329,8 +330,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
               solvedBlock = Some(newBlock.header)
               Future.successful(())
             case Some(Failure(exception)) =>
+              refreshCandidate()
               Future.failed(new Exception(s"Invalid block mined: ${exception.getMessage}", exception))
             case None =>
+              refreshCandidate()
               Future.failed(new Exception("Invalid miner state"))
           }
         }
@@ -454,6 +457,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def refreshCandidate(): Unit = {
     log.info("Requesting candidate")
     candidateOpt = None
+    candidateGenerating = false
     self ! PrepareCandidate(candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty), reply = false)
   }
 

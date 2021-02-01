@@ -25,7 +25,7 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
                          inputs: TreeMap[BoxId, WeightedTxId])
                         (implicit settings: ErgoSettings) extends ScorexLogging {
 
-  import ErgoMemPool.weighted
+  import OrderedTxPool.weighted
 
   private implicit val ms: MonetarySettings = settings.chainSettings.monetary
 
@@ -71,6 +71,11 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
     txs.foldLeft(this) { case (pool, tx) => pool.remove(tx) }
   }
 
+  /**
+    * Removes transaction from the pool
+    *
+    * @param tx - Transaction to remove
+    */
   def remove(tx: ErgoTransaction): OrderedTxPool = {
     transactionsRegistry.get(tx.id) match {
       case Some(wtx) =>
@@ -148,9 +153,8 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
       pool.outputs.get(input.boxId).fold(pool)(wtx => {
         pool.orderedTransactions.get(wtx) match {
           case Some(parent) =>
-            val newWtx = WeightedTxId(wtx.id, wtx.weight + weight)
-            val newPool = OrderedTxPool(
-              pool.orderedTransactions - wtx + (newWtx -> parent),
+            val newWtx = WeightedTxId(wtx.id, wtx.weight + weight, wtx.feePerKb, wtx.created)
+            val newPool = OrderedTxPool(pool.orderedTransactions - wtx + (newWtx -> parent),
               pool.transactionsRegistry.updated(parent.id, newWtx),
               invalidated,
               parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
@@ -168,7 +172,15 @@ case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransact
 
 object OrderedTxPool {
 
-  case class WeightedTxId(id: ModifierId, weight: Long) {
+  /**
+    * Weighted transaction id
+    *
+    * @param id       - Transcation id
+    * @param weight   - Weight of transaction
+    * @param feePerKb - Transaction's fee per KB
+    * @param created  - Transaction creation time
+    */
+  case class WeightedTxId(id: ModifierId, weight: Long, feePerKb: Long, created: Long) {
     // `id` depends on `weight` so we can use only the former for comparison.
     override def equals(obj: Any): Boolean = obj match {
       case that: WeightedTxId => that.id == id
@@ -190,4 +202,13 @@ object OrderedTxPool {
       TreeMap.empty[BoxId, WeightedTxId])(settings)
   }
 
+  def weighted(tx: ErgoTransaction)(implicit ms: MonetarySettings): WeightedTxId = {
+    val fee = tx.outputs
+      .filter(b => java.util.Arrays.equals(b.propositionBytes, ms.feePropositionBytes))
+      .map(_.value)
+      .sum
+    // We multiply by 1024 for better precision
+    val feePerKb = fee * 1024 / tx.size
+    WeightedTxId(tx.id, feePerKb, feePerKb, System.currentTimeMillis())
+  }
 }

@@ -3,6 +3,7 @@ package org.ergoplatform.http.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive, Directive1, Route}
 import akka.pattern.ask
+import io.circe.generic.decoding.DerivedDecoder.decodeIncompleteCaseClass
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
@@ -13,6 +14,7 @@ import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
@@ -46,6 +48,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         transactionsR ~
         unspentBoxesR ~
         boxesR ~
+        collectBoxesR ~
+        getTransactionsByScanIdR ~
         generateTransactionR ~
         generateUnsignedTransactionR ~
         generateCommitmentsR ~
@@ -228,6 +232,16 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     sendTransaction(withFee(requests), Seq.empty, Seq.empty)
   }
 
+  def collectBoxesR: Route = (path("boxes" / "collect") & post
+    & entity(as[BoxesRequest])) { request =>
+    withWalletOp(_.collectBoxes(request)) {
+      _.result.fold(
+        e => NotExists(s"No wallet boxes found due to ${e.getMessage}"),
+        boxes => ApiResponse(boxes.asJson)
+      )
+    }
+  }
+
   def balancesR: Route = (path("balances") & get) {
     withWallet(_.confirmedBalances)
   }
@@ -290,6 +304,12 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   def getTransactionR: Route = (path("transactionById") & modifierIdGet & get) { id =>
     withWalletOp(_.transactionById(id)) {
       _.fold[Route](NotExists)(tx => ApiResponse(tx.asJson))
+    }
+  }
+
+  def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get) { id =>
+    withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort)) {
+      resp => ApiResponse(resp.result.asJson)
     }
   }
 

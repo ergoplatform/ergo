@@ -16,9 +16,9 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
   val epochLength: Int = chainSettings.epochLength
   val initialDifficulty: BigInt = chainSettings.initialDifficulty
 
-  assert(useLastEpochs > 1, "useLastEpochs should always be > 1")
-  assert(epochLength > 0, "epochLength should always be > 0")
-  assert(epochLength < Int.MaxValue / useLastEpochs, s"epochLength $epochLength is too high for $useLastEpochs epochs")
+  require(useLastEpochs > 1, "useLastEpochs should always be > 1")
+  require(epochLength > 0, "epochLength should always be > 0")
+  require(epochLength < Int.MaxValue / useLastEpochs, s"epochLength $epochLength is too high for $useLastEpochs epochs")
 
   /**
     * @return heights of previous headers required for block recalculation
@@ -35,7 +35,7 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
 
   @SuppressWarnings(Array("TraversableHead"))
   def calculate(previousHeaders: Seq[Header]): Difficulty = {
-    assert(previousHeaders.nonEmpty, "PreviousHeaders should always contain at least 1 element")
+    require(previousHeaders.nonEmpty, "PreviousHeaders should always contain at least 1 element")
     val uncompressedDiff = {
       if (previousHeaders.lengthCompare(1) == 0 || previousHeaders.head.timestamp >= previousHeaders.last.timestamp) {
         previousHeaders.head.requiredDifficulty
@@ -84,5 +84,4 @@ class LinearDifficultyControl(val chainSettings: ChainSettings) extends ScorexLo
 
 object LinearDifficultyControl {
   val PrecisionConstant: Int = 1000000000
-
 }

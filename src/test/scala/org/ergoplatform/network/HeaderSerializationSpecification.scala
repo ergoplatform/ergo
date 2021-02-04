@@ -20,6 +20,8 @@ class HeaderSerializationSpecification extends ErgoPropertyTest with DecodingUti
     groupElemFromBytes(bytes)
   }
 
+  // This test contains simple parser for header version 1
+  // In Ergo mainnet, used for blocks till 417,791
   property("Header simple parsing - block version 1") {
     // real header from mainnet, at 414,474, https://explorer.ergoplatform.com/en/blocks/8cf6dca6b9505243e36192fa107735024c0000cf4594b1daa2dc4e13ee86f26f
     val version = 1 : Byte
@@ -105,6 +107,8 @@ class HeaderSerializationSpecification extends ErgoPropertyTest with DecodingUti
   }
 
 
+  // This test contains simple parser for header version 2
+  // In Ergo mainnet, used for blocks since 417,792 (inclusive)
   property("Header simple parsing - block version 2") {
     // real header from mainnet, at 418,838, https://explorer.ergoplatform.com/en/blocks/f46c89e44f13a92d8409341490f97f05c85785fa8d2d2164332cc066eda95c39
     val version = 2 : Byte

@@ -20,7 +20,7 @@ class HeaderSerializationSpecification extends ErgoPropertyTest with DecodingUti
     groupElemFromBytes(bytes)
   }
 
-  property("Header simple parsing") {
+  property("Header simple parsing - block version 1") {
     // real header from mainnet, at 414,474, https://explorer.ergoplatform.com/en/blocks/8cf6dca6b9505243e36192fa107735024c0000cf4594b1daa2dc4e13ee86f26f
     val version = 1 : Byte
     val height = 414474
@@ -104,4 +104,87 @@ class HeaderSerializationSpecification extends ErgoPropertyTest with DecodingUti
     dParsed shouldBe d
   }
 
+
+  property("Header simple parsing - block version 2") {
+    // real header from mainnet, at 418,838, https://explorer.ergoplatform.com/en/blocks/f46c89e44f13a92d8409341490f97f05c85785fa8d2d2164332cc066eda95c39
+    val version = 2 : Byte
+    val height = 418138
+    val parentId = ModifierId @@ "7fbc70ec5913706ddef67bbcdb7700ea5f15dc709012491269c9c7eb545d720c"
+    val adProofsRoot = Digest32 @@ Base16.decode("a80bbd4d69b4f017da6dd9250448ef1cde492121fc350727e755c7b7ae2988ad").get
+    val stateRoot = ADDigest @@ Base16.decode("995c0efe63744c5227e6ae213a2061c60f8db845d47707a6bff53f9ff1936a9e13").get
+    val transactionsRoot = Digest32 @@ Base16.decode("141bf3de015c44995858a435e4d6c50c51622d077760de32977ba5412aaaae03").get
+    val timestamp = 1612465607426L
+    val nBits = 107976917L
+    val extensionRoot = Digest32 @@ Base16.decode("b1457df896bba9dc962f8e42187e1ac580842f1282c8c7fb9cf9f4cd520d1c07").get
+
+    val pk = base16ToEcPoint("0315345f1fca9445eee5df74759d4c495094bcfc82a2831b26fca6efa599b509de")
+    val w = AutolykosSolution.wForV2
+    val n = Base16.decode("1b95db2168f95fda").get
+    val d = AutolykosSolution.dForV2
+    val powSolution = AutolykosSolution(pk, w, n, d)
+    val votes = Array[Byte](0, 0, 0)
+
+    val h = Header(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits,
+      height, extensionRoot, powSolution, votes)
+
+    h.id shouldBe "f46c89e44f13a92d8409341490f97f05c85785fa8d2d2164332cc066eda95c39"
+
+    h.id shouldBe Base16.encode(Blake2b256(h.bytes)) // header id is blake2b256 of its bytes
+
+    val bb = ByteBuffer.wrap(h.bytes)
+
+    // read block version
+    val versionParsed = getByte(bb)
+    versionParsed shouldBe version
+
+    // read parent id, 32 bytes
+    val parentIdParsed = getBytes(bb, 32)
+    Base16.encode(parentIdParsed) shouldBe parentId
+
+    // read authenticating hash of state transformation correctness proofs, 32 bytes
+    val adProofsRootParsed = getBytes(bb, 32)
+    adProofsRootParsed.toIndexedSeq shouldBe adProofsRoot.toIndexedSeq
+
+    // read transactions Merkle tree root, 32 bytes
+    val transactionsRootParsed = getBytes(bb, 32)
+    transactionsRootParsed.toIndexedSeq shouldBe transactionsRoot.toIndexedSeq
+
+    // read UTXO state AVL+ tree root + height, 33 bytes
+    val stateRootParsed = getBytes(bb, 33)
+    stateRootParsed.toIndexedSeq shouldBe stateRoot.toIndexedSeq
+
+    val timestampParsed = getULong(bb) // timestamp, up to 8 bytes
+    timestampParsed shouldBe timestamp
+
+    // read Merkle tree root of block extension data, 32 bytes
+    val extensionRootParsed = getBytes(bb, 32)
+    extensionRootParsed.toIndexedSeq shouldBe extensionRoot.toIndexedSeq
+
+    // read difficulty encoded in Bitcoin nBits format, https://bitco.in/en/developer-reference#target-nbits
+    val nbits = getBytes(bb, 4) // 4 bytes
+    val difficulty = RequiredDifficulty.decodeCompactBits(RequiredDifficulty.readUint32BE(nbits))
+    difficulty shouldBe h.requiredDifficulty
+
+    val heightParsed = getULong(bb) // up to 4 bytes
+    heightParsed shouldBe height
+
+    // read miner votes for protocol parameters update
+    val votesParsed = getBytes(bb, 3)
+    votesParsed.toIndexedSeq shouldBe votes.toIndexedSeq
+
+
+    // Block version V2 specific field, contains length of additional data
+    val additionalFieldsLength = getUByte(bb)
+    additionalFieldsLength shouldBe 0
+
+    // read PoW solution, no "w" and "d" in block version 2
+
+    val pkParsed = getBytes(bb, 33)
+    groupElemFromBytes(pkParsed) shouldBe pk
+
+    val nonceParsed = getBytes(bb, 8)
+    nonceParsed.toIndexedSeq shouldBe n.toIndexedSeq
+
+    bb.remaining() shouldBe 0
+  }
 }

@@ -239,7 +239,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @return - difficulty for the next block
     */
   def requiredDifficultyAfter(parent: Header): Difficulty = {
-    if (parent.height + 1 == settings.chainSettings.voting.version2ActivationHeight) {
+    if (parent.height == settings.chainSettings.voting.version2ActivationHeight || parent.height + 1 == settings.chainSettings.voting.version2ActivationHeight) {
       // Set difficulty for version 2 activation height (where specific difficulty is needed due to PoW change)
       settings.chainSettings.initialDifficultyVersion2
     } else {

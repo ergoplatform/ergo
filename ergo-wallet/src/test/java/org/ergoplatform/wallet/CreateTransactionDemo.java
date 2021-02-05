@@ -1,7 +1,6 @@
-package org.ergoplatform.walllet;
+package org.ergoplatform.wallet;
 
 import org.ergoplatform.*;
-import org.ergoplatform.wallet.Utils;
 import org.ergoplatform.wallet.interface4j.crypto.ErgoUnsafeProver;
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey;
 import scorex.util.Random;
@@ -12,7 +11,7 @@ public class CreateTransactionDemo {
      * A demo describing the process of creating simple payment transaction.
      * Note, more complex transaction would require more steps which are not described in this demo.
      */
-    public void createTransaction() throws Exception {
+    public static void createTransaction() {
         ErgoAddressEncoder encoder = new ErgoAddressEncoder((byte) 0x00);
 
         String receiverAddressStr = "9fKYyGuV3wMYFYzWBR1FDgc61CFV2hbGLrY6S3wgH1r4xJcwLnq";

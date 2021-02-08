@@ -2,7 +2,8 @@ package org.ergoplatform.settings
 
 import java.io.{File, FileOutputStream}
 import java.nio.channels.Channels
-import com.typesafe.config.{Config, ConfigFactory}
+
+import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.mining.groupElemFromBytes
@@ -12,6 +13,7 @@ import scorex.core.settings.{ScorexSettings, SettingsReaders}
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
 import sigmastate.basics.DLogProtocol.ProveDlog
+
 import scala.util.Try
 
 
@@ -90,22 +92,37 @@ object ErgoSettings extends ScorexLogging
 
     val cfg = ConfigFactory.parseFile(configFile)
 
+    val keystorePath = "ergo.wallet.secretStorage.secretDir"
+
     // Check that user-provided Ergo directory exists and has write access (if provided at all)
-    Try(cfg.getString("ergo.directory")).foreach { ergoDirName =>
+    val userDirOpt = Try(cfg.getString("ergo.directory")).toOption
+    userDirOpt.foreach { ergoDirName =>
       require(new File(s"$ergoDirName").canWrite, s"Folder $ergoDirName does not exist or not writable")
     }
 
     // Check that user-provided wallet secret directory exists and has read access (if provided at all)
-    Try(cfg.getString("ergo.wallet.secretStorage.secretDir")).foreach { secretDirName =>
+    val walletKeystoreDirOpt = Try(cfg.getString(keystorePath)).toOption
+    walletKeystoreDirOpt.foreach { secretDirName =>
       require(new File(s"$secretDirName").canRead, s"Folder $secretDirName does not exist or not readable")
     }
 
-    ConfigFactory
+    val fullConfig = ConfigFactory
       .defaultOverrides()
       .withFallback(cfg)
       .withFallback(firstFallBack)
       .withFallback(ConfigFactory.defaultReference())
       .resolve()
+
+    // If user provided only ergo.directory but not ergo.wallet.secretStorage.secretDir in his config,
+    // set ergo.wallet.secretStorage.secretDir like in reference.conf (so ergo.directory + "/wallet/keystore")
+    // Otherwise, a user may have an issue, especially with Powershell it seems from reports.
+    userDirOpt.map { userDir =>
+      if(walletKeystoreDirOpt.isEmpty) {
+        fullConfig.withValue(keystorePath, ConfigValueFactory.fromAnyRef(userDir + "/wallet/keystore"))
+      } else {
+        fullConfig
+      }
+    }.getOrElse(fullConfig)
   }
 
   private def readConfig(args: Args): Config = {
@@ -126,7 +143,9 @@ object ErgoSettings extends ScorexLogging
             source.close()
             dest.close()
 
-            sys.addShutdownHook { new File(destDir, confName).delete }
+            sys.addShutdownHook {
+              new File(destDir, confName).delete
+            }
 
             fileOut
           }

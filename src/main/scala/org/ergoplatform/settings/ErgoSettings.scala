@@ -82,6 +82,32 @@ object ErgoSettings extends ScorexLogging
     )
   }
 
+  // Helper method to read user-provided `configFile` with network-specific `fallbackConfig`
+  // to be used before
+
+  private def configWithOverrides(configFile: File, fallbackConfig: Option[File]) = {
+    val firstFallBack = fallbackConfig.map(ConfigFactory.parseFile).getOrElse(ConfigFactory.defaultApplication())
+
+    val cfg = ConfigFactory.parseFile(configFile)
+
+    // Check that user-provided Ergo directory exists and has write access (if provided at all)
+    Try(cfg.getString("ergo.directory")).foreach { ergoDirName =>
+      require(new File(s"$ergoDirName").canWrite, s"Folder $ergoDirName does not exist or not writable")
+    }
+
+    // Check that user-provided wallet secret directory exists and has read access (if provided at all)
+    Try(cfg.getString("ergo.wallet.secretStorage.secretDir")).foreach { secretDirName =>
+      require(new File(s"$secretDirName").canRead, s"Folder $secretDirName does not exist or not readable")
+    }
+
+    ConfigFactory
+      .defaultOverrides()
+      .withFallback(cfg)
+      .withFallback(firstFallBack)
+      .withFallback(ConfigFactory.defaultReference())
+      .resolve()
+  }
+
   private def readConfig(args: Args): Config = {
 
     val networkConfigFileOpt = args.networkTypeOpt
@@ -126,22 +152,10 @@ object ErgoSettings extends ScorexLogging
           .resolve()
       // application config needs to be resolved wrt both system properties *and* user-supplied config.
       case (Some(networkConfigFile), Some(file)) =>
-        val cfg = ConfigFactory.parseFile(file)
-        ConfigFactory
-          .defaultOverrides()
-          .withFallback(cfg)
-          .withFallback(ConfigFactory.parseFile(networkConfigFile))
-          .withFallback(ConfigFactory.defaultReference())
-          .resolve()
+        configWithOverrides(file, Some(networkConfigFile))
       case (None, Some(file)) =>
-        val cfg = ConfigFactory.parseFile(file)
-        ConfigFactory
-          .defaultOverrides()
-          .withFallback(cfg)
-          .withFallback(ConfigFactory.defaultApplication())
-          .withFallback(ConfigFactory.defaultReference())
-          .resolve()
-      case _ =>
+        configWithOverrides(file, None)
+      case (None, None) =>
         ConfigFactory.load()
     }
   }

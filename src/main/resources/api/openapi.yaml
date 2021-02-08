@@ -396,6 +396,24 @@ components:
         address:
           $ref: '#/components/schemas/ErgoAddress'
 
+    BoxesRequestHolder:
+      description: Holds request for wallet boxes
+      type: object
+      required:
+        - targetAssets
+        - targetBalance
+      properties:
+        targetAssets:
+          description: Target assets
+          type: array
+          items:
+            description: Pair of TokenId and Long
+            type: array
+        targetBalance:
+          description: Target balance
+          type: integer
+          format: int64
+
     RequestsHolder:
       description: Holds many transaction requests and transaction fee
       type: object
@@ -3239,6 +3257,37 @@ paths:
       responses:
         '200':
           description: A list of all wallet-related boxes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletBox'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/boxes/collect:
+    get:
+      security:
+        - ApiKeyAuth: [ api_key ]
+      summary: Get a list of collected boxes.
+      operationId: walletBoxesCollect
+      tags:
+        - wallet
+      requestBody:
+        description: This API method recieves balance and assets, according to which, it's collecting result
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BoxesRequestHolder'
+      responses:
+        '200':
+          description: A list of all collected boxes
           content:
             application/json:
               schema:

@@ -7,8 +7,6 @@ import org.ergoplatform.wallet.secrets.DerivationPath;
 import org.ergoplatform.wallet.secrets.ExtendedPublicKey;
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey;
 import scala.Option;
-import sigmastate.Values;
-import sigmastate.basics.DLogProtocol;
 
 
 public class AdressGenerationDemo {
@@ -48,4 +46,5 @@ public class AdressGenerationDemo {
 
         DerivationPath firstUserPath = nextPath(rootSecret, changePath);
     }
+
 }

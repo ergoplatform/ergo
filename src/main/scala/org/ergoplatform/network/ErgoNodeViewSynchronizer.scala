@@ -1,6 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorRefFactory, Props}
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
@@ -22,7 +23,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 /**
-  * Tweaks on top of Scorex' NodeViewSynchronizer made for optimizing Ergo network
+  * Tweaks on top of Scorex' NodeViewSynchronizer made to optimize Ergo network
   */
 class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
@@ -144,7 +145,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
     mod match {
-      case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) => fb.toSeq.foreach(s => broadcastModifierInv(s))
+      case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 2.hours) => fb.toSeq.foreach(s => broadcastModifierInv(s))
       case _ =>
     }
   }

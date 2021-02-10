@@ -4,8 +4,7 @@ import java.net.InetSocketAddress
 
 import akka.actor.{ActorRef, PoisonPill, ActorSystem}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler}
-import akka.stream.{Materializer, SystemMaterializer}
+import akka.stream.SystemMaterializer
 import org.ergoplatform.http._
 import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.http.api.{ScanApiRoute, _}
@@ -37,10 +36,6 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val ergoSettings: ErgoSettings = ErgoSettings.read(args)
 
   implicit private def settings: ScorexSettings = ergoSettings.scorexSettings
-
-  implicit def exceptionHandler: ExceptionHandler = ApiErrorHandler.exceptionHandler
-
-  implicit def rejectionHandler: RejectionHandler = ApiRejectionHandler.rejectionHandler
 
   implicit private val actorSystem: ActorSystem = ActorSystem(settings.network.agentName)
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
@@ -121,7 +116,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
     UtxoApiRoute(readersHolderRef, settings.restApi),
     ScriptApiRoute(readersHolderRef, ergoSettings),
-    ScanApiRoute(readersHolderRef, ergoSettings)
+    ScanApiRoute(readersHolderRef, ergoSettings),
+    NodeApiRoute(ergoSettings)
   ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
 
 

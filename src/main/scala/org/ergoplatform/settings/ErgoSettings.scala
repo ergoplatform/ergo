@@ -85,8 +85,7 @@ object ErgoSettings extends ScorexLogging
   }
 
   // Helper method to read user-provided `configFile` with network-specific `fallbackConfig`
-  // to be used before
-
+  // to be used for default fallback values before reference.conf (which is the last resort)
   private def configWithOverrides(configFile: File, fallbackConfig: Option[File]) = {
     val firstFallBack = fallbackConfig.map(ConfigFactory.parseFile).getOrElse(ConfigFactory.defaultApplication())
 

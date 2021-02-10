@@ -1,6 +1,5 @@
 package org.ergoplatform
 
-import java.io.File
 import java.net.InetSocketAddress
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
@@ -35,6 +34,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
   log.info(s"Running with args: $args")
 
   private val ergoSettings: ErgoSettings = ErgoSettings.read(args)
+
+  require(ergoSettings.scorexSettings.restApi.apiKeyHash.isDefined, "API key hash must be set")
 
   log.info(s"Working directory: ${ergoSettings.directory}")
   log.info(s"Secret directory: ${ergoSettings.walletSettings.secretStorage.secretDir}")

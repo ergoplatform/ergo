@@ -83,7 +83,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Helper method which is deciding whether chain is likely nearly of fully synchronized with the network
+    * Helper method which is deciding whether chain is likely nearly or fully synchronized with the network
     */
   private def chainAlmostDownloaded: Boolean = {
     historyReaderOpt.exists { historyReader =>

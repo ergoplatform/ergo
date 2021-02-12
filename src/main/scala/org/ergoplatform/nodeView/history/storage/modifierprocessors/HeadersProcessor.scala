@@ -81,8 +81,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
 
-  def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
-
   /**
     * @param h - header to process
     * @return ProgressInfo - info required for State to be consistent with History
@@ -170,6 +168,20 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     .map(BigInt.apply)
 
   /**
+    * Get main chain header id
+    * @param height - height to get header id at
+    * @return - header id or None
+    */
+  def bestHeaderIdAtHeight(height: Int): Option[ModifierId] = {
+    historyStorage.getIndex(heightIdsKey(height: Int)).map { bs =>
+      // in 99% cases bs.length == 32 (no orphaned headers)
+      if (bs.length == 32) bs else bs.take(32)
+    }.map(bytesToId)
+  }
+
+  /**
+    * @note this method implementation should be changed along with `bestHeaderIdAtHeight`
+    *
     * @param height - block height
     * @return ids of headers on chosen height.
     *         Seq.empty we don't have any headers on this height (e.g. it is too big or we bootstrap in PoPoW regime)

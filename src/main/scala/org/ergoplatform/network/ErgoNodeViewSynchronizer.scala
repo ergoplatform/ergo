@@ -47,7 +47,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Approximate number of modifiers to be downloaded simultaneously
     */
-  protected val desiredSizeOfExpectingQueue: Int = networkSettings.desiredInvObjects
+  protected val desiredSizeOfExpectingQueue: Int = networkSettings.desiredInvObjects * 2
 
   override def preStart(): Unit = {
     val toDownloadCheckInterval = networkSettings.syncInterval
@@ -249,7 +249,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * - block sections, if our headers chain is synced
     */
   override protected def requestMoreModifiers(applied: Seq[ErgoPersistentModifier]): Unit = {
-    super.requestMoreModifiers(applied)
     if (deliveryTracker.requestedSize < desiredSizeOfExpectingQueue / 2) {
       historyReaderOpt foreach { h =>
         if (h.isHeadersChainSynced) {

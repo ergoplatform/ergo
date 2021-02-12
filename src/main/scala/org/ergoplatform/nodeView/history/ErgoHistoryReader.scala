@@ -124,35 +124,32 @@ trait ErgoHistoryReader
   }
 
   /**
-    * @param info other's node sync info
+    * @param syncInfo other's node sync info
     * @param size max return size
     * @return Ids of headers, that node with info should download and apply to synchronize
     */
-  override def continuationIds(info: ErgoSyncInfo, size: Int): ModifierIds =
+  override def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds =
     if (isEmpty) {
-      info.startingPoints
-    } else if (info.lastHeaderIds.isEmpty) {
-      val heightFrom = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
-      headerIdsAtHeight(heightFrom).headOption.toSeq.flatMap { startId =>
-        typedModifierById[Header](startId).toSeq.flatMap { startHeader =>
-          val headers = headerChainBack(size, startHeader, _ => false)
-            .ensuring(_.headers.exists(_.isGenesis), "Should always contain genesis header")
-          headers.headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
-        }
+      // if no any header applied yet, return identifiers from other node's sync info
+      syncInfo.startingPoints
+    } else if (syncInfo.lastHeaderIds.isEmpty) {
+      // if other node has no headers yet, send up to `size` headers from genesis
+      val heightTo = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
+      (ErgoHistory.GenesisHeight to heightTo).flatMap { height =>
+        bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
       }
     } else {
-      val ids = info.lastHeaderIds
+      // else, find common header with the other node and send up to `size` headers from it
+      val ids = syncInfo.lastHeaderIds
       val branchingPointOpt: Option[ModifierId] = ids.view.reverse
         .find(m => isInBestChain(m))
         .orElse(if (ids.contains(PreGenesisHeader.id)) Some(PreGenesisHeader.id) else None)
       branchingPointOpt.toSeq.flatMap { branchingPoint =>
         val otherNodeHeight = heightOf(branchingPoint).getOrElse(PreGenesisHeader.height)
-        val heightFrom = Math.min(headersHeight, otherNodeHeight + size)
-        val startId = headerIdsAtHeight(heightFrom).head
-        val startHeader = typedModifierById[Header](startId).get
-        val headerIds = headerChainBack(size, startHeader, _.parentId == branchingPointOpt)
-          .headers.map(Header.modifierTypeId -> _.id)
-        headerIds
+        val heightTo = Math.min(headersHeight, otherNodeHeight + size)
+        ((otherNodeHeight + 1) to heightTo).flatMap { height =>
+          bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
+        }
       }
     }
 
@@ -206,8 +203,9 @@ trait ErgoHistoryReader
   /**
     * @return ids of count headers starting from offset
     */
-  def headerIdsAt(offset: Int = 0, limit: Int): Seq[ModifierId] = (offset until (limit + offset))
-    .flatMap(h => headerIdsAtHeight(h).headOption)
+  def headerIdsAt(offset: Int = 0, limit: Int): Seq[ModifierId] = {
+    (offset until (limit + offset)).flatMap(height => bestHeaderIdAtHeight(height))
+  }
 
   override def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
     modifier match {

@@ -169,14 +169,21 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   /**
     * Get main chain header id
+    *
+    * Optimized version of headerIdsAtHeight(height).headOption
+    *
     * @param height - height to get header id at
     * @return - header id or None
     */
   def bestHeaderIdAtHeight(height: Int): Option[ModifierId] = {
     historyStorage.getIndex(heightIdsKey(height: Int)).map { bs =>
       // in 99% cases bs.length == 32 (no orphaned headers)
-      if (bs.length == 32) bs else bs.take(32)
-    }.map(bytesToId)
+      if (bs.length == 32) {
+        bytesToId(bs)
+      } else {
+        bytesToId(bs.take(32))
+      }
+    }
   }
 
   /**

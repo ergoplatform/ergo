@@ -7,22 +7,27 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownloa
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.{Constants, ErgoSettings}
+import scorex.core.NodeViewHolder.ReceivableMessages.{ModifiersFromRemote, TransactionsFromRemote}
 import scorex.core.NodeViewHolder._
-import scorex.core.{ModifierTypeId, PersistentNodeViewModifier}
+import scorex.core.network.ModifiersStatus.Requested
+import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
-import scorex.core.network.message.{InvData, Message}
-import scorex.core.network.{ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToRandom}
+import scorex.core.network.message.{InvData, Message, ModifiersData}
+import scorex.core.network.{Broadcast, ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToRandom}
+import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
+import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import scala.util.{Failure, Success}
 
 /**
-  * Tweaks on top of Scorex' NodeViewSynchronizer made for optimizing Ergo network
+  * Tweaks on top of Scorex' NodeViewSynchronizer made to optimize Ergo network
   */
 class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
@@ -75,6 +80,130 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     deliveryTracker.setRequested(modifierIds, modifierTypeId, None)
     val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
     networkControllerRef ! SendToNetwork(msg, SendToRandom)
+  }
+
+  /**
+    * Helper method which is deciding whether chain is likely nearly or fully synchronized with the network
+    */
+  private def chainAlmostDownloaded: Boolean = {
+    historyReaderOpt.exists { historyReader =>
+      (historyReader.headersHeight - historyReader.fullBlockHeight < 3) &&
+       historyReader.bestHeaderOpt.exists(_.isNew(timeProvider, 1.hour))
+    }
+  }
+
+  /**
+    * Logic to process block parts got from another peer.
+    * Filter out non-requested block parts (with a penalty to spamming peer),
+    * parse block parts and send valid modifiers to NodeViewHolder
+    *
+    * Also, re-announce new blocks.
+    */
+  override protected def modifiersFromRemote(data: ModifiersData, remote: ConnectedPeer): Unit = {
+    val typeId = data.typeId
+    val modifiers = data.modifiers
+    log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: $remote")
+    log.trace(s"Received modifier ids ${modifiers.keySet.map(encoder.encodeId).mkString(",")}")
+
+    // filter out non-requested modifiers
+    val requestedModifiers = processSpam(remote, typeId, modifiers)
+
+    Constants.modifierSerializers.get(typeId) match {
+      case Some(serializer: ScorexSerializer[ErgoTransaction]@unchecked) if typeId == Transaction.ModifierTypeId =>
+        // parse all transactions and send them to node view holder
+        val parsed: Iterable[ErgoTransaction] = parseModifiers(requestedModifiers, serializer, remote)
+        viewHolderRef ! TransactionsFromRemote(parsed)
+
+      case Some(serializer: ScorexSerializer[ErgoPersistentModifier]@unchecked) =>
+        // parse all modifiers and put them to modifiers cache
+        val parsed: Iterable[ErgoPersistentModifier] = parseModifiers(requestedModifiers, serializer, remote)
+        val valid = parsed.filter(validateAndSetStatus(remote, _))
+        if (valid.nonEmpty) viewHolderRef ! ModifiersFromRemote[ErgoPersistentModifier](valid)
+
+        // If chain is synced or almost synced, announce new modifiers received.
+        // Helping to push new blocks around the network faster.
+        if (chainAlmostDownloaded) {
+          val toAnnounce = valid.map(_.id).toSeq
+          log.info(s"Announcing recent modifiers: ${toAnnounce.size}, type: $typeId}")
+          val msg = Message(invSpec, Right(InvData(typeId, toAnnounce)), None)
+          networkControllerRef ! SendToNetwork(msg, Broadcast)
+        }
+
+      case _ =>
+        log.error(s"Undefined serializer for modifier of type $typeId")
+    }
+  }
+
+  /**
+    * Currently just a copy from private method in basic trait! Will be optimized in future likely.
+    *
+    * Parse modifiers using specified serializer, check that its id is equal to the declared one,
+    * penalize misbehaving peer for every incorrect modifier,
+    * call deliveryTracker.onReceive() for every correct modifier to update its status
+    *
+    * @return collection of parsed modifiers
+    */
+  def parseModifiers[M <: NodeViewModifier](modifiers: Map[ModifierId, Array[Byte]],
+                                            serializer: ScorexSerializer[M],
+                                            remote: ConnectedPeer): Iterable[M] = {
+    modifiers.flatMap { case (id, bytes) =>
+      serializer.parseBytesTry(bytes) match {
+        case Success(mod) if id == mod.id =>
+          Some(mod)
+        case _ =>
+          // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
+          penalizeMisbehavingPeer(remote)
+          log.warn(s"Failed to parse modifier with declared id ${encoder.encodeId(id)} from ${remote.toString}")
+          None
+      }
+    }
+  }
+
+  /**
+    * Currently just copy from private method in basic trait! Will be optimized in future likely.
+    *
+    * Get modifiers from remote peer, filter out spam modifiers and penalize peer for spam
+    *
+    * @return ids and bytes of modifiers that were requested by our node
+    */
+  private def processSpam(remote: ConnectedPeer,
+                          typeId: ModifierTypeId,
+                          modifiers: Map[ModifierId, Array[Byte]]): Map[ModifierId, Array[Byte]] = {
+    val (requested, spam) = modifiers.partition { case (id, _) =>
+      deliveryTracker.status(id) == Requested
+    }
+
+    if (spam.nonEmpty) {
+      log.info(s"Spam attempt: peer $remote has sent a non-requested modifiers of type $typeId with ids" +
+        s": ${spam.keys.map(encoder.encodeId)}")
+      penalizeSpammingPeer(remote)
+    }
+    requested
+  }
+
+  /**
+    * Currently just copy from private method in basic trait! Will be optimized in future likely.
+    *
+    * Move `pmod` to `Invalid` if it is permanently invalid, to `Received` otherwise
+    */
+  private def validateAndSetStatus(remote: ConnectedPeer, pmod: ErgoPersistentModifier): Boolean = {
+    historyReaderOpt match {
+      case Some(hr) =>
+        hr.applicableTry(pmod) match {
+          case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
+            log.warn(s"Modifier ${pmod.encodedId} is permanently invalid", e)
+            deliveryTracker.setInvalid(pmod.id)
+            penalizeMisbehavingPeer(remote)
+            false
+          case _ =>
+            deliveryTracker.setReceived(pmod.id, remote)
+            true
+        }
+      case None =>
+        log.error("Got modifier while history reader is not ready")
+        deliveryTracker.setReceived(pmod.id, remote)
+        true
+    }
   }
 
   /**

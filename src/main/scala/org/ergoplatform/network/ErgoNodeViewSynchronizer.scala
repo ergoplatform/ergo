@@ -45,7 +45,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val networkSettings: NetworkSettings = settings.scorexSettings.network
 
   /**
-    * Approximate number of modifiers to be downloaded simultaneously
+    * Approximate number of modifiers to be downloaded simultaneously.
+    * Set to be max objects in get-modifiers networking message * 2 to minimize chance of empty cache.
     */
   protected val desiredSizeOfExpectingQueue: Int = networkSettings.desiredInvObjects * 2
 

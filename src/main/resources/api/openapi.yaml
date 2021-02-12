@@ -2128,7 +2128,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-
   /blocks/{headerId}/proofFor/{txId}:
     get:
       summary: Get Merkle proof for transaction

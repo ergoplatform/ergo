@@ -210,7 +210,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         costLimit = maxCost - addExact(currentTxCost, accumulatedCost),
         initCost = 0)
 
+      val vs0 = System.currentTimeMillis()
+      println("tree: " + box.ergoTree)
       val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
+      val vs = System.currentTimeMillis()
+      println("Verification time: " + (vs-vs0))
       costTry.recover { case t =>
         log.debug(s"Tx verification failed: ${t.getMessage}")
       }

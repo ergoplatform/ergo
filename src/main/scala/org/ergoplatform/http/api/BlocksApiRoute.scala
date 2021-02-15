@@ -73,7 +73,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
           BlockTransactions.modifierTypeId,
           headerId,
           header.transactionsRoot.asInstanceOf[Array[Byte]]
-      )
+        )
         getModifierById(blockTxsId).map {
           case Some(txs: BlockTransactions) => txs.proofFor(txId)
           case _ => None

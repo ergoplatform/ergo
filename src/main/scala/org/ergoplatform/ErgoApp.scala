@@ -2,7 +2,7 @@ package org.ergoplatform
 
 import java.net.InetSocketAddress
 
-import akka.actor.{ActorRef, PoisonPill, ActorSystem}
+import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.http.scaladsl.Http
 import akka.stream.SystemMaterializer
 import org.ergoplatform.http._
@@ -10,16 +10,16 @@ import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.http.api.{ScanApiRoute, _}
 import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMinerRef
-import org.ergoplatform.network.{ModeFeature, ErgoNodeViewSynchronizer}
+import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.{ErgoReadersHolderRef, ErgoNodeViewRef}
-import org.ergoplatform.settings.{Args, NetworkType, ErgoSettings}
+import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
 import scorex.core.app.{Application, ScorexContext}
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
 import scorex.core.network.message._
 import scorex.core.network.peer.PeerManagerRef
-import scorex.core.network.{PeerSynchronizerRef, UPnP, UPnPGateway, PeerFeature, NetworkControllerRef}
+import scorex.core.network.{NetworkControllerRef, PeerFeature, PeerSynchronizerRef, UPnP, UPnPGateway}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
@@ -27,13 +27,18 @@ import scorex.util.ScorexLogging
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 import scala.io.Source
-import scala.util.{Success, Failure}
+import scala.util.{Failure, Success}
 
 class ErgoApp(args: Args) extends ScorexLogging {
 
   log.info(s"Running with args: $args")
 
   private val ergoSettings: ErgoSettings = ErgoSettings.read(args)
+
+  require(ergoSettings.scorexSettings.restApi.apiKeyHash.isDefined, "API key hash must be set")
+
+  log.info(s"Working directory: ${ergoSettings.directory}")
+  log.info(s"Secret directory: ${ergoSettings.walletSettings.secretStorage.secretDir}")
 
   implicit private def settings: ScorexSettings = ergoSettings.scorexSettings
 

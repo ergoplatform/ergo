@@ -57,10 +57,17 @@ object Utils {
       }
       .toIndexedSeq
 
+    val dataInputs = IndexedSeq.empty
+    val outputs = if (changeAmt == 0) {
+      IndexedSeq(payTo, fee)
+    } else {
+      IndexedSeq(payTo, change, fee)
+    }
+
     new UnsignedErgoLikeTransaction(
       unsignedInputs,
-      IndexedSeq(),
-      IndexedSeq(payTo, change, fee)
+      dataInputs,
+      outputs
     )
   }
 

@@ -77,7 +77,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     * (i.e. height of a last block applied to the state, not the wallet)
     * Wallet's height may be behind it.
     */
-  private var fullHeight: Int = ErgoHistory.EmptyHistoryHeight
+  private var fullHeight: Int = stateContext.currentHeight
   private var parameters: Parameters = LaunchParameters
 
   /**

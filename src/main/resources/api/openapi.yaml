@@ -1414,11 +1414,10 @@ components:
         levels:
           type: array
           items:
-            type: string
-            description: internal node with direction byte prepended
-            example: '018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337'
-          example: ['018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337']
-
+            type: array
+            description: pairs of hash and side of hash
+            example: ['018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337', 0]
+          example: [['018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337', 0]]
 
     ProofOfUpcomingTransactions:
       type: object
@@ -2147,6 +2146,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /blocks/{headerId}/proofFor/{txId}:
+    get:
+      summary: Get Merkle proof for transaction
+      operationId: getProofForTx
+      tags:
+        - blocks
+      parameters:
+        - in: path
+          name: headerId
+          required: true
+          description: ID of a wanted block transactions
+          schema:
+            type: string
+        - in: path
+          name: txId
+          required: true
+          description: ID of a wanted transaction
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Merkle proof object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerkleProof'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 
   /blocks/lastHeaders/{count}:
     get:

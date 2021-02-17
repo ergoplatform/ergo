@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
-import akka.actor.{Actor, ActorRef}
+import akka.actor.SupervisorStrategy.{Restart, Stop}
+import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, DeathPactException, OneForOneStrategy}
 import cats.Traverse
 import com.google.common.hash.BloomFilter
 import org.ergoplatform.ErgoBox._
@@ -86,6 +87,22 @@ class ErgoWalletActor(settings: ErgoSettings,
   private def walletHeight(): Int = {
     registry.fetchDigest().height
   }
+
+  override val supervisorStrategy: OneForOneStrategy =
+    OneForOneStrategy(maxNrOfRetries = 5, withinTimeRange = 1.minute) {
+      case _: ActorKilledException =>
+        log.info("Wallet actor got KILL message")
+        Stop
+      case _: DeathPactException =>
+        log.info("Wallet actor forced to stop")
+        Stop
+      case e: ActorInitializationException =>
+        log.error(s"Wallet failed during initialization with: $e")
+        Stop
+      case e: Exception =>
+        log.error(s"Walet failed with: $e")
+        Restart
+    }
 
   override def postRestart(reason: Throwable): Unit = {
     log.error(s"Wallet actor restarted due to ${reason.getMessage}", reason)

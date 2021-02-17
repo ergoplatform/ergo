@@ -39,6 +39,7 @@ import sigmastate.eval._
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
+import scala.concurrent.duration._
 
 
 class ErgoWalletActor(settings: ErgoSettings,

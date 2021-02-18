@@ -28,7 +28,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
 
   import ReplaceCompactCollectBoxSelector._
 
-  val ScanDepthFactor = 10
+  val ScanDepthFactor = 20
 
   /**
     * A method which is selecting boxes to spend in order to collect needed amounts of ergo tokens and assets.

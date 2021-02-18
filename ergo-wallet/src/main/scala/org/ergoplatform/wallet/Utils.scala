@@ -1,9 +1,8 @@
 package org.ergoplatform.wallet
 
-import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
+import org.ergoplatform.{ErgoAddress, ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, UnsignedErgoLikeTransaction, UnsignedInput}
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
-import sigmastate.Values.TrueLeaf
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 
@@ -37,7 +36,7 @@ object Utils {
     )
     val fee = new ErgoBoxCandidate(
       feeAmt,
-      TrueLeaf.toSigmaProp,
+      ErgoScriptPredef.feeProposition(),
       currentHeight,
       Seq.empty[(ErgoBox.TokenId, Long)].toColl,
       Map.empty

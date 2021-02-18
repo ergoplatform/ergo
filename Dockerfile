@@ -1,12 +1,16 @@
 FROM mozilla/sbt:11.0.8_1.3.13 as builder
-COPY ["build.sbt", "/ergo/"]
-COPY ["project", "/ergo/project"]
-RUN sbt -Dsbt.rootdir=true update
-COPY . /ergo
-WORKDIR /ergo
-RUN sbt -Dsbt.rootdir=true assembly
-RUN mv `find . -name ergo-*.jar` /ergo.jar
-CMD ["java", "-jar", "/ergo.jar"]
+WORKDIR /mnt
+COPY build.sbt findbugs-exclude.xml ./
+COPY project/ project/
+COPY avldb/build.sbt avldb/build.sbt
+COPY avldb/project/ avldb/project/
+COPY ergo-wallet/build.sbt ergo-wallet/build.sbt
+COPY ergo-wallet/project/ ergo-wallet/project/
+COPY benchmarks/build.sbt benchmarks/build.sbt
+RUN sbt update
+COPY . ./
+RUN sbt assembly
+RUN mv `find . -name ergo-*.jar` ergo.jar
 
 FROM openjdk:11-jre-slim
 RUN adduser --disabled-password --home /home/ergo --uid 9052 --gecos "ErgoPlatform" ergo && \
@@ -17,5 +21,5 @@ WORKDIR /home/ergo
 VOLUME ["/home/ergo/.ergo"]
 ENV MAX_HEAP 3G
 ENV _JAVA_OPTIONS "-Xmx${MAX_HEAP}"
-COPY --from=builder /ergo.jar /home/ergo/ergo.jar
+COPY --from=builder /mnt/ergo.jar /home/ergo/ergo.jar
 ENTRYPOINT ["java", "-jar", "/home/ergo/ergo.jar"]

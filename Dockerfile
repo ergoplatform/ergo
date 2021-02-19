@@ -1,32 +1,25 @@
-FROM openjdk:11-jdk-slim as builder
-ENV DEBIAN_FRONTEND noninteractive
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends apt-transport-https apt-utils bc dirmngr gnupg && \
-    echo "deb https://dl.bintray.com/sbt/debian /" | tee -a /etc/apt/sources.list.d/sbt.list && \
-    apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 2EE0EA64E40A89B84B2DF73499E82A75642AC823 && \
-    # seems that dash package upgrade is broken in Debian, so we hold it's version before update
-    echo "dash hold" | dpkg --set-selections && \
-    apt-get update && \
-    apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends sbt
-COPY ["build.sbt", "/ergo/"]
-COPY ["project", "/ergo/project"]
-RUN sbt -Dsbt.rootdir=true update
-COPY . /ergo
-WORKDIR /ergo
-RUN sbt -Dsbt.rootdir=true assembly
-RUN mv `find . -name ergo-*.jar` /ergo.jar
-CMD ["java", "-jar", "/ergo.jar"]
+FROM mozilla/sbt:11.0.8_1.3.13 as builder
+WORKDIR /mnt
+COPY build.sbt findbugs-exclude.xml ./
+COPY project/ project/
+COPY avldb/build.sbt avldb/build.sbt
+COPY avldb/project/ avldb/project/
+COPY ergo-wallet/build.sbt ergo-wallet/build.sbt
+COPY ergo-wallet/project/ ergo-wallet/project/
+COPY benchmarks/build.sbt benchmarks/build.sbt
+RUN sbt update
+COPY . ./
+RUN sbt assembly
+RUN mv `find . -name ergo-*.jar` ergo.jar
 
 FROM openjdk:11-jre-slim
-LABEL maintainer="Andrey Andreev <andyceo@yandex.ru> (@andyceo)"
 RUN adduser --disabled-password --home /home/ergo --uid 9052 --gecos "ErgoPlatform" ergo && \
     install -m 0750 -o ergo -g ergo -d /home/ergo/.ergo
-COPY --from=builder /ergo.jar /home/ergo/ergo.jar
 USER ergo
-EXPOSE 9020 9052
+EXPOSE 9020 9052 9030 9053
 WORKDIR /home/ergo
 VOLUME ["/home/ergo/.ergo"]
 ENV MAX_HEAP 3G
-ENTRYPOINT java -Xmx${MAX_HEAP} -jar /home/ergo/ergo.jar $0 $1 $2 $3
-CMD []
+ENV _JAVA_OPTIONS "-Xmx${MAX_HEAP}"
+COPY --from=builder /mnt/ergo.jar /home/ergo/ergo.jar
+ENTRYPOINT ["java", "-jar", "/home/ergo/ergo.jar"]

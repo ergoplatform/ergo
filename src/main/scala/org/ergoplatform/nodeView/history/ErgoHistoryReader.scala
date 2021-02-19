@@ -123,6 +123,8 @@ trait ErgoHistoryReader
     }
   }
 
+  var savedMem = 0L
+
   /**
     * @param syncInfo other's node sync info
     * @param size max return size
@@ -145,9 +147,11 @@ trait ErgoHistoryReader
         .find(m => isInBestChain(m))
         .orElse(if (ids.contains(PreGenesisHeader.id)) Some(PreGenesisHeader.id) else None)
       branchingPointOpt.toSeq.flatMap { branchingPoint =>
-        val otherNodeHeight = heightOf(branchingPoint).getOrElse(PreGenesisHeader.height)
+        val otherNodeHeight = heightOf(branchingPoint).getOrElse(ErgoHistory.GenesisHeight)
         val heightTo = Math.min(headersHeight, otherNodeHeight + size)
-        ((otherNodeHeight + 1) to heightTo).flatMap { height =>
+        savedMem += size * 300
+        println(s"$size headers serializations avoided, $savedMem bytes saved in total")
+        (otherNodeHeight to heightTo).flatMap { height =>
           bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
         }
       }

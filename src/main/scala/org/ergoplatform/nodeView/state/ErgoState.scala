@@ -115,7 +115,8 @@ object ErgoState extends ScorexLogging {
         accCostTry
     }
 
-    if(currentStateContext.blockVersion == 1){
+    if (currentStateContext.blockVersion == 1 &&
+          currentStateContext.ergoSettings.optimizations.skipV1TransactionsValidation) {
       Valid(0L)
     } else {
       execTx(transactions.toList, Valid[Long](0L))

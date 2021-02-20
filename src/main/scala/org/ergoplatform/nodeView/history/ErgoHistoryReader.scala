@@ -123,7 +123,6 @@ trait ErgoHistoryReader
     }
   }
 
-  var savedMem = 0L
 
   /**
     * @param syncInfo other's node sync info
@@ -149,16 +148,9 @@ trait ErgoHistoryReader
       branchingPointOpt.toSeq.flatMap { branchingPoint =>
         val otherNodeHeight = heightOf(branchingPoint).getOrElse(ErgoHistory.GenesisHeight)
         val heightTo = Math.min(headersHeight, otherNodeHeight + size)
-        val res = (otherNodeHeight to heightTo).flatMap { height =>
+        (otherNodeHeight + 1 to heightTo).flatMap { height =>
           bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
         }
-        savedMem += res.size * 300
-        println(s"${res.size} headers serializations avoided, $savedMem bytes saved in total")
-
-        println("Branching position: " + res.zipWithIndex.find(_._1._2 == branchingPoint).map(_._2) +
-          ", branchingPoint: " + branchingPoint +
-          ", res sise " + res.size)
-        res
       }
     }
 

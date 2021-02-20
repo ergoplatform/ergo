@@ -328,7 +328,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     }
 
     private def checkpointV2Condition(header: Header): Boolean = {
-      if(header.height == 417792 && settings.networkType.isMainNet){
+      if (header.height == 417792 && settings.networkType.isMainNet) {
         header.id == "0ba60a7db44877aade553beb05200f7d67b586945418d733e455840d283e0508"
       } else {
         true

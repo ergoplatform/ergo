@@ -123,6 +123,7 @@ trait ErgoHistoryReader
     }
   }
 
+
   /**
     * @param syncInfo other's node sync info
     * @param size max return size
@@ -139,15 +140,15 @@ trait ErgoHistoryReader
         bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
       }
     } else {
-      // else, find common header with the other node and send up to `size` headers from it
+      // else, find common header with the other node and send up to `size` headers from it (including the point)
       val ids = syncInfo.lastHeaderIds
       val branchingPointOpt: Option[ModifierId] = ids.view.reverse
         .find(m => isInBestChain(m))
         .orElse(if (ids.contains(PreGenesisHeader.id)) Some(PreGenesisHeader.id) else None)
       branchingPointOpt.toSeq.flatMap { branchingPoint =>
-        val otherNodeHeight = heightOf(branchingPoint).getOrElse(PreGenesisHeader.height)
+        val otherNodeHeight = heightOf(branchingPoint).getOrElse(ErgoHistory.GenesisHeight)
         val heightTo = Math.min(headersHeight, otherNodeHeight + size)
-        ((otherNodeHeight + 1) to heightTo).flatMap { height =>
+        (otherNodeHeight + 1 to heightTo).flatMap { height =>
           bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
         }
       }

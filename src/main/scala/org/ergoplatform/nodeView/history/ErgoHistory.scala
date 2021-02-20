@@ -193,7 +193,7 @@ object ErgoHistory extends ScorexLogging {
   val CharsetName = "UTF-8"
 
   val EmptyHistoryHeight: Int = 0
-  val GenesisHeight: Int = EmptyHistoryHeight + 1
+  val GenesisHeight: Int = EmptyHistoryHeight + 1 // first block has height == 1
 
   def heightOf(headerOpt: Option[Header]): Int = headerOpt.map(_.height).getOrElse(EmptyHistoryHeight)
 

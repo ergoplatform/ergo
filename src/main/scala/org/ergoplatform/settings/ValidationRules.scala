@@ -257,6 +257,7 @@ object ValidationRules {
   val hdrVotesDuplicates: Short = 213
   val hdrVotesContradictory: Short = 214
   val hdrVotesUnknown: Short = 215
+  val hdrCheckpointV2: Short = 216
 
   // block sections validation
   val alreadyApplied: Short = 300

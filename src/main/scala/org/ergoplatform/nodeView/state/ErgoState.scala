@@ -1,11 +1,9 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-import java.util.Date
 
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, R4, TokenId}
 import org.ergoplatform._
-import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
@@ -14,10 +12,9 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Args, ChainSettings, Constants, ErgoSettings, NetworkType}
+import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.MinimalState
-import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.core.{VersionTag, idToVersion}

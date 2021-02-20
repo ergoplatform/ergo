@@ -1,23 +1,19 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-import java.util.Date
-
 import cats.Traverse
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
-import org.ergoplatform.settings.{Algos, Args, ErgoSettings, NetworkType, VotingSettings}
+import org.ergoplatform.settings.{Algos, VotingSettings}
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
 import scorex.core.transaction.state.TransactionValidation
-import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
+import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}

@@ -116,7 +116,7 @@ object ErgoState extends ScorexLogging {
     }
 
     if (currentStateContext.blockVersion == 1 &&
-          currentStateContext.ergoSettings.optimizations.skipV1TransactionsValidation) {
+          currentStateContext.ergoSettings.nodeSettings.skipV1TransactionsValidation) {
       Valid(0L)
     } else {
       execTx(transactions.toList, Valid[Long](0L))

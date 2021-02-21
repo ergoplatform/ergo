@@ -137,6 +137,10 @@ object ValidationRules {
     hdrVotesUnknown -> RuleStatus(s => fatal(s"First header of an epoch should not contain a vote for unknown parameter. $s"),
       Seq(classOf[Header]),
       mayBeDisabled = true),
+    hdrCheckpointV2 -> RuleStatus(s => fatal(s"First version 2 header on the mainnet on height 417,729 should have " +
+      s"ID = 0ba60a7db44877aade553beb05200f7d67b586945418d733e455840d283e0508. $s"),
+      Seq(classOf[Header]),
+      mayBeDisabled = false),
 
     // block sections validation
     bsNoHeader -> RuleStatus(s => recoverable(s"A header for a modifier $s is not defined"),

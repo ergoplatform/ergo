@@ -51,8 +51,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val desiredSizeOfExpectingQueue: Int = networkSettings.desiredInvObjects * 2
 
   override def preStart(): Unit = {
-    val toDownloadCheckInterval = networkSettings.syncInterval
     super.preStart()
+    val toDownloadCheckInterval = networkSettings.syncInterval
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
   }
@@ -79,6 +79,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   //  asking from a random peer
   override protected def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
     deliveryTracker.setRequested(modifierIds, modifierTypeId, None)
+
     val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
     networkControllerRef ! SendToNetwork(msg, SendToRandom)
   }

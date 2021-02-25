@@ -29,6 +29,9 @@ import sigmastate.interpreter._
 import sigmastate.interpreter.CryptoConstants.EcPointType
 import io.circe.syntax._
 import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
+import scorex.crypto.authds.{LeafData, Side}
+import scorex.crypto.authds.merkle.MerkleProof
+import scorex.crypto.hash.Digest
 import sigmastate.serialization.OpCodes
 import special.sigma.AnyValue
 
@@ -40,6 +43,19 @@ trait ApiCodecs extends JsonCodecs {
   def fromValidation[T](validationResult: ValidationResult[T])
                        (implicit cursor: ACursor): Either[DecodingFailure, T] = {
     fromTry(validationResult.toTry)
+  }
+
+  implicit val leafDataEncoder: Encoder[LeafData] = xs => Base16.encode(xs).asJson
+
+  implicit val digestEncoder: Encoder[Digest] = x => Base16.encode(x).asJson
+
+  implicit val sideEncoder: Encoder[Side] = _.toByte.asJson
+
+  implicit def merkleProofEncoder[D <: Digest]: Encoder[MerkleProof[D]] = { proof =>
+    Json.obj(
+      "leafData" -> proof.leafData.asJson,
+      "levels" -> proof.levels.asJson,
+    )
   }
 
   implicit val bigIntEncoder: Encoder[BigInt] = { bigInt =>

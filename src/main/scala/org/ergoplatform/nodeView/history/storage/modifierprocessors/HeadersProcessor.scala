@@ -85,7 +85,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @param h - header to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
-  protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
+  protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = synchronized {
     val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = toInsert(h)
 
     historyStorage.insert(dataToInsert._1, dataToInsert._2)

@@ -29,10 +29,9 @@ trait ErgoHistoryReader
     with ScorexLogging
     with ScorexEncoding {
 
-  protected[history] val historyStorage: HistoryStorage
+  val historyStorage: HistoryStorage
 
   protected val settings: ErgoSettings
-
   /**
     * Is there's no history, even genesis block
     */
@@ -105,9 +104,15 @@ trait ErgoHistoryReader
         Younger
       case Some(_) =>
         //We are on different forks now.
-        if (info.lastHeaderIds.view.reverse.exists(m => contains(m) || m == PreGenesisHeader.id)) {
+        val commonHeaderIdOpt = info.lastHeaderIds.view.reverse.find(m => contains(m) || m == PreGenesisHeader.id)
+        if (commonHeaderIdOpt.isDefined) {
           //Return Younger, because we can send blocks from our fork that other node can download.
-          Fork
+          val commonHeaderId = commonHeaderIdOpt.get
+          if (commonHeaderId == PreGenesisHeader.id || isInBestChain(commonHeaderId)) {
+            Younger
+          } else {
+            Fork
+          }
         } else {
           //We don't have any of id's from other's node sync info in history.
           //We don't know whether we can sync with it and what blocks to send in Inv message.
@@ -124,7 +129,7 @@ trait ErgoHistoryReader
   }
 
   def continuationIdsOld(info: ErgoSyncInfo, size: Int): ModifierIds = {
-    val res = if (isEmpty) {
+    if (isEmpty) {
       info.startingPoints
     } else if (info.lastHeaderIds.isEmpty) {
       val heightFrom = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
@@ -150,12 +155,6 @@ trait ErgoHistoryReader
         headerIds
       }
     }
-    if(res.sameElements(continuationIdsOld(info, size))){
-      log.info("ContinuationIds are the same!")
-    } else {
-      log.error("ContinuationIds are the different!")
-    }
-    res
   }
 
   /**
@@ -163,8 +162,8 @@ trait ErgoHistoryReader
     * @param size max return size
     * @return Ids of headers, that node with info should download and apply to synchronize
     */
-  override def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds =
-    if (isEmpty) {
+  override def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds = {
+    val res = if (isEmpty) {
       // if no any header applied yet, return identifiers from other node's sync info
       syncInfo.startingPoints
     } else if (syncInfo.lastHeaderIds.isEmpty) {
@@ -182,11 +181,26 @@ trait ErgoHistoryReader
       branchingPointOpt.toSeq.flatMap { branchingPoint =>
         val otherNodeHeight = heightOf(branchingPoint).getOrElse(ErgoHistory.GenesisHeight)
         val heightTo = Math.min(headersHeight, otherNodeHeight + size)
-        (otherNodeHeight + 1 to heightTo).flatMap { height =>
+        log.info("branching point: " + branchingPoint)
+        log.info("other node height: " + otherNodeHeight)
+        (otherNodeHeight to heightTo).flatMap { height =>
           bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
         }
       }
     }
+
+    if(res.sameElements(continuationIdsOld(syncInfo, size))){
+      log.info("ContinuationIds are the same!")
+    } else {
+      log.error("new: " + res + " ," +
+                "old: " + continuationIdsOld(syncInfo, size) + " ," +
+                "syncInfo: " + syncInfo.lastHeaderIds
+                )
+      log.error("ContinuationIds are the different!")
+    }
+    res
+   // continuationIdsOld(syncInfo, size)
+  }
 
   /**
     *

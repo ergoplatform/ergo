@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
+
 import cats.Traverse
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.{ADProofs, Header}
@@ -98,9 +99,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
-      val ts0 = System.currentTimeMillis()
-
-      val r = persistentProver.synchronized {
+      persistentProver.synchronized {
         val height = fb.header.height
 
         log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
@@ -111,12 +110,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
           applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
-
-            val pts0 = System.currentTimeMillis()
             val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
             val proofHash = ADProofs.proofDigest(proofBytes)
-            val pts = System.currentTimeMillis()
-            println("Proof generation time: " + (pts - pts0) + " msec")
             if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
             if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
@@ -138,11 +133,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
           Failure(e)
         }
-      }
 
-      val ts = System.currentTimeMillis()
-      println("Application time: " + (ts - ts0) + " msec")
-      r
+      }
 
     case h: Header =>
       log.warn("Only full-blocks are expected (before UTXO snapshot downloading implementation")

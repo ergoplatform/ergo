@@ -56,10 +56,6 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     commonChecks(history, block.extension, block.header)
   }
 
-  property("Header validation - block 417,792") {
-
-  }
-
   private def init(version: Version = Header.InitialVersion) = {
     var history = genHistory()
     val chain = genChain(2, history, version)

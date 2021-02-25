@@ -115,6 +115,7 @@ object ErgoState extends ScorexLogging {
         accCostTry
     }
 
+    // Skip v1 block transactions validation if corresponding setting is on
     if (currentStateContext.blockVersion == 1 &&
           currentStateContext.ergoSettings.nodeSettings.skipV1TransactionsValidation) {
       Valid(0L)

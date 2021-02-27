@@ -95,7 +95,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
       val genesisBlock = makeGenesisBlock(address.pubkey)
       val genesisTx = genesisBlock.transactions.head
       applyBlock(genesisBlock) shouldBe 'success //scan by wallet happens during apply
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(1.second, 100.millis)
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
       eventually {
         val availableAmount = getConfirmedBalances.walletBalance
         val emissionAmount: Int = 100000000

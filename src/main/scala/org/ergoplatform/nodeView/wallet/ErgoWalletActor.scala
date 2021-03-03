@@ -131,7 +131,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       case None =>
         log.info("Trying to read wallet in secure mode ..")
         JsonSecretStorage.readFile(settings.walletSettings.secretStorage).fold(
-          e => log.info(
+          e => log.warn(
             s"Failed to read wallet. Manual initialization is required to sign transactions. Cause: ${e.getCause}"),
           secretStorage => {
             log.info("Wallet loaded successfully and locked")

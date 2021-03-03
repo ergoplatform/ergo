@@ -1,5 +1,6 @@
 package org.ergoplatform.wallet.interpreter
 
+import com.google.common.cache.CacheStats
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.settings.ErgoAlgos
 import org.ergoplatform.validation.{ValidationRules, SigmaValidationSettings}
@@ -7,13 +8,13 @@ import org.ergoplatform.wallet.protocol.Constants
 import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
 import org.ergoplatform.{ErgoLikeContext, ErgoBox, ErgoBoxCandidate, ErgoLikeInterpreter}
 import scorex.crypto.authds.ADDigest
+import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{RuntimeIRContext, IRContext}
 import sigmastate.interpreter.Interpreter.{VerificationResult, ScriptEnv}
-import sigmastate.interpreter.{PrecompiledScriptProcessor, CacheKey}
+import sigmastate.interpreter.{CacheKey, PrecompiledScriptProcessor, ScriptProcessorSettings}
 import sigmastate.{AvlTreeData, AvlTreeFlags}
 
-import scala.collection.mutable
 import scala.util.Try
 
 /**
@@ -130,8 +131,18 @@ object ErgoInterpreter {
       val bytes = ErgoAlgos.decodeUnsafe(s)
       validationSettings.map(vs => CacheKey(bytes, vs))
     }
-    new PrecompiledScriptProcessor(scriptKeys) {
+    new PrecompiledScriptProcessor(
+      ScriptProcessorSettings(
+        predefScripts = scriptKeys,
+        maxCacheSize = 10000,
+        recordCacheStats = true,
+        reportingInterval = 100
+      )) with ScorexLogging {
       override protected def createIR(): IRContext = new RuntimeIRContext
+
+      override protected def onReportStats(stats: CacheStats): Unit = {
+        log.warn(s"Cache Stats: $stats")
+      }
     }
   }
 }

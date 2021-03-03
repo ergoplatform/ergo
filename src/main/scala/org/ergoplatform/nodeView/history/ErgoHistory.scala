@@ -51,7 +51,7 @@ trait ErgoHistory
     * Append ErgoPersistentModifier to History if valid
     */
   override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
-    log.info(s"Trying to append modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} to history")
+    log.debug(s"Trying to append modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} to history")
     applicableTry(modifier).map { _ =>
       modifier match {
         case header: Header =>

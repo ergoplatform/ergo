@@ -101,7 +101,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         log.error(s"Wallet failed during initialization with: $e")
         Stop
       case e: Exception =>
-        log.error(s"Walet failed with: $e")
+        log.error(s"Wallet failed with: $e")
         Restart
     }
 

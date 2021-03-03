@@ -46,7 +46,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /**
     * Approximate number of modifiers to be downloaded simultaneously.
+<<<<<<< HEAD
   */
+=======
+    * Set to be max objects in get-modifiers networking message * 2 to minimize chance of empty cache.
+    */
+>>>>>>> 1fd421cf976f57ab22bc1b6deccdf449e560f9fe
   protected val desiredSizeOfExpectingQueue: Int = networkSettings.desiredInvObjects
 
   override def preStart(): Unit = {

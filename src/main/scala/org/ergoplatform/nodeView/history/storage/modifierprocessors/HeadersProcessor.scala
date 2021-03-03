@@ -85,7 +85,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @param h - header to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
-  protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
+  protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = synchronized {
     val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = toInsert(h)
 
     historyStorage.insert(dataToInsert._1, dataToInsert._2)
@@ -310,6 +310,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .result
     }
 
+    /**
+      * Validate non-genesis block header.
+      */
     private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] = {
       validationState
         .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, s"${header.timestamp} > ${parent.timestamp}")
@@ -320,7 +323,19 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
+        .validate(hdrCheckpointV2, checkpointV2Condition(header), "Wrong V2 checkpoint")
         .result
+    }
+
+    /**
+      * Helper method to check v2 checkpoint (first v2 block)
+      */
+    private def checkpointV2Condition(header: Header): Boolean = {
+      if (header.height == 417792 && settings.networkType.isMainNet) {
+        header.id == "0ba60a7db44877aade553beb05200f7d67b586945418d733e455840d283e0508"
+      } else {
+        true
+      }
     }
 
   }

@@ -46,12 +46,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /**
     * Approximate number of modifiers to be downloaded simultaneously.
-<<<<<<< HEAD
-  */
-=======
     * Set to be max objects in get-modifiers networking message * 2 to minimize chance of empty cache.
     */
->>>>>>> 1fd421cf976f57ab22bc1b6deccdf449e560f9fe
   protected val desiredSizeOfExpectingQueue: Int = networkSettings.desiredInvObjects
 
   override def preStart(): Unit = {
@@ -85,16 +81,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     deliveryTracker.setRequested(modifierIds, modifierTypeId, None)
     val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
     networkControllerRef ! SendToNetwork(msg, SendToRandom)
-  }
-
-  /**
-    * Helper method which is deciding whether chain is likely nearly or fully synchronized with the network
-    */
-  private def chainAlmostDownloaded: Boolean = {
-    historyReaderOpt.exists { historyReader =>
-      (historyReader.headersHeight - historyReader.fullBlockHeight < 3) &&
-       historyReader.bestHeaderOpt.exists(_.isNew(timeProvider, 1.hour))
-    }
   }
 
   /**

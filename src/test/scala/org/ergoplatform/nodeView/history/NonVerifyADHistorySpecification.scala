@@ -148,7 +148,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     chain.headers.map(_.id) should contain theSameElementsAs ci.map(_._2)
   }
 
-  property("continuationIds() for light history should contain ids of next headers in our chain") {
+  property("continuationIds() for less developed chain should contain ids of next headers in our chain") {
     var history = genHistory()
 
     history = ensureMinimalHeight(history, BlocksInChain + 1)
@@ -158,9 +158,9 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
       whenever(forkLength > 1 && chain.size > forkLength) {
         val si = ErgoSyncInfo(Seq(chain.headers(chain.size - forkLength - 1).id))
         val continuation = history.continuationIds(si, forkLength)
-        continuation.length shouldBe forkLength
+        continuation.length shouldBe forkLength + 1
         continuation.last._2 shouldEqual chain.last.id
-        continuation.head._2 shouldEqual chain.headers(chain.size - forkLength).id
+        continuation.head._2 shouldEqual chain.headers(chain.size - forkLength - 1).id
       }
     }
   }

@@ -12,7 +12,7 @@ import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{RuntimeIRContext, IRContext}
 import sigmastate.interpreter.Interpreter.{VerificationResult, ScriptEnv}
-import sigmastate.interpreter.{CacheKey, PrecompiledScriptProcessor, ScriptProcessorSettings}
+import sigmastate.interpreter.{CacheKey, PrecompiledScriptProcessor, ScriptProcessorSettings, ProcessorStats}
 import sigmastate.{AvlTreeData, AvlTreeFlags}
 
 import scala.util.Try
@@ -134,14 +134,14 @@ object ErgoInterpreter {
     new PrecompiledScriptProcessor(
       ScriptProcessorSettings(
         predefScripts = scriptKeys,
-        maxCacheSize = 10000,
+        maxCacheSize = 5000,
         recordCacheStats = true,
         reportingInterval = 100
       )) with ScorexLogging {
       override protected def createIR(): IRContext = new RuntimeIRContext
 
-      override protected def onReportStats(stats: CacheStats): Unit = {
-        log.warn(s"Cache Stats: $stats")
+      override protected def onReportStats(stats: ProcessorStats): Unit = {
+        log.warn(s"Stats: $stats")
       }
     }
   }

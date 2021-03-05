@@ -812,68 +812,69 @@ class ErgoWalletActor(settings: ErgoSettings,
     }
   }
 
-  private def processUnlock(secretStorage: JsonSecretStorage): Unit = Try {
-    secretStorage.secret match {
+  private def processUnlock(secretStorage: JsonSecretStorage): Unit = {
+    Try {
+      secretStorage.secret match {
 
-      case None => throw new Exception("Master key is not available after unlock")
+        case None => throw new Exception("Master key is not available after unlock")
 
-      case Some(masterKey) =>
+        case Some(masterKey) =>
 
-        // first, we're trying to find in the database paths written by clients prior 3.3.0 and convert them
-        // into a new format (pubkeys with paths stored instead of paths)
-        val oldPaths = storage.readPaths()
-        if (oldPaths.nonEmpty) {
-          val oldDerivedSecrets = masterKey +: oldPaths.map {
-            path => masterKey.derive(path)
-          }
-          val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
-          oldPubKeys.foreach(storage.addKey)
-          storage.removePaths()
-        }
-
-        // now we read previously stored, or just stored during the conversion procedure above, public keys
-        var pubKeys = storage.readAllKeys().toIndexedSeq
-
-        //If no public keys in the database yet, add master's public key into it
-        if (pubKeys.isEmpty) {
-          if (walletSettings.usePreEip3Derivation) {
-            // If usePreEip3Derivation flag is set in the wallet settings, the first key is the master key
-            val masterPubKey = masterKey.publicKey
-            storage.addKey(masterPubKey)
-            pubKeys = scala.collection.immutable.IndexedSeq(masterPubKey)
-          } else {
-            // If no usePreEip3Derivation flag is set, add first derived key (for m/44'/429'/0'/0/0) to the db
-            val firstSk = nextKey(masterKey).result.map(_._3).toOption
-            val firstPk = firstSk.map(_.publicKey)
-            firstPk.foreach { pk =>
-              storage.addKey(pk)
-              storage.updateChangeAddress(P2PKAddress(pk.key))
+          // first, we're trying to find in the database paths written by clients prior 3.3.0 and convert them
+          // into a new format (pubkeys with paths stored instead of paths)
+          val oldPaths = storage.readPaths()
+          if (oldPaths.nonEmpty) {
+            val oldDerivedSecrets = masterKey +: oldPaths.map {
+              path => masterKey.derive(path)
             }
-
-            pubKeys = firstPk.toIndexedSeq
+            val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
+            oldPubKeys.foreach(storage.addKey)
+            storage.removePaths()
           }
-        }
 
-        // Secrets corresponding to public keys
-        val secretsPk = pubKeys.map { pk =>
-          val path = pk.path.toPrivateBranch
-          masterKey.derive(path)
-        }
+          // now we read previously stored, or just stored during the conversion procedure above, public keys
+          var pubKeys = storage.readAllKeys().toIndexedSeq
 
-        // If no master key in the secrets corresponding to public keys,
-        // add master key so then it is not available to the user but presents in the prover
-        val secrets = if (secretsPk.headOption.contains(masterKey)) {
-          secretsPk
-        } else {
-          masterKey +: secretsPk
-        }
-        val prover = ErgoProvingInterpreter(secrets, parameters)
-        walletVars = walletVars.withProver(prover)
+          //If no public keys in the database yet, add master's public key into it
+          if (pubKeys.isEmpty) {
+            if (walletSettings.usePreEip3Derivation) {
+              // If usePreEip3Derivation flag is set in the wallet settings, the first key is the master key
+              val masterPubKey = masterKey.publicKey
+              storage.addKey(masterPubKey)
+              pubKeys = scala.collection.immutable.IndexedSeq(masterPubKey)
+            } else {
+              // If no usePreEip3Derivation flag is set, add first derived key (for m/44'/429'/0'/0/0) to the db
+              val firstSk = nextKey(masterKey).result.map(_._3).toOption
+              val firstPk = firstSk.map(_.publicKey)
+              firstPk.foreach { pk =>
+                storage.addKey(pk)
+                storage.updateChangeAddress(P2PKAddress(pk.key))
+              }
+
+              pubKeys = firstPk.toIndexedSeq
+            }
+          }
+
+          // Secrets corresponding to public keys
+          val secretsPk = pubKeys.map { pk =>
+            val path = pk.path.toPrivateBranch
+            masterKey.derive(path)
+          }
+
+          // If no master key in the secrets corresponding to public keys,
+          // add master key so then it is not available to the user but presents in the prover
+          val secrets = if (secretsPk.headOption.contains(masterKey)) {
+            secretsPk
+          } else {
+            masterKey +: secretsPk
+          }
+          val prover = ErgoProvingInterpreter(secrets, parameters)
+          walletVars = walletVars.withProver(prover)
+      }
+    } match {
+      case Success(_) =>
+      case Failure(t) => log.error("Unlock failed: ", t)
     }
-  } match {
-    case Success(_) =>
-    case Failure(t) =>
-      log.error("Unlock failed: ", t)
   }
 
   private def wrapLegalExc[T](e: Throwable): Failure[T] =

@@ -164,7 +164,11 @@ class ErgoWalletActor(settings: ErgoSettings,
       walletHeight() + 1
     } else {
       // Node has pruned blockchain
-      if (walletHeight() == 0) blockHeight else walletHeight() + 1
+      if (walletHeight() == 0) {
+        blockHeight // todo: should be height of first non-pruned block
+      } else {
+        walletHeight() + 1
+      }
     }
   }
 
@@ -190,14 +194,16 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     //scan block transactions
     case ScanOnChain(block) =>
-      val expHeight = expectedHeight(block.height)
-      if (expHeight == block.height) {
-        scanBlock(block)
-      } else if (expHeight < block.height) {
-        log.warn(s"Wallet: skipped blocks found starting from $expHeight, going back to scan them")
-        self ! ScanInThePast(expHeight)
-      } else {
-        log.warn(s"Wallet: block in the past reported at ${block.height}, blockId: ${block.id}")
+      if (secretIsSet) { // scan blocks only if wallet is initialized
+        val expHeight = expectedHeight(block.height)
+        if (expHeight == block.height) {
+          scanBlock(block)
+        } else if (expHeight < block.height) {
+          log.warn(s"Wallet: skipped blocks found starting from $expHeight, going back to scan them")
+          self ! ScanInThePast(expHeight)
+        } else {
+          log.warn(s"Wallet: block in the past reported at ${block.height}, blockId: ${block.id}")
+        }
       }
 
     case Rollback(version: VersionTag) =>

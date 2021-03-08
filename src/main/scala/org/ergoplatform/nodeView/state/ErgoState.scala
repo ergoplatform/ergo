@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import org.ergoplatform.ErgoBox.{R4, TokenId, allZerosModifierId, AdditionalRegisters}
+import org.ergoplatform.ErgoBox.{AdditionalRegisters, R4, TokenId}
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
@@ -22,9 +22,8 @@ import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.AtLeast
-import sigmastate.Values.{ByteArrayConstant, SigmaPropConstant, IntConstant, ErgoTree}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol.ProveDlog
-import sigmastate.eval.CostingSigmaDslBuilder
 import sigmastate.serialization.ValueSerializer
 
 import scala.annotation.tailrec
@@ -116,7 +115,13 @@ object ErgoState extends ScorexLogging {
         accCostTry
     }
 
-    execTx(transactions.toList, Valid[Long](0L))
+    // Skip v1 block transactions validation if corresponding setting is on
+    if (currentStateContext.blockVersion == 1 &&
+          currentStateContext.ergoSettings.nodeSettings.skipV1TransactionsValidation) {
+      Valid(0L)
+    } else {
+      execTx(transactions.toList, Valid[Long](0L))
+    }
   }
 
   /**

@@ -11,7 +11,6 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
@@ -19,6 +18,7 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
+import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
@@ -34,7 +34,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
-class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGenerators {
+class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGenerators with Eventually {
 
   implicit private val timeout: Timeout = defaultTimeout
 
@@ -146,7 +146,6 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
     expectNoMessage(1 second)
     val r: Readers = requestReaders
-    val pool: ErgoMemPoolReader = r.m
     val wallet: ErgoWalletReader = r.w
 
     val minerRef: ActorRef = ErgoMinerRef(
@@ -200,9 +199,10 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     // Generate and send `desiredSize` transactions to mempool
     loop(desiredSize)
 
-    Thread.sleep(5000)
-
-    requestReaders.m.size should be > 10
+    implicit val patienceConfig: PatienceConfig = PatienceConfig(10.second, 100.millis)
+    eventually {
+      requestReaders.m.size should be > 10
+    }
 
     // wait for mempool to be cleaned
     scorex.core.utils.untilTimeout(5.minute, 500.millis) {
@@ -400,17 +400,18 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     (wm1.h.get >= forkHeight) shouldBe true
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    Thread.sleep(100)
+    implicit val patienceConfig: PatienceConfig = PatienceConfig(1.seconds, 50.millis)
+    eventually {
+      val wm2 = getWorkMessage(minerRef, Seq.empty)
+      (wm2.h.get >= forkHeight) shouldBe true
+      wm1.msg.sameElements(wm2.msg) shouldBe false
 
-    val wm2 = getWorkMessage(minerRef, Seq.empty)
-    (wm2.h.get >= forkHeight) shouldBe true
-    wm1.msg.sameElements(wm2.msg) shouldBe false
+      val v2Block = testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-    val v2Block = testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-
-    val h2 = v2Block.modifier.asInstanceOf[ErgoFullBlock].header
-    h2.version shouldBe 2
-    h2.minerPk shouldBe defaultMinerPk.value
+      val h2 = v2Block.modifier.asInstanceOf[ErgoFullBlock].header
+      h2.version shouldBe 2
+      h2.minerPk shouldBe defaultMinerPk.value
+    }
   }
 
 }

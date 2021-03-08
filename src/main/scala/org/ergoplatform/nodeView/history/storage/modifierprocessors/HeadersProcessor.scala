@@ -81,13 +81,11 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
 
-  def bestHeaderIdAtHeight(h: Int): Option[ModifierId] = headerIdsAtHeight(h).headOption
-
   /**
     * @param h - header to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
-  protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = {
+  protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = synchronized {
     val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = toInsert(h)
 
     historyStorage.insert(dataToInsert._1, dataToInsert._2)
@@ -170,6 +168,27 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     .map(BigInt.apply)
 
   /**
+    * Get main chain header id
+    *
+    * Optimized version of headerIdsAtHeight(height).headOption
+    *
+    * @param height - height to get header id at
+    * @return - header id or None
+    */
+  def bestHeaderIdAtHeight(height: Int): Option[ModifierId] = {
+    historyStorage.getIndex(heightIdsKey(height: Int)).map { bs =>
+      // in 99% cases bs.length == 32 (no orphaned headers)
+      if (bs.length == 32) {
+        bytesToId(bs)
+      } else {
+        bytesToId(bs.take(32))
+      }
+    }
+  }
+
+  /**
+    * @note this method implementation should be changed along with `bestHeaderIdAtHeight`
+    *
     * @param height - block height
     * @return ids of headers on chosen height.
     *         Seq.empty we don't have any headers on this height (e.g. it is too big or we bootstrap in PoPoW regime)
@@ -291,6 +310,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .result
     }
 
+    /**
+      * Validate non-genesis block header.
+      */
     private def validateChildBlockHeader(header: Header, parent: Header): ValidationResult[Unit] = {
       validationState
         .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, s"${header.timestamp} > ${parent.timestamp}")
@@ -301,7 +323,19 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")
         .validateNot(alreadyApplied, historyStorage.contains(header.id), header.id.toString)
+        .validate(hdrCheckpointV2, checkpointV2Condition(header), "Wrong V2 checkpoint")
         .result
+    }
+
+    /**
+      * Helper method to check v2 checkpoint (first v2 block)
+      */
+    private def checkpointV2Condition(header: Header): Boolean = {
+      if (header.height == 417792 && settings.networkType.isMainNet) {
+        header.id == "0ba60a7db44877aade553beb05200f7d67b586945418d733e455840d283e0508"
+      } else {
+        true
+      }
     }
 
   }

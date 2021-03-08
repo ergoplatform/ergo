@@ -5,8 +5,8 @@ import akka.http.scaladsl.server.{Directive, Route}
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -14,6 +14,8 @@ import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core.api.http.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
+import scorex.crypto.authds.merkle.MerkleProof
+import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 
 import scala.concurrent.Future
@@ -31,6 +33,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       getBlockIdsAtHeightR ~
       getBlockHeaderByHeaderIdR ~
       getBlockTransactionsByHeaderIdR ~
+      getProofForTxR ~
       getFullBlockByHeaderIdR ~
       getModifierByIdR
   }
@@ -63,6 +66,21 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   private def getModifierById(modifierId: ModifierId): Future[Option[ErgoPersistentModifier]] =
     getHistory.map(_.modifierById(modifierId))
 
+  private def getProofForTx(headerId: ModifierId, txId: ModifierId): Future[Option[MerkleProof[Digest32]]] =
+    getModifierById(headerId).flatMap {
+      case Some(header: Header) =>
+        val blockTxsId = BlockSection.computeId(
+          BlockTransactions.modifierTypeId,
+          headerId,
+          header.transactionsRoot.asInstanceOf[Array[Byte]]
+        )
+        getModifierById(blockTxsId).map {
+          case Some(txs: BlockTransactions) => txs.proofFor(txId)
+          case _ => None
+        }
+      case _ => Future(None)
+    }
+
   private def getChainSlice(fromHeight: Int, toHeight: Int): Future[Json] =
     getHistory.map { history =>
       val maxHeaderOpt = if (toHeight >= 0) {
@@ -93,7 +111,9 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       log.info("Received a new valid block through the API: " + block)
 
       viewHolderRef ! LocallyGeneratedModifier(block.header)
-      block.blockSections.foreach { viewHolderRef ! LocallyGeneratedModifier(_) }
+      block.blockSections.foreach {
+        viewHolderRef ! LocallyGeneratedModifier(_)
+      }
 
       ApiResponse.OK
     } else {
@@ -107,6 +127,10 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   def getModifierByIdR: Route = (pathPrefix("modifier") & modifierId & get) { id =>
     ApiResponse(getModifierById(id))
+  }
+
+  def getProofForTxR: Route = (modifierId & pathPrefix("proofFor") & modifierId & get) { (headerId, txId) =>
+    ApiResponse(getProofForTx(headerId, txId))
   }
 
   def getLastHeadersR: Route = (pathPrefix("lastHeaders" / IntNumber) & get) { count =>

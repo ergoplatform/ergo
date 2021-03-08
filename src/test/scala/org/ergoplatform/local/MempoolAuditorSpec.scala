@@ -37,7 +37,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
   val fixture = new NodeViewFixture(settingsToTest)
   val newTx: Class[SuccessfulTransaction[_]] = classOf[SuccessfulTransaction[_]]
 
-  it should "expose transactions which become invalid" in {
+  it should "remove transactions which become invalid" in {
     import fixture._
 
     val testProbe = new TestProbe(actorSystem)
@@ -80,7 +80,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
     getPoolSize shouldBe 1 // first tx removed from pool during node view update
 
-    scorex.core.utils.untilTimeout(cleanupDuration * 2, 100.millis) {
+    scorex.core.utils.untilTimeout(cleanupDuration * 3, 100.millis) {
       getPoolSize shouldBe 0 // another tx invalidated by `MempoolAuditor`
     }
 

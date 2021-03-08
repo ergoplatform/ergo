@@ -158,7 +158,7 @@ trait Generators {
     Gen.choose(1, 100).map { cnt =>
       (1 to cnt).foldLeft(IndexedSeq(sk)) { case (keys, _) =>
         val dp = DerivationPath.nextPath(keys, usePreEip3Derivation = false).get
-        val newSk = sk.derive(dp).asInstanceOf[ExtendedSecretKey]
+        val newSk = sk.derive(dp)
         keys :+ newSk
       }.map(_.publicKey)
     }

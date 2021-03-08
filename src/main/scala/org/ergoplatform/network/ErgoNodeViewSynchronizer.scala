@@ -47,10 +47,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val networkSettings: NetworkSettings = settings.scorexSettings.network
 
   /**
-    * Approximate number of modifiers to be downloaded simultaneously.
-    * Set to be max objects in get-modifiers networking message * 2 to minimize chance of empty cache.
+    * Approximate number of modifiers to be downloaded simultaneously
     */
-  protected val desiredSizeOfExpectingQueue: Int = networkSettings.desiredInvObjects * 2
+  protected val desiredSizeOfExpectingQueue: Int = networkSettings.desiredInvObjects
 
   override def preStart(): Unit = {
     super.preStart()
@@ -131,16 +130,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     println("requestDownload sending strategy: " + sendingStrategy)
     val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
     networkControllerRef ! SendToNetwork(msg, sendingStrategy)
-  }
-
-  /**
-    * Helper method which is deciding whether chain is likely nearly or fully synchronized with the network
-    */
-  private def chainAlmostDownloaded: Boolean = {
-    historyReaderOpt.exists { historyReader =>
-      (historyReader.headersHeight - historyReader.fullBlockHeight < 3) &&
-       historyReader.bestHeaderOpt.exists(_.isNew(timeProvider, 1.hour))
-    }
   }
 
   /**

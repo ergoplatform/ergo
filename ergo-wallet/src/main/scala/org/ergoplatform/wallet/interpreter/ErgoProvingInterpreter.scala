@@ -98,7 +98,7 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     * @return modified prover
     */
   def withNewParameters(newParams: ErgoLikeParameters): ErgoProvingInterpreter = {
-    new ErgoProvingInterpreter(secretKeys, newParams, this.cachedHdPubKeysOpt)
+    new ErgoProvingInterpreter(this.secretKeys, newParams, this.cachedHdPubKeysOpt)
   }
 
   def signInputs(unsignedTx: UnsignedErgoLikeTransaction,

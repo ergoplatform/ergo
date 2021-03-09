@@ -83,16 +83,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Helper method which is deciding whether chain is likely nearly or fully synchronized with the network
-    */
-  private def chainAlmostDownloaded: Boolean = {
-    historyReaderOpt.exists { historyReader =>
-      (historyReader.headersHeight - historyReader.fullBlockHeight < 3) &&
-       historyReader.bestHeaderOpt.exists(_.isNew(timeProvider, 1.hour))
-    }
-  }
-
-  /**
     * Logic to process block parts got from another peer.
     * Filter out non-requested block parts (with a penalty to spamming peer),
     * parse block parts and send valid modifiers to NodeViewHolder
@@ -239,7 +229,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * - block sections, if our headers chain is synced
     */
   override protected def requestMoreModifiers(applied: Seq[ErgoPersistentModifier]): Unit = {
-    super.requestMoreModifiers(applied)
     if (deliveryTracker.requestedSize < desiredSizeOfExpectingQueue / 2) {
       historyReaderOpt foreach { h =>
         if (h.isHeadersChainSynced) {

@@ -45,11 +45,6 @@ trait WalletTestOps extends NodeViewBaseOps {
   def getBalancesWithUnconfirmed(implicit w: WalletFixture): WalletDigest =
     await(w.wallet.balancesWithUnconfirmed)
 
-  // Wait for 5 seconds
-  def waitForScanning(block: ErgoFullBlock)(implicit ctx: Ctx): Unit = blocking(Thread.sleep(5000))
-
-  def waitForOffchainScanning(tx: ErgoTransaction): Unit = blocking(Thread.sleep(offchainScanTime(tx)))
-
   def offchainScanTime(tx: ErgoTransaction): Long = tx.outputs.size * 100 + 300
 
   def balanceAmount(boxes: Seq[ErgoBox]): Long = boxes.map(_.value).sum

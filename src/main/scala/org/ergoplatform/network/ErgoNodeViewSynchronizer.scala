@@ -94,7 +94,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         status match {
           case Unknown =>
-            //todo: should we ban peer if its status is unknown after getting info from it?
             log.warn("Peer status is still unknown")
           case Nonsense =>
             log.warn("Got nonsense")

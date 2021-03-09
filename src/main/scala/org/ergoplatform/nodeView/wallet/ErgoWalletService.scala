@@ -84,7 +84,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
         log.info("Trying to read wallet in secure mode ..")
         JsonSecretStorage.readFile(secretStorage).fold(
           e => {
-            log.info(s"Failed to read wallet. Manual initialization is required to sign transactions. Cause: ${e.getCause}")
+            log.warn(s"Failed to read wallet. Manual initialization is required to sign transactions. Cause: ${e.getCause}")
             state
           },
           secretStorage => {

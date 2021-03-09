@@ -51,7 +51,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         log.error(s"Wallet failed during initialization with: $e")
         Stop
       case e: Exception =>
-        log.error(s"Walet failed with: $e")
+        log.error(s"Wallet failed with: $e")
         Restart
     }
 
@@ -188,15 +188,17 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     //scan block transactions
     case ScanOnChain(newBlock) =>
-      val nextBlockHeight = state.expectedNextBlockHeight(newBlock.height, settings.nodeSettings.isFullBlocksPruned)
-      if (nextBlockHeight == newBlock.height) {
-        log.info(s"Wallet is going to scan a block ${newBlock.id} on chain at height ${newBlock.height}")
-        context.become(walletInit(ergoWalletService.scanBlockUpdate(state, newBlock)))
-      } else if (nextBlockHeight < newBlock.height) {
-        log.warn(s"Wallet: skipped blocks found starting from $nextBlockHeight, going back to scan them")
-        self ! ScanInThePast(nextBlockHeight)
-      } else {
-        log.warn(s"Wallet: block in the past reported at ${newBlock.height}, blockId: ${newBlock.id}")
+      if (state.secretIsSet(settings.walletSettings.testMnemonic)) { // scan blocks only if wallet is initialized
+        val nextBlockHeight = state.expectedNextBlockHeight(newBlock.height, settings.nodeSettings.isFullBlocksPruned)
+        if (nextBlockHeight == newBlock.height) {
+          log.info(s"Wallet is going to scan a block ${newBlock.id} on chain at height ${newBlock.height}")
+          context.become(walletInit(ergoWalletService.scanBlockUpdate(state, newBlock)))
+        } else if (nextBlockHeight < newBlock.height) {
+          log.warn(s"Wallet: skipped blocks found starting from $nextBlockHeight, going back to scan them")
+          self ! ScanInThePast(nextBlockHeight)
+        } else {
+          log.warn(s"Wallet: block in the past reported at ${newBlock.height}, blockId: ${newBlock.id}")
+        }
       }
 
     case Rollback(version: VersionTag) =>

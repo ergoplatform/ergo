@@ -102,7 +102,11 @@ case class ErgoWalletState(
       walletHeight + 1
     } else {
       // Node has pruned blockchain
-      if (walletHeight == 0) blockHeight else walletHeight + 1
+      if (walletHeight == 0) {
+        blockHeight // todo: should be height of first non-pruned block
+      } else {
+        walletHeight + 1
+      }
     }
   }
 

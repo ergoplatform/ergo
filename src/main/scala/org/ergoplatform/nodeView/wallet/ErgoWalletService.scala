@@ -281,7 +281,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
         val rootSecret = secretStorage.secret.get // unlocked means Some(secret)
         DerivationPath.fromEncoded(encodedPath) match {
           case Success(path) if !path.publicBranch =>
-            val secret = rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
+            val secret = rootSecret.derive(path)
             addSecretToStorage(state, secret) match {
               case Success(newState) =>
                 Success(P2PKAddress(secret.publicKey.key) -> newState)

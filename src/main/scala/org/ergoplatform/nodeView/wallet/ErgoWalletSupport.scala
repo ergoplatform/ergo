@@ -48,7 +48,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                                        (implicit addrEncoder: ErgoAddressEncoder): Try[(DeriveNextKeyResult, ErgoWalletState)] = {
     val secrets = state.walletVars.proverOpt.toIndexedSeq.flatMap(_.hdKeys)
     val derivationResult = DerivationPath.nextPath(secrets, usePreEip3Derivation).map { path =>
-      val secret = masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
+      val secret = masterKey.derive(path)
       (path, P2PKAddress(secret.publicKey.key), secret)
     }
     derivationResult.map(_._3)
@@ -61,7 +61,7 @@ trait ErgoWalletSupport extends ScorexLogging {
     val sks =
       pks.map { pk =>
         val path = pk.path.toPrivateBranch
-        masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
+        masterKey.derive(path)
       }
     // If no master key in the secrets corresponding to public keys,
     // add master key so then it is not available to the user but presents in the prover
@@ -79,7 +79,7 @@ trait ErgoWalletSupport extends ScorexLogging {
     val oldPaths = storage.readPaths()
     if (oldPaths.nonEmpty) {
       val oldDerivedSecrets = masterKey +: oldPaths.map {
-        path => masterKey.derive(path).asInstanceOf[ExtendedSecretKey]
+        path => masterKey.derive(path)
       }
       val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
       oldPubKeys.foreach(storage.addKey)

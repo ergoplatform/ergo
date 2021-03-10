@@ -51,6 +51,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected val desiredSizeOfExpectingQueue: Int = networkSettings.desiredInvObjects
 
+  /**
+    * Register periodic events
+    */
   override def preStart(): Unit = {
     super.preStart()
     val toDownloadCheckInterval = networkSettings.syncInterval
@@ -59,15 +62,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.scheduleAtFixedRate(2.seconds, statusTracker.minInterval(), self, SendLocalSyncInfo)
   }
 
+  private def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(historyReader)) == ModifiersStatus.Unknown
+
   /**
-    * Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
+    * Requests BlockSections with `Unknown` status defined from block headers but not downloaded yet.
     * Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
     */
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
       historyReaderOpt.foreach { h =>
-        def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(h)) == ModifiersStatus.Unknown
-
         val toDownload =
           h.nextModifiersToDownload(desiredSizeOfExpectingQueue - deliveryTracker.requestedSize, downloadRequired)
 
@@ -83,7 +86,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     historyReaderOpt match {
       case Some(historyReader) =>
-        def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(historyReader)) == ModifiersStatus.Unknown
 
         val comparison = historyReader.compare(syncInfo)
         log.debug(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +
@@ -126,7 +128,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.warn("requestDownload can't find senior or equal peers")
       SendToRandom
     }
-    println("requestDownload sending strategy: " + sendingStrategy)
     val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
     networkControllerRef ! SendToNetwork(msg, sendingStrategy)
   }

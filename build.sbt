@@ -32,7 +32,7 @@ val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.1"
 
-val scorexVersion = "master-7d7d9bb7-SNAPSHOT"
+val scorexVersion = "p2p-improvs-wip1-08abd291-SNAPSHOT"
 val sigmaStateVersion = "4.0.0-java8"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)

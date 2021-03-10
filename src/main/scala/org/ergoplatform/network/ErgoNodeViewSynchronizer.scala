@@ -1,6 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorRefFactory, Props}
+import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
@@ -9,12 +10,13 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{ModifiersFromRemote, TransactionsFromRemote}
 import scorex.core.NodeViewHolder._
+import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
-import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier}
+import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SendLocalSyncInfo}
 import scorex.core.network.message.{InvData, Message, ModifiersData}
-import scorex.core.network.{ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToRandom}
+import scorex.core.network.{ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToRandom, SendToRandomFromChosen}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.Transaction
@@ -49,22 +51,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected val desiredSizeOfExpectingQueue: Int = networkSettings.desiredInvObjects
 
+  /**
+    * Register periodic events
+    */
   override def preStart(): Unit = {
-    val toDownloadCheckInterval = networkSettings.syncInterval
     super.preStart()
+    val toDownloadCheckInterval = networkSettings.syncInterval
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
+    context.system.scheduler.scheduleAtFixedRate(2.seconds, statusTracker.minInterval(), self, SendLocalSyncInfo)
   }
 
+  private def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(historyReader)) == ModifiersStatus.Unknown
+
   /**
-    * Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
+    * Requests BlockSections with `Unknown` status defined from block headers but not downloaded yet.
     * Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
     */
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
       historyReaderOpt.foreach { h =>
-        def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(h)) == ModifiersStatus.Unknown
-
         val toDownload =
           h.nextModifiersToDownload(desiredSizeOfExpectingQueue - deliveryTracker.requestedSize, downloadRequired)
 
@@ -74,12 +80,56 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
-  // todo: this method is just a copy of the ancestor from Scorex, however, smarter logic is needed, not just
-  //  asking from a random peer
+
+  //sync info is coming from another node
+  override protected def processSync(syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
+
+    historyReaderOpt match {
+      case Some(historyReader) =>
+
+        val comparison = historyReader.compare(syncInfo)
+        log.debug(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +
+          s"Comparison result is $comparison.")
+
+        val status = comparison
+        statusTracker.updateStatus(remote, status)
+
+        status match {
+          case Unknown =>
+            log.warn("Peer status is still unknown")
+          case Nonsense =>
+            log.warn("Got nonsense")
+          case Younger | Fork =>
+            val ext = historyReader.continuationIds(syncInfo, networkSettings.desiredInvObjects)
+            if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
+            log.debug(s"Sending extension of length ${ext.length}")
+            log.debug(s"Extension ids: ${idsToString(ext)}")
+            sendExtension(remote, status, ext)
+          case Older =>
+            val ids = syncInfo.lastHeaderIds.reverse
+            val headerIds = ids.takeWhile(hId => !historyReader.isInBestChain(hId))
+            if (headerIds.nonEmpty) {
+              requestDownload(Header.modifierTypeId, headerIds.reverse.filter(downloadRequired))
+            }
+          case Equal => // does nothing for `Equal`
+        }
+      case _ =>
+    }
+  }
+
+  // todo: do more filtering for peers, e.g. ask for full block parts only peers keeping long enough suffix
   override protected def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
     deliveryTracker.setRequested(modifierIds, modifierTypeId, None)
+    val sendingStrategy = if(statusTracker.seniors.nonEmpty) {
+      SendToRandomFromChosen(statusTracker.seniors.toSeq)
+    } else if(statusTracker.seniorOrEqual.nonEmpty) {
+      SendToRandomFromChosen(statusTracker.seniorOrEqual.toSeq)
+    } else {
+      log.warn("requestDownload can't find senior or equal peers")
+      SendToRandom
+    }
     val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
-    networkControllerRef ! SendToNetwork(msg, SendToRandom)
+    networkControllerRef ! SendToNetwork(msg, sendingStrategy)
   }
 
   /**
@@ -93,6 +143,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val typeId = data.typeId
     val modifiers = data.modifiers
     log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: $remote")
+    log.info("Modifier ids: " + modifiers.map(_._1))
     log.trace(s"Received modifier ids ${modifiers.keySet.map(encoder.encodeId).mkString(",")}")
 
     // filter out non-requested modifiers

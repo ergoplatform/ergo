@@ -3,7 +3,6 @@ package org.ergoplatform.http.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive, Directive1, Route}
 import akka.pattern.ask
-import io.circe.generic.decoding.DerivedDecoder.decodeIncompleteCaseClass
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._

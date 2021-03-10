@@ -1,5 +1,7 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
+import java.io.File
+
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest, ScanSerializer}
@@ -156,6 +158,13 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
       .getOrElse(PaymentsScanId)
   }
 
+  /**
+    * Close wallet storage
+    */
+  def close(): Unit = {
+    store.close()
+  }
+
 }
 
 object WalletStorage {
@@ -198,9 +207,13 @@ object WalletStorage {
   val ChangeAddressKey: Array[Byte] = noPrefixKey("change_address")
   val lastUsedScanIdKey: Array[Byte] = noPrefixKey("last_scan_id")
 
+
+  def storageFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/storage")
+
   def readOrCreate(settings: ErgoSettings)
                   (implicit addressEncoder: ErgoAddressEncoder): WalletStorage = {
-    new WalletStorage(LDBFactory.createKvDb(s"${settings.directory}/wallet/storage"), settings)
+    val db = LDBFactory.createKvDb(storageFolder(settings).getPath)
+    new WalletStorage(db, settings)
   }
 
 }

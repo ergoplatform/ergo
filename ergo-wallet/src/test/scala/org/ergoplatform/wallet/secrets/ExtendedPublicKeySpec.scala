@@ -31,7 +31,7 @@ class ExtendedPublicKeySpec
 
   property("derived public tree corresponds to private tree") {
     forAll(derivationPathGen(isPublic = false, allowHardened = false)) { path =>
-      val sk: ExtendedSecretKey = rootSecret.derive(path).asInstanceOf[ExtendedSecretKey]
+      val sk: ExtendedSecretKey = rootSecret.derive(path)
       val pk = rootSecret.publicKey.derive(path.copy(publicBranch = true))
 
       java.util.Arrays.equals(sk.publicKey.keyBytes, pk.keyBytes) shouldBe true

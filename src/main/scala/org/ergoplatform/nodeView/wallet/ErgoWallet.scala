@@ -21,14 +21,13 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
     with ErgoWalletReader
     with ScorexLogging {
 
+  private val walletSettings = settings.walletSettings
+
   // A replace-compact-collect selector is parameterized with max number of inputs a transaction could has,
   // and also optimal number of inputs(a selector is collecting dust if transaction has less inputs than optimal).
-  // Now these settings are hard-coded, however, they should be parameterized
-  // https://github.com/ergoplatform/ergo/issues/856
-  val maxInputs = 64
-  val optimalInputs = 3
-
-  val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs)
+  private val maxInputs = walletSettings.maxInputs
+  private val optimalInputs = walletSettings.optimalInputs
+  private val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs)
 
   override type NVCT = this.type
 

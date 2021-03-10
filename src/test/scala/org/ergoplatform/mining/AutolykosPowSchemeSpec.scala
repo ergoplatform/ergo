@@ -13,7 +13,7 @@ class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
   property("generated solution should be valid") {
     val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
     forAll(invalidHeaderGen,
-            Gen.choose(30, 50),
+            Gen.choose(60, 70),
             Gen.choose[Byte](1, 2)) { (inHeader, difficulty, ver) =>
       val nBits = RequiredDifficulty.encodeCompactBits(difficulty)
       val h = inHeader.copy(nBits = nBits, version = ver)

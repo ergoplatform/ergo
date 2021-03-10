@@ -110,14 +110,18 @@ object JsonSecretStorage {
     if (dir.exists()) {
       dir.listFiles().toList match {
         case files if files.size > 1 =>
-          Failure(new Exception(s"Ambiguous secret files in dir '$dir'"))
+          val jsonFiles = files.filter(_.getName.contains(".json"))
+          jsonFiles.headOption match {
+            case Some(headFile) => Success(new JsonSecretStorage(headFile, settings.encryption))
+            case None => Failure(new Exception(s"No json files found in dir '$dir'"))
+          }
         case headFile :: _ =>
           Success(new JsonSecretStorage(headFile, settings.encryption))
         case Nil =>
           Failure(new Exception(s"Cannot readSecretStorage: Secret file not found in dir '$dir'"))
       }
     } else {
-      Failure(new Exception(s"Cannot readSecretStorage: Secret dir '$dir' doesn't exist"))
+      Failure(new Exception(s"Cannot readSecretStorage: dir '$dir' doesn't exist"))
     }
   }
 

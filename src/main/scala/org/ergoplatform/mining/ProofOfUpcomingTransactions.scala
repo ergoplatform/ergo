@@ -9,7 +9,7 @@ import io.circe.syntax._
 /**
   * Proof of inclusion of certain transactions into a block with known and yet unproven header.
   *
-  * In particular, can be useful for collateralized pools, see [[org.ergoplatform.examples.LiteClientExamples]]
+  * In particular, can be useful for collateralized pools, see `LiteClientExamples` in tests
   * for details. But there are could be more examples where a miner needs to show that a transaction is included
   * into upcoming block the miner is working on.
   *

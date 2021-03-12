@@ -141,14 +141,21 @@ class ErgoWalletActor(settings: ErgoSettings,
     }
   }
 
+  /**
+    * Helper method to remove and create again wallet storage database
+    */
   private def removeStorageFolder(): Unit = {
     val storageFolder = WalletStorage.storageFolder(settings)
-    log.info(s"Removing the registry folder $storageFolder")
+    log.info(s"Removing the wallet storage folder $storageFolder")
     storage.close()
     FileUtils.deleteRecursive(storageFolder)
     storage = WalletStorage.readOrCreate(settings)
   }
 
+
+  /**
+    * Helper method to remove and create again wallet registry database
+    */
   private def removeRegistryFolder(): Unit = {
     val registryFolder = WalletRegistry.registryFolder(settings)
     log.info(s"Removing the registry folder $registryFolder")
@@ -357,6 +364,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           mnemonic
         } match {
         case s: Success[String] =>
+          // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
           removeRegistryFolder()
           removeStorageFolder()
           self ! UnlockWallet(pass)
@@ -379,6 +387,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         secretStorageOpt = Some(secretStorage)
       } match {
         case s: Success[Unit] =>
+          // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
           removeRegistryFolder()
           removeStorageFolder()
           self ! UnlockWallet(encryptionPass)

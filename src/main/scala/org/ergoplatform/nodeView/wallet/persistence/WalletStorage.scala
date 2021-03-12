@@ -1,7 +1,5 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import java.io.File
-
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest, ScanSerializer}
@@ -11,7 +9,7 @@ import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.db.{LDBFactory, LDBKVStore}
-
+import java.io.File
 import scala.util.{Success, Try}
 
 /**
@@ -159,7 +157,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
   }
 
   /**
-    * Close wallet storage
+    * Close wallet storage database
     */
   def close(): Unit = {
     store.close()
@@ -208,6 +206,9 @@ object WalletStorage {
   val lastUsedScanIdKey: Array[Byte] = noPrefixKey("last_scan_id")
 
 
+  /**
+    * @return folder (as an instance of java.io.File) where wallet storage database stored
+    */
   def storageFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/storage")
 
   def readOrCreate(settings: ErgoSettings)

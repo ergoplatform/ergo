@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform._
 import org.ergoplatform.db.DBSpec
+import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.utils.fixtures.WalletFixture
@@ -11,21 +12,38 @@ import org.ergoplatform.utils.{ErgoPropertyTest, WalletTestOps}
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
+import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
+import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
 import sigmastate.helpers.TestingHelpers.testBox
 import sigmastate.{SType, Values}
 
-
 class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with ErgoWalletSupport with ErgoTransactionGenerators with DBSpec with BeforeAndAfterAll {
 
   private implicit val x: WalletFixture = new WalletFixture(settings, getCurrentView(_).vault)
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 4)
   private lazy val pks = getPublicKeys.toList
 
   override def afterAll(): Unit = try super.afterAll() finally x.stop()
 
-  property("prepareUnsignedTransaction should yield valid tx") {
+  private def initialState(store: LDBKVStore, versionedStore: LDBVersionedStore) = {
+    ErgoWalletState(
+      new WalletStorage(store, settings),
+      secretStorageOpt = Option.empty,
+      new WalletRegistry(versionedStore)(settings.walletSettings),
+      OffChainRegistry.empty,
+      outputsFilter = Option.empty,
+      WalletVars(Some(defaultProver), Seq.empty, None),
+      stateReaderOpt = Option.empty,
+      mempoolReaderOpt = Option.empty,
+      utxoReaderOpt = Option.empty,
+      parameters
+    )
+  }
+
+  property("it should prepare unsigned transaction") {
     val inputBoxes = {
       Seq(
         TrackedBox(
@@ -53,7 +71,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
     }
   }
 
-  property("requestsToBoxCandidates should process payment request") {
+  property("it should generate valid box candidates from payment request") {
     forAll(validErgoTransactionGen) {
       case (ergoBoxes, _) =>
         val paymentRequest = PaymentRequest(pks.head, 1, Seq.empty, Map.empty)
@@ -62,7 +80,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
     }
   }
 
-  property("requestsToBoxCandidates should process asset issue request") {
+  property("it should generate valid box candidates from asset issue requests") {
     forAll(validErgoTransactionGen) {
       case (ergoBoxes, _) =>
         val ergoBox = ergoBoxes.head
@@ -95,22 +113,34 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
     }
   }
 
-  property("generateUnsignedTransaction should return valid tx") {
+  property("it should get spent and unspent wallet boxes") {
+    forAll(Gen.nonEmptyListOf(trackedBoxGen), modifierIdGen) { case (boxes, txId) =>
+      withVersionedStore(10) { versionedStore =>
+        withStore { store =>
+          val wState = initialState(store, versionedStore)
+          val blockId = modifierIdGen.sample.get
+          val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(PaymentsScanId)))
+          val spentBox = boxes.head.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = Set(PaymentsScanId))
+          val allBoxes = unspentBoxes :+ spentBox
+          wState.registry.updateOnBlock(ScanResults(allBoxes, Seq.empty, Seq.empty), blockId, 100)
+
+          val walletService = new ErgoWalletServiceImpl
+          val actualUnspentOnlyWalletBoxes = walletService.getWalletBoxes(wState, unspentOnly = true, considerUnconfirmed = false).toList
+          val expectedUnspentOnlyWalletBoxes = unspentBoxes.map(x => WalletBox(x, wState.fullHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
+          actualUnspentOnlyWalletBoxes should contain theSameElementsAs expectedUnspentOnlyWalletBoxes
+
+          val actualWalletBoxes = walletService.getWalletBoxes(wState, unspentOnly = false, considerUnconfirmed = false).toList
+          val expectedWalletBoxes = allBoxes.map(x => WalletBox(x, wState.fullHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
+          actualWalletBoxes should contain theSameElementsAs expectedWalletBoxes
+        }
+      }
+    }
+  }
+
+  property("it should generate unsigned transaction") {
     withVersionedStore(2) { versionedStore =>
       withStore { store =>
-        val wState =
-          ErgoWalletState(
-            new WalletStorage(store, settings),
-            secretStorageOpt = Option.empty,
-            new WalletRegistry(versionedStore)(settings.walletSettings),
-            OffChainRegistry.empty,
-            outputsFilter = Option.empty,
-            WalletVars(Some(defaultProver), Seq.empty, None),
-            stateReaderOpt = Option.empty,
-            mempoolReaderOpt = Option.empty,
-            utxoReaderOpt = Option.empty,
-            parameters
-          )
+        val wState = initialState(store, versionedStore)
 
         val encodedBoxes =
           boxesAvailable(makeGenesisBlock(pks.head.pubkey, randomNewAsset), pks.head.pubkey)

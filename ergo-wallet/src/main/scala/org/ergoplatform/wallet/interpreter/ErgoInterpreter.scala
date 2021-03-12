@@ -134,9 +134,9 @@ object ErgoInterpreter {
     new PrecompiledScriptProcessor(
       ScriptProcessorSettings(
         predefScripts = scriptKeys,
-        maxCacheSize = 5000,
+        maxCacheSize = 2000,  // takes up around 600Mb
         recordCacheStats = true,
-        reportingInterval = 100
+        reportingInterval = 500
       )) with ScorexLogging {
       override protected def createIR(): IRContext = new RuntimeIRContext
 

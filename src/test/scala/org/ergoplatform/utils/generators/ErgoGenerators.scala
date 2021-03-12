@@ -4,14 +4,14 @@ import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{Header, ADProofs, Extension}
+import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
 import org.ergoplatform.network.ModeFeature
-import org.ergoplatform.nodeView.history.ErgoSyncInfo
+import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoV1}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.{Constants, ErgoValidationSettingsUpdate, ErgoValidationSettings, ValidationRules}
+import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
 import org.ergoplatform.utils.ErgoTestConstants
-import org.ergoplatform.validation.{DisabledRule, ChangedRule, ReplacedRule, EnabledRule}
+import org.ergoplatform.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
 import org.ergoplatform.wallet.utils.Generators
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
@@ -20,10 +20,10 @@ import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.testkit.generators.CoreGenerators
 import sigmastate.Values.ErgoTree
-import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
-import sigmastate.basics.{ProveDHTuple, DiffieHellmanTupleProverInput}
+import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{ProverResult, CryptoConstants}
+import sigmastate.interpreter.{CryptoConstants, ProverResult}
 
 import scala.util.Random
 
@@ -63,7 +63,7 @@ trait ErgoGenerators extends CoreGenerators with Generators with Matchers with E
 
   lazy val ergoSyncInfoGen: Gen[ErgoSyncInfo] = for {
     ids <- Gen.nonEmptyListOf(modifierIdGen).map(_.take(ErgoSyncInfo.MaxBlockIds))
-  } yield ErgoSyncInfo(ids)
+  } yield ErgoSyncInfoV1(ids)
 
   lazy val digest32Gen: Gen[Digest32] = {
     val x = Digest32 @@ genBytes(32)

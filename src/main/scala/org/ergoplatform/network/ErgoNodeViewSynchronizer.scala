@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{ModifiersFromRemote, TransactionsFromRemote}
@@ -62,8 +62,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.scheduleAtFixedRate(2.seconds, statusTracker.minInterval(), self, SendLocalSyncInfo)
   }
 
-  private def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(historyReader)) == ModifiersStatus.Unknown
-
   /**
     * Requests BlockSections with `Unknown` status defined from block headers but not downloaded yet.
     * Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
@@ -71,6 +69,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
       historyReaderOpt.foreach { h =>
+        def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(h)) == ModifiersStatus.Unknown
+
         val toDownload =
           h.nextModifiersToDownload(desiredSizeOfExpectingQueue - deliveryTracker.requestedSize, downloadRequired)
 
@@ -80,12 +80,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
+  override protected def processSync(syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
+    syncInfo match {
+      case syncV1: ErgoSyncInfoV1 => processSyncV1(syncV1, remote)
+      case syncV2: ErgoSyncInfoV2 => ??? // todo:
+    }
+  }
 
   //sync info is coming from another node
-  override protected def processSync(syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
+  protected def processSyncV1(syncInfo: ErgoSyncInfoV1, remote: ConnectedPeer): Unit = {
 
     historyReaderOpt match {
       case Some(historyReader) =>
+        def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(historyReader)) == ModifiersStatus.Unknown
 
         val comparison = historyReader.compare(syncInfo)
         log.debug(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +

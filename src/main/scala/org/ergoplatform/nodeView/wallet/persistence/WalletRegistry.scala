@@ -151,6 +151,21 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
   }
 
   /**
+    * Read all the wallet-related transactions
+    * @param offset - offset of the beginning of a sequence of transactions
+    * @param limit - maximum number of returned entity
+    *
+    * @return all the transactions for all the scans
+    */
+  def allWalletTxs(offset: Int, limit: Int): Seq[WalletTransaction] = {
+    store.getRange(FirstTxSpaceKey, LastTxSpaceKey)
+      .slice(offset, offset + limit)
+      .flatMap { case (_, txBytes) =>
+        WalletTransactionSerializer.parseBytesTry(txBytes).toOption
+      }
+  }
+
+  /**
     * Read aggregate wallet information
     *
     * @return wallet digest

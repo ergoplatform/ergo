@@ -523,8 +523,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       val res = collectBoxes(targetBalance, targetAssets)
       sender() ! ReqBoxesResponse(res)
 
-    case GetScanTransactions(scanId: ScanId) =>
-      val res = registry.allWalletTxs().filter(wtx => wtx.scanIds.contains(scanId))
+    case GetScanTransactions(scanId: ScanId, offset, limit) =>
+      val res = registry.allWalletTxs(offset, limit).filter(wtx => wtx.scanIds.contains(scanId))
         .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
       sender() ! ScanRelatedTxsResponse(res)
   }
@@ -1043,7 +1043,7 @@ object ErgoWalletActor {
     *
     * @param scanId  - Scan identifier
     */
-  final case class GetScanTransactions(scanId: ScanId)
+  final case class GetScanTransactions(scanId: ScanId, offset: Int, limit: Int)
 
   /**
     * Response for requested scan related transactions

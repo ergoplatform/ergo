@@ -287,10 +287,10 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
-  def transactionsR: Route = (path("transactions") & get & txParams) {
-    case (minHeight, maxHeight, minConfNum, maxConfNum) =>
+  def transactionsR: Route = (path("transactions") & get & paging & txParams) {
+    case (offset, limit, minHeight, maxHeight, minConfNum, maxConfNum) =>
       withWallet {
-        _.transactions
+        _.transactions(offset, limit)
           .map {
             _.filter(tx =>
               tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId) &&

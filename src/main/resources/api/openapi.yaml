@@ -3080,6 +3080,24 @@ paths:
   /wallet/transactions:
     parameters:
       - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - in: query
+        name: limit
+        required: false
+        description: The number of items in list to return
+        schema:
+          type: integer
+          format: int32
+          minimum: 10
+          maximum: 100
+          default: 50
+      - in: query
         name: minInclusionHeight
         required: false
         description: Minimal tx inclusion height
@@ -3173,6 +3191,24 @@ paths:
 
   /wallet/transactionsByScanId:
     parameters:
+      - in: query
+        name: offset
+        required: false
+        description: The number of items in list to skip
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - in: query
+        name: limit
+        required: false
+        description: The number of items in list to return
+        schema:
+          type: integer
+          format: int32
+          minimum: 10
+          maximum: 100
+          default: 50
       - in: query
         name: scanId
         required: true

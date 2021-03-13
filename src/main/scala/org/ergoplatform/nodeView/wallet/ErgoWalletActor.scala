@@ -246,8 +246,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       }) ++ unconfirmed
       sender() ! boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
 
-    case GetTransactions =>
-      sender() ! registry.allWalletTxs()
+    case GetTransactions(offset, limit) =>
+      sender() ! registry.allWalletTxs(offset, limit)
         .sortBy(-_.inclusionHeight)
         .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
 
@@ -1109,7 +1109,7 @@ object ErgoWalletActor {
   /**
     * Get all wallet-related transaction
     */
-  case object GetTransactions
+  case class GetTransactions(offset: Int, limit: Int)
 
   /**
     * Derive next key-pair according to BIP-32

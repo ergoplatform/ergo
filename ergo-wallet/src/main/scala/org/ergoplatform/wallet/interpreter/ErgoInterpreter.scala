@@ -131,7 +131,7 @@ object ErgoInterpreter {
     new PrecompiledScriptProcessor(
       ScriptProcessorSettings(
         predefScripts = scriptKeys,
-        maxCacheSize = 500,  // takes up around 150Mb
+        maxCacheSize = 250,  // takes up around 150Mb
         recordCacheStats = true,
         reportingInterval = 500
       )) with ScorexLogging {

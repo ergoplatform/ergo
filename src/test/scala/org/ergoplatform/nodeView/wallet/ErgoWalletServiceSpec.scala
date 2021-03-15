@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform.ErgoBox.NonMandatoryRegisterId
 import org.ergoplatform._
 import org.ergoplatform.db.DBSpec
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
@@ -12,6 +13,7 @@ import org.ergoplatform.utils.{ErgoPropertyTest, WalletTestOps}
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
+import org.ergoplatform.wallet.crypto.ErgoSignature
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
@@ -137,7 +139,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
     }
   }
 
-  property("it should generate unsigned transaction") {
+  property("it should generate signed and unsigned transaction") {
     withVersionedStore(2) { versionedStore =>
       withStore { store =>
         val wState = initialState(store, versionedStore)
@@ -149,13 +151,21 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
             }
         val paymentRequest = PaymentRequest(pks.head, 50000, Seq.empty, Map.empty)
         val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs)
-        val (tx, inputs, dataInputs) = generateUnsignedTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty).get
 
+        val (tx, inputs, dataInputs) = generateUnsignedTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty).get
         dataInputs shouldBe empty
         inputs.size shouldBe 1
         tx.inputs.size shouldBe 1
         tx.outputs.size shouldBe 2
         tx.outputs.map(_.value).sum shouldBe inputs.map(_.value).sum
+
+        val walletService = new ErgoWalletServiceImpl
+        val signedTx = walletService.generateTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty, sign = true).get.asInstanceOf[ErgoTransaction]
+
+        ErgoSignature.verify(signedTx.messageToSign, signedTx.inputs.head.spendingProof.proof, pks.head.pubkey.h) shouldBe true
+        signedTx.inputs.size shouldBe 1
+        signedTx.outputs.size shouldBe 2
+
       }
     }
   }

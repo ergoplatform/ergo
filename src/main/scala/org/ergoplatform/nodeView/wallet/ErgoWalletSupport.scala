@@ -28,7 +28,7 @@ import scala.util.{Failure, Success, Try}
 
 trait ErgoWalletSupport extends ScorexLogging {
 
-  protected def buildProverFromMnemonic(mnemonic: String, keysQty: Option[Int], parameters: Parameters): ErgoProvingInterpreter = {
+  def buildProverFromMnemonic(mnemonic: String, keysQty: Option[Int], parameters: Parameters): ErgoProvingInterpreter = {
     val seed = Mnemonic.toSeed(mnemonic)
     val rootSk = ExtendedSecretKey.deriveMasterKey(seed)
     val childSks = keysQty.toIndexedSeq.flatMap(x => (0 until x).map(rootSk.child))
@@ -233,6 +233,8 @@ trait ErgoWalletSupport extends ScorexLogging {
           throw new Exception(s"Cannot generateUnsignedTransaction($requests, $inputsRaw): wallet is locked")
       }
     }
+
+    require(inputBoxes.nonEmpty, "There must be at least one input box")
 
     //We're getting id of the first input, it will be used in case of asset issuance (asset id == first input id)
     requestsToBoxCandidates(requests, inputBoxes.head.box.id, state.fullHeight, state.parameters, state.walletVars.publicKeyAddresses)

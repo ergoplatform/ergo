@@ -251,8 +251,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! status
 
     case GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign) =>
-      val tx = ergoWalletService.generateTransaction(state, boxSelector, requests, inputsRaw, dataInputsRaw, sign)
-      sender() ! tx
+      val txTry = ergoWalletService.generateTransaction(state, boxSelector, requests, inputsRaw, dataInputsRaw, sign)
+      sender() ! txTry
 
     case GenerateCommitmentsFor(unsignedTx, externalSecretsOpt, externalInputsOpt, externalDataInputsOpt) =>
       val resultTry = ergoWalletService.generateCommitments(state, unsignedTx, externalSecretsOpt, externalInputsOpt, externalDataInputsOpt)

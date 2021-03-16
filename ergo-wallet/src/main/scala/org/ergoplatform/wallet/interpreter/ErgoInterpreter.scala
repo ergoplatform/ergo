@@ -1,9 +1,8 @@
 package org.ergoplatform.wallet.interpreter
 
-import com.google.common.cache.CacheStats
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.settings.ErgoAlgos
-import org.ergoplatform.validation.{ValidationRules, SigmaValidationSettings}
+import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.protocol.Constants
 import org.ergoplatform.wallet.protocol.context.ErgoLikeParameters
 import org.ergoplatform.{ErgoLikeContext, ErgoBox, ErgoBoxCandidate, ErgoLikeInterpreter}
@@ -92,7 +91,7 @@ object ErgoInterpreter {
     */
   def apply(params: ErgoLikeParameters): ErgoInterpreter =
     new ErgoInterpreter(params)(new RuntimeIRContext) {
-      override val precompiledScriptProcessor = scriptProcessor
+      override val precompiledScriptProcessor: PrecompiledScriptProcessor = scriptProcessor
     }
 
   /** Create [[AvlTreeData]] with the given digest and all operations enabled. */
@@ -100,12 +99,6 @@ object ErgoInterpreter {
     val flags = AvlTreeFlags(insertAllowed = true, updateAllowed = true, removeAllowed = true)
     AvlTreeData(digest, flags, Constants.HashLength)
   }
-
-  /** A list of settings, one for each soft-fork. */
-  val validationSettings: Seq[SigmaValidationSettings] = Array(
-    ValidationRules.currentSettings // for v4.0
-    // add v5.0 settings here...
-  )
 
   /** Top most frequently used complex scripts (with approx counters shown as of 03.03.2021). */
   val frequentlyUsedScripts: Seq[String] = Array(
@@ -126,22 +119,26 @@ object ErgoInterpreter {
     * Preforms pre-compilation of the given scripts during instantiation.
     * Keeps pre-compiled data structures for the lifetime of JVM.
     */
-  val scriptProcessor = {
-    val scriptKeys = frequentlyUsedScripts.flatMap { s =>
+  val scriptProcessor: PrecompiledScriptProcessor = {
+    /** Script compilation requires an instance of [[SigmaValidationSettings]].
+      * The only way to pass it to the CacheLoader is via cache key.
+      * So here we augment each script bytes with the instance of validation settings.
+      */
+    val scriptKeys = frequentlyUsedScripts.map { s =>
       val bytes = ErgoAlgos.decodeUnsafe(s)
-      validationSettings.map(vs => CacheKey(bytes, vs))
+      CacheKey(bytes, ValidationRules.currentSettings)
     }
     new PrecompiledScriptProcessor(
       ScriptProcessorSettings(
         predefScripts = scriptKeys,
-        maxCacheSize = 5000,
+        maxCacheSize = 100,  // takes up around 30Mb
         recordCacheStats = true,
-        reportingInterval = 100
+        reportingInterval = 500
       )) with ScorexLogging {
       override protected def createIR(): IRContext = new RuntimeIRContext
 
       override protected def onReportStats(stats: ProcessorStats): Unit = {
-        log.warn(s"Stats: $stats")
+        log.info(s"Stats: $stats")
       }
     }
   }

@@ -9,7 +9,7 @@ import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.db.{LDBFactory, LDBKVStore}
-
+import java.io.File
 import scala.util.{Success, Try}
 
 /**
@@ -156,6 +156,13 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
       .getOrElse(PaymentsScanId)
   }
 
+  /**
+    * Close wallet storage database
+    */
+  def close(): Unit = {
+    store.close()
+  }
+
 }
 
 object WalletStorage {
@@ -198,9 +205,16 @@ object WalletStorage {
   val ChangeAddressKey: Array[Byte] = noPrefixKey("change_address")
   val lastUsedScanIdKey: Array[Byte] = noPrefixKey("last_scan_id")
 
+
+  /**
+    * @return folder (as an instance of java.io.File) where wallet storage database stored
+    */
+  def storageFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/storage")
+
   def readOrCreate(settings: ErgoSettings)
                   (implicit addressEncoder: ErgoAddressEncoder): WalletStorage = {
-    new WalletStorage(LDBFactory.createKvDb(s"${settings.directory}/wallet/storage"), settings)
+    val db = LDBFactory.createKvDb(storageFolder(settings).getPath)
+    new WalletStorage(db, settings)
   }
 
 }

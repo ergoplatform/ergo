@@ -84,9 +84,9 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   private def walletInit(state: ErgoWalletState): Receive = {
     // Init wallet (w. mnemonic generation) if secret is not set yet
-    case initWallet@InitWallet(pass, _) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
+    case InitWallet(pass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
       val ws = settings.walletSettings
-      ergoWalletService.initWallet(state, ws.seedStrengthBits, ws.mnemonicPhraseLanguage, ws.secretStorage, initWallet) match {
+      ergoWalletService.initWallet(state, ws.seedStrengthBits, ws.mnemonicPhraseLanguage, ws.secretStorage, pass, mnemonicPassOpt) match {
         case Success((mnemonic, newState)) =>
           log.info("Wallet is initialized")
           context.become(walletInit(newState))
@@ -99,12 +99,12 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     //Restore wallet with mnemonic if secret is not set yet
-    case restoreWallet@RestoreWallet(_, _, encryptionPass) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      ergoWalletService.restoreWallet(state, restoreWallet, settings.walletSettings.secretStorage) match {
+    case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
+      ergoWalletService.restoreWallet(state, mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage) match {
         case Success(newState) =>
           log.info("Wallet is restored")
           context.become(walletInit(newState))
-          self ! UnlockWallet(encryptionPass)
+          self ! UnlockWallet(walletPass)
           sender() ! Success(())
         case Failure(t) =>
           val f = wrapLegalExc(t) //getting nicer message for illegal key size exception

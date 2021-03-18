@@ -29,8 +29,17 @@ import scala.util.{Failure, Success, Try}
 
 trait ErgoWalletService {
   def setupWallet(state: ErgoWalletState, testMnemonic: Option[String], testKeysQty: Option[Int], secretStorage: SecretStorageSettings): ErgoWalletState
-  def initWallet(state: ErgoWalletState, seedStrengthBits: Int, mnemonicPhraseLanguage: String, secretStorage: SecretStorageSettings, initWallet: InitWallet): Try[(String, ErgoWalletState)]
-  def restoreWallet(state: ErgoWalletState, restoreWallet: RestoreWallet, secretStorageSettings: SecretStorageSettings): Try[ErgoWalletState]
+  def initWallet(state: ErgoWalletState,
+                 seedStrengthBits: Int,
+                 mnemonicPhraseLanguage: String,
+                 secretStorage: SecretStorageSettings,
+                 walletPass: String,
+                 mnemonicPassOpt: Option[String]): Try[(String, ErgoWalletState)]
+  def restoreWallet(state: ErgoWalletState,
+                    mnemonic: String,
+                    mnemonicPassOpt: Option[String],
+                    walletPass: String,
+                    secretStorageSettings: SecretStorageSettings): Try[ErgoWalletState]
   def unlockWallet(state: ErgoWalletState, walletPass: String, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState]
   def rescanWallet(state: ErgoWalletState, registryFolder: File)(newRegistry: => WalletRegistry): Try[ErgoWalletState]
   def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox]
@@ -95,7 +104,12 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
     }
   }
 
-  def initWallet(state: ErgoWalletState, seedStrengthBits: Int, mnemonicPhraseLanguage: String, secretStorage: SecretStorageSettings, initWallet: InitWallet): Try[(String, ErgoWalletState)] = {
+  def initWallet(state: ErgoWalletState,
+                 seedStrengthBits: Int,
+                 mnemonicPhraseLanguage: String,
+                 secretStorage: SecretStorageSettings,
+                 walletPass: String,
+                 mnemonicPassOpt: Option[String]): Try[(String, ErgoWalletState)] = {
     //Read high-quality random bits from Java's SecureRandom
     val entropy = scorex.utils.Random.randomBytes(seedStrengthBits / 8)
     log.warn("Initializing wallet")
@@ -103,17 +117,20 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
       new Mnemonic(mnemonicPhraseLanguage, seedStrengthBits)
         .toMnemonic(entropy)
         .flatMap { mnemonic =>
-          Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, initWallet.mnemonicPassOpt), initWallet.walletPass)(secretStorage))
+          Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), walletPass)(secretStorage))
             .map( newSecretStorage => mnemonic -> state.copy(secretStorageOpt = Some(newSecretStorage)))
         }
     java.util.Arrays.fill(entropy, 0: Byte)
     result
   }
 
-  def restoreWallet(state: ErgoWalletState, restoreWallet: RestoreWallet, secretStorageSettings: SecretStorageSettings): Try[ErgoWalletState] =
-    Try(JsonSecretStorage.restore(restoreWallet.mnemonic, restoreWallet.mnemonicPassOpt, restoreWallet.walletPass, secretStorageSettings))
+  def restoreWallet(state: ErgoWalletState,
+                    mnemonic: String,
+                    mnemonicPassOpt: Option[String],
+                    walletPass: String,
+                    secretStorageSettings: SecretStorageSettings): Try[ErgoWalletState] =
+    Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, secretStorageSettings))
       .map (secretStorage => state.copy(secretStorageOpt = Some(secretStorage)))
-
 
   def unlockWallet(state: ErgoWalletState, walletPass: String, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
     state.secretStorageOpt match {
@@ -346,8 +363,8 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
         }
     }
 
-  def addScan(state: ErgoWalletState, appRequest: ScanRequest): Try[(Scan, ErgoWalletState)] =
-    state.storage.addScan(appRequest).map { scan =>
+  def addScan(state: ErgoWalletState, scanRequest: ScanRequest): Try[(Scan, ErgoWalletState)] =
+    state.storage.addScan(scanRequest).map { scan =>
       scan -> state.copy(walletVars = state.walletVars.addScan(scan))
     }
 

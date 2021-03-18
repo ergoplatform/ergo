@@ -2,6 +2,7 @@ package org.ergoplatform.it
 
 import com.typesafe.config.Config
 import io.circe.Json
+import io.circe.Json.JArray
 import io.circe.parser._
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.TokenId
@@ -10,7 +11,7 @@ import org.ergoplatform.it.api.NodeApi.UnexpectedStatusCodeException
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.ergoplatform.it.util.RichEither
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
-import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, RequestsHolder, RequestsHolderEncoder}
+import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, PaymentRequestEncoder, RequestsHolder, RequestsHolderEncoder}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoWalletServiceImpl}
 import org.ergoplatform.settings.{Args, ErgoSettings, LaunchParameters}
 import org.ergoplatform.utils.{ErgoTestHelpers, WalletTestOps}
@@ -83,10 +84,11 @@ class WalletSpec extends AsyncWordSpec with IntegrationSuite with WalletTestOps 
 
     node.waitForStartup.flatMap { node: Node =>
       for {
-        txs            <- node.getWihApiKey("/wallet/transactions")
+        txId <- node.postJson("/wallet/payment/send", Json.arr(new PaymentRequestEncoder(settings)(paymentRequest)))
         generateTxResp <- node.postJson("/wallet/transaction/generateUnsigned", requestsHolder.asJson)
-      } yield (txs, generateTxResp)
-    }.map { case (txs, generateTxResp) =>
+        txs            <- node.getWihApiKey("/wallet/transactions")
+      } yield (txs, generateTxResp, txId)
+    }.map { case (txs, generateTxResp, txId) =>
       decode[Seq[AugWalletTransaction]](txs.getResponseBody).left.map(_.getMessage).get shouldBe empty
 
       val generatedTx = decode[UnsignedErgoTransaction](generateTxResp.getResponseBody).left.map(_.getMessage).get

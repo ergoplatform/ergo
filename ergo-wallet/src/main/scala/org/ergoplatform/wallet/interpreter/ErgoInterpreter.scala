@@ -9,9 +9,9 @@ import org.ergoplatform.{ErgoLikeContext, ErgoBox, ErgoBoxCandidate, ErgoLikeInt
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
-import sigmastate.eval.{RuntimeIRContext, IRContext}
+import sigmastate.eval.{RuntimeIRContext, IRContext, Profiler}
 import sigmastate.interpreter.Interpreter.{VerificationResult, ScriptEnv}
-import sigmastate.interpreter.{CacheKey, PrecompiledScriptProcessor, ScriptProcessorSettings, ProcessorStats}
+import sigmastate.interpreter.{ScriptProcessorSettings, ProcessorStats, EvalSettings, PrecompiledScriptProcessor, CacheKey}
 import sigmastate.{AvlTreeData, AvlTreeFlags}
 
 import scala.util.Try
@@ -26,6 +26,12 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
   extends ErgoLikeInterpreter {
 
   override type CTX = ErgoLikeContext
+
+  val profiler = new Profiler
+
+  override val evalSettings: EvalSettings = super.evalSettings.copy(
+    profilerOpt = Some(profiler)
+  )
 
   /**
     * Checks that expired box is spent in a proper way

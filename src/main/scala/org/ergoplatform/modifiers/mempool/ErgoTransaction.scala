@@ -9,26 +9,28 @@ import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
+import org.ergoplatform.settings.{ErgoValidationSettings, Algos, ErgoAlgos}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.EphemerealNodeViewModifier
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
+import scalan.util.BenchmarkUtil
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, ValidationState}
+import scorex.core.validation.{ValidationState, ModifierValidator}
 import scorex.db.{ByteArrayUtils, ByteArrayWrapper}
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.util.{bytesToId, ScorexLogging, ModifierId}
+import sigmastate.Values.{SigmaPropConstant, SigmaBoolean, ErgoTree}
 import sigmastate.eval.Extensions._
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
 
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
 /**
   * ErgoTransaction is an atomic state transition operation. It destroys Boxes from the state
@@ -210,12 +212,18 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         costLimit = maxCost - addExact(currentTxCost, accumulatedCost),
         initCost = 0)
 
-      val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
-      costTry.recover { case t =>
-        log.debug(s"Tx verification failed: ${t.getMessage}")
+      val (costTry, time) = BenchmarkUtil.measureTimeNano {
+        verifier.verify(box.ergoTree, ctx, proof, messageToSign)
       }
 
-      lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
+      val (isCostValid, scriptCost) = costTry match {
+        case Success(res @ (_, scriptCost)) =>
+          registerScriptTime(verifier, ctx, box.ergoTree, time, scriptCost)
+          res
+        case Failure(t) =>
+          log.debug(s"Tx verification failed: ${t.getMessage}")
+          (false, maxCost + 1)
+      }
 
       validation
         // Just in case, should always be true if client implementation is correct.
@@ -223,8 +231,24 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         // Check whether input box script interpreter raised exception
         .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
         // Check that cost of the transaction after checking the input becomes too big
-        .validate(bsBlockTransactionsCost, maxCost >= addExact(currentTxCost, accumulatedCost, scriptCost), s"$id: cost exceeds limit after input #$idx")
+        .validate(bsBlockTransactionsCost, maxCost >= addExact(addExact(currentTxCost, accumulatedCost), scriptCost), s"$id: cost exceeds limit after input #$idx")
         .map(c => addExact(c, scriptCost))
+    }
+  }
+
+  private def registerScriptTime(verifier: ErgoInterpreter,
+                                 context: ErgoContext,
+                                 ergoTree: ErgoTree,
+                                 time: Long,
+                                 scriptCost: Long) = {
+    val prop = verifier.propositionFromErgoTree(ergoTree, context)
+    prop match {
+      case SigmaPropConstant(p) =>
+        // get sigma tree template
+        // register cost for the template
+      case _ =>
+        val treeHex = ErgoAlgos.encode(ergoTree.bytes)
+        verifier.profiler.addEstimation(treeHex, scriptCost.toInt, time)
     }
   }
 

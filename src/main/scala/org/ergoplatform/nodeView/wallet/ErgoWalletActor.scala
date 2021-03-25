@@ -56,7 +56,7 @@ class ErgoWalletActor(settings: ErgoSettings,
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
   private var secretStorageOpt: Option[JsonSecretStorage] = None
-  private val storage: WalletStorage = WalletStorage.readOrCreate(settings)
+  private var storage: WalletStorage = WalletStorage.readOrCreate(settings)
   private var registry: WalletRegistry = WalletRegistry.apply(settings)
   private var offChainRegistry: OffChainRegistry = OffChainRegistry.init(registry)
 
@@ -139,6 +139,29 @@ class ErgoWalletActor(settings: ErgoSettings,
           }
         )
     }
+  }
+
+  /**
+    * Helper method to remove and create again wallet storage database
+    */
+  private def removeStorageFolder(): Unit = {
+    val storageFolder = WalletStorage.storageFolder(settings)
+    log.info(s"Removing the wallet storage folder $storageFolder")
+    storage.close()
+    FileUtils.deleteRecursive(storageFolder)
+    storage = WalletStorage.readOrCreate(settings)
+  }
+
+
+  /**
+    * Helper method to remove and create again wallet registry database
+    */
+  private def removeRegistryFolder(): Unit = {
+    val registryFolder = WalletRegistry.registryFolder(settings)
+    log.info(s"Removing the registry folder $registryFolder")
+    registry.close()
+    FileUtils.deleteRecursive(registryFolder)
+    registry = WalletRegistry.apply(settings)
   }
 
   /**
@@ -341,6 +364,9 @@ class ErgoWalletActor(settings: ErgoSettings,
           mnemonic
         } match {
         case s: Success[String] =>
+          // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
+          removeRegistryFolder()
+          removeStorageFolder()
           self ! UnlockWallet(pass)
           java.util.Arrays.fill(entropy, 0: Byte)
           log.info("Wallet is initialized")
@@ -361,6 +387,9 @@ class ErgoWalletActor(settings: ErgoSettings,
         secretStorageOpt = Some(secretStorage)
       } match {
         case s: Success[Unit] =>
+          // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
+          removeRegistryFolder()
+          removeStorageFolder()
           self ! UnlockWallet(encryptionPass)
           log.info("Wallet is restored")
           s
@@ -423,11 +452,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       // We do wallet rescan by closing the wallet's database, deleting it from the disk,
       // then reopening it and sending a rescan signal.
       val rescanResult = Try {
-        val registryFolder = WalletRegistry.registryFolder(settings)
-        log.info(s"Rescanning the wallet, the registry is in $registryFolder")
-        registry.close()
-        FileUtils.deleteRecursive(registryFolder)
-        registry = WalletRegistry.apply(settings)
+        removeRegistryFolder()
         self ! ScanInThePast(walletHeight()) // walletHeight() corresponds to empty wallet state now
       }
       rescanResult.recover { case t =>

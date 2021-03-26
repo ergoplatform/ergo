@@ -14,11 +14,13 @@ import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoLikeContext.Height
 import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.wallet.transactions.TransactionBuilder
+import scorex.util.encode.Base16
 
 import scala.collection.mutable
 
@@ -148,6 +150,18 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
       .flatMap { case (_, txBytes) =>
         WalletTransactionSerializer.parseBytesTry(txBytes).toOption
       }
+  }
+
+  def walletTxsSince(height: Height): Seq[WalletTransaction] = {
+    val firstKey = firstIncludedScanTransactionSpaceKey(Constants.PaymentsScanId, height)
+    val lastKey = lastIncludedScanTransactionSpaceKey(Constants.PaymentsScanId)
+    val range = store.getRange(firstKey, lastKey)
+    println("range size: " + range.size)
+    range.flatMap { case (_, txId) =>
+      store.get(txKey(ModifierId @@ Base16.encode(txId))).flatMap { txBytes =>
+        WalletTransactionSerializer.parseBytesTry(txBytes).toOption
+      }
+    }
   }
 
   /**
@@ -428,6 +442,16 @@ object WalletRegistry {
     res
   }
 
+  /** Same as [[composeKey()]] with additional height parameter. */
+  private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, height: Int): Array[Byte] = {
+    val res = new Array[Byte](39) // 1 byte for prefix + 2 for scanId + 4 for height + 32 for suffix
+    res(0) = prefix
+    putShort(res, pos = 1, scanId)
+    putInt(res, pos = 3, height)
+    res
+  }
+
+
   /** Same as [[composeKey()]] with additional height parameter and suffix given by id. */
   private[persistence] final def composeKeyWithHeightAndId(prefix: Byte, scanId: ScanId,
                                                            height: Int, suffixId: Array[Byte]): Array[Byte] = {
@@ -456,6 +480,12 @@ object WalletRegistry {
 
   private def lastIncludedScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(UnspentIndexPrefix, scanId, Int.MaxValue, -1)
+
+  private def firstIncludedScanTransactionSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
+    composeKey(InclusionHeightScanTxPrefix, scanId, height)
+
+  private def lastIncludedScanTransactionSpaceKey(scanId: ScanId): Array[Byte] =
+    composeKey(InclusionHeightScanTxPrefix, scanId, Int.MaxValue)
 
   private val RegistrySummaryKey: Array[Byte] = Array(0x02: Byte)
 

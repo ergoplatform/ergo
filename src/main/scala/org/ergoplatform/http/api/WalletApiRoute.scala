@@ -289,15 +289,27 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def transactionsR: Route = (path("transactions") & get & txParams) {
     case (minHeight, maxHeight, minConfNum, maxConfNum) =>
-      withWallet {
-        _.transactions
-          .map {
-            _.filter(tx =>
-              tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId) &&
+      if(minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
+        withWallet {
+          _.transactions
+            .map {
+              _.filter(tx =>
+                tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId) &&
+                  tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
+                  tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
+              )
+            }
+        }
+      } else {
+        withWallet {
+          _.filteredTransactions(minHeight, maxHeight, minConfNum, maxConfNum)
+            .map {
+              _.filter(tx =>
                 tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
-                tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
-            )
-          }
+                  tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
+              )
+            }
+        }
       }
   }
 

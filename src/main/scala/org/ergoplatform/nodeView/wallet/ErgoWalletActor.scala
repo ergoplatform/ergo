@@ -89,6 +89,11 @@ class ErgoWalletActor(settings: ErgoSettings,
     registry.fetchDigest().height
   }
 
+  // Cache for wallet transactions
+  private var cachedTransactions: Option[(Height, Seq[AugWalletTransaction])] = None
+
+  private var cachedUnspentBoxes: Option[(Height, Seq[TrackedBox])] = None
+
   override val supervisorStrategy: OneForOneStrategy =
     OneForOneStrategy(maxNrOfRetries = 5, withinTimeRange = 1.minute) {
       case _: ActorKilledException =>
@@ -261,7 +266,11 @@ class ErgoWalletActor(settings: ErgoSettings,
     case GetWalletBoxes(unspent, considerUnconfirmed) =>
       val currentHeight = fullHeight
       val boxes = if (unspent) {
-        val confirmed = registry.walletUnspentBoxes()
+        val confirmed = if (cachedUnspentBoxes.isEmpty || cachedUnspentBoxes.get._1 != fullHeight) {
+          val ubs = registry.walletUnspentBoxes()
+          cachedUnspentBoxes = Some(fullHeight -> ubs)
+          ubs
+        } else cachedUnspentBoxes.get._2
         if (considerUnconfirmed) {
           // We filter out spent boxes in the same way as wallet does when assembling a transaction
           (confirmed ++ offChainRegistry.offChainBoxes).filter(walletFilter)
@@ -294,9 +303,33 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
 
     case GetTransactions =>
-      sender() ! registry.allWalletTxs()
+      log.info("Starting to read wallet transactions")
+      val ts0 = System.currentTimeMillis()
+      val transactions = if(cachedTransactions.isEmpty || cachedTransactions.get._1 != fullHeight) {
+        val txs = registry.allWalletTxs()
+          .sortBy(-_.inclusionHeight)
+          .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
+        cachedTransactions = Some(fullHeight -> txs)
+        txs
+      } else cachedTransactions.get._2
+      val ts = System.currentTimeMillis()
+      log.info(s"Wallet: ${transactions.size} read in ${ts-ts0} ms")
+      sender() ! transactions
+
+    case GetFilteredTransactions(minHeight, maxHeight, minConfNum, maxConfNum) =>
+      val heightFrom = if (maxConfNum == Int.MaxValue) {
+        minHeight
+      } else {
+        Math.max(minHeight, fullHeight - maxConfNum)
+      }
+      log.info("Starting to read wallet transactions")
+      val ts0 = System.currentTimeMillis()
+      val txs = registry.walletTxsSince(heightFrom)
         .sortBy(-_.inclusionHeight)
         .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
+      val ts = System.currentTimeMillis()
+      log.info(s"Wallet: ${txs.size} read in ${ts-ts0} ms")
+      sender() ! txs
 
     case GetTransaction(txId) =>
       sender() ! registry.getTx(txId)
@@ -426,22 +459,27 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case UnlockWallet(encPass) =>
-      secretStorageOpt match {
-        case Some(secretStorage) =>
-          val unlockResult = secretStorage.unlock(encPass)
-          unlockResult match {
-            case Success(_) =>
-              Future {
-                log.info("Starting wallet unlock")
-                processUnlock(secretStorage)
-                log.info("Wallet unlock finished")
-              }
-            case Failure(t) =>
-              log.warn("Wallet unlock failed with: ", t)
-          }
-          sender() ! unlockResult
-        case None =>
-          sender() ! Failure(new Exception("Wallet not initialized"))
+      if(walletVars.proverOpt.isEmpty) {
+        secretStorageOpt match {
+          case Some(secretStorage) =>
+            val unlockResult = secretStorage.unlock(encPass)
+            unlockResult match {
+              case Success(_) =>
+                Future {
+                  log.info("Starting wallet unlock")
+                  processUnlock(secretStorage)
+                  log.info("Wallet unlock finished")
+                }
+              case Failure(t) =>
+                log.warn("Wallet unlock failed with: ", t)
+            }
+            sender() ! unlockResult
+          case None =>
+            sender() ! Failure(new Exception("Wallet not initialized"))
+        }
+      } else {
+        log.info("Wallet already unlocked")
+        sender() ! Failure(new Exception("Wallet already unlocked"))
       }
 
     case LockWallet =>
@@ -1160,6 +1198,12 @@ object ErgoWalletActor {
     * Get all wallet-related transaction
     */
   case object GetTransactions
+
+  /**
+    * Get filtered wallet-related transaction
+    */
+  case class GetFilteredTransactions(minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int)
+
 
   /**
     * Derive next key-pair according to BIP-32

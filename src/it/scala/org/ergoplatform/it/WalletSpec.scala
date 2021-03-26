@@ -84,11 +84,11 @@ class WalletSpec extends AsyncWordSpec with IntegrationSuite with WalletTestOps 
 
     node.waitForStartup.flatMap { node: Node =>
       for {
-        txId <- node.postJson("/wallet/payment/send", Json.arr(new PaymentRequestEncoder(settings)(paymentRequest)))
+        _ <- node.postJson("/wallet/payment/send", Json.arr(new PaymentRequestEncoder(settings)(paymentRequest)))
         generateTxResp <- node.postJson("/wallet/transaction/generateUnsigned", requestsHolder.asJson)
         txs            <- node.getWihApiKey("/wallet/transactions")
-      } yield (txs, generateTxResp, txId)
-    }.map { case (txs, generateTxResp, txId) =>
+      } yield (txs, generateTxResp)
+    }.map { case (txs, generateTxResp) =>
       decode[Seq[AugWalletTransaction]](txs.getResponseBody).left.map(_.getMessage).get shouldBe empty
 
       val generatedTx = decode[UnsignedErgoTransaction](generateTxResp.getResponseBody).left.map(_.getMessage).get

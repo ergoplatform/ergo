@@ -22,7 +22,7 @@ case class ErgoWalletState(
     walletVars: WalletVars,
     stateReaderOpt: Option[ErgoStateReader], //todo: temporary 3.2.x collection and readers
     mempoolReaderOpt: Option[ErgoMemPoolReader],
-    utxoReaderOpt: Option[UtxoStateReader],
+    utxoStateReaderOpt: Option[UtxoStateReader],
     parameters: Parameters
   ) extends ScorexLogging {
 
@@ -50,7 +50,7 @@ case class ErgoWalletState(
 
     // double-check that box is exists in UTXO set or outputs of offchain transaction
     def inOutputs: Boolean = {
-      utxoReaderOpt.forall { utxo =>
+      utxoStateReaderOpt.forall { utxo =>
         utxo.boxById(bid).isDefined
       }
     }
@@ -86,7 +86,7 @@ case class ErgoWalletState(
 
   // Read a box from UTXO set if the node has it, otherwise, from the wallet
   def readBoxFromUtxoWithWalletFallback(boxId: BoxId): Option[ErgoBox] = {
-    utxoReaderOpt match {
+    utxoStateReaderOpt match {
       case Some(utxoReader) =>
         utxoReader.boxById(boxId)
       case None =>
@@ -143,7 +143,7 @@ object ErgoWalletState {
       walletVars,
       stateReaderOpt = None,
       mempoolReaderOpt = None,
-      utxoReaderOpt = None,
+      utxoStateReaderOpt = None,
       LaunchParameters
     )
   }

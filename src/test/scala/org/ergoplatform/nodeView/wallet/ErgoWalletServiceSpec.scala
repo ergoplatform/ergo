@@ -14,6 +14,8 @@ import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
 import org.ergoplatform.wallet.crypto.ErgoSignature
+import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
@@ -22,11 +24,14 @@ import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
 import sigmastate.helpers.TestingHelpers.testBox
 import sigmastate.{SType, Values}
 
+import scala.util.Random
+
 class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with ErgoWalletSupport with ErgoTransactionGenerators with DBSpec with BeforeAndAfterAll {
 
   private implicit val x: WalletFixture = new WalletFixture(settings, getCurrentView(_).vault)
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 4)
   private lazy val pks = getPublicKeys.toList
+  private val masterKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed("edge talent poet tortoise trumpet dose"))
 
   override def afterAll(): Unit = try super.afterAll() finally x.stop()
 
@@ -170,4 +175,44 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
     }
   }
 
+  property("it should process unlock using preEip3Derivation") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletState = initialState(store, versionedStore)
+        val unlockedWalletState = processUnlock(walletState, masterKey, usePreEip3Derivation = true).get
+        unlockedWalletState.storage.readAllKeys().size shouldBe 1
+        unlockedWalletState.storage.readAllKeys() should contain(masterKey.publicKey)
+        unlockedWalletState.walletVars.proverOpt shouldNot be(empty)
+      }
+    }
+  }
+
+  property("it should process unlock without preEip3Derivation") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletState = initialState(store, versionedStore)
+        val unlockedWalletState = processUnlock(walletState, masterKey, usePreEip3Derivation = false).get
+        unlockedWalletState.storage.readAllKeys().size shouldBe 1
+        unlockedWalletState.storage.readChangeAddress shouldNot be(empty)
+        unlockedWalletState.walletVars.proverOpt shouldNot be(empty)
+      }
+    }
+  }
+
+  property("it should unlock wallet") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletState = initialState(store, versionedStore)
+        val walletService = new ErgoWalletServiceImpl
+        val ws = settings.walletSettings
+        val pass = Random.nextString(10)
+        val (mnemonic, initializedState) = walletService.initWallet(walletState, ws.seedStrengthBits, ws.mnemonicPhraseLanguage, ws.secretStorage, pass, Option.empty).get
+        Mnemonic.toSeed(mnemonic, Option.empty)
+        val unlockedWalletState = walletService.unlockWallet(initializedState, pass, usePreEip3Derivation = true).get
+        unlockedWalletState.secretStorageOpt.get.isLocked shouldBe false
+        walletState.storage.readAllKeys().size shouldBe 1
+        walletState.walletVars.proverOpt shouldNot be(empty)
+      }
+    }
+  }
 }

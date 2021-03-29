@@ -39,7 +39,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   override val route: Route = (pathPrefix("wallet") & withAuth) {
-    toStrictEntity(10.seconds) {
+    toStrictEntity(30.seconds) {
       getWalletStatusR ~
         balancesR ~
         unconfirmedBalanceR ~

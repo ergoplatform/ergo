@@ -265,6 +265,8 @@ class ErgoWalletActor(settings: ErgoSettings,
      */
     case GetWalletBoxes(unspent, considerUnconfirmed) =>
       val currentHeight = fullHeight
+      log.info("Starting to read wallet boxes at height: " + currentHeight)
+      val ts0 = System.currentTimeMillis()
       val boxes = if (unspent) {
         val confirmed = if (cachedUnspentBoxes.isEmpty || cachedUnspentBoxes.get._1 != fullHeight) {
           val ubs = registry.walletUnspentBoxes()
@@ -286,7 +288,10 @@ class ErgoWalletActor(settings: ErgoSettings,
           confirmed
         }
       }
-      sender() ! boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
+      val result = boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
+      val ts = System.currentTimeMillis()
+      log.info(s"Wallet boxes read in ${ts-ts0} ms.")
+      sender() ! result
 
     case GetScanBoxes(scanId, unspent, considerUnconfirmed) =>
 

@@ -247,15 +247,13 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def getWalletStatusR: Route = (path("status") & get) {
-    withWalletOp(_.getWalletStatus) { walletStatus =>
-      ApiResponse(
+    withWallet(_.getWalletStatus) { walletStatus =>
         Json.obj(
           "isInitialized" -> walletStatus.initialized.asJson,
           "isUnlocked" -> walletStatus.unlocked.asJson,
           "changeAddress" -> walletStatus.changeAddress.map(_.toString()).getOrElse("").asJson,
           "walletHeight" -> walletStatus.height.asJson
         )
-      )
     }
   }
 

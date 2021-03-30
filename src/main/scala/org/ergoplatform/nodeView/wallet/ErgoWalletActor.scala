@@ -232,8 +232,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case LockWallet =>
-      state.secretStorageOpt.foreach(_.lock())
-      context.become(loadedWallet(state.copy(walletVars = state.walletVars.resetProver())))
+      log.info("Locking wallet")
+      context.become(loadedWallet(ergoWalletService.lockWallet(state)))
 
     // We do wallet rescan by closing the wallet's database, deleting it from the disk, then reopening it and sending a rescan signal.
     case RescanWallet =>

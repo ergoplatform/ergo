@@ -199,7 +199,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
     }
   }
 
-  property("it should unlock wallet") {
+  property("it should lock/unlock wallet") {
     withVersionedStore(2) { versionedStore =>
       withStore { store =>
         val walletState = initialState(store, versionedStore)
@@ -210,8 +210,17 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
         Mnemonic.toSeed(mnemonic, Option.empty)
         val unlockedWalletState = walletService.unlockWallet(initializedState, pass, usePreEip3Derivation = true).get
         unlockedWalletState.secretStorageOpt.get.isLocked shouldBe false
-        walletState.storage.readAllKeys().size shouldBe 1
-        walletState.walletVars.proverOpt shouldNot be(empty)
+        unlockedWalletState.storage.readAllKeys().size shouldBe 1
+        unlockedWalletState.walletVars.proverOpt shouldNot be(empty)
+
+        val lockedWalletState = walletService.lockWallet(unlockedWalletState)
+        lockedWalletState.secretStorageOpt.get.isLocked shouldBe true
+        lockedWalletState.walletVars.proverOpt shouldBe empty
+
+        val finalUnlockedState = walletService.unlockWallet(lockedWalletState, pass, usePreEip3Derivation = true).get
+        finalUnlockedState.secretStorageOpt.get.isLocked shouldBe false
+        finalUnlockedState.storage.readAllKeys().size shouldBe 1
+        finalUnlockedState.walletVars.proverOpt shouldNot be(empty)
       }
     }
   }

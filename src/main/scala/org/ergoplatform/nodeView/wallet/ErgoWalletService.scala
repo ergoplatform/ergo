@@ -77,13 +77,20 @@ trait ErgoWalletService {
                     secretStorageSettings: SecretStorageSettings): Try[ErgoWalletState]
 
   /**
-    * Decrypt underlying JsonSecretStorage using `walletPass` and update public keys
+    * Decrypt underlying [[JsonSecretStorage]] using `walletPass` and update public keys
     * @param state current wallet state
     * @param walletPass used for wallet initialization to decrypt wallet json file with
     * @param usePreEip3Derivation if true, the first key is the master key
     * @return Try of new wallet state
     */
   def unlockWallet(state: ErgoWalletState, walletPass: String, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState]
+
+  /**
+    * Unset secret in [[JsonSecretStorage]] and reset prover
+    * @param state current wallet state
+    * @return Try of new wallet state
+    */
+  def lockWallet(state: ErgoWalletState): ErgoWalletState
 
   /**
     * Close it, delete from filesystem and create new one
@@ -250,6 +257,11 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
       case None =>
         Failure(new Exception("Wallet not initialized"))
     }
+
+  def lockWallet(state: ErgoWalletState): ErgoWalletState = {
+    state.secretStorageOpt.foreach(_.lock())
+    state.copy(walletVars = state.walletVars.resetProver())
+  }
 
   def recreateRegistry(state: ErgoWalletState, registryFolder: File)(newRegistry: => WalletRegistry): Try[ErgoWalletState] =
     Try {

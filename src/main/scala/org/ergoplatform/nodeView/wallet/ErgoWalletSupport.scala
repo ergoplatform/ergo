@@ -92,7 +92,8 @@ trait ErgoWalletSupport extends ScorexLogging {
     convertLegacyClientPaths(state.storage, masterKey)
     // Now we read previously stored, or just stored during the conversion procedure above, public keys
     // If no public keys in the database yet, add master's public key into it
-    if (state.storage.readAllKeys().toIndexedSeq.isEmpty) {
+    val pubKeys = state.storage.readAllKeys().toIndexedSeq
+    if (pubKeys.isEmpty) {
       if (usePreEip3Derivation) {
         // If usePreEip3Derivation flag is set in the wallet settings, the first key is the master key
         val masterPubKey = masterKey.publicKey
@@ -113,7 +114,7 @@ trait ErgoWalletSupport extends ScorexLogging {
       }
     } else {
       log.info("Wallet unlock finished using existing keys in storage")
-      Success(state)
+      Try(updatePublicKeys(state, masterKey, pubKeys))
     }
   }
 

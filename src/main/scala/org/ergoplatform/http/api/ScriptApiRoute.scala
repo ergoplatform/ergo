@@ -109,7 +109,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
           val res = interpreter.reduceToCrypto(req.ctx.asInstanceOf[interpreter.CTX], prop)
           res.fold(
             e => BadRequest(e.getMessage),
-            s => ApiResponse(CryptoResult(s._1, s._2).asJson)
+            s => ApiResponse(CryptoResult(s.value, s.cost).asJson)
           )
         }
       )

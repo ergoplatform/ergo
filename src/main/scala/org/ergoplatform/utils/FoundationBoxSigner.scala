@@ -60,7 +60,7 @@ object FoundationBoxSigner extends App {
   val action: ACTION = preSign
 
   // hints provided by a cosigner
-  val commitmentStringOpt: Option[String] = None
+  val commitmentStringOpt: Option[String] = Some("02fd3c2b13fd4603c442182cb6d11d6c059e8f2768ee77682123b23bc0912291cf")
   val ownRandomnessStringOpt: Option[String] = None
   val partialSignatureStringOpt: Option[String] = None
 

@@ -319,10 +319,18 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
     }
   }
 
-  def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get) { id =>
-    withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort)) {
-      resp => ApiResponse(resp.result.asJson)
-    }
+  def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get & txParams) {
+    case (id, minHeight, maxHeight, minConfNum, maxConfNum) =>
+      if (minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
+        withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort)) {
+          resp => ApiResponse(resp.result.asJson)
+        }
+      }
+      else {
+        withWalletOp(_.filteredScanTransations(ScanId @@ id.toShort, minHeight, maxHeight, minConfNum, maxConfNum)){
+          resp => ApiResponse(resp.asJson)
+        }
+      }
   }
 
   def initWalletR: Route = (path("init") & post & initRequest) {

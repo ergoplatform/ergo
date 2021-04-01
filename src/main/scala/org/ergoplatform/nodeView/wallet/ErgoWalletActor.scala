@@ -18,6 +18,7 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, ExternalSec
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{BoxUtils, FileUtils}
+import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus, ErgoBoxSerializer, TrackedBox}
@@ -317,19 +318,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! transactions
 
     case GetFilteredTransactions(minHeight, maxHeight, minConfNum, maxConfNum) =>
-      val heightFrom = if (maxConfNum == Int.MaxValue) {
-        minHeight
-      } else {
-        Math.max(minHeight, fullHeight - maxConfNum)
-      }
-      log.info("Starting to read wallet transactions")
-      val ts0 = System.currentTimeMillis()
-      val txs = registry.walletTxsSince(heightFrom)
-        .sortBy(-_.inclusionHeight)
-        .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
-      val ts = System.currentTimeMillis()
-      log.info(s"Wallet: ${txs.size} read in ${ts-ts0} ms")
-      sender() ! txs
+      getFiltered(Constants.PaymentsScanId, minHeight, maxHeight, minConfNum, maxConfNum)
 
     case GetTransaction(txId) =>
       sender() ! registry.getTx(txId)
@@ -614,6 +603,25 @@ class ErgoWalletActor(settings: ErgoSettings,
       val res = registry.allWalletTxs().filter(wtx => wtx.scanIds.contains(scanId))
         .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
       sender() ! ScanRelatedTxsResponse(res)
+
+    case GetFilteredScanTxs(scanId, minHeight, maxHeight, minConfNum, maxConfNum)  =>
+      getFiltered(scanId, minHeight, maxHeight, minConfNum, maxConfNum)
+  }
+
+  def getFiltered(scanId: ScanId, minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int): Unit = {
+    val heightFrom = if (maxConfNum == Int.MaxValue) {
+      minHeight
+    } else {
+      Math.max(minHeight, fullHeight - maxConfNum)
+    }
+    log.info("Starting to read wallet transactions")
+    val ts0 = System.currentTimeMillis()
+    val txs = registry.walletTxsSince(scanId, heightFrom)
+      .sortBy(-_.inclusionHeight)
+      .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
+    val ts = System.currentTimeMillis()
+    log.info(s"Wallet: ${txs.size} read in ${ts-ts0} ms")
+    sender() ! txs
   }
 
   override def receive: Receive =
@@ -1204,6 +1212,8 @@ object ErgoWalletActor {
     */
   case class GetFilteredTransactions(minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int)
 
+
+  case class GetFilteredScanTxs(scanId: ScanId, minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int)
 
   /**
     * Derive next key-pair according to BIP-32

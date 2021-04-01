@@ -152,9 +152,9 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
       }
   }
 
-  def walletTxsSince(height: Height): Seq[WalletTransaction] = {
-    val firstKey = firstIncludedScanTransactionSpaceKey(Constants.PaymentsScanId, height)
-    val lastKey = lastIncludedScanTransactionSpaceKey(Constants.PaymentsScanId)
+  def walletTxsSince(scanId: ScanId, height: Height): Seq[WalletTransaction] = {
+    val firstKey = firstIncludedScanTransactionSpaceKey(scanId, height)
+    val lastKey = lastIncludedScanTransactionSpaceKey(scanId)
     val range = store.getRange(firstKey, lastKey)
     println("range size: " + range.size)
     range.flatMap { case (_, txId) =>

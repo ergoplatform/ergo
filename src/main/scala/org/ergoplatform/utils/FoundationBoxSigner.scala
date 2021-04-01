@@ -53,7 +53,7 @@ object FoundationBoxSigner extends App {
   val preSign: ACTION = 1
   val sign: ACTION = 2
 
-  val height = 415000
+  val height = 450000
 
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
@@ -117,9 +117,9 @@ object FoundationBoxSigner extends App {
   //waves gateway address for Ergo Waves account
   val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
 
-  val addr = enc.fromString("9hxFS2RkmL5Fv5DRZGwZCbsbjTU1R75Luc2t5hkUcR1x3jWzre4").get
+  val addr = enc.fromString("9f2g2isM4RLPwqb63BQm3acfCxAYPyZSe8gsKxBd6CZDKTnUCta").get
 
-  val withdrawalAmount = 95000 * EmissionRules.CoinsInOneErgo
+  val withdrawalAmount = 1 * EmissionRules.CoinsInOneErgo
   val withdrawalOutputs = IndexedSeq(new ErgoBoxCandidate(withdrawalAmount, addr.script, height))
 
   val foundationOutput = new ErgoBoxCandidate(gfBox.value - withdrawalAmount - fee, gfBox.ergoTree, height,

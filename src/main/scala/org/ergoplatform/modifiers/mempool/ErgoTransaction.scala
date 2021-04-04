@@ -236,6 +236,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     }
   }
 
+  /** Register the cost and time of executing the given ErgoTree in the given context.
+    * The data record in registered in the profiler of the given verifier.
+    */
   private def registerScriptTime(verifier: ErgoInterpreter,
                                  context: ErgoContext,
                                  ergoTree: ErgoTree,

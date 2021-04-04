@@ -27,7 +27,7 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
 
   override type CTX = ErgoLikeContext
 
-  val profiler = new Profiler
+  val profiler = ErgoInterpreter.debugProfiler
 
   override val evalSettings: EvalSettings = super.evalSettings.copy(
     profilerOpt = Some(profiler)
@@ -87,10 +87,14 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
       super.verify(env, exp, context, proof, message)
     }
   }
-
 }
 
 object ErgoInterpreter {
+
+  /** Profiler which is used in `debug mode` to evaluate accuracy of cost estimation.
+    * This profiler is shared by all instances of ErgoInterpreter
+    */
+  val debugProfiler = new Profiler
 
   /** Creates an interpreter with the given parameters, [[RuntimeIRContext]] for script processing and
     * the `scriptProcessor` for handling compilation caching and handling pre-compiled scripts.

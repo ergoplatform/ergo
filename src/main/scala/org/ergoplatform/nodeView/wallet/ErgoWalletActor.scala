@@ -317,9 +317,6 @@ class ErgoWalletActor(settings: ErgoSettings,
       log.info(s"Wallet: ${transactions.size} read in ${ts-ts0} ms")
       sender() ! transactions
 
-    case GetFilteredTransactions(minHeight, maxHeight, minConfNum, maxConfNum) =>
-      getFiltered(Constants.PaymentsScanId, minHeight, maxHeight, minConfNum, maxConfNum)
-
     case GetTransaction(txId) =>
       sender() ! registry.getTx(txId)
         .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
@@ -604,11 +601,11 @@ class ErgoWalletActor(settings: ErgoSettings,
         .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
       sender() ! ScanRelatedTxsResponse(res)
 
-    case GetFilteredScanTxs(scanId, minHeight, maxHeight, minConfNum, maxConfNum)  =>
-      getFiltered(scanId, minHeight, maxHeight, minConfNum, maxConfNum)
+    case GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum)  =>
+      getFiltered(scanIds, minHeight, maxHeight, minConfNum, maxConfNum)
   }
 
-  def getFiltered(scanId: ScanId, minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int): Unit = {
+  def getFiltered(scanId: List[ScanId], minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int): Unit = {
     val heightFrom = if (maxConfNum == Int.MaxValue) {
       minHeight
     } else {
@@ -621,7 +618,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     }
     log.info("Starting to read wallet transactions")
     val ts0 = System.currentTimeMillis()
-    val txs = registry.walletTxsSince(scanId, heightFrom, heightTo)
+    val txs = scanId.flatMap(c => registry.walletTxsSince(c, heightFrom, heightTo))
       .sortBy(-_.inclusionHeight)
       .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
     val ts = System.currentTimeMillis()
@@ -1215,10 +1212,10 @@ object ErgoWalletActor {
   /**
     * Get filtered wallet-related transaction
     */
-  case class GetFilteredTransactions(minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int)
+  case class GetFilteredTransactions(scanIds: List[ScanId], minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int)
 
 
-  case class GetFilteredScanTxs(scanId: ScanId, minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int)
+  case class GetFilteredScanTxs(scanId: List[ScanId], minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int)
 
   /**
     * Derive next key-pair according to BIP-32

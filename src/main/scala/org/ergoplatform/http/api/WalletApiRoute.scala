@@ -300,7 +300,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         }
       } else {
         withWallet {
-          _.filteredTransactions(minHeight, maxHeight, minConfNum, maxConfNum)
+          _.filteredScanTransactions(List(Constants.PaymentsScanId, Constants.MiningScanId), minHeight, maxHeight, minConfNum, maxConfNum)
         }
       }
   }
@@ -319,7 +319,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         }
       }
       else {
-        withWalletOp(_.filteredScanTransations(ScanId @@ id.toShort, minHeight, maxHeight, minConfNum, maxConfNum)) {
+        withWalletOp(_.filteredScanTransactions(List(ScanId @@ id.toShort), minHeight, maxHeight, minConfNum, maxConfNum)) {
           resp => ApiResponse(resp.asJson)
         }
       }

@@ -614,9 +614,14 @@ class ErgoWalletActor(settings: ErgoSettings,
     } else {
       Math.max(minHeight, fullHeight - maxConfNum)
     }
+    val heightTo = if (minConfNum == 0) {
+      maxHeight
+    } else {
+      Math.min(maxHeight, fullHeight - minConfNum)
+    }
     log.info("Starting to read wallet transactions")
     val ts0 = System.currentTimeMillis()
-    val txs = registry.walletTxsSince(scanId, heightFrom)
+    val txs = registry.walletTxsSince(scanId, heightFrom, heightTo)
       .sortBy(-_.inclusionHeight)
       .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
     val ts = System.currentTimeMillis()

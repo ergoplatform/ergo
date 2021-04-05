@@ -88,13 +88,20 @@ trait ErgoWalletService {
   def lockWallet(state: ErgoWalletState): ErgoWalletState
 
   /**
-    * Close it, delete from filesystem and create new one
+    * Close it, recursively delete registryFolder from filesystem if present and create new registry
     * @param state current wallet state
-    * @param registryFolder will be recursively deleted if present
-    * @param newRegistry function that creates new registry
+    * @param settings [[ErgoSettings]]
     * @return Try of new wallet state
     */
-  def recreateRegistry(state: ErgoWalletState, registryFolder: File)(newRegistry: => WalletRegistry): Try[ErgoWalletState]
+  def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState]
+
+  /**
+    * Close it, recursively delete storageFolder from filesystem if present and create new storage
+    * @param state current wallet state
+    * @param settings [[ErgoSettings]]
+    * @return Try of new wallet state
+    */
+  def recreateStorage(state: ErgoWalletState, settings: ErgoSettings)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState]
 
   def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox]
 

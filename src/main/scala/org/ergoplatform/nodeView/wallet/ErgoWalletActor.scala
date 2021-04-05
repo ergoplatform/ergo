@@ -9,7 +9,6 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
-import org.ergoplatform.nodeView.wallet.persistence._
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.settings._
@@ -238,7 +237,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     // We do wallet rescan by closing the wallet's database, deleting it from the disk, then reopening it and sending a rescan signal.
     case RescanWallet =>
       log.info(s"Rescanning the wallet")
-      ergoWalletService.recreateRegistry(state, WalletRegistry.registryFolder(settings))(WalletRegistry.apply(settings)) match {
+      ergoWalletService.recreateRegistry(state, settings) match {
         case Success(newState) =>
           context.become(loadedWallet(newState))
           self ! ScanInThePast(newState.getWalletHeight) // walletHeight() corresponds to empty wallet state now

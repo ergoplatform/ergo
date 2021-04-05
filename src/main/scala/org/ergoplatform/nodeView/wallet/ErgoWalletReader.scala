@@ -146,5 +146,4 @@ trait ErgoWalletReader extends VaultReader {
 
   def filteredScanTransactions(scanIds: List[ScanId], minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int): Future[Seq[AugWalletTransaction]] =
     (walletActor ? GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum)).mapTo[Seq[AugWalletTransaction]]
-
 }

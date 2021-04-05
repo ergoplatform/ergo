@@ -6,13 +6,12 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoStateReader}
-import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{InitWallet, RestoreWallet}
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
-import org.ergoplatform.nodeView.wallet.persistence.WalletRegistry
+import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
-import org.ergoplatform.settings.Parameters
+import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.utils.FileUtils
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, ErgoBoxSerializer}
@@ -48,33 +47,29 @@ trait ErgoWalletService {
   /**
     * Initializes JsonSecretStorage with new wallet file encrypted with given `walletPass`
     * @param state current wallet state
-    * @param seedStrengthBits number of bits in the seed
-    * @param mnemonicPhraseLanguage language identifier to be used in sentence
-    * @param secretStorageSettings to be used for initializing JsonSecretStorage
+    * @param settings [[ErgoSettings]]
     * @param walletPass to encrypt wallet file with
     * @param mnemonicPassOpt optional mnemonic password included into seed. Needed for restoring wallet
     * @return generated mnemonic the JsonSecretStorage was initialized with -> new wallet state
     */
   def initWallet(state: ErgoWalletState,
-                 seedStrengthBits: Int,
-                 mnemonicPhraseLanguage: String,
-                 secretStorageSettings: SecretStorageSettings,
+                 settings: ErgoSettings,
                  walletPass: String,
-                 mnemonicPassOpt: Option[String]): Try[(String, ErgoWalletState)]
+                 mnemonicPassOpt: Option[String])(implicit addrEncoder: ErgoAddressEncoder): Try[(String, ErgoWalletState)]
 
   /**
     * @param state current wallet state
+    * @param settings [[ErgoSettings]]
     * @param mnemonic that was used to initialize wallet with
     * @param mnemonicPassOpt that was used to initialize wallet with
     * @param walletPass that was used to initialize wallet with
-    * @param secretStorageSettings to be used for restoring wallet
     * @return new wallet state
     */
   def restoreWallet(state: ErgoWalletState,
+                    settings: ErgoSettings,
                     mnemonic: String,
                     mnemonicPassOpt: Option[String],
-                    walletPass: String,
-                    secretStorageSettings: SecretStorageSettings): Try[ErgoWalletState]
+                    walletPass: String)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState]
 
   /**
     * Decrypt underlying [[JsonSecretStorage]] using `walletPass` and update public keys
@@ -216,32 +211,38 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
   }
 
   def initWallet(state: ErgoWalletState,
-                 seedStrengthBits: Int,
-                 mnemonicPhraseLanguage: String,
-                 secretStorageSettings: SecretStorageSettings,
+                 settings: ErgoSettings,
                  walletPass: String,
-                 mnemonicPassOpt: Option[String]): Try[(String, ErgoWalletState)] = {
+                 mnemonicPassOpt: Option[String]
+              )(implicit addrEncoder: ErgoAddressEncoder): Try[(String, ErgoWalletState)] = {
+    val walletSettings = settings.walletSettings
     //Read high-quality random bits from Java's SecureRandom
-    val entropy = scorex.utils.Random.randomBytes(seedStrengthBits / 8)
+    val entropy = scorex.utils.Random.randomBytes(walletSettings.seedStrengthBits / 8)
     log.warn("Initializing wallet")
     val result =
-      new Mnemonic(mnemonicPhraseLanguage, seedStrengthBits)
-        .toMnemonic(entropy)
-        .flatMap { mnemonic =>
-          Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), walletPass)(secretStorageSettings))
-            .map( newSecretStorage => mnemonic -> state.copy(secretStorageOpt = Some(newSecretStorage)))
-        }
+      for {
+        mnemonic <- new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits).toMnemonic(entropy)
+        newSecretStorage <- Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), walletPass)(walletSettings.secretStorage))
+        // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
+        stateV1 <- recreateRegistry(state, settings)
+        stateV2 <- recreateStorage(stateV1, settings)
+      } yield mnemonic -> stateV2.copy(secretStorageOpt = Some(newSecretStorage))
+
     java.util.Arrays.fill(entropy, 0: Byte)
     result
   }
 
   def restoreWallet(state: ErgoWalletState,
+                    settings: ErgoSettings,
                     mnemonic: String,
                     mnemonicPassOpt: Option[String],
-                    walletPass: String,
-                    secretStorageSettings: SecretStorageSettings): Try[ErgoWalletState] =
-    Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, secretStorageSettings))
-      .map (secretStorage => state.copy(secretStorageOpt = Some(secretStorage)))
+                    walletPass: String)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
+    for {
+      secretStorage <- Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage))
+      // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
+      stateV1 <- recreateRegistry(state, settings)
+      stateV2 <- recreateStorage(stateV1, settings)
+    } yield stateV2.copy(secretStorageOpt = Some(secretStorage))
 
   def unlockWallet(state: ErgoWalletState, walletPass: String, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
     state.secretStorageOpt match {
@@ -263,11 +264,22 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
     state.copy(walletVars = state.walletVars.resetProver())
   }
 
-  def recreateRegistry(state: ErgoWalletState, registryFolder: File)(newRegistry: => WalletRegistry): Try[ErgoWalletState] =
+  def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] =
     Try {
+      val registryFolder = WalletRegistry.registryFolder(settings)
+      log.info(s"Removing the registry folder $registryFolder")
       state.registry.close()
       FileUtils.deleteRecursive(registryFolder)
-      state.copy(registry = newRegistry)
+      state.copy(registry = WalletRegistry.apply(settings))
+    }
+
+  def recreateStorage(state: ErgoWalletState, settings: ErgoSettings)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
+    Try {
+      val storageFolder = WalletStorage.storageFolder(settings)
+      log.info(s"Removing the wallet storage folder $storageFolder")
+      state.storage.close()
+      FileUtils.deleteRecursive(storageFolder)
+      state.copy(storage = WalletStorage.readOrCreate(settings))
     }
 
   def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox] = {

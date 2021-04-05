@@ -86,7 +86,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     // Init wallet (w. mnemonic generation) if secret is not set yet
     case InitWallet(pass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
       val ws = settings.walletSettings
-      ergoWalletService.initWallet(state, ws.seedStrengthBits, ws.mnemonicPhraseLanguage, ws.secretStorage, pass, mnemonicPassOpt) match {
+      ergoWalletService.initWallet(state, settings, pass, mnemonicPassOpt) match {
         case Success((mnemonic, newState)) =>
           log.info("Wallet is initialized")
           context.become(loadedWallet(newState))
@@ -100,7 +100,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     //Restore wallet with mnemonic if secret is not set yet
     case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      ergoWalletService.restoreWallet(state, mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage) match {
+      ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass) match {
         case Success(newState) =>
           log.info("Wallet is restored")
           context.become(loadedWallet(newState))
@@ -237,9 +237,8 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     // We do wallet rescan by closing the wallet's database, deleting it from the disk, then reopening it and sending a rescan signal.
     case RescanWallet =>
-      val registryFolder = WalletRegistry.registryFolder(settings)
-      log.info(s"Rescanning the wallet, the registry is in $registryFolder")
-      ergoWalletService.recreateRegistry(state, registryFolder)(WalletRegistry.apply(settings)) match {
+      log.info(s"Rescanning the wallet")
+      ergoWalletService.recreateRegistry(state, WalletRegistry.registryFolder(settings))(WalletRegistry.apply(settings)) match {
         case Success(newState) =>
           context.become(loadedWallet(newState))
           self ! ScanInThePast(newState.getWalletHeight) // walletHeight() corresponds to empty wallet state now

@@ -204,7 +204,6 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
       withStore { store =>
         val walletState = initialState(store, versionedStore)
         val walletService = new ErgoWalletServiceImpl
-        val ws = settings.walletSettings
         val pass = Random.nextString(10)
         val (mnemonic, initializedState) = walletService.initWallet(walletState, settings, pass, Option.empty).get
         Mnemonic.toSeed(mnemonic, Option.empty)

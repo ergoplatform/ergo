@@ -74,6 +74,7 @@ class ErgoWalletActor(settings: ErgoSettings,
   private def emptyWallet: Receive = {
     case ReadWallet(state) =>
       val ws = settings.walletSettings
+      // Try to read wallet from json file or test mnemonic provided in a config file
       val newState = ergoWalletService.readWallet(state, ws.testMnemonic, ws.testKeysQty, ws.secretStorage)
       context.become(loadedWallet(newState))
       unstashAll()
@@ -84,7 +85,6 @@ class ErgoWalletActor(settings: ErgoSettings,
   private def loadedWallet(state: ErgoWalletState): Receive = {
     // Init wallet (w. mnemonic generation) if secret is not set yet
     case InitWallet(pass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      val ws = settings.walletSettings
       ergoWalletService.initWallet(state, settings, pass, mnemonicPassOpt) match {
         case Success((mnemonic, newState)) =>
           log.info("Wallet is initialized")
@@ -97,7 +97,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           sender() ! f
       }
 
-    //Restore wallet with mnemonic if secret is not set yet
+    // Restore wallet with mnemonic if secret is not set yet
     case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
       ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass) match {
         case Success(newState) =>
@@ -122,6 +122,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ReadPublicKeys(from, until) =>
       sender() ! state.walletVars.publicKeyAddresses.slice(from, until)
 
+    // read first wallet secret (used in miner only)
     case GetFirstSecret =>
       if (state.walletVars.proverOpt.nonEmpty) {
         state.walletVars.proverOpt.foreach(_.hdKeys.headOption.foreach(s => sender() ! Success(s.privateInput)))
@@ -152,12 +153,14 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     /** STATE CHANGE */
     case ChangedMempool(mr: ErgoMemPoolReader@unchecked) =>
-      context.become(loadedWallet(ergoWalletService.updateUtxoState(state.copy(mempoolReaderOpt = Some(mr)))))
+      val newState = ergoWalletService.updateUtxoState(state.copy(mempoolReaderOpt = Some(mr)))
+      context.become(loadedWallet(newState))
 
     case ChangedState(s: ErgoStateReader@unchecked) =>
       val stateContext = s.stateContext
       state.storage.updateStateContext(stateContext)
-      val newState = ergoWalletService.updateUtxoState(state.copy(stateReaderOpt = Some(s), parameters = stateContext.currentParameters))
+      val cp = stateContext.currentParameters
+      val newState = ergoWalletService.updateUtxoState(state.copy(stateReaderOpt = Some(s), parameters = cp))
       context.become(loadedWallet(newState))
 
     /** SCAN COMMANDS */

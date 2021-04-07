@@ -163,10 +163,15 @@ trait ErgoWalletService {
 
   /**
     * Process the block transactions and update database and in-memory structures for offchain data accordingly
+    *
+    * @param state current wallet state
     * @param block - block to scan
     */
   def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): ErgoWalletState
 
+  /**
+    * Sign a transaction
+    */
   def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
                       tx: UnsignedErgoTransaction,
                       secrets: Seq[ExternalSecret],
@@ -175,23 +180,38 @@ trait ErgoWalletService {
                       dataBoxesOpt: Option[Seq[ErgoBox]],
                       parameters: Parameters,
                       stateContext: ErgoStateContext)(extract: BoxId => Option[ErgoBox]): Try[ErgoTransaction]
+
+  /**
+    * Generate signed or unsigned transaction.
+    */
   def generateTransaction(state: ErgoWalletState,
                           boxSelector: BoxSelector,
                           requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String],
                           dataInputsRaw: Seq[String],
                           sign: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoLikeTransactionTemplate[_]]
+
+  /**
+    * Generate commitments to be used then to sign a transaction.
+    * See EIP-11 for details.
+    */
   def generateCommitments(state: ErgoWalletState,
                           unsignedTx: UnsignedErgoTransaction,
                           externalSecretsOpt: Option[Seq[ExternalSecret]],
                           externalInputsOpt: Option[Seq[ErgoBox]],
                           externalDataInputsOpt: Option[Seq[ErgoBox]]): Try[TransactionHintsBag]
+
+  /**
+    * Extract hints from (supposedly, partially) signed transaction. Useful for distributed signing.
+    * See EIP-11 for details.
+    */
   def extractHints(state: ErgoWalletState,
                    tx: ErgoTransaction,
                    real: Seq[SigmaBoolean],
                    simulated: Seq[SigmaBoolean],
                    boxesToSpendOpt: Option[Seq[ErgoBox]],
                    dataBoxesOpt: Option[Seq[ErgoBox]]): TransactionHintsBag
+
 }
 
 class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {

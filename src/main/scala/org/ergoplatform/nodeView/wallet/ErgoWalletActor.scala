@@ -251,7 +251,8 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     case GetWalletStatus =>
       val isSecretSet = state.secretIsSet(settings.walletSettings.testMnemonic)
-      val status = WalletStatus(isSecretSet, state.walletVars.proverOpt.isDefined, state.getChangeAddress, state.getWalletHeight)
+      val isUnlocked = state.walletVars.proverOpt.isDefined
+      val status = WalletStatus(isSecretSet, isUnlocked, state.getChangeAddress, state.getWalletHeight)
       sender() ! status
 
     case GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign) =>

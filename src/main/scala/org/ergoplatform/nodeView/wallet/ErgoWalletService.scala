@@ -22,8 +22,6 @@ import org.ergoplatform.wallet.settings.SecretStorageSettings
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.SigmaBoolean
-
-import java.io.File
 import scala.util.{Failure, Success, Try}
 
 /**

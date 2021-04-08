@@ -112,8 +112,19 @@ trait ErgoWalletService {
     */
   def getScanBoxes(state: ErgoWalletState, scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox]
 
+  /**
+    * @param registry - wallet registry database
+    * @param fullHeight - current height (to construct AugWalletTransaction instances with confirmations included)
+    * @return - wallet transactions augmented with confirmations numbers
+    */
   def getTransactions(registry: WalletRegistry, fullHeight: Int): Seq[AugWalletTransaction]
 
+  /**
+    * @param txId - transaction identifier
+    * @param registry - wallet registry database
+    * @param fullHeight - current height (to construct AugWalletTransaction instances with confirmations included)
+    * @return - wallet transaction augmented with confirmations number, or None is no such transaction in the wallet
+    */
   def getTransactionsByTxId(txId: ModifierId, registry: WalletRegistry, fullHeight: Int): Option[AugWalletTransaction]
 
   /**

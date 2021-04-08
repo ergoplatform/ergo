@@ -11,6 +11,7 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
 import org.ergoplatform.settings.{Algos, VotingSettings}
 import org.ergoplatform.utils.LoggingUtil
+import org.ergoplatform.utils.metrics._
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
 import scorex.core.transaction.state.TransactionValidation
@@ -20,7 +21,6 @@ import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
-
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -71,7 +71,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        expectedDigest: ADDigest,
-                                       currentStateContext: ErgoStateContext): Try[Unit] = {
+                                       currentStateContext: ErgoStateContext): Try[Long] = {
     import cats.implicits._
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
 
@@ -82,6 +82,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext)(checkBoxExistence)
     if (txProcessing.isValid) {
+      val cost = txProcessing.toTry.get
       persistentProver.synchronized {
         val mods = ErgoState.stateChanges(transactions).operations.map(ADProofs.changeToMod)
         val resultTry = Traverse[List].sequence(mods.map(persistentProver.performOneOperation).toList).map(_ => ())
@@ -90,9 +91,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
           .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest)
           .result
           .toTry
+          .map(_ => cost)
       }
     } else {
-      txProcessing.toTry.map(_ => ())
+      txProcessing.toTry
     }
   }
 
@@ -106,8 +108,16 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
         val inRoot = rootHash
 
-        val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
-          applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
+        val stateTry = for {
+          newStateContext <- measureOp(fb, UtxoState.appendFullBlockReporter) {
+            stateContext.appendFullBlock(fb)
+          }
+          // TODO metric: measure time of applyTransactions
+          _ <- measureCostedOp(fb, ApplyTransactionsReporter) {
+            applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
+          }
+          state <- measureOp(fb, UtxoState.createUtxoStateReporter)(Try {
+            // TODO metric: measure this block of code
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
@@ -124,8 +134,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
               s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
             new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
-          }
-        }
+          })
+        } yield state
+
         stateTry.recoverWith[UtxoState] { case e =>
           log.warn(s"Error while applying full block with header ${fb.header.encodedId} to UTXOState with root" +
             s" ${Algos.encode(inRoot)}, reason: ${LoggingUtil.getReasonMsg(e)} ")
@@ -133,7 +144,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
           Failure(e)
         }
-
       }
 
     case h: Header =>
@@ -161,6 +171,9 @@ object UtxoState {
 
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
+
+  val appendFullBlockReporter = ErgoFullBlockReporter("appendFullBlock")
+  val createUtxoStateReporter = ErgoFullBlockReporter("createUtxoState")
 
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,

@@ -6,20 +6,21 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
+import org.ergoplatform.modifiers.{ErgoPersistentModifier, ErgoFullBlock}
+import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistory, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform.utils.FileUtils
+import org.ergoplatform.settings.{Constants, Algos, ErgoSettings}
+import org.ergoplatform.utils.metrics.CsvCollector
+import org.ergoplatform.utils.{metrics, FileUtils}
 import scorex.core._
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider)
@@ -48,6 +49,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     log.warn("Stopping ErgoNodeViewHolder")
     history().closeStorage()
     minimalState().closeStorage()
+  }
+
+  override protected def pmodModify(pmod: ErgoPersistentModifier): Unit = {
+    metrics.executeWithCollector(CsvCollector) {
+      super.pmodModify(pmod)
+    }
   }
 
   override protected def txModify(tx: ErgoTransaction): Unit = {

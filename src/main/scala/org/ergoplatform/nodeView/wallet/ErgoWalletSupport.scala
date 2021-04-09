@@ -213,7 +213,7 @@ trait ErgoWalletSupport extends ScorexLogging {
                                            inputsRaw: Seq[String],
                                            dataInputsRaw: Seq[String]
                                          )(implicit addrEncoder: ErgoAddressEncoder): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = Try {
-    require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issue requests")
+    require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issuance requests")
 
     val userInputs = ErgoWalletService.stringsToBoxes(inputsRaw)
 

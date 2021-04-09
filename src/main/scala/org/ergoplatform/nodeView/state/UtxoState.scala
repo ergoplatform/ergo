@@ -73,7 +73,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                                        expectedDigest: ADDigest,
                                        currentStateContext: ErgoStateContext): Try[Long] = {
     import cats.implicits._
-    val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
+    val createdOutputs = transactions
+      .flatMap(_.outputs)
+      .map(o => (ByteArrayWrapper(o.id), o)).toMap
 
     def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
       .get(ByteArrayWrapper(id))

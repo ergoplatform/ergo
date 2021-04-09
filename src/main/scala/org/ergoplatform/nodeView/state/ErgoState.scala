@@ -100,17 +100,23 @@ object ErgoState extends ScorexLogging {
           .map(in => checkBoxExistence(in.boxId))
           .sequence
 
-        lazy val boxes: Try[(List[ErgoBox], List[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
+        lazy val boxes: Try[(List[ErgoBox], List[ErgoBox])] = dataBoxesTry
+          .flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
 
         val vs = tx.validateStateless()
           .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
           .validateNoFailure(txDataBoxes, dataBoxesTry)
           .payload[Long](r.value)
-          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) { case (_, (dataBoxes, toSpend)) =>
-            tx.validateStateful(toSpend.toIndexedSeq, dataBoxes.toIndexedSeq, currentStateContext, r.value)(verifier).result
+          .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) {
+            case (_, (dataBoxes, toSpend)) =>
+              val res = tx.validateStateful(
+                toSpend.toIndexedSeq,
+                dataBoxes.toIndexedSeq,
+                currentStateContext, accumulatedCost = r.value)(verifier).result
+              res
           }
 
-        execTx(tail, vs)
+        execTx(tail, vs.result)
       case _ =>
         accCostTry
     }

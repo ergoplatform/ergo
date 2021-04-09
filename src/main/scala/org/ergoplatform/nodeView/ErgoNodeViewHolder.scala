@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Constants, Algos, ErgoSettings}
-import org.ergoplatform.utils.metrics.CsvCollector
+import org.ergoplatform.utils.metrics.csvCollector
 import org.ergoplatform.utils.{metrics, FileUtils}
 import scorex.core._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction}
@@ -52,7 +52,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   override protected def pmodModify(pmod: ErgoPersistentModifier): Unit = {
-    metrics.executeWithCollector(CsvCollector) {
+    metrics.executeWithCollector(csvCollector) {
       super.pmodModify(pmod)
     }
   }

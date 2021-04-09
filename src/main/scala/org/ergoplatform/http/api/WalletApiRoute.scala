@@ -3,7 +3,6 @@ package org.ergoplatform.http.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive, Directive1, Route}
 import akka.pattern.ask
-import io.circe.generic.decoding.DerivedDecoder.decodeIncompleteCaseClass
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform._
@@ -181,8 +180,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
     val utx = gcr.unsignedTx
     val externalSecretsOpt = gcr.externalSecretsOpt
-    val extInputsOpt = gcr.inputs.map(ErgoWalletActor.stringsToBoxes)
-    val extDataInputsOpt = gcr.dataInputs.map(ErgoWalletActor.stringsToBoxes)
+    val extInputsOpt = gcr.inputs.map(ErgoWalletService.stringsToBoxes)
+    val extDataInputsOpt = gcr.dataInputs.map(ErgoWalletService.stringsToBoxes)
 
     withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt, extInputsOpt, extDataInputsOpt).map(_.response)) {
       case Failure(e) => BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
@@ -401,8 +400,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def extractHintsR: Route = (path("extractHints") & post & entity(as[HintExtractionRequest])) { her =>
     withWallet { w =>
-      val extInputsOpt = her.inputs.map(ErgoWalletActor.stringsToBoxes)
-      val extDataInputsOpt = her.dataInputs.map(ErgoWalletActor.stringsToBoxes)
+      val extInputsOpt = her.inputs.map(ErgoWalletService.stringsToBoxes)
+      val extDataInputsOpt = her.dataInputs.map(ErgoWalletService.stringsToBoxes)
 
       w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
     }

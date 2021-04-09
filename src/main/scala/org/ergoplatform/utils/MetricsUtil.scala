@@ -1,6 +1,6 @@
 package org.ergoplatform.utils
 
-import java.io.{BufferedWriter, FileWriter, Writer}
+import java.io.{BufferedWriter, FileWriter, Writer, File}
 
 import scalan.util.{BenchmarkUtil, FileUtil}
 
@@ -51,12 +51,12 @@ object metrics {
     }
   }
 
-  abstract class CsvCollector(val ergoSettings: ErgoSettings) extends MetricsCollector {
+  abstract class CsvCollector extends MetricsCollector {
 
     protected def createOutputWriter[D](r: Reporter[D]): Writer
 
     protected def createOutputManager[D](r: Reporter[D]): OutputManager = {
-      new OutputManager(createOutputWriter(r))
+      new OutputManager(r, createOutputWriter(r))
     }
 
     /** Write header and thus prepare writer for accepting data rows */
@@ -67,7 +67,7 @@ object metrics {
     }
 
 
-    class OutputManager(val writer: Writer, var lineCount: Int = 0)
+    class OutputManager(val reporter: Reporter[_], val writer: Writer, var lineCount: Int = 0)
 
     val metricOutputs = mutable.HashMap.empty[String, OutputManager]
 
@@ -97,18 +97,21 @@ object metrics {
     }
   }
 
-  class CsvFileCollector(override val ergoSettings: ErgoSettings)
-      extends CsvCollector(ergoSettings) {
+  class CsvFileCollector(val directory: String) extends CsvCollector {
+
+    def getMetricFile[D](r: Reporter[D]): File = {
+      val fileName = s"${r.metricName}.csv"
+      val dir = FileUtil.file(directory)
+      val file = FileUtil.file(dir, fileName)
+      file
+    }
 
     override protected def createOutputWriter[D](r: Reporter[D]): Writer = {
-      val fileName = s"${r.metricName}.csv"
-      val dir = FileUtil.file(ergoSettings.directory)
-      val file = FileUtil.file(dir, fileName)
-
+      val file = getMetricFile(r)
       if(file.exists())
         new BufferedWriter(new FileWriter(file, true))
       else {
-        dir.mkdirs() // ensure dirs
+        file.getParentFile.mkdirs() // ensure dirs
 
         // open new empty file
         val w = new BufferedWriter(new FileWriter(file, false))
@@ -118,8 +121,6 @@ object metrics {
       }
     }
   }
-
-  lazy val csvCollector = new CsvFileCollector(ErgoSettings.read())
 
   def executeWithCollector[R](collector: MetricsCollector)(block: => R): R = {
     MetricsCollector._current.withValue(collector)(block)

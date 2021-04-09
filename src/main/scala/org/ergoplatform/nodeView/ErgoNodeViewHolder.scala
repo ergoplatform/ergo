@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Constants, Algos, ErgoSettings}
-import org.ergoplatform.utils.metrics.csvCollector
+import org.ergoplatform.utils.metrics.CsvFileCollector
 import org.ergoplatform.utils.{metrics, FileUtils}
 import scorex.core._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction}
@@ -29,6 +29,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   private implicit lazy val actorSystem: ActorSystem = context.system
 
   override val scorexSettings: ScorexSettings = settings.scorexSettings
+
+  private lazy val metricsCollector = new CsvFileCollector(settings.directory + "/metrics")
 
   override type MS = State
   override type SI = ErgoSyncInfo
@@ -52,7 +54,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   override protected def pmodModify(pmod: ErgoPersistentModifier): Unit = {
-    metrics.executeWithCollector(csvCollector) {
+    metrics.executeWithCollector(metricsCollector) {
       super.pmodModify(pmod)
     }
   }

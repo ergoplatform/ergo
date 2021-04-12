@@ -7,7 +7,7 @@ import scalan.util.{BenchmarkUtil, FileUtil}
 import scala.util.{DynamicVariable, Try}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import scorex.core.validation.ValidationResult
-import scorex.util.ModifierId
+import scorex.util.{ModifierId, bytesToId}
 
 import scala.collection.mutable
 
@@ -33,6 +33,8 @@ object metrics {
     override def fieldValues(b: ErgoFullBlock): Seq[String] =
       Array(b.id, b.blockTransactions.txs.length.toString)
   }
+
+  val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
   case class InputMetricData(blockId: ModifierId, txId: ModifierId, index: Int)
 

@@ -1,12 +1,13 @@
 package org.ergoplatform.utils
 
-import java.io.{BufferedWriter, FileWriter, Writer, File}
+import java.io.{BufferedWriter, FileWriter, File, Writer}
 
 import scalan.util.{BenchmarkUtil, FileUtil}
 
 import scala.util.{DynamicVariable, Try}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.settings.ErgoSettings
+import scorex.core.validation.ValidationResult
+import scorex.util.ModifierId
 
 import scala.collection.mutable
 
@@ -31,6 +32,23 @@ object metrics {
     override val fieldNames: Seq[String] = Array("blockId", "tx_num")
     override def fieldValues(b: ErgoFullBlock): Seq[String] =
       Array(b.id, b.blockTransactions.txs.length.toString)
+  }
+
+  case class InputMetricData(blockId: ModifierId, txId: ModifierId, index: Int)
+
+  case class InputMetricReporter(metricName: String) extends Reporter[InputMetricData] {
+    override val fieldNames: Seq[String] = Array("blockId", "txId", "index")
+    override def fieldValues(d: InputMetricData): Seq[String] =
+      Array(d.blockId, d.txId, d.index.toString)
+  }
+
+  case class TransactionMetricData(blockId: ModifierId, txId: ModifierId)
+
+  case class TransactionMetricReporter(val metricName: String) extends Reporter[TransactionMetricData] {
+    override val fieldNames: Seq[String] = Array("blockId", "txId")
+    override def fieldValues(d: TransactionMetricData): Seq[String] = {
+      Array(d.blockId, d.txId)
+    }
   }
 
   case class MeasuredObject[D](data: D, cost: Long, time: Long)
@@ -126,7 +144,7 @@ object metrics {
     MetricsCollector._current.withValue(collector)(block)
   }
 
-  def measureOp[D, R](d: D, r: Reporter[D])(block: => Try[R]): Try[R] = {
+  def measureOp[D, R](d: => D, r: Reporter[D])(block: => Try[R]): Try[R] = {
     val (res, time) = BenchmarkUtil.measureTimeNano(block)
     val obj = MeasuredObject(d, -1, time)
     val metricCollector = MetricsCollector.current
@@ -134,13 +152,24 @@ object metrics {
     res
   }
 
-  def measureCostedOp[D, R](d: D, r: Reporter[D])(costedOp: => Try[Long]): Try[Unit] = {
+  def measureCostedOp[D, R](d: => D, r: Reporter[D])(costedOp: => Try[Long]): Try[Unit] = {
     val (costTry, time) = BenchmarkUtil.measureTimeNano(costedOp)
     costTry.map { cost =>
       val obj = MeasuredObject(d, cost, time)
       val metricCollector = MetricsCollector.current
       metricCollector.save(obj)(r)
       ()
+    }
+  }
+
+  def measureValidationOp[D, R](d: => D, r: Reporter[D])
+                               (costedOp: => ValidationResult[Long]): ValidationResult[Long] = {
+    val (res, time) = BenchmarkUtil.measureTimeNano(costedOp)
+    res.map { cost =>
+      val obj = MeasuredObject(d, cost, time)
+      val metricCollector = MetricsCollector.current
+      metricCollector.save(obj)(r)
+      cost
     }
   }
 }

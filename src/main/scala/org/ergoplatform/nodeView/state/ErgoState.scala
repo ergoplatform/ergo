@@ -13,7 +13,7 @@ import org.ergoplatform.modifiers.state.{Insertion, Removal, Lookup, StateChange
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Constants, ChainSettings, ErgoSettings}
-import org.ergoplatform.utils.metrics.{measureValidationOp, TransactionMetricData, Reporter, emptyModifierId}
+import org.ergoplatform.utils.metrics.{measureValidationOp, TransactionMetricData, MetricStore, emptyModifierId}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.MinimalState
 import scorex.core.validation.ValidationResult.Valid
@@ -79,6 +79,8 @@ object ErgoState extends ScorexLogging {
     StateChanges(toRemoveChanges, toInsertChanges, toLookup)
   }
 
+  val validateTxStatefulStore = MetricStore[TransactionMetricData]("validateTxStateful")
+
   /**
     * Tries to validate and execute transactions.
     *
@@ -112,7 +114,7 @@ object ErgoState extends ScorexLogging {
             case (_, (dataBoxes, toSpend)) =>
               val res = measureValidationOp(
                 TransactionMetricData(currentStateContext.lastHeaderIdOpt.getOrElse(emptyModifierId), tx.id),
-                Reporter[TransactionMetricData]("validateTxStateful")
+                validateTxStatefulStore
               ) {
                 tx.validateStateful(
                   toSpend.toIndexedSeq,

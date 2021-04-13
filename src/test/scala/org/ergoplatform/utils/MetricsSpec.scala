@@ -19,7 +19,7 @@ class MetricsSpec extends ErgoPropertyTest {
   class TestCsvCollector extends CsvCollector {
     val outputs = mutable.HashMap.empty[String, ByteArrayOutputStream]
 
-    override protected def createOutputWriter[D](r: metrics.Reporter[D]): Writer = {
+    override protected def createOutputWriter[D](r: metrics.MetricStore[D]): Writer = {
       val baos = outputs.getOrElseUpdate(r.metricName, new ByteArrayOutputStream())
       val w = new OutputStreamWriter(baos)
       writeHeader(r, w)
@@ -33,7 +33,7 @@ class MetricsSpec extends ErgoPropertyTest {
       .map(line => line.split(';').dropRight(1): Seq[String])
   }
 
-  def checkOutput[D](c: TestCsvCollector, r: Reporter[D], expOut: Seq[Seq[String]]) = {
+  def checkOutput[D](c: TestCsvCollector, r: MetricStore[D], expOut: Seq[Seq[String]]) = {
     val m1 = c.outputs(r.metricName)
     val out = parseCsvText(m1.toString())
     if (expOut.isEmpty)

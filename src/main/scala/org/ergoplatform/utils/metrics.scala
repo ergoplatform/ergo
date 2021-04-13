@@ -19,29 +19,16 @@ object metrics {
     def fieldValues(d: D): Seq[String]
   }
 
-  case class ErgoFullBlockReporter(metricName: String) extends Reporter[ErgoFullBlock] {
-    override def fieldNames: Seq[String] = ErgoFullBlockReporter.names
-    override def fieldValues(b: ErgoFullBlock): Seq[String] = Array(b.id)
-  }
-  object ErgoFullBlockReporter {
-    private val names = Array("id")
-  }
-
-  object ApplyTransactionsReporter extends Reporter[ErgoFullBlock] {
-    override def metricName: String = "applyTransactions"
-    override val fieldNames: Seq[String] = Array("blockId", "tx_num")
-    override def fieldValues(b: ErgoFullBlock): Seq[String] =
-      Array(b.id, b.blockTransactions.txs.length.toString)
-  }
-
   val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
-  case class InputMetricData(blockId: ModifierId, txId: ModifierId, index: Int)
+  case class BlockMetricData(blockId: ModifierId, height: Int, nTransactionsOpt: Option[Int])
 
-  case class InputMetricReporter(metricName: String) extends Reporter[InputMetricData] {
-    override val fieldNames: Seq[String] = Array("blockId", "txId", "index")
-    override def fieldValues(d: InputMetricData): Seq[String] =
-      Array(d.blockId, d.txId, d.index.toString)
+  case class BlockMetricReporter(metricName: String) extends Reporter[BlockMetricData] {
+    override val fieldNames: Seq[String] = Array("blockId", "height", "tx_num")
+    override def fieldValues(d: BlockMetricData): Seq[String] = {
+      val nTx = d.nTransactionsOpt.map(_.toString).getOrElse("")
+      Array(d.blockId, d.height.toString, nTx)
+    }
   }
 
   case class TransactionMetricData(blockId: ModifierId, txId: ModifierId)
@@ -51,6 +38,14 @@ object metrics {
     override def fieldValues(d: TransactionMetricData): Seq[String] = {
       Array(d.blockId, d.txId)
     }
+  }
+
+  case class InputMetricData(blockId: ModifierId, txId: ModifierId, index: Int)
+
+  case class InputMetricReporter(metricName: String) extends Reporter[InputMetricData] {
+    override val fieldNames: Seq[String] = Array("blockId", "txId", "index")
+    override def fieldValues(d: InputMetricData): Seq[String] =
+      Array(d.blockId, d.txId, d.index.toString)
   }
 
   case class MeasuredObject[D](data: D, cost: Long, time: Long)

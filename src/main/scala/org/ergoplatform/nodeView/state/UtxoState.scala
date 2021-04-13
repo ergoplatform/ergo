@@ -50,7 +50,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     constants.nodeViewHolderRef.foreach(h => h ! LocallyGeneratedModifier(proof))
   }
 
-  import UtxoState.metadata
+  import UtxoState._
 
   override val maxRollbackDepth = 10
 
@@ -110,15 +110,15 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
 
         val inRoot = rootHash
-
+        val blockData = BlockMetricData(fb.id, fb.height, Some(fb.blockTransactions.txs.length))
         val stateTry = for {
-          newStateContext <- measureOp(fb, UtxoState.appendFullBlockReporter) {
+          newStateContext <- measureOp(blockData, appendFullBlockReporter) {
             stateContext.appendFullBlock(fb)
           }
-          _ <- measureCostedOp(fb, ApplyTransactionsReporter) {
+          _ <- measureCostedOp(blockData, applyTransactionsReporter) {
             applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
           }
-          state <- measureOp(fb, UtxoState.createUtxoStateReporter)(Try {
+          state <- measureOp(blockData, createUtxoStateReporter)(Try {
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
@@ -173,8 +173,9 @@ object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
-  val appendFullBlockReporter = ErgoFullBlockReporter("appendFullBlock")
-  val createUtxoStateReporter = ErgoFullBlockReporter("createUtxoState")
+  val appendFullBlockReporter = BlockMetricReporter("appendFullBlock")
+  val applyTransactionsReporter = BlockMetricReporter("applyTransactions")
+  val createUtxoStateReporter = BlockMetricReporter("createUtxoState")
 
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,

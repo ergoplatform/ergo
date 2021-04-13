@@ -11,7 +11,7 @@ import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{RuntimeIRContext, IRContext}
 import sigmastate.interpreter.Interpreter.{VerificationResult, ScriptEnv}
-import sigmastate.interpreter.{ScriptProcessorSettings, ProcessorStats, PrecompiledScriptProcessor, CacheKey}
+import sigmastate.interpreter.{CacheKey, PrecompiledScriptProcessor, ScriptProcessorSettings, ProcessorStats}
 import sigmastate.{AvlTreeData, AvlTreeFlags}
 
 import scala.util.Try
@@ -81,6 +81,7 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
       super.verify(env, exp, context, proof, message)
     }
   }
+
 }
 
 object ErgoInterpreter {

@@ -6,8 +6,8 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoPersistentModifier, ErgoFullBlock}
-import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistory, ErgoSyncInfo}
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
@@ -16,11 +16,11 @@ import org.ergoplatform.settings.{Constants, Algos, ErgoSettings}
 import org.ergoplatform.utils.metrics.CsvFileCollector
 import org.ergoplatform.utils.{metrics, FileUtils}
 import scorex.core._
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider)

@@ -9,22 +9,21 @@ import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.state.{Insertion, Removal, Lookup, StateChanges}
+import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Constants, ChainSettings, ErgoSettings}
-import org.ergoplatform.utils.metrics
-import org.ergoplatform.utils.metrics.{measureValidationOp, TransactionMetricData, Reporter, TransactionMetricReporter, emptyModifierId}
+import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings}
+import org.ergoplatform.utils.metrics.{measureValidationOp, TransactionMetricData, TransactionMetricReporter, emptyModifierId}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.MinimalState
 import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult}
-import scorex.core.{idToVersion, VersionTag}
+import scorex.core.{VersionTag, idToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{bytesToId, ScorexLogging, ModifierId}
 import sigmastate.AtLeast
-import sigmastate.Values.{ByteArrayConstant, SigmaPropConstant, ErgoTree, IntConstant}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.serialization.ValueSerializer
 

@@ -21,6 +21,7 @@ import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
+
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -114,12 +115,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
           newStateContext <- measureOp(fb, UtxoState.appendFullBlockReporter) {
             stateContext.appendFullBlock(fb)
           }
-          // TODO metric: measure time of applyTransactions
           _ <- measureCostedOp(fb, ApplyTransactionsReporter) {
             applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
           }
           state <- measureOp(fb, UtxoState.createUtxoStateReporter)(Try {
-            // TODO metric: measure this block of code
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)

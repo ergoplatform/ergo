@@ -2,12 +2,11 @@ package org.ergoplatform.utils
 
 import java.io.{BufferedWriter, FileWriter, File, Writer}
 
-import scalan.util.{BenchmarkUtil, FileUtil}
+import scalan.util.FileUtil
 
 import scala.util.{DynamicVariable, Try}
-import org.ergoplatform.modifiers.ErgoFullBlock
 import scorex.core.validation.ValidationResult
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{bytesToId, ModifierId}
 
 import scala.collection.mutable
 
@@ -33,7 +32,7 @@ object metrics {
 
   case class TransactionMetricData(blockId: ModifierId, txId: ModifierId)
 
-  case class TransactionMetricReporter(val metricName: String) extends Reporter[TransactionMetricData] {
+  case class TransactionMetricReporter(metricName: String) extends Reporter[TransactionMetricData] {
     override val fieldNames: Seq[String] = Array("blockId", "txId")
     override def fieldValues(d: TransactionMetricData): Seq[String] = {
       Array(d.blockId, d.txId)
@@ -48,10 +47,10 @@ object metrics {
       Array(d.blockId, d.txId, d.index.toString)
   }
 
-  case class MeasuredObject[D](data: D, cost: Long, time: Long)
+  case class MeasuredData[D](data: D, cost: Long, time: Long)
 
   abstract class MetricsCollector {
-    def save[D: Reporter](obj: MeasuredObject[D]): Unit
+    def collect[D: Reporter](data: MeasuredData[D]): Unit
   }
 
   object MetricsCollector {
@@ -62,7 +61,7 @@ object metrics {
       else c
     }
     private object Throwing extends MetricsCollector {
-      override def save[D: Reporter](obj: MeasuredObject[D]): Unit = () // do nothing
+      override def collect[D: Reporter](obj: MeasuredData[D]): Unit = () // do nothing
     }
   }
 
@@ -75,7 +74,7 @@ object metrics {
     }
 
     /** Write header and thus prepare writer for accepting data rows */
-    protected def writeHeader[D](r: Reporter[D], w: Writer) = {
+    protected def writeHeader[D](r: Reporter[D], w: Writer): Unit = {
       val fields = r.fieldNames ++ Array("cost", "time")
       val line = fields.mkString(";") + System.lineSeparator()
       w.write(line)
@@ -86,7 +85,7 @@ object metrics {
 
     val metricOutputs = mutable.HashMap.empty[String, OutputManager]
 
-    override def save[D](obj: MeasuredObject[D])(implicit r: Reporter[D]): Unit = {
+    override def collect[D](obj: MeasuredData[D])(implicit r: Reporter[D]): Unit = {
       val m = metricOutputs.getOrElseUpdate(r.metricName, createOutputManager(r))
 
       val values = r.fieldValues(obj.data) ++ Array(obj.cost.toString, obj.time.toString)
@@ -98,14 +97,14 @@ object metrics {
     }
 
     /** Flush all the underlying file writers. */
-    def flush() = {
+    def flush(): Unit = {
       metricOutputs.values.foreach { m =>
         m.writer.flush()
       }
     }
 
     /** Close all the underlying file writers. */
-    def close() = {
+    def close(): Unit = {
       metricOutputs.values.foreach { m =>
         m.writer.close()
       }
@@ -152,18 +151,18 @@ object metrics {
 
   def measureOp[D, R](d: => D, r: Reporter[D])(block: => Try[R]): Try[R] = {
     val (res, time) = measureTimeNano(block)
-    val obj = MeasuredObject(d, -1, time)
+    val obj = MeasuredData(d, -1, time)
     val metricCollector = MetricsCollector.current
-    metricCollector.save(obj)(r)
+    metricCollector.collect(obj)(r)
     res
   }
 
   def measureCostedOp[D, R](d: => D, r: Reporter[D])(costedOp: => Try[Long]): Try[Unit] = {
     val (costTry, time) = measureTimeNano(costedOp)
     costTry.map { cost =>
-      val obj = MeasuredObject(d, cost, time)
+      val obj = MeasuredData(d, cost, time)
       val metricCollector = MetricsCollector.current
-      metricCollector.save(obj)(r)
+      metricCollector.collect(obj)(r)
       ()
     }
   }
@@ -172,9 +171,9 @@ object metrics {
                                (costedOp: => ValidationResult[Long]): ValidationResult[Long] = {
     val (res, time) = measureTimeNano(costedOp)
     res.map { cost =>
-      val obj = MeasuredObject(d, cost, time)
+      val obj = MeasuredData(d, cost, time)
       val metricCollector = MetricsCollector.current
-      metricCollector.save(obj)(r)
+      metricCollector.collect(obj)(r)
       cost
     }
   }

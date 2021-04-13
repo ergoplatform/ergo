@@ -12,17 +12,21 @@ import scala.collection.mutable
 
 object metrics {
 
-  trait Reporter[D] {
-    def metricName: String
+  trait Reportable[D] {
     def fieldNames: Seq[String]
     def fieldValues(d: D): Seq[String]
+  }
+
+  case class Reporter[D](metricName: String)(implicit r: Reportable[D]) {
+    def fieldNames: Seq[String] = r.fieldNames
+    def fieldValues(d: D): Seq[String] = r.fieldValues(d)
   }
 
   val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
   case class BlockMetricData(blockId: ModifierId, height: Int, nTransactionsOpt: Option[Int])
 
-  case class BlockMetricReporter(metricName: String) extends Reporter[BlockMetricData] {
+  implicit object ReportableBlockMetricData extends Reportable[BlockMetricData] {
     override val fieldNames: Seq[String] = Array("blockId", "height", "tx_num")
     override def fieldValues(d: BlockMetricData): Seq[String] = {
       val nTx = d.nTransactionsOpt.map(_.toString).getOrElse("")
@@ -32,7 +36,7 @@ object metrics {
 
   case class TransactionMetricData(blockId: ModifierId, txId: ModifierId)
 
-  case class TransactionMetricReporter(metricName: String) extends Reporter[TransactionMetricData] {
+  implicit object ReportableTransactionMetricData extends Reportable[TransactionMetricData] {
     override val fieldNames: Seq[String] = Array("blockId", "txId")
     override def fieldValues(d: TransactionMetricData): Seq[String] = {
       Array(d.blockId, d.txId)
@@ -41,7 +45,7 @@ object metrics {
 
   case class InputMetricData(blockId: ModifierId, txId: ModifierId, index: Int)
 
-  case class InputMetricReporter(metricName: String) extends Reporter[InputMetricData] {
+  implicit object ReportableInputMetricData extends Reportable[InputMetricData] {
     override val fieldNames: Seq[String] = Array("blockId", "txId", "index")
     override def fieldValues(d: InputMetricData): Seq[String] =
       Array(d.blockId, d.txId, d.index.toString)
@@ -50,18 +54,18 @@ object metrics {
   case class MeasuredData[D](data: D, cost: Long, time: Long)
 
   abstract class MetricsCollector {
-    def collect[D: Reporter](data: MeasuredData[D]): Unit
+    def collect[D](data: MeasuredData[D], r: Reporter[D]): Unit
   }
 
   object MetricsCollector {
     private[ergoplatform] val _current = new DynamicVariable[MetricsCollector](null)
     def current: MetricsCollector = {
       val c = _current.value
-      if (c == null) Throwing
+      if (c == null) DiscardingCollector
       else c
     }
-    private object Throwing extends MetricsCollector {
-      override def collect[D: Reporter](obj: MeasuredData[D]): Unit = () // do nothing
+    private object DiscardingCollector extends MetricsCollector {
+      override def collect[D](obj: MeasuredData[D], r: Reporter[D]): Unit = () // do nothing
     }
   }
 
@@ -85,7 +89,7 @@ object metrics {
 
     val metricOutputs = mutable.HashMap.empty[String, OutputManager]
 
-    override def collect[D](obj: MeasuredData[D])(implicit r: Reporter[D]): Unit = {
+    override def collect[D](obj: MeasuredData[D], r: Reporter[D]): Unit = {
       val m = metricOutputs.getOrElseUpdate(r.metricName, createOutputManager(r))
 
       val values = r.fieldValues(obj.data) ++ Array(obj.cost.toString, obj.time.toString)
@@ -153,7 +157,7 @@ object metrics {
     val (res, time) = measureTimeNano(block)
     val obj = MeasuredData(d, -1, time)
     val metricCollector = MetricsCollector.current
-    metricCollector.collect(obj)(r)
+    metricCollector.collect(obj, r)
     res
   }
 
@@ -162,7 +166,7 @@ object metrics {
     costTry.map { cost =>
       val obj = MeasuredData(d, cost, time)
       val metricCollector = MetricsCollector.current
-      metricCollector.collect(obj)(r)
+      metricCollector.collect(obj, r)
       ()
     }
   }
@@ -173,7 +177,7 @@ object metrics {
     res.map { cost =>
       val obj = MeasuredData(d, cost, time)
       val metricCollector = MetricsCollector.current
-      metricCollector.collect(obj)(r)
+      metricCollector.collect(obj, r)
       cost
     }
   }

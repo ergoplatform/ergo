@@ -173,9 +173,9 @@ object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
-  val appendFullBlockReporter = BlockMetricReporter("appendFullBlock")
-  val applyTransactionsReporter = BlockMetricReporter("applyTransactions")
-  val createUtxoStateReporter = BlockMetricReporter("createUtxoState")
+  val appendFullBlockReporter = Reporter[BlockMetricData]("appendFullBlock")
+  val applyTransactionsReporter = Reporter[BlockMetricData]("applyTransactions")
+  val createUtxoStateReporter = Reporter[BlockMetricData]("createUtxoState")
 
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,

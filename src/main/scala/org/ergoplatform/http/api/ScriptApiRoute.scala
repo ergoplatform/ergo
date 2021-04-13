@@ -19,7 +19,7 @@ import sigmastate.Values.{ByteArrayConstant, ErgoTree}
 import sigmastate._
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.{CompiletimeIRContext, IRContext, RuntimeIRContext}
-import sigmastate.lang.{CompilerSettings, SigmaCompiler, TransformingSigmaBuilder}
+import sigmastate.lang.{SigmaCompiler, TransformingSigmaBuilder}
 import sigmastate.serialization.ValueSerializer
 
 import scala.concurrent.Future
@@ -61,10 +61,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   private def compileSource(source: String, env: Map[String, Any]): Try[ErgoTree] = {
     import sigmastate.Values._
-    val compiler = SigmaCompiler(CompilerSettings(
-      networkPrefix = ergoSettings.chainSettings.addressPrefix,
-      builder = TransformingSigmaBuilder,
-      lowerMethodCalls = true))
+    val compiler = SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
     Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
       case script: Value[SSigmaProp.type@unchecked] if script.tpe == SSigmaProp =>
         Success(script)
@@ -109,7 +106,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
           val res = interpreter.reduceToCrypto(req.ctx.asInstanceOf[interpreter.CTX], prop)
           res.fold(
             e => BadRequest(e.getMessage),
-            s => ApiResponse(CryptoResult(s.value, s.cost).asJson)
+            s => ApiResponse(CryptoResult(s._1, s._2).asJson)
           )
         }
       )

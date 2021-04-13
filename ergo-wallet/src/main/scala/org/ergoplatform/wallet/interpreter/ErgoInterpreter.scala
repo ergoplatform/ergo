@@ -9,9 +9,9 @@ import org.ergoplatform.{ErgoLikeContext, ErgoBox, ErgoBoxCandidate, ErgoLikeInt
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import sigmastate.Values.ErgoTree
-import sigmastate.eval.{RuntimeIRContext, IRContext, Profiler}
+import sigmastate.eval.{RuntimeIRContext, IRContext}
 import sigmastate.interpreter.Interpreter.{VerificationResult, ScriptEnv}
-import sigmastate.interpreter.{ScriptProcessorSettings, ProcessorStats, EvalSettings, PrecompiledScriptProcessor, CacheKey}
+import sigmastate.interpreter.{ScriptProcessorSettings, ProcessorStats, PrecompiledScriptProcessor, CacheKey}
 import sigmastate.{AvlTreeData, AvlTreeFlags}
 
 import scala.util.Try
@@ -26,12 +26,6 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
   extends ErgoLikeInterpreter {
 
   override type CTX = ErgoLikeContext
-
-  val profiler = ErgoInterpreter.debugProfiler
-
-  override val evalSettings: EvalSettings = super.evalSettings.copy(
-    profilerOpt = Some(profiler)
-  )
 
   /**
     * Checks that expired box is spent in a proper way
@@ -90,11 +84,6 @@ class ErgoInterpreter(params: ErgoLikeParameters)(implicit IR: IRContext)
 }
 
 object ErgoInterpreter {
-
-  /** Profiler which is used in `debug mode` to evaluate accuracy of cost estimation.
-    * This profiler is shared by all instances of ErgoInterpreter
-    */
-  val debugProfiler = new Profiler
 
   /** Creates an interpreter with the given parameters, [[RuntimeIRContext]] for script processing and
     * the `scriptProcessor` for handling compilation caching and handling pre-compiled scripts.

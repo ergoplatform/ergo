@@ -141,19 +141,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     )
     val maxCost = stateContext.currentParameters.maxBlockCost
 
-    val startingCost = addExact(initialCost, accumulatedCost)
-    if (startingCost > maxCost) {
-      log.warn(s"Starting cost $startingCost exceeds block maximum: txId = $id")
-      measureCostedOp(
-        TransactionMetricData(stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId), id),
-        TransactionMetricReporter("startingCost")) { Success(startingCost) }
-    }
     ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big
-      // TODO v5.0: make this check versioned
-      //.validate(bsBlockTransactionsCost, maxCost >= addExact(initialCost, accumulatedCost), s"$id: initial cost")
+      .validate(bsBlockTransactionsCost, maxCost >= addExact(initialCost, accumulatedCost), s"$id: initial cost")
       // Starting validation
-      .payload(startingCost)
+      .payload(initialCost)
       // Perform cheap checks first
       .validateNoFailure(txAssetsInOneBox, outAssetsTry)
       .validate(txPositiveAssets,
@@ -228,33 +220,15 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
           val ctx = new ErgoContext(
             stateContext, transactionContext, inputContext,
-            costLimit = maxCost - currentTxCost,  // remaining cost so far
+            costLimit = maxCost - addExact(currentTxCost, accumulatedCost),
             initCost = 0)
 
-          val (costTry, time) = BenchmarkUtil.measureTimeNano {
-            verifier.verify(box.ergoTree, ctx, proof, messageToSign)
+          val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
+          costTry.recover { case t =>
+            log.debug(s"Tx verification failed: ${t.getMessage}")
           }
 
-          val (isCostValid, scriptCost) = costTry match {
-            case Success(res @ (_, scriptCost)) =>
-              registerScriptTime(verifier, ctx, box.ergoTree, time, scriptCost)
-              res
-            case Failure(t) =>
-              log.debug(s"Tx verification failed: ${t.getMessage}")
-              (false, maxCost + 1)
-          }
-
-          val currCost = addExact(currentTxCost, scriptCost)
-          if (currCost > maxCost) {
-            log.warn(
-              s"""Current cost $currCost exceeds block maximum:
-                |txId = $id;
-                |input = $idx;
-                |scriptCost: $scriptCost""".stripMargin)
-            measureCostedOp(
-              InputMetricData(stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId), box.transactionId, idx),
-              InputMetricReporter("scriptCost")) { Success(currCost) }
-          }
+          lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
 
           validation
             // Just in case, should always be true if client implementation is correct.
@@ -262,34 +236,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             // Check whether input box script interpreter raised exception
             .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
             // Check that cost of the transaction after checking the input becomes too big
-            // TODO v5.0: make this check versioned
-            // .validate(bsBlockTransactionsCost,
-            //   addExact(currentTxCost, scriptCost) <= maxCost,
-            //   s"$id: cost exceeds limit after input #$idx")
-            .result
+            .validate(bsBlockTransactionsCost, maxCost >= addExact(currentTxCost, accumulatedCost, scriptCost), s"$id: cost exceeds limit after input #$idx")
             .map(c => addExact(c, scriptCost))
         }
         res
       }
-  }
-
-  /** Register the cost and time of executing the given ErgoTree in the given context.
-    * The data record in registered in the profiler of the given verifier.
-    */
-  private def registerScriptTime(verifier: ErgoInterpreter,
-                                 context: ErgoContext,
-                                 ergoTree: ErgoTree,
-                                 time: Long,
-                                 scriptCost: Long) = {
-    val prop = verifier.propositionFromErgoTree(ergoTree, context)
-    prop match {
-      case SigmaPropConstant(p) =>
-        // get sigma tree template
-        // register cost for the template
-      case _ =>
-        val treeHex = ErgoAlgos.encode(ergoTree.bytes)
-        verifier.profiler.addEstimation(treeHex, scriptCost.toInt, time)
-    }
   }
 
   /**

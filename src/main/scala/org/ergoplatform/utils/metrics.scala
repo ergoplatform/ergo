@@ -146,8 +146,17 @@ object metrics {
     MetricsCollector._current.withValue(collector)(block)
   }
 
+  /** Execute block and measure the time of its execution using Java Virtual Machine's
+    * high-resolution time source, in nanoseconds. */
+  def measureTimeNano[T](action: => T): (T, Long) = {
+    val t0 = System.nanoTime()
+    val res = action
+    val t = System.nanoTime()
+    (res, t - t0)
+  }
+
   def measureOp[D, R](d: => D, r: Reporter[D])(block: => Try[R]): Try[R] = {
-    val (res, time) = BenchmarkUtil.measureTimeNano(block)
+    val (res, time) = measureTimeNano(block)
     val obj = MeasuredObject(d, -1, time)
     val metricCollector = MetricsCollector.current
     metricCollector.save(obj)(r)
@@ -155,7 +164,7 @@ object metrics {
   }
 
   def measureCostedOp[D, R](d: => D, r: Reporter[D])(costedOp: => Try[Long]): Try[Unit] = {
-    val (costTry, time) = BenchmarkUtil.measureTimeNano(costedOp)
+    val (costTry, time) = measureTimeNano(costedOp)
     costTry.map { cost =>
       val obj = MeasuredObject(d, cost, time)
       val metricCollector = MetricsCollector.current
@@ -166,7 +175,7 @@ object metrics {
 
   def measureValidationOp[D, R](d: => D, r: Reporter[D])
                                (costedOp: => ValidationResult[Long]): ValidationResult[Long] = {
-    val (res, time) = BenchmarkUtil.measureTimeNano(costedOp)
+    val (res, time) = measureTimeNano(costedOp)
     res.map { cost =>
       val obj = MeasuredObject(d, cost, time)
       val metricCollector = MetricsCollector.current

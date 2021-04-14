@@ -28,7 +28,8 @@ case class NodeConfigurationSettings(stateType: StateType,
                                      mempoolCleanupDuration: FiniteDuration,
                                      rebroadcastCount: Int,
                                      minimalFeeAmount: Long,
-                                     headerChainDiff: Int) {
+                                     headerChainDiff: Int,
+                                     skipV1TransactionsValidation: Boolean = false) {
   /**
     * Whether the node keeping all the full blocks of the blockchain or not.
     * @return true if the blockchain is pruned, false if not

@@ -14,7 +14,7 @@ import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.network.message.{InvData, Message, ModifiersData}
-import scorex.core.network.{Broadcast, ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToRandom}
+import scorex.core.network.{ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToRandom}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.Transaction
@@ -83,21 +83,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Helper method which is deciding whether chain is likely nearly or fully synchronized with the network
-    */
-  private def chainAlmostDownloaded: Boolean = {
-    historyReaderOpt.exists { historyReader =>
-      (historyReader.headersHeight - historyReader.fullBlockHeight < 3) &&
-       historyReader.bestHeaderOpt.exists(_.isNew(timeProvider, 1.hour))
-    }
-  }
-
-  /**
     * Logic to process block parts got from another peer.
     * Filter out non-requested block parts (with a penalty to spamming peer),
     * parse block parts and send valid modifiers to NodeViewHolder
     *
-    * Also, re-announce new blocks.
+    * Currently just a copy from private method in basic trait!
     */
   override protected def modifiersFromRemote(data: ModifiersData, remote: ConnectedPeer): Unit = {
     val typeId = data.typeId
@@ -119,16 +109,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val parsed: Iterable[ErgoPersistentModifier] = parseModifiers(requestedModifiers, serializer, remote)
         val valid = parsed.filter(validateAndSetStatus(remote, _))
         if (valid.nonEmpty) viewHolderRef ! ModifiersFromRemote[ErgoPersistentModifier](valid)
-
-        // If chain is synced or almost synced, announce new modifiers received.
-        // Helping to push new blocks around the network faster.
-        if (chainAlmostDownloaded) {
-          val toAnnounce = valid.map(_.id).toSeq
-          log.info(s"Announcing recent modifiers: ${toAnnounce.size}, type: $typeId}")
-          val msg = Message(invSpec, Right(InvData(typeId, toAnnounce)), None)
-          networkControllerRef ! SendToNetwork(msg, Broadcast)
-        }
-
       case _ =>
         log.error(s"Undefined serializer for modifier of type $typeId")
     }
@@ -249,7 +229,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * - block sections, if our headers chain is synced
     */
   override protected def requestMoreModifiers(applied: Seq[ErgoPersistentModifier]): Unit = {
-    super.requestMoreModifiers(applied)
     if (deliveryTracker.requestedSize < desiredSizeOfExpectingQueue / 2) {
       historyReaderOpt foreach { h =>
         if (h.isHeadersChainSynced) {

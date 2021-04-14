@@ -13,13 +13,16 @@ import sigmastate.lang.Terms._
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.{IRContext, CompiletimeIRContext}
 import sigmastate.interpreter.CryptoConstants.dlogGroup
-import sigmastate.lang.{TransformingSigmaBuilder, SigmaCompiler}
+import sigmastate.lang.{TransformingSigmaBuilder, SigmaCompiler, CompilerSettings}
 
 import scala.util.{Random, Try}
 
 class ScriptsSpec extends ErgoPropertyTest {
 
-  val compiler = SigmaCompiler(TestnetNetworkPrefix, TransformingSigmaBuilder)
+  val compiler = SigmaCompiler(CompilerSettings(
+    networkPrefix = TestnetNetworkPrefix,
+    builder = TransformingSigmaBuilder,
+    lowerMethodCalls = true))
   val delta = emission.settings.minerRewardDelay
   val fixedBox: ErgoBox = ergoBoxGen(fromString("1 == 1"), heightGen = 0).sample.get
   implicit lazy val context: IRContext = new CompiletimeIRContext

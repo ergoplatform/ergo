@@ -293,7 +293,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       t - t0
     }
 
-    val gen = validErgoTransactionGenTemplate(0, 0, 1000, 1000, trueLeafGen)
+    val gen = validErgoTransactionGenTemplate(0, 0, 1500, 2000, trueLeafGen)
     val (from, tx) = gen.sample.get
     tx.statelessValidity().isSuccess shouldBe true
 

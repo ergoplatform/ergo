@@ -830,6 +830,8 @@ components:
       properties:
         scanName:
           type: string
+        removeOffchain:
+          type: boolean
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
       example:
@@ -845,6 +847,8 @@ components:
           type: string
         scanId:
           type: integer
+        removeOffchain:
+          type: boolean
         trackingRule:
           $ref: '#/components/schemas/ScanningPredicate'
       example:

@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
+import org.ergoplatform.nodeView.wallet.ErgoWalletService.FilteringOptions
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
@@ -142,8 +143,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       val boxes = ergoWalletService.getScanBoxes(state, scanId, unspent, considerUnconfirmed)
       sender() ! boxes
 
-    case GetTransactions =>
-      sender() ! ergoWalletService.getTransactions(state.registry, state.fullHeight)
+    case GetTransactions(filteringOptions) =>
+      sender() ! ergoWalletService.getTransactions(state.registry, state.fullHeight, filteringOptions)
 
     case GetTransaction(txId) =>
       sender() ! ergoWalletService.getTransactionsByTxId(txId, state.registry, state.fullHeight)
@@ -573,15 +574,9 @@ object ErgoWalletActor extends ScorexLogging {
   final case class CheckSeed(mnemonic: String, passOpt: Option[String])
 
   /**
-    * Get all wallet-related transaction
+    * Get wallet-related transaction
     */
-  case object GetTransactions
-
-  /**
-    * Get filtered wallet-related transaction
-    */
-  case class GetFilteredTransactions(minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int)
-
+  case class GetTransactions(filteringOptions: Option[FilteringOptions])
 
   /**
     * Derive next key-pair according to BIP-32

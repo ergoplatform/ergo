@@ -17,7 +17,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import scorex.db.LDBVersionedStore
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.util.encode.Base16
@@ -154,11 +154,12 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
       }
   }
 
-  def walletTxsSince(height: Height): Seq[WalletTransaction] = {
-    val firstKey = firstIncludedScanTransactionSpaceKey(Constants.PaymentsScanId, height)
-    val lastKey = lastIncludedScanTransactionSpaceKey(Constants.PaymentsScanId)
+  def walletTxsBetween(heightFrom: Height, heightTo: Height): Seq[WalletTransaction] = {
+    val firstKey = firstIncludedScanTransactionSpaceKey(Constants.PaymentsScanId, heightFrom)
+    val lastKey = lastIncludedScanTransactionSpaceKey(Constants.PaymentsScanId, heightTo)
+
+    // Get wallet transactions from hightFrom (inclusive) to heightTo (inclusive)
     val range = store.getRange(firstKey, lastKey)
-    println("range size: " + range.size)
     range.flatMap { case (_, txId) =>
       store.get(txKey(ModifierId @@ Base16.encode(txId))).flatMap { txBytes =>
         WalletTransactionSerializer.parseBytesTry(txBytes).toOption
@@ -486,8 +487,8 @@ object WalletRegistry {
   private def firstIncludedScanTransactionSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
     composeKey(InclusionHeightScanTxPrefix, scanId, height)
 
-  private def lastIncludedScanTransactionSpaceKey(scanId: ScanId): Array[Byte] =
-    composeKey(InclusionHeightScanTxPrefix, scanId, Int.MaxValue)
+  private def lastIncludedScanTransactionSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
+    composeKey(InclusionHeightScanTxPrefix, scanId, height)
 
   private val RegistrySummaryKey: Array[Byte] = Array(0x02: Byte)
 

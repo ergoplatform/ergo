@@ -22,6 +22,7 @@ import org.ergoplatform.wallet.settings.SecretStorageSettings
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.SigmaBoolean
+
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -117,7 +118,9 @@ trait ErgoWalletService {
     * @param fullHeight - current height (to construct AugWalletTransaction instances with confirmations included)
     * @return - wallet transactions augmented with confirmations numbers
     */
-  def getTransactions(registry: WalletRegistry, fullHeight: Int): Seq[AugWalletTransaction]
+  def getTransactions(registry: WalletRegistry,
+                      fullHeight: Int,
+                      filteringOptions: Option[FilteringOptions]): Seq[AugWalletTransaction]
 
   /**
     * @param txId - transaction identifier
@@ -292,20 +295,28 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
         }
       }
 
-  def unlockWallet(state: ErgoWalletState, walletPass: String, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
-    state.secretStorageOpt match {
-      case Some(secretStorage) =>
-        secretStorage.unlock(walletPass).flatMap { _ =>
-          secretStorage.secret match {
-            case None =>
-              Failure(new Exception("Master key is not available for wallet unlocking"))
-            case Some(masterKey) =>
-              processUnlock(state, masterKey, usePreEip3Derivation)
+  def unlockWallet(state: ErgoWalletState,
+                   walletPass: String,
+                   usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] = {
+    if (state.walletVars.proverOpt.isEmpty) {
+      state.secretStorageOpt match {
+        case Some(secretStorage) =>
+          secretStorage.unlock(walletPass).flatMap { _ =>
+            secretStorage.secret match {
+              case None =>
+                Failure(new Exception("Master key is not available for wallet unlocking"))
+              case Some(masterKey) =>
+                processUnlock(state, masterKey, usePreEip3Derivation)
+            }
           }
-        }
-      case None =>
-        Failure(new Exception("Wallet not initialized"))
+        case None =>
+          Failure(new Exception("Wallet not initialized"))
+      }
+    } else {
+      log.info("Wallet already unlocked")
+      Failure(new Exception("Wallet already unlocked"))
     }
+  }
 
   def lockWallet(state: ErgoWalletState): ErgoWalletState = {
     state.secretStorageOpt.foreach(_.lock())
@@ -366,10 +377,24 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
     boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 
-  def getTransactions(registry: WalletRegistry, fullHeight: Int): Seq[AugWalletTransaction] =
-    registry.allWalletTxs()
-      .sortBy(-_.inclusionHeight)
+  def getTransactions(registry: WalletRegistry,
+                      fullHeight: Int,
+                      filteringOptions: Option[FilteringOptions]): Seq[AugWalletTransaction] = {
+    val txs = filteringOptions match {
+      case Some(FilteringOptions(minHeight, maxHeight, minConfNum, maxConfNum)) =>
+        // Whether heights or confs provided, checked in WalletApiRoute.transactionsR
+        val (heightFrom, heightTo) = if (maxConfNum == Int.MaxValue) {
+          (minHeight, maxHeight)
+        } else {
+          (fullHeight - maxConfNum, fullHeight - minConfNum)
+        }
+        registry.walletTxsBetween(heightFrom, heightTo)
+      case None => registry.allWalletTxs()
+    }
+
+    txs.sortBy(-_.inclusionHeight)
       .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
+  }
 
   def getTransactionsByTxId(txId: ModifierId, registry: WalletRegistry, fullHeight: Int): Option[AugWalletTransaction] =
     registry.getTx(txId)

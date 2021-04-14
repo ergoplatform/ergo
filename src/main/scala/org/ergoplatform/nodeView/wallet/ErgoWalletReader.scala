@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import java.util.concurrent.TimeUnit
+
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
@@ -8,7 +9,7 @@ import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.{ErgoBox, P2PKAddress}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
-import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
+import org.ergoplatform.nodeView.wallet.ErgoWalletService.{DeriveNextKeyResult, FilteringOptions}
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
 import org.ergoplatform.nodeView.wallet.requests.{BoxesRequest, ExternalSecret, TransactionGenerationRequest}
@@ -84,11 +85,8 @@ trait ErgoWalletReader extends VaultReader {
   def updateChangeAddress(address: P2PKAddress): Unit =
     walletActor ! UpdateChangeAddress(address)
 
-  def transactions: Future[Seq[AugWalletTransaction]] =
-    (walletActor ? GetTransactions).mapTo[Seq[AugWalletTransaction]]
-
-  def filteredTransactions(minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int): Future[Seq[AugWalletTransaction]] =
-    (walletActor ? GetFilteredTransactions(minHeight, maxHeight, minConfNum, maxConfNum)).mapTo[Seq[AugWalletTransaction]]
+  def transactions(filteringOpts: Option[FilteringOptions]): Future[Seq[AugWalletTransaction]] =
+    (walletActor ? GetTransactions(filteringOpts)).mapTo[Seq[AugWalletTransaction]]
 
   def transactionById(id: ModifierId): Future[Option[AugWalletTransaction]] =
     (walletActor ? GetTransaction(id)).mapTo[Option[AugWalletTransaction]]

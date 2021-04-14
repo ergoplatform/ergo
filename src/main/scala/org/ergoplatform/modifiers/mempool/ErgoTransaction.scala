@@ -142,6 +142,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     )
     val maxCost = stateContext.currentParameters.maxBlockCost
 
+    val startingCost = addExact(initialCost, accumulatedCost)
+    if (startingCost > maxCost) {
+      log.warn(s"Starting cost $startingCost exceeds block maximum: txId = $id")
+      measureCostedOp(
+        TransactionMetricData(stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId), id),
+        TransactionMetricReporter("startingCost")) { Success(startingCost) }
+    }
+
     ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big
       .validate(bsBlockTransactionsCost, maxCost >= addExact(initialCost, accumulatedCost), s"$id: initial cost")

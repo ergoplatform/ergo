@@ -62,7 +62,7 @@ class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
     pow.calcN(2, 41984000) shouldBe 2143944600
   }
 
-  // testing an invalid header got from a pool
+  // testing an invalid header got from a mining pool
   property("test vector - invalid solution") {
     import io.circe.parser._
 

@@ -109,6 +109,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
         log.debug(s"Trying to apply full block with header ${fb.header.encodedId} at height $height")
 
+        implicit val es = constants.settings
         val inRoot = rootHash
         val blockData = BlockMetricData(fb.id, fb.height, Some(fb.blockTransactions.txs.length))
         val stateTry = for {

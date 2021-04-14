@@ -2,6 +2,7 @@ package org.ergoplatform.utils
 
 import java.io.{BufferedWriter, FileWriter, File, Writer}
 
+import org.ergoplatform.settings.ErgoSettings
 import scalan.util.FileUtil
 
 import scala.util.{DynamicVariable, Try}
@@ -193,42 +194,55 @@ object metrics {
     (res, t - t0)
   }
 
+  /** Helper method which saves the given data to the given store. */
+  @inline private def collectMetricsTo[D](store: MetricStore[D], d: D, cost: Long, time: Long) = {
+    val obj = MeasuredData(d, cost, time)
+    val metricCollector = MetricsCollector.current
+    metricCollector.collect(obj, store)
+  }
+
   /** Executes the given `block` of code (operation) measuring its time.
     * Sends the given metric data to the given store of the current collector. */
-  def measureOp[D, R](d: => D, r: MetricStore[D])(block: => Try[R]): Try[R] = {
-    val (res, time) = measureTimeNano(block)
-    val obj = MeasuredData(d, -1, time)
-    val metricCollector = MetricsCollector.current
-    metricCollector.collect(obj, r)
-    res
+  def measureOp[D, R](d: => D, store: MetricStore[D])
+                     (block: => Try[R])
+                     (implicit es: ErgoSettings): Try[R] = {
+    if (es.nodeSettings.collectMetrics) {
+      val (res, time) = measureTimeNano(block)
+      collectMetricsTo(store, d, -1, time)
+      res
+    } else
+      block  // no overhead when the metrics are not being collected
   }
 
   /** Executes the given `costedOp` measuring its time.
     * Sends the given metric data to the given store of the current collector.
     * In addition, the cost returned by the operation is stored in the row.
     */
-  def measureCostedOp[D, R](d: => D, r: MetricStore[D])(costedOp: => Try[Long]): Try[Unit] = {
-    val (costTry, time) = measureTimeNano(costedOp)
-    costTry.map { cost =>
-      val obj = MeasuredData(d, cost, time)
-      val metricCollector = MetricsCollector.current
-      metricCollector.collect(obj, r)
-      ()
-    }
+  def measureCostedOp[D, R](d: => D, store: MetricStore[D])
+                           (costedOp: => Try[Long])
+                           (implicit es: ErgoSettings): Try[Long] = {
+    if (es.nodeSettings.collectMetrics) {
+      val (costTry, time) = measureTimeNano(costedOp)
+      val cost = costTry.getOrElse(-1L)
+      collectMetricsTo(store, d, cost, time)
+      costTry
+    } else
+      costedOp // no overhead when the metrics are not being collected
   }
 
   /** Executes the given `validationOp` measuring its time.
     * Sends the given metric data to the given store of the current collector.
     * In addition, the cost returned by the operation is stored in the row.
     */
-  def measureValidationOp[D, R](d: => D, r: MetricStore[D])
-                               (validationOp: => ValidationResult[Long]): ValidationResult[Long] = {
-    val (res, time) = measureTimeNano(validationOp)
-    res.map { cost =>
-      val obj = MeasuredData(d, cost, time)
-      val metricCollector = MetricsCollector.current
-      metricCollector.collect(obj, r)
-      cost
-    }
+  def measureValidationOp[D, R](d: => D, store: MetricStore[D])
+                               (validationOp: => ValidationResult[Long])
+                               (implicit es: ErgoSettings): ValidationResult[Long] = {
+    if (es.nodeSettings.collectMetrics) {
+      val (res, time) = measureTimeNano(validationOp)
+      val cost = res.toTry.getOrElse(-1L)
+      collectMetricsTo(store, d, cost, time)
+      res
+    } else
+      validationOp // no overhead when the metrics are not being collected
   }
 }

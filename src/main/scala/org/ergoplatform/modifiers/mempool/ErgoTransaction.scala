@@ -126,7 +126,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        stateContext: ErgoStateContext,
                        accumulatedCost: Long)
                       (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
-
+    implicit val es = stateContext.ergoSettings
     verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 

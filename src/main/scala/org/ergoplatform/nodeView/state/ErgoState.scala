@@ -91,6 +91,7 @@ object ErgoState extends ScorexLogging {
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     import cats.implicits._
     implicit val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
+    implicit val es = currentStateContext.ergoSettings
 
     @tailrec
     def execTx(txs: List[ErgoTransaction], accCostTry: ValidationResult[Long]): ValidationResult[Long] = (txs, accCostTry) match {
@@ -131,7 +132,7 @@ object ErgoState extends ScorexLogging {
 
     // Skip v1 block transactions validation if corresponding setting is on
     if (currentStateContext.blockVersion == 1 &&
-          currentStateContext.ergoSettings.nodeSettings.skipV1TransactionsValidation) {
+          es.nodeSettings.skipV1TransactionsValidation) {
       Valid(0L)
     } else {
       execTx(transactions.toList, Valid[Long](0L))

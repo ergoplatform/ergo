@@ -54,9 +54,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   override protected def pmodModify(pmod: ErgoPersistentModifier): Unit = {
-    metrics.executeWithCollector(metricsCollector) {
+    if (settings.nodeSettings.collectMetrics)
+      metrics.executeWithCollector(metricsCollector) {
+        super.pmodModify(pmod)
+      }
+    else
       super.pmodModify(pmod)
-    }
   }
 
   override protected def txModify(tx: ErgoTransaction): Unit = {

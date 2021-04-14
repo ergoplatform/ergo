@@ -3,6 +3,7 @@ package org.ergoplatform.utils
 import java.io.{OutputStreamWriter, Writer, ByteArrayOutputStream}
 
 import org.ergoplatform.nodeView.state.UtxoState._
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.metrics._
 import scalan.RType
 import scalan.util.FileUtil
@@ -14,6 +15,10 @@ import scala.collection.mutable
 import scala.util.Success
 
 class MetricsSpec extends ErgoPropertyTest {
+  implicit def ergoSettings: ErgoSettings = settings.copy(
+    nodeSettings = settings.nodeSettings.copy(collectMetrics = true)
+  )
+
   def Coll[T](items: T*)(implicit cT: RType[T]) = CostingSigmaDslBuilder.Colls.fromItems(items:_*)
 
   class TestCsvCollector extends CsvCollector {

@@ -48,13 +48,20 @@ class HeaderSerializationSpecification extends ErgoPropertyTest with DecodingUti
 
     h.id shouldBe Base16.encode(Blake2b256(h.bytes)) // header id is blake2b256 of its bytes
 
+
+    //test vector
+    Base16.encode(h.bytes) shouldBe
+      "018bdd043dab20aa690afc9a18fc4797de4f02f049f5c16f9657646c753d69582e4527a2a7bcee7f77b5697f505e5effc5342750f58a52dddfe407a3ce3bd3abd0722f9306300d0d96fe8c10de830216d700131614f9e6ce2496e8dba1cbb459516c06d6277d40aeb958c5631515dc3ec3d11d8504e62de77df024d0ca67242fb512d4d0c1d9f42ea1a3933312467ce53d41fdc20e38c603e8fd89999371c60d7537c5d5760ef7c4070923938aa61904030002bb8eb301ab3d5d14515e33760d0dfb4f7191312a640db64a3a1aeeac9703f2d3026d7b267c33120d15c267664081a6b77a6dcae6b35147db2c3e1195573119cb140008a1d1038801171a16514e604d76c516eec4124f4066e6e326b9e8d2fc5165b631aa"
+
+    h.bytes.length shouldBe 279
+
     val bb = ByteBuffer.wrap(h.bytes)
 
-    // read block version
+    // read block version, 1 byte
     val versionParsed = getByte(bb)
     versionParsed shouldBe version
 
-    // read parent id, 32 bytes
+    // read parent header id, 32 bytes
     val parentIdParsed = getBytes(bb, 32)
     Base16.encode(parentIdParsed) shouldBe parentId
 
@@ -90,17 +97,21 @@ class HeaderSerializationSpecification extends ErgoPropertyTest with DecodingUti
     votesParsed.toIndexedSeq shouldBe votes.toIndexedSeq
 
     // read PoW solution
-
+    // read public key, 33 bytes (EC point)
     val pkParsed = getBytes(bb, 33)
     groupElemFromBytes(pkParsed) shouldBe pk
 
+    // read one-time secret w, 33 bytes (EC point)
     val wParsed = getBytes(bb, 33)
     groupElemFromBytes(wParsed) shouldBe w
 
+    // read nonce (8 bytes)
     val nonceParsed = getBytes(bb, 8)
     nonceParsed.toIndexedSeq shouldBe n.toIndexedSeq
 
+    // read length of d, 1 byte
     val dLength = getUByte(bb)
+    // read d bigint bytes
     val dBytes = getBytes(bb, dLength)
     val dParsed = BigInt(1, dBytes)
     dParsed shouldBe d

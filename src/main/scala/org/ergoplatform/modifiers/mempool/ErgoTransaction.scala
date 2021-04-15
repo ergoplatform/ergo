@@ -104,6 +104,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   }
 
   val verifyScriptStore = MetricStore[InputMetricData]("verifyScript")
+  val invInitCostStore = MetricStore[TransactionMetricData]("invInitCost")
+  val invScriptCostStore = MetricStore[InputMetricData]("invScriptCost")
 
   /**
     * Checks whether transaction is valid against input boxes to spend, and
@@ -142,19 +144,21 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     )
     val maxCost = stateContext.currentParameters.maxBlockCost
 
-    val startingCost = addExact(initialCost, accumulatedCost)
-    if (startingCost > maxCost) {
-      log.warn(s"Starting cost $startingCost exceeds block maximum: txId = $id")
-      measureCostedOp(
+    val startCost = addExact(initialCost, accumulatedCost)
+    if (startCost > maxCost) {
+      log.warn(s"Starting cost $startCost exceeds block maximum: txId = $id")
+      collectMetricsTo(
+        invInitCostStore,
         TransactionMetricData(stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId), id),
-        TransactionMetricReporter("startingCost")) { Success(startingCost) }
+        initialCost, 0)
     }
 
     ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big
-      .validate(bsBlockTransactionsCost, maxCost >= addExact(initialCost, accumulatedCost), s"$id: initial cost")
+      // TODO v5.0: make this check versioned
+      //.validate(bsBlockTransactionsCost, maxCost >= addExact(initialCost, accumulatedCost), s"$id: initial cost")
       // Starting validation
-      .payload(initialCost)
+      .payload(startCost)
       // Perform cheap checks first
       .validateNoFailure(txAssetsInOneBox, outAssetsTry)
       .validate(txPositiveAssets,
@@ -227,7 +231,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
           val ctx = new ErgoContext(
             stateContext, transactionContext, inputContext,
-            costLimit = maxCost - addExact(currentTxCost, accumulatedCost),
+            costLimit = maxCost - currentTxCost, // remaining cost so far
             initCost = 0)
 
           val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
@@ -237,18 +241,35 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
           lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
 
+          val currCost = addExact(currentTxCost, scriptCost)
+          if (currCost > maxCost) {
+            log.warn(
+              s"""Current cost $currCost exceeds block maximum:
+                |txId = $id;
+                |input = $idx;
+                |scriptCost: $scriptCost""".stripMargin)
+            collectMetricsTo(invScriptCostStore,
+              InputMetricData(
+                blockId = stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId),
+                box.transactionId, idx),
+              scriptCost, 0)
+          }
+
           validation
             // Just in case, should always be true if client implementation is correct.
             .validateEquals(txBoxToSpend, box.id, input.boxId)
             // Check whether input box script interpreter raised exception
             .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
             // Check that cost of the transaction after checking the input becomes too big
-            .validate(bsBlockTransactionsCost, maxCost >= addExact(currentTxCost, accumulatedCost, scriptCost), s"$id: cost exceeds limit after input #$idx")
+            // TODO v5.0: make this check versioned
+            // .validate(bsBlockTransactionsCost,
+            //   currCost <= maxCost,
+            //   s"$id: cost exceeds limit after input #$idx")
+            .result
             .map(c => addExact(c, scriptCost))
         }
 
-        collectMetricsTo(
-          verifyScriptStore,
+        collectMetricsTo(verifyScriptStore,
           InputMetricData(
             blockId = stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId),
             box.transactionId, idx),

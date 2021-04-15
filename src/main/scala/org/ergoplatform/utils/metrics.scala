@@ -195,7 +195,7 @@ object metrics {
   }
 
   /** Helper method which saves the given data to the given store. */
-  @inline private def collectMetricsTo[D](store: MetricStore[D], d: D, cost: Long, time: Long) = {
+  @inline def collectMetricsTo[D](store: MetricStore[D], d: D, cost: Long, time: Long) = {
     val obj = MeasuredData(d, cost, time)
     val metricCollector = MetricsCollector.current
     metricCollector.collect(obj, store)

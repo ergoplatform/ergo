@@ -13,7 +13,7 @@ import org.ergoplatform.modifiers.state.{Insertion, Removal, Lookup, StateChange
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Constants, ChainSettings, ErgoSettings}
-import org.ergoplatform.utils.metrics.{measureValidationOp, TransactionMetricData, MetricStore, emptyModifierId}
+import org.ergoplatform.utils.metrics._
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.MinimalState
 import scorex.core.validation.ValidationResult.Valid
@@ -113,15 +113,18 @@ object ErgoState extends ScorexLogging {
           .payload[Long](r.value)
           .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) {
             case (_, (dataBoxes, toSpend)) =>
-              val res = measureValidationOp(
-                TransactionMetricData(currentStateContext.lastHeaderIdOpt.getOrElse(emptyModifierId), tx.id),
-                validateTxStatefulStore
-              ) {
+              val (res, time) = measureTimeNano(
                 tx.validateStateful(
                   toSpend.toIndexedSeq,
                   dataBoxes.toIndexedSeq,
                   currentStateContext, accumulatedCost = r.value)(verifier).result
-              }
+              )
+              collectMetricsTo(
+                validateTxStatefulStore,
+                TransactionMetricData(currentStateContext.lastHeaderIdOpt.getOrElse(emptyModifierId), tx.id),
+                cost = res.map(c => c - r.value).toTry.getOrElse(-1L),
+                time
+              )
               res
           }.result
 

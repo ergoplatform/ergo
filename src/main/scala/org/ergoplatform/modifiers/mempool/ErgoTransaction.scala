@@ -209,11 +209,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
       // Check inputs, the most expensive check usually, so done last.
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
-        val res = measureValidationOp(
-              InputMetricData(stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId), box.transactionId, idx),
-              verifyScriptStore) {
-          val currentTxCost = validation.result.payload.get
+        val currentTxCost = validation.result.payload.get
 
+        val (res, time) = measureTimeNano {
           val input = inputs(idx)
           val proof = input.spendingProof
           val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
@@ -240,6 +238,15 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             .validate(bsBlockTransactionsCost, maxCost >= addExact(currentTxCost, accumulatedCost, scriptCost), s"$id: cost exceeds limit after input #$idx")
             .map(c => addExact(c, scriptCost))
         }
+
+        collectMetricsTo(
+          verifyScriptStore,
+          InputMetricData(
+            blockId = stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId),
+            box.transactionId, idx),
+          cost = res.map(c => c - currentTxCost).toTry.getOrElse(-1L),
+          time
+        )
         res
       }
   }

@@ -291,7 +291,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       ) {
         BadRequest(s"Bad request: both heights and confirmations set")
       } else {
-        val filteriongOpts = if (minHeight == 0 && maxHeight == Int.MaxValue &&
+        val filteringOpts = if (minHeight == 0 && maxHeight == Int.MaxValue &&
           minConfNum == 0 && maxConfNum == Int.MaxValue) {
           None
         } else {
@@ -299,7 +299,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         }
 
         withWallet {
-          _.transactions(filteriongOpts)
+          _.transactions(filteringOpts)
             .map {
               _.filter(tx =>
                 tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId) &&

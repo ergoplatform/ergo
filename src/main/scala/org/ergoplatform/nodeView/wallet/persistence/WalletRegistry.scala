@@ -17,7 +17,7 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import scorex.db.LDBVersionedStore
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.util.encode.Base16
@@ -161,8 +161,15 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     // Get wallet transactions from hightFrom (inclusive) to heightTo (inclusive)
     val range = store.getRange(firstKey, lastKey)
     range.flatMap { case (_, txId) =>
-      store.get(txKey(ModifierId @@ Base16.encode(txId))).flatMap { txBytes =>
-        WalletTransactionSerializer.parseBytesTry(txBytes).toOption
+      store.get(txKey(txId)) match {
+        case Some(txBytes) => WalletTransactionSerializer.parseBytesTry(txBytes) match {
+          case Success(tx) =>
+            Some(tx)
+          case Failure(t) =>
+            log.error(s"Transaction ${Base16.encode(txId)} can't be read from the db", t); None
+        }
+        case None => 
+          log.error(s"Transaction ${Base16.encode(txId)} is found in indexes but not db"); None
       }
     }
   }
@@ -497,6 +504,8 @@ object WalletRegistry {
   private def boxKey(id: BoxId): Array[Byte] = BoxKeyPrefix +: id
 
   private def txKey(id: ModifierId): Array[Byte] = TxKeyPrefix +: idToBytes(id)
+
+  private def txKey(id: Array[Byte]): Array[Byte] = TxKeyPrefix +: id
 
   private def boxToKvPair(box: TrackedBox) = boxKey(box) -> TrackedBoxSerializer.toBytes(box)
 

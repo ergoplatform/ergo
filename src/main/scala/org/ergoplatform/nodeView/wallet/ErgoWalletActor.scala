@@ -575,7 +575,7 @@ object ErgoWalletActor extends ScorexLogging {
   /**
     * Get wallet-related transaction
     */
-  case class GetTransactions(filteringOptions: Option[FilteringOptions])
+  case class GetTransactions(filteringOptions: Option[WalletFiltering])
 
   /**
     * Derive next key-pair according to BIP-32

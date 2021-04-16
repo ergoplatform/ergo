@@ -85,7 +85,7 @@ trait ErgoWalletReader extends VaultReader {
   def updateChangeAddress(address: P2PKAddress): Unit =
     walletActor ! UpdateChangeAddress(address)
 
-  def transactions(filteringOpts: Option[FilteringOptions]): Future[Seq[AugWalletTransaction]] =
+  def transactions(filteringOpts: Option[WalletFiltering]): Future[Seq[AugWalletTransaction]] =
     (walletActor ? GetTransactions(filteringOpts)).mapTo[Seq[AugWalletTransaction]]
 
   def transactionById(id: ModifierId): Future[Option[AugWalletTransaction]] =

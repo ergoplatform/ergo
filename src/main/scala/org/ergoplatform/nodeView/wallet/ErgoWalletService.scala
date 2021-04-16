@@ -120,7 +120,7 @@ trait ErgoWalletService {
     */
   def getTransactions(registry: WalletRegistry,
                       fullHeight: Int,
-                      filteringOptions: Option[FilteringOptions]): Seq[AugWalletTransaction]
+                      filteringOptions: Option[WalletFiltering]): Seq[AugWalletTransaction]
 
   /**
     * @param txId - transaction identifier
@@ -366,7 +366,9 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
   def getScanBoxes(state: ErgoWalletState, scanId: ScanId, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox] = {
     val unconfirmed = if (considerUnconfirmed) {
       state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
-    } else Seq.empty
+    } else {
+      Seq.empty
+    }
 
     val currentHeight = state.fullHeight
     val boxes = (if (unspentOnly) {
@@ -379,14 +381,13 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
 
   def getTransactions(registry: WalletRegistry,
                       fullHeight: Int,
-                      filteringOptions: Option[FilteringOptions]): Seq[AugWalletTransaction] = {
+                      filteringOptions: Option[WalletFiltering]): Seq[AugWalletTransaction] = {
     val txs = filteringOptions match {
-      case Some(FilteringOptions(minHeight, maxHeight, minConfNum, maxConfNum)) =>
+      case Some(walletFiltering) =>
         // Whether heights or confs provided, checked in WalletApiRoute.transactionsR
-        val (heightFrom, heightTo) = if (maxConfNum == Int.MaxValue) {
-          (minHeight, maxHeight)
-        } else {
-          (fullHeight - maxConfNum, fullHeight - minConfNum)
+        val (heightFrom, heightTo) = walletFiltering match {
+          case ByHeight(minHeight, maxHeight) => (minHeight, maxHeight)
+          case ByConfirmationsNum(minConfNum, maxConfNum) => (fullHeight - maxConfNum, fullHeight - minConfNum)
         }
         registry.walletTxsBetween(heightFrom, heightTo)
       case None => registry.allWalletTxs()

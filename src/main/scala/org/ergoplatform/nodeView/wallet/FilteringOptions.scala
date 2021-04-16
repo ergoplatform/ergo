@@ -3,4 +3,9 @@ package org.ergoplatform.nodeView.wallet
 /**
   * Request to filter transactions by height or by confirmations
   */
-case class FilteringOptions(minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int)
+
+sealed trait WalletFiltering
+
+case class ByHeight(minHeight: Int, maxHeight: Int) extends WalletFiltering
+
+case class ByConfirmationsNum(minConfNum: Int, maxConfNum: Int) extends WalletFiltering

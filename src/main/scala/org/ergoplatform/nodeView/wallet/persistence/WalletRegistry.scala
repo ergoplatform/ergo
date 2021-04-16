@@ -168,7 +168,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
           case Failure(t) =>
             log.error(s"Transaction ${Base16.encode(txId)} can't be read from the db", t); None
         }
-        case None => 
+        case None =>
           log.error(s"Transaction ${Base16.encode(txId)} is found in indexes but not db"); None
       }
     }

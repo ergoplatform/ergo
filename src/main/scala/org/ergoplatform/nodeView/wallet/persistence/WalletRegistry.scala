@@ -488,7 +488,7 @@ object WalletRegistry {
     composeKey(InclusionHeightScanTxPrefix, scanId, height)
 
   private def lastIncludedScanTransactionSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
-    composeKey(InclusionHeightScanTxPrefix, scanId, height)
+    composeKey(InclusionHeightScanTxPrefix, scanId, height, -1)
 
   private val RegistrySummaryKey: Array[Byte] = Array(0x02: Byte)
 

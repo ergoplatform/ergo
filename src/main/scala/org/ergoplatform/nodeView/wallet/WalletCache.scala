@@ -20,7 +20,7 @@ final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
   implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
   // Mining rewards are being tracked only if mining = true in config
-  val miningScripts: Seq[Values.ErgoTree] =
+  private val miningScripts: Seq[Values.ErgoTree] =
     if(settings.nodeSettings.mining) {
       WalletCache.miningScripts(trackedPubKeys, settings)
     } else Seq.empty

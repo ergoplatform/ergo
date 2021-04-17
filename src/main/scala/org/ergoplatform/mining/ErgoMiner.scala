@@ -479,7 +479,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def startInternalMiner(candidateBlock: CandidateBlock): Unit = {
     secretKeyOpt match {
       case Some(sk) =>
-        miningThreads += ErgoMiningThread(ergoSettings, self, candidateBlock, sk.w, timeProvider)(context)
+        miningThreads += ErgoMiningThread(ergoSettings, self, candidateBlock, sk.w)(context)
         miningThreads.foreach(_ ! candidateBlock)
       case None =>
         log.warn("Trying to start native miner while secret key is not ready")

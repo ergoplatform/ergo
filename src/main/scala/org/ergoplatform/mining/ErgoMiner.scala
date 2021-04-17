@@ -94,10 +94,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
   override def preStart(): Unit = {
-    // in external miner mode key from wallet is used if `publicKeyOpt` is not set
     if (secretKeyOpt.isEmpty && !externalMinerMode) {
       self ! QueryWallet(secret = true)
-    } else if (publicKeyOpt.isEmpty && externalMinerMode) {
+    } else if (publicKeyOpt.isEmpty) { // mining pubKey is needed in both modes
       log.info("Trying to use key from wallet for mining")
       self ! QueryWallet(secret = false)
     }
@@ -254,9 +253,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def generateCandidate(h: ErgoHistoryReader,
                                 m: ErgoMemPoolReader,
                                 s: UtxoStateReader,
-                                txsToIncludeOpt: Option[Seq[ErgoTransaction]]): Try[CandidateCache] = {
+                                txsToInclude: Seq[ErgoTransaction]): Try[CandidateCache] = {
     //mandatory transactions to include into next block taken from the previous candidate
-    val txsToInclude = txsToIncludeOpt.getOrElse(candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty)).filter { tx =>
+    val unspentTxsToInclude = txsToInclude.filter { tx =>
       inputsNotSpent(tx, s)
     }
 
@@ -268,9 +267,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     publicKeyOpt match {
       case Some(pk) =>
         if (solvedBlock.isEmpty && h.bestFullBlockOpt.map(_.id) == s.stateContext.lastHeaderOpt.map(_.id)) {
-          createCandidate(pk, h, m, desiredUpdate, s, txsToInclude) match {
+          createCandidate(pk, h, m, desiredUpdate, s, unspentTxsToInclude) match {
             case Success(candidate) =>
-              Success(updateCandidate(candidate, pk, txsToInclude))
+              Success(updateCandidate(candidate, pk, unspentTxsToInclude))
             case Failure(e) =>
               log.warn("Failed to produce candidate block.", e)
               //candidate cleared, including its mandatory transactions
@@ -302,7 +301,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
           readersR.flatMap {
             case Readers(h, s: UtxoStateReader, m, _) =>
-              Future.fromTry(generateCandidate(h, m, s, Some(txsToInclude)))
+              Future.fromTry(generateCandidate(h, m, s, txsToInclude))
             case _ =>
               Future.failed(new Exception("Invalid readers state, mining is possible in UTXO mode only"))
           }
@@ -473,7 +472,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     log.info("Requesting candidate")
     candidateOpt = None
     candidateGenerating = false
-    self ! PrepareCandidate(candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty), reply = false)
+    self ! PrepareCandidate(Seq.empty, reply = false)
   }
 
   // Start internal miner's threads. Called once per block candidate.
@@ -726,7 +725,7 @@ object ErgoMiner extends ScorexLogging {
 
 object ErgoMinerRef {
 
-  def props(ergoSettings: ErgoSettings,
+  private def props(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,

@@ -176,7 +176,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! boxes.sortBy(_.trackedBox.inclusionHeightOpt)
 
-      case GetTransactions =>
+      case GetTransactions(_) =>
         sender() ! walletTxs
 
       case DeriveKey(_) => sender() ! Success(WalletActorStub.address)

@@ -85,10 +85,8 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @return sequences of scan-related unspent boxes found in the database
     */
   def unspentBoxes(scanId: ScanId): Seq[TrackedBox] = {
-    val range = store
+    store
       .getRange(firstScanBoxSpaceKey(scanId), lastScanBoxSpaceKey(scanId))
-    log.info("Boxes range size: " + range.length)
-    range.take(100)
       .flatMap { case (_, boxId) => getBox(ADKey @@ boxId) }
   }
 

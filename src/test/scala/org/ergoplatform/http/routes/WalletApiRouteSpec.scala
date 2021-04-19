@@ -210,7 +210,6 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   it should "return wallet transactions" in {
     Get(prefix + "/transactions") ~> route ~> check {
-      println(responseEntity)
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
       val walletTxs = WalletActorStub.walletTxs.filter { awtx =>

@@ -29,10 +29,8 @@ import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.utxo.CostTable
 
 import scala.annotation.tailrec
-import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.util.{Failure, Success, Try}
 
 class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGenerators with Eventually {
 
@@ -41,12 +39,9 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
   val newBlockSignal: Class[SemanticallySuccessfulModifier[_]] = classOf[SemanticallySuccessfulModifier[_]]
   val newBlockDelay: FiniteDuration = 30 seconds
 
-  @tailrec
   private def getWorkMessage(minerRef: ActorRef, mandatoryTransactions: Seq[ErgoTransaction]): WorkMessage = {
-    Try(await((minerRef ? PrepareCandidate(mandatoryTransactions)).mapTo[Future[WorkMessage]].flatten)) match {
-      case Success(wm) => wm
-      case Failure(_) => getWorkMessage(minerRef, mandatoryTransactions)
-    }
+    implicit val patienceConfig: PatienceConfig = PatienceConfig(1.seconds, 50.millis)
+    eventually(await(minerRef.askWithStatus(PrepareCandidate(mandatoryTransactions)).mapTo[WorkMessage]))
   }
 
   val defaultSettings: ErgoSettings = {
@@ -70,7 +65,6 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     }
     complexScript.complexity shouldBe 28077
 
-
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
@@ -83,9 +77,6 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     )
     expectNoMessage(1 second)
     val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
-
-    val history: ErgoHistoryReader = r.h
-    val startBlock: Option[Header] = history.bestHeaderOpt
 
     minerRef ! StartMining
 
@@ -286,7 +277,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
     val passiveMiner: ActorRef = minerRef
 
-    val wm = await((passiveMiner ? PrepareCandidate(Seq.empty)).mapTo[Future[WorkMessage]].flatten)
+    val wm = await(passiveMiner.askWithStatus(PrepareCandidate(Seq.empty)).mapTo[WorkMessage])
     wm.isInstanceOf[WorkMessage] shouldBe true
     system.terminate()
   }
@@ -308,9 +299,6 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     )
     expectNoMessage(1 second)
     val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
-
-    val history: ErgoHistoryReader = r.h
-    val startBlock: Option[Header] = history.bestHeaderOpt
 
     minerRef ! StartMining
 

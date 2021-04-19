@@ -1,7 +1,7 @@
 package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
-import akka.pattern.ask
+import akka.pattern.{StatusReply, ask}
 import akka.util.Timeout
 import com.google.common.primitives.Longs
 import org.ergoplatform.ErgoBox.TokenId
@@ -38,7 +38,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -285,32 +284,41 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }
 
   private def mining: Receive = {
-    case PrepareCandidate(_, _) if !ergoSettings.nodeSettings.mining =>
-      sender() ! Future.failed(new Exception("Candidate creation is not supported when mining is disabled"))
+    case PrepareCandidate(_, reply) if !ergoSettings.nodeSettings.mining =>
+      if (reply) {
+        sender() ! StatusReply.error("Candidate creation is not supported when mining is disabled")
+      }
 
     case PrepareCandidate(txsToInclude, reply) =>
-      val candF: Future[CandidateCache] = if (candidateGenerating) {
-        Future.failed(new Exception("Skipping candidate generation, one is already in progress"))
+      val msgSender = if (reply) Some(sender()) else None
+      if (candidateGenerating) {
+        msgSender.foreach(_ ! StatusReply.error("Skipping candidate generation, one is already in progress"))
       } else {
         candidateGenerating = true
-        val f = if (cachedFor(txsToInclude)) {
-          candidateOpt.fold[Future[CandidateCache]](
-            Future.failed(new Exception("Failed to create candidate")))(Future.successful)
+        if (cachedFor(txsToInclude)) {
+          msgSender.foreach { s =>
+            s ! candidateOpt.fold[StatusReply[WorkMessage]](
+              StatusReply.error("Failed to create candidate")
+            )(c => StatusReply.success(c.externalVersion))
+          }
+          candidateGenerating = false
         } else {
           log.info("Generating new candidate requested by external miner")
-          val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
-          readersR.flatMap {
-            case Readers(h, s: UtxoStateReader, m, _) =>
-              Future.fromTry(generateCandidate(h, m, s, txsToInclude))
-            case _ =>
-              Future.failed(new Exception("Invalid readers state, mining is possible in UTXO mode only"))
-          }
+          (readersHolderRef ? GetReaders).mapTo[Readers]
+            .onComplete {
+              case Success(Readers(h, s: UtxoStateReader, m, _)) =>
+                val candidateVersionReply =
+                  generateCandidate(h, m, s, txsToInclude).fold(
+                    ex => StatusReply.error(ex),
+                    candidate => StatusReply.success(candidate.externalVersion)
+                  )
+                candidateGenerating = false
+                msgSender.foreach(_ ! candidateVersionReply)
+              case _ =>
+                candidateGenerating = false
+                msgSender.foreach(_ ! StatusReply.error("Invalid readers state, mining is possible in UTXO mode only"))
+            }
         }
-        f.onComplete(_ => candidateGenerating = false)
-        f
-      }
-      if (reply) {
-        sender() ! candF.map(_.externalVersion)
       }
 
     // solution found externally (by e.g. GPU miner)
@@ -325,14 +333,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         preSolution
       }
       log.info("Got solution: " + solution)
-      val result: Future[Unit] =
+      val result: StatusReply[Unit] =
         if (solvedBlock.nonEmpty) {
           log.info("Duplicate solution: " + solution)
           refreshCandidate()
-          Future.failed(new Exception("Solution already submitted"))
+          StatusReply.error("Solution already submitted")
         } else if (publicKeyOpt.isEmpty) {
           log.warn("Got a solution, but no pubkey is set")
-          Future.failed(new Exception("No pubkey is set"))
+          StatusReply.error("No pubkey is set")
         } else {
           candidateOpt.map { c =>
             val newBlock = completeBlock(c.candidateBlock, solution)
@@ -342,13 +350,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
             case Some(Success(newBlock)) =>
               sendToNodeView(newBlock)
               solvedBlock = Some(newBlock.header)
-              Future.successful(())
+              StatusReply.success(())
             case Some(Failure(exception)) =>
               refreshCandidate()
-              Future.failed(new Exception(s"Invalid block mined: ${exception.getMessage}", exception))
+              StatusReply.error(new Exception(s"Invalid block mined: ${exception.getMessage}", exception))
             case None =>
               refreshCandidate()
-              Future.failed(new Exception("Invalid miner state"))
+              StatusReply.error("Invalid miner state")
           }
         }
       log.debug(s"Processed solution $solution with the result result $result")

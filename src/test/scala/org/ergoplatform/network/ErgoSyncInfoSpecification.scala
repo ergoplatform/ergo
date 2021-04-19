@@ -48,12 +48,12 @@ class ErgoSyncInfoSpecification extends ErgoPropertyTest with DecodingUtils {
     val messageCode = getByte(bb)
     messageCode shouldBe syncSpec.messageCode  // 65 (in dec)
 
-    // read message length (up to 4 bytes)
+    // read message length (4 bytes)
     val messageLength = Ints.fromByteArray(getBytes(bb,4))
 
     messageLength shouldBe 33
 
-    // read message checksum (4 bytes)
+    // read message length (4 bytes)
     val checkSum = getBytes(bb, 4)
 
     // read number of headers, up to 8 bytes, but there are app-level limits (400 in reference client)

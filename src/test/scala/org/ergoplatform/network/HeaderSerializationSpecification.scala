@@ -187,7 +187,6 @@ class HeaderSerializationSpecification extends ErgoPropertyTest with DecodingUti
     val votesParsed = getBytes(bb, 3)
     votesParsed.toIndexedSeq shouldBe votes.toIndexedSeq
 
-
     // Block version V2 specific field, contains length of additional data
     val additionalFieldsLength = getUByte(bb)
     additionalFieldsLength shouldBe 0
@@ -202,4 +201,5 @@ class HeaderSerializationSpecification extends ErgoPropertyTest with DecodingUti
 
     bb.remaining() shouldBe 0
   }
+
 }

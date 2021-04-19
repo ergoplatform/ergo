@@ -138,23 +138,29 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     )
     val maxCost = stateContext.currentParameters.maxBlockCost
 
+    val startCost = addExact(initialCost, accumulatedCost)
     ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big
-      .validate(bsBlockTransactionsCost, maxCost >= addExact(initialCost, accumulatedCost), s"$id: initial cost")
+      .validate(bsBlockTransactionsCost, maxCost >= startCost, s"$id: initial cost")
       // Starting validation
-      .payload(initialCost)
+      .payload(startCost)
       // Perform cheap checks first
       .validateNoFailure(txAssetsInOneBox, outAssetsTry)
-      .validate(txPositiveAssets, outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)), s"$id: ${outputCandidates.map(_.additionalTokens)}")
+      .validate(txPositiveAssets,
+        outputCandidates.forall(_.additionalTokens.forall(_._2 > 0)),
+        s"$id: ${outputCandidates.map(_.additionalTokens)}")
       // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) =>
-      validationState
-        .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters), s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}")
-        .validate(txFuture, out.creationHeight <= stateContext.currentHeight, s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out")
-        .validate(txNegHeight, (blockVersion == 1) || out.creationHeight >= 0, s" ${out.creationHeight} >= 0 is not true, output id: $id: output $out")
-        .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
-        .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
-    }
+        validationState
+          .validate(txDust, out.value >= BoxUtils.minimalErgoAmount(out, stateContext.currentParameters),
+            s"$id, output ${Algos.encode(out.id)}, ${out.value} >= ${BoxUtils.minimalErgoAmount(out, stateContext.currentParameters)}")
+          .validate(txFuture, out.creationHeight <= stateContext.currentHeight,
+            s" ${out.creationHeight} <= ${stateContext.currentHeight} is not true, output id: $id: output $out")
+          .validate(txNegHeight, (blockVersion == 1) || out.creationHeight >= 0,
+            s" ${out.creationHeight} >= 0 is not true, output id: $id: output $out")
+          .validate(txBoxSize, out.bytes.length <= MaxBoxSize.value, s"$id: output $out")
+          .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
+      }
       // Just to be sure, check that all the input boxes to spend (and to read) are presented.
       // Normally, this check should always pass, if the client is implemented properly
       // so it is not part of the protocol really.
@@ -164,67 +170,71 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txInputsSum, inputSumTry.isSuccess, s"$id")
       // Check that transaction is not creating money out of thin air.
       .validate(txErgPreservation, inputSumTry == outputsSumTry, s"$id: $inputSumTry == $outputsSumTry")
-      .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", e)) { case (validation, (outAssets, outAssetsNum)) =>
-        ErgoTransaction.extractAssets(boxesToSpend) match {
-          case Success((inAssets, inAssetsNum)) =>
-            lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
-            val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
-            val currentTxCost = validation.result.payload.get
-            // Cost of assets preservation rules checks.
-            // We iterate through all assets to create a map (cost: `(outAssetsNum + inAssetsNum) * tokenAccessCost)`)
-            // and after that we iterate through unique asset ids to check preservation rules (cost: `(inAssets.size + outAssets.size) * tokenAccessCost`)
-            val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
-              (inAssets.size + outAssets.size) * tokenAccessCost
-            val newCost = addExact(currentTxCost, totalAssetsAccessCost)
+      .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", e)) {
+        case (validation, (outAssets, outAssetsNum)) =>
+          val inAssetsTry = ErgoTransaction.extractAssets(boxesToSpend)
+          inAssetsTry match {
+            case Success((inAssets, inAssetsNum)) =>
+              lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
+              val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
+              val currentTxCost = validation.result.payload.get
+              // Cost of assets preservation rules checks.
+              // We iterate through all assets to create a map (cost: `(outAssetsNum + inAssetsNum) * tokenAccessCost)`)
+              // and after that we iterate through unique asset ids to check preservation rules (cost: `(inAssets.size + outAssets.size) * tokenAccessCost`)
+              val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
+                (inAssets.size + outAssets.size) * tokenAccessCost
+              val newCost = addExact(currentTxCost, totalAssetsAccessCost)
 
-            validation
-              // Check that transaction is not too costly considering all the assets
-              .validate(bsBlockTransactionsCost, maxCost >= newCost, s"$id: assets cost")
-              .validateSeq(outAssets) {
-                case (validationState, (outAssetId, outAmount)) =>
-                  val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
+              validation
+                // Check that transaction is not too costly considering all the assets
+                .validate(bsBlockTransactionsCost, maxCost >= newCost, s"$id: assets cost")
+                .validateSeq(outAssets) {
+                  case (validationState, (outAssetId, outAmount)) =>
+                    val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
 
-                  // Check that for each asset output amount is no more than input amount,
-                  // with a possible exception for a new asset created by the transaction
-                  validationState.validate(txAssetsPreservation,
-                    inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0),
-                    s"$id: Amount in = $inAmount, out = $outAmount. Allowed new asset = $newAssetId, out = $outAssetId")
-              }
-              .payload(newCost)
-          case Failure(e) =>
-            // should never be here as far as we've already checked this when we've created the box
-            ModifierValidator.fatal(e.getMessage)
-        }
+                    // Check that for each asset output amount is no more than input amount,
+                    // with a possible exception for a new asset created by the transaction
+                    validationState.validate(txAssetsPreservation,
+                      inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0),
+                      s"$id: Amount in = $inAmount, out = $outAmount. Allowed new asset = $newAssetId, out = $outAssetId")
+                }
+                .payload(newCost)
+            case Failure(e) =>
+              // should never be here as far as we've already checked this when we've created the box
+              ModifierValidator.fatal(e.getMessage)
+          }
       }
       // Check inputs, the most expensive check usually, so done last.
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
-      val currentTxCost = validation.result.payload.get
+        val currentTxCost = validation.result.payload.get
 
-      val input = inputs(idx)
-      val proof = input.spendingProof
-      val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
-      val inputContext = InputContext(idx.toShort, proof.extension)
+        val input = inputs(idx)
+        val proof = input.spendingProof
+        val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
+        val inputContext = InputContext(idx.toShort, proof.extension)
 
-      val ctx = new ErgoContext(
-        stateContext, transactionContext, inputContext,
-        costLimit = maxCost - addExact(currentTxCost, accumulatedCost),
-        initCost = 0)
+        val ctx = new ErgoContext(
+          stateContext, transactionContext, inputContext,
+          costLimit = maxCost - currentTxCost, // remaining cost so far
+          initCost = 0)
 
-      val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
-      costTry.recover { case t =>
-        log.debug(s"Tx verification failed: ${t.getMessage}")
-      }
+        val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
+        costTry.recover { case t =>
+          log.debug(s"Tx verification failed: ${t.getMessage}")
+        }
 
-      lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
+        val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
 
-      validation
-        // Just in case, should always be true if client implementation is correct.
-        .validateEquals(txBoxToSpend, box.id, input.boxId)
-        // Check whether input box script interpreter raised exception
-        .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
-        // Check that cost of the transaction after checking the input becomes too big
-        .validate(bsBlockTransactionsCost, maxCost >= addExact(currentTxCost, accumulatedCost, scriptCost), s"$id: cost exceeds limit after input #$idx")
-        .map(c => addExact(c, scriptCost))
+        val currCost = addExact(currentTxCost, scriptCost)
+
+        validation
+          // Just in case, should always be true if client implementation is correct.
+          .validateEquals(txBoxToSpend, box.id, input.boxId)
+          // Check whether input box script interpreter raised exception
+          .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
+          // Check that cost of the transaction after checking the input becomes too big
+          .validate(bsBlockTransactionsCost, currCost <= maxCost, s"$id: cost exceeds limit after input #$idx")
+          .map(c => addExact(c, scriptCost))
     }
   }
 

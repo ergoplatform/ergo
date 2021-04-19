@@ -142,8 +142,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       val boxes = ergoWalletService.getScanBoxes(state, scanId, unspent, considerUnconfirmed)
       sender() ! boxes
 
-    case GetTransactions =>
-      sender() ! ergoWalletService.getTransactions(state.registry, state.fullHeight)
+    case GetTransactions(filteringOptions) =>
+      sender() ! ergoWalletService.getTransactions(state.registry, state.fullHeight, filteringOptions)
 
     case GetTransaction(txId) =>
       sender() ! ergoWalletService.getTransactionsByTxId(txId, state.registry, state.fullHeight)
@@ -573,9 +573,9 @@ object ErgoWalletActor extends ScorexLogging {
   final case class CheckSeed(mnemonic: String, passOpt: Option[String])
 
   /**
-    * Get all wallet-related transaction
+    * Get wallet-related transaction
     */
-  case object GetTransactions
+  case class GetTransactions(filteringOptions: Option[WalletFiltering])
 
   /**
     * Derive next key-pair according to BIP-32

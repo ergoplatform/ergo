@@ -206,8 +206,13 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
         val walletService = new ErgoWalletServiceImpl
         val pass = Random.nextString(10)
         val (mnemonic, initializedState) = walletService.initWallet(walletState, settings, pass, Option.empty).get
-        Mnemonic.toSeed(mnemonic, Option.empty)
-        val unlockedWalletState = walletService.unlockWallet(initializedState, pass, usePreEip3Derivation = true).get
+
+        // Wallet unlocked after init, so we're locking it
+        val initLockedWalletState = walletService.lockWallet(initializedState)
+        initLockedWalletState.secretStorageOpt.get.isLocked shouldBe true
+        initLockedWalletState.walletVars.proverOpt shouldBe empty
+
+        val unlockedWalletState = walletService.unlockWallet(initLockedWalletState, pass, usePreEip3Derivation = true).get
         unlockedWalletState.secretStorageOpt.get.isLocked shouldBe false
         unlockedWalletState.storage.readAllKeys().size shouldBe 1
         unlockedWalletState.walletVars.proverOpt shouldNot be(empty)

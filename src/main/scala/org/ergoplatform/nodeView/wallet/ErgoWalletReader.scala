@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import java.util.concurrent.TimeUnit
+
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
@@ -84,8 +85,8 @@ trait ErgoWalletReader extends VaultReader {
   def updateChangeAddress(address: P2PKAddress): Unit =
     walletActor ! UpdateChangeAddress(address)
 
-  def transactions: Future[Seq[AugWalletTransaction]] =
-    (walletActor ? GetTransactions).mapTo[Seq[AugWalletTransaction]]
+  def transactions(filteringOpts: Option[WalletFiltering]): Future[Seq[AugWalletTransaction]] =
+    (walletActor ? GetTransactions(filteringOpts)).mapTo[Seq[AugWalletTransaction]]
 
   def transactionById(id: ModifierId): Future[Option[AugWalletTransaction]] =
     (walletActor ? GetTransaction(id)).mapTo[Option[AugWalletTransaction]]

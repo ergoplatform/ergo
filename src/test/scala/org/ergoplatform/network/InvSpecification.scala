@@ -70,6 +70,7 @@ class InvSpecification extends ErgoPropertyTest with DecodingUtils {
 
     headerIdParsed.toIndexedSeq shouldBe headerId.toIndexedSeq
 
+    // validating checksum
     checkSum shouldBe hash.Blake2b256(Array(modifierTypeId, headersCount.toByte) ++ headerId).take(4)
   }
 

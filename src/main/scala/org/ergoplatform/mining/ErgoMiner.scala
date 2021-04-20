@@ -158,6 +158,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def startMining: Receive = {
     case StartMining if candidateOpt.isEmpty =>
       if (secretKeyOpt.isDefined || externalMinerMode) {
+        log.info(s"Preparing new candidate")
         refreshCandidate()
       }
       context.system.scheduler.scheduleOnce(1.seconds, self, StartMining)(context.system.dispatcher)
@@ -168,10 +169,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           case Some(_) =>
             isMining = true
             if (!externalMinerMode) {
-              log.info("Starting native miner")
+              log.info("Starting native miner and passing it candidate")
               startInternalMiner(candidate.candidateBlock)
             } else {
-              log.info("Ready to serve external miner")
+              log.info("Preparing new candidate for external miner")
               // Refresh candidate block if it was formed before NVH state restore in response to API requests
               refreshCandidate()
             }
@@ -179,6 +180,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
             log.warn("Got start mining command while public key is not ready")
         }
       }
+    case StartMining =>
+      // Miner is busy or mining disabled
   }
 
   private def needNewCandidate(b: ErgoFullBlock): Boolean = {
@@ -198,7 +201,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       * Stop all current threads and re-run them with newly produced candidate.
       */
     case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if isMining && needNewCandidate(mod) =>
-      log.info(s"Producing new candidate on getting new block at ${mod.height}")
+      log.info(s"Preparing new candidate on getting new block at ${mod.height}")
       refreshCandidate()
 
     /**
@@ -304,7 +307,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           }
           candidateGenerating = false
         } else {
-          log.info("Generating new candidate requested by external miner")
+          log.info("Generating new candidate requested by miner")
           (readersHolderRef ? GetReaders).mapTo[Readers]
             .onComplete {
               case Success(Readers(h, s: UtxoStateReader, m, _)) =>
@@ -336,7 +339,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       log.info("Got solution: " + solution)
       val result: StatusReply[Unit] =
         if (solvedBlock.nonEmpty) {
-          log.info("Duplicate solution: " + solution)
+          log.info("Preparing new candidate due to duplicate solution: " + solution)
           refreshCandidate()
           StatusReply.error("Solution already submitted")
         } else if (publicKeyOpt.isEmpty) {
@@ -353,9 +356,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
               solvedBlock = Some(newBlock.header)
               StatusReply.success(())
             case Some(Failure(exception)) =>
+              log.warn(s"Preparing new candidate due to invalid block ${exception.getMessage}")
               refreshCandidate()
               StatusReply.error(new Exception(s"Invalid block mined: ${exception.getMessage}", exception))
             case None =>
+              log.warn("Preparing new candidate due to invalid miner state")
               refreshCandidate()
               StatusReply.error("Invalid miner state")
           }
@@ -478,7 +483,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   }.flatten
 
   private def refreshCandidate(): Unit = {
-    log.info("Requesting candidate")
     candidateOpt = None
     candidateGenerating = false
     self ! PrepareCandidate(Seq.empty, reply = false)

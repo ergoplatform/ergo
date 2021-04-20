@@ -52,7 +52,6 @@ class InvSpecification extends ErgoPropertyTest with DecodingUtils {
 
     messageLength shouldBe 34
 
-    // read message length (4 bytes)
     val checkSum = getBytes(bb, 4)
 
     // read modifier type id (1 byte)

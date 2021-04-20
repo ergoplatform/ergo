@@ -135,6 +135,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   // Useful for local blockchains (devnet)
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     require(minerRefOpt.isDefined, "Miner does not exist but mining = true in config")
+    log.info(s"Starting mining with offlineGeneration")
     minerRefOpt.get ! StartMining
   }
 

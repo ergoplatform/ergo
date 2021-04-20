@@ -13,7 +13,7 @@ public class CreateTransactionDemo {
      * A demo describing the process of creating simple payment transaction.
      * Note, more complex transaction would require more steps which are not described in this demo.
      */
-    public static void createTransaction() {
+    public void createTransaction() throws Exception {
         ErgoAddressEncoder encoder = new ErgoAddressEncoder((byte) 0x00);
 
         String receiverAddressStr = "9fKYyGuV3wMYFYzWBR1FDgc61CFV2hbGLrY6S3wgH1r4xJcwLnq";

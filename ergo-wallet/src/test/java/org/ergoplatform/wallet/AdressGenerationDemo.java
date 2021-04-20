@@ -8,7 +8,9 @@ import org.ergoplatform.wallet.secrets.ExtendedPublicKey;
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey;
 import scala.Option;
 
-
+/**
+ * This runnable example is showing how to derive change address and other addresses according to EIP-3
+ */
 public class AdressGenerationDemo {
     public static byte[] secretSeedFromMnemonic(String mnemonic) {
         byte[] secret =  Mnemonic.toSeed(mnemonic, Option.empty());
@@ -40,11 +42,17 @@ public class AdressGenerationDemo {
         DerivationPath changePath = Constants.eip3DerivationPath();
         ExtendedSecretKey changeSecretKey = deriveSecretKey(rootSecret, changePath);
         ExtendedPublicKey changePubkey = changeSecretKey.publicKey();
-        P2PKAddress address = P2PKAddress.apply(changePubkey.key(), addressEncoder);
+        P2PKAddress changeAddress = P2PKAddress.apply(changePubkey.key(), addressEncoder);
 
-        System.out.println("Change address: " + address);
+        System.out.println("Change address: " + changeAddress);
 
-        DerivationPath firstUserPath = nextPath(rootSecret, changePath);
+        DerivationPath firstPath = nextPath(rootSecret, changePath);
+        ExtendedSecretKey firstSecretKey = deriveSecretKey(rootSecret, firstPath);
+        ExtendedPublicKey firstPubkey = firstSecretKey.publicKey();
+        P2PKAddress firstAddress = P2PKAddress.apply(firstPubkey.key(), addressEncoder);
+
+        System.out.println("First derived path: " + firstPath);
+        System.out.println("First derived address: " + firstAddress);
     }
 
 }

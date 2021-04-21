@@ -15,6 +15,9 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Constants, Algos, ErgoSettings}
 import org.ergoplatform.utils.metrics.CsvFileCollector
 import org.ergoplatform.utils.{metrics, FileUtils}
+import org.ergoplatform.nodeView.wallet.{ErgoWallet, ErgoWalletReader}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.utils.FileUtils
 import scorex.core._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
 import scorex.core.settings.ScorexSettings
@@ -122,12 +125,15 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     None
   } else {
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
+    log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
     val constants = StateConstants(Some(self), settings)
     val state = restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[MS], history)
+    log.info("State database read, state synchronized")
     val wallet = ErgoWallet.readOrGenerate(
       history.getReader.asInstanceOf[ErgoHistoryReader],
       settings)
+    log.info("Wallet database read")
     Some((history, state, wallet, memPool))
   }
 

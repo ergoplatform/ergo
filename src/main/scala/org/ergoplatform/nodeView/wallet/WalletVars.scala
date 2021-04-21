@@ -39,8 +39,6 @@ final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
 
   val trackedBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.trackedBytes).getOrElse(Seq.empty)
 
-  val miningScripts: Seq[Values.ErgoTree] = stateCacheOpt.map(_.miningScripts).getOrElse(Seq.empty)
-
   val miningScriptsBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.miningScriptsBytes).getOrElse(Seq.empty)
 
   val filter: BloomFilter[Array[Byte]] =

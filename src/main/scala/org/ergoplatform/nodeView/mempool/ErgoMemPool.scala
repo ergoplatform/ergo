@@ -117,14 +117,14 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
           case utxo: UtxoState =>
             // Allow proceeded transaction to spend outputs of pooled transactions.
             utxo.withTransactions(getAll).validate(tx).fold(
-              new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(_),
+              ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
               _ => acceptIfNoDoubleSpend(tx)
             )
           case validator: TransactionValidation[ErgoTransaction@unchecked] =>
             // transaction validation currently works only for UtxoState, so this branch currently
             // will not be triggered probably
             validator.validate(tx).fold(
-              new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(_),
+              ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
               _ => acceptIfNoDoubleSpend(tx)
             )
           case _ =>

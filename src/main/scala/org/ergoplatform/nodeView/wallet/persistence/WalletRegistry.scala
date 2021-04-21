@@ -14,11 +14,13 @@ import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoLikeContext.Height
 import scorex.db.LDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.wallet.transactions.TransactionBuilder
+import scorex.util.encode.Base16
 
 import scala.collection.mutable
 
@@ -148,6 +150,26 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
       .flatMap { case (_, txBytes) =>
         WalletTransactionSerializer.parseBytesTry(txBytes).toOption
       }
+  }
+
+  def walletTxsBetween(heightFrom: Height, heightTo: Height): Seq[WalletTransaction] = {
+    val firstKey = firstIncludedScanTransactionSpaceKey(Constants.PaymentsScanId, heightFrom)
+    val lastKey = lastIncludedScanTransactionSpaceKey(Constants.PaymentsScanId, heightTo)
+
+    // Get wallet transactions from hightFrom (inclusive) to heightTo (inclusive)
+    val range = store.getRange(firstKey, lastKey)
+    range.flatMap { case (_, txId) =>
+      store.get(txKey(txId)) match {
+        case Some(txBytes) => WalletTransactionSerializer.parseBytesTry(txBytes) match {
+          case Success(tx) =>
+            Some(tx)
+          case Failure(t) =>
+            log.error(s"Transaction ${Base16.encode(txId)} can't be read from the db", t); None
+        }
+        case None =>
+          log.error(s"Transaction ${Base16.encode(txId)} is found in indexes but not db"); None
+      }
+    }
   }
 
   /**
@@ -428,6 +450,16 @@ object WalletRegistry {
     res
   }
 
+  /** Same as [[composeKey()]] with additional height parameter. */
+  private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, height: Int): Array[Byte] = {
+    val res = new Array[Byte](39) // 1 byte for prefix + 2 for scanId + 4 for height + 32 for suffix
+    res(0) = prefix
+    putShort(res, pos = 1, scanId)
+    putInt(res, pos = 3, height)
+    res
+  }
+
+
   /** Same as [[composeKey()]] with additional height parameter and suffix given by id. */
   private[persistence] final def composeKeyWithHeightAndId(prefix: Byte, scanId: ScanId,
                                                            height: Int, suffixId: Array[Byte]): Array[Byte] = {
@@ -457,6 +489,12 @@ object WalletRegistry {
   private def lastIncludedScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(UnspentIndexPrefix, scanId, Int.MaxValue, -1)
 
+  private def firstIncludedScanTransactionSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
+    composeKey(InclusionHeightScanTxPrefix, scanId, height)
+
+  private def lastIncludedScanTransactionSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
+    composeKey(InclusionHeightScanTxPrefix, scanId, height, -1)
+
   private val RegistrySummaryKey: Array[Byte] = Array(0x02: Byte)
 
   private def boxKey(trackedBox: TrackedBox): Array[Byte] = BoxKeyPrefix +: trackedBox.box.id
@@ -464,6 +502,8 @@ object WalletRegistry {
   private def boxKey(id: BoxId): Array[Byte] = BoxKeyPrefix +: id
 
   private def txKey(id: ModifierId): Array[Byte] = TxKeyPrefix +: idToBytes(id)
+
+  private def txKey(id: Array[Byte]): Array[Byte] = TxKeyPrefix +: id
 
   private def boxToKvPair(box: TrackedBox) = boxKey(box) -> TrackedBoxSerializer.toBytes(box)
 

@@ -122,6 +122,9 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ReadPublicKeys(from, until) =>
       sender() ! state.walletVars.publicKeyAddresses.slice(from, until)
 
+    case GetMiningPubKey =>
+      sender() ! state.walletVars.trackedPubKeys.headOption.map(_.key)
+
     // read first wallet secret (used in miner only)
     case GetFirstSecret =>
       if (state.walletVars.proverOpt.nonEmpty) {
@@ -615,6 +618,11 @@ object ErgoWalletActor extends ScorexLogging {
     * Get root secret key (used in miner)
     */
   case object GetFirstSecret
+
+  /**
+    * Get mining public key
+    */
+  case object GetMiningPubKey
 
   /**
     * Get registered scans list

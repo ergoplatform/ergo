@@ -1,14 +1,14 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Input, UnsignedInput}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Input}
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, TokenId}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.{WalletTransaction, WalletVars}
 import org.ergoplatform.utils.ErgoTestConstants
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import scorex.util.ModifierId
 import scorex.util.encode.Base16

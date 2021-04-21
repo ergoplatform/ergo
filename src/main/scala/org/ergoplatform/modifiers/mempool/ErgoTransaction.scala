@@ -244,10 +244,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
         collectMetricsTo(
           verifyScriptStore,
-          InputMetricData(
+          data = InputMetricData(
             blockId = stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId),
             box.transactionId, idx),
-          cost = res.map(c => c - currentTxCost).toTry.getOrElse(-1L),
+          cost = res.map { c =>
+            val scriptCost = c - currentTxCost // cost of script validation for this input
+            scriptCost
+          }.toTry.getOrElse(-1L),
           time
         )
         res

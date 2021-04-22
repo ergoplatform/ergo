@@ -145,18 +145,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val maxCost = stateContext.currentParameters.maxBlockCost
 
     val startCost = addExact(initialCost, accumulatedCost)
-    if (startCost > maxCost) {
-      log.warn(s"Starting cost $startCost exceeds block maximum: txId = $id")
-      collectMetricsTo(
-        invInitCostStore,
-        TransactionMetricData(stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId), id),
-        initialCost, 0)
-    }
-
     ModifierValidator(stateContext.validationSettings)
       // Check that the transaction is not too big
-      // TODO v5.0: make this check versioned
-      //.validate(bsBlockTransactionsCost, maxCost >= addExact(initialCost, accumulatedCost), s"$id: initial cost")
+      .validate(bsBlockTransactionsCost, maxCost >= startCost, s"$id: initial cost")
       // Starting validation
       .payload(startCost)
       // Perform cheap checks first
@@ -202,7 +193,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
               validation
                 // Check that transaction is not too costly considering all the assets
-                .validate(bsBlockTransactionsCost, newCost <= maxCost, s"$id: assets cost")
+                .validate(bsBlockTransactionsCost, maxCost >= newCost, s"$id: assets cost")
                 .validateSeq(outAssets) {
                   case (validationState, (outAssetId, outAmount)) =>
                     val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
@@ -239,21 +230,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             log.debug(s"Tx verification failed: ${t.getMessage}")
           }
 
-          lazy val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
+          val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
 
           val currCost = addExact(currentTxCost, scriptCost)
-          if (currCost > maxCost) {
-            log.warn(
-              s"""Current cost $currCost exceeds block maximum:
-                |txId = $id;
-                |input = $idx;
-                |scriptCost: $scriptCost""".stripMargin)
-            collectMetricsTo(invScriptCostStore,
-              InputMetricData(
-                blockId = stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId),
-                box.transactionId, idx),
-              scriptCost, 0)
-          }
 
           validation
             // Just in case, should always be true if client implementation is correct.
@@ -261,19 +240,21 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
             // Check whether input box script interpreter raised exception
             .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
             // Check that cost of the transaction after checking the input becomes too big
-            // TODO v5.0: make this check versioned
-            // .validate(bsBlockTransactionsCost,
-            //   currCost <= maxCost,
-            //   s"$id: cost exceeds limit after input #$idx")
+            .validate(bsBlockTransactionsCost, currCost <= maxCost, s"$id: cost exceeds limit after input #$idx")
             .result
             .map(c => addExact(c, scriptCost))
         }
 
-        collectMetricsTo(verifyScriptStore,
-          InputMetricData(
+        collectMetricsTo(
+          verifyScriptStore,
+          data = InputMetricData(
             blockId = stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId),
-            box.transactionId, idx),
-          cost = res.map(c => c - currentTxCost).toTry.getOrElse(-1L),
+            txId = id,
+            index = idx),
+          cost = res.map { c =>
+            val scriptCost = c - currentTxCost // cost of script validation for this input
+            scriptCost
+          }.toTry.getOrElse(-1L),
           time
         )
         res

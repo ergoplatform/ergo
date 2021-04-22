@@ -122,6 +122,9 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ReadPublicKeys(from, until) =>
       sender() ! state.walletVars.publicKeyAddresses.slice(from, until)
 
+    case GetMiningPubKey =>
+      sender() ! state.walletVars.trackedPubKeys.headOption.map(_.key)
+
     // read first wallet secret (used in miner only)
     case GetFirstSecret =>
       if (state.walletVars.proverOpt.nonEmpty) {
@@ -142,8 +145,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       val boxes = ergoWalletService.getScanBoxes(state, scanId, unspent, considerUnconfirmed)
       sender() ! boxes
 
-    case GetTransactions =>
-      sender() ! ergoWalletService.getTransactions(state.registry, state.fullHeight)
+    case GetTransactions(filteringOptions) =>
+      sender() ! ergoWalletService.getTransactions(state.registry, state.fullHeight, filteringOptions)
 
     case GetTransaction(txId) =>
       sender() ! ergoWalletService.getTransactionsByTxId(txId, state.registry, state.fullHeight)
@@ -573,9 +576,9 @@ object ErgoWalletActor extends ScorexLogging {
   final case class CheckSeed(mnemonic: String, passOpt: Option[String])
 
   /**
-    * Get all wallet-related transaction
+    * Get wallet-related transaction
     */
-  case object GetTransactions
+  case class GetTransactions(filteringOptions: Option[WalletFiltering])
 
   /**
     * Derive next key-pair according to BIP-32
@@ -615,6 +618,11 @@ object ErgoWalletActor extends ScorexLogging {
     * Get root secret key (used in miner)
     */
   case object GetFirstSecret
+
+  /**
+    * Get mining public key
+    */
+  case object GetMiningPubKey
 
   /**
     * Get registered scans list

@@ -88,16 +88,17 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private var secretKeyOpt: Option[DLogProverInput] = inSecretKeyOpt
 
   // "miningPubkeyHex" setting in config has preference over wallet's secret key
-  private var publicKeyOpt: Option[ProveDlog] = ergoSettings.miningPubKey.orElse(inSecretKeyOpt.map(_.publicImage))
+  private var publicKeyOpt: Option[ProveDlog] = ergoSettings.miningPubKey
 
   // internal (CPU) miner threads, if internal mining is chosen
   private val miningThreads: mutable.Buffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
   override def preStart(): Unit = {
-    // in external miner mode key from wallet is used if `publicKeyOpt` is not set
-    if ((publicKeyOpt.isEmpty && externalMinerMode) || (secretKeyOpt.isEmpty && !externalMinerMode)) {
+    if (secretKeyOpt.isEmpty && !externalMinerMode) {
+      self ! QueryWallet(secret = true)
+    } else if (publicKeyOpt.isEmpty) { // mining pubKey is needed in both modes
       log.info("Trying to use key from wallet for mining")
-      self ! QueryWallet
+      self ! QueryWallet(secret = false)
     }
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
   }
@@ -120,22 +121,35 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       secretKeyOpt = Some(s)
       publicKeyOpt = Some(s.publicImage)
 
+    case UpdatePublicKey(pkOpt) =>
+      publicKeyOpt = pkOpt
+
     // used in /mining/rewardAddress API method
     case ReadMinerPk =>
       sender() ! publicKeyOpt
   }
 
   private def queryWallet: Receive = {
-    case QueryWallet =>
+    case QueryWallet(secret) =>
       val callback = self
       viewHolderRef ! GetDataFromCurrentView[ErgoHistory, DigestState, ErgoWallet, ErgoMemPool, Unit] { v =>
-        v.vault.firstSecret.onComplete {
-          _.flatten match {
+        if(secret) {
+          v.vault.firstSecret.onComplete {
+            _.flatten match {
+              case Failure(t) =>
+                log.warn(s"Miner can't load secret key from wallet: ${t.getMessage} ")
+                context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet(secret))(context.system.dispatcher)
+              case Success(proverInput: DLogProverInput) =>
+                callback ! UpdateSecret(proverInput)
+            }
+          }
+        } else {
+          v.vault.miningPubkey.onComplete {
             case Failure(t) =>
-              log.warn(s"Miner can't load key from wallet: ${t.getMessage} ")
-              context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet)(context.system.dispatcher)
-            case Success(proverInput: DLogProverInput) =>
-              callback ! UpdateSecret(proverInput)
+              log.warn(s"Miner can't load public key from wallet: ${t.getMessage} ")
+              context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet(secret))(context.system.dispatcher)
+            case Success(miningPubKeyOpt) =>
+              callback ! UpdatePublicKey(miningPubKeyOpt)
           }
         }
       }
@@ -239,9 +253,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   private def generateCandidate(h: ErgoHistoryReader,
                                 m: ErgoMemPoolReader,
                                 s: UtxoStateReader,
-                                txsToIncludeOpt: Option[Seq[ErgoTransaction]]): Try[CandidateCache] = {
+                                txsToInclude: Seq[ErgoTransaction]): Try[CandidateCache] = {
     //mandatory transactions to include into next block taken from the previous candidate
-    val txsToInclude = txsToIncludeOpt.getOrElse(candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty)).filter { tx =>
+    val unspentTxsToInclude = txsToInclude.filter { tx =>
       inputsNotSpent(tx, s)
     }
 
@@ -253,9 +267,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     publicKeyOpt match {
       case Some(pk) =>
         if (solvedBlock.isEmpty && h.bestFullBlockOpt.map(_.id) == s.stateContext.lastHeaderOpt.map(_.id)) {
-          createCandidate(pk, h, m, desiredUpdate, s, txsToInclude) match {
+          createCandidate(pk, h, m, desiredUpdate, s, unspentTxsToInclude) match {
             case Success(candidate) =>
-              Success(updateCandidate(candidate, pk, txsToInclude))
+              Success(updateCandidate(candidate, pk, unspentTxsToInclude))
             case Failure(e) =>
               log.warn("Failed to produce candidate block.", e)
               //candidate cleared, including its mandatory transactions
@@ -287,7 +301,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           val readersR = (readersHolderRef ? GetReaders).mapTo[Readers]
           readersR.flatMap {
             case Readers(h, s: UtxoStateReader, m, _) =>
-              Future.fromTry(generateCandidate(h, m, s, Some(txsToInclude)))
+              Future.fromTry(generateCandidate(h, m, s, txsToInclude))
             case _ =>
               Future.failed(new Exception("Invalid readers state, mining is possible in UTXO mode only"))
           }
@@ -458,7 +472,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     log.info("Requesting candidate")
     candidateOpt = None
     candidateGenerating = false
-    self ! PrepareCandidate(candidateOpt.map(_.txsToInclude).getOrElse(Seq.empty), reply = false)
+    self ! PrepareCandidate(Seq.empty, reply = false)
   }
 
   // Start internal miner's threads. Called once per block candidate.
@@ -697,7 +711,7 @@ object ErgoMiner extends ScorexLogging {
 
   case object StartMining
 
-  case object QueryWallet
+  case class QueryWallet(secret: Boolean)
 
   case class PrepareCandidate(toInclude: Seq[ErgoTransaction], reply: Boolean = true)
 
@@ -705,11 +719,13 @@ object ErgoMiner extends ScorexLogging {
 
   case class UpdateSecret(s: DLogProverInput)
 
+  case class UpdatePublicKey(pkOpt: Option[ProveDlog])
+
 }
 
 object ErgoMinerRef {
 
-  def props(ergoSettings: ErgoSettings,
+  private def props(ergoSettings: ErgoSettings,
             viewHolderRef: ActorRef,
             readersHolderRef: ActorRef,
             timeProvider: NetworkTimeProvider,

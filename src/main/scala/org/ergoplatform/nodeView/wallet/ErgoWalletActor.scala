@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
+import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
@@ -298,8 +299,8 @@ class ErgoWalletActor(settings: ErgoSettings,
         case Success((derivationResult, newState)) =>
           context.become(loadedWallet(newState))
           sender() ! derivationResult
-        case f@Failure(_) =>
-          sender() ! f
+        case Failure(t) =>
+          sender() ! DeriveNextKeyResult(Failure(t))
       }
 
     case UpdateChangeAddress(address) =>

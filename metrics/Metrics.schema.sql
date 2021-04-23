@@ -110,3 +110,17 @@ CREATE TABLE IF NOT EXISTS "validateTxStateful4"
     constraint validateTxStateful_pk
         primary key (blockId, txId)
 );
+CREATE INDEX validateTxStateful_blockId_index
+    on validateTxStateful (blockId);
+CREATE INDEX validateTxStateful4_blockId_index
+    on validateTxStateful4 (blockId);
+CREATE INDEX validateTxStateful_txId_index
+    on validateTxStateful (txId);
+CREATE INDEX verifyScript_blockId_txId_index
+    on verifyScript (blockId, txId);
+CREATE INDEX verifyScript4_blockId_txId_index
+    on verifyScript4 (blockId, txId);
+CREATE INDEX verifyScript_blockId_index
+    on verifyScript (blockId);
+CREATE INDEX verifyScript4_blockId_index
+    on verifyScript4 (blockId);

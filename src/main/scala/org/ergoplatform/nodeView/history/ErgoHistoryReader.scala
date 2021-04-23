@@ -206,7 +206,7 @@ trait ErgoHistoryReader
   /**
     * @return ids of count headers starting from offset
     */
-  def headerIdsAt(offset: Int = 0, limit: Int): Seq[ModifierId] = {
+  def headerIdsAt(offset: Int, limit: Int): Seq[ModifierId] = {
     (offset until (limit + offset)).flatMap(height => bestHeaderIdAtHeight(height))
   }
 

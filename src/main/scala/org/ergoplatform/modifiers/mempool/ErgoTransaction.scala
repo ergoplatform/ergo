@@ -129,7 +129,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                        accumulatedCost: Long)
                       (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
     implicit val es = stateContext.ergoSettings
-    verifier.IR.resetContext() // ensure there is no garbage in the IRContext
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
     val blockVersion = stateContext.blockVersion
@@ -137,7 +136,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     // Cost of transaction initialization: we should read and parse all inputs and data inputs,
     // and also iterate through all outputs to check rules
     val initialCost: Long = addExact(
-      CostTable.interpreterInitCost,
+      1000, // TODO v5.0: introduce global constant
       multiplyExact(boxesToSpend.size, stateContext.currentParameters.inputCost),
       multiplyExact(dataBoxes.size, stateContext.currentParameters.dataInputCost),
       multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost),

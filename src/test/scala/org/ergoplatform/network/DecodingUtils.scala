@@ -29,7 +29,7 @@ trait DecodingUtils {
       if ((b & 0x80) == 0) return result
       shift += 7
     }
-    IllegalStateException("Trying to read long, but more bytes than needed found")
+    new IllegalStateException("Trying to read long, but more bytes than needed found")
   }
 
   /**

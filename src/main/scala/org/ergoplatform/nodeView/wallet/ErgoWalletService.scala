@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGen
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.utils.FileUtils
+import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, ErgoBoxSerializer}
 import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
@@ -119,8 +120,7 @@ trait ErgoWalletService {
     * @return - wallet transactions augmented with confirmations numbers
     */
   def getTransactions(registry: WalletRegistry,
-                      fullHeight: Int,
-                      filteringOptions: Option[WalletFiltering]): Seq[AugWalletTransaction]
+                      fullHeight: Int): Seq[AugWalletTransaction]
 
   /**
     * @param txId - transaction identifier
@@ -380,20 +380,8 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
   }
 
   def getTransactions(registry: WalletRegistry,
-                      fullHeight: Int,
-                      filteringOptions: Option[WalletFiltering]): Seq[AugWalletTransaction] = {
-    val txs = filteringOptions match {
-      case Some(walletFiltering) =>
-        // Whether heights or confs provided, checked in WalletApiRoute.transactionsR
-        val (heightFrom, heightTo) = walletFiltering match {
-          case ByHeight(minHeight, maxHeight) => (minHeight, maxHeight)
-          case ByConfirmationsNum(minConfNum, maxConfNum) => (fullHeight - maxConfNum, fullHeight - minConfNum)
-        }
-        registry.walletTxsBetween(heightFrom, heightTo)
-      case None => registry.allWalletTxs()
-    }
-
-    txs.sortBy(-_.inclusionHeight)
+                      fullHeight: Int): Seq[AugWalletTransaction] = {
+    registry.allWalletTxs().sortBy(-_.inclusionHeight)
       .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
   }
 

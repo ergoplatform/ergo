@@ -3228,6 +3228,38 @@ paths:
         description: Scan id
         schema:
           type: string
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Minimal tx inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximal tx inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal confirmations number
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximal confirmations number
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
     get:
       security:
         - ApiKeyAuth: [ api_key ]

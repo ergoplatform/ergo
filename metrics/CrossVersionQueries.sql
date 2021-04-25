@@ -181,6 +181,39 @@ from (select t5.script_count,
 group by t.time_ratio / 10
 order by t.time_ratio / 10 asc;
 
+-- count blocks by script_time speedup (selected)
+select t.time_ratio / 10,
+       count(*),
+       round(avg(t.script_count), 1) as avg_script_count,
+       round(avg(t.time4_us), 1)     as avg_t4_us,
+       round(avg(t.time5_us), 1)     as avg_t5_us
+from (select t5.script_count,
+             t4.script_time_us                          as time4_us,
+             t5.script_time_us                          as time5_us,
+             t4.script_time_us * 10 / t5.script_time_us as time_ratio
+      from (select b.blockId,
+                   b.cost               as cost,
+                   t.script_time / 1000 as script_time_us,
+                   t.script_count
+            from (select blockId,
+                         sum(time) as script_time,
+                         count(*)  as script_count
+                  from verifyScript as s
+                           join selectedInputs as i on s.txId = i.txId and s.boxIndex = i.boxIndex
+                  group by blockId) as t
+                     join applyTransactions as b on b.blockId = t.blockId) as t5
+
+               join (select blockId,
+                            script_time / 1000 as script_time_us
+                     from (select blockId, sum(time) as script_time
+                           from verifyScript4 as s
+                                    join selectedInputs as i
+                                         on s.txId = i.txId and s.boxIndex = i.boxIndex
+                           group by blockId)) as t4 on t5.blockId = t4.blockId) as t
+-- where t.time_ratio <= 19
+group by t.time_ratio / 10
+order by t.time_ratio / 10 asc;
+
 -- small ratio: count blocks by script_time speedup
 select round(t.time_ratio * 0.1, 1)  as speedup_ratio,
        count(*)                      as num_blocks,
@@ -212,13 +245,105 @@ where t.time_ratio >= 10
 group by t.time_ratio
 order by t.time_ratio asc;
 
+-- small ratio: count blocks by script_time speedup (selected)
+select round(t.time_ratio * 0.1, 1)  as speedup_ratio,
+       count(*)                      as num_blocks,
+       round(avg(t.script_count), 1) as avg_script_count,
+       round(avg(t.time4_us), 1)     as avg_t4_us,
+       round(avg(t.time5_us), 1)     as avg_t5_us
+from (select t5.script_count,
+             t4.script_time_us                          as time4_us,
+             t5.script_time_us                          as time5_us,
+             t4.script_time_us * 10 / t5.script_time_us as time_ratio
+      from (select b.blockId,
+                   b.cost               as cost,
+                   t.script_time / 1000 as script_time_us,
+                   t.script_count
+            from (select blockId,
+                         sum(time) as script_time,
+                         count(*)  as script_count
+                  from verifyScript as s
+                           join selectedInputs as i on s.txId = i.txId and s.boxIndex = i.boxIndex
+                  group by blockId) as t
+                     join applyTransactions as b on b.blockId = t.blockId) as t5
+
+               join (select blockId,
+                            script_time / 1000 as script_time_us
+                     from (select blockId, sum(time) as script_time
+                           from verifyScript4 as s
+                                    join selectedInputs as i
+                                         on s.txId = i.txId and s.boxIndex = i.boxIndex
+                           group by blockId)) as t4 on t5.blockId = t4.blockId) as t
+where t.time_ratio >= 10
+  and t.time_ratio <= 40
+group by t.time_ratio
+order by t.time_ratio asc;
+
+select count(*)
+from selectedInputs;
+
+select count(*) as total_rows4
+from verifyScript4 as s;
+
+select count(*) as total_rows4
+from verifyScript4 as s
+where not exists(
+        select *
+        from selectedInputs as i
+        where s.txId = i.txId
+          and s.boxIndex = i.boxIndex);
+
 -- sum of all script times
 select total_time4_us,
        total_time_us,
-       total_time4_us - total_time_us      as total_diff,
-       total_time4_us * 10 / total_time_us as ratio
+       total_time4_us - total_time_us                      as total_diff,
+       round(total_time4_us * 10 / total_time_us * 0.1, 1) as ratio
 from (select total_time4 / 1000 as total_time4_us
       from (select sum(time) as total_time4 from verifyScript4)),
      (select total_time / 1000 as total_time_us
-      from (select sum(time) as total_time from verifyScript))
+      from (select sum(time) as total_time from verifyScript));
+
+-- sum of all script times (!selected)
+select total_time4_us,
+       total_time_us,
+       total_time4_us - total_time_us                      as total_diff_us,
+       round(total_time4_us * 10 / total_time_us * 0.1, 1) as ratio
+from (select total_time4 / 1000 as total_time4_us
+      from (select sum(time) as total_time4
+            from verifyScript4 as s
+            where not exists(
+                    select *
+                    from selectedInputs
+                    where s.txId = txId
+                      and s.boxIndex = boxIndex))),
+     (select total_time / 1000 as total_time_us
+      from (select sum(time) as total_time
+            from verifyScript as s
+            where not exists(
+                    select *
+                    from selectedInputs
+                    where s.txId = txId
+                      and s.boxIndex = boxIndex)));
+
+select count(*) as total_count4
+from verifyScript4 as s
+         join selectedInputs as i on s.txId = i.txId and s.boxIndex = i.boxIndex;
+
+-- sum of all script times (selected)
+select total_time4_us,
+       total_time_us,
+       total_rows,
+       total_time4_us - total_time_us                      as total_diff_us,
+       round(total_time4_us * 10 / total_time_us * 0.1, 1) as ratio
+from (select total_time4 / 1000 as total_time4_us,
+             total_time / 1000  as total_time_us,
+             total_rows
+      from (select sum(s4.time) as total_time4,
+                   sum(s.time)  as total_time,
+                   count(*)     as total_rows
+            from verifyScript4 as s4
+                     join verifyScript as s
+                          on s4.blockId = s.blockId and s4.txId = s.txId and
+                             s4.boxIndex = s.boxIndex
+                     join selectedInputs as i on s4.txId = i.txId and s4.boxIndex = i.boxIndex))
 

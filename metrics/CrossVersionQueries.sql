@@ -56,6 +56,43 @@ from (select b.blockId,
 where time_ratio < 10
 order by time_ratio asc;
 
+-- tx costs and times by blocks (compare)
+select count(*) from (
+select t5.blockId,
+       t5.height,
+       t5.tx_num,
+
+       t4.cost                                            as cost4,
+       t5.cost                                            as cost5,
+       round(t4.cost * 10 / t5.cost * 0.1, 1)             as cost_ratio,
+
+       t4.tx_time_us                                      as time4_us,
+       t5.tx_time_us                                      as time5_us,
+       round(t4.tx_time_us * 10 / t5.tx_time_us * 0.1, 1) as time_ratio,
+       round(t4.cost / t4.tx_time_us * 0.1, 1)            as cost_time_ratio
+from (select b.blockId,
+             b.height,
+             b.tx_num,
+             (t.cost + b.tx_num * 9000) * 2 as cost,
+             t.tx_time / 1000         as tx_time_us
+
+      from (select blockId, sum(cost) as cost, sum(time) as tx_time
+            from validateTxStateful
+            group by blockId) as t
+               join applyTransactions as b on b.blockId = t.blockId) as t5
+
+         join (select blockId,
+                      cost,
+                      tx_time / 1000 as tx_time_us
+               from (select blockId, sum(cost) as cost, sum(time) as tx_time
+                     from validateTxStateful4
+                     group by blockId)) as t4 on t5.blockId = t4.blockId
+-- where cost_ratio > time_ratio and time_ratio >= 1
+--   and cost_time_ratio < 1
+--where time_ratio >= 1 and time_ratio <= 1.1
+order by cost4 desc
+);
+
 -- count blocks by tx_time speedup
 select t.time_ratio / 10,
        count(*),

@@ -24,10 +24,10 @@ class MetricsSpec extends ErgoPropertyTest {
   class TestCsvCollector extends CsvCollector {
     val outputs = mutable.HashMap.empty[String, ByteArrayOutputStream]
 
-    override protected def createOutputWriter[D](r: metrics.MetricDesc[D]): Writer = {
-      val baos = outputs.getOrElseUpdate(r.metricName, new ByteArrayOutputStream())
+    override protected def createOutputWriter[D](metric: metrics.MetricDesc[D]): Writer = {
+      val baos = outputs.getOrElseUpdate(metric.metricName, new ByteArrayOutputStream())
       val w = new OutputStreamWriter(baos)
-      writeHeader(r, w)
+      writeHeader(metric, w)
       w
     }
   }
@@ -38,8 +38,8 @@ class MetricsSpec extends ErgoPropertyTest {
       .map(line => line.split(';').dropRight(1): Seq[String])
   }
 
-  def checkOutput[D](c: TestCsvCollector, r: MetricDesc[D], expOut: Seq[Seq[String]]) = {
-    val m1 = c.outputs(r.metricName)
+  def checkOutput[D](c: TestCsvCollector, metric: MetricDesc[D], expOut: Seq[Seq[String]]) = {
+    val m1 = c.outputs(metric.metricName)
     val out = parseCsvText(m1.toString())
     if (expOut.isEmpty)
       SigmaPPrint.pprintln(out)
@@ -115,8 +115,8 @@ class MetricsSpec extends ErgoPropertyTest {
         (createUtxoStateMetric, createUtxoStateRows)
       )
 
-      cases.foreach { case (r, expRows) =>
-        val f = c.getMetricFile(r)
+      cases.foreach { case (m, expRows) =>
+        val f = c.getMetricFile(m)
         f.exists() shouldBe true
         val text = FileUtil.read(f)
         parseCsvText(text) shouldBe expRows

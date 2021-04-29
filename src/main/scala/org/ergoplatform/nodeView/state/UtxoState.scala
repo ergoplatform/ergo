@@ -113,13 +113,13 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val inRoot = rootHash
         val blockData = BlockMetricData(fb.id, fb.height, Some(fb.blockTransactions.txs.length))
         val stateTry = for {
-          newStateContext <- measureOp(blockData, appendFullBlockReporter) {
+          newStateContext <- measureOp(blockData, appendFullBlockMetric) {
             stateContext.appendFullBlock(fb)
           }
-          _ <- measureCostedOp(blockData, applyTransactionsReporter) {
+          _ <- measureCostedOp(blockData, applyTransactionsMetric) {
             applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
           }
-          state <- measureOp(blockData, createUtxoStateReporter)(Try {
+          state <- measureOp(blockData, createUtxoStateMetric)(Try {
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
@@ -174,9 +174,9 @@ object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
-  val appendFullBlockReporter = MetricStore[BlockMetricData]("appendFullBlock")
-  val applyTransactionsReporter = MetricStore[BlockMetricData]("applyTransactions")
-  val createUtxoStateReporter = MetricStore[BlockMetricData]("createUtxoState")
+  val appendFullBlockMetric = MetricDesc[BlockMetricData]("appendFullBlock")
+  val applyTransactionsMetric = MetricDesc[BlockMetricData]("applyTransactions")
+  val createUtxoStateMetric = MetricDesc[BlockMetricData]("createUtxoState")
 
   private def metadata(modId: VersionTag,
                        stateRoot: ADDigest,

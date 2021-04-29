@@ -103,7 +103,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     validateStateless().result.toTry
   }
 
-  val verifyScriptStore = MetricStore[InputMetricData]("verifyScript")
+  val verifyScriptMetric = MetricDesc[InputMetricData]("verifyScript")
 
   /**
     * Checks whether transaction is valid against input boxes to spend, and
@@ -243,7 +243,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         }
 
         collectMetricsTo(
-          verifyScriptStore,
+          verifyScriptMetric,
           data = InputMetricData(
             blockId = stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId),
             txId = id,

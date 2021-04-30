@@ -59,7 +59,12 @@ object metrics {
 
   val emptyModifierId: ModifierId = ModifierId @@ ""
 
-  /** Metric data for block operations. */
+  /** Metric data, which describes a block-related operations.
+    *
+    * @param blockId          identifier of the related block
+    * @param height           blockchain height of the block
+    * @param nTransactionsOpt optional number of transactions in the block
+    */
   case class BlockMetricData(blockId: ModifierId, height: Int, nTransactionsOpt: Option[Int])
 
   implicit object BlockMetricRow extends MetricRow[BlockMetricData] {
@@ -70,7 +75,11 @@ object metrics {
     }
   }
 
-  /** Metric data for transaction operations. */
+  /** Metric data, which describes a transaction-related operations.
+    *
+    * @param blockId identifier of the related block
+    * @param txId    identifier of the related transaction
+    */
   case class TransactionMetricData(blockId: ModifierId, txId: ModifierId)
 
   implicit object TransactionMetricRow extends MetricRow[TransactionMetricData] {
@@ -80,7 +89,12 @@ object metrics {
     }
   }
 
-  /** Metric data for an operation with transaction input with the given `index` */
+  /** Metric data for an operation related to transaction input with the given `index`.
+    *
+    * @param blockId block identifier of the owner block
+    * @param txId    transaction identifier
+    * @param index   zero-based index of the input in the transaction
+    */
   case class InputMetricData(blockId: ModifierId, txId: ModifierId, index: Int)
 
   implicit object InputMetricRow extends MetricRow[InputMetricData] {
@@ -206,7 +220,10 @@ object metrics {
   }
 
   /** Executes the given code block under the given collector.
-    * Within the block the collector can be obtaned as MetricsCollector.current */
+    * Within the block the collector can be obtaned as MetricsCollector.current.
+    * The method saves the current collector before the call and restores it after the block is
+    * executed.
+    */
   def executeWithCollector[R](collector: MetricsCollector)(block: => R): R = {
     MetricsCollector._current.withValue(collector)(block)
   }

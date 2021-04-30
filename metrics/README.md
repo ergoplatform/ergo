@@ -87,7 +87,6 @@ The `time` is measured using `System.nanoTime()` method and is equal the differe
 and end of the code `block` passed to the `measureOp` method.
 When the cost of operation is not computed, then `-1` is passed as the value of `cost`.
 
-
 ## Metrics collected in Ergo node
 
 Ergo node uses the metrics sub-system to collect metrics of block validation, this procedure is
@@ -97,13 +96,23 @@ the nodes when they validate blocks and transactions.
 Currently, when collectMetrics is enabled, the metric data is saved in CSV files located in
 `${ergo.directory}/metrics` directory. One file for each metric with `${metricName}.csv` file name.
 
-The files can be loaded into Sqlite database and then analyzed using [Jupyter Notebook](Report.ipynb)
+The files can be loaded into Sqlite database and then analyzed using [Jupyter
+Notebook](Report.ipynb). The database schema is described in [Metrics Analysis database](#metrics-analysis-database)
 
 ### Block validation
 
 Block validation starts in `UtxoState.applyModifier` method when `ErgoFullBlock` modifier is passed
 as the argument. Each block is validated in three steps, and for each step the corresponding metric
-is defined and performance data collected.
+is defined and performance data collected. Each of the metrics related to block validation steps
+collect data represented by `BlockMetricData`. The resulting CSV files have the following columns:
+
+ Column      | Description
+-------------|-------------
+`blockId`    |  identifier of the related block
+`height`     |       blockchain height of the block
+`nTransactionsOpt` | optional number of transactions in the block
+`cost`  | computational cost of the operation (or -1 if not defined)
+`time`  | execution time of the operation in nano seconds
 
 The block validation steps:
 
@@ -117,6 +126,48 @@ described](#usage).
 
 3) New instance of `UtxoState` is created with persistentProver containing updated metadata. 
 This method's performance is measured using `createUtxoStateMetric`.
+
+### Transaction Validation
+
+Transaction validation starts in `ErgoState.execTransactions` method where all the block
+transactions are processed in a loop. Each of the metrics related to transaction validation collect
+data represented by `TransactionMetricData` class. The resulting CSV files have the following
+columns:
+
+ Column   | Description
+----------|-------------
+`blockId` | identifier of the related block
+`txId`    | identifier of the related transaction 
+`cost`    | computational cost of the operation (or -1 if not defined)
+`time`    | execution time of the operation in nano seconds
+
+Transactions of a block are validated in sequence, and for each transactions two steps are
+performed:
+1) Stateless validation in the method `ErgoTransaction.validateStateless` where many
+context-independent conditions are checked.
+2) Stateful validation in the method `ErgoTransaction.validateStateful`. 
+
+Only the second step is measured and analyzed using `validateTxStatefulMetric` because it involves
+verification of all input scripts. It may also be valuable to add metric for the first step.
+
+### Input Script Validation
+
+Each input of a transaction has spending condition (aka guarding predicate), which has to be
+evaluated and verified. The verification of each input script is measured by
+`verifyScriptMetric` which is collected in `ErgoTransaction.validateStateful` method.
+Each of the metrics related to input validation collect data represented by `InputMetricData` class.
+The resulting CSV file collected by `verifyScriptMetric` has the following columns:
+
+ Column   | Description
+----------|-------------
+`blockId` | identifier of the related block
+`txId`    | identifier of the related transaction 
+`index`   | zero-based index of the input in the transaction
+`cost`    | computational cost of the operation (or -1 if not defined)
+`time`    | execution time of the operation in nano 
+
+## Metrics Analysis Database
+
 
 ## Working with Metrics notebook
 

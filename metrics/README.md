@@ -168,6 +168,34 @@ The resulting CSV file collected by `verifyScriptMetric` has the following colum
 
 ## Metrics Analysis Database
 
+All the collected metric data is saved in CSV files stored in `${ergo.directory}/metrics` directory.
+Those files can be loaded into Sqlite database for further analysis using SQL queries or using
+[Jupyter Notebook](Report.ipynb).
+Each metric CSV file can be loaded into the corresponding table of the database with the same name.
+
+The schema is designed for analysing performance of v5.0 version versus v4.x version of Ergo node
+and contains all tables duplicated, i.e. for each metric there are two tables. The v4.0 tables have
+suffix `4` in the name (i.e. `appendFullBlock` table for v5.0 and `appendFullBlock4` for v4.x).
+
+The schema of the database is defined in [Metrics.schema.sql](Metrics.schema.sql) file. There are
+helper scripts and commands that can be used to manage the database. 
+These should be run in the <project root> directory and they use `DB_FILE` parameter targets
+`METRICS_DIR` variables, which should be configured according to your locations. Note, you can run
+both v4.0 and v5.0 versions of Ergo node simultaneously, but use different directories, which means
+you also need to set the variables accordingly.
+
+Command  | Description
+---------|-------------
+[load_metrics.sh](load_metrics.sh) | load the CSV files form `METRICS_DIR` directory into v5.0 tables of `DB_FILE` database
+[load_metrics4.sh](load_metrics4.sh) | load the CSV files form `METRICS_DIR` directory into v4.x tables of `DB_FILE` database
+[truncate_metrics.sh](truncate_metrics.sh) | truncate all v5.0 tables of `DB_FILE` database
+[truncate_metrics4.sh](truncate_metrics4.sh) | truncate all v4.x tables of `DB_FILE` database
+`sqlite3 DB_FILE '.read Metrics.schema.sql'` | create new DB_FILE database and load schema
+`sqlite3 DB_FILE '.schema'` | print schema SQL definition of the database
+
+As an alternative to Sqlite the schema can be instantiated in Postgres database of Ergo Explorer (if
+you also run explorer). In this case metric tables can be joined with other explorer tables for more
+fine grained analysis.
 
 ## Working with Metrics notebook
 

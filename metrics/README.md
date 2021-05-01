@@ -176,7 +176,7 @@ Each metric CSV file can be loaded into the corresponding table of the database 
 The schema is designed for analysing performance of v5.0 version versus v4.x version of Ergo node
 and contains all tables duplicated, i.e. for each metric there are two tables. The v4.0 tables have
 suffix `4` in the name (i.e. `appendFullBlock` table for v5.0 and `appendFullBlock4` for v4.x).
-
+                                             
 The schema of the database is defined in [Metrics.schema.sql](Metrics.schema.sql) file. There are
 helper scripts and commands that can be used to manage the database. 
 These should be run in the <project root> directory and they use `DB_FILE` parameter targets

@@ -80,10 +80,10 @@ order by script_count desc;
 select tx.blockId,
        tx.txId,
        t.script_count,
-       tx.time / 1000                       as tx_time_us,
-       t.sum_script_time / 1000             as script_time_us,
-       (tx.time - t.sum_script_time) / 1000 as time_diff,
-       tx.time * 10 / t.sum_script_time     as time_ratio
+       tx.time / 1000                                   as tx_time_us,
+       t.sum_script_time / 1000                         as script_time_us,
+       (tx.time - t.sum_script_time) / 1000             as time_diff_us,
+       round(tx.time * 10 / t.sum_script_time * 0.1, 1) as time_ratio
 from (select blockId,
              txId,
              sum(time) as sum_script_time,
@@ -138,7 +138,7 @@ where t.time_ratio <= 19
 group by t.time_ratio
 order by t.time_ratio desc;
 
--- top block_time vs script_time ratio
+-- top tx block_time vs script_time ratio
 select b.blockId,
        t.script_count,
        b.time / 1000                       as block_time_us,
@@ -224,9 +224,22 @@ from (select b1.blockId,
       from appendFullBlock as b1
                join applyTransactions as b2 on b1.blockId = b2.blockId
                join createUtxoState b3 on b1.blockId = b3.blockId
-      where t3_us >= t2_us
+      where time_us * 0.5 >= t3_us
       order by b2.cost desc);
 
+select b1.blockId,
+       b1.height,
+       b1.tx_num,
+       b2.cost,
+       b1.time / 1000                       as t1_us,
+       b2.time / 1000                       as t2_us,
+       b3.time / 1000                       as t3_us,
+       (b1.time + b2.time + b3.time) / 1000 as time_us
+from appendFullBlock as b1
+         join applyTransactions as b2 on b1.blockId = b2.blockId
+         join createUtxoState b3 on b1.blockId = b3.blockId
+where time_us * 0.3 >= t3_us
+order by b2.cost desc;
 
 -- new vs old
 select at5.blockId, at5.time as t5, at4.time as t4

@@ -11,7 +11,7 @@ import scala.Option;
 /**
  * This runnable example is showing how to derive change address and other addresses according to EIP-3
  */
-public class AdressGenerationDemo {
+public class AddressGenerationDemo {
     public static byte[] secretSeedFromMnemonic(String mnemonic) {
         byte[] secret =  Mnemonic.toSeed(mnemonic, Option.empty());
         return secret;

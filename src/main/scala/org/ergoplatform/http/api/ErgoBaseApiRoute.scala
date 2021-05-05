@@ -12,7 +12,7 @@ trait ErgoBaseApiRoute extends ApiRoute {
 
   implicit val ec: ExecutionContextExecutor = context.dispatcher
 
-  val paging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 50)
+  val paging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 1, "limit".as[Int] ? 50)
 
   val modifierId: Directive1[ModifierId] = pathPrefix(Segment).flatMap(handleModifierId)
 

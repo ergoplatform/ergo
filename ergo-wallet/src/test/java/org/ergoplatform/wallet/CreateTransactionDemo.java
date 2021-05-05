@@ -1,9 +1,10 @@
-package org.ergoplatform.walllet;
+package org.ergoplatform.wallet;
 
+import io.circe.Json;
 import org.ergoplatform.*;
-import org.ergoplatform.wallet.Utils;
 import org.ergoplatform.wallet.interface4j.crypto.ErgoUnsafeProver;
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey;
+import org.ergoplatform.wallet.serialization.JsonCodecsWrapper;
 import scorex.util.Random;
 
 public class CreateTransactionDemo {
@@ -45,6 +46,12 @@ public class CreateTransactionDemo {
         );
 
         ErgoLikeTransaction tx = new ErgoUnsafeProver().prove(unsignedTx, extendedSecretKey.privateInput());
+
+        // print transaction JSON
+        // then the transaction can be broadcasted by sending the json to
+        // https://api.ergoplatform.com/api/v0/transactions/send (POST request)
+        Json json = JsonCodecsWrapper.ergoLikeTransactionEncoder().apply(tx);
+        System.out.println(json.toString());
     }
 
 }

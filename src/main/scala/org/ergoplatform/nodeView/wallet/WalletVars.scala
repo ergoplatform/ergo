@@ -9,7 +9,6 @@ import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
 import scorex.util.ScorexLogging
-import sigmastate.Values
 
 import scala.util.Try
 

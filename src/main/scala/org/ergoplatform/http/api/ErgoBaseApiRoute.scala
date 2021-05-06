@@ -1,6 +1,6 @@
 package org.ergoplatform.http.api
 
-import akka.http.scaladsl.server.{Directive, Directive1, ValidationRejection}
+import akka.http.scaladsl.server.{Directive1, ValidationRejection}
 import org.ergoplatform.settings.Algos
 import scorex.core.api.http.ApiRoute
 import scorex.util.{ModifierId, bytesToId}

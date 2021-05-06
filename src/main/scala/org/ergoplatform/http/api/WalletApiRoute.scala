@@ -295,9 +295,9 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           minConfNum == 0 && maxConfNum == Int.MaxValue) {
           None
         } else if(minHeight > 0 || maxHeight < Int.MaxValue){
-          Some(ByHeight(minHeight, maxHeight))
+          Some(FilterByHeight(minHeight, maxHeight))
         } else {
-          Some(ByConfirmationsNum(minConfNum, maxConfNum))
+          Some(FilterByConfirmations(minConfNum, maxConfNum))
         }
 
         withWallet {

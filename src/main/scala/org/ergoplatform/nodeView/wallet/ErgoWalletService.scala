@@ -386,8 +386,8 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
       case Some(walletFiltering) =>
         // Whether heights or confs provided, checked in WalletApiRoute.transactionsR
         val (heightFrom, heightTo) = walletFiltering match {
-          case ByHeight(minHeight, maxHeight) => (minHeight, maxHeight)
-          case ByConfirmationsNum(minConfNum, maxConfNum) => (fullHeight - maxConfNum, fullHeight - minConfNum)
+          case FilterByHeight(minHeight, maxHeight) => (minHeight, maxHeight)
+          case FilterByConfirmations(minConfNum, maxConfNum) => (fullHeight - maxConfNum, fullHeight - minConfNum)
         }
         registry.walletTxsBetween(heightFrom, heightTo)
       case None => registry.allWalletTxs()

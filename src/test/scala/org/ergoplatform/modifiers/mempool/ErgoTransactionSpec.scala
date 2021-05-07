@@ -369,6 +369,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   }
 
   property("cost accumulated correctly across inputs") {
+    val accInitCost = 100000
+
     def inputCost(tx: ErgoTransaction, idx: Short, from: IndexedSeq[ErgoBox]): Long = {
       val idx = 0
       val input = tx.inputs(idx)
@@ -399,7 +401,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
       val tokenAccessCost = emptyStateContext.currentParameters.tokenAccessCost
 
-      val txCost = tx.statefulValidity(from, IndexedSeq(), emptyStateContext, 0).get
+      val txCost = tx.statefulValidity(from, IndexedSeq(), emptyStateContext, accInitCost).get
 
       val (inAssets, inAssetsNum): (Map[ByteArrayWrapper, Long], Int) = ErgoTransaction.extractAssets(from).get
       val (outAssets, outAssetsNum): (Map[ByteArrayWrapper, Long], Int) = ErgoTransaction.extractAssets(tx.outputs).get
@@ -414,7 +416,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
           CostTable.interpreterInitCost +
           assetsCost
 
-      txCost shouldBe (initialCost + inputCost(tx, 0, from) * inputsNum)
+      txCost shouldBe (accInitCost + initialCost + inputCost(tx, 0, from) * inputsNum)
     }
   }
 

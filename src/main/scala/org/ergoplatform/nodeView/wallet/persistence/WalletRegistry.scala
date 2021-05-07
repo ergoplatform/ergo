@@ -163,7 +163,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     val firstKey = firstIncludedScanTransactionSpaceKey(Constants.PaymentsScanId, heightFrom)
     val lastKey = lastIncludedScanTransactionSpaceKey(Constants.PaymentsScanId, heightTo)
 
-    // Get wallet transactions from hightFrom (inclusive) to heightTo (inclusive)
+    // Get wallet transactions from heightFrom (inclusive) to heightTo (inclusive)
     val range = store.getRange(firstKey, lastKey)
     range.flatMap { case (_, txId) =>
       store.get(txKey(txId)) match {

@@ -74,9 +74,8 @@ final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
   def withExtendedKey(secret: ExtendedSecretKey): Try[WalletVars] = Try {
     proverOpt match {
       case Some(prover) =>
-        val (updProver, newPk) = prover.withNewExtendedSecret(secret)
-        val updCache = stateCacheOpt.get.withNewPubkey(newPk).get
-        this.copy(proverOpt = Some(updProver), stateCacheProvided = Some(updCache))
+        val newProver = prover.withNewExtendedSecret(secret)
+        this.copy(proverOpt = Some(newProver))
       case None =>
         log.warn(s"Trying to add new secret, but prover is not initialized")
         this
@@ -86,16 +85,16 @@ final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
   /**
     * Updates parameters of the prover
     *
-    * @param parameters - new of the prover parameters
+    * @param parameters - new prover parameters
     * @return
     */
   def withParameters(parameters: Parameters): Try[WalletVars] = Try {
     proverOpt match {
       case Some(prover) =>
-        val updProver = prover.withNewParameters(parameters)
-        this.copy(proverOpt = Some(updProver))
+        val newProver = prover.withNewParameters(parameters)
+        this.copy(proverOpt = Some(newProver))
       case None =>
-        log.warn(s"Trying to add new secret, but prover is not initialized")
+        log.warn(s"Trying to update prover's parameters, but prover is not initialized")
         this
     }
   }

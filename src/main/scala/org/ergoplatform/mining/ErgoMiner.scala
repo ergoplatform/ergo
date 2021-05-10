@@ -118,11 +118,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   private def keysManagement: Receive = {
     case UpdateSecret(s) =>
+      log.info("Setting secret and public key")
       secretKeyOpt = Some(s)
       publicKeyOpt = Some(s.publicImage)
 
-    case UpdatePublicKey(pkOpt) =>
-      publicKeyOpt = pkOpt
+    case UpdatePublicKey(pk) =>
+      log.info("Setting public key")
+      publicKeyOpt = Option(pk)
 
     // used in /mining/rewardAddress API method
     case ReadMinerPk =>
@@ -148,8 +150,11 @@ class ErgoMiner(ergoSettings: ErgoSettings,
             case Failure(t) =>
               log.warn(s"Miner can't load public key from wallet: ${t.getMessage} ")
               context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet(secret))(context.system.dispatcher)
-            case Success(miningPubKeyOpt) =>
-              callback ! UpdatePublicKey(miningPubKeyOpt)
+            case Success(None) =>
+              log.info(s"Miner is waiting for wallet initialization")
+              context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet(secret))(context.system.dispatcher)
+            case Success(Some(miningPubKey)) =>
+              callback ! UpdatePublicKey(miningPubKey)
           }
         }
       }
@@ -719,7 +724,7 @@ object ErgoMiner extends ScorexLogging {
 
   case class UpdateSecret(s: DLogProverInput)
 
-  case class UpdatePublicKey(pkOpt: Option[ProveDlog])
+  case class UpdatePublicKey(pk: ProveDlog)
 
 }
 

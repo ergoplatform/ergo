@@ -123,7 +123,15 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! state.walletVars.publicKeyAddresses.slice(from, until)
 
     case GetMiningPubKey =>
-      sender() ! state.walletVars.trackedPubKeys.headOption.map(_.key)
+      state.walletVars.trackedPubKeys.headOption match {
+        case Some(pk) =>
+          log.info(s"Loading pubkey for miner from cache")
+          sender() ! Some(pk.key)
+        case None =>
+          val pubKeyOpt = state.storage.readAllKeys().headOption.map(_.key)
+          pubKeyOpt.foreach(_ => log.info(s"Loading pubkey for miner from storage"))
+          sender() ! state.storage.readAllKeys().headOption.map(_.key)
+      }
 
     // read first wallet secret (used in miner only)
     case GetFirstSecret =>

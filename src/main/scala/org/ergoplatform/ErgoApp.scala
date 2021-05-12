@@ -192,35 +192,28 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
 object ErgoApp extends ScorexLogging {
 
-  import scopt.OParser
-
-  val builder = OParser.builder[Args]
-  val argParser = {
-    import builder._
-    OParser.sequence(
-      programName("ergo"),
+  val argParser = new scopt.OptionParser[Args]("ergo") {
       opt[String]("config")
         .abbr("c")
         .action((x, c) => c.copy(userConfigPathOpt = Some(x)))
         .text("location of ergo node configuration")
-        .optional(),
+        .optional()
       opt[Unit]("devnet")
         .action((_, c) => c.copy(networkTypeOpt = Some(NetworkType.DevNet)))
         .text("set network to devnet")
-        .optional(),
+        .optional()
       opt[Unit]("testnet")
         .action((_, c) => c.copy(networkTypeOpt = Some(NetworkType.TestNet)))
         .text("set network to testnet")
-        .optional(),
+        .optional()
       opt[Unit]("mainnet")
         .action((_, c) => c.copy(networkTypeOpt = Some(NetworkType.MainNet)))
         .text("set network to mainnet")
-        .optional(),
+        .optional()
       help("help").text("prints this usage text")
-    )
   }
 
-  def main(args: Array[String]): Unit = OParser.parse(argParser, args, Args()) match {
+  def main(args: Array[String]): Unit = argParser.parse(args, Args()) match {
     case Some(argsParsed) => new ErgoApp(argsParsed).run()
     case None => // Error message will be displayed when arguments are bad
   }

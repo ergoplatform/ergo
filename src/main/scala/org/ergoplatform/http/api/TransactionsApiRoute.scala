@@ -20,6 +20,9 @@ import scala.concurrent.Future
 case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, settings: RESTApiSettings)
                                (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
+
+  val txPaging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 50)
+
   override val route: Route = pathPrefix("transactions") {
     checkTransactionR ~
       getUnconfirmedTransactionsR ~
@@ -70,7 +73,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
     validateTransactionAndProcess(tx) { tx => tx }
   }
 
-  def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & paging) { (offset, limit) =>
+  def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & txPaging) { (offset, limit) =>
     ApiResponse(getUnconfirmedTransactions(offset, limit))
   }
 

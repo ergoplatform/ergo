@@ -6,6 +6,6 @@ package org.ergoplatform.nodeView.wallet
 
 sealed trait WalletFiltering
 
-case class ByHeight(minHeight: Int, maxHeight: Int) extends WalletFiltering
+case class FilterByHeight(minHeight: Int, maxHeight: Int) extends WalletFiltering
 
-case class ByConfirmationsNum(minConfNum: Int, maxConfNum: Int) extends WalletFiltering
+case class FilterByConfirmations(minConfNum: Int, maxConfNum: Int) extends WalletFiltering

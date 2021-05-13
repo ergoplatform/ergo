@@ -255,11 +255,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * Calculate difficulty for the next block
     *
     * @param parent - latest block
-    * @param nextBlockTimestampOpt - timestamp of the next block, used in testnets only, see acomment withing the method
     * @return - difficulty for the next block
     */
-  def requiredDifficultyAfter(parent: Header,
-                              nextBlockTimestampOpt: Option[Long] = None): Difficulty = {
+  def requiredDifficultyAfter(parent: Header): Difficulty = {
     if (parent.height == settings.chainSettings.voting.version2ActivationHeight || parent.height + 1 == settings.chainSettings.voting.version2ActivationHeight) {
       // Set difficulty for version 2 activation height (where specific difficulty is needed due to PoW change)
       settings.chainSettings.initialDifficultyVersion2
@@ -318,7 +316,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         .validate(hdrNonIncreasingTimestamp, header.timestamp > parent.timestamp, s"${header.timestamp} > ${parent.timestamp}")
         .validate(hdrHeight, header.height == parent.height + 1, s"${header.height} vs ${parent.height}")
         .validateNoFailure(hdrPoW, powScheme.validate(header))
-        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent, Some(header.timestamp)))
+        .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent))
         .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), heightOf(header.parentId).toString)
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId))
         .validate(hdrFutureTimestamp, header.timestamp - timeProvider.time() <= MaxTimeDrift, s"${header.timestamp} vs ${timeProvider.time()}")

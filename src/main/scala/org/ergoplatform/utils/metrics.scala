@@ -11,6 +11,25 @@ import scorex.util.ModifierId
 
 import scala.collection.mutable
 
+/** Implementation of the metrics sub-system. The general algorithm of metrics collection is as the
+  * following:
+  * 1. The `block` of code is wrapped into invocation of [[metrics.measureOp]] or
+  * [[metrics.measureCostedOp]] method.
+  * 2. The method executes the `block` and if `ergo.node.collectMetrics` config parameter is `true`
+  * then execution time is measured.
+  * 3. If metric collection is enabled then [[metrics.MeasuredData]] instance is created and passed
+  * to the current collector on the thread [[metrics.MetricsCollector.current]] by calling
+  * [[metrics.MetricsCollector.collect]] method.
+  * 4. The [[metrics.CsvCollector]] assembles a new csv line, looks up the
+  * [[metrics.CsvCollector.OutputManager]], and writes the line into the output Writer.
+  *
+  * The current collector on the current thread can be changed by using the following pattern
+  * <pre class="stHighlight">
+  * metrics.executeWithCollector(MyCollector) {
+  *   // execute code with the given collector set as current
+  * }
+  * </pre>
+  */
 object metrics {
 
   /** Type-class which implements capability to output data as CSV-like row. */
@@ -24,19 +43,28 @@ object metrics {
     def fieldValues(d: D): Seq[String]
   }
 
-  /** Represents a store for the given metric name and data type.
-    * @tparam D
+  /** Represents a descriptor for the given metric name and data type.
+    * Conceptually a descriptor specifies is a table of rows with the set of columns given by `row`
+    * instance.
+    * @tparam D data type which represents information recorded for each measurement of this metric
     * @param metricName a name of a metric
     * @param row an instance of CSV-like row handler
     */
-  case class MetricStore[D](metricName: String)(implicit row: MetricRow[D]) {
+  case class MetricDesc[D](metricName: String)(implicit row: MetricRow[D]) {
+    /** If metric is a table, then this method returns a the names of the columns. */
     def fieldNames: Seq[String] = row.fieldNames
+    /** Extract the values of the row from the given data instance. */
     def fieldValues(d: D): Seq[String] = row.fieldValues(d)
   }
 
   val emptyModifierId: ModifierId = ModifierId @@ ""
 
-  /** Metric data for block operations. */
+  /** Metric data, which describes a block-related operations.
+    *
+    * @param blockId          identifier of the related block
+    * @param height           blockchain height of the block
+    * @param nTransactionsOpt optional number of transactions in the block
+    */
   case class BlockMetricData(blockId: ModifierId, height: Int, nTransactionsOpt: Option[Int])
 
   implicit object BlockMetricRow extends MetricRow[BlockMetricData] {
@@ -47,7 +75,11 @@ object metrics {
     }
   }
 
-  /** Metric data for transaction operations. */
+  /** Metric data, which describes a transaction-related operations.
+    *
+    * @param blockId identifier of the related block
+    * @param txId    identifier of the related transaction
+    */
   case class TransactionMetricData(blockId: ModifierId, txId: ModifierId)
 
   implicit object TransactionMetricRow extends MetricRow[TransactionMetricData] {
@@ -57,7 +89,12 @@ object metrics {
     }
   }
 
-  /** Metric data for an operation with transaction input with the given `index` */
+  /** Metric data for an operation related to transaction input with the given `index`.
+    *
+    * @param blockId block identifier of the owner block
+    * @param txId    transaction identifier
+    * @param index   zero-based index of the input in the transaction
+    */
   case class InputMetricData(blockId: ModifierId, txId: ModifierId, index: Int)
 
   implicit object InputMetricRow extends MetricRow[InputMetricData] {
@@ -78,8 +115,8 @@ object metrics {
 
   /** Base class of metric collectors. */
   abstract class MetricsCollector {
-    /** Collects the given data, associates it with the given store. */
-    def collect[D](data: MeasuredData[D], store: MetricStore[D]): Unit
+    /** Collects the given data, of the given metric. */
+    def collect[D](data: MeasuredData[D], metric: MetricDesc[D]): Unit
   }
 
   object MetricsCollector {
@@ -87,46 +124,49 @@ object metrics {
     val FlushInterval = 50
 
     private[ergoplatform] val _current = new DynamicVariable[MetricsCollector](null)
+
+    /** Returns the current collector from the current thread. */
     def current: MetricsCollector = {
       val c = _current.value
       if (c == null) DiscardingCollector
       else c
     }
+
     private object DiscardingCollector extends MetricsCollector {
-      override def collect[D](obj: MeasuredData[D], store: MetricStore[D]): Unit = () // do nothing
+      override def collect[D](obj: MeasuredData[D], metric: MetricDesc[D]): Unit = () // do nothing
     }
   }
 
-  /** Base class for CSV file collectors. Each collector maintains a dictionary of stores
-    * which may receive data metrics.
+  /** Base class for CSV file collectors. Each collector maintains a dictionary of metrics
+    * which may receive data.
     * This class is thread safe. */
   abstract class CsvCollector extends MetricsCollector {
 
-    /** Keeps track of store, associated writer and the current number of lines written. */
-    class OutputManager(val store: MetricStore[_], val writer: Writer, var lineCount: Int = 0)
+    /** Keeps track of metric descriptor, associated writer and the current number of lines written. */
+    class OutputManager(val metric: MetricDesc[_], val writer: Writer, var lineCount: Int = 0)
 
     /** Keeps one OutputManager for each metric name. */
     val metricOutputs = mutable.HashMap.empty[String, OutputManager]
 
-    /** Creates a suitable Writer for the given store. */
-    protected def createOutputWriter[D](store: MetricStore[D]): Writer
+    /** Creates a suitable Writer for the given metric. */
+    protected def createOutputWriter[D](metric: MetricDesc[D]): Writer
 
-    /** Creates a suitable OutputManager for the given store. */
-    protected def createOutputManager[D](store: MetricStore[D]): OutputManager = {
-      new OutputManager(store, createOutputWriter(store))
+    /** Creates a suitable OutputManager for the given metric. */
+    protected def createOutputManager[D](metric: MetricDesc[D]): OutputManager = {
+      new OutputManager(metric, createOutputWriter(metric))
     }
 
     /** Write header and thus prepare writer for accepting data rows */
-    protected def writeHeader[D](store: MetricStore[D], w: Writer): Unit = {
-      val fields = store.fieldNames ++ Array("cost", "time")
+    protected def writeHeader[D](metric: MetricDesc[D], w: Writer): Unit = {
+      val fields = metric.fieldNames ++ Array("cost", "time")
       val line = fields.mkString(";") + System.lineSeparator()
       w.write(line)
     }
 
-    override def collect[D](obj: MeasuredData[D], r: MetricStore[D]): Unit = this.synchronized {
-      val m = metricOutputs.getOrElseUpdate(r.metricName, createOutputManager(r))
+    override def collect[D](obj: MeasuredData[D], metric: MetricDesc[D]): Unit = this.synchronized {
+      val m = metricOutputs.getOrElseUpdate(metric.metricName, createOutputManager(metric))
 
-      val values = r.fieldValues(obj.data) ++ Array(obj.cost.toString, obj.timeNano.toString)
+      val values = metric.fieldValues(obj.data) ++ Array(obj.cost.toString, obj.timeNano.toString)
       val line = values.mkString(";") + System.lineSeparator()
       m.writer.write(line)
       m.lineCount += 1
@@ -154,17 +194,17 @@ object metrics {
     */
   class CsvFileCollector(val directory: String) extends CsvCollector {
 
-    /** Returns a File for the given store. */
-    def getMetricFile[D](r: MetricStore[D]): File = {
-      val fileName = s"${r.metricName}.csv"
+    /** Returns a File for the given metric. */
+    def getMetricFile[D](metric: MetricDesc[D]): File = {
+      val fileName = s"${metric.metricName}.csv"
       val dir = FileUtil.file(directory)
       val file = FileUtil.file(dir, fileName)
       file
     }
 
     /** Creates a new FileWriter wrapped in a BufferedWriter */
-    override protected def createOutputWriter[D](r: MetricStore[D]): Writer = {
-      val file = getMetricFile(r)
+    override protected def createOutputWriter[D](metric: MetricDesc[D]): Writer = {
+      val file = getMetricFile(metric)
       if(file.exists())
         new BufferedWriter(new FileWriter(file, true))
       else {
@@ -173,14 +213,17 @@ object metrics {
         // open new empty file
         val w = new BufferedWriter(new FileWriter(file, false))
 
-        writeHeader(r, w)
+        writeHeader(metric, w)
         w
       }
     }
   }
 
   /** Executes the given code block under the given collector.
-    * Within the block the collector can be obtaned as MetricsCollector.current */
+    * Within the block the collector can be obtaned as MetricsCollector.current.
+    * The method saves the current collector before the call and restores it after the block is
+    * executed.
+    */
   def executeWithCollector[R](collector: MetricsCollector)(block: => R): R = {
     MetricsCollector._current.withValue(collector)(block)
   }
@@ -194,53 +237,53 @@ object metrics {
     (res, t - t0)
   }
 
-  /** Helper method which saves the given data to the given store. */
-  @inline def collectMetricsTo[D](store: MetricStore[D], data: D, cost: Long, time: Long) = {
+  /** Helper method which saves the given data of the given metric. */
+  @inline def collectMetricsTo[D](metric: MetricDesc[D], data: D, cost: Long, time: Long) = {
     val obj = MeasuredData(data, cost, time)
     val metricCollector = MetricsCollector.current
-    metricCollector.collect(obj, store)
+    metricCollector.collect(obj, metric)
   }
 
   /** Executes the given `block` of code (operation) measuring its time.
-    * Sends the given metric data to the given store of the current collector. */
-  def measureOp[D, R](d: => D, store: MetricStore[D])
+    * Sends the given metric data to the current collector. */
+  def measureOp[D, R](data: => D, metric: MetricDesc[D])
                      (block: => Try[R])
                      (implicit es: ErgoSettings): Try[R] = {
     if (es.nodeSettings.collectMetrics) {
       val (res, time) = measureTimeNano(block)
-      collectMetricsTo(store, d, -1, time)
+      collectMetricsTo(metric, data, -1, time)
       res
     } else
       block  // no overhead when the metrics are not being collected
   }
 
   /** Executes the given `costedOp` measuring its time.
-    * Sends the given metric data to the given store of the current collector.
+    * Sends the given metric data to the current collector.
     * In addition, the cost returned by the operation is stored in the row.
     */
-  def measureCostedOp[D, R](d: => D, store: MetricStore[D])
+  def measureCostedOp[D, R](data: => D, metric: MetricDesc[D])
                            (costedOp: => Try[Long])
                            (implicit es: ErgoSettings): Try[Long] = {
     if (es.nodeSettings.collectMetrics) {
       val (costTry, time) = measureTimeNano(costedOp)
       val cost = costTry.getOrElse(-1L)
-      collectMetricsTo(store, d, cost, time)
+      collectMetricsTo(metric, data, cost, time)
       costTry
     } else
       costedOp // no overhead when the metrics are not being collected
   }
 
   /** Executes the given `validationOp` measuring its time.
-    * Sends the given metric data to the given store of the current collector.
+    * Sends the given metric data to the current collector.
     * In addition, the cost returned by the operation is stored in the row.
     */
-  def measureValidationOp[D, R](d: => D, store: MetricStore[D])
+  def measureValidationOp[D, R](data: => D, metric: MetricDesc[D])
                                (validationOp: => ValidationResult[Long])
                                (implicit es: ErgoSettings): ValidationResult[Long] = {
     if (es.nodeSettings.collectMetrics) {
       val (res, time) = measureTimeNano(validationOp)
       val cost = res.toTry.getOrElse(-1L)
-      collectMetricsTo(store, d, cost, time)
+      collectMetricsTo(metric, data, cost, time)
       res
     } else
       validationOp // no overhead when the metrics are not being collected

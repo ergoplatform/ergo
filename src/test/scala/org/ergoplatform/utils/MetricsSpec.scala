@@ -24,10 +24,10 @@ class MetricsSpec extends ErgoPropertyTest {
   class TestCsvCollector extends CsvCollector {
     val outputs = mutable.HashMap.empty[String, ByteArrayOutputStream]
 
-    override protected def createOutputWriter[D](r: metrics.MetricStore[D]): Writer = {
-      val baos = outputs.getOrElseUpdate(r.metricName, new ByteArrayOutputStream())
+    override protected def createOutputWriter[D](metric: metrics.MetricDesc[D]): Writer = {
+      val baos = outputs.getOrElseUpdate(metric.metricName, new ByteArrayOutputStream())
       val w = new OutputStreamWriter(baos)
-      writeHeader(r, w)
+      writeHeader(metric, w)
       w
     }
   }
@@ -38,8 +38,8 @@ class MetricsSpec extends ErgoPropertyTest {
       .map(line => line.split(';').dropRight(1): Seq[String])
   }
 
-  def checkOutput[D](c: TestCsvCollector, r: MetricStore[D], expOut: Seq[Seq[String]]) = {
-    val m1 = c.outputs(r.metricName)
+  def checkOutput[D](c: TestCsvCollector, metric: MetricDesc[D], expOut: Seq[Seq[String]]) = {
+    val m1 = c.outputs(metric.metricName)
     val out = parseCsvText(m1.toString())
     if (expOut.isEmpty)
       SigmaPPrint.pprintln(out)
@@ -47,15 +47,15 @@ class MetricsSpec extends ErgoPropertyTest {
   }
 
   def performMeasuredOps(block: BlockMetricData) = {
-    measureOp(block, appendFullBlockReporter) {
+    measureOp(block, appendFullBlockMetric) {
       Thread.sleep(5) // to simulate work
       Success(())
     }
-    measureCostedOp(block, applyTransactionsReporter) {
+    measureCostedOp(block, applyTransactionsMetric) {
       Thread.sleep(10)
       Success(10000L)
     }
-    measureOp(block, createUtxoStateReporter) {
+    measureOp(block, createUtxoStateMetric) {
       Thread.sleep(15)
       Success(())
     }
@@ -87,11 +87,11 @@ class MetricsSpec extends ErgoPropertyTest {
 
     collector.flush()
 
-    checkOutput(collector, appendFullBlockReporter, appendFullBlockRows)
+    checkOutput(collector, appendFullBlockMetric, appendFullBlockRows)
 
-    checkOutput(collector, applyTransactionsReporter, applyTransactionsRows)
+    checkOutput(collector, applyTransactionsMetric, applyTransactionsRows)
 
-    checkOutput(collector, createUtxoStateReporter, createUtxoStateRows)
+    checkOutput(collector, createUtxoStateMetric, createUtxoStateRows)
       
     collector.close()
   }
@@ -109,14 +109,14 @@ class MetricsSpec extends ErgoPropertyTest {
       }
       c.flush()
 
-      val reporters = Seq(
-        (appendFullBlockReporter, appendFullBlockRows),
-        (applyTransactionsReporter, applyTransactionsRows),
-        (createUtxoStateReporter, createUtxoStateRows)
+      val cases = Seq(
+        (appendFullBlockMetric, appendFullBlockRows),
+        (applyTransactionsMetric, applyTransactionsRows),
+        (createUtxoStateMetric, createUtxoStateRows)
       )
 
-      reporters.foreach { case (r, expRows) =>
-        val f = c.getMetricFile(r)
+      cases.foreach { case (m, expRows) =>
+        val f = c.getMetricFile(m)
         f.exists() shouldBe true
         val text = FileUtil.read(f)
         parseCsvText(text) shouldBe expRows

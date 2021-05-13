@@ -79,7 +79,7 @@ object ErgoState extends ScorexLogging {
     StateChanges(toRemoveChanges, toInsertChanges, toLookup)
   }
 
-  val validateTxStatefulStore = MetricStore[TransactionMetricData]("validateTxStateful")
+  val validateTxStatefulMetric = MetricDesc[TransactionMetricData]("validateTxStateful")
 
   /**
     * Tries to validate and execute transactions.
@@ -120,7 +120,7 @@ object ErgoState extends ScorexLogging {
                   currentStateContext, accumulatedCost = r.value)(verifier).result
               )
               collectMetricsTo(
-                validateTxStatefulStore,
+                validateTxStatefulMetric,
                 TransactionMetricData(currentStateContext.lastHeaderIdOpt.getOrElse(emptyModifierId), tx.id),
                 cost = res.map(c => c - r.value).toTry.getOrElse(-1L),
                 time

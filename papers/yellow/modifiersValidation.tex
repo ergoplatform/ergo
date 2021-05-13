@@ -60,6 +60,8 @@ voting via soft forks, while new rules may also be added at the same time.
     \hline
     121 & Box proposition size should not exceed 4096. & \cmark & \cmark & ErgoTransaction \\
     \hline
+    122 & Transaction outputs should have non-negative creationHeight. & \xmark & \cmark & ErgoTransaction \\
+    \hline
 \end{tabular}
 
 
@@ -95,6 +97,8 @@ voting via soft forks, while new rules may also be added at the same time.
     214 & A header votes should contain no contradictory votes. & \xmark & \cmark & Header \\
     \hline
     215 & First header of an epoch should not contain a vote for unknown parameter. & \cmark & \cmark & Header \\
+    \hline
+    216 & First version 2 header on the mainnet on height 417,729 should have ID = 0ba60a7db44877aade553beb05200f7d67b586945418d733e455840d283e0508. & \xmark & \cmark & Header \\
     \hline
 \end{tabular}
 

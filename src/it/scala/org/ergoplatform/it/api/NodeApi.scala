@@ -49,13 +49,13 @@ trait NodeApi {
 
   def getWihApiKey(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] = retrying {
     _get(s"http://$restAddress:$nodeRestPort$path")
-      .setHeader("api_key", "integration-test-rest-api")
+      .setHeader("api_key", "hello")
       .build()
   }
 
   def post(url: String, port: Int, path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] =
     retrying(f(
-      _post(s"$url:$port$path").setHeader("api_key", "integration-test-rest-api")
+      _post(s"$url:$port$path").setHeader("api_key", "hello")
     ).build())
 
   def postJson[A: Encoder](path: String, body: A): Future[Response] =
@@ -91,12 +91,12 @@ trait NodeApi {
   }
 
   def waitForHeight(expectedHeight: Int, retryingInterval: FiniteDuration = 1.second): Future[Int] = {
-    waitFor[Int](_.height, h => h >= expectedHeight, retryingInterval)
+    waitFor[Int](_.fullHeight, h => h >= expectedHeight, retryingInterval)
   }
 
   def waitForStartup: Future[this.type] = get("/info").map(_ => this)
 
-  def height: Future[Int] = get("/info") flatMap { r =>
+  def fullHeight: Future[Int] = get("/info") flatMap { r =>
     val response = ergoJsonAnswerAs[Json](r.getResponseBody)
     val eitherHeight = response.hcursor.downField("fullHeight").as[Option[Int]]
     eitherHeight.fold[Future[Int]](
@@ -176,7 +176,8 @@ object NodeApi extends ScorexLogging {
                       bestBlockIdOpt: Option[String],
                       bestHeaderHeightOpt: Option[Int],
                       bestBlockHeightOpt: Option[Int],
-                      stateRootOpt: Option[String])
+                      stateRootOpt: Option[String],
+                      isMining: Option[Boolean])
 
   implicit val nodeInfoDecoder: Decoder[NodeInfo] = { c =>
     for {
@@ -185,6 +186,7 @@ object NodeApi extends ScorexLogging {
       bestHeaderHeightOpt <- c.downField("headersHeight").as[Option[Int]]
       bestBlockHeightOpt <- c.downField("fullHeight").as[Option[Int]]
       stateRootOpt <- c.downField("stateRoot").as[Option[String]]
-    } yield NodeInfo(bestHeaderIdOpt, bestBlockIdOpt, bestHeaderHeightOpt, bestBlockHeightOpt, stateRootOpt)
+      isMining <- c.downField("isMining").as[Option[Boolean]]
+    } yield NodeInfo(bestHeaderIdOpt, bestBlockIdOpt, bestHeaderHeightOpt, bestBlockHeightOpt, stateRootOpt, isMining)
   }
 }

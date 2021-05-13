@@ -152,11 +152,18 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
       }
   }
 
+  /**
+    * Read wallet-related transactions for certain heights
+    *
+    * @param heightFrom - height to start from (inclusive)
+    * @param heightTo - height to finish at (inclusive)
+    * @return - wallet transactions for the heights range provided
+    */
   def walletTxsBetween(heightFrom: Height, heightTo: Height): Seq[WalletTransaction] = {
     val firstKey = firstIncludedScanTransactionSpaceKey(Constants.PaymentsScanId, heightFrom)
     val lastKey = lastIncludedScanTransactionSpaceKey(Constants.PaymentsScanId, heightTo)
 
-    // Get wallet transactions from hightFrom (inclusive) to heightTo (inclusive)
+    // Get wallet transactions from heightFrom (inclusive) to heightTo (inclusive)
     val range = store.getRange(firstKey, lastKey)
     range.flatMap { case (_, txId) =>
       store.get(txKey(txId)) match {

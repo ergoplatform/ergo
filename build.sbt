@@ -140,6 +140,7 @@ assemblyMergeStrategy in assembly := {
 
 enablePlugins(sbtdocker.DockerPlugin)
 enablePlugins(JavaAppPackaging)
+enablePlugins(ReproducibleBuildsPlugin)
 
 mappings in Universal += {
   val sampleFile = (resourceDirectory in Compile).value / "samples" / "local.conf.sample"

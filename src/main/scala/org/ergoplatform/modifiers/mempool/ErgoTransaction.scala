@@ -119,7 +119,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     * @param stateContext    - blockchain context at the moment of validation
     * @param accumulatedCost - computational cost before validation, validation starts with this value
     * @param verifier        - interpreter used to check spending correctness for transaction inputs
-    * @return total computation cost
+    * @return total computation cost (accumulatedCost + transaction verification cost), or error details
     */
   def validateStateful(boxesToSpend: IndexedSeq[ErgoBox],
                        dataBoxes: IndexedSeq[ErgoBox],
@@ -140,11 +140,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       multiplyExact(dataBoxes.size, stateContext.currentParameters.dataInputCost),
       multiplyExact(outputCandidates.size, stateContext.currentParameters.outputCost),
     )
+
+    // Cost limit per block
     val maxCost = stateContext.currentParameters.maxBlockCost
 
+    // We sum up previously accumulated cost and transaction initialization cost
     val startCost = addExact(initialCost, accumulatedCost)
     ModifierValidator(stateContext.validationSettings)
-      // Check that the transaction is not too big
+      // Check that the initial transaction cost is not too exceeding block limit
       .validate(bsBlockTransactionsCost, maxCost >= startCost, s"$id: initial cost")
       // Starting validation
       .payload(startCost)

@@ -119,8 +119,7 @@ trait ErgoWalletService {
     * @return - wallet transactions augmented with confirmations numbers
     */
   def getTransactions(registry: WalletRegistry,
-                      fullHeight: Int,
-                      filteringOptions: Option[WalletFiltering]): Seq[AugWalletTransaction]
+                      fullHeight: Int): Seq[AugWalletTransaction]
 
   /**
     * @param txId - transaction identifier
@@ -380,20 +379,9 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
   }
 
   def getTransactions(registry: WalletRegistry,
-                      fullHeight: Int,
-                      filteringOptions: Option[WalletFiltering]): Seq[AugWalletTransaction] = {
-    val txs = filteringOptions match {
-      case Some(walletFiltering) =>
-        // Whether heights or confs provided, checked in WalletApiRoute.transactionsR
-        val (heightFrom, heightTo) = walletFiltering match {
-          case FilterByHeight(minHeight, maxHeight) => (minHeight, maxHeight)
-          case FilterByConfirmations(minConfNum, maxConfNum) => (fullHeight - maxConfNum, fullHeight - minConfNum)
-        }
-        registry.walletTxsBetween(heightFrom, heightTo)
-      case None => registry.allWalletTxs()
-    }
-
-    txs.sortBy(-_.inclusionHeight)
+                      fullHeight: Int
+                     ): Seq[AugWalletTransaction] = {
+    registry.allWalletTxs().sortBy(-_.inclusionHeight)
       .map(tx => AugWalletTransaction(tx, fullHeight - tx.inclusionHeight))
   }
 

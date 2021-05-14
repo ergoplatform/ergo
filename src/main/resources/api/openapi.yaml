@@ -772,7 +772,7 @@ components:
         - $ref: '#/components/schemas/ScanningPredicate'
         - type: object
         - required:
-          - bytes
+            - bytes
         - properties:
             register:
               type: string
@@ -893,7 +893,7 @@ components:
         - a
       properties:
         r:
-          description:  Hex-encoded big-endian 256-bits secret exponent
+          description: Hex-encoded big-endian 256-bits secret exponent
           type: string
           example: '433080ff80d0d52d7f8bfffff47f00807f44f680000949b800007f7f7ff1017f'
         a:
@@ -910,7 +910,7 @@ components:
         - simulated
       properties:
         tx:
-          description:  Transaction to extract prover hints from
+          description: Transaction to extract prover hints from
           $ref: '#/components/schemas/ErgoTransaction'
         real:
           description: Real signers of the transaction
@@ -947,14 +947,14 @@ components:
       properties:
         hint:
           type: string
-          enum: [cmtWithSecret, cmtReal, cmtSimulated]
+          enum: [ cmtWithSecret, cmtReal, cmtSimulated ]
         pubkey:
           $ref: '#/components/schemas/SigmaBoolean'
         position:
           type: string
         type:
           type: string
-          enum: [dlog, dht]
+          enum: [ dlog, dht ]
         a:
           description: a group element of the commitment
           type: string
@@ -964,7 +964,7 @@ components:
 
     CommitmentWithSecret:
       description: commitment to secret along with secret (!) randomness
-      allOf:     # Combines the Commitment and the inline model
+      allOf: # Combines the Commitment and the inline model
         - $ref: '#/components/schemas/Commitment'
           type: object
           required:
@@ -984,7 +984,7 @@ components:
       properties:
         hint:
           type: string
-          enum: [proofReal, proofSimulated]
+          enum: [ proofReal, proofSimulated ]
         challenge:
           type: string
         pubkey:
@@ -1024,7 +1024,7 @@ components:
             "type": "dlog",
             "a": "02924d6274d1b9132fe028a0e3ac2fdbc503a1e52d1398932fa5f1bcf71909eb4b",
             "secret": "42a2a0ae6b98ee791ac9734252e8a7a08e691b92de085138e302f64a722a4300"
-          }]
+          } ]
 
     TransactionHintsBag:
       description: prover hints extracted from a transaction
@@ -1039,7 +1039,7 @@ components:
           description: Hints which contain public data only, share them freely!
           type: array
           items:
-              $ref: '#/components/schemas/InputHints'
+            $ref: '#/components/schemas/InputHints'
 
     GenerateCommitmentsRequest:
       description: request to generate commitments to sign a transaction
@@ -1416,8 +1416,8 @@ components:
           items:
             type: array
             description: pairs of hash and side of hash
-            example: ['018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337', 0]
-          example: [['018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337', 0]]
+            example: [ '018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337', 0 ]
+          example: [ [ '018b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337', 0 ] ]
 
     ProofOfUpcomingTransactions:
       type: object
@@ -1936,7 +1936,7 @@ paths:
                 items:
                   type: string
                   example: '8b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337'
-                example: ['8b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337']
+                example: [ '8b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337' ]
         default:
           description: Error
           content:
@@ -1987,7 +1987,7 @@ paths:
               schema:
                 type: array
                 description: Array of header ids
-                example: ['8b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337']
+                example: [ '8b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337' ]
                 items:
                   type: string
                   example: '8b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337'
@@ -2287,7 +2287,7 @@ paths:
   /transactions/check:
     post:
       summary: Checks an Ergo transaction without sending it over the network. Checks that transaction is valid and
-                its inputs are in the UTXO set. Returns transaction identifier if the transaction is passing the checks.
+        its inputs are in the UTXO set. Returns transaction identifier if the transaction is passing the checks.
       operationId: checkTransaction
       tags:
         - transactions
@@ -2517,7 +2517,7 @@ paths:
     post:
       summary: Add address to peers list
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       operationId: connectToPeer
       tags:
         - peers
@@ -2772,7 +2772,7 @@ paths:
   /wallet/init:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Initialize new wallet with randomly generated seed
       operationId: walletInit
       tags:
@@ -2815,7 +2815,7 @@ paths:
   /wallet/restore:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Create new wallet from existing mnemonic seed
       operationId: walletRestore
       tags:
@@ -2852,7 +2852,7 @@ paths:
   /wallet/check:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Check whether mnemonic phrase is corresponding to the wallet seed
       operationId: checkSeed
       tags:
@@ -2895,7 +2895,7 @@ paths:
   /wallet/unlock:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Unlock wallet
       operationId: walletUnlock
       tags:
@@ -2925,7 +2925,7 @@ paths:
   /wallet/lock:
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Lock wallet
       operationId: walletLock
       tags:
@@ -2943,7 +2943,7 @@ paths:
   /wallet/rescan:
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Rescan wallet (all the available full blocks)
       operationId: walletRescan
       tags:
@@ -2961,7 +2961,7 @@ paths:
   /wallet/status:
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Get wallet status
       operationId: getWalletStatus
       tags:
@@ -2988,8 +2988,8 @@ paths:
                   changeAddress:
                     type: string
                     description: address to send change to. Empty when wallet is not initialized or locked.
-                                 By default change address correponds to root key address, could be set via
-                                 /wallet/updateChangeAddress method.
+                      By default change address correponds to root key address, could be set via
+                      /wallet/updateChangeAddress method.
                     example: '3WzCFq7mkykKqi4Ykdk8BK814tkh6EsPmA42pQZxU2NRwSDgd6yB'
                   walletHeight:
                     type: integer
@@ -3004,7 +3004,7 @@ paths:
   /wallet/updateChangeAddress:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Update address to be used to send change to
       operationId: walletUpdateChangeAddress
       tags:
@@ -3035,7 +3035,7 @@ paths:
   /wallet/deriveKey:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Derive new key according to a provided path
       operationId: walletDeriveKey
       tags:
@@ -3075,7 +3075,7 @@ paths:
   /wallet/deriveNextKey:
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Derive next key
       operationId: walletDeriveNextKey
       tags:
@@ -3107,7 +3107,7 @@ paths:
   /wallet/balances:
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Get total amount of confirmed Ergo tokens and assets
       operationId: walletBalances
       tags:
@@ -3162,7 +3162,7 @@ paths:
           minimum: 0
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Get a list of all wallet-related transactions
       operationId: walletTransactions
       tags:
@@ -3193,7 +3193,7 @@ paths:
           type: string
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Get wallet-related transaction by id
       operationId: walletGetTransaction
       tags:
@@ -3228,6 +3228,38 @@ paths:
         description: Scan id
         schema:
           type: string
+      - in: query
+        name: minInclusionHeight
+        required: false
+        description: Minimal tx inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximal tx inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal confirmations number
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximal confirmations number
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
     get:
       security:
         - ApiKeyAuth: [ api_key ]
@@ -3279,9 +3311,9 @@ paths:
           default: 0
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Get a list of all wallet-related boxes, both spent and unspent. Set minConfirmations to -1 to get
-               mempool boxes included.
+        mempool boxes included.
       operationId: walletBoxes
       tags:
         - wallet
@@ -3354,7 +3386,7 @@ paths:
           default: 0
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Get a list of unspent boxes. Set minConfirmations to -1 to have mempool boxes considered.
       operationId: walletUnspentBoxes
       tags:
@@ -3378,7 +3410,7 @@ paths:
   /wallet/balances/withUnconfirmed:
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Get summary amount of confirmed plus unconfirmed Ergo tokens and assets
       operationId: walletBalancesUnconfirmed
       tags:
@@ -3400,7 +3432,7 @@ paths:
   /wallet/addresses:
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Get wallet addresses
       operationId: walletAddresses
       tags:
@@ -3424,7 +3456,7 @@ paths:
   /wallet/transaction/generate:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Generate arbitrary transaction from array of requests.
       operationId: walletTransactionGenerate
       tags:
@@ -3467,7 +3499,7 @@ paths:
   /wallet/transaction/generateUnsigned:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Generate unsigned transaction from array of requests.
       operationId: walletUnsignedTransactionGenerate
       tags:
@@ -3503,7 +3535,7 @@ paths:
   /wallet/transaction/sign:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Sign arbitrary unsigned transaction with wallet secrets and also secrets provided.
       operationId: walletTransactionSign
       tags:
@@ -3544,7 +3576,7 @@ paths:
   /wallet/transaction/send:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Generate and send arbitrary transaction
       operationId: walletTransactionGenerateAndSend
       tags:
@@ -3579,7 +3611,7 @@ paths:
   /wallet/payment/send:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Generate and send payment transaction (default fee of 0.001 Erg is used)
       operationId: walletPaymentTransactionGenerateAndSend
       tags:
@@ -3615,7 +3647,7 @@ paths:
   /mining/candidate:
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Request block candidate
       operationId: miningRequestBlockCandidate
       tags:
@@ -3637,7 +3669,7 @@ paths:
   /mining/candidateWithTxs:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Request block candidate
       operationId: miningRequestBlockCandidateWithMandatoryTransactions
       tags:
@@ -3665,7 +3697,7 @@ paths:
   /mining/rewardAddress:
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Read miner reward address
       operationId: miningReadMinerRewardAddress
       tags:
@@ -3692,7 +3724,7 @@ paths:
   /mining/rewardPublicKey:
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Read public key associated with miner rewards
       operationId: miningReadMinerRewardPubkey
       tags:
@@ -3720,7 +3752,7 @@ paths:
   /mining/solution:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Submit solution for current candidate
       operationId: miningSubmitSolution
       tags:
@@ -3912,7 +3944,7 @@ paths:
   /script/p2sAddress:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Create P2SAddress from Sigma source
       operationId: scriptP2SAddress
       tags:
@@ -3946,7 +3978,7 @@ paths:
   /script/p2shAddress:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Create P2SHAddress from Sigma source
       operationId: scriptP2SHAddress
       tags:
@@ -4045,7 +4077,7 @@ paths:
   /script/executeWithContext:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Execute script with context
       operationId: executeWithContext
       tags:
@@ -4079,7 +4111,7 @@ paths:
   /scan/register:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Register a scan
       operationId: registerScan
       tags:
@@ -4113,7 +4145,7 @@ paths:
   /scan/deregister:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Stop tracking and deregister scan
       operationId: deregisterScan
       tags:
@@ -4147,7 +4179,7 @@ paths:
   /scan/listAll:
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: List all the registered scans
       operationId: listAllScans
       tags:
@@ -4190,7 +4222,7 @@ paths:
           default: 0
     get:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: List boxes which are not spent.
       operationId: listUnspentScans
       tags:
@@ -4222,7 +4254,7 @@ paths:
   /scan/stopTracking:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Stop scan-related box tracking
       operationId: scanStopTracking
       tags:
@@ -4250,7 +4282,7 @@ paths:
   /wallet/generateCommitments:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Generate signature commitments for inputs of an unsigned transaction
       operationId: generateCommitments
       tags:
@@ -4285,7 +4317,7 @@ paths:
   /wallet/extractHints:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Extract hints from a transaction
       operationId: extractHints
       tags:
@@ -4320,7 +4352,7 @@ paths:
   /scan/addBox:
     post:
       security:
-        - ApiKeyAuth: [api_key]
+        - ApiKeyAuth: [ api_key ]
       summary: Adds a box to scans, writes box to database if it is not there. You can use scan number 10 to add a box to the wallet.
       operationId: addBox
       tags:

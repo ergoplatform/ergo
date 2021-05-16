@@ -409,7 +409,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
       .leftMap(m => new Exception(m.message))
       .map { res =>
         val ergoBoxes = res.boxes.map(_.box)
-        val changeBoxes = res.changeBoxes.map(b => ChangeBox(b.value, b.tokens))
+        val changeBoxes = res.changeBoxes.map(b => ChangeBox(b.value, b.tokens)).headOption
         CollectedBoxes(ergoBoxes, changeBoxes)
       }.toTry
   }

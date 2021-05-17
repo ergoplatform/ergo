@@ -9,28 +9,29 @@ import org.ergoplatform.ErgoScriptPredef
 import org.ergoplatform.UnsignedErgoLikeTransaction
 import org.ergoplatform.UnsignedInput
 import sigmastate.eval.Extensions._
+
 import scala.util.Try
-import scorex.util.{ModifierId, idToBytes, bytesToId}
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 import special.collection.Coll
 import sigmastate.eval._
 import org.ergoplatform.ErgoBox.TokenId
 import scorex.crypto.hash.Digest32
-import cats.implicits._
+import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector
-import scala.collection.mutable
+
 
 object TransactionBuilder {
 
-  private def calcTokenOutput(outputCandidates: Seq[ErgoBoxCandidate]): Map[ModifierId, Long] =
-    outputCandidates
-      .map(b => collTokensToMap(b.additionalTokens))
-      .foldLeft(Map[ModifierId, Long]()){case (a, e) => a.combine(e) }
+  def collectOutputTokens(outputCandidates: Seq[ErgoBoxCandidate]): TokensMap =
+    AssetUtils.mergeAssets(
+      initialMap = Map.empty[ModifierId, Long],
+      maps = outputCandidates.map(b => collTokensToMap(b.additionalTokens)):_*)
 
-  private def collTokensToMap(tokens: Coll[(TokenId, Long)]): Map[ModifierId, Long] =
-    tokens.toArray.toSeq.map(t => bytesToId(t._1) -> t._2).toMap
+  def collTokensToMap(tokens: Coll[(TokenId, Long)]): TokensMap =
+    tokens.toArray.map(t => bytesToId(t._1) -> t._2).toMap
 
-  private def tokensMapToColl(tokens: Map[ModifierId, Long]): Coll[(TokenId, Long)] =
+  def tokensMapToColl(tokens: TokensMap): Coll[(TokenId, Long)] =
     tokens.toSeq.map {t => (Digest32 @@ idToBytes(t._1)) -> t._2}.toArray.toColl
 
   private def validateStatelessChecks(inputs: IndexedSeq[ErgoBox], dataInputs: IndexedSeq[DataInput],
@@ -71,6 +72,7 @@ object TransactionBuilder {
     changeAddress: ErgoAddress,
     minChangeValue: Long,
     minerRewardDelay: Int,
+    burnTokens: TokensMap = Map.empty,
     boxSelector: BoxSelector = DefaultBoxSelector
   ): Try[UnsignedErgoLikeTransaction] = Try {
 
@@ -86,15 +88,21 @@ object TransactionBuilder {
     require(changeAmt >= 0, s"total inputs $inputTotal is less then total outputs $outputTotal")
 
     val firstInputBoxId = bytesToId(inputs(0).id)
-    val tokensOut = calcTokenOutput(outputCandidates)
+    val tokensOut = collectOutputTokens(outputCandidates)
     // remove minted tokens if any
     val tokensOutNoMinted = tokensOut.filterKeys(_ != firstInputBoxId)
     val mintedTokensNum = tokensOut.size - tokensOutNoMinted.size
     require(mintedTokensNum <= 1, s"Only one token can be minted, but found $mintedTokensNum")
+    require(burnTokens.values.forall(_ > 0),
+      s"Incorrect burnTokens specification, positive values are expected: $burnTokens")
 
-    val selection = boxSelector.select(inputs.toIterator, outputTotal, tokensOutNoMinted) match {
+    // add burnTokens to target assets so that they are excluded from the change outputs
+    // thus total outputs assets will be reduced which is interpreted as _token burning_
+    val tokensOutWithBurned = AssetUtils.mergeAssets(tokensOutNoMinted, burnTokens)
+
+    val selection = boxSelector.select(inputs.toIterator, outputTotal, tokensOutWithBurned) match {
       case Left(err) => throw new IllegalArgumentException(
-        s"failed to calculate change for outputTotal: $outputTotal, \ntokens: $tokensOut, \ninputs: $inputs, \nreason: $err")
+        s"failed to calculate change for outputTotal: $outputTotal, \ntokens: $tokensOut, \nburnTokens: $burnTokens, \ninputs: $inputs, \nreason: $err")
       case Right(v) => v
     }
     // although we're only interested in change boxes, make sure selection contains exact inputs

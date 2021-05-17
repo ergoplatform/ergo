@@ -1,7 +1,6 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.ErgoScriptPredef
-import org.ergoplatform.local.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.{LaunchParameters, MonetarySettings}
@@ -20,6 +19,36 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
     ErgoScriptPredef.rewardOutputScript(delta, pk).bytes
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
+
+  property("minersRewardAtHeight test vectors") {
+    emission.minersRewardAtHeight(525000) shouldBe 67500000000L
+    emission.minersRewardAtHeight(525600) shouldBe 67500000000L
+    emission.minersRewardAtHeight(590400) shouldBe 67500000000L
+    emission.minersRewardAtHeight(655200) shouldBe 66000000000L
+    emission.minersRewardAtHeight(720000) shouldBe 63000000000L
+    emission.minersRewardAtHeight(784800) shouldBe 60000000000L
+    emission.minersRewardAtHeight(849600) shouldBe 57000000000L
+    emission.minersRewardAtHeight(914400) shouldBe 54000000000L
+    emission.minersRewardAtHeight(979200) shouldBe 51000000000L
+    emission.minersRewardAtHeight(1044000) shouldBe 48000000000L
+    emission.minersRewardAtHeight(1108800) shouldBe 45000000000L
+    emission.minersRewardAtHeight(1173600) shouldBe 42000000000L
+    emission.minersRewardAtHeight(1238400) shouldBe 39000000000L
+    emission.minersRewardAtHeight(1303200) shouldBe 36000000000L
+    emission.minersRewardAtHeight(1368000) shouldBe 33000000000L
+    emission.minersRewardAtHeight(1432800) shouldBe 30000000000L
+    emission.minersRewardAtHeight(1497600) shouldBe 27000000000L
+    emission.minersRewardAtHeight(1562400) shouldBe 24000000000L
+    emission.minersRewardAtHeight(1627200) shouldBe 21000000000L
+    emission.minersRewardAtHeight(1692000) shouldBe 18000000000L
+    emission.minersRewardAtHeight(1756800) shouldBe 15000000000L
+    emission.minersRewardAtHeight(1821600) shouldBe 12000000000L
+    emission.minersRewardAtHeight(1886400) shouldBe 9000000000L
+    emission.minersRewardAtHeight(1951200) shouldBe 6000000000L
+    emission.minersRewardAtHeight(2016000) shouldBe 3000000000L
+    emission.minersRewardAtHeight(2080799) shouldBe 3000000000L
+    emission.minersRewardAtHeight(2080800) shouldBe 0L
+  }
 
   property("collect reward from emission box only") {
     val us = createUtxoState()._1
@@ -88,11 +117,13 @@ class ErgoMinerPropSpec extends ErgoPropertyTest {
       val upcomingContext = us.stateContext.upcoming(h.minerPk, h.timestamp, h.nBits, h.votes, emptyVSUpdate, h.version)
       upcomingContext.currentHeight shouldBe (us.stateContext.currentHeight + 1)
 
-      val fromSmallMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, Int.MaxValue, us, upcomingContext, Seq(head), Seq())(validationSettingsNoIl)._1
+      val fromSmallMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, Int.MaxValue, us, upcomingContext,
+        Seq(head))(validationSettingsNoIl)._1
       fromSmallMempool.size shouldBe 2
       fromSmallMempool.contains(head) shouldBe true
 
-      val fromBigMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, Int.MaxValue, us, upcomingContext, txsWithFees, Seq())(validationSettingsNoIl)._1
+      val fromBigMempool = ErgoMiner.collectTxs(defaultMinerPk, maxCost, maxSize, Int.MaxValue, us, upcomingContext,
+        txsWithFees)(validationSettingsNoIl)._1
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
       val costs: Seq[Long] = fromBigMempool.map { tx =>

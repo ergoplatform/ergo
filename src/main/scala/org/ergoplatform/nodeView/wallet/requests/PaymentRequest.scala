@@ -17,7 +17,7 @@ case class PaymentRequest(address: ErgoAddress,
                           value: Long,
                           assets: Seq[(ErgoBox.TokenId, Long)],
                           registers: Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]])
-  extends TransactionRequest
+  extends TransactionGenerationRequest
 
 class PaymentRequestEncoder(settings: ErgoSettings) extends Encoder[PaymentRequest] {
 

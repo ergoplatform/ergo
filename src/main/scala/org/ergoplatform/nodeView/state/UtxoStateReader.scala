@@ -3,9 +3,11 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
-import org.ergoplatform.modifiers.mempool.{ErgoBoxSerializer, ErgoTransaction}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
+import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
 import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
@@ -34,11 +36,11 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
                        complexityLimit: Int): Try[Long] = {
     val verifier = ErgoInterpreter(stateContext.currentParameters)
     val context = stateContextOpt.getOrElse(stateContext)
-    tx.statelessValidity.flatMap { _ =>
+    tx.statelessValidity().flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
       val txComplexity = boxesToSpend.map(_.ergoTree.complexity).sum
       if (txComplexity > complexityLimit) {
-        throw new Exception(s"Transaction $tx have too high complexity $txComplexity")
+        throw new Exception(s"Transaction $tx has too high complexity $txComplexity")
       }
       tx.statefulValidity(
         boxesToSpend,
@@ -122,12 +124,18 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     */
   def withTransactions(txns: Seq[ErgoTransaction]): UtxoState = {
     new UtxoState(persistentProver, version, store, constants) {
-      val createdBoxes = txns.flatMap(_.outputs)
+      lazy val createdBoxes: Seq[ErgoBox] = txns.flatMap(_.outputs)
 
       override def boxById(id: ADKey): Option[ErgoBox] = {
         super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
       }
     }
   }
+
+  /**
+    * Producing a copy of the state which takes into account pool of unconfirmed transactions.
+    * Useful when checking mempool transactions.
+    */
+  def withMempool(mp: ErgoMemPoolReader): UtxoState = withTransactions(mp.getAll)
 
 }

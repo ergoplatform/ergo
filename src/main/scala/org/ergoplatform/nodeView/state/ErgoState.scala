@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.state
 
 import java.io.File
 
-import org.ergoplatform.ErgoBox.R4
+import org.ergoplatform.ErgoBox.{AdditionalRegisters, R4, TokenId}
 import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
@@ -16,13 +16,13 @@ import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.MinimalState
 import scorex.core.validation.ValidationResult.Valid
-import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationSettings}
+import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.core.{VersionTag, idToVersion}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.AtLeast
-import sigmastate.Values.{ByteArrayConstant, IntConstant, SigmaPropConstant}
+import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.serialization.ValueSerializer
 
@@ -102,7 +102,7 @@ object ErgoState extends ScorexLogging {
 
         lazy val boxes: Try[(List[ErgoBox], List[ErgoBox])] = dataBoxesTry.flatMap(db => boxesToSpendTry.map(bs => (db, bs)))
 
-        val vs = tx.validateStateless
+        val vs = tx.validateStateless()
           .validateNoFailure(txBoxesToSpend, boxesToSpendTry)
           .validateNoFailure(txDataBoxes, dataBoxesTry)
           .payload[Long](r.value)
@@ -115,7 +115,13 @@ object ErgoState extends ScorexLogging {
         accCostTry
     }
 
-    execTx(transactions.toList, Valid[Long](0L))
+    // Skip v1 block transactions validation if corresponding setting is on
+    if (currentStateContext.blockVersion == 1 &&
+          currentStateContext.ergoSettings.nodeSettings.skipV1TransactionsValidation) {
+      Valid(0L)
+    } else {
+      execTx(transactions.toList, Valid[Long](0L))
+    }
   }
 
   /**
@@ -141,6 +147,20 @@ object ErgoState extends ScorexLogging {
     (toRemove.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
   }
 
+  private def createBox(value: Long,
+                        ergoTree: ErgoTree,
+                        creationHeight: Int,
+                        additionalTokens: Seq[(TokenId, Long)] = Nil,
+                        additionalRegisters: AdditionalRegisters = Map.empty,
+                        transactionId: ModifierId = ErgoBox.allZerosModifierId,
+                        boxIndex: Short = 0): ErgoBox = {
+    import sigmastate.eval._
+    new ErgoBox(value, ergoTree,
+      CostingSigmaDslBuilder.Colls.fromArray(additionalTokens.toArray[(TokenId, Long)]),
+      additionalRegisters,
+      transactionId, boxIndex, creationHeight)
+  }
+
   /**
     * Genesis box that contains all coins to be collected by Ergo foundation.
     * Box is protected by the script that allows to take part of them every block
@@ -155,7 +175,7 @@ object ErgoState extends ScorexLogging {
     val protectionBytes = ValueSerializer.serialize(protection)
     val value = emission.foundersCoinsTotal - EmissionRules.CoinsInOneErgo
     val prop = ErgoScriptPredef.foundationScript(settings.monetary)
-    ErgoBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map(R4 -> ByteArrayConstant(protectionBytes)))
+    createBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map(R4 -> ByteArrayConstant(protectionBytes)))
   }
 
   /**
@@ -165,7 +185,7 @@ object ErgoState extends ScorexLogging {
   private def genesisEmissionBox(chainSettings: ChainSettings): ErgoBox = {
     val value = chainSettings.emissionRules.minersCoinsTotal
     val prop = chainSettings.monetary.emissionBoxProposition
-    ErgoBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map())
+    createBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map())
   }
 
   /**
@@ -175,7 +195,7 @@ object ErgoState extends ScorexLogging {
   private def noPremineBox(chainSettings: ChainSettings): ErgoBox = {
     val proofsBytes = chainSettings.noPremineProof.map(b => ByteArrayConstant(b.getBytes("UTF-8")))
     val proofs = ErgoBox.nonMandatoryRegisters.zip(proofsBytes).toMap
-    ErgoBox(EmissionRules.CoinsInOneErgo, Constants.FalseLeaf, ErgoHistory.EmptyHistoryHeight, Seq(), proofs)
+    createBox(EmissionRules.CoinsInOneErgo, Constants.FalseLeaf, ErgoHistory.EmptyHistoryHeight, Seq(), proofs)
   }
 
   /**

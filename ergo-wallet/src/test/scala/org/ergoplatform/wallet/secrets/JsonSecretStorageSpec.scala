@@ -1,14 +1,15 @@
 package org.ergoplatform.wallet.secrets
 
 import org.ergoplatform.wallet.settings.SecretStorageSettings
-import org.ergoplatform.wallet.utils.{FileUtils, Generators}
-import org.scalatest.{Matchers, PropSpec}
-import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
+import org.ergoplatform.wallet.utils.{Generators, FileUtils}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 class JsonSecretStorageSpec
-  extends PropSpec
+  extends AnyPropSpec
     with Matchers
-    with ScalaCheckDrivenPropertyChecks
+    with ScalaCheckPropertyChecks
     with Generators
     with FileUtils {
 

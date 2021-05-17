@@ -1,26 +1,30 @@
 {
   "files": {
-    "main.css": "./static/css/main.de2ea70b.chunk.css",
-    "main.js": "./static/js/main.48aabfb3.chunk.js",
-    "main.js.map": "./static/js/main.48aabfb3.chunk.js.map",
-    "runtime-main.js": "./static/js/runtime-main.be567568.js",
-    "runtime-main.js.map": "./static/js/runtime-main.be567568.js.map",
-    "static/css/2.a94a8b68.chunk.css": "./static/css/2.a94a8b68.chunk.css",
-    "static/js/2.365d2821.chunk.js": "./static/js/2.365d2821.chunk.js",
-    "static/js/2.365d2821.chunk.js.map": "./static/js/2.365d2821.chunk.js.map",
-    "index.html": "./index.html",
-    "precache-manifest.db54e45f05ed1fa6e4ed3bb03fbaf4cc.js": "./precache-manifest.db54e45f05ed1fa6e4ed3bb03fbaf4cc.js",
-    "service-worker.js": "./service-worker.js",
-    "static/css/2.a94a8b68.chunk.css.map": "./static/css/2.a94a8b68.chunk.css.map",
-    "static/css/main.de2ea70b.chunk.css.map": "./static/css/main.de2ea70b.chunk.css.map",
-    "static/media/index.scss": "./static/media/Roboto-Thin.89e2666c.ttf",
-    "static/media/logotype_white.svg": "./static/media/logotype_white.4dcfd639.svg"
+    "main.css": "/static/css/main.0e9161bb.chunk.css",
+    "main.js": "/static/js/main.3c3e7be0.chunk.js",
+    "main.js.map": "/static/js/main.3c3e7be0.chunk.js.map",
+    "runtime-main.js": "/static/js/runtime-main.219240e0.js",
+    "runtime-main.js.map": "/static/js/runtime-main.219240e0.js.map",
+    "static/css/2.9338f6a1.chunk.css": "/static/css/2.9338f6a1.chunk.css",
+    "static/js/2.7f3897d7.chunk.js": "/static/js/2.7f3897d7.chunk.js",
+    "static/js/2.7f3897d7.chunk.js.map": "/static/js/2.7f3897d7.chunk.js.map",
+    "index.html": "/index.html",
+    "precache-manifest.afcf3f0cc9867c165cadb68757203faa.js": "/precache-manifest.afcf3f0cc9867c165cadb68757203faa.js",
+    "service-worker.js": "/service-worker.js",
+    "static/css/2.9338f6a1.chunk.css.map": "/static/css/2.9338f6a1.chunk.css.map",
+    "static/css/main.0e9161bb.chunk.css.map": "/static/css/main.0e9161bb.chunk.css.map",
+    "static/media/index.scss": "/static/media/Roboto-Thin.89e2666c.ttf",
+    "static/media/close.feae5a5c.svg": "/static/media/close.feae5a5c.svg",
+    "static/media/copy.icon.835ebda7.svg": "/static/media/copy.icon.835ebda7.svg",
+    "static/media/logotype_white.svg": "/static/media/logotype_white.4dcfd639.svg",
+    "static/media/redo-arrow-symbol.e801de31.svg": "/static/media/redo-arrow-symbol.e801de31.svg",
+    "static/media/remove.94c0849a.svg": "/static/media/remove.94c0849a.svg"
   },
   "entrypoints": [
-    "static/js/runtime-main.be567568.js",
-    "static/css/2.a94a8b68.chunk.css",
-    "static/js/2.365d2821.chunk.js",
-    "static/css/main.de2ea70b.chunk.css",
-    "static/js/main.48aabfb3.chunk.js"
+    "static/js/runtime-main.219240e0.js",
+    "static/css/2.9338f6a1.chunk.css",
+    "static/js/2.7f3897d7.chunk.js",
+    "static/css/main.0e9161bb.chunk.css",
+    "static/js/main.3c3e7be0.chunk.js"
   ]
 }

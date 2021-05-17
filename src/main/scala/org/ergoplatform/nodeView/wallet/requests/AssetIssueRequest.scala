@@ -23,21 +23,24 @@ import sigmastate.Values.EvaluatedValue
   * additional registers (R7, R8, R9) could be used for asset-specific information
   */
 case class AssetIssueRequest(addressOpt: Option[ErgoAddress],
+                             valueOpt: Option[Long],
                              amount: Amount,
                              name: String,
                              description: String,
                              decimals: Int,
-                             registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]]) extends TransactionRequest
+                             registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]])
+  extends TransactionGenerationRequest
 
 object AssetIssueRequest {
 
   def apply(address: ErgoAddress,
+            valueOpt: Option[Long],
             amount: Amount,
             name: String,
             description: String,
             decimals: Int,
             registers: Option[Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]]] = None): AssetIssueRequest =
-    new AssetIssueRequest(Some(address), amount, name, description, decimals, registers)
+    new AssetIssueRequest(Some(address), valueOpt, amount, name, description, decimals, registers)
 }
 
 class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssueRequest] with ApiCodecs {
@@ -47,6 +50,7 @@ class AssetIssueRequestEncoder(settings: ErgoSettings) extends Encoder[AssetIssu
   def apply(request: AssetIssueRequest): Json = {
     Json.obj(
       "address" -> request.addressOpt.asJson,
+      "ergValue" -> request.valueOpt.asJson,
       "amount" -> request.amount.asJson,
       "name" -> request.name.asJson,
       "description" -> request.description.asJson,
@@ -66,12 +70,13 @@ class AssetIssueRequestDecoder(settings: ErgoSettings) extends Decoder[AssetIssu
   def apply(cursor: HCursor): Decoder.Result[AssetIssueRequest] = {
     for {
       address <- cursor.downField("address").as[Option[ErgoAddress]]
+      value <- cursor.downField("ergValue").as[Option[Long]]
       amount <- cursor.downField("amount").as[Amount]
       name <- cursor.downField("name").as[String]
       description <- cursor.downField("description").as[String]
       decimals <- cursor.downField("decimals").as[Int]
       registers <- cursor.downField("registers").as[Option[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]]
-    } yield AssetIssueRequest(address, amount, name, description, decimals, registers)
+    } yield AssetIssueRequest(address, value, amount, name, description, decimals, registers)
   }
 
 }

@@ -1,16 +1,20 @@
-import scala.util.Try
+// this values should be in sync with root (i.e. ../build.sbt)
+val scala211 = "2.11.12"
+val scala212 = "2.12.10"
 
-val circeVersion = "0.10.0"
+val circeVersion = "0.13.0"
+val circeVersion211 = "0.10.0"
 
 libraryDependencies ++= Seq(
   "org.scodec" %% "scodec-bits" % "1.1.6",
 
-  "io.circe" %% "circe-core" % circeVersion,
-  "io.circe" %% "circe-generic" % circeVersion,
-  "io.circe" %% "circe-parser" % circeVersion,
+  "io.circe" %% "circe-core" % (if (scalaVersion.value == scala211) circeVersion211 else circeVersion),
+  "io.circe" %% "circe-generic" % (if (scalaVersion.value == scala211) circeVersion211 else circeVersion),
+  "io.circe" %% "circe-parser" % (if (scalaVersion.value == scala211) circeVersion211 else circeVersion),
 
-  "org.scalatest" %% "scalatest" % "3.0.8" % "test",
-  "org.scalacheck" %% "scalacheck" % "1.14.1" % "test",
+  "org.scalatest" %% "scalatest" % "3.1.1" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.14.3" % "test",
+  "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test
 )
 
 publishMavenStyle in ThisBuild := true

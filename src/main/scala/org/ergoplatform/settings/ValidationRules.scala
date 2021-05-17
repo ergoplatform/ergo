@@ -86,6 +86,9 @@ object ValidationRules {
     txBoxPropositionSize -> RuleStatus(s => fatal(s"Box proposition size should not exceed ${MaxPropositionBytes.value}. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
+    txNegHeight -> RuleStatus(s => fatal(s"Transaction outputs should have non-negative creationHeight. $s"),
+      Seq(classOf[ErgoTransaction]),
+      mayBeDisabled = false),
 
     // header validation
     hdrGenesisParent -> RuleStatus(s => fatal(s"Genesis header should have genesis parent id. $s"),
@@ -134,6 +137,10 @@ object ValidationRules {
     hdrVotesUnknown -> RuleStatus(s => fatal(s"First header of an epoch should not contain a vote for unknown parameter. $s"),
       Seq(classOf[Header]),
       mayBeDisabled = true),
+    hdrCheckpointV2 -> RuleStatus(s => fatal(s"First version 2 header on the mainnet on height 417,729 should have " +
+      s"ID = 0ba60a7db44877aade553beb05200f7d67b586945418d733e455840d283e0508. $s"),
+      Seq(classOf[Header]),
+      mayBeDisabled = false),
 
     // block sections validation
     bsNoHeader -> RuleStatus(s => recoverable(s"A header for a modifier $s is not defined"),
@@ -236,6 +243,7 @@ object ValidationRules {
   val txScriptValidation: Short = 119
   val txBoxSize: Short = 120
   val txBoxPropositionSize: Short = 121
+  val txNegHeight: Short = 122
 
   // header validation
   val hdrGenesisParent: Short = 200
@@ -253,6 +261,7 @@ object ValidationRules {
   val hdrVotesDuplicates: Short = 213
   val hdrVotesContradictory: Short = 214
   val hdrVotesUnknown: Short = 215
+  val hdrCheckpointV2: Short = 216
 
   // block sections validation
   val alreadyApplied: Short = 300

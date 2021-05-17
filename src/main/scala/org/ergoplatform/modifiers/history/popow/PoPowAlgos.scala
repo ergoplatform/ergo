@@ -1,10 +1,13 @@
 package org.ergoplatform.modifiers.history.popow
 
+import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.Extension.InterlinksVectorPrefix
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.Constants
+import scorex.crypto.authds.merkle.MerkleProof
+import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.collection.mutable
@@ -29,7 +32,7 @@ case class PoPowParams(m: Int, k: Int)
   * Please note that for [KMZ17] we're using the version published @ Financial Cryptography 2020, which is different
   * from previously published versions on IACR eprint.
   */
-object PoPowAlgos {
+class PoPowAlgos(powScheme: AutolykosPowScheme) {
 
   private def log2(x: Double): Double = math.log(x) / math.log(2)
 
@@ -115,7 +118,7 @@ object PoPowAlgos {
   def maxLevelOf(header: Header): Int =
     if (!header.isGenesis) {
       val requiredTarget = org.ergoplatform.mining.q / RequiredDifficulty.decodeCompactBits(header.nBits)
-      val realTarget = header.powSolution.d
+      val realTarget = powScheme.powHit(header).doubleValue
       val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
       level.toInt
     } else {
@@ -200,7 +203,7 @@ object PoPowAlgos {
     val suffixTail = suffix.tail.map(_.header)
     val maxLevel = chain.dropRight(params.k).last.interlinks.size - 1
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height)
-    PoPowProof(m, k, prefix, suffixHead, suffixTail)
+    PoPowProof(this, m, k, prefix, suffixHead, suffixTail)
   }
 
   /**
@@ -270,7 +273,16 @@ object PoPowAlgos {
     val genesisHeight = 1
     val prefix = genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)
 
-    PoPowProof(m, k, prefix, suffixHead, suffixTail)
+    PoPowProof(this, m, k, prefix, suffixHead, suffixTail)
+  }
+
+  /**
+    * Proves the inclusion of an interlink pointer to blockId in the Merkle Tree of the given extension.
+    */
+  def proofForInterlink(ext: ExtensionCandidate, blockId: ModifierId): Option[MerkleProof[Digest32]] = {
+    ext.fields
+      .find({ case (key, value) => key.head == InterlinksVectorPrefix && (value.tail sameElements idToBytes(blockId)) })
+      .flatMap({ case (key, _) => ext.proofFor(key) })
   }
 
 }

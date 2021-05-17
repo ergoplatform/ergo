@@ -6,7 +6,6 @@ import org.ergoplatform.ErgoBox.{BoxId, R4}
 import org.ergoplatform._
 import org.ergoplatform.mining._
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.popow.PoPowAlgos._
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Extension, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -21,6 +20,7 @@ import scorex.util.encode.Base16
 import sigmastate.Values.ByteArrayConstant
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.interpreter.ProverResult
+import sigmastate.helpers.TestingHelpers._
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Random, Try}
@@ -39,12 +39,13 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val height = us.stateContext.currentHeight
       val inputs = IndexedSeq(Input(foundersBox.id, emptyProverResult))
       val remaining = emission.remainingFoundationRewardAtHeight(height)
-      val newFoundersBox = ErgoBox(remaining, foundersBox.ergoTree, height, Seq(), Map(R4 -> foundersBox.additionalRegisters(R4)))
-      val rewardBox = ErgoBox(foundersBox.value - remaining, defaultProver.secrets.last.publicImage, height)
+      val newFoundersBox = testBox(remaining, foundersBox.ergoTree, height, Seq(), Map(R4 -> foundersBox.additionalRegisters(R4)))
+      val rewardBox = testBox(foundersBox.value - remaining, defaultProver.hdKeys.last.publicImage, height)
       val newBoxes = IndexedSeq(newFoundersBox, rewardBox)
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx: ErgoTransaction = ErgoTransaction(defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get)
-      us.validateWithCost(tx, None, Constants.DefaultComplexityLimit).get should be <= 100000L
+      val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
+      us.validateWithCost(tx, None, complexityLimit).get should be <= 100000L
       val block1 = validFullBlock(Some(lastBlock), us, Seq(ErgoTransaction(tx)))
       us = us.applyModifier(block1).get
       foundersBox = tx.outputs.head
@@ -60,7 +61,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     val settingsPks = settings.chainSettings.foundersPubkeys
       .map(str => groupElemFromBytes(Base16.decode(str).get))
       .map(pk => ProveDlog(pk))
-    settingsPks.count(defaultProver.pubKeys.contains) shouldBe 2
+    settingsPks.count(defaultProver.hdPubKeys.map(_.key).contains) shouldBe 2
 
     forAll(defaultHeaderGen) { header =>
       val rewardPk = new DLogProverInput(BigInt(header.height).bigInteger).publicImage
@@ -74,15 +75,16 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         height = height,
         parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId))
       val adProofs = ADProofs(realHeader.id, adProofBytes)
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), genExtension(realHeader, us.stateContext), Some(adProofs))
+      val bt = BlockTransactions(realHeader.id, Header.InitialVersion, txs)
+      val fb = ErgoFullBlock(realHeader, bt, genExtension(realHeader, us.stateContext), Some(adProofs))
       us = us.applyModifier(fb).get
       val remaining = emission.remainingFoundationRewardAtHeight(height)
 
       // check validity of transaction, spending founders box
       val inputs = IndexedSeq(Input(foundersBox.id, emptyProverResult))
       val newBoxes = IndexedSeq(
-        ErgoBox(remaining, foundersBox.ergoTree, height, Seq(), foundersBox.additionalRegisters),
-        ErgoBox(foundersBox.value - remaining, rewardPk, height, Seq())
+        testBox(remaining, foundersBox.ergoTree, height, Seq(), foundersBox.additionalRegisters),
+        testBox(foundersBox.value - remaining, rewardPk, height, Seq())
       )
       val unsignedTx = new UnsignedErgoTransaction(inputs, IndexedSeq(), newBoxes)
       val tx = defaultProver.sign(unsignedTx, IndexedSeq(foundersBox), emptyDataBoxes, us.stateContext).get
@@ -151,7 +153,8 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         height = height,
         parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId))
       val adProofs = ADProofs(realHeader.id, adProofBytes)
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), genExtension(realHeader, us.stateContext), Some(adProofs))
+      val bt = BlockTransactions(realHeader.id, 1: Byte, txs)
+      val fb = ErgoFullBlock(realHeader, bt, genExtension(realHeader, us.stateContext), Some(adProofs))
       us = us.applyModifier(fb).get
       height = height + 1
     }
@@ -177,7 +180,8 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
         parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId))
       val adProofs = ADProofs(realHeader.id, adProofBytes)
       height = height + 1
-      val fb = ErgoFullBlock(realHeader, BlockTransactions(realHeader.id, txs), genExtension(realHeader, us.stateContext), Some(adProofs))
+      val bt = BlockTransactions(realHeader.id, Header.InitialVersion, txs)
+      val fb = ErgoFullBlock(realHeader, bt, genExtension(realHeader, us.stateContext), Some(adProofs))
       us = us.applyModifier(fb).get
       fb
     }
@@ -312,7 +316,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val digest = us.proofsForTransactions(txs).get._2
       val wBlock = invalidErgoFullBlockGen.sample.get
       val block = wBlock.copy(header = wBlock.header.copy(height = 1))
-      val newSC = us.stateContext.appendFullBlock(block, votingSettings).get
+      val newSC = us.stateContext.appendFullBlock(block).get
       us.applyTransactions(txs, digest, newSC).get
     }
   }
@@ -336,8 +340,9 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
       val digest = us.proofsForTransactions(txs).get._2
 
       val header = invalidHeaderGen.sample.get.copy(stateRoot = digest, height = 1)
-      val fb = new ErgoFullBlock(header, new BlockTransactions(header.id, txs), genExtension(header, us.stateContext), None)
-      val newSC = us.stateContext.appendFullBlock(fb, votingSettings).get
+      val bt = new BlockTransactions(header.id, 1: Byte, txs)
+      val fb = new ErgoFullBlock(header, bt, genExtension(header, us.stateContext), None)
+      val newSC = us.stateContext.appendFullBlock(fb).get
       us.applyTransactions(txs, digest, newSC).get
     }
   }
@@ -456,9 +461,8 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     }
   }
 
-
   private def genExtension(header: Header, sc: ErgoStateContext): Extension = {
-    interlinksToExtension(updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt)).toExtension(header.id)
+    popowAlgos.interlinksToExtension(popowAlgos.updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt)).toExtension(header.id)
   }
 
 }

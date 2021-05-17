@@ -2,7 +2,6 @@ package org.ergoplatform.modifiers.history.popow
 
 import io.circe.Encoder
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
-import org.ergoplatform.modifiers.history.popow.PoPowAlgos.{bestArg, lowestCommonAncestor, maxLevelOf}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions.LongOps
@@ -21,13 +20,14 @@ import scorex.util.Extensions.LongOps
   * @param suffixHead - first header of the suffix
   * @param suffixTail - tail of the proof suffix headers
   */
-case class PoPowProof(m: Int,
+case class PoPowProof(popowAlgos: PoPowAlgos,
+                      m: Int,
                       k: Int,
                       prefix: Seq[PoPowHeader],
                       suffixHead: PoPowHeader,
                       suffixTail: Seq[Header]) {
 
-  def serializer: ScorexSerializer[PoPowProof] = PoPowProofSerializer
+  def serializer: ScorexSerializer[PoPowProof] = new PoPowProofSerializer(popowAlgos)
 
   def headersChain: Seq[Header] = prefixHeaders ++ suffixHeaders
 
@@ -35,7 +35,7 @@ case class PoPowProof(m: Int,
 
   def suffixHeaders: Seq[Header] = suffixHead.header +: suffixTail
 
-  def chainOfLevel(l: Int): Seq[PoPowHeader] = prefix.filter(x => maxLevelOf(x.header) >= l)
+  def chainOfLevel(l: Int): Seq[PoPowHeader] = prefix.filter(x => popowAlgos.maxLevelOf(x.header) >= l)
 
   /**
     * Implementation of the ≥ algorithm from [KMZ17], see Algorithm 4
@@ -45,10 +45,10 @@ case class PoPowProof(m: Int,
     */
   def isBetterThan(that: PoPowProof): Boolean = {
     if (this.isValid() && that.isValid()) {
-      lowestCommonAncestor(headersChain, that.headersChain)
+      popowAlgos.lowestCommonAncestor(headersChain, that.headersChain)
         .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
         .exists({ case (thisDivergingChain, thatDivergingChain) =>
-          bestArg(thisDivergingChain)(m) > bestArg(thatDivergingChain)(m) })
+          popowAlgos.bestArg(thisDivergingChain)(m) > popowAlgos.bestArg(thatDivergingChain)(m) })
     } else {
       this.isValid()
     }
@@ -105,7 +105,7 @@ object PoPowProof {
 
 }
 
-object PoPowProofSerializer extends ScorexSerializer[PoPowProof] {
+class PoPowProofSerializer(poPowAlgos: PoPowAlgos) extends ScorexSerializer[PoPowProof] {
 
   override def serialize(obj: PoPowProof, w: Writer): Unit = {
     w.putUInt(obj.m)
@@ -142,7 +142,7 @@ object PoPowProofSerializer extends ScorexSerializer[PoPowProof] {
       val size = r.getUInt().toIntExact
       HeaderSerializer.parseBytes(r.getBytes(size))
     }
-    PoPowProof(m, k, prefix, suffixHead, suffixTail)
+    PoPowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail)
   }
 
 }

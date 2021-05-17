@@ -1,24 +1,17 @@
 package org.ergoplatform.local
 
-import org.ergoplatform.modifiers.history.popow.{PoPowProof, PoPowHeader, PoPowParams}
-import org.ergoplatform.modifiers.history.popow.PoPowAlgos._
+import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators}
-import org.scalacheck.Gen
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import org.scalatest.{Matchers, PropSpec}
-import scorex.util.ModifierId
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.propspec.AnyPropSpec
 
-class PoPoWVerifierSpec
-  extends PropSpec
-    with Matchers
-    with ChainGenerator
-    with ErgoGenerators
-    with GeneratorDrivenPropertyChecks {
+
+class PoPoWVerifierSpec extends AnyPropSpec with Matchers with ChainGenerator with ErgoGenerators {
 
   private val poPowParams = PoPowParams(30, 30)
   val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
-    c.map(b => PoPowHeader(b.header, unpackInterlinks(b.extension.fields).get))
+    c.map(b => PoPowHeader(b.header, popowAlgos.unpackInterlinks(b.extension.fields).get))
 
   property("processes new proofs") {
     val sizes = Seq(1000)
@@ -28,8 +21,8 @@ class PoPoWVerifierSpec
       val shortChain = toPoPoWChain(baseChain)
       val longChain = toPoPoWChain(baseChain ++ genChain(5, branchPoint).tail)
 
-      val shortProof = prove(shortChain)(poPowParams)
-      val longProof = prove(longChain)(poPowParams)
+      val shortProof = popowAlgos.prove(shortChain)(poPowParams)
+      val longProof = popowAlgos.prove(longChain)(poPowParams)
 
       val verifier = new PoPoWVerifier(poPowParams, baseChain.head.id)
       verifier.bestChain.length shouldBe 0

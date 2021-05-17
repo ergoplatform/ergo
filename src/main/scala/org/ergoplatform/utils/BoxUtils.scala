@@ -7,7 +7,6 @@ import scorex.util.ModifierId
 import sigmastate.SType
 import sigmastate.Values.{ErgoTree, EvaluatedValue}
 import sigmastate.eval._
-import sigmastate.eval.Extensions._
 import special.collection.Coll
 
 object BoxUtils {

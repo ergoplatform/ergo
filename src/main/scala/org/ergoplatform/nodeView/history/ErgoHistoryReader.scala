@@ -1,9 +1,10 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader, PoPowParams, PoPowProof}
+import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams, PoPowProof}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.popow.PoPoWProofsProcessor
@@ -124,35 +125,35 @@ trait ErgoHistoryReader
   }
 
   /**
-    * @param info other's node sync info
+    * Calculating continuation from common header which will send to another node
+    * if comparison status is YOUNGER of FORK.
+    *
+    * @param syncInfo other's node sync info
     * @param size max return size
-    * @return Ids of headerss, that node with info should download and apply to synchronize
+    * @return Ids of headers, that node with info should download and apply to synchronize
     */
-  override def continuationIds(info: ErgoSyncInfo, size: Int): ModifierIds =
+  override def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds =
     if (isEmpty) {
-      info.startingPoints
-    } else if (info.lastHeaderIds.isEmpty) {
-      val heightFrom = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
-      headerIdsAtHeight(heightFrom).headOption.toSeq.flatMap { startId =>
-        typedModifierById[Header](startId).toSeq.flatMap { startHeader =>
-          val headers = headerChainBack(size, startHeader, _ => false)
-            .ensuring(_.headers.exists(_.isGenesis), "Should always contain genesis header")
-          headers.headers.flatMap(h => Seq((Header.modifierTypeId, h.id)))
-        }
+      // if no any header applied yet, return identifiers from other node's sync info
+      syncInfo.startingPoints
+    } else if (syncInfo.lastHeaderIds.isEmpty) {
+      // if other node has no headers yet, send up to `size` headers from genesis
+      val heightTo = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
+      (ErgoHistory.GenesisHeight to heightTo).flatMap { height =>
+        bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
       }
     } else {
-      val ids = info.lastHeaderIds
+      // else, find common header with the other node and send up to `size` headers from it (including the point)
+      val ids = syncInfo.lastHeaderIds
       val branchingPointOpt: Option[ModifierId] = ids.view.reverse
         .find(m => isInBestChain(m))
         .orElse(if (ids.contains(PreGenesisHeader.id)) Some(PreGenesisHeader.id) else None)
       branchingPointOpt.toSeq.flatMap { branchingPoint =>
-        val otherNodeHeight = heightOf(branchingPoint).getOrElse(PreGenesisHeader.height)
-        val heightFrom = Math.min(headersHeight, otherNodeHeight + size)
-        val startId = headerIdsAtHeight(heightFrom).head
-        val startHeader = typedModifierById[Header](startId).get
-        val headerIds = headerChainBack(size, startHeader, _.parentId == branchingPointOpt)
-          .headers.map(Header.modifierTypeId -> _.id)
-        headerIds
+        val otherNodeHeight = heightOf(branchingPoint).getOrElse(ErgoHistory.GenesisHeight)
+        val heightTo = Math.min(headersHeight, otherNodeHeight + size)
+        (otherNodeHeight to heightTo).flatMap { height =>
+          bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
+        }
       }
     }
 
@@ -200,16 +201,15 @@ trait ErgoHistoryReader
   /**
     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
     */
-  def lastHeaders(count: Int, offset: Int = 0): HeaderChain =
-    bestHeaderOpt
-      .map(bestHeader => headerChainBack(count, bestHeader, _ => false).drop(offset))
-      .getOrElse(HeaderChain.empty)
+  def lastHeaders(count: Int, offset: Int = 0): HeaderChain = bestHeaderOpt
+    .map(bestHeader => headerChainBack(count, bestHeader, _ => false).drop(offset)).getOrElse(HeaderChain.empty)
 
   /**
-    * @return ids of headers starting from offset, no more than limit
+    * @return ids of headers (max. limit) starting from offset
     */
-  def headerIdsAt(offset: Int = 0, limit: Int): Seq[ModifierId] = (offset until (limit + offset))
-    .flatMap(h => headerIdsAtHeight(h).headOption)
+  def headerIdsAt(offset: Int, limit: Int): Seq[ModifierId] = {
+    (offset until (limit + offset)).flatMap(height => bestHeaderIdAtHeight(height))
+  }
 
   override def applicableTry(modifier: ErgoPersistentModifier): Try[Unit] = {
     modifier match {
@@ -235,6 +235,29 @@ trait ErgoHistoryReader
         Some(ErgoFullBlock(header, txs, ext, None))
       case _ => None
     }
+  }
+
+  /**
+    * Returns full block from a best headers-chain at given height
+    * @param height - height to get the full block from
+    * @return - full block or None if there's no such a block at given height
+    */
+  def bestFullBlockAt(height: Height): Option[ErgoFullBlock] = {
+    bestHeaderIdAtHeight(height)
+      .flatMap(headerId => typedModifierById[Header](headerId))
+      .flatMap(header => getFullBlock(header))
+  }
+
+
+  /**
+    * Returns block transactions from a best headers-chain at given height
+    * @param height - height to get the block transactions from
+    * @return - block transactions or None if there's no such a block at given height
+    */
+  def bestBlockTransactionsAt(height: Height): Option[BlockTransactions] = {
+    bestHeaderIdAtHeight(height)
+      .flatMap(headerId => typedModifierById[Header](headerId))
+      .flatMap(header => typedModifierById[BlockTransactions](header.transactionsId))
   }
 
   /**
@@ -330,7 +353,7 @@ trait ErgoHistoryReader
   def popowHeader(headerId: ModifierId): Option[PoPowHeader] = {
     this.typedModifierById[Header](headerId).flatMap(h =>
       typedModifierById[Extension](h.extensionId).flatMap{ext =>
-        PoPowAlgos.unpackInterlinks(ext.fields).toOption.map{interlinks =>
+        popowAlgos.unpackInterlinks(ext.fields).toOption.map{interlinks =>
           PoPowHeader(h, interlinks)
         }
       }
@@ -357,7 +380,7 @@ trait ErgoHistoryReader
     */
   def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[PoPowProof] = Try {
     val proofParams = PoPowParams(m, k)
-    PoPowAlgos.prove(this, headerIdOpt)(proofParams)
+    popowAlgos.prove(this, headerIdOpt)(proofParams)
   }
 
 }

@@ -1,3 +1,6 @@
+mainnet
+devnet
+
 # IDE/Editor files
 .idea
 .ensime
@@ -27,7 +30,6 @@ my*.conf
 # Core latex/pdflatex auxiliary files:
 *.aux
 *.lof
-*.log
 *.lot
 *.fls
 *.out
@@ -43,6 +45,7 @@ my*.conf
 *.data
 ergo/
 .ergo/
+.ergo_test/
 
 # for temporary experiments
 sheet.scala

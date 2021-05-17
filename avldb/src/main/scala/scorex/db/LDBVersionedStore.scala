@@ -13,38 +13,41 @@ import scala.util.Try
 
 
 /**
-  * Implementation of versioned storage on top of leveldb.
-  * This class implements IODB io.iohk.iodb.Store interface.
-  * Only this interface is used from IODB to avoid changes in existed code which works with this interface.
+  * Implementation of versioned storage on top of LevelDB.
+  *
   * LevelDB implementation of versioned store is based on maintaining "compensating transaction" list,
   * list of reverse operations needed to undo changes of applied transactions.
-  * This list is stored in separate levedb database (undo) and size of list is limited by keepVersions parameter.
-  * If keepVersions == 0, then undo list is not maintained and rollback of the committed transactions is no possible.
+  * This list is stored in separate LevelDB database (undo) and size of list is limited by the keepVersions parameter.
+  * If keepVersions == 0, then undo list is not maintained and rollback of the committed transactions is not possible.
+  *
+  * @param dir - folder to store data
+  * @param keepVersions - number of versions to keep
+  *
   */
-class LDBVersionedStore(val dir: File, val keepVersions: Int) extends KVStore {
+class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends KVStoreReader {
   type VersionID = Array[Byte]
 
   type LSN = Long // logical serial number: type used to provide order of records in undo list
+
   override val db: DB = createDB(dir, "ldb_main") // storage for main data
   override val lock = new ReentrantReadWriteLock()
 
   private val undo: DB = createDB(dir, "ldb_undo") // storage for undo data
   private var lsn: LSN = getLastLSN // last assigned logical serial number
   private var versionLsn = ArrayBuffer.empty[LSN] // LSNs of versions (var because we need to invert this array)
-  private val versions: ArrayBuffer[VersionID] = getAllVersions // array of all kept versions
-  private val writeOptions = defaultWriteOptions
+
+  // mutable array of all the kept versions
+  private val versions: ArrayBuffer[VersionID] = getAllVersions
   private var lastVersion: Option[VersionID] = versions.lastOption
+
+  //default write options, no sync!
+  private val writeOptions = new WriteOptions()
 
   private def createDB(dir: File, storeName: String): DB = {
     val op = new Options()
     op.createIfMissing(true)
     op.paranoidChecks(true)
     factory.open(new File(dir, storeName), op)
-  }
-
-  private def defaultWriteOptions: WriteOptions = {
-    val options = new WriteOptions()
-    options
   }
 
   /** returns value associated with the key or throws `NoSuchElementException` */
@@ -70,7 +73,6 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int) extends KVStore {
       consumer(key, value)
     }
   }
-
 
   def processAll(consumer: (K, V) => Unit): Unit = {
     lock.readLock().lock()
@@ -154,7 +156,7 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int) extends KVStore {
     // As far as org.iq80.leveldb doesn't support iteration in reverse order, we have to iterate in the order
     // of decreasing LSNs and then revert version list. For each version we store first (smallest) LSN.
     versionLsn += lastLsn // first LSN of oldest version
-    versionLsn = versionLsn.reverse // LSNs should be in ascent order
+    versionLsn = versionLsn.reverse // LSNs should be in ascending order
     versionLsn.remove(versionLsn.size - 1) // remove last element which corresponds to next assigned LSN
     versions.reverse
   }
@@ -207,7 +209,7 @@ class LDBVersionedStore(val dir: File, val keepVersions: Int) extends KVStore {
         }
       })
       for ((key, v) <- toUpdate) {
-        assert(key.length != 0) // empty keys are now allowed
+        assert(key.length != 0) // empty keys are not allowed
         if (keepVersions > 0) {
           val old = db.get(key)
           undoBatch.put(newLSN(), serializeUndo(versionID, key, old))

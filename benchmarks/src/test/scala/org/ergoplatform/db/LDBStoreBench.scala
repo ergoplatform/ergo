@@ -23,7 +23,6 @@ object LDBStoreBench
 
   private val options = new Options()
   options.createIfMissing(true)
-  private val db0 = factory.open(createTempDir, options)
   private val db1 = factory.open(createTempDir, options)
 
   private def storeLDB() = new LDBKVStore(db1)

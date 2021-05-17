@@ -5,7 +5,8 @@ import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.{AutolykosPowScheme, DefaultFakePowScheme}
 import org.ergoplatform.modifiers.history.ExtensionCandidate
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, UpcomingStateContext}
+import org.ergoplatform.modifiers.history.popow.PoPowAlgos
+import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConstants, StateType, UpcomingStateContext}
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
@@ -28,7 +29,7 @@ import scala.concurrent.duration._
 
 trait ErgoTestConstants extends ScorexLogging {
 
-  implicit val votingSettings: VotingSettings = VotingSettings(1024, 32, 128)
+  implicit val votingSettings: VotingSettings = VotingSettings(1024, 32, 128, 32 * 1024, "01")
   val validationSettings: ErgoValidationSettings = ErgoValidationSettings.initial
   implicit val validationSettingsNoIl: ErgoValidationSettings = validationSettings
     .updated(ErgoValidationSettingsUpdate(Seq(exIlUnableToValidate, exIlEncoding, exIlStructure, exEmpty), Seq()))
@@ -37,7 +38,14 @@ trait ErgoTestConstants extends ScorexLogging {
   val timeProvider: NetworkTimeProvider = ErgoTestHelpers.defaultTimeProvider
   val initSettings: ErgoSettings = ErgoSettings.read(Args(Some("src/test/resources/application.conf"), None))
 
-  val settings: ErgoSettings = initSettings
+  implicit val settings: ErgoSettings = initSettings
+
+  val popowAlgos = new PoPowAlgos(powScheme)
+
+  val lightModeSettings: ErgoSettings = initSettings.copy(
+    nodeSettings = initSettings.nodeSettings.copy(stateType = StateType.Digest)
+  )
+
   val emission: EmissionRules = settings.chainSettings.emissionRules
   val coinsTotal: Long = emission.coinsTotal
   val stateConstants: StateConstants = StateConstants(None, settings)
@@ -54,8 +62,8 @@ trait ErgoTestConstants extends ScorexLogging {
   val genesisEmissionBox: ErgoBox = ErgoState.genesisBoxes(settings.chainSettings).head
   val defaultProver: ErgoProvingInterpreter = ErgoProvingInterpreter(
     defaultRootSecret +: defaultChildSecrets, parameters)
-  val defaultMinerSecret: DLogProverInput = defaultProver.secrets.head
-  val defaultMinerSecretNumber: BigInt = defaultProver.secrets.head.w
+  val defaultMinerSecret: DLogProverInput = defaultProver.hdKeys.head.privateInput
+  val defaultMinerSecretNumber: BigInt = defaultProver.hdKeys.head.privateInput.w
   val defaultMinerPk: ProveDlog = defaultMinerSecret.publicImage
   val defaultMinerPkPoint: EcPointType = defaultMinerPk.h
 

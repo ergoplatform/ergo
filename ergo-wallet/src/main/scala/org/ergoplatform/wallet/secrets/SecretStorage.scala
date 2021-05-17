@@ -1,9 +1,6 @@
 package org.ergoplatform.wallet.secrets
 
 import java.io.File
-
-import sigmastate.basics.DLogProtocol
-
 import scala.util.Try
 
 trait SecretStorage {
@@ -17,5 +14,7 @@ trait SecretStorage {
   def unlock(pass: String): Try[Unit]
 
   def lock(): Unit
+
+  def checkSeed(mnemonic: String, mnemonicPassOpt: Option[String]): Boolean
 
 }

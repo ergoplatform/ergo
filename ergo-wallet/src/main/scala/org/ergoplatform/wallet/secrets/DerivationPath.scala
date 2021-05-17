@@ -1,9 +1,10 @@
 package org.ergoplatform.wallet.secrets
 
+import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import scorex.util.serialization.{Reader, Writer}
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * HD key derivation path (see: https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)
@@ -14,7 +15,10 @@ final case class DerivationPath(decodedPath: Seq[Int], publicBranch: Boolean) {
 
   def depth: Int = decodedPath.length
 
-  def index: Long = decodedPath.last
+  /**
+    * @return last element of the derivation path, e.g. 2 for m/1/2
+    */
+  def index: Int = decodedPath.last
 
   def isMaster: Boolean = depth == 1
 
@@ -22,16 +26,40 @@ final case class DerivationPath(decodedPath: Seq[Int], publicBranch: Boolean) {
   def encoded: String = {
     val masterPrefix = if (publicBranch) s"$PublicBranchMasterId/" else s"$PrivateBranchMasterId/"
     val tailPath = decodedPath.tail
-        .map(x => if (Index.isHardened(x)) s"${x - Index.HardRangeStart}'" else x.toString)
-        .mkString("/")
+      .map(x => if (Index.isHardened(x)) s"${x - Index.HardRangeStart}'" else x.toString)
+      .mkString("/")
     masterPrefix + tailPath
   }
 
   def extended(idx: Int): DerivationPath = DerivationPath(decodedPath :+ idx, publicBranch)
 
-  def toPublic: DerivationPath = this.copy(publicBranch = true)
+  /**
+    * @return path with last element of the derivation path being increased, e.g. m/1/2 -> m/1/3
+    */
+  def increased: DerivationPath = DerivationPath(decodedPath.dropRight(1) :+ (index + 1), publicBranch)
+
+  /**
+    * Convert the derivation path to public branch. See BIP-32 for details.
+    * @return derivation path from the public branch
+    */
+  def toPublicBranch: DerivationPath = this.copy(publicBranch = true)
+
+  /**
+    * Convert the derivation path to private branch. See BIP-32 for details.
+    * @return derivation path from the private branch
+    */
+  def toPrivateBranch: DerivationPath = this.copy(publicBranch = false)
+
+  /**
+    * @return whether derivation path corresponds to EIP-3
+    */
+  def isEip3: Boolean = {
+    decodedPath.tail.startsWith(Constants.eip3DerivationPath.decodedPath.tail.take(3))
+  }
 
   override def toString: String = encoded
+
+  def bytes: Array[Byte] = DerivationPathSerializer.toBytes(this)
 }
 
 object DerivationPath {
@@ -54,6 +82,51 @@ object DerivationPath {
       }
       val isPublicBranch = split.head == PublicBranchMasterId
       pathTry.map(DerivationPath(_, isPublicBranch))
+    }
+  }
+
+  /**
+    * Finds next available path index for a new key.
+    * @param secrets - secrets previously generated
+    * @param usePreEip3Derivation - whether to use pre-EIP3 derivation or not
+    */
+  def nextPath(secrets: IndexedSeq[ExtendedSecretKey],
+               usePreEip3Derivation: Boolean): Try[DerivationPath] = {
+
+    def pathSequence(secret: ExtendedSecretKey): Seq[Int] = secret.path.decodedPath.tail
+
+    @scala.annotation.tailrec
+    def nextPath(accPath: List[Int], remaining: Seq[Seq[Int]]): Try[DerivationPath] = {
+      if (!remaining.forall(_.isEmpty)) {
+        val maxChildIdx = remaining.flatMap(_.headOption).max
+        if (!Index.isHardened(maxChildIdx)) {
+          Success(DerivationPath(0 +: (accPath :+ maxChildIdx + 1), publicBranch = false))
+        } else {
+          nextPath(accPath :+ maxChildIdx, remaining.map(_.drop(1)))
+        }
+      } else {
+        val exc = new Exception("Out of non-hardened index space. Try to derive hardened key specifying path manually")
+        Failure(exc)
+      }
+    }
+
+    if (secrets.isEmpty || (secrets.size == 1 && secrets.head.path.isMaster)) {
+      // If pre-EIP3 generation, the first key generated after master's would be m/1, otherwise m/44'/429'/0'/0/0
+      val path = if(usePreEip3Derivation) {
+        Constants.preEip3DerivationPath
+      } else {
+        Constants.eip3DerivationPath
+      }
+      Success(path)
+    } else {
+      // If last secret corresponds to EIP-3 path, do EIP-3 derivation, otherwise, old derivation
+      // For EIP-3 derivation, we increase last segment, m/44'/429'/0'/0/0 -> m/44'/429'/0'/0/1 and so on
+      // For old derivation, we increase last non-hardened segment, m/1/1 -> m/2
+      if (secrets.last.path.isEip3) {
+        Success(secrets.last.path.increased)
+      } else {
+        nextPath(List.empty, secrets.map(pathSequence))
+      }
     }
   }
 

@@ -3,13 +3,13 @@ package org.ergoplatform.sanity
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.{BlockTransactions, HeaderSerializer}
+import org.ergoplatform.modifiers.history.{BlockTransactions, Header, HeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.{Args, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.scalacheck.Gen
 import scorex.core.network.ConnectedPeer
@@ -66,7 +66,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
         ncProbe.ref,
         vhProbe.ref,
         ErgoSyncInfoMessageSpec,
-        settings.scorexSettings.network,
+        settings,
         tp,
         h,
         pool)
@@ -81,6 +81,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     val p: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
       pchProbe.ref,
+      lastMessage = 0,
       Some(peerInfo)
     )
     val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
@@ -91,7 +92,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     val boxHolder = boxesHolderGen.sample.get
     val txs = validTransactionsFromBoxHolder(boxHolder)._1
     val id = modifierIdGen.sample.get
-    BlockTransactions(id, txs)
+    BlockTransactions(id, Header.InitialVersion, txs)
   }
 
 }

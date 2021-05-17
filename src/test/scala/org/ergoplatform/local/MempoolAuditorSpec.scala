@@ -2,24 +2,31 @@ package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestActorRef, TestProbe}
+import org.ergoplatform.ErgoBox.BoxId
+import org.ergoplatform.{ErgoAddressEncoder, ErgoScriptPredef}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, OrderedTxPool}
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
+import org.ergoplatform.settings.{Constants, Algos, ErgoSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
-import org.ergoplatform.utils.{ErgoTestHelpers, NodeViewTestOps}
-import org.scalatest.FlatSpec
+import org.ergoplatform.utils.{NodeViewTestOps, ErgoTestHelpers}
+import org.scalatest.flatspec.AnyFlatSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState, FailedTransaction, SuccessfulTransaction}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction, ChangedState, ChangedMempool}
 import scorex.util.ModifierId
+import sigmastate.Values.ErgoTree
+import sigmastate.eval.{RuntimeIRContext, IRContext}
+import sigmastate.interpreter.Interpreter.emptyEnv
 
 import scala.concurrent.duration._
 import scala.util.Random
+import sigmastate.lang.Terms.ValueOps
+import sigmastate.serialization.ErgoTreeSerializer
 
-
-class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelpers {
+class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers {
+  implicit lazy val context: IRContext = new RuntimeIRContext
 
   val cleanupDuration: FiniteDuration = 2.seconds
   val settingsToTest: ErgoSettings = settings.copy(
@@ -30,7 +37,7 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
   val fixture = new NodeViewFixture(settingsToTest)
   val newTx: Class[SuccessfulTransaction[_]] = classOf[SuccessfulTransaction[_]]
 
-  it should "expose transactions which become invalid" in {
+  it should "remove transactions which become invalid" in {
     import fixture._
 
     val testProbe = new TestProbe(actorSystem)
@@ -46,26 +53,34 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
     val boxes = ErgoState.boxChanges(genesis.transactions)._2.find(_.ergoTree == Constants.TrueLeaf)
     boxes.nonEmpty shouldBe true
 
-    val validTx = validTransactionFromBoxes(boxes.toIndexedSeq)
-    val doubleSpendTx = validTransactionFromBoxes(boxes.toIndexedSeq, outputsProposition = proveDlogGen.sample.get)
+    val script = s"{sigmaProp(HEIGHT == ${genesis.height})}"
+    val prop = ErgoScriptPredef.compileWithCosting(emptyEnv, script, ErgoAddressEncoder.MainnetNetworkPrefix)
+    val tree = ErgoTree.fromProposition(prop.asSigmaProp)
+
+    val bs = ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(tree)
+    ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bs) shouldBe tree
+
+    val validTx = validTransactionFromBoxes(boxes.toIndexedSeq, outputsProposition = tree)
+
+    val temporarilyValidTx = validTransactionFromBoxes(validTx.outputs, outputsProposition = proveDlogGen.sample.get)
 
     subscribeEvents(classOf[FailedTransaction])
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](validTx)
     testProbe.expectMsgClass(cleanupDuration, newTx)
-    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](doubleSpendTx)
+    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](temporarilyValidTx)
     testProbe.expectMsgClass(cleanupDuration, newTx)
     getPoolSize shouldBe 2
 
     val _: ActorRef = MempoolAuditorRef(nodeViewHolderRef, nodeViewHolderRef, settingsToTest)
 
-    // include first transaction in the block so that second tx becomes invalid
+    // include first transaction in the block
     val block = validFullBlock(Some(genesis), wusAfterGenesis, Seq(validTx))
 
     applyBlock(block) shouldBe 'success
 
     getPoolSize shouldBe 1 // first tx removed from pool during node view update
 
-    scorex.core.utils.untilTimeout(cleanupDuration * 2, 100.millis) {
+    scorex.core.utils.untilTimeout(cleanupDuration * 4, 100.millis) {
       getPoolSize shouldBe 0 // another tx invalidated by `MempoolAuditor`
     }
 
@@ -100,6 +115,13 @@ class MempoolAuditorSpec extends FlatSpec with NodeViewTestOps with ErgoTestHelp
       override def getAllPrioritized: Seq[ErgoTransaction] = txs
 
       override def take(limit: Int): Iterable[ErgoTransaction] = txs.take(limit)
+
+      override def spentInputs: Iterator[BoxId] = txs.flatMap(_.inputs).map(_.boxId).toIterator
+
+      override def getRecommendedFee(expectedWaitTimeMinutes: Int, txSize: Int) : Long = 0
+
+      override def getExpectedWaitTime(txFee: Long, txSize: Int): Long = 0
+
     }
 
     implicit val system = ActorSystem()

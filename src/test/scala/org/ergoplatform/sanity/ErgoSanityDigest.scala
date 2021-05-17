@@ -71,7 +71,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
         ncProbe.ref,
         vhProbe.ref,
         ErgoSyncInfoMessageSpec,
-        settings.scorexSettings.network,
+        settings,
         tp,
         h,
         pool)
@@ -87,6 +87,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val p: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
       pchProbe.ref,
+      lastMessage = 0,
       Some(peerInfo)
     )
     val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
@@ -97,6 +98,6 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val boxHolder = boxesHolderGen.sample.get
     val txs = validTransactionsFromBoxHolder(boxHolder)._1
     val id = modifierIdGen.sample.get
-    BlockTransactions(id, txs)
+    BlockTransactions(id, 1: Byte, txs)
   }
 }

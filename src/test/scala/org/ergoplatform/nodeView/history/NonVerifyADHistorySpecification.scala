@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.popow.PoPowAlgos
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
@@ -150,7 +149,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     chain.headers.map(_.id) should contain theSameElementsAs ci.map(_._2)
   }
 
-  property("continuationIds() for light history should contain ids of next headers in our chain") {
+  property("continuationIds() for less developed chain should contain ids of next headers in our chain") {
     var history = genHistory()
 
     history = ensureMinimalHeight(history, BlocksInChain + 1)
@@ -160,9 +159,9 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
       whenever(forkLength > 1 && chain.size > forkLength) {
         val si = ErgoSyncInfo(Seq(chain.headers(chain.size - forkLength - 1).id))
         val continuation = history.continuationIds(si, forkLength)
-        continuation.length shouldBe forkLength
+        continuation.length shouldBe forkLength + 1
         continuation.last._2 shouldEqual chain.last.id
-        continuation.head._2 shouldEqual chain.headers(chain.size - forkLength).id
+        continuation.head._2 shouldEqual chain.headers(chain.size - forkLength - 1).id
       }
     }
   }
@@ -218,7 +217,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
         val fork1 = genHeaderChain(forkLength, history, diffBitsOpt = None, useRealTs = false).tail
         val common = fork1.headers(forkDepth)
         val commonInterlinks = history.typedModifierById[Extension](common.extensionId)
-          .map(ext => PoPowAlgos.unpackInterlinks(ext.fields).get)
+          .map(ext => popowAlgos.unpackInterlinks(ext.fields).get)
           .getOrElse(Seq.empty)
         val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common), commonInterlinks,
           defaultDifficultyControl, extensionHash, diffBitsOpt = None, useRealTs = false)

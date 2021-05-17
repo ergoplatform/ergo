@@ -229,8 +229,11 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
       levels.foldRight(initAnchoringHeight) { case ((prevHeaderId, levelIdx), anchoringHeight) =>
         val levelHeaders = collectLevel(prevHeaderId, levelIdx, anchoringHeight)
         levelHeaders.foreach(ph => collected.update(ph.id, ph))
-        if (m < levelHeaders.length) levelHeaders(levelHeaders.length - m).height
-        else anchoringHeight
+        if (m < levelHeaders.length) {
+          levelHeaders(levelHeaders.length - m).height
+        } else {
+          anchoringHeight
+        }
       }
       collected.values.toSeq
     }

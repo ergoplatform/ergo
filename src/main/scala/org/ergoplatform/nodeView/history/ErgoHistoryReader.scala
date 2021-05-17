@@ -374,7 +374,7 @@ trait ErgoHistoryReader
     * See PoPowAlgos.prove for construction details.
     * @param m - min superchain length
     * @param k - suffix length
-    * @param headerIdOpt - optional header to start suffix from.
+    * @param headerIdOpt - optional header to start suffix from (so to construct proof for the header.
     *                    Please note that k-1 headers will be provided after the header.
     * @return PoPow proof if success, Failure instance otherwise
     */

@@ -18,14 +18,14 @@ import scorex.util.ModifierId
 import scala.concurrent.Future
 import scala.util.Try
 
-case class ClientApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergoSettings: ErgoSettings)
-                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
+case class NipopowApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergoSettings: ErgoSettings)
+                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   private implicit val popowProofEncoder: Encoder[PoPowProof] = PoPowProof.popowProofEncoder
 
-  override val route: Route = pathPrefix("client") {
+  override val route: Route = pathPrefix("nipopow") {
     getPopowHeaderByHeaderIdR ~
       getPopowHeaderByHeightR ~
       getPopowProofR ~

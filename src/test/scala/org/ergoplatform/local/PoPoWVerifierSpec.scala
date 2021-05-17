@@ -1,6 +1,6 @@
 package org.ergoplatform.local
 
-import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader, PoPowParams}
+import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators}
 import org.scalatest.matchers.should.Matchers

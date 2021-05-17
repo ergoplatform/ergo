@@ -14,7 +14,7 @@ import scorex.util.ModifierId
 class PoPoWVerifier(poPoWParams: PoPowParams, genesisId: ModifierId) {
   var bestProof: Option[PoPowProof] = None
 
-  def bestChain(): Seq[Header] = {
+  def bestChain: Seq[Header] = {
     bestProof.map(_.headersChain).getOrElse(Seq())
   }
 
@@ -24,4 +24,5 @@ class PoPoWVerifier(poPoWParams: PoPowParams, genesisId: ModifierId) {
       bestProof = Some(newProof)
     }
   }
+  
 }

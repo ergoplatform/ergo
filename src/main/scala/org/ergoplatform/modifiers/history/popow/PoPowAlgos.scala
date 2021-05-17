@@ -40,13 +40,11 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
     * Computes interlinks vector for a header next to `prevHeader`.
     */
   @inline def updateInterlinks(prevHeaderOpt: Option[Header], prevExtensionOpt: Option[Extension]): Seq[ModifierId] =
-    prevHeaderOpt
-      .flatMap { prevHeader =>
-        prevExtensionOpt
-          .flatMap(ext => PoPowAlgos.unpackInterlinks(ext.fields).toOption)
-          .map(updateInterlinks(prevHeader, _))
-      }
-      .getOrElse(Seq.empty)
+    prevHeaderOpt.flatMap { prevHeader =>
+      prevExtensionOpt
+        .flatMap(ext => PoPowAlgos.unpackInterlinks(ext.fields).toOption)
+        .map(updateInterlinks(prevHeader, _))
+    }.getOrElse(Seq.empty)
 
   /**
     * Computes interlinks vector for a header next to `prevHeader`.

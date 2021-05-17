@@ -181,12 +181,12 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
   }
 
   /**
-    * Computes NiPoPow proof for the a chain stored in `histReader`'s database,
+    * Computes NiPoPow proof for the chain stored in `histReader`'s database,
     * or a prefix of the chain which contains a specific header (if `headerIdOpt` is specified).
     * In the latter case, header will be the first header of the suffix of max length `k`.
     */
   def prove(histReader: ErgoHistoryReader,
-            headerIdOpt: Option[ModifierId] = None)(params: PoPowParams): PoPowProof = {
+            headerIdOpt: Option[ModifierId] = None)(params: PoPowParams): Try[PoPowProof] = Try {
     type Height = Int
 
     val k = params.k
@@ -206,7 +206,7 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
                      level: Int,
                      anchoringHeight: Height,
                      acc: Seq[PoPowHeader] = Seq.empty): Seq[PoPowHeader] = {
-      val prevHeader = histReader.popowHeader(prevHeaderId).get
+      val prevHeader = histReader.popowHeader(prevHeaderId).get // to be caught in outer (prove's) Try
       if (prevHeader.height < anchoringHeight) {
         acc
       } else {
@@ -238,15 +238,15 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
 
     val (suffixHead, suffixTail) = headerIdOpt match {
       case Some(headerId) =>
-        val suffixHead = histReader.popowHeader(headerId).get
+        val suffixHead = histReader.popowHeader(headerId).get // to be caught in outer (prove's) Try
         val suffixTail = histReader.bestHeadersAfter(suffixHead.header, k - 1)
         suffixHead -> suffixTail
       case None =>
         val suffix = histReader.lastHeaders(k).headers
-        histReader.popowHeader(suffix.head.id).get -> suffix.tail
+        histReader.popowHeader(suffix.head.id).get -> suffix.tail // .get to be caught in outer (prove's) Try
     }
 
-    val genesisPopowHeader = histReader.popowHeader(1).get
+    val genesisPopowHeader = histReader.popowHeader(1).get // to be caught in outer (prove's) Try
     val genesisHeight = 1
     val prefix = genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)
 

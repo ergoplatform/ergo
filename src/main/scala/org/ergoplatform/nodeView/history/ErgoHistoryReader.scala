@@ -378,7 +378,7 @@ trait ErgoHistoryReader
     *                    Please note that k-1 headers will be provided after the header.
     * @return PoPow proof if success, Failure instance otherwise
     */
-  def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[PoPowProof] = Try {
+  def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[PoPowProof] = {
     val proofParams = PoPowParams(m, k)
     popowAlgos.prove(this, headerIdOpt)(proofParams)
   }

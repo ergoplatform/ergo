@@ -24,5 +24,5 @@ class PoPoWVerifier(poPoWParams: PoPowParams, genesisId: ModifierId) {
       bestProof = Some(newProof)
     }
   }
-  
+
 }

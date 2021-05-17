@@ -128,7 +128,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     val h = generateHistory(true, StateType.Digest, false,
       10000, 10000, 10, None)
     val hr = applyChain(h, blocksChain)
-    val proof1 = popowAlgos.prove(hr)(poPowParams)
+    val proof1 = popowAlgos.prove(hr)(poPowParams).get
 
     proof0.suffixHead.id shouldBe proof1.suffixHead.id
     proof0.suffixTail.map(_.id) shouldBe proof1.suffixTail.map(_.id)
@@ -146,12 +146,12 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     val h = generateHistory(true, StateType.Digest, false,
       10000, 10000, 10, None)
     val hr = applyChain(h, blocksChain.take(at))
-    val proof0 = popowAlgos.prove(hr, None)(poPowParams)
+    val proof0 = popowAlgos.prove(hr, None)(poPowParams).get
 
     val id = proof0.suffixHead.header.id
 
     val hrf = applyChain(hr, blocksChain.drop(at))
-    val proof1 = popowAlgos.prove(hrf, Some(id))(poPowParams)
+    val proof1 = popowAlgos.prove(hrf, Some(id))(poPowParams).get
 
     proof0.suffixHead.id shouldBe proof1.suffixHead.id
     proof0.suffixTail.map(_.id) shouldBe proof1.suffixTail.map(_.id)

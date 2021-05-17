@@ -29,8 +29,8 @@ class ExtensionValidator[T](validationState: ValidationState[T], popowAlgos: PoP
                                  prevHeaderOpt: Option[Header]): ValidationState[T] = {
     (prevHeaderOpt, prevExtensionOpt) match {
       case (Some(parent), Some(parentExt)) =>
-        val parentLinksTry = popowAlgos.unpackInterlinks(parentExt.fields)
-        val currentLinksTry = popowAlgos.unpackInterlinks(extension.fields)
+        val parentLinksTry = PoPowAlgos.unpackInterlinks(parentExt.fields)
+        val currentLinksTry = PoPowAlgos.unpackInterlinks(extension.fields)
 
         val expectedLinksTry = parentLinksTry
           .map { prev => popowAlgos.updateInterlinks(parent, prev) }

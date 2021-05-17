@@ -6,6 +6,7 @@ import org.ergoplatform._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, ErgoMiner}
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.popow.PoPowAlgos
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -159,7 +160,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
     val interlinks = lastHeaderOpt
       .flatMap { h =>
         history.typedModifierById[Extension](h.extensionId)
-          .flatMap(ext => popowAlgos.unpackInterlinks(ext.fields).toOption)
+          .flatMap(ext => PoPowAlgos.unpackInterlinks(ext.fields).toOption)
           .map(popowAlgos.updateInterlinks(h, _))
       }
       .getOrElse(Seq.empty)
@@ -203,7 +204,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
       case Some(fb) => fb
       case _ =>
         val interlinks = candidate.parentOpt
-          .map(popowAlgos.updateInterlinks(_, popowAlgos.unpackInterlinks(candidate.extension.fields).get))
+          .map(popowAlgos.updateInterlinks(_, PoPowAlgos.unpackInterlinks(candidate.extension.fields).get))
           .getOrElse(Seq.empty)
         val minerTag = scorex.utils.Random.randomBytes(Extension.FieldKeySize)
         proveCandidate {

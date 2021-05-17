@@ -4,8 +4,7 @@ import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{Header, ADProofs, Extension}
-import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader, PoPowParams, PoPowProof}
+import org.ergoplatform.modifiers.history.popow.{ PoPowHeader, PoPowParams, PoPowProof}
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
 import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
@@ -25,7 +24,7 @@ import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.{ProveDlog, DLogProverInput}
 import sigmastate.basics.{ProveDHTuple, DiffieHellmanTupleProverInput}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{ProverResult, CryptoConstants}
+import sigmastate.interpreter.CryptoConstants
 
 import sigmastate.interpreter.ProverResult
 import scala.util.Random

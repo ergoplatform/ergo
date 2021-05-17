@@ -1,13 +1,13 @@
 package org.ergoplatform.modifiers.history
 
-import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams, PoPowProof}
+import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader, PoPowParams, PoPowProof}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.generators.ChainGenerator
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
-import scorex.util.{bytesToId, ModifierId}
+import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.utils.HistoryTestHelpers
 
 class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers with ChainGenerator {
@@ -52,10 +52,10 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     val packed = popowAlgos.interlinksToExtension(interlinks).fields
     val improperlyPacked = packed.map(x => x._1 -> (x._2 :+ (127: Byte)))
 
-    val unpackedTry = popowAlgos.unpackInterlinks(packed)
+    val unpackedTry = PoPowAlgos.unpackInterlinks(packed)
 
     unpackedTry shouldBe 'success
-    popowAlgos.unpackInterlinks(improperlyPacked) shouldBe 'failure
+    PoPowAlgos.unpackInterlinks(improperlyPacked) shouldBe 'failure
 
     unpackedTry.get shouldEqual interlinks
   }
@@ -96,9 +96,9 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   }
 
   property("bestArg - always equal for equal proofs") {
-    val chain0 = genChain(100).map(b => PoPowHeader(b.header, popowAlgos.unpackInterlinks(b.extension.fields).get))
+    val chain0 = genChain(100).map(b => PoPowHeader.fromBlock(b).get)
     val proof0 = popowAlgos.prove(chain0)(poPowParams)
-    val chain1 = genChain(100).map(b => PoPowHeader(b.header, popowAlgos.unpackInterlinks(b.extension.fields).get))
+    val chain1 = genChain(100).map(b => PoPowHeader.fromBlock(b).get)
     val proof1 = popowAlgos.prove(chain1)(poPowParams)
     val m = poPowParams.m
 
@@ -108,9 +108,9 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   }
 
   property("bestArg - always greater for better proof") {
-    val chain0 = genChain(100).map(b => PoPowHeader(b.header, popowAlgos.unpackInterlinks(b.extension.fields).get))
+    val chain0 = genChain(100).map(b => PoPowHeader.fromBlock(b).get)
     val proof0 = popowAlgos.prove(chain0)(poPowParams)
-    val chain1 = genChain(70).map(b => PoPowHeader(b.header, popowAlgos.unpackInterlinks(b.extension.fields).get))
+    val chain1 = genChain(70).map(b => PoPowHeader.fromBlock(b).get)
     val proof1 = popowAlgos.prove(chain1)(poPowParams)
     val m = poPowParams.m
 
@@ -122,7 +122,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   property("proof(chain) is equivalent to proof(histReader)") {
     val poPowParams = PoPowParams(5, 6)
     val blocksChain = genChain(300)
-    val pchain = blocksChain.map(b => PoPowHeader(b.header, popowAlgos.unpackInterlinks(b.extension.fields).get))
+    val pchain = blocksChain.map(b => PoPowHeader.fromBlock(b).get)
     val proof0 = popowAlgos.prove(pchain)(poPowParams)
 
     val h = generateHistory(true, StateType.Digest, false,
@@ -162,8 +162,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
 
   property("isBetterThan - marginally longer chain should be better") {
     val sizes = Seq(1000)
-    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
-      c.map(b => PoPowHeader(b.header, popowAlgos.unpackInterlinks(b.extension.fields).get))
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     sizes.foreach { size =>
       val baseChain = genChain(size)
       val branchPoint = baseChain(baseChain.length - 1)
@@ -180,8 +179,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   property("isBetterThan - a disconnected prefix chain should not win") {
     val smallPoPowParams = PoPowParams(50, 1)
     val size = 100
-    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
-      c.map(b => PoPowHeader(b.header, popowAlgos.unpackInterlinks(b.extension.fields).get))
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     val chain = toPoPoWChain(genChain(size))
     val proof = popowAlgos.prove(chain)(smallPoPowParams)
 
@@ -197,8 +195,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   property("hasValidConnections - ensures a connected prefix chain") {
     val smallPoPowParams = PoPowParams(5, 5)
     val sizes = Seq(100, 200)
-    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
-      c.map(b => PoPowHeader(b.header, popowAlgos.unpackInterlinks(b.extension.fields).get))
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     sizes.foreach { size =>
       val chain = toPoPoWChain(genChain(size))
       val randomBlock = toPoPoWChain(genChain(1)).head
@@ -213,8 +210,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   property("hasValidConnections - ensures a connected suffix chain") {
     val smallPoPowParams = PoPowParams(5, 5)
     val sizes = Seq(100, 200)
-    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
-      c.map(b => PoPowHeader(b.header, popowAlgos.unpackInterlinks(b.extension.fields).get))
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     sizes.foreach { size =>
       val chain = toPoPoWChain(genChain(size))
       val randomBlock = genChain(1).head.header
@@ -227,8 +223,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
   }
 
   property("hasValidConnections - ensures prefix.last & suffix.head are linked") {
-    val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
-      c.map(b => PoPowHeader(b.header, popowAlgos.unpackInterlinks(b.extension.fields).get))
+    val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     val prefix = toPoPoWChain(genChain(1))
     val suffix = toPoPoWChain(genChain(1))
     PoPowProof(popowAlgos, 0, 0, prefix, suffix.head, suffix.tail.map(_.header)).hasValidConnections() shouldBe false

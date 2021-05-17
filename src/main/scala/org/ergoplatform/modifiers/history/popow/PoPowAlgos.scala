@@ -43,7 +43,7 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
     prevHeaderOpt
       .flatMap { prevHeader =>
         prevExtensionOpt
-          .flatMap(ext => unpackInterlinks(ext.fields).toOption)
+          .flatMap(ext => PoPowAlgos.unpackInterlinks(ext.fields).toOption)
           .map(updateInterlinks(prevHeader, _))
       }
       .getOrElse(Seq.empty)
@@ -87,30 +87,6 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
 
   @inline def interlinksToExtension(links: Seq[ModifierId]): ExtensionCandidate =
     ExtensionCandidate(packInterlinks(links))
-
-  /**
-    * Unpacks interlinks from key-value format of block extension.
-    */
-  @inline def unpackInterlinks(fields: Seq[(Array[Byte], Array[Byte])]): Try[Seq[ModifierId]] = {
-    @scala.annotation.tailrec
-    def loop(rem: List[(Array[Byte], Array[Byte])],
-             acc: Seq[ModifierId] = Seq.empty): Try[Seq[ModifierId]] =
-      rem match {
-        case head :: tail =>
-          val value = head._2
-          if (value.lengthCompare(Constants.ModifierIdSize + 1) == 0) {
-            val duplicatesQty = 0xff & value.head.toInt
-            val link = bytesToId(value.tail)
-            loop(tail, acc ++ Seq.fill(duplicatesQty)(link))
-          } else {
-            Failure(new Exception("Interlinks improperly packed"))
-          }
-        case Nil =>
-          Success(acc)
-      }
-
-    loop(fields.filter(_._1.headOption.contains(InterlinksVectorPrefix)).toList)
-  }
 
   /**
     * Computes max level (μ) of the given [[Header]], such that μ = log(T) − log(id(B))
@@ -285,4 +261,31 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
       .flatMap({ case (key, _) => ext.proofFor(key) })
   }
 
+}
+
+
+object PoPowAlgos {
+  /**
+    * Unpacks interlinks from key-value format of block extension.
+    */
+  @inline def unpackInterlinks(fields: Seq[(Array[Byte], Array[Byte])]): Try[Seq[ModifierId]] = {
+    @scala.annotation.tailrec
+    def loop(rem: List[(Array[Byte], Array[Byte])],
+             acc: Seq[ModifierId] = Seq.empty): Try[Seq[ModifierId]] =
+      rem match {
+        case head :: tail =>
+          val value = head._2
+          if (value.lengthCompare(Constants.ModifierIdSize + 1) == 0) {
+            val duplicatesQty = 0xff & value.head.toInt
+            val link = bytesToId(value.tail)
+            loop(tail, acc ++ Seq.fill(duplicatesQty)(link))
+          } else {
+            Failure(new Exception("Interlinks improperly packed"))
+          }
+        case Nil =>
+          Success(acc)
+      }
+
+    loop(fields.filter(_._1.headOption.contains(InterlinksVectorPrefix)).toList)
+  }
 }

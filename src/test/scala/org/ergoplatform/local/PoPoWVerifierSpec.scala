@@ -1,6 +1,6 @@
 package org.ergoplatform.local
 
-import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams}
+import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.utils.generators.{ChainGenerator, ErgoGenerators}
 import org.scalatest.matchers.should.Matchers
@@ -10,8 +10,7 @@ import org.scalatest.propspec.AnyPropSpec
 class PoPoWVerifierSpec extends AnyPropSpec with Matchers with ChainGenerator with ErgoGenerators {
 
   private val poPowParams = PoPowParams(30, 30)
-  val toPoPoWChain = (c: Seq[ErgoFullBlock]) =>
-    c.map(b => PoPowHeader(b.header, popowAlgos.unpackInterlinks(b.extension.fields).get))
+  val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
 
   property("processes new proofs") {
     val sizes = Seq(1000)

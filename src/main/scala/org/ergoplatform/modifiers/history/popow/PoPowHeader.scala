@@ -1,6 +1,7 @@
 package org.ergoplatform.modifiers.history.popow
 
 import io.circe.Encoder
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
 import org.ergoplatform.settings.Algos
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
@@ -8,14 +9,15 @@ import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
+import scala.util.Try
+
 /**
-  * Header with unpacked interlinks
+  * Block header along with unpacked interlinks
   *
   * Interlinks are stored in reverse order: first element is always genesis header, then level of lowest target met etc
   *
   */
-case class PoPowHeader(header: Header, interlinks: Seq[ModifierId])
-  extends BytesSerializable {
+case class PoPowHeader(header: Header, interlinks: Seq[ModifierId]) extends BytesSerializable {
 
   override type M = PoPowHeader
 
@@ -24,10 +26,17 @@ case class PoPowHeader(header: Header, interlinks: Seq[ModifierId])
   def id: ModifierId = header.id
 
   def height: Int = header.height
+
 }
 
 object PoPowHeader {
   import io.circe.syntax._
+
+  def fromBlock(b: ErgoFullBlock): Try[PoPowHeader] = {
+    PoPowAlgos.unpackInterlinks(b.extension.fields).map { interlinkVector =>
+      PoPowHeader(b.header, interlinkVector)
+    }
+  }
 
   implicit val interlinksEncoder: Encoder[Seq[ModifierId]] = { interlinksVector: Seq[ModifierId] =>
     interlinksVector.map(id => Algos.encode(id).asJson).asJson

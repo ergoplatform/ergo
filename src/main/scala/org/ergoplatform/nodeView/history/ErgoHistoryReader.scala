@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams, PoPowProof}
+import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader, PoPowParams, PoPowProof}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -352,8 +352,8 @@ trait ErgoHistoryReader
     */
   def popowHeader(headerId: ModifierId): Option[PoPowHeader] = {
     this.typedModifierById[Header](headerId).flatMap(h =>
-      typedModifierById[Extension](h.extensionId).flatMap{ext =>
-        popowAlgos.unpackInterlinks(ext.fields).toOption.map{interlinks =>
+      typedModifierById[Extension](h.extensionId).flatMap { ext =>
+        PoPowAlgos.unpackInterlinks(ext.fields).toOption.map { interlinks =>
           PoPowHeader(h, interlinks)
         }
       }

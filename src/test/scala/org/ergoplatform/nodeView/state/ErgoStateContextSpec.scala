@@ -69,7 +69,7 @@ class ErgoStateContextSpec extends HistoryTestHelpers {
 
     // validation of incorrect interlinks
     val invalidInterlinks = popowAlgos.interlinksToExtension(
-      popowAlgos.unpackInterlinks(fb.extension.fields).get ++ Seq(fb.header.id)
+      PoPowAlgos.unpackInterlinks(fb.extension.fields).get ++ Seq(fb.header.id)
     ).fields
     sc.appendFullBlock(fbWithFields(invalidInterlinks ++ oldFields)) shouldBe 'failure
 

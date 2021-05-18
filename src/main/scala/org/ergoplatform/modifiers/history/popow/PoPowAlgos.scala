@@ -14,6 +14,8 @@ import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
+  * NiPoPoW proof params from the KMZ17 paper
+  *
   * @param m - minimal superchain length
   * @param k - suffix length
   */
@@ -25,7 +27,8 @@ case class PoPowParams(m: Int, k: Int)
   *
   * Based on papers:
   *
-  * [KMZ17] Non-Interactive Proofs of Proof-of-Work https://fc20.ifca.ai/preproceedings/74.pdf
+  * [KMZ17] Non-Interactive Proofs of Proof-of-Work, FC 20 (published) version
+  *           https://fc20.ifca.ai/preproceedings/74.pdf
   *
   * [KLS16] Proofs of Proofs of Work with Sublinear Complexity http://fc16.ifca.ai/bitcoin/papers/KLS16.pdf
   *
@@ -33,8 +36,7 @@ case class PoPowParams(m: Int, k: Int)
   * from previously published versions on IACR eprint.
   */
 class PoPowAlgos(powScheme: AutolykosPowScheme) {
-
-  private def log2(x: Double): Double = math.log(x) / math.log(2)
+  import PoPowAlgos._
 
   /**
     * Computes interlinks vector for a header next to `prevHeader`.
@@ -183,7 +185,8 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
   /**
     * Computes NiPoPow proof for the chain stored in `histReader`'s database,
     * or a prefix of the chain which contains a specific header (if `headerIdOpt` is specified).
-    * In the latter case, header will be the first header of the suffix of max length `k`.
+    * In the latter case, header will be the first header of the suffix of max length `k`
+    * (`suffixHead` field of the result).
     */
   def prove(histReader: ErgoHistoryReader,
             headerIdOpt: Option[ModifierId] = None)(params: PoPowParams): Try[PoPowProof] = Try {
@@ -266,6 +269,9 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
 
 
 object PoPowAlgos {
+
+  private def log2(x: Double): Double = math.log(x) / math.log(2)
+
   /**
     * Unpacks interlinks from key-value format of block extension.
     */

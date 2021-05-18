@@ -35,7 +35,7 @@ trait ErgoHistoryReader
   protected val settings: ErgoSettings
 
   /**
-    * Is there's no history, even genesis block
+    * True if there's no history, even genesis block
     */
   def isEmpty: Boolean = bestHeaderIdOpt.isEmpty
 

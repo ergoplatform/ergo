@@ -202,18 +202,10 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
   def validNiPoPowProofGen(m: Int, k: Int): Gen[PoPowProof] = for {
     mulM <- Gen.chooseNum(1, 20)
   } yield {
-    val chain = genHeaderChain(m * mulM + k, diffBitsOpt = None, useRealTs = false).headers
-    val poPowChain = chain.foldLeft(Seq.empty[PoPowHeader], None: Option[PoPowHeader]) {
-      case ((acc, bestHeaderOpt), h) =>
-        val links = popowAlgos.updateInterlinks(
-          bestHeaderOpt.map(_.header),
-          bestHeaderOpt.map(ph => popowAlgos.interlinksToExtension(ph.interlinks).toExtension(ph.id))
-        )
-        val poPowH = PoPowHeader(h, links)
-        (acc :+ poPowH, Some(poPowH))
-    }._1
+    val chain = genHeaderChain(m * mulM + k, diffBitsOpt = None, useRealTs = false)
+    val popowChain = popowHeaderChain(chain)
     val params = PoPowParams(m, k)
-    popowAlgos.prove(poPowChain)(params).get
+    popowAlgos.prove(popowChain)(params).get
   }
 
 }

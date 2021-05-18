@@ -1,10 +1,11 @@
 package org.ergoplatform.modifiers.history.popow
 
-import io.circe.Encoder
+import io.circe.{Decoder, Encoder}
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions.LongOps
+import scala.language.implicitConversions
 
 
 /**
@@ -44,13 +45,13 @@ case class PoPowProof(popowAlgos: PoPowAlgos,
     * @return whether this PoPoW proof is better than "that"
     */
   def isBetterThan(that: PoPowProof): Boolean = {
-    if (this.isValid() && that.isValid()) {
+    if (this.isValid && that.isValid) {
       popowAlgos.lowestCommonAncestor(headersChain, that.headersChain)
         .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
         .exists({ case (thisDivergingChain, thatDivergingChain) =>
           popowAlgos.bestArg(thisDivergingChain)(m) > popowAlgos.bestArg(thatDivergingChain)(m) })
     } else {
-      this.isValid()
+      this.isValid
     }
   }
 
@@ -58,8 +59,8 @@ case class PoPowProof(popowAlgos: PoPowAlgos,
     * Checks if the proof is valid: if the heights are consistent and the connections are valid.
     * @return true if the proof is valid
     */
-  def isValid(): Boolean = {
-    this.hasValidConnections() && this.hasValidHeights()
+  def isValid: Boolean = {
+    this.hasValidConnections && this.hasValidHeights
   }
 
   /**
@@ -68,7 +69,7 @@ case class PoPowProof(popowAlgos: PoPowAlgos,
     *
     * @return true if the heights of the header-chain are consistent
     */
-  def hasValidHeights(): Boolean = {
+  def hasValidHeights: Boolean = {
     headersChain.zip(headersChain.tail).forall({
       case (prev, next) => prev.height < next.height
     })
@@ -80,7 +81,7 @@ case class PoPowProof(popowAlgos: PoPowAlgos,
     *
     * @return true if all adjacent blocks are correctly connected
     */
-  def hasValidConnections(): Boolean = {
+  def hasValidConnections: Boolean = {
     prefix.zip(prefix.tail :+ suffixHead).forall({
       case (prev, next) => next.interlinks.contains(prev.id)
     }) && (suffixHead.header +: suffixTail).zip(suffixTail).forall({
@@ -101,6 +102,16 @@ object PoPowProof {
       "suffixHead" -> proof.suffixHead.asJson,
       "suffixTail" -> proof.suffixTail.asJson
     ).asJson
+  }
+
+  def popowProofDecoder(poPowAlgos: PoPowAlgos): Decoder[PoPowProof] = { c =>
+    for {
+      m <- c.downField("m").as[Int]
+      k <- c.downField("k").as[Int]
+      prefix <- c.downField("prefix").as[Seq[PoPowHeader]]
+      suffixHead <- c.downField("suffixHead").as[PoPowHeader]
+      suffixTail <- c.downField("suffixTail").as[Seq[Header]]
+    } yield PoPowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail)
   }
 
 }

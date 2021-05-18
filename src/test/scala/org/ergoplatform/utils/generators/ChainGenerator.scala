@@ -4,7 +4,7 @@ import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header, HeaderChain}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.history.popow.PoPowAlgos
+import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
@@ -66,6 +66,18 @@ trait ChainGenerator extends ErgoTestConstants {
     val headers = headerStream(prefix, control, diffBitsOpt = diffBitsOpt, useRealTs = useRealTs)
     val chain = Iterator.from(prefix.size).map(size => headers.take(size)).find(until).get
     HeaderChain(chain)
+  }
+
+  def popowHeaderChain(chain: HeaderChain): Seq[PoPowHeader] = {
+    chain.headers.foldLeft(Seq.empty[PoPowHeader], None: Option[PoPowHeader]) {
+      case ((acc, bestHeaderOpt), h) =>
+        val links = popowAlgos.updateInterlinks(
+          bestHeaderOpt.map(_.header),
+          bestHeaderOpt.map(ph => popowAlgos.interlinksToExtension(ph.interlinks).toExtension(ph.id))
+        )
+        val poPowH = PoPowHeader(h, links)
+        (acc :+ poPowH, Some(poPowH))
+    }._1
   }
 
   private def headerStream(prefix: Option[Header],

@@ -2,12 +2,9 @@ package org.ergoplatform.serialization
 
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
-import org.ergoplatform.modifiers.history.{ADProofSerializer, BlockTransactionsSerializer, ExtensionSerializer, Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.popow.PoPowProofSerializer
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer
-import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigestSerializer
 import org.ergoplatform.nodeView.state.ErgoStateContextSerializer
 import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsSerializer, ErgoValidationSettingsUpdateSerializer}

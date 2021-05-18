@@ -213,7 +213,7 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
         (acc :+ poPowH, Some(poPowH))
     }._1
     val params = PoPowParams(m, k)
-    popowAlgos.prove(poPowChain)(params)
+    popowAlgos.prove(poPowChain)(params).get
   }
 
 }

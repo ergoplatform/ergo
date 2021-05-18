@@ -150,7 +150,7 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
   /**
     * Computes NiPoPow proof for the given `chain` according to given `params`.
     */
-  def prove(chain: Seq[PoPowHeader])(params: PoPowParams): PoPowProof = {
+  def prove(chain: Seq[PoPowHeader])(params: PoPowParams): Try[PoPowProof] = Try {
     val k = params.k
     val m = params.m
 

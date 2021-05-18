@@ -19,7 +19,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     val chain = genChain(ChainLength)
     val genesis = chain.head
     val interlinks = chain.foldLeft(Seq.empty[Seq[ModifierId]]) { case (acc, b) =>
-      acc :+ (if (acc.isEmpty){
+      acc :+ (if (acc.isEmpty) {
         popowAlgos.updateInterlinks(b.header, Seq.empty)
       } else {
         popowAlgos.updateInterlinks(b.header, acc.last)
@@ -97,9 +97,9 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
 
   property("bestArg - always equal for equal proofs") {
     val chain0 = genChain(100).map(b => PoPowHeader.fromBlock(b).get)
-    val proof0 = popowAlgos.prove(chain0)(poPowParams)
+    val proof0 = popowAlgos.prove(chain0)(poPowParams).get
     val chain1 = genChain(100).map(b => PoPowHeader.fromBlock(b).get)
-    val proof1 = popowAlgos.prove(chain1)(poPowParams)
+    val proof1 = popowAlgos.prove(chain1)(poPowParams).get
     val m = poPowParams.m
 
     proof0.prefix.size shouldEqual proof1.prefix.size
@@ -109,9 +109,9 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
 
   property("bestArg - always greater for better proof") {
     val chain0 = genChain(100).map(b => PoPowHeader.fromBlock(b).get)
-    val proof0 = popowAlgos.prove(chain0)(poPowParams)
+    val proof0 = popowAlgos.prove(chain0)(poPowParams).get
     val chain1 = genChain(70).map(b => PoPowHeader.fromBlock(b).get)
-    val proof1 = popowAlgos.prove(chain1)(poPowParams)
+    val proof1 = popowAlgos.prove(chain1)(poPowParams).get
     val m = poPowParams.m
 
     proof0.prefix.size > proof1.prefix.size shouldBe true
@@ -123,7 +123,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     val poPowParams = PoPowParams(5, 6)
     val blocksChain = genChain(300)
     val pchain = blocksChain.map(b => PoPowHeader.fromBlock(b).get)
-    val proof0 = popowAlgos.prove(pchain)(poPowParams)
+    val proof0 = popowAlgos.prove(pchain)(poPowParams).get
 
     val h = generateHistory(true, StateType.Digest, false,
       10000, 10000, 10, None)
@@ -169,8 +169,8 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
       val shortChain = toPoPoWChain(baseChain)
       val longChain = toPoPoWChain(baseChain ++ genChain(1, branchPoint).takeRight(1))
 
-      val shortProof = popowAlgos.prove(shortChain)(poPowParams)
-      val longProof = popowAlgos.prove(longChain)(poPowParams)
+      val shortProof = popowAlgos.prove(shortChain)(poPowParams).get
+      val longProof = popowAlgos.prove(longChain)(poPowParams).get
 
       shortProof.isBetterThan(longProof) shouldBe false
     }
@@ -181,16 +181,15 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     val size = 100
     val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     val chain = toPoPoWChain(genChain(size))
-    val proof = popowAlgos.prove(chain)(smallPoPowParams)
+    val proof = popowAlgos.prove(chain)(smallPoPowParams).get
 
-    val longerChain = toPoPoWChain(genChain(size*2))
-    val longerProof = popowAlgos.prove(longerChain)(smallPoPowParams)
+    val longerChain = toPoPoWChain(genChain(size * 2))
+    val longerProof = popowAlgos.prove(longerChain)(smallPoPowParams).get
 
-    val disconnectedProofPrefix = proof.prefix.take(proof.prefix.length/2) ++ longerProof.prefix
+    val disconnectedProofPrefix = proof.prefix.take(proof.prefix.length / 2) ++ longerProof.prefix
     val disconnectedProof = PoPowProof(popowAlgos, proof.m, proof.k, disconnectedProofPrefix, proof.suffixHead, proof.suffixTail)
     proof.isBetterThan(disconnectedProof) shouldBe true
   }
-
 
   property("hasValidConnections - ensures a connected prefix chain") {
     val smallPoPowParams = PoPowParams(5, 5)
@@ -199,8 +198,8 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     sizes.foreach { size =>
       val chain = toPoPoWChain(genChain(size))
       val randomBlock = toPoPoWChain(genChain(1)).head
-      val proof = popowAlgos.prove(chain)(smallPoPowParams)
-      val disconnectedProofPrefix = proof.prefix.updated(proof.prefix.length/2, randomBlock)
+      val proof = popowAlgos.prove(chain)(smallPoPowParams).get
+      val disconnectedProofPrefix = proof.prefix.updated(proof.prefix.length / 2, randomBlock)
       val disconnectedProof = PoPowProof(popowAlgos, proof.m, proof.k, disconnectedProofPrefix, proof.suffixHead, proof.suffixTail)
       proof.hasValidConnections() shouldBe true
       disconnectedProof.hasValidConnections() shouldBe false
@@ -214,8 +213,8 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     sizes.foreach { size =>
       val chain = toPoPoWChain(genChain(size))
       val randomBlock = genChain(1).head.header
-      val proof = popowAlgos.prove(chain)(smallPoPowParams)
-      val disconnectedProofSuffixTail = proof.suffixTail.updated(proof.suffixTail.length/2, randomBlock)
+      val proof = popowAlgos.prove(chain)(smallPoPowParams).get
+      val disconnectedProofSuffixTail = proof.suffixTail.updated(proof.suffixTail.length / 2, randomBlock)
       val disconnectedProof = PoPowProof(popowAlgos, proof.m, proof.k, proof.prefix, proof.suffixHead, disconnectedProofSuffixTail)
       proof.hasValidConnections() shouldBe true
       disconnectedProof.hasValidConnections() shouldBe false

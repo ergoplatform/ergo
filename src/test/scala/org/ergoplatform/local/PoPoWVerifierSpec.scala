@@ -21,9 +21,9 @@ class PoPoWVerifierSpec extends AnyPropSpec with Matchers with ChainGenerator wi
       val longChain = toPoPoWChain(baseChain ++ genChain(5, branchPoint).tail)
       val longestChain = toPoPoWChain(baseChain ++ genChain(50, branchPoint).tail)
 
-      val shortProof = popowAlgos.prove(shortChain)(poPowParams)
-      val longProof = popowAlgos.prove(longChain)(poPowParams)
-      val longestProof = popowAlgos.prove(longestChain)(poPowParams)
+      val shortProof = popowAlgos.prove(shortChain)(poPowParams).get
+      val longProof = popowAlgos.prove(longChain)(poPowParams).get
+      val longestProof = popowAlgos.prove(longestChain)(poPowParams).get
 
       val verifier = new PoPoWVerifier(poPowParams, baseChain.head.id)
       verifier.bestChain.length shouldBe 0

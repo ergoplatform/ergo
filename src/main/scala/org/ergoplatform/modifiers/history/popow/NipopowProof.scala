@@ -21,14 +21,14 @@ import scala.language.implicitConversions
   * @param suffixHead - first header of the suffix
   * @param suffixTail - tail of the proof suffix headers
   */
-case class PoPowProof(popowAlgos: PoPowAlgos,
-                      m: Int,
-                      k: Int,
-                      prefix: Seq[PoPowHeader],
-                      suffixHead: PoPowHeader,
-                      suffixTail: Seq[Header]) {
+case class NipopowProof(popowAlgos: NipopowAlgos,
+                        m: Int,
+                        k: Int,
+                        prefix: Seq[PoPowHeader],
+                        suffixHead: PoPowHeader,
+                        suffixTail: Seq[Header]) {
 
-  def serializer: ScorexSerializer[PoPowProof] = new PoPowProofSerializer(popowAlgos)
+  def serializer: ScorexSerializer[NipopowProof] = new NipopowProofSerializer(popowAlgos)
 
   def headersChain: Seq[Header] = prefixHeaders ++ suffixHeaders
 
@@ -44,7 +44,7 @@ case class PoPowProof(popowAlgos: PoPowAlgos,
     * @param that - PoPoW proof to compare with
     * @return whether this PoPoW proof is better than "that"
     */
-  def isBetterThan(that: PoPowProof): Boolean = {
+  def isBetterThan(that: NipopowProof): Boolean = {
     if (this.isValid && that.isValid) {
       popowAlgos.lowestCommonAncestor(headersChain, that.headersChain)
         .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
@@ -90,11 +90,11 @@ case class PoPowProof(popowAlgos: PoPowAlgos,
   }
 }
 
-object PoPowProof {
+object NipopowProof {
   import io.circe.syntax._
   import PoPowHeader._
 
-  implicit val popowProofEncoder: Encoder[PoPowProof] = { proof: PoPowProof =>
+  implicit val nipopowProofEncoder: Encoder[NipopowProof] = { proof: NipopowProof =>
     Map(
       "m" -> proof.m.asJson,
       "k" -> proof.k.asJson,
@@ -104,21 +104,21 @@ object PoPowProof {
     ).asJson
   }
 
-  def popowProofDecoder(poPowAlgos: PoPowAlgos): Decoder[PoPowProof] = { c =>
+  def nipopowProofDecoder(poPowAlgos: NipopowAlgos): Decoder[NipopowProof] = { c =>
     for {
       m <- c.downField("m").as[Int]
       k <- c.downField("k").as[Int]
       prefix <- c.downField("prefix").as[Seq[PoPowHeader]]
       suffixHead <- c.downField("suffixHead").as[PoPowHeader]
       suffixTail <- c.downField("suffixTail").as[Seq[Header]]
-    } yield PoPowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail)
+    } yield NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail)
   }
 
 }
 
-class PoPowProofSerializer(poPowAlgos: PoPowAlgos) extends ScorexSerializer[PoPowProof] {
+class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ScorexSerializer[NipopowProof] {
 
-  override def serialize(obj: PoPowProof, w: Writer): Unit = {
+  override def serialize(obj: NipopowProof, w: Writer): Unit = {
     w.putUInt(obj.m)
     w.putUInt(obj.k)
     w.putUInt(obj.prefix.size)
@@ -138,7 +138,7 @@ class PoPowProofSerializer(poPowAlgos: PoPowAlgos) extends ScorexSerializer[PoPo
     }
   }
 
-  override def parse(r: Reader): PoPowProof = {
+  override def parse(r: Reader): NipopowProof = {
     val m = r.getUInt().toIntExact
     val k = r.getUInt().toIntExact
     val prefixSize = r.getUInt().toIntExact
@@ -153,7 +153,7 @@ class PoPowProofSerializer(poPowAlgos: PoPowAlgos) extends ScorexSerializer[PoPo
       val size = r.getUInt().toIntExact
       HeaderSerializer.parseBytes(r.getBytes(size))
     }
-    PoPowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail)
+    NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail)
   }
 
 }

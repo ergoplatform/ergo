@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.history.popow.{PoPowAlgos, PoPowHeader, PoPowParams, PoPowProof}
+import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, PoPowHeader, PoPowParams, NipopowProof}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
@@ -354,7 +354,7 @@ trait ErgoHistoryReader
   def popowHeader(headerId: ModifierId): Option[PoPowHeader] = {
     this.typedModifierById[Header](headerId).flatMap(h =>
       typedModifierById[Extension](h.extensionId).flatMap { ext =>
-        PoPowAlgos.unpackInterlinks(ext.fields).toOption.map { interlinks =>
+        NipopowAlgos.unpackInterlinks(ext.fields).toOption.map { interlinks =>
           PoPowHeader(h, interlinks)
         }
       }
@@ -380,7 +380,7 @@ trait ErgoHistoryReader
     *                    Please note that k-1 headers will be provided after the header.
     * @return PoPow proof if success, Failure instance otherwise
     */
-  def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[PoPowProof] = {
+  def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
     val proofParams = PoPowParams(m, k)
     popowAlgos.prove(this, headerIdOpt)(proofParams)
   }

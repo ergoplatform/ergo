@@ -4,7 +4,7 @@ import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.popow.PoPowAlgos
+import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.history.{Extension, ExtensionCandidate, Header}
 import org.ergoplatform.modifiers.history.{ExtensionCandidate, Header, Extension}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -204,7 +204,7 @@ trait ValidBlocksGenerators
 
     val time = timeOpt.orElse(parentOpt.map(_.header.timestamp + 1)).getOrElse(timeProvider.time())
     val interlinks = parentOpt.toSeq.flatMap { block =>
-      popowAlgos.updateInterlinks(block.header, PoPowAlgos.unpackInterlinks(block.extension.fields).get)
+      popowAlgos.updateInterlinks(block.header, NipopowAlgos.unpackInterlinks(block.extension.fields).get)
     }
     val extension: ExtensionCandidate =
       LaunchParameters.toExtensionCandidate ++

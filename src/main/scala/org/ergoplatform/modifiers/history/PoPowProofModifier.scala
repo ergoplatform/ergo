@@ -2,13 +2,13 @@ package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.popow.PoPowProof
+import org.ergoplatform.modifiers.history.popow.NipopowProof
 import org.ergoplatform.settings.Algos
 import scorex.core.ModifierTypeId
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.{ModifierId, bytesToId}
 
-case class PoPowProofModifier(proof: PoPowProof,
+case class PoPowProofModifier(proof: NipopowProof,
                               override val sizeOpt: Option[Int] = None)
                              (implicit powScheme: AutolykosPowScheme) extends Comparable[PoPowProofModifier] with Ordered[PoPowProofModifier]
   with ErgoPersistentModifier {

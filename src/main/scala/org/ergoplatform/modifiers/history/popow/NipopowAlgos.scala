@@ -35,8 +35,8 @@ case class PoPowParams(m: Int, k: Int)
   * Please note that for [KMZ17] we're using the version published @ Financial Cryptography 2020, which is different
   * from previously published versions on IACR eprint.
   */
-class PoPowAlgos(powScheme: AutolykosPowScheme) {
-  import PoPowAlgos._
+class NipopowAlgos(powScheme: AutolykosPowScheme) {
+  import NipopowAlgos._
 
   /**
     * Computes interlinks vector for a header next to `prevHeader`.
@@ -44,7 +44,7 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
   @inline def updateInterlinks(prevHeaderOpt: Option[Header], prevExtensionOpt: Option[Extension]): Seq[ModifierId] =
     prevHeaderOpt.flatMap { prevHeader =>
       prevExtensionOpt
-        .flatMap(ext => PoPowAlgos.unpackInterlinks(ext.fields).toOption)
+        .flatMap(ext => NipopowAlgos.unpackInterlinks(ext.fields).toOption)
         .map(updateInterlinks(prevHeader, _))
     }.getOrElse(Seq.empty)
 
@@ -150,7 +150,7 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
   /**
     * Computes NiPoPow proof for the given `chain` according to given `params`.
     */
-  def prove(chain: Seq[PoPowHeader])(params: PoPowParams): Try[PoPowProof] = Try {
+  def prove(chain: Seq[PoPowHeader])(params: PoPowParams): Try[NipopowProof] = Try {
     val k = params.k
     val m = params.m
 
@@ -179,7 +179,7 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
     val suffixTail = suffix.tail.map(_.header)
     val maxLevel = chain.dropRight(params.k).last.interlinks.size - 1
     val prefix = provePrefix(chain.head, maxLevel).distinct.sortBy(_.height)
-    PoPowProof(this, m, k, prefix, suffixHead, suffixTail)
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
   }
 
   /**
@@ -189,7 +189,7 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
     * (`suffixHead` field of the result).
     */
   def prove(histReader: ErgoHistoryReader,
-            headerIdOpt: Option[ModifierId] = None)(params: PoPowParams): Try[PoPowProof] = Try {
+            headerIdOpt: Option[ModifierId] = None)(params: PoPowParams): Try[NipopowProof] = Try {
     type Height = Int
 
     val k = params.k
@@ -253,7 +253,7 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
     val genesisHeight = 1
     val prefix = genesisPopowHeader +: provePrefix(genesisHeight, suffixHead)
 
-    PoPowProof(this, m, k, prefix, suffixHead, suffixTail)
+    NipopowProof(this, m, k, prefix, suffixHead, suffixTail)
   }
 
   /**
@@ -268,7 +268,7 @@ class PoPowAlgos(powScheme: AutolykosPowScheme) {
 }
 
 
-object PoPowAlgos {
+object NipopowAlgos {
 
   private def log2(x: Double): Double = math.log(x) / math.log(2)
 

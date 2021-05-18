@@ -4,7 +4,7 @@ import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.popow.{ PoPowHeader, PoPowParams, PoPowProof}
+import org.ergoplatform.modifiers.history.popow.{ PoPowHeader, PoPowParams, NipopowProof}
 import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
 import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
@@ -193,13 +193,13 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
     if (maximum < 3) 1 else Math.abs(Random.nextLong()) % (maximum - 2) + 1
   }
 
-  lazy val poPowProofGen: Gen[PoPowProof] = for {
+  lazy val poPowProofGen: Gen[NipopowProof] = for {
     m <- Gen.chooseNum(1, 128)
     k <- Gen.chooseNum(1, 128)
     proof <- validNiPoPowProofGen(m, k)
   } yield proof
 
-  def validNiPoPowProofGen(m: Int, k: Int): Gen[PoPowProof] = for {
+  def validNiPoPowProofGen(m: Int, k: Int): Gen[NipopowProof] = for {
     mulM <- Gen.chooseNum(1, 20)
   } yield {
     val chain = genHeaderChain(m * mulM + k, diffBitsOpt = None, useRealTs = false)

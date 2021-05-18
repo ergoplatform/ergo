@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.popow.PoPowAlgos
+import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
@@ -218,7 +218,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
         val fork1 = genHeaderChain(forkLength, history, diffBitsOpt = None, useRealTs = false).tail
         val common = fork1.headers(forkDepth)
         val commonInterlinks = history.typedModifierById[Extension](common.extensionId)
-          .map(ext => PoPowAlgos.unpackInterlinks(ext.fields).get)
+          .map(ext => NipopowAlgos.unpackInterlinks(ext.fields).get)
           .getOrElse(Seq.empty)
         val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common), commonInterlinks,
           defaultDifficultyControl, extensionHash, diffBitsOpt = None, useRealTs = false)

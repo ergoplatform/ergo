@@ -34,7 +34,7 @@ object PoPowHeader {
   import io.circe.syntax._
 
   def fromBlock(b: ErgoFullBlock): Try[PoPowHeader] = {
-    PoPowAlgos.unpackInterlinks(b.extension.fields).map { interlinkVector =>
+    NipopowAlgos.unpackInterlinks(b.extension.fields).map { interlinkVector =>
       PoPowHeader(b.header, interlinkVector)
     }
   }

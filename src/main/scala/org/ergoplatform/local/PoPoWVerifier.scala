@@ -1,6 +1,6 @@
 package org.ergoplatform.local
 
-import org.ergoplatform.modifiers.history.popow.{PoPowProof, PoPowParams}
+import org.ergoplatform.modifiers.history.popow.{NipopowProof, PoPowParams}
 import org.ergoplatform.modifiers.history.Header
 import scorex.util.ModifierId
 
@@ -12,13 +12,13 @@ import scorex.util.ModifierId
   * @param genesisId    - the block id of the genesis block
   */
 class PoPoWVerifier(poPoWParams: PoPowParams, genesisId: ModifierId) {
-  var bestProof: Option[PoPowProof] = None
+  var bestProof: Option[NipopowProof] = None
 
   def bestChain: Seq[Header] = {
     bestProof.map(_.headersChain).getOrElse(Seq())
   }
 
-  def process(newProof: PoPowProof) {
+  def process(newProof: NipopowProof) {
     if (newProof.headersChain.head.id == genesisId &&
       !bestProof.exists(_.isBetterThan(newProof))) {
       bestProof = Some(newProof)

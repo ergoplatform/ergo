@@ -6,7 +6,7 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import io.circe.Encoder
 import io.circe.syntax._
-import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowProof}
+import org.ergoplatform.modifiers.history.popow.{PoPowHeader, NipopowProof}
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.ErgoSettings
@@ -23,7 +23,7 @@ case class NipopowApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, erg
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
-  private implicit val popowProofEncoder: Encoder[PoPowProof] = PoPowProof.popowProofEncoder
+  private implicit val popowProofEncoder: Encoder[NipopowProof] = NipopowProof.nipopowProofEncoder
 
   override val route: Route = pathPrefix("nipopow") {
     getPopowHeaderByHeaderIdR ~
@@ -45,19 +45,28 @@ case class NipopowApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, erg
       history.popowHeader(height)
     }
 
-  private def getPopowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Future[Try[PoPowProof]] =
+  private def getPopowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Future[Try[NipopowProof]] =
     getHistory.map { history =>
       history.popowProof(m, k, headerIdOpt)
     }
 
+  /**
+    * Get header along with interlink vector for given header identifier
+    */
   def getPopowHeaderByHeaderIdR: Route = (pathPrefix("popowHeaderById") & modifierId & get) { headerId =>
     ApiResponse(getPopowHeaderById(headerId))
   }
 
+  /**
+    * Get best chain header along with its interlink vector for given height
+    */
   def getPopowHeaderByHeightR: Route = (pathPrefix("popowHeaderByHeight" / IntNumber) & get) { headerId =>
     ApiResponse(getPopowHeaderByHeight(headerId))
   }
 
+  /**
+    * Get NiPoPow proof for current moment of time (for header from k blocks ago)
+    */
   def getPopowProofR: Route = (pathPrefix("popowProof" / IntNumber / IntNumber) & get) { case (m, k) =>
     onSuccess(getPopowProof(m, k, None)) {
       _.fold(
@@ -67,6 +76,9 @@ case class NipopowApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, erg
     }
   }
 
+  /**
+    * Get NiPoPow proof for given block id
+    */
   def getPopowProofByHeaderIdR: Route = (pathPrefix("popowProof" / IntNumber / IntNumber) & modifierId & get) {
     case (m, k, headerId) =>
 

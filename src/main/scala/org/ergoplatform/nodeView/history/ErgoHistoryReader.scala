@@ -42,7 +42,7 @@ trait ErgoHistoryReader
   /**
     * Header of best Header chain. Empty if no genesis block is applied yet (from a chain or a PoPoW proof).
     * Transactions and ADProofs for this Header may be missed, to get block from best full chain (in mode that support
-    * it) call bestFullBlockOpt.
+    * it), call bestFullBlockOpt.
     */
   def bestHeaderOpt: Option[Header] = bestHeaderIdOpt.flatMap(typedModifierById[Header])
 
@@ -78,7 +78,7 @@ trait ErgoHistoryReader
   override def contains(id: ModifierId): Boolean = historyStorage.contains(id)
 
   /**
-    * Id of best block to mine
+    * Id of the best full block known
     */
   override def openSurfaceIds(): Seq[ModifierId] = bestFullBlockIdOpt.orElse(bestHeaderIdOpt).toSeq
 
@@ -347,6 +347,7 @@ trait ErgoHistoryReader
 
   /**
     * Constructs popow header against given header identifier
+    *
     * @param headerId - identifier of the header
     * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available
     */
@@ -361,7 +362,8 @@ trait ErgoHistoryReader
   }
 
   /**
-    * Constructs popow header (header + interlinks) for a best header at given height
+    * Constructs popow header (header + interlinks) for еру best header at given height
+    *
     * @param height - height
     * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available
     */
@@ -370,11 +372,11 @@ trait ErgoHistoryReader
   }
 
   /**
-    * Constructs PoPoW proof for given m and k according to KMZ17 (FC20) version.
+    * Constructs PoPoW proof for given m and k according to KMZ17 (FC20 version).
     * See PoPowAlgos.prove for construction details.
     * @param m - min superchain length
     * @param k - suffix length
-    * @param headerIdOpt - optional header to start suffix from (so to construct proof for the header.
+    * @param headerIdOpt - optional header to start suffix from (so to construct proof for the header).
     *                    Please note that k-1 headers will be provided after the header.
     * @return PoPow proof if success, Failure instance otherwise
     */

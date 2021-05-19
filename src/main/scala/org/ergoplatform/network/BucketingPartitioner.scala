@@ -3,7 +3,7 @@ package org.ergoplatform.network
 object BucketingPartitioner {
 
   /**
-    * Evenly distributes elements into unique buckets
+    * Evenly distributes elements under unique bucket-type keys
     * @param buckets to distribute elements into
     * @param maxElements maximum elements to fetch
     * @param minElementsPerBucket minimum elements to distribute per bucket
@@ -29,8 +29,7 @@ object BucketingPartitioner {
           } else {
             val lessBuckets =
               if (elementsSize / bucketsCount < minElementsPerBucket) {
-                val bucketsToUse = Math.max(elementsSize / minElementsPerBucket, 1)
-                buckets.take(bucketsToUse)
+                buckets.take(Math.max(elementsSize / minElementsPerBucket, 1))
               } else buckets
             val (quot, rem) = (elementsSize / lessBuckets.size, elementsSize % lessBuckets.size)
             val (smaller, bigger) = elements.splitAt(elementsSize - rem * (quot + 1))

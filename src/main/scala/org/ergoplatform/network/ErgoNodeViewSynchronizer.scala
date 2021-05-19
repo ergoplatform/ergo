@@ -73,7 +73,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         requestDownload(
           maxElements,
           minElementsPerBucket = 5,
-          maxElementsPerBucket = 20)(getPeersForDownloadingBlocks) { howManyPerType =>
+          maxElementsPerBucket = 20
+        )(getPeersForDownloadingBlocks) { howManyPerType =>
           h.nextModifiersToDownload(howManyPerType, downloadRequired(h))
         }
       }
@@ -111,7 +112,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
               requestDownload(
                 maxElements,
                 minElementsPerBucket = 50,
-                maxElementsPerBucket = 400)(Option(getPeersForDownloadingHeaders(remote))) { howManyPerType =>
+                maxElementsPerBucket = 400
+              )(Option(getPeersForDownloadingHeaders(remote))) { howManyPerType =>
                 Map(Header.modifierTypeId -> headerIds.reverse.filter(downloadRequired(historyReader)).take(howManyPerType))
               }
             }
@@ -152,9 +154,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       .foreach { case (peerStatus, peers) =>
         val modifiersByBucket = BucketingPartitioner.distribute(peers, maxElements, minElementsPerBucket, maxElementsPerBucket)(fetchMax)
         modifiersByBucket.headOption.foreach { _ =>
-          val modifierCounts = modifiersByBucket.map(_._2.size).mkString(",")
-          val modifierTypes = modifiersByBucket.map(_._1._2).toSet.mkString(",")
-          log.info(s"Downloading from $peerStatus peer(s) of ${modifiersByBucket.size} buckets with $modifierCounts modifiers of type $modifierTypes")
+          modifiersByBucket
+            .groupBy(_._1._2)
+            .mapValues(_.map(_._2.size))
+            .map { case (modType, batchSizes) =>
+              s"Downloading from $peerStatus peers : type[$modType] of ${batchSizes.size} batches each of ~ size: ${batchSizes.take(2).max}"
+            }.foreach(log.info)
+
           modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
             deliveryTracker.setRequested(modifierIds, modifierTypeId, Some(peer))
             val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)

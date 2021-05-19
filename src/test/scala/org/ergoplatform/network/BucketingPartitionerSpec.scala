@@ -38,7 +38,7 @@ class BucketingPartitionerSpec extends AnyPropSpec with ScalaCheckPropertyChecks
         assert(count <= 10*buckets.size)
         Map("A" -> elements.take(count))
       }
-
+      // if there is only 4 elements available to download, then bucket may contain only 4 elements regardless of minElementsPerBucket=5
       if (elements.size >= 5) {
         elemsByBucket.map(_._2.size).foreach { count =>
           assert(count >= 5 && count <= 10)
@@ -70,5 +70,12 @@ class BucketingPartitionerSpec extends AnyPropSpec with ScalaCheckPropertyChecks
     } shouldBe Map((2,"B") -> List(2), (1,"C") -> List(1), (1,"B") -> List(1), (1,"A") -> List(1), (2,"C") -> List(2), (2,"A") -> List(2))
   }
 
-
+  property("minElementsPerBucket constraint should not be used if there is less elements available") {
+    val elems =
+      BucketingPartitioner.distribute(List(1), Integer.MAX_VALUE, 100, 1) { _ =>
+        Map("A" -> List(1))
+      }
+    elems.size shouldBe 1
+    elems.head._2.size shouldBe 1
+  }
 }

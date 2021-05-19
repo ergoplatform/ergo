@@ -9,7 +9,7 @@ import scorex.util.ScorexLogging
 import scala.util.Try
 
 /**
-  * Contains all functions required by History to process PoPoWProofs and generate them.
+  * Contains all functions required by History to process PoPowProofModifier and generate them.
   */
 trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
 

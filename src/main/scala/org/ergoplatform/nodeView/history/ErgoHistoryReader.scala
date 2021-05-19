@@ -328,6 +328,11 @@ trait ErgoHistoryReader
     }
   }
 
+  /**
+    * @param header - header to start from (it is excluded from result)
+    * @param howMany - maximum number of headers to read after `header`
+    * @return up to `howMany` headers after `header` (exclusive)
+    */
   def bestHeadersAfter(header: Header, howMany: Int): Seq[Header] = {
     @tailrec
     def accumulateHeaders(height: Int, accumulator: Seq[Header], left: Int): Seq[Header] = {

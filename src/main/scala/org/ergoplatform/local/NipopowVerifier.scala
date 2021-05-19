@@ -11,7 +11,7 @@ import scorex.util.ModifierId
   * @param poPoWParams  - the PoPoW security parameters, m and k
   * @param genesisId    - the block id of the genesis block
   */
-class PoPoWVerifier(poPoWParams: PoPowParams, genesisId: ModifierId) {
+class NipopowVerifier(poPoWParams: PoPowParams, genesisId: ModifierId) {
   var bestProof: Option[NipopowProof] = None
 
   def bestChain: Seq[Header] = {

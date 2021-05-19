@@ -217,7 +217,7 @@ trait ErgoHistoryReader
         validate(header)
       case m: BlockSection =>
         validate(m)
-      case m: PoPowProofModifier =>
+      case m: NipopowProofModifier =>
         validate(m)
       case chunk: UTXOSnapshotChunk =>
         validate(chunk)

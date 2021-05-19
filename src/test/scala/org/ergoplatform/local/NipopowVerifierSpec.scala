@@ -7,7 +7,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 
 
-class PoPoWVerifierSpec extends AnyPropSpec with Matchers with ChainGenerator with ErgoGenerators {
+class NipopowVerifierSpec extends AnyPropSpec with Matchers with ChainGenerator with ErgoGenerators {
 
   private val poPowParams = PoPowParams(30, 30)
   val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
@@ -25,7 +25,7 @@ class PoPoWVerifierSpec extends AnyPropSpec with Matchers with ChainGenerator wi
       val longProof = popowAlgos.prove(longChain)(poPowParams).get
       val longestProof = popowAlgos.prove(longestChain)(poPowParams).get
 
-      val verifier = new PoPoWVerifier(poPowParams, baseChain.head.id)
+      val verifier = new NipopowVerifier(poPowParams, baseChain.head.id)
       verifier.bestChain.length shouldBe 0
 
       verifier.process(shortProof)

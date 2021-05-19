@@ -15,10 +15,10 @@ import scorex.util.{ModifierId, bytesToId}
   * @param proof   - NiPoPoW proof
   * @param sizeOpt - optionally, serialized network message size
   */
-case class PoPowProofModifier(proof: NipopowProof, override val sizeOpt: Option[Int] = None)
-  extends Comparable[PoPowProofModifier] with Ordered[PoPowProofModifier] with ErgoPersistentModifier {
+case class NipopowProofModifier(proof: NipopowProof, override val sizeOpt: Option[Int] = None)
+  extends Comparable[NipopowProofModifier] with Ordered[NipopowProofModifier] with ErgoPersistentModifier {
 
-  override val modifierTypeId: ModifierTypeId = PoPowProofModifier.modifierTypeId
+  override val modifierTypeId: ModifierTypeId = NipopowProofModifier.modifierTypeId
 
   override def parentId: ModifierId = ???
 
@@ -26,15 +26,15 @@ case class PoPowProofModifier(proof: NipopowProof, override val sizeOpt: Option[
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
-  override type M = PoPowProofModifier
+  override type M = NipopowProofModifier
 
-  override lazy val serializer: ScorexSerializer[PoPowProofModifier] = throw new Error("PoPow proofs serialization not supported")
+  override lazy val serializer: ScorexSerializer[NipopowProofModifier] = throw new Error("PoPow proofs serialization not supported")
 
-  override def compare(that: PoPowProofModifier): Int = ???
+  override def compare(that: NipopowProofModifier): Int = ???
 
 }
 
-object PoPowProofModifier {
+object NipopowProofModifier {
 
   val modifierTypeId: ModifierTypeId = ModifierTypeId @@ (105: Byte)
 

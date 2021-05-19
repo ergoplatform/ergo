@@ -201,8 +201,8 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
       val proof = popowAlgos.prove(chain)(smallPoPowParams).get
       val disconnectedProofPrefix = proof.prefix.updated(proof.prefix.length / 2, randomBlock)
       val disconnectedProof = NipopowProof(popowAlgos, proof.m, proof.k, disconnectedProofPrefix, proof.suffixHead, proof.suffixTail)
-      proof.hasValidConnections() shouldBe true
-      disconnectedProof.hasValidConnections() shouldBe false
+      proof.hasValidConnections shouldBe true
+      disconnectedProof.hasValidConnections shouldBe false
     }
   }
 
@@ -216,8 +216,8 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
       val proof = popowAlgos.prove(chain)(smallPoPowParams).get
       val disconnectedProofSuffixTail = proof.suffixTail.updated(proof.suffixTail.length / 2, randomBlock)
       val disconnectedProof = NipopowProof(popowAlgos, proof.m, proof.k, proof.prefix, proof.suffixHead, disconnectedProofSuffixTail)
-      proof.hasValidConnections() shouldBe true
-      disconnectedProof.hasValidConnections() shouldBe false
+      proof.hasValidConnections shouldBe true
+      disconnectedProof.hasValidConnections shouldBe false
     }
   }
 
@@ -225,7 +225,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers with HistoryTestHelpers w
     val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
     val prefix = toPoPoWChain(genChain(1))
     val suffix = toPoPoWChain(genChain(1))
-    NipopowProof(popowAlgos, 0, 0, prefix, suffix.head, suffix.tail.map(_.header)).hasValidConnections() shouldBe false
+    NipopowProof(popowAlgos, 0, 0, prefix, suffix.head, suffix.tail.map(_.header)).hasValidConnections shouldBe false
   }
 
 }

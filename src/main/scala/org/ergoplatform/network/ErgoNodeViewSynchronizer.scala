@@ -70,7 +70,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case CheckModifiersToDownload =>
       historyReaderOpt.foreach { h =>
         val maxElements = desiredSizeOfExpectingModifierQueue - deliveryTracker.requestedSize
-        requestDownload(maxElements, maxElementsPerBucket = 20)(getPeersForDownloadingBlocks) { howManyPerType =>
+        requestDownload(
+          maxElements,
+          minElementsPerBucket = 5,
+          maxElementsPerBucket = 20)(getPeersForDownloadingBlocks) { howManyPerType =>
           h.nextModifiersToDownload(howManyPerType, downloadRequired(h))
         }
       }
@@ -105,7 +108,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             val headerIds = ids.takeWhile(hId => !historyReader.isInBestChain(hId))
             if (headerIds.nonEmpty) {
               val maxElements = desiredSizeOfExpectingHeaderQueue - deliveryTracker.requestedSize
-              requestDownload(maxElements, maxElementsPerBucket = 400)(Option(getPeersForDownloadingHeaders(remote))) { howManyPerType =>
+              requestDownload(
+                maxElements,
+                minElementsPerBucket = 50,
+                maxElementsPerBucket = 400)(Option(getPeersForDownloadingHeaders(remote))) { howManyPerType =>
                 Map(Header.modifierTypeId -> headerIds.reverse.filter(downloadRequired(historyReader)).take(howManyPerType))
               }
             }
@@ -139,12 +145,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
-  protected def requestDownload(maxElements: Int, maxElementsPerBucket: Int)
+  protected def requestDownload(maxElements: Int, minElementsPerBucket: Int, maxElementsPerBucket: Int)
                                (getPeers: => Option[(PeerSyncState, Iterable[ConnectedPeer])])
                                (fetchMax: Int => Map[ModifierTypeId, Seq[ModifierId]]): Unit =
     getPeers
       .foreach { case (peerStatus, peers) =>
-        val modifiersByBucket = BucketingPartitioner.distribute(peers, maxElements, maxElementsPerBucket)(fetchMax)
+        val modifiersByBucket = BucketingPartitioner.distribute(peers, maxElements, minElementsPerBucket, maxElementsPerBucket)(fetchMax)
         modifiersByBucket.headOption.foreach { _ =>
           val modifierCounts = modifiersByBucket.map(_._2.size).mkString(",")
           val modifierTypes = modifiersByBucket.map(_._1._2).toSet.mkString(",")

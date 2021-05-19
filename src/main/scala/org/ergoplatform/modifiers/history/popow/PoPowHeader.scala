@@ -3,7 +3,6 @@ package org.ergoplatform.modifiers.history.popow
 import io.circe.{Decoder, Encoder}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
-import org.ergoplatform.settings.Algos
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
@@ -15,6 +14,8 @@ import scala.util.Try
   * Block header along with unpacked interlinks
   *
   * Interlinks are stored in reverse order: first element is always genesis header, then level of lowest target met etc
+  *
+  * Not used in the consensus protocol
   *
   */
 case class PoPowHeader(header: Header, interlinks: Seq[ModifierId]) extends BytesSerializable {
@@ -39,7 +40,6 @@ object PoPowHeader {
     }
   }
 
-
   implicit val interlinksEncoder: Encoder[Seq[ModifierId]] = { interlinksVector: Seq[ModifierId] =>
     interlinksVector.map(id => id: String).asJson
   }
@@ -62,6 +62,7 @@ object PoPowHeader {
 }
 
 object PoPowHeaderSerializer extends ScorexSerializer[PoPowHeader] {
+  import org.ergoplatform.wallet.Constants.ModifierIdLength
 
   override def serialize(obj: PoPowHeader, w: Writer): Unit = {
     val headerBytes = obj.header.bytes
@@ -75,7 +76,7 @@ object PoPowHeaderSerializer extends ScorexSerializer[PoPowHeader] {
     val headerSize = r.getUInt().toIntExact
     val header = HeaderSerializer.parseBytes(r.getBytes(headerSize))
     val linksQty = r.getUInt().toIntExact
-    val interlinks = (0 until linksQty).map(_ => bytesToId(r.getBytes(32)))
+    val interlinks = (0 until linksQty).map(_ => bytesToId(r.getBytes(ModifierIdLength)))
     PoPowHeader(header, interlinks)
   }
 

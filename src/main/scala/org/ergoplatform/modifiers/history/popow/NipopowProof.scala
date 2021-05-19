@@ -77,7 +77,7 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
 
   /**
     * Checks the connections of the blocks in the proof. Adjacent blocks should be linked either via interlink
-    * or previd.
+    * or parent block id.
     *
     * @return true if all adjacent blocks are correctly connected
     */

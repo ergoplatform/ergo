@@ -23,6 +23,7 @@ import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
 import org.ergoplatform.P2PKAddress
+import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.scanning.Scan
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.scalacheck.Gen
@@ -149,6 +150,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
     private val apps = mutable.Map[ScanId, Scan]()
 
+    private val ergoWalletService = new ErgoWalletServiceImpl
+
     def receive: Receive = {
 
       case _: InitWallet => sender() ! Success(WalletActorStub.mnemonic)
@@ -173,7 +176,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! boxes.sortBy(_.trackedBox.inclusionHeightOpt)
 
-      case GetTransactions =>
+      case GetTransactions(_) =>
         sender() ! walletTxs
 
       case DeriveKey(_) => sender() ! Success(WalletActorStub.address)
@@ -224,13 +227,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
         val sc = ErgoStateContext.empty(stateConstants)
         val params = LaunchParameters
-        val boxesToSpend = boxesToSpendOpt.getOrElse{
-          tx.inputs.map(inp => utxoState.versionedBoxHolder.get(ByteArrayWrapper(inp.boxId)).get)
+        sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, params, sc) { boxId =>
+          utxoState.versionedBoxHolder.get(ByteArrayWrapper(boxId))
         }
-        val dataBoxes = dataBoxesOpt.getOrElse{
-          tx.dataInputs.map(inp => utxoState.versionedBoxHolder.get(ByteArrayWrapper(inp.boxId)).get)
-        }
-        sender() ! ErgoWalletActor.signTransaction(Some(prover), tx, secrets, hints, boxesToSpend, dataBoxes, params, sc)
     }
   }
 

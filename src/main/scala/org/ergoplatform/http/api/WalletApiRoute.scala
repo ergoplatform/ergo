@@ -38,7 +38,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   override val route: Route = (pathPrefix("wallet") & withAuth) {
-    toStrictEntity(10.seconds) {
+    toStrictEntity(30.seconds) {
       getWalletStatusR ~
         balancesR ~
         unconfirmedBalanceR ~
@@ -180,8 +180,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
     val utx = gcr.unsignedTx
     val externalSecretsOpt = gcr.externalSecretsOpt
-    val extInputsOpt = gcr.inputs.map(ErgoWalletActor.stringsToBoxes)
-    val extDataInputsOpt = gcr.dataInputs.map(ErgoWalletActor.stringsToBoxes)
+    val extInputsOpt = gcr.inputs.map(ErgoWalletService.stringsToBoxes)
+    val extDataInputsOpt = gcr.dataInputs.map(ErgoWalletService.stringsToBoxes)
 
     withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt, extInputsOpt, extDataInputsOpt).map(_.response)) {
       case Failure(e) => BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
@@ -246,15 +246,13 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def getWalletStatusR: Route = (path("status") & get) {
-    withWalletOp(_.getWalletStatus) { walletStatus =>
-      ApiResponse(
+    withWallet(_.getWalletStatus) { walletStatus =>
         Json.obj(
           "isInitialized" -> walletStatus.initialized.asJson,
           "isUnlocked" -> walletStatus.unlocked.asJson,
           "changeAddress" -> walletStatus.changeAddress.map(_.toString()).getOrElse("").asJson,
           "walletHeight" -> walletStatus.height.asJson
         )
-      )
     }
   }
 
@@ -288,15 +286,30 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def transactionsR: Route = (path("transactions") & get & txParams) {
     case (minHeight, maxHeight, minConfNum, maxConfNum) =>
-      withWallet {
-        _.transactions
-          .map {
-            _.filter(tx =>
-              tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId) &&
-                tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
-                tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
-            )
-          }
+      if ((minHeight > 0 || maxHeight < Int.MaxValue) && // height is set
+        (minConfNum > 0 || maxConfNum < Int.MaxValue)    // confirmations are set
+      ) {
+        BadRequest(s"Bad request: both heights and confirmations set")
+      } else {
+        val filteringOpts = if (minHeight == 0 && maxHeight == Int.MaxValue &&
+          minConfNum == 0 && maxConfNum == Int.MaxValue) {
+          None
+        } else if(minHeight > 0 || maxHeight < Int.MaxValue){
+          Some(FilterByHeight(minHeight, maxHeight))
+        } else {
+          Some(FilterByConfirmations(minConfNum, maxConfNum))
+        }
+
+        withWallet {
+          _.transactions(filteringOpts)
+            .map {
+              _.filter(tx =>
+                tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId) &&
+                  tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
+                  tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
+              )
+            }
+        }
       }
   }
 
@@ -400,8 +413,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def extractHintsR: Route = (path("extractHints") & post & entity(as[HintExtractionRequest])) { her =>
     withWallet { w =>
-      val extInputsOpt = her.inputs.map(ErgoWalletActor.stringsToBoxes)
-      val extDataInputsOpt = her.dataInputs.map(ErgoWalletActor.stringsToBoxes)
+      val extInputsOpt = her.inputs.map(ErgoWalletService.stringsToBoxes)
+      val extDataInputsOpt = her.dataInputs.map(ErgoWalletService.stringsToBoxes)
 
       w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
     }

@@ -33,7 +33,7 @@ val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.1"
 
 val scorexVersion = "p2p-improvs-wip1-08abd291-SNAPSHOT"
-val sigmaStateVersion = "4.0.0-java8"
+val sigmaStateVersion = "4.0.3"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -139,6 +139,7 @@ assemblyMergeStrategy in assembly := {
 
 enablePlugins(sbtdocker.DockerPlugin)
 enablePlugins(JavaAppPackaging)
+enablePlugins(ReproducibleBuildsPlugin)
 
 mappings in Universal += {
   val sampleFile = (resourceDirectory in Compile).value / "samples" / "local.conf.sample"

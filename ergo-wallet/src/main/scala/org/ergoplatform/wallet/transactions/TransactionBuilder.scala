@@ -115,7 +115,7 @@ object TransactionBuilder {
 
     require(!changeGoesToFee || (changeAmt == 0 || createFeeOutput.isDefined),
       s"""When change=$changeAmt < minChangeValue=$minChangeValue it is added to miner's fee,
-        |it this case createFeeOutput should be defined
+        |in this case createFeeOutput should be defined
         |""".stripMargin)
 
     val feeOutOpt = createFeeOutput.map { fee =>

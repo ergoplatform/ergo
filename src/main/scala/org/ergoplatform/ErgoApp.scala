@@ -135,6 +135,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   // Useful for local blockchains (devnet)
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
     require(minerRefOpt.isDefined, "Miner does not exist but mining = true in config")
+    log.info(s"Starting mining with offlineGeneration")
     minerRefOpt.get ! StartMining
   }
 
@@ -192,16 +193,30 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
 object ErgoApp extends ScorexLogging {
 
-  import com.joefkelley.argyle._
+  val argParser = new scopt.OptionParser[Args]("ergo") {
+      opt[String]("config")
+        .abbr("c")
+        .action((x, c) => c.copy(userConfigPathOpt = Some(x)))
+        .text("location of ergo node configuration")
+        .optional()
+      opt[Unit]("devnet")
+        .action((_, c) => c.copy(networkTypeOpt = Some(NetworkType.DevNet)))
+        .text("set network to devnet")
+        .optional()
+      opt[Unit]("testnet")
+        .action((_, c) => c.copy(networkTypeOpt = Some(NetworkType.TestNet)))
+        .text("set network to testnet")
+        .optional()
+      opt[Unit]("mainnet")
+        .action((_, c) => c.copy(networkTypeOpt = Some(NetworkType.MainNet)))
+        .text("set network to mainnet")
+        .optional()
+      help("help").text("prints this usage text")
+  }
 
-  val argParser: Arg[Args] = (
-    optional[String]("--config", "-c") and
-      optionalOneOf[NetworkType](NetworkType.all.map(x => s"--${x.verboseName}" -> x): _*)
-    ).to[Args]
-
-  def main(args: Array[String]): Unit = argParser.parse(args) match {
-    case Success(argsParsed) => new ErgoApp(argsParsed).run()
-    case Failure(e) => throw e
+  def main(args: Array[String]): Unit = argParser.parse(args, Args()) match {
+    case Some(argsParsed) => new ErgoApp(argsParsed).run()
+    case None => // Error message will be displayed when arguments are bad
   }
 
   def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)

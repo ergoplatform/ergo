@@ -159,7 +159,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             .mapValues(_.map(_._2.size))
             .map { case (modType, batchSizes) =>
               s"Downloading from $peerStatus peers : type[$modType] of ${batchSizes.size} batches each of ~ size: ${batchSizes.take(2).max}"
-            }.foreach(log.info)
+            }.foreach(log.info(_))
 
           modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
             deliveryTracker.setRequested(modifierIds, modifierTypeId, Some(peer))

@@ -10,7 +10,7 @@ COPY benchmarks/build.sbt benchmarks/build.sbt
 RUN sbt update
 COPY . ./
 RUN sbt assembly
-RUN mv `find . -name ergo-*.jar` ergo.jar
+RUN mv `find target/scala-*/stripped/ -name ergo-*.jar` ergo.jar
 
 FROM openjdk:11-jre-slim
 RUN adduser --disabled-password --home /home/ergo --uid 9052 --gecos "ErgoPlatform" ergo && \

@@ -1944,7 +1944,6 @@ components:
         error:
           type: string
 
-
     ApiError:
       type: object
       required:
@@ -2324,6 +2323,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PopowHeader'
+        '404':
+          description: Header of extension of a corresponding block are not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:
@@ -2352,6 +2357,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PopowHeader'
+        '404':
+          description: Header of extension of a corresponding block are not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:

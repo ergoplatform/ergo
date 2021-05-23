@@ -72,8 +72,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val maxElements = desiredSizeOfExpectingModifierQueue - deliveryTracker.requestedSize
         requestDownload(
           maxElements,
-          minElementsPerBucket = 5,
-          maxElementsPerBucket = 20
+          minModifiersPerBucket = 5,
+          maxModifiersPerBucket = 20
         )(getPeersForDownloadingBlocks) { howManyPerType =>
           h.nextModifiersToDownload(howManyPerType, downloadRequired(h))
         }
@@ -111,8 +111,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
               val maxElements = desiredSizeOfExpectingHeaderQueue - deliveryTracker.requestedSize
               requestDownload(
                 maxElements,
-                minElementsPerBucket = 50,
-                maxElementsPerBucket = 400
+                minModifiersPerBucket = 50,
+                maxModifiersPerBucket = 400
               )(Option(getPeersForDownloadingHeaders(remote))) { howManyPerType =>
                 Map(Header.modifierTypeId -> headerIds.reverse.filter(downloadRequired(historyReader)).take(howManyPerType))
               }
@@ -147,12 +147,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
-  protected def requestDownload(maxElements: Int, minElementsPerBucket: Int, maxElementsPerBucket: Int)
+  /**
+    * Methods that is given min/max constraints and means of getting peers and modifiers
+    * @param maxModifiers maximum modifiers to download
+    * @param minModifiersPerBucket minimum modifiers to download per bucket
+    * @param maxModifiersPerBucket maximum modifiers to download per bucket
+    * @param getPeers get peers to download from, all peers have the same [[PeerSyncState]]
+    * @param fetchMax function that fetches modifiers, it is passed how many of them tops
+    */
+  protected def requestDownload(maxModifiers: Int, minModifiersPerBucket: Int, maxModifiersPerBucket: Int)
                                (getPeers: => Option[(PeerSyncState, Iterable[ConnectedPeer])])
                                (fetchMax: Int => Map[ModifierTypeId, Seq[ModifierId]]): Unit =
     getPeers
       .foreach { case (peerStatus, peers) =>
-        val modifiersByBucket = BucketingPartitioner.distribute(peers, maxElements, minElementsPerBucket, maxElementsPerBucket)(fetchMax)
+        val modifiersByBucket = BucketingPartitioner.distribute(peers, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
         modifiersByBucket.headOption.foreach { _ =>
           modifiersByBucket
             .groupBy(_._1._2)

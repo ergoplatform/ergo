@@ -148,7 +148,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Methods that is given min/max constraints and means of getting peers and modifiers
+    * Modifier download method that is given min/max constraints and means of getting peers and modifiers.
+    * It sends requests for modifiers to optimal peers in optimally sized batches.
     * @param maxModifiers maximum modifiers to download
     * @param minModifiersPerBucket minimum modifiers to download per bucket
     * @param maxModifiersPerBucket maximum modifiers to download per bucket
@@ -377,6 +378,7 @@ object ErgoNodeViewSynchronizer {
 
   case object CheckModifiersToDownload
 
+  /** Alternative Peer Status dedicated only for peer syncing */
   sealed trait PeerSyncState
   object PeerSyncState {
     /** Peer for downloading headers must be older */

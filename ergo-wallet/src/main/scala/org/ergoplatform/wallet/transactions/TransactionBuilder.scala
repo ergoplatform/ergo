@@ -49,17 +49,17 @@ object TransactionBuilder {
     require(inputs.distinct.size == inputs.size, s"There should be no duplicate inputs")
   }
 
-
   /** Creates unsigned transaction from given inputs and outputs adding outputs with miner's fee and change
     * Runs required checks ensuring that resulted transaction will be successfully validated by a node.
     *
-    * @param inputs - input boxes
-    * @param dataInputs - data inputs
+    * @param inputs           - input boxes
+    * @param dataInputs       - data inputs
     * @param outputCandidates - output candidate boxes
-    * @param currentHeight - current height (used in miner's fee box and change box)
-    * @param feeAmount - fee amount to put in miner's fee box
-    * @param changeAddress - address where to send change from the input boxes
-    * @param minChangeValue - minimum change value to send, otherwise add to miner's fee
+    * @param currentHeight    - current height (used in miner's fee box and change box)
+    * @param createFeeOutput  - optional fee amount to put in a new miner's fee box, which will be
+    *                           created by this method. If None, then feeOut is not created.
+    * @param changeAddress    - address where to send change from the input boxes
+    * @param minChangeValue   - minimum change value to send, otherwise add to miner's fee
     * @param minerRewardDelay - reward delay to encode in miner's fee box
     * @return unsigned transaction
     */
@@ -68,7 +68,7 @@ object TransactionBuilder {
     dataInputs: IndexedSeq[DataInput],
     outputCandidates: Seq[ErgoBoxCandidate],
     currentHeight: Int,
-    feeAmount: Long,
+    createFeeOutput: Option[Long],
     changeAddress: ErgoAddress,
     minChangeValue: Long,
     minerRewardDelay: Int,
@@ -80,7 +80,8 @@ object TransactionBuilder {
 
     // TODO: implement all appropriate checks from ErgoTransaction.validateStatefull
 
-    require(feeAmount > 0, s"expected fee amount > 0, got $feeAmount")
+    val feeAmount = createFeeOutput.getOrElse(0L)
+    require(createFeeOutput.fold(true)(_ > 0), s"expected fee amount > 0, got $feeAmount")
     val inputTotal  = inputs.map(_.value).sum
     val outputSum   = outputCandidates.map(_.value).sum
     val outputTotal = outputSum + feeAmount
@@ -110,17 +111,24 @@ object TransactionBuilder {
     val changeBoxes = selection.changeBoxes
     val changeBoxesHaveTokens = changeBoxes.exists(_.tokens.nonEmpty)
 
-    val noChange = changeAmt < minChangeValue && !changeBoxesHaveTokens
+    val changeGoesToFee = changeAmt < minChangeValue && !changeBoxesHaveTokens
 
-    // if computed changeAmt is too small give it to miner as tips
-    val actualFee = if (noChange) feeAmount + changeAmt else feeAmount
-    val feeOut = new ErgoBoxCandidate(
-      actualFee,
-      ErgoScriptPredef.feeProposition(minerRewardDelay),
-      currentHeight
-    )
+    require(!changeGoesToFee || (changeAmt == 0 || createFeeOutput.isDefined),
+      s"""When change=$changeAmt < minChangeValue=$minChangeValue it is added to miner's fee,
+        |in this case createFeeOutput should be defined
+        |""".stripMargin)
 
-    val addedChangeOut = if (!noChange) {
+    val feeOutOpt = createFeeOutput.map { fee =>
+      // if computed changeAmt is too small give it to miner as tips
+      val actualFee = if (changeGoesToFee) fee + changeAmt else fee
+      new ErgoBoxCandidate(
+        actualFee,
+        ErgoScriptPredef.feeProposition(minerRewardDelay),
+        currentHeight
+      )
+    }
+
+    val addedChangeOut = if (!changeGoesToFee) {
       val script = changeAddress.script
       changeBoxes.map { cb =>
         new ErgoBoxCandidate(cb.value, script, currentHeight, tokensMapToColl(cb.tokens))
@@ -129,7 +137,7 @@ object TransactionBuilder {
       Seq()
     }
 
-    val finalOutputCandidates = outputCandidates ++ Seq(feeOut) ++ addedChangeOut
+    val finalOutputCandidates = outputCandidates ++ feeOutOpt ++ addedChangeOut
 
     new UnsignedErgoLikeTransaction(
       inputs.map(b => new UnsignedInput(b.id)),

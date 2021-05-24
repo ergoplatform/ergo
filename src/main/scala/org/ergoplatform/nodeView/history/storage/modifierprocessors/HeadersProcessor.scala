@@ -35,7 +35,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   val powScheme: AutolykosPowScheme
 
-  lazy val popowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
+  val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
 
   // Maximum time in future block header may have
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis

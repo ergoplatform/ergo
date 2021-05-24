@@ -357,7 +357,7 @@ trait ErgoHistoryReader
     * @return PoPowHeader(header + interlinks) or None if header of extension of a corresponding block are not available
     */
   def popowHeader(headerId: ModifierId): Option[PoPowHeader] = {
-    this.typedModifierById[Header](headerId).flatMap(h =>
+    typedModifierById[Header](headerId).flatMap(h =>
       typedModifierById[Extension](h.extensionId).flatMap { ext =>
         NipopowAlgos.unpackInterlinks(ext.fields).toOption.map { interlinks =>
           PoPowHeader(h, interlinks)
@@ -387,7 +387,7 @@ trait ErgoHistoryReader
     */
   def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
     val proofParams = PoPowParams(m, k)
-    popowAlgos.prove(this, headerIdOpt)(proofParams)
+    nipopowAlgos.prove(this, headerIdOpt)(proofParams)
   }
 
 }

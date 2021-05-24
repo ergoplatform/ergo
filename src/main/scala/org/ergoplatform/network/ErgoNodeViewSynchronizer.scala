@@ -69,11 +69,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val onCheckModifiersToDownload: Receive = {
     case CheckModifiersToDownload =>
       historyReaderOpt.foreach { h =>
-        val maxElements = desiredSizeOfExpectingModifierQueue - deliveryTracker.requestedSize
+        val maxModifiers = desiredSizeOfExpectingModifierQueue - deliveryTracker.requestedSize
         requestDownload(
-          maxElements,
-          minElementsPerBucket = 5,
-          maxElementsPerBucket = 20
+          maxModifiers,
+          minModifiersPerBucket = 5,
+          maxModifiersPerBucket = 20
         )(getPeersForDownloadingBlocks) { howManyPerType =>
           h.nextModifiersToDownload(howManyPerType, downloadRequired(h))
         }
@@ -108,11 +108,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             val ids = syncInfo.lastHeaderIds.reverse
             val headerIds = ids.takeWhile(hId => !historyReader.isInBestChain(hId))
             if (headerIds.nonEmpty) {
-              val maxElements = desiredSizeOfExpectingHeaderQueue - deliveryTracker.requestedSize
+              val maxModifiers = desiredSizeOfExpectingHeaderQueue - deliveryTracker.requestedSize
               requestDownload(
-                maxElements,
-                minElementsPerBucket = 50,
-                maxElementsPerBucket = 400
+                maxModifiers,
+                minModifiersPerBucket = 50,
+                maxModifiersPerBucket = 400
               )(Option(getPeersForDownloadingHeaders(remote))) { howManyPerType =>
                 Map(Header.modifierTypeId -> headerIds.reverse.filter(downloadRequired(historyReader)).take(howManyPerType))
               }
@@ -147,12 +147,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
-  protected def requestDownload(maxElements: Int, minElementsPerBucket: Int, maxElementsPerBucket: Int)
-                               (getPeers: => Option[(PeerSyncState, Iterable[ConnectedPeer])])
+  /**
+    * Modifier download method that is given min/max constraints and means of getting peers and modifiers.
+    * It sends requests for modifiers to optimal peers in optimally sized batches.
+    * @param maxModifiers maximum modifiers to download
+    * @param minModifiersPerBucket minimum modifiers to download per bucket
+    * @param maxModifiersPerBucket maximum modifiers to download per bucket
+    * @param getPeersOpt optionally get peers to download from, all peers have the same [[PeerSyncState]]
+    * @param fetchMax function that fetches modifiers, it is passed how many of them tops
+    */
+  protected def requestDownload(maxModifiers: Int, minModifiersPerBucket: Int, maxModifiersPerBucket: Int)
+                               (getPeersOpt: => Option[(PeerSyncState, Iterable[ConnectedPeer])])
                                (fetchMax: Int => Map[ModifierTypeId, Seq[ModifierId]]): Unit =
-    getPeers
+    getPeersOpt
       .foreach { case (peerStatus, peers) =>
-        val modifiersByBucket = BucketingPartitioner.distribute(peers, maxElements, minElementsPerBucket, maxElementsPerBucket)(fetchMax)
+        val modifiersByBucket = BucketingPartitioner.distribute(peers, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
         modifiersByBucket.headOption.foreach { _ =>
           modifiersByBucket
             .groupBy(_._1._2)
@@ -369,6 +378,7 @@ object ErgoNodeViewSynchronizer {
 
   case object CheckModifiersToDownload
 
+  /** Alternative Peer Status dedicated only for peer syncing */
   sealed trait PeerSyncState
   object PeerSyncState {
     /** Peer for downloading headers must be older */

@@ -2346,7 +2346,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /nipopow/proof/{minChainLength}/{sufLength}:
+  /nipopow/proof/{minChainLength}/{suffixLength}:
     get:
       summary: Construct PoPoW proof for given min superchain length and suffix length
       operationId: getPopowProof
@@ -2360,7 +2360,7 @@ paths:
           schema:
             type: number
         - in: path
-          name: sufLength
+          name: suffixLength
           required: true
           description: Suffix length
           schema:
@@ -2379,7 +2379,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /nipopow/proof/{minChainLength}/{sufLength}/{headerId}:
+  /nipopow/proof/{minChainLength}/{suffixLength}/{headerId}:
     get:
       summary: Construct PoPoW proof for given min superchain length, suffix length and header ID
       operationId: getPopowProofByHeaderId
@@ -2393,7 +2393,7 @@ paths:
           schema:
             type: number
         - in: path
-          name: sufLength
+          name: suffixLength
           required: true
           description: Suffix length
           schema:

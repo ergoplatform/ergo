@@ -1257,39 +1257,15 @@ components:
           items:
             $ref: '#/components/schemas/ModifierId'
 
-    AutolykosPowScheme:
-      type: object
-      required:
-        - k
-        - n
-      properties:
-        k:
-          description: Number of elements in one solution
-          type: number
-        n:
-          description: initially, N = 2^^n
-          type: number
-
-    NipopowAlgos:
-      type: object
-      required:
-        - powScheme
-      properties:
-        powScheme:
-          $ref: '#/components/schemas/AutolykosPowScheme'
-
     NipopowProof:
       type: object
       required:
-        - popowAlgos
         - m
         - k
         - prefix
         - suffixHead
         - suffixTail
       properties:
-        popowAlgos:
-          $ref: '#/components/schemas/NipopowAlgos'
         m:
           description: security parameter (min μ-level superchain length)
           type: number

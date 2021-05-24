@@ -11,8 +11,7 @@ import scala.concurrent.ExecutionContext
 class ErgoMiningThread(ergoSettings: ErgoSettings,
                        minerRef: ActorRef,
                        startCandidate: CandidateBlock,
-                       sk: PrivateKey,
-                       timeProvider: NetworkTimeProvider) extends Actor with ScorexLogging {
+                       sk: PrivateKey) extends Actor with ScorexLogging {
 
   implicit val ec: ExecutionContext = context.dispatcher
 
@@ -55,20 +54,18 @@ class ErgoMiningThread(ergoSettings: ErgoSettings,
 
 object ErgoMiningThread {
 
-  def props(ergoSettings: ErgoSettings,
+  private def props(ergoSettings: ErgoSettings,
             minerRef: ActorRef,
             startCandidate: CandidateBlock,
-            sk: BigInt,
-            timeProvider: NetworkTimeProvider): Props =
-    Props(new ErgoMiningThread(ergoSettings, minerRef, startCandidate, sk, timeProvider))
+            sk: BigInt): Props =
+    Props(new ErgoMiningThread(ergoSettings, minerRef, startCandidate, sk))
 
   def apply(ergoSettings: ErgoSettings,
             minerRef: ActorRef,
             startCandidate: CandidateBlock,
-            sk: BigInt,
-            timeProvider: NetworkTimeProvider)
+            sk: BigInt)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(ergoSettings, minerRef, startCandidate, sk, timeProvider))
+    context.actorOf(props(ergoSettings, minerRef, startCandidate, sk))
 
   case object MineBlock
 

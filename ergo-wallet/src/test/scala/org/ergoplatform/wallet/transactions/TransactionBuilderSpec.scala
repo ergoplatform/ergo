@@ -5,12 +5,13 @@ import sigmastate.Values.SigmaPropValue
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers._
+import sigmastate.utils.Helpers._
 import org.ergoplatform._
 import org.scalatest.Matchers
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.wallet.TokensMap
 
-import scala.util.{Success, Try}
+import scala.util.{Success, Try, Failure}
 import scorex.crypto.hash.Digest32
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
@@ -51,17 +52,17 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
 
   def transaction(inputBox: ErgoBox,
                   outBox: ErgoBoxCandidate,
+                  fee: Option[Long] = Some(minBoxValue),
                   burnTokens: TokensMap = Map.empty): Try[UnsignedErgoLikeTransaction] = {
     val ins = IndexedSeq(inputBox)
     val outs = IndexedSeq(outBox)
     val changeAddress = P2PKAddress(rootSecret.privateInput.publicImage)
-    val fee = minBoxValue
     val res = buildUnsignedTx(
       inputs = ins,
       dataInputs = IndexedSeq(),
       outputCandidates = outs,
       currentHeight = currentHeight,
-      feeAmount = fee,
+      createFeeOutput = fee,
       changeAddress = changeAddress,
       minChangeValue = minChangeValue,
       minerRewardDelay = minerRewardDelay,
@@ -100,4 +101,28 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
     val remainingTokens = Map(tid1 -> 600L, tid2 -> 1200L)
     TransactionBuilder.collTokensToMap(out2.additionalTokens) shouldBe remainingTokens
   }
+
+  property("no fees") {
+    val inputBox = box(minBoxValue)
+    val tokenId  = Digest32 @@ inputBox.id
+    val outBox = boxCandidate(minBoxValue, Seq(tokenId -> 100L))
+    val res = transaction(inputBox, outBox, fee = None)
+
+    res shouldBe a[Success[_]]
+    val tx = res.get
+    tx.outputCandidates.size shouldBe 1
+    tx.outputCandidates(0) shouldEqual outBox
+  }
+
+  property("change goes to fee, but no outFee box") {
+    val inputBox = box(minBoxValue + minBoxValue / 2)
+    val tokenId  = Digest32 @@ inputBox.id
+    val outBox = boxCandidate(minBoxValue, Seq(tokenId -> 100L))
+    val res = transaction(inputBox, outBox, fee = None)
+
+    assertExceptionThrown(
+      res.getOrThrow,
+      t => t.getMessage.contains("createFeeOutput should be defined"))
+  }
+
 }

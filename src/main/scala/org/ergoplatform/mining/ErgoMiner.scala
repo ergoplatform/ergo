@@ -77,6 +77,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   // Flag which is set when a future with block candidate generation is running
   private var candidateGenerating: Boolean = false
 
+  private var prepareCandidateRetry: FiniteDuration = 100.millis
+
   // cached block candidate
   private var candidateOpt: Option[CandidateCache] = None
 
@@ -300,7 +302,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case prepareCandidate@PrepareCandidate(txsToInclude, reply) =>
       val msgSender = if (reply) Some(sender()) else None
       if (candidateGenerating) {
-        msgSender.foreach(s => context.system.scheduler.scheduleOnce(100.millis, self, prepareCandidate)(context.system.dispatcher, s))
+        msgSender.foreach(s => context.system.scheduler.scheduleOnce(prepareCandidateRetry, self, prepareCandidate)(context.system.dispatcher, s))
       } else if (publicKeyOpt.isEmpty) {
         // this should never happen as we set pubKeyOpt at preStart
         msgSender.foreach(_ ! StatusReply.error("Candidate could not be generated, public key not available"))
@@ -320,14 +322,16 @@ class ErgoMiner(ergoSettings: ErgoSettings,
               case Success(Readers(h, s: UtxoStateReader, m, _)) =>
                 generateCandidate(h, m, s, publicKeyOpt.get, txsToInclude) match {
                   case Some(Success(candidate)) =>
-                    log.info(s"Generated new candidate requested by miner in ${System.currentTimeMillis() - start} ms")
+                    val generationTook = System.currentTimeMillis() - start
+                    prepareCandidateRetry = generationTook.millis
+                    log.info(s"Generated new candidate requested by miner in $generationTook ms")
                     msgSender.foreach(_ ! StatusReply.success(candidate.externalVersion))
                   case Some(Failure(ex)) =>
                     log.error("Failed to generate new candidate", ex)
                     msgSender.foreach(_ ! StatusReply.error(ex))
                   case None =>
                     log.warn("Can not generate block candidate: chain not synced (maybe last block not fully applied yet")
-                    msgSender.foreach(s => context.system.scheduler.scheduleOnce(50.millis, self, prepareCandidate)(context.system.dispatcher, s))
+                    msgSender.foreach(s => context.system.scheduler.scheduleOnce(prepareCandidateRetry, self, prepareCandidate)(context.system.dispatcher, s))
                 }
                 candidateGenerating = false
               case _ =>

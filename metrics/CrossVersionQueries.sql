@@ -25,6 +25,7 @@ where a1.height != a2.height
 ---------------------------------------
 -- Cross Version reports
 
+--
 -- tx costs and times by blocks
 select t5.blockId,
        t5.height,
@@ -316,12 +317,35 @@ where t.time_ratio >= 10
 group by t.time_ratio
 order by t.time_ratio asc;
 
-select count(*)
-from selectedInputs;
+select count(*) from selectedInputs;
 
-select count(*) as total_rows4
-from verifyScript4 as s;
+-- count script rows
+select *, total_rows5 - total_rows4 as v5_v4_rows_diff from
+(select count(*) as total_rows5
+from verifyScript as s),
+(select count(*) as total_rows4
+from verifyScript4 as s),
+(select count(*) as common_rows
+from verifyScript as t5
+         join verifyScript4 t4
+              on t5.blockId = t4.blockId
+                  and t5.txId = t4.txId
+                  and t5.boxIndex = t4.boxIndex);
 
+-- compare total script time
+select times.total_time4 / 1000                                   as total_time4_us,
+       times.total_time5 / 1000                                   as total_time5_us,
+       (times.total_time4 - times.total_time5) / 1000             as total_diff_us,
+       round((1 - round(times.total_time5 * 100 / times.total_time4 * 0.01, 1)) * 100, 1) as percent_of_reduction
+from (select sum(t5.time) as total_time5,
+             sum(t4.time) as total_time4
+      from verifyScript as t5
+               join verifyScript4 t4
+                    on t5.blockId = t4.blockId
+                        and t5.txId = t4.txId
+                        and t5.boxIndex = t4.boxIndex) as times;
+
+-- count v4 script which are not selected
 select count(*) as total_rows4
 from verifyScript4 as s
 where not exists(
@@ -329,16 +353,6 @@ where not exists(
         from selectedInputs as i
         where s.txId = i.txId
           and s.boxIndex = i.boxIndex);
-
--- sum of all script times
-select total_time4_us,
-       total_time_us,
-       total_time4_us - total_time_us                      as total_diff,
-       round(total_time4_us * 10 / total_time_us * 0.1, 1) as ratio
-from (select total_time4 / 1000 as total_time4_us
-      from (select sum(time) as total_time4 from verifyScript4)),
-     (select total_time / 1000 as total_time_us
-      from (select sum(time) as total_time from verifyScript));
 
 -- sum of all script times (!selected)
 select total_time4_us,

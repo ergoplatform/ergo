@@ -242,6 +242,8 @@ where t.time_ratio <= 19
 group by t.time_ratio
 order by t.time_ratio desc;
 
+-----------------------------------------------------------
+-- comparing stages of block validation
 -- v5.0: top 1000 block costs vs total validation times
 select b1.blockId,
        b1.height,

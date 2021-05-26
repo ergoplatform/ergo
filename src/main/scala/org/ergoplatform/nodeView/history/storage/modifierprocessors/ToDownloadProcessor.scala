@@ -37,12 +37,16 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     */
   def isHeadersChainSynced: Boolean = pruningProcessor.isHeadersChainSynced
 
-  /** Returns Next `howMany` modifier ids satisfying `filter` condition our node should download
-    * to synchronize full blocks
+  /**
+    * Get modifier ids to download to synchronize full blocks
+    * @param howManyPerType how many ModifierIds per ModifierTypeId to fetch
+    * @param condition filter only ModifierIds that pass this condition
+    * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
     */
   def nextModifiersToDownload(howManyPerType: Int, condition: ModifierId => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
     @tailrec
     def continuation(height: Int, acc: Map[ModifierTypeId, Seq[ModifierId]]): Map[ModifierTypeId, Seq[ModifierId]] = {
+      // return if at least one of Modifier types reaches howManyPerType limit for modifier ids
       if (acc.values.exists(_.lengthCompare(howManyPerType) >= 0)) {
         acc.mapValues(_.take(howManyPerType)).view.force
       } else {
@@ -50,7 +54,9 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
         if (headersAtThisHeight.nonEmpty) {
           val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter(m => condition(m._2))
-          continuation(height + 1, toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) => newAcc.adjust(mType)(_.fold(Seq(mId))(_ :+ mId)) })
+          // add new modifiers to download to accumulator
+          val newAcc = toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) => newAcc.adjust(mType)(_.fold(Seq(mId))(_ :+ mId)) }
+          continuation(height + 1, newAcc)
         } else {
           acc
         }
@@ -105,6 +111,12 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
 object ToDownloadProcessor {
   implicit class MapPimp[K, V](underlying: Map[K, V]) {
+    /**
+      * One liner for updating a Map with the possibility to handle case of missing Key
+      * @param k map key
+      * @param f function that is passed Option depending on Key being present or missing, returning new Value
+      * @return new Map with value updated under given key
+      */
     def adjust(k: K)(f: Option[V] => V): Map[K, V] = underlying.updated(k, f(underlying.get(k)))
   }
 }

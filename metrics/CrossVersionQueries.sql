@@ -25,7 +25,8 @@ where a1.height != a2.height
 ---------------------------------------
 -- Cross Version reports
 
---
+-- comment this count(*) line and parentheses to get records
+select count(*) from (
 -- tx costs and times by blocks
 select t5.blockId,
        t5.height,
@@ -33,15 +34,15 @@ select t5.blockId,
 
        t4.cost                            as cost4,
        t5.cost                            as cost5,
-       t4.cost * 10 / t5.cost             as cost_ratio,
+       round(t4.cost * 10 / t5.cost * 0.1, 1) as cost_ratio,
 
        t4.tx_time_us                      as time4_us,
        t5.tx_time_us                      as time5_us,
-       t4.tx_time_us * 10 / t5.tx_time_us as time_ratio
+       round(t4.tx_time_us * 10 / t5.tx_time_us * 0.1, 1) as time_ratio
 from (select b.blockId,
              b.height,
              b.tx_num,
-             t.cost           as cost,
+             t.cost + b.tx_num * 9000 as cost,
              t.tx_time / 1000 as tx_time_us
       from (select blockId, sum(cost) as cost, sum(time) as tx_time
             from validateTxStateful
@@ -54,8 +55,10 @@ from (select b.blockId,
                from (select blockId, sum(cost) as cost, sum(time) as tx_time
                      from validateTxStateful4
                      group by blockId)) as t4 on t5.blockId = t4.blockId
-where time_ratio < 10
-order by time_ratio asc;
+where time_ratio < 1
+order by time_ratio asc
+    )
+;
 
 -- tx costs and times by blocks (compare)
 select count(*) from (
@@ -106,7 +109,6 @@ from (select t5.tx_num,
              t4.tx_time_us * 10 / t5.tx_time_us as time_ratio
       from (select b.blockId,
                    b.tx_num,
-                   b.cost           as cost,
                    t.tx_time / 1000 as tx_time_us
             from (select blockId, sum(time) as tx_time
                   from validateTxStateful
@@ -114,9 +116,8 @@ from (select t5.tx_num,
                      join applyTransactions as b on b.blockId = t.blockId) as t5
 
                join (select blockId,
-                            cost,
                             tx_time / 1000 as tx_time_us
-                     from (select blockId, sum(cost) as cost, sum(time) as tx_time
+                     from (select blockId, sum(time) as tx_time
                            from validateTxStateful4
                            group by blockId)) as t4 on t5.blockId = t4.blockId) as t
 group by t.time_ratio / 10
@@ -376,6 +377,7 @@ from (select total_time4 / 1000 as total_time4_us
                     where s.txId = txId
                       and s.boxIndex = boxIndex)));
 
+-- count of all scripts (selected)
 select count(*) as total_count4
 from verifyScript4 as s
          join selectedInputs as i on s.txId = i.txId and s.boxIndex = i.boxIndex;

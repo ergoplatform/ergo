@@ -14313,10 +14313,9 @@ See <code>README.md</code> for detail of database schema.</p>
 <div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[2]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># open sqlite connection to perform helper queries</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># open sqlite connection to perform queries</span>
 <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
 <span class="kn">import</span> <span class="nn">sqlite3</span>
-
 <span class="n">conn</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s2">&quot;../Metrics.sqlite&quot;</span><span class="p">)</span>
 </pre></div>
 
@@ -14561,85 +14560,13 @@ See <code>README.md</code> for detail of database schema.</p>
 </div>
 <div class="jp-Cell-inputWrapper"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h2 id="Cross-Version-validation">Cross Version validation<a class="anchor-link" href="#Cross-Version-validation">&#182;</a></h2><ul>
-<li>Make sure recorded data for v5 and v4 have the same <code>height</code> and <code>tx_num</code> for all blockIds</li>
-</ul>
-
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
-<div class="jp-Cell-inputWrapper">
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[6]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-     <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">checks</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
-    <span class="n">appendFullBlockOk</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">        -- validate appendFullBlock tables</span>
-<span class="s2">        select *</span>
-<span class="s2">        from appendFullBlock a1</span>
-<span class="s2">                 join appendFullBlock4 a2 on a1.blockId = a2.blockId</span>
-<span class="s2">        where a1.height != a2.height</span>
-<span class="s2">           or a1.tx_num != a2.tx_num;</span>
-<span class="s2">        &quot;&quot;&quot;</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span>
-    <span class="n">applyTransactionsOk</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">        select *</span>
-<span class="s2">        from applyTransactions a1</span>
-<span class="s2">                 join applyTransactions4 a2 on a1.blockId = a2.blockId</span>
-<span class="s2">        where a1.height != a2.height</span>
-<span class="s2">           or a1.tx_num != a2.tx_num;</span>
-<span class="s2">        &quot;&quot;&quot;</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span>
-    <span class="n">createUtxoStateOk</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">        select *</span>
-<span class="s2">        from createUtxoState a1</span>
-<span class="s2">                 join createUtxoState4 a2 on a1.blockId = a2.blockId</span>
-<span class="s2">        where a1.height != a2.height</span>
-<span class="s2">           or a1.tx_num != a2.tx_num;</span>
-<span class="s2">        &quot;&quot;&quot;</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span>
-<span class="p">)</span>
-<span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">checks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;appendFullBlockOk&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">checks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;applyTransactionsOk&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">checks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-        <span class="s2">&quot;createUtxoStateOk&quot;</span><span class="p">)):</span>
-    <span class="n">ok</span> <span class="o">=</span> <span class="n">checks</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="n">ok</span> <span class="o">=</span> <span class="s2">&quot;ok&quot;</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">ok</span><span class="p">,</span> <span class="n">checks</span><span class="p">)</span>
-</pre></div>
-
-     </div>
-</div>
-</div>
-</div>
-
-<div class="jp-Cell-outputWrapper">
-
-
-<div class="jp-OutputArea jp-Cell-outputArea">
-
-<div class="jp-OutputArea-child">
-
-    
-    <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-
-
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
-<pre>ok {&#39;appendFullBlockOk&#39;: True, &#39;applyTransactionsOk&#39;: True, &#39;createUtxoStateOk&#39;: True}
-</pre>
-</div>
-</div>
-
-</div>
-
-</div>
-
-</div>
-<div class="jp-Cell-inputWrapper"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
-<h2 id="v5.0-Analysis">v5.0 Analysis<a class="anchor-link" href="#v5.0-Analysis">&#182;</a></h2><h3 id="Block-Validation-Analysis">Block Validation Analysis<a class="anchor-link" href="#Block-Validation-Analysis">&#182;</a></h3><p>In this section we compare script validation against block validation times.</p>
+<h2 id="v5.0-Analysis">v5.0 Analysis<a class="anchor-link" href="#v5.0-Analysis">&#182;</a></h2><h3 id="Block-Validation-Time-Analysis">Block Validation Time Analysis<a class="anchor-link" href="#Block-Validation-Time-Analysis">&#182;</a></h3><p>In this section we compare script validation time against block validation time.</p>
 <h4 id="Sizes-of-the-recorded-tables">Sizes of the recorded tables<a class="anchor-link" href="#Sizes-of-the-recorded-tables">&#182;</a></h4>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
 <div class="jp-Cell-inputWrapper">
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[7]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[6]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
@@ -14670,7 +14597,7 @@ See <code>README.md</code> for detail of database schema.</p>
 <div class="jp-OutputArea-child">
 
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[7]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[6]:</div>
 
 
 
@@ -14735,7 +14662,7 @@ For more ~40% of the blocks:
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
 <div class="jp-Cell-inputWrapper">
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[14]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[7]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
@@ -14769,7 +14696,7 @@ For more ~40% of the blocks:
 <div class="jp-OutputArea-child">
 
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[14]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[7]:</div>
 
 
 
@@ -15092,7 +15019,7 @@ We can see that for &gt; 70% blocks the ration is above 2, which suggests that
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
 <div class="jp-Cell-inputWrapper">
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[15]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[8]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
@@ -15131,7 +15058,7 @@ We can see that for &gt; 70% blocks the ration is above 2, which suggests that
 <div class="jp-OutputArea-child">
 
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[15]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[8]:</div>
 
 
 
@@ -15275,7 +15202,7 @@ We see that for most transactions, <code>verifyScript</code> is &gt; 50% of <cod
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
 <div class="jp-Cell-inputWrapper">
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[18]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[9]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
@@ -15315,7 +15242,7 @@ We see that for most transactions, <code>verifyScript</code> is &gt; 50% of <cod
 <div class="jp-OutputArea-child">
 
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[18]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[9]:</div>
 
 
 
@@ -15704,7 +15631,7 @@ comparing times in <code>verifyScript</code> and <code>validateTxStateful</code>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
 <div class="jp-Cell-inputWrapper">
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[17]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[10]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
@@ -15745,7 +15672,7 @@ comparing times in <code>verifyScript</code> and <code>validateTxStateful</code>
 <div class="jp-OutputArea-child">
 
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[17]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[10]:</div>
 
 
 
@@ -15878,7 +15805,7 @@ Comparing times in <code>verifyScript</code> and <code>validateTxStateful</code>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
 <div class="jp-Cell-inputWrapper">
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[12]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[11]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
@@ -15913,7 +15840,7 @@ Comparing times in <code>verifyScript</code> and <code>validateTxStateful</code>
 <div class="jp-OutputArea-child">
 
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[12]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[11]:</div>
 
 
 
@@ -15936,7 +15863,7 @@ Comparing times in <code>verifyScript</code> and <code>validateTxStateful</code>
   <thead>
     <tr style="text-align: right;">
       <th></th>
-      <th>count(*)</th>
+      <th>tx_count</th>
     </tr>
   </thead>
   <tbody>
@@ -15960,14 +15887,965 @@ Comparing times in <code>verifyScript</code> and <code>validateTxStateful</code>
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
 <p>Conclusions:</p>
 <ul>
+<li>Creating UtxoState after application of transactions requires profiling and optimization.</li>
+<li><code>UtxoState.applyTransactions</code> method need optimizations.</li>
 <li>In most of the cases the time to validate transaction (<code>validateStateful</code> method) is dominated by
 the script validation time</li>
 <li>There is a few transactions where script validation not greater than 80% of tx validation time.</li>
 <li>The results suggest that <code>validateStateful</code> doesn't require optimizations, or at least it can
 be done after the other parts of block validation had been optimized.</li>
 </ul>
+<h3 id="Block-Validation-Cost-Analysis">Block Validation Cost Analysis<a class="anchor-link" href="#Block-Validation-Cost-Analysis">&#182;</a></h3><p>In this section we compare script validation costs against transaction and block validation costs.</p>
+<h2 id="v5.0-vs-v4.0-Cross-Analysis">v5.0 vs v4.0 Cross Analysis<a class="anchor-link" href="#v5.0-vs-v4.0-Cross-Analysis">&#182;</a></h2><h3 id="Cross-Version-validation">Cross Version validation<a class="anchor-link" href="#Cross-Version-validation">&#182;</a></h3><ul>
+<li>Make sure recorded data for v5 and v4 have the same <code>height</code> and <code>tx_num</code> for all blockIds</li>
+</ul>
 
 </div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[12]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">checks</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+    <span class="n">appendFullBlockOk</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        -- validate appendFullBlock tables</span>
+<span class="s2">        select *</span>
+<span class="s2">        from appendFullBlock a1</span>
+<span class="s2">                 join appendFullBlock4 a2 on a1.blockId = a2.blockId</span>
+<span class="s2">        where a1.height != a2.height</span>
+<span class="s2">           or a1.tx_num != a2.tx_num;</span>
+<span class="s2">        &quot;&quot;&quot;</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">applyTransactionsOk</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        select *</span>
+<span class="s2">        from applyTransactions a1</span>
+<span class="s2">                 join applyTransactions4 a2 on a1.blockId = a2.blockId</span>
+<span class="s2">        where a1.height != a2.height</span>
+<span class="s2">           or a1.tx_num != a2.tx_num;</span>
+<span class="s2">        &quot;&quot;&quot;</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">createUtxoStateOk</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        select *</span>
+<span class="s2">        from createUtxoState a1</span>
+<span class="s2">                 join createUtxoState4 a2 on a1.blockId = a2.blockId</span>
+<span class="s2">        where a1.height != a2.height</span>
+<span class="s2">           or a1.tx_num != a2.tx_num;</span>
+<span class="s2">        &quot;&quot;&quot;</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span>
+<span class="p">)</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">checks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;appendFullBlockOk&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">checks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;applyTransactionsOk&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">checks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+        <span class="s2">&quot;createUtxoStateOk&quot;</span><span class="p">)):</span>
+    <span class="n">ok</span> <span class="o">=</span> <span class="n">checks</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">ok</span> <span class="o">=</span> <span class="s2">&quot;ok&quot;</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">checks</span><span class="p">)</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+
+<div class="jp-OutputArea-child">
+
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+
+
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
+<pre>{&#39;appendFullBlockOk&#39;: True, &#39;applyTransactionsOk&#39;: True, &#39;createUtxoStateOk&#39;: True}
+</pre>
+</div>
+</div>
+
+</div>
+
+</div>
+
+</div>
+<div class="jp-Cell-inputWrapper"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
+<h3 id="Block-Validation-Times">Block Validation Times<a class="anchor-link" href="#Block-Validation-Times">&#182;</a></h3><p>First count recorded block validations of v4 and v5 and how much of them can be
+joined. This is also validation check, because <code>common_rows</code> should be equal to the minimal count.</p>
+
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[13]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">select *, count_rows5 - count_rows4 as v5_v4_rows_diff</span>
+<span class="s2">from (select count(*) as count_rows5 from applyTransactions),</span>
+<span class="s2">     (select count(*) as count_rows4 from applyTransactions4),</span>
+<span class="s2">     (select count(*) as common_rows</span>
+<span class="s2">      from applyTransactions as t5 join applyTransactions4 t4 on t5.blockId = t4.blockId);</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+
+<div class="jp-OutputArea-child">
+
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[13]:</div>
+
+
+
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>count_rows5</th>
+      <th>count_rows4</th>
+      <th>common_rows</th>
+      <th>v5_v4_rows_diff</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>488100</td>
+      <td>473000</td>
+      <td>473000</td>
+      <td>15100</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+<div class="jp-Cell-inputWrapper"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
+<p>The new v5 script interpreter is expected to perform faster comparing to v4.
+The following shows the distribution of the blocks across ranges of speedup. We see that for the
+most of the blocks the speedup is in a range from 1 (no speedup) to 2 (twice faster).</p>
+
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[14]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">select t4.time / t5.time as speedup, count(*) as num_blocks</span>
+<span class="s2">from applyTransactions t5 join applyTransactions4 t4 on t5.blockId = t4.blockId</span>
+<span class="s2">group by speedup order by speedup;</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+
+<div class="jp-OutputArea-child">
+
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[14]:</div>
+
+
+
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>speedup</th>
+      <th>num_blocks</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>0</td>
+      <td>8048</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>1</td>
+      <td>449950</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>2</td>
+      <td>9866</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>3</td>
+      <td>1950</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>4</td>
+      <td>962</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>5</td>
+      <td>734</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>6</td>
+      <td>547</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>7</td>
+      <td>206</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>8</td>
+      <td>191</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>9</td>
+      <td>132</td>
+    </tr>
+    <tr>
+      <th>10</th>
+      <td>10</td>
+      <td>103</td>
+    </tr>
+    <tr>
+      <th>11</th>
+      <td>11</td>
+      <td>69</td>
+    </tr>
+    <tr>
+      <th>12</th>
+      <td>12</td>
+      <td>37</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>13</td>
+      <td>28</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>14</td>
+      <td>25</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>15</td>
+      <td>9</td>
+    </tr>
+    <tr>
+      <th>16</th>
+      <td>16</td>
+      <td>16</td>
+    </tr>
+    <tr>
+      <th>17</th>
+      <td>17</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>18</td>
+      <td>12</td>
+    </tr>
+    <tr>
+      <th>19</th>
+      <td>19</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <th>20</th>
+      <td>20</td>
+      <td>8</td>
+    </tr>
+    <tr>
+      <th>21</th>
+      <td>21</td>
+      <td>8</td>
+    </tr>
+    <tr>
+      <th>22</th>
+      <td>22</td>
+      <td>5</td>
+    </tr>
+    <tr>
+      <th>23</th>
+      <td>23</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <th>24</th>
+      <td>24</td>
+      <td>5</td>
+    </tr>
+    <tr>
+      <th>25</th>
+      <td>25</td>
+      <td>6</td>
+    </tr>
+    <tr>
+      <th>26</th>
+      <td>26</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <th>27</th>
+      <td>27</td>
+      <td>6</td>
+    </tr>
+    <tr>
+      <th>28</th>
+      <td>28</td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <th>29</th>
+      <td>29</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <th>30</th>
+      <td>30</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <th>31</th>
+      <td>31</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <th>32</th>
+      <td>32</td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <th>33</th>
+      <td>33</td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <th>34</th>
+      <td>34</td>
+      <td>11</td>
+    </tr>
+    <tr>
+      <th>35</th>
+      <td>35</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <th>36</th>
+      <td>37</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <th>37</th>
+      <td>38</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>38</th>
+      <td>39</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>39</th>
+      <td>40</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <th>40</th>
+      <td>41</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>41</th>
+      <td>43</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>42</th>
+      <td>44</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>43</th>
+      <td>48</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>44</th>
+      <td>49</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>45</th>
+      <td>54</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>46</th>
+      <td>58</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>47</th>
+      <td>62</td>
+      <td>1</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+<div class="jp-Cell-inputWrapper"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
+<p>We see outliers, i.e. blocks which executed slower in v5 than in v4. This can be attributed to
+measurement fluctuations. Such blocks will be simply filtered out in the following analysis.</p>
+<p>We also see a long tail of blocks with higher than 2 speedups.</p>
+
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[15]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">select sum(num_blocks) from (</span>
+<span class="s2">select t4.time / t5.time as speedup, count(*) as num_blocks</span>
+<span class="s2">from applyTransactions t5 join applyTransactions4 t4 on t5.blockId = t4.blockId</span>
+<span class="s2">where speedup &gt;= 2</span>
+<span class="s2">group by speedup order by speedup</span>
+<span class="s2">)</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+
+<div class="jp-OutputArea-child">
+
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[15]:</div>
+
+
+
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>sum(num_blocks)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>15002</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+<div class="jp-Cell-inputWrapper"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
+<p>Let's see how the speedup is spread over ranges of the blockchain.
+The block <code>b</code> falls in <code>range</code> if <code>range = b.height / 100000</code>. The blocks of each range are counted,
+and the average speedup over the range is computed.</p>
+
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[16]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">select t5.height / 100000                            as range,</span>
+<span class="s2">       round(avg(t4.time * 100 / t5.time * 0.01), 2) as avg_speedup,</span>
+<span class="s2">       count(*)                                      as num_blocks</span>
+<span class="s2">from applyTransactions t5 join applyTransactions4 t4 on t5.blockId = t4.blockId</span>
+<span class="s2">where t4.time / t5.time &gt;= 1</span>
+<span class="s2">group by range order by range;</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+
+<div class="jp-OutputArea-child">
+
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[16]:</div>
+
+
+
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>range</th>
+      <th>avg_speedup</th>
+      <th>num_blocks</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>0</td>
+      <td>1.26</td>
+      <td>97603</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>1</td>
+      <td>1.29</td>
+      <td>98368</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>2</td>
+      <td>1.34</td>
+      <td>99011</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>3</td>
+      <td>1.40</td>
+      <td>98192</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>4</td>
+      <td>1.45</td>
+      <td>71778</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+<div class="jp-Cell-inputWrapper"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
+<p>We observe that the average speedup increase towards the most recent range, which is expected, because
+more and more complex contracts are used on chain over time. The v5 script interpreter is by design
+faster on complex contracts.</p>
+<p>If we further constrain speedup to be above 1.2, we get the following distribution of blocks.</p>
+
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[17]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">select t5.height / 100000                            as range,</span>
+<span class="s2">       round(avg(t4.time * 100 / t5.time * 0.01), 2) as avg_speedup,</span>
+<span class="s2">       count(*) as num_blocks</span>
+<span class="s2">from applyTransactions t5 join applyTransactions4 t4 on t5.blockId = t4.blockId</span>
+<span class="s2">where t4.time * 100 / t5.time * 0.01 &gt;= 1.2</span>
+<span class="s2">group by range order by range</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+
+<div class="jp-OutputArea-child">
+
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[17]:</div>
+
+
+
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>range</th>
+      <th>avg_speedup</th>
+      <th>num_blocks</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>0</td>
+      <td>1.34</td>
+      <td>60383</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>1</td>
+      <td>1.35</td>
+      <td>68973</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>2</td>
+      <td>1.39</td>
+      <td>79345</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>3</td>
+      <td>1.44</td>
+      <td>84885</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>4</td>
+      <td>1.52</td>
+      <td>60029</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+<div class="jp-Cell-inputWrapper"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
+<p>Note, this speedups are due to improvements in script evaluation which is further analyzed in the
+<a href="#script-validation-time">next section</a>. However, as shown in <a href="#comparing-stages-of-block-validation">Comparing Stages of Block
+Validation</a>, for most of the blocks, script evaluation is
+less than 50% of the block validation time, so the impact of script speedups is limited by this
+factor.</p>
+
+</div>
+</div>
+<div class="jp-Cell-inputWrapper"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
+<h3 id="Script-Validation-Time">Script Validation Time<a class="anchor-link" href="#Script-Validation-Time">&#182;</a></h3><p>In this section we focus on script evaluation part only (i.e. Interpreter.verify method), which is
+measured and recorded in <code>verifyScript</code> table.</p>
+<p>First count recorded script validations of v4 and v5 and how much of them can be
+joined. This is also validation check, because <code>common_rows</code> should be equal to the minimal count.</p>
+
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[18]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">select *, total_rows5 - total_rows4 as v5_v4_rows_diff from</span>
+<span class="s2">(select count(*) as total_rows5</span>
+<span class="s2">from verifyScript as s),</span>
+<span class="s2">(select count(*) as total_rows4</span>
+<span class="s2">from verifyScript4 as s),</span>
+<span class="s2">(select count(*) as common_rows</span>
+<span class="s2">from verifyScript as t5</span>
+<span class="s2">         join verifyScript4 t4</span>
+<span class="s2">              on t5.blockId = t4.blockId</span>
+<span class="s2">                  and t5.txId = t4.txId</span>
+<span class="s2">                  and t5.boxIndex = t4.boxIndex);</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+
+<div class="jp-OutputArea-child">
+
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[18]:</div>
+
+
+
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>total_rows5</th>
+      <th>total_rows4</th>
+      <th>common_rows</th>
+      <th>v5_v4_rows_diff</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>3823200</td>
+      <td>3537350</td>
+      <td>3537350</td>
+      <td>285850</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+<div class="jp-Cell-inputWrapper"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput " data-mime-type="text/markdown">
+<p>For common recorded script we compute the total time spend in script validation for both v4 and v5
+  and compare them. Then compute the expected percent of total script time reduction after switching
+  to v5.0.</p>
+
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+<div class="jp-Cell-inputWrapper">
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[19]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+     <div class="CodeMirror cm-s-jupyter">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">read_sql_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">select times.total_time4 / 1000                                   as total_time4_us,</span>
+<span class="s2">       times.total_time5 / 1000                                   as total_time5_us,</span>
+<span class="s2">       (times.total_time4 - times.total_time5) / 1000             as total_diff_us,</span>
+<span class="s2">       round((1 - round(times.total_time5 * 100 / times.total_time4 * 0.01, 1)) * 100, 1) as percent_of_reduction</span>
+<span class="s2">from (select sum(t5.time) as total_time5,</span>
+<span class="s2">             sum(t4.time) as total_time4</span>
+<span class="s2">      from verifyScript as t5</span>
+<span class="s2">               join verifyScript4 t4</span>
+<span class="s2">                    on t5.blockId = t4.blockId</span>
+<span class="s2">                        and t5.txId = t4.txId</span>
+<span class="s2">                        and t5.boxIndex = t4.boxIndex) as times;</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">conn</span><span class="p">)</span>
+</pre></div>
+
+     </div>
+</div>
+</div>
+</div>
+
+<div class="jp-Cell-outputWrapper">
+
+
+<div class="jp-OutputArea jp-Cell-outputArea">
+
+<div class="jp-OutputArea-child">
+
+    
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[19]:</div>
+
+
+
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>total_time4_us</th>
+      <th>total_time5_us</th>
+      <th>total_diff_us</th>
+      <th>percent_of_reduction</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>3175910119</td>
+      <td>2207370816</td>
+      <td>968539302</td>
+      <td>30.0</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+
+</div>
+
 </div>
 </body>
 

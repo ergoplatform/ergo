@@ -2,13 +2,15 @@ package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.HistoryTestHelpers
+import scorex.core.ModifierTypeId
 import scorex.core.consensus.History.ProgressInfo
 
 class VerifyNonADHistorySpecification extends HistoryTestHelpers {
+  import ToDownloadProcessor._
 
   private def genHistory() =
     generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
@@ -113,16 +115,18 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
 
     val missedChain = chain.tail.toList
     val missedBS = missedChain.flatMap { fb =>
-      Seq((BlockTransactions.modifierTypeId, Seq(fb.blockTransactions.encodedId)), (Extension.modifierTypeId, Seq(fb.extension.encodedId)))
-    }.toMap
+      Seq((BlockTransactions.modifierTypeId, fb.blockTransactions.encodedId), (Extension.modifierTypeId, fb.extension.encodedId))
+    }.foldLeft(Map.empty[ModifierTypeId, Seq[String]]) { case (newAcc, (mType, mId)) =>
+      newAcc.adjust(mType)(_.fold(Seq(mId))(_ :+ mId))
+    }
 
-    history.nextModifiersToDownload(1, id => !history.contains(id)).map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS
+    history.nextModifiersToDownload(1, id => !history.contains(id)).map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS.mapValues(_.take(1)).view.force
 
     history.nextModifiersToDownload(2 * (BlocksToKeep - 1), id => !history.contains(id))
       .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS
 
     history.nextModifiersToDownload(2, id => !history.contains(id) && (id != missedChain.head.blockTransactions.id))
-      .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS
+      .map(id => (id._1, id._2.map(Algos.encode))) shouldEqual missedBS.mapValues(_.take(2).filter( _ != missedChain.head.blockTransactions.id)).view.force
   }
 
   property("append header as genesis") {

@@ -43,7 +43,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
   def nextModifiersToDownload(howManyPerType: Int, condition: ModifierId => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
     @tailrec
     def continuation(height: Int, acc: Map[ModifierTypeId, Seq[ModifierId]]): Map[ModifierTypeId, Seq[ModifierId]] = {
-      if (acc.headOption.exists(_._2.lengthCompare(howManyPerType) >= 0)) {
+      if (acc.values.exists(_.lengthCompare(howManyPerType) >= 0)) {
         acc.mapValues(_.take(howManyPerType)).view.force
       } else {
         val headersAtThisHeight = headerIdsAtHeight(height).flatMap(id => typedModifierById[Header](id))

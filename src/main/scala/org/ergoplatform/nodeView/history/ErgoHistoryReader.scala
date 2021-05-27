@@ -150,8 +150,10 @@ trait ErgoHistoryReader
       val branchingPointOpt: Option[ModifierId] = ids.view.reverse
         .find(m => isInBestChain(m))
         .orElse(if (ids.contains(PreGenesisHeader.id)) Some(PreGenesisHeader.id) else None)
+      log.debug("Branching point: " + branchingPointOpt)
       branchingPointOpt.toSeq.flatMap { branchingPoint =>
         val otherNodeHeight = heightOf(branchingPoint).getOrElse(ErgoHistory.GenesisHeight)
+        log.debug("Other node height: " + branchingPointOpt)
         val heightTo = Math.min(headersHeight, otherNodeHeight + size)
         (otherNodeHeight to heightTo).flatMap { height =>
           bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)

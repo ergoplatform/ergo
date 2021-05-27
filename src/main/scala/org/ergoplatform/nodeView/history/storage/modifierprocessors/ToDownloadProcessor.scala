@@ -45,7 +45,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
     */
   def nextModifiersToDownload(howManyPerType: Int, condition: ModifierId => Boolean): Map[ModifierTypeId, Seq[ModifierId]] = {
     @tailrec
-    def continuation(height: Int, acc: Map[ModifierTypeId, Seq[ModifierId]]): Map[ModifierTypeId, Seq[ModifierId]] = {
+    def continuation(height: Int, acc: Map[ModifierTypeId, Vector[ModifierId]]): Map[ModifierTypeId, Vector[ModifierId]] = {
       // return if at least one of Modifier types reaches howManyPerType limit for modifier ids
       if (acc.values.exists(_.lengthCompare(howManyPerType) >= 0)) {
         acc.mapValues(_.take(howManyPerType)).view.force
@@ -55,7 +55,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         if (headersAtThisHeight.nonEmpty) {
           val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter(m => condition(m._2))
           // add new modifiers to download to accumulator
-          val newAcc = toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) => newAcc.adjust(mType)(_.fold(Seq(mId))(_ :+ mId)) }
+          val newAcc = toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) => newAcc.adjust(mType)(_.fold(Vector(mId))(_ :+ mId)) }
           continuation(height + 1, newAcc)
         } else {
           acc

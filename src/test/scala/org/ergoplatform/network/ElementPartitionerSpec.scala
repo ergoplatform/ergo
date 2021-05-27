@@ -5,7 +5,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-class BucketingPartitionerSpec
+class ElementPartitionerSpec
   extends AnyPropSpec
   with ScalaCheckPropertyChecks
   with Matchers {
@@ -15,7 +15,7 @@ class BucketingPartitionerSpec
       case (buckets, elements) =>
         val (elemsType_1, elemsType_2) = elements.splitAt(elements.size / 2)
         val elemsByBucket =
-          BucketingPartitioner.distribute(buckets, Integer.MAX_VALUE, 1, 5) { count =>
+          ElementPartitioner.distribute(buckets, Integer.MAX_VALUE, 1, 5) { count =>
             count shouldBe buckets.size * 5
             Map("A" -> elemsType_1.take(count), "B" -> elemsType_2.take(count))
           }
@@ -30,7 +30,7 @@ class BucketingPartitionerSpec
     forAll(Gen.nonEmptyListOf(Gen.alphaNumChar), Gen.nonEmptyListOf(Gen.alphaNumChar)) {
       case (buckets, elements) =>
         val (elemsType_1, elemsType_2) = elements.splitAt(elements.size / 2)
-        val elemsByBucket = BucketingPartitioner.distribute(buckets, 5, 1, 100) { count =>
+        val elemsByBucket = ElementPartitioner.distribute(buckets, 5, 1, 100) { count =>
           count shouldBe 5
           Map("A" -> elemsType_1.take(count), "B" -> elemsType_2.take(count))
         }
@@ -44,7 +44,7 @@ class BucketingPartitionerSpec
     forAll(Gen.listOf(Gen.alphaNumChar), Gen.listOf(Gen.alphaNumChar)) {
       case (buckets, elements) =>
         val elemsByBucket =
-          BucketingPartitioner.distribute(buckets, Integer.MAX_VALUE, 5, 10) { count =>
+          ElementPartitioner.distribute(buckets, Integer.MAX_VALUE, 5, 10) { count =>
             assert(count <= 10 * buckets.size)
             Map("A" -> elements.take(count))
           }
@@ -58,34 +58,34 @@ class BucketingPartitionerSpec
   }
 
   property("empty buckets or elements cannot be partitioned") {
-    BucketingPartitioner
+    ElementPartitioner
       .distribute(List.empty, Integer.MAX_VALUE, 1, 5)(_ => Map("A" -> List(1)))
       .size shouldBe 0
-    BucketingPartitioner
+    ElementPartitioner
       .distribute(List(1), Integer.MAX_VALUE, 1, 5)(_ => Map.empty[String, Seq[Int]])
       .size shouldBe 0
-    BucketingPartitioner
+    ElementPartitioner
       .distribute(List.empty, Integer.MAX_VALUE, 1, 5)(_ => Map.empty[String, Seq[Int]])
       .size shouldBe 0
   }
 
   property("0 or negative count of elements to fetch cannot be partitioned") {
-    BucketingPartitioner
+    ElementPartitioner
       .distribute(List.empty, -1, 1, 5)(_ => Map("A" -> List(1)))
       .size shouldBe 0
-    BucketingPartitioner
+    ElementPartitioner
       .distribute(List.empty, 5, 1, 0)(_ => Map("A" -> List(1)))
       .size shouldBe 0
   }
 
   property("less or equal elements than buckets should return one element per bucket") {
-    BucketingPartitioner.distribute(List(1, 2, 3), Integer.MAX_VALUE, 1, 5) { _ =>
+    ElementPartitioner.distribute(List(1, 2, 3), Integer.MAX_VALUE, 1, 5) { _ =>
       Map("A" -> List(1))
     } shouldBe Map((1, "A") -> List(1))
   }
 
   property("elements should be distributed into bucket-types") {
-    BucketingPartitioner.distribute(List(1, 2), Integer.MAX_VALUE, 1, 1) { _ =>
+    ElementPartitioner.distribute(List(1, 2), Integer.MAX_VALUE, 1, 1) { _ =>
       Map("A" -> List(1, 2), "B" -> List(1, 2), "C" -> List(1, 2))
     } shouldBe Map(
       (2, "B") -> List(2),
@@ -101,7 +101,7 @@ class BucketingPartitionerSpec
     "minElementsPerBucket constraint should not be used if there is less elements available"
   ) {
     val elems =
-      BucketingPartitioner.distribute(List(1), Integer.MAX_VALUE, 100, 1) { _ =>
+      ElementPartitioner.distribute(List(1), Integer.MAX_VALUE, 100, 1) { _ =>
         Map("A" -> List(1))
       }
     elems.size shouldBe 1

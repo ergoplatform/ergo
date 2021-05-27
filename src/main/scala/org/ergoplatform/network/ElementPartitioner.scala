@@ -1,9 +1,12 @@
 package org.ergoplatform.network
 
-object BucketingPartitioner {
+/**
+  * Allows for partitioning elements into arbitrarily sized buckets given min/max limits
+  */
+object ElementPartitioner {
 
   /**
-    * Evenly distributes elements under unique bucket-type keys
+    * Evenly distributes elements under unique bucket-type keys given min/max limits
     * @param buckets to distribute elements into
     * @param maxElements maximum elements to fetch
     * @param minElementsPerBucket minimum elements to distribute per bucket

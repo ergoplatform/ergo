@@ -135,6 +135,7 @@ trait ErgoHistoryReader
     * @return Ids of headers, that node with info should download and apply to synchronize
     */
   override def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds =
+    log.debug("syncInfo: " + syncInfo)
     if (isEmpty) {
       // if no any header applied yet, return identifiers from other node's sync info
       syncInfo.startingPoints

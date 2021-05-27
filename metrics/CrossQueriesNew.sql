@@ -45,7 +45,7 @@ order by ratio
 )
 ;
 
--- blocks that at least 1.2 speedup in v5
+-- blocks with least 1.2 speedup in v5
 select sum(num_blocks) from (
 select t5.height / 100000                            as range,
        round(avg(t4.time * 100 / t5.time * 0.01), 2) as avg_speedup,

@@ -105,8 +105,11 @@ trait ErgoHistoryReader
         Younger
       case Some(_) =>
         //We are on different forks now.
-        if (info.lastHeaderIds.view.reverse.exists(m => contains(m) || m == PreGenesisHeader.id)) {
-          //Return Younger, because we can send blocks from our fork that other node can download.
+        val r = info.lastHeaderIds.view.reverse
+        if (r.headOption.exists(m => contains(m) || m == PreGenesisHeader.id)) {
+          //Return Younger, because we can send blocks from our chain that other node can download.
+          Younger
+        } else if (r.exists(m => contains(m) || m == PreGenesisHeader.id)) {
           Fork
         } else {
           //We don't have any of id's from other's node sync info in history.

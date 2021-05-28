@@ -154,7 +154,7 @@ trait ErgoHistoryReader
       log.debug("Branching point: " + branchingPointOpt)
       branchingPointOpt.toSeq.flatMap { branchingPoint =>
         val otherNodeHeight = heightOf(branchingPoint).getOrElse(ErgoHistory.GenesisHeight)
-        log.debug("Other node height: " + branchingPointOpt)
+        log.debug("Other node height: " + otherNodeHeight)
         val heightTo = Math.min(headersHeight, otherNodeHeight + size)
         (otherNodeHeight to heightTo).flatMap { height =>
           bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
@@ -196,7 +196,7 @@ trait ErgoHistoryReader
   override def syncInfo: ErgoSyncInfo = if (isEmpty) {
     ErgoSyncInfo(Seq.empty)
   } else {
-    val startingPoints = lastHeaders(ErgoSyncInfo.MaxBlockIds).headers
+    val startingPoints = lastHeaders(55).headers
     if (startingPoints.headOption.exists(_.isGenesis)) {
       ErgoSyncInfo((PreGenesisHeader +: startingPoints).map(_.id))
     } else {

@@ -105,12 +105,12 @@ object DefaultBoxSelector extends BoxSelector {
       tMap =>
         tMap.filter(tm => tm._2 == 0)
         val uu = foundBoxAssets.map { case (id, amount) => (id, amount - targetBoxAssets(id)) }
-        if (changeBalance == 0 && uu.exists { case (_, am) => am > 0 })
-          Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs"))
-        else if (changeBalance < 0)
+        if (changeBalance < 0)
           Left(NotEnoughCoinsForChangeBoxError(s"Not enough ERG $changeBalance to create change box"))
         else if (!uu.forall { case (_, amount) => amount >= 0 })
           Left(NotEnoughTokensError(s"Not enough tokens to create change box"))
+        else if (changeBalance == 0 && uu.exists { case (_, am) => am > 0 })
+          Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs"))
         else if (changeBalance == 0 && uu.forall { case (_, amount) => amount == 0 }) Right(None)
         else Right(Some(ErgoBoxAssetsHolder(changeBalance, tMap)))
     }

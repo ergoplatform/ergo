@@ -38,18 +38,47 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     formChangeBox(fB2, tB2, foundAssets1, targetAssets1) shouldBe
       Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -10 to create change box"))
 
+    val foundAssets2 = mutable.Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 20L)
+    formChangeBox(fB2, tB2, foundAssets2, targetAssets1) shouldBe
+      Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -10 to create change box"))
+
     val fB3 = 110
-    val targetAssets2 = mutable.Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 20L)
     val targetAssets5 = Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 20L)
     formChangeBox(fB3, fB3, foundAssets1, targetAssets5) shouldBe
       Left(NotEnoughTokensError("Not enough tokens to create change box"))
 
+    val targetAssets6 = Map(ModifierId @@ "token1" -> 4L, ModifierId @@ "token2" -> 25L)
+    formChangeBox(fB3, fB3, foundAssets1, targetAssets6) shouldBe
+      Left(NotEnoughTokensError("Not enough tokens to create change box"))
+
+    formChangeBox(fB2, fB3, foundAssets1, targetAssets1) shouldBe
+      Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -20 to create change box"))
+
     val foundAssets4 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 20L)
-    formChangeBox(fB3, fB3, targetAssets2, foundAssets4) shouldBe
+    formChangeBox(fB3, fB3, foundAssets2, foundAssets4) shouldBe
       Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs"))
 
+    val tA6 = Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 15L)
+    formChangeBox(fB3, fB3, foundAssets2, tA6) shouldBe
+      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs"))
+
+    val tA7 = Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 25L)
+    formChangeBox(fB3, fB3, foundAssets2, tA7) shouldBe
+      Left(NotEnoughTokensError("Not enough tokens to create change box"))
+
+    val tA5 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token4" -> 20L)
+    formChangeBox(fB3, fB3, foundAssets2, tA5) shouldBe
+      Left(NoSuchTokensError("There are no token2 tokens in target"))
+
+    formChangeBox(fB2, fB3, foundAssets2, tA5) shouldBe
+      Left(NoSuchTokensError("There are no token2 tokens in target"))
+
+    val tA8 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 25L)
+    formChangeBox(fB3, tB2, foundAssets2, tA8) shouldBe
+      Left(NotEnoughTokensError("Not enough tokens to create change box"))
+
     val tA4 = Map(ModifierId @@ "token3" -> 5L, ModifierId @@ "token2" -> 20L)
-    formChangeBox(fB3, fB3, targetAssets2, tA4) shouldBe
+    formChangeBox(fB3, fB3, foundAssets2, tA4) shouldBe
       Left(NoSuchTokensError("There are no token1 tokens in target"))
 
     val targetAssets3 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 15L)
@@ -59,6 +88,22 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
         Map(
           ModifierId @@ "token1" -> 0,
           ModifierId @@ "token2" -> 5L))))
+
+    val targetAssets4 = Map(ModifierId @@ "token1" -> 1L, ModifierId @@ "token2" -> 15L)
+    formChangeBox(fB3, tB2, foundAssets1, targetAssets4) shouldBe Right( Some(
+      ErgoBoxAssetsHolder(
+        10,
+        Map(
+          ModifierId @@ "token1" -> 4L,
+          ModifierId @@ "token2" -> 5L))))
+
+    formChangeBox(110, tB1, foundAssets1, targetAssets1) shouldBe
+      Right( Some(
+        ErgoBoxAssetsHolder(
+          10,
+          Map(
+            ModifierId @@ "token1" -> 0,
+            ModifierId @@ "token2" -> 0))))
   }
 
   property("returns error when it is impossible to select coins") {

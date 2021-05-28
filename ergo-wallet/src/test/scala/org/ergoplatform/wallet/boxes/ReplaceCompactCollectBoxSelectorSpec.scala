@@ -27,7 +27,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
     val targetBalance = 1300
 
     val boxSelectionResult = BoxSelectionResult(
-      inputValues.map(trackedBox), Seq()
+      inputValues.map(trackedBox), None
     )
     val res = selector.compress(boxSelectionResult, targetBalance, Map()).right.value
     res.boxes.length shouldBe 3
@@ -42,7 +42,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
     val selector = new ReplaceCompactCollectBoxSelector(3, 2)
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
     val targetBalance = 1303
-    val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), Seq())
+    val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), None)
     val res = selector.replace(boxSelectionResult, Seq(), targetBalance, Map()).right.value
     res.boxes.map(_.value) shouldBe inputValues
   }
@@ -51,7 +51,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
     val selector = new ReplaceCompactCollectBoxSelector(3, 2)
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
     val targetBalance = 1303
-    val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), Seq())
+    val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), None)
     val res = selector.replace(boxSelectionResult, Seq(trackedBox(300), trackedBox(200)), targetBalance, Map()).right.value
     res.boxes.length shouldBe 3
     res.boxes.map(_.value) shouldBe Seq(200L, 1000L, 300L)
@@ -61,7 +61,7 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
     val selector = new ReplaceCompactCollectBoxSelector(3, 2)
     val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
     val targetBalance = 1303
-    val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), Seq())
+    val boxSelectionResult = BoxSelectionResult(inputValues.map(trackedBox), None)
     val res = selector.replace(boxSelectionResult, Seq(trackedBox(2000)), targetBalance, Map()).right.value
     res.boxes.length shouldBe 1
     res.boxes.map(_.value) shouldBe Seq(2000L)

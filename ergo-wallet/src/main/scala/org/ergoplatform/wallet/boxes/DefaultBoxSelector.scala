@@ -76,8 +76,8 @@ object DefaultBoxSelector extends BoxSelector {
           },
         assetsMet
       )) {
-        formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets).mapRight { changeBoxes =>
-          BoxSelectionResult(res, changeBoxes)
+        formChangeBox(currentBalance, targetBalance, currentAssets, targetAssets).mapRight { changeBox =>
+          BoxSelectionResult(res, changeBox.headOption)
         }
       } else {
         Left(NotEnoughTokensError(s"not enough boxes to meet token needs $targetAssets (found only $currentAssets)"))
@@ -90,7 +90,7 @@ object DefaultBoxSelector extends BoxSelector {
   def formChangeBox(
                      foundBalance: Long,
                      targetBalance: Long,
-                     foundBoxAssets: Map[ModifierId, Long],
+                     foundBoxAssets: mutable.Map[ModifierId, Long],
                      targetBoxAssets: TokensMap
                    ): Either[BoxSelectionError, Option[ErgoBoxAssets]] = {
     val changeBalance = foundBalance - targetBalance

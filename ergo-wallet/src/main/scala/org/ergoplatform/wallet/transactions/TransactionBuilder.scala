@@ -108,8 +108,8 @@ object TransactionBuilder {
     }
     // although we're only interested in change boxes, make sure selection contains exact inputs
     assert(selection.boxes == inputs, s"unexpected selected boxes, expected: $inputs, got ${selection.boxes}")
-    val changeBoxes = selection.changeBox
-    val changeBoxesHaveTokens = changeBoxes.exists(_.tokens.nonEmpty)
+    val changeBox = selection.changeBox
+    val changeBoxesHaveTokens = changeBox.exists(_.tokens.nonEmpty)
 
     val changeGoesToFee = changeAmt < minChangeValue && !changeBoxesHaveTokens
 
@@ -130,14 +130,14 @@ object TransactionBuilder {
 
     val addedChangeOut = if (!changeGoesToFee) {
       val script = changeAddress.script
-      changeBoxes.map { cb =>
+      changeBox.map { cb =>
         new ErgoBoxCandidate(cb.value, script, currentHeight, tokensMapToColl(cb.tokens))
       }
     } else {
-      Seq()
+      None
     }
 
-    val finalOutputCandidates = outputCandidates ++ feeOutOpt ++ addedChangeOut
+    val finalOutputCandidates = outputCandidates ++ feeOutOpt ++ addedChangeOut.toSeq
 
     new UnsignedErgoLikeTransaction(
       inputs.map(b => new UnsignedInput(b.id)),

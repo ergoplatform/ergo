@@ -12,6 +12,8 @@ import org.ergoplatform.wallet.boxes.DefaultBoxSelector.{NoSuchTokensError, NotE
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 
+import scala.collection.mutable
+
 class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues {
   import DefaultBoxSelector.select
   import BoxSelector.MinBoxValue
@@ -26,7 +28,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
   property("properly validate creation of change box") {
     val fB1 = 100
     val tB1 = 100
-    val foundAssets1 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 20L)
+    val foundAssets1 = mutable.Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 20L)
     val targetAssets1 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 20L)
     formChangeBox(fB1, tB1, foundAssets1, targetAssets1) shouldBe
       Right(None)
@@ -37,11 +39,13 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
       Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -10 to create change box"))
 
     val fB3 = 110
-    val targetAssets2 = Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 20L)
-    formChangeBox(fB3, fB3, foundAssets1, targetAssets2) shouldBe
+    val targetAssets2 = mutable.Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 20L)
+    val targetAssets5 = Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 20L)
+    formChangeBox(fB3, fB3, foundAssets1, targetAssets5) shouldBe
       Left(NotEnoughTokensError("Not enough tokens to create change box"))
 
-    formChangeBox(fB3, fB3, targetAssets2, foundAssets1) shouldBe
+    val foundAssets4 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 20L)
+    formChangeBox(fB3, fB3, targetAssets2, foundAssets4) shouldBe
       Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs"))
 
     val tA4 = Map(ModifierId @@ "token3" -> 5L, ModifierId @@ "token2" -> 20L)
@@ -88,31 +92,31 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
     val s1 = select(uBoxes.toIterator, noFilter, 1, Map())
     s1 shouldBe 'right
-    s1.right.get.changeBox.isEmpty shouldBe true
+    s1.right.get.changeBox.toSeq.isEmpty shouldBe true
     s1.right.get.boxes.head shouldBe uBox1
 
     val s2 = select(uBoxes.toIterator, noFilter, 10, Map())
     s2 shouldBe 'right
-    s2.right.get.changeBox.size == 1
-    s2.right.get.changeBox.head.value shouldBe 1
+    s2.right.get.changeBox.toSeq.size == 1
+    s2.right.get.changeBox.toSeq.head.value shouldBe 1
     s2.right.get.boxes shouldBe Seq(uBox1, uBox2)
 
     val s3 = select(uBoxes.toIterator, noFilter, 11, Map())
     s3 shouldBe 'right
-    s3.right.get.changeBox.isEmpty shouldBe true
+    s3.right.get.changeBox.toSeq.isEmpty shouldBe true
     s3.right.get.boxes shouldBe Seq(uBox1, uBox2)
 
     //box2 should be filtered out
     val s4 = select(uBoxes.toIterator, onChainFilter, 11, Map())
     s4 shouldBe 'right
-    s4.right.get.changeBox.size == 1
-    s4.right.get.changeBox.head.value shouldBe 90
+    s4.right.get.changeBox.toSeq.size == 1
+    s4.right.get.changeBox.toSeq.head.value shouldBe 90
     s4.right.get.boxes shouldBe Seq(uBox1, uBox3)
 
     val s5 = select(uBoxes.toIterator, noFilter, 61, Map())
     s5 shouldBe 'right
-    s5.right.get.changeBox.size == 1
-    s5.right.get.changeBox.head.value shouldBe 50
+    s5.right.get.changeBox.toSeq.size == 1
+    s5.right.get.changeBox.toSeq.head.value shouldBe 50
     s5.right.get.boxes shouldBe Seq(uBox1, uBox2, uBox3)
   }
 
@@ -134,14 +138,14 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
     val s1 = select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 1))
     s1 shouldBe 'right
-    s1.right.get.changeBox.isEmpty shouldBe true
+    s1.right.get.changeBox.toSeq.isEmpty shouldBe true
     s1.right.get.boxes.head shouldBe uBox1
 
     val s2 = select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 11))
     s2 shouldBe 'right
-    s2.right.get.changeBox.size == 1
-    s2.right.get.changeBox.head.value shouldBe 100 * MinBoxValue
-    s2.right.get.changeBox.head.tokens(assetId1) shouldBe 90
+    s2.right.get.changeBox.toSeq.size == 1
+    s2.right.get.changeBox.toSeq.head.value shouldBe 100 * MinBoxValue
+    s2.right.get.changeBox.toSeq.head.tokens(assetId1) shouldBe 90
     s2.right.get.boxes shouldBe Seq(uBox1, uBox3)
 
     select(uBoxes.toIterator, onChainFilter, 1, Map(assetId2 -> 1)).left.value shouldBe a [NotEnoughTokensError]
@@ -150,10 +154,10 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
     val s3 = select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 11, assetId2 -> 1))
     s3 shouldBe 'right
-    s3.right.get.changeBox.size == 1
-    s3.right.get.changeBox.head.value shouldBe 110 * MinBoxValue
-    s3.right.get.changeBox.head.tokens(assetId1) shouldBe 90
-    s3.right.get.changeBox.head.tokens(assetId2) shouldBe 9
+    s3.right.get.changeBox.toSeq.size == 1
+    s3.right.get.changeBox.toSeq.head.value shouldBe 110 * MinBoxValue
+    s3.right.get.changeBox.toSeq.head.tokens(assetId1) shouldBe 90
+    s3.right.get.changeBox.toSeq.head.tokens(assetId2) shouldBe 9
     s3.right.get.boxes shouldBe Seq(uBox1, uBox2, uBox3)
 
     select(uBoxes.toIterator, onChainFilter, 1 * MinBoxValue, Map(assetId1 -> 11, assetId2 -> 1)).left.value shouldBe 
@@ -195,13 +199,13 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     s1.right.get.boxes should contain theSameElementsAs(Seq(uBox1, uBox3))
 
     s1.right.get.changeBox.size shouldBe 1
-    s1.right.get.changeBox(0).value shouldBe 100 * MinBoxValue
-    s1.right.get.changeBox(0).tokens(assetId1) shouldBe 1
-    s1.right.get.changeBox(0).tokens(assetId2) shouldBe 1
-    s1.right.get.changeBox(0).tokens(assetId3) shouldBe 90
-    s1.right.get.changeBox(0).tokens(assetId4) shouldBe 101
-    s1.right.get.changeBox(0).tokens(assetId5) shouldBe 100
-    s1.right.get.changeBox(0).tokens(assetId6) shouldBe 100
+    s1.right.get.changeBox.toSeq(0).value shouldBe 100 * MinBoxValue
+    s1.right.get.changeBox.toSeq(0).tokens(assetId1) shouldBe 1
+    s1.right.get.changeBox.toSeq(0).tokens(assetId2) shouldBe 1
+    s1.right.get.changeBox.toSeq(0).tokens(assetId3) shouldBe 90
+    s1.right.get.changeBox.toSeq(0).tokens(assetId4) shouldBe 101
+    s1.right.get.changeBox.toSeq(0).tokens(assetId5) shouldBe 100
+    s1.right.get.changeBox.toSeq(0).tokens(assetId6) shouldBe 100
 
     s1.right.get.boxes shouldBe Seq(uBox1, uBox3)
 
@@ -209,10 +213,10 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
       Map(assetId1 -> 1, assetId2 -> 1, assetId3 -> 1, assetId4 -> 1))
     s2 shouldBe 'right
     s2.right.get.changeBox.size == 1
-    s2.right.get.changeBox(0).tokens(assetId5) shouldBe 10
-    s2.right.get.changeBox(0).tokens(assetId6) shouldBe 10
-    s2.right.get.changeBox(0).tokens(assetId7) shouldBe 10
-    s2.right.get.changeBox(0).tokens(assetId8) shouldBe 10
+    s2.right.get.changeBox.toSeq(0).tokens(assetId5) shouldBe 10
+    s2.right.get.changeBox.toSeq(0).tokens(assetId6) shouldBe 10
+    s2.right.get.changeBox.toSeq(0).tokens(assetId7) shouldBe 10
+    s2.right.get.changeBox.toSeq(0).tokens(assetId8) shouldBe 10
 
     //todo: should selector fail in this case (if there's no monetary value to create a new box w. assets) ?
     select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 1)).left.value shouldBe a [NotEnoughCoinsForChangeBoxError]

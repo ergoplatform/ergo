@@ -191,8 +191,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Currently just copy from private method in basic trait! Will be optimized in future likely.
-    *
     * Get modifiers from remote peer, filter out spam modifiers and penalize peer for spam
     *
     * @return ids and bytes of modifiers that were requested by our node
@@ -204,10 +202,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.status(id) == Requested
     }
 
+    // todo: consider rules for penalizing peers for spammy transactions
     if (spam.nonEmpty) {
-      log.info(s"Spam attempt: peer $remote has sent a non-requested modifiers of type $typeId with ids" +
-        s": ${spam.keys.map(encoder.encodeId)}")
-      penalizeSpammingPeer(remote)
+      if(typeId == Transaction.ModifierTypeId) {
+        log.info(s"Got spammy transactions: $modifiers")
+      } else {
+        log.info(s"Spam attempt: peer $remote has sent a non-requested modifiers of type $typeId with ids" +
+          s": ${spam.keys.map(encoder.encodeId)}")
+        penalizeSpammingPeer(remote)
+      }
     }
     requested
   }

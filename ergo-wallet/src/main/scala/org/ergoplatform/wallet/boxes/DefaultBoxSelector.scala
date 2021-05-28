@@ -23,7 +23,9 @@ object DefaultBoxSelector extends BoxSelector {
 
   final case class NotEnoughTokensError(message: String) extends BoxSelectionError
 
-  final case class NotEnoughCoinsForChangeBoxesError(message: String) extends BoxSelectionError
+  final case class NotEnoughCoinsForChangeBoxError(message: String) extends BoxSelectionError
+
+  final case class NoSuchTokensError(message: String) extends BoxSelectionError
 
   override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
                                           externalFilter: T => Boolean,
@@ -85,6 +87,35 @@ object DefaultBoxSelector extends BoxSelector {
     }
   }
 
+  def formChangeBox(
+                     foundBalance: Long,
+                     targetBalance: Long,
+                     foundBoxAssets: Map[ModifierId, Long],
+                     targetBoxAssets: TokensMap
+                   ): Either[BoxSelectionError, Option[ErgoBoxAssets]] = {
+    val changeBalance = foundBalance - targetBalance
+    foundBoxAssets.foldLeft[Either[BoxSelectionError, TokensMap]](Right(Map.empty)) { case (acc, (id, amount)) =>
+      targetBoxAssets.get(id) match {
+        case Some(value) => acc.map(_.updated(id, amount - value))
+        case None => Left(NoSuchTokensError(
+          s"There are no $id tokens in target"
+        ))
+      }
+    }.flatMap {
+      x =>
+        x.filter(tm => tm._2 == 0)
+        val uu = foundBoxAssets.map { case (id, amount) => (id, amount - targetBoxAssets(id)) }
+        if (changeBalance == 0 && uu.exists { case (_, am) => am > 0 })
+          Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs"))
+        else if (changeBalance < 0)
+          Left(NotEnoughCoinsForChangeBoxError(s"Not enough ERG $changeBalance to create change box"))
+        else if (!uu.forall { case (_, amount) => amount >= 0 })
+          Left(NotEnoughTokensError(s"Not enough tokens to create change box"))
+        else if (changeBalance == 0 && uu.forall { case (_, amount) => amount == 0 }) Right(None)
+        else Right(Some(ErgoBoxAssetsHolder(changeBalance, x)))
+    }
+  }
+
   def formChangeBoxes(
                        foundBalance: Long,
                        targetBalance: Long,
@@ -96,7 +127,7 @@ object DefaultBoxSelector extends BoxSelector {
     val changeBalance = foundBalance - targetBalance
     //at least a minimum amount of ERG should be assigned per a created box
     if (changeBoxesAssets.size * MinBoxValue > changeBalance) {
-      Left(NotEnoughCoinsForChangeBoxesError(
+      Left(NotEnoughCoinsForChangeBoxError(
         s"Not enough ERG $changeBalance to create ${changeBoxesAssets.size} change boxes, \nfor $changeBoxesAssets"
       ))
     } else {

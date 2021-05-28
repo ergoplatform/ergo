@@ -1,16 +1,16 @@
 package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.wallet.Constants.PaymentsScanId
-import org.ergoplatform.{ErgoLikeTransaction, ErgoBox}
-import scorex.crypto.hash.{Digest32, Blake2b256}
+import org.ergoplatform.{ErgoBox, ErgoLikeTransaction}
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.Values
 import sigmastate.Values.SigmaPropValue
 import sigmastate.helpers.TestingHelpers._
-import scorex.util.{idToBytes, bytesToId}
+import scorex.util.{bytesToId, idToBytes}
 import org.scalatest.EitherValues
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughErgsError
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughTokensError
-import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughCoinsForChangeBoxesError
+import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughCoinsForChangeBoxError
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 
@@ -183,7 +183,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     s2.right.get.changeBoxes(0).tokens(assetId8) shouldBe 10
 
     //todo: should selector fail in this case (if there's no monetary value to create a new box w. assets) ?
-    select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 1)).left.value shouldBe a [NotEnoughCoinsForChangeBoxesError]
+    select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 1)).left.value shouldBe a [NotEnoughCoinsForChangeBoxError]
   }
 
 }

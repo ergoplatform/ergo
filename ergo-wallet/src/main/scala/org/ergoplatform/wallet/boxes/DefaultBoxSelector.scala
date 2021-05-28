@@ -77,7 +77,7 @@ object DefaultBoxSelector extends BoxSelector {
         assetsMet
       )) {
         formChangeBox(currentBalance, targetBalance, currentAssets, targetAssets).mapRight { changeBox =>
-          BoxSelectionResult(res, changeBox.headOption)
+          BoxSelectionResult(res, changeBox)
         }
       } else {
         Left(NotEnoughTokensError(s"not enough boxes to meet token needs $targetAssets (found only $currentAssets)"))
@@ -102,8 +102,8 @@ object DefaultBoxSelector extends BoxSelector {
         ))
       }
     }.flatMap {
-      x =>
-        x.filter(tm => tm._2 == 0)
+      tMap =>
+        tMap.filter(tm => tm._2 == 0)
         val uu = foundBoxAssets.map { case (id, amount) => (id, amount - targetBoxAssets(id)) }
         if (changeBalance == 0 && uu.exists { case (_, am) => am > 0 })
           Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs"))
@@ -112,46 +112,7 @@ object DefaultBoxSelector extends BoxSelector {
         else if (!uu.forall { case (_, amount) => amount >= 0 })
           Left(NotEnoughTokensError(s"Not enough tokens to create change box"))
         else if (changeBalance == 0 && uu.forall { case (_, amount) => amount == 0 }) Right(None)
-        else Right(Some(ErgoBoxAssetsHolder(changeBalance, x)))
-    }
-  }
-
-  def formChangeBoxes(
-                       foundBalance: Long,
-                       targetBalance: Long,
-                       foundBoxAssets: mutable.Map[ModifierId, Long],
-                       targetBoxAssets: TokensMap
-                     ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
-    AssetUtils.subtractAssetsMut(foundBoxAssets, targetBoxAssets)
-    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxTokens).toSeq
-    val changeBalance = foundBalance - targetBalance
-    //at least a minimum amount of ERG should be assigned per a created box
-    if (changeBoxesAssets.size * MinBoxValue > changeBalance) {
-      Left(NotEnoughCoinsForChangeBoxError(
-        s"Not enough ERG $changeBalance to create ${changeBoxesAssets.size} change boxes, \nfor $changeBoxesAssets"
-      ))
-    } else {
-      val changeBoxes = if (changeBoxesAssets.nonEmpty) {
-        val baseChangeBalance = changeBalance / changeBoxesAssets.size
-
-        val changeBoxesNoBalanceAdjusted = changeBoxesAssets.map { a =>
-          ErgoBoxAssetsHolder(baseChangeBalance, a.toMap)
-        }
-
-        val modifiedBoxOpt = changeBoxesNoBalanceAdjusted.headOption.map { firstBox =>
-          ErgoBoxAssetsHolder(
-            changeBalance - baseChangeBalance * (changeBoxesAssets.size - 1),
-            firstBox.tokens
-          )
-        }
-
-        modifiedBoxOpt.toSeq ++ changeBoxesNoBalanceAdjusted.tail
-      } else if (changeBalance > 0) {
-        Seq(ErgoBoxAssetsHolder(changeBalance))
-      } else {
-        Seq.empty
-      }
-      Right(changeBoxes)
+        else Right(Some(ErgoBoxAssetsHolder(changeBalance, tMap)))
     }
   }
 

@@ -85,11 +85,11 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
   protected[boxes] def calcChange[T <: ErgoBoxAssets](boxes: Seq[T],
                                                       targetBalance: Long,
                                                       targetAssets: TokensMap
-                                                     ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
+                                                     ): Either[BoxSelectionError, Option[ErgoBoxAssets]] = {
     val compactedBalance = boxes.map(_.value).sum
     val compactedAssets = mutable.Map[ModifierId, Long]()
     AssetUtils.mergeAssetsMut(compactedAssets, boxes.map(_.tokens): _*)
-    DefaultBoxSelector.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets)
+    DefaultBoxSelector.formChangeBox(compactedBalance, targetBalance, compactedAssets, targetAssets)
   }
 
   protected[boxes] def collectDust[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
@@ -100,7 +100,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     val dust = tail.sortBy(_.value).take(diff).filter(b => !bsr.boxes.contains(b))
 
     val boxes = bsr.boxes ++ dust
-    calcChange(boxes, targetBalance, targetAssets).mapRight(changeBox => BoxSelectionResult(boxes, changeBox.headOption))
+    calcChange(boxes, targetBalance, targetAssets).mapRight(changeBox => BoxSelectionResult(boxes, changeBox))
   }
 
   protected[boxes] def compress[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
@@ -120,7 +120,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
       }
       val compactedBoxes = boxes.filter(b => !thrownBoxes.contains(b))
       calcChange(compactedBoxes, targetBalance, targetAssets)
-        .mapRight(changeBox => BoxSelectionResult(compactedBoxes, changeBox.headOption))
+        .mapRight(changeBox => BoxSelectionResult(compactedBoxes, changeBox))
     } else {
       Right(bsr)
     }
@@ -157,7 +157,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int, optimalInputs: Int) exten
     if (toAdd.nonEmpty) {
       val compactedBoxes = bsr.boxes.filter(b => !toDrop.contains(b)) ++ toAdd
       calcChange(compactedBoxes, targetBalance, targetAssets)
-        .mapRight(changeBox => BoxSelectionResult(compactedBoxes, changeBox.headOption))
+        .mapRight(changeBox => BoxSelectionResult(compactedBoxes, changeBox))
     } else {
       Right(bsr)
     }

@@ -65,7 +65,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
 
     forAll(ergoBoxCandidateGen, ergoBoxCandidateGen, validErgoTransactionGen, proveDlogGen) {
       case (outputCandidate, outputChangeCandidate, (ergoBoxes, _), proveDlog) =>
-        val selectionResult = BoxSelectionResult(inputBoxes, Seq(outputChangeCandidate))
+        val selectionResult = BoxSelectionResult(inputBoxes, Some(outputChangeCandidate))
         val tx = prepareUnsignedTransaction(Seq(outputCandidate), startHeight, selectionResult, ergoBoxes, Option(proveDlog)).get
         tx.inputs shouldBe inputBoxes.map(_.box.id).map(id => new UnsignedInput(id))
         tx.dataInputs shouldBe ergoBoxes.map(dataInputBox => DataInput(dataInputBox.id))

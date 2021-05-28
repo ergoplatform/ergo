@@ -108,7 +108,7 @@ object TransactionBuilder {
     }
     // although we're only interested in change boxes, make sure selection contains exact inputs
     assert(selection.boxes == inputs, s"unexpected selected boxes, expected: $inputs, got ${selection.boxes}")
-    val changeBoxes = selection.changeBoxes
+    val changeBoxes = selection.changeBox
     val changeBoxesHaveTokens = changeBoxes.exists(_.tokens.nonEmpty)
 
     val changeGoesToFee = changeAmt < minChangeValue && !changeBoxesHaveTokens

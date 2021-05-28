@@ -180,12 +180,12 @@ trait ErgoWalletSupport extends ScorexLogging {
                                            selectionResult: BoxSelectionResult[TrackedBox],
                                            dataInputBoxes: IndexedSeq[ErgoBox],
                                            changeAddressOpt: Option[ProveDlog]): Try[UnsignedErgoTransaction] = Try {
-    if (selectionResult.changeBoxes.nonEmpty) {
+    if (selectionResult.changeBox.nonEmpty) {
       require(changeAddressOpt.isDefined, "Does not have change address to send change to")
     }
 
     val dataInputs = dataInputBoxes.map(dataInputBox => DataInput(dataInputBox.id))
-    val changeBoxCandidates = selectionResult.changeBoxes.map { changeBox =>
+    val changeBoxCandidates = selectionResult.changeBox.map { changeBox =>
       val assets = changeBox.tokens.map(t => Digest32 @@ idToBytes(t._1) -> t._2).toIndexedSeq
       new ErgoBoxCandidate(changeBox.value, changeAddressOpt.get, walletHeight, assets.toColl)
     }

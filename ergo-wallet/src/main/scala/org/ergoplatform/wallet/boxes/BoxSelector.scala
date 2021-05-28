@@ -44,7 +44,7 @@ object BoxSelector {
   private val MinValuePerByteDefault = 30 * 12
   val MinBoxValue: Long = (MaxBoxSize.value / 2) * MinValuePerByteDefault
 
-  final case class BoxSelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
+  final case class BoxSelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBox: Option[ErgoBoxAssets])
 
   trait BoxSelectionError {
     def message: String

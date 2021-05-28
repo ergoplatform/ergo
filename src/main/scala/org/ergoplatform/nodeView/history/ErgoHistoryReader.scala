@@ -149,7 +149,7 @@ trait ErgoHistoryReader
         .orElse(if (ids.contains(PreGenesisHeader.id)) Some(PreGenesisHeader.id) else None)
       branchingPointOpt.toSeq.flatMap { branchingPoint =>
         val otherNodeHeight = heightOf(branchingPoint).getOrElse(ErgoHistory.GenesisHeight)
-        val heightTo = Math.min(headersHeight, otherNodeHeight + size)
+        val heightTo = Math.min(headersHeight, otherNodeHeight + size - 1)
         (otherNodeHeight to heightTo).flatMap { height =>
           bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
         }

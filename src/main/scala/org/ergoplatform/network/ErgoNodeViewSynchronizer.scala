@@ -62,7 +62,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.scheduleAtFixedRate(2.seconds, statusTracker.minInterval(), self, SendLocalSyncInfo)
   }
 
-  private def downloadRequired(id: ModifierId): Boolean = deliveryTracker.status(id, Seq(historyReader)) == ModifiersStatus.Unknown
+  private def downloadRequired(historyReader: ErgoHistory)(id: ModifierId): Boolean =
+    deliveryTracker.status(id, Array(historyReader)) == ModifiersStatus.Unknown
 
   /**
     * Requests BlockSections with `Unknown` status defined from block headers but not downloaded yet.
@@ -72,7 +73,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case CheckModifiersToDownload =>
       historyReaderOpt.foreach { h =>
         val toDownload =
-          h.nextModifiersToDownload(desiredSizeOfExpectingQueue - deliveryTracker.requestedSize, downloadRequired)
+          h.nextModifiersToDownload(desiredSizeOfExpectingQueue - deliveryTracker.requestedSize, downloadRequired(h))
 
         log.info(s"${toDownload.length} persistent modifiers to be downloaded")
 
@@ -109,7 +110,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             val ids = syncInfo.lastHeaderIds.reverse
             val headerIds = ids.takeWhile(hId => !historyReader.isInBestChain(hId))
             if (headerIds.nonEmpty) {
-              requestDownload(Header.modifierTypeId, headerIds.reverse.filter(downloadRequired))
+              requestDownload(Header.modifierTypeId, headerIds.reverse.filter(downloadRequired(historyReader)))
             }
           case Equal => // does nothing for `Equal`
         }
@@ -117,6 +118,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  // OLD VERSION
+  // todo: this method is just a copy of the ancestor from Scorex, however, smarter logic is needed, not just
+  //  asking from a random peer
+  override protected def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
+    deliveryTracker.setRequested(modifierIds, modifierTypeId, None)
+    val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
+    networkControllerRef ! SendToNetwork(msg, SendToRandom)
+  }
+
+  /*
+  NEW VERSION, depends on Scorex p2p-improvs-wip1-08abd291-SNAPSHOT
   // todo: do more filtering for peers, e.g. ask for full block parts only peers keeping long enough suffix
   override protected def requestDownload(modifierTypeId: ModifierTypeId, modifierIds: Seq[ModifierId]): Unit = {
     deliveryTracker.setRequested(modifierIds, modifierTypeId, None)
@@ -131,6 +143,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
     networkControllerRef ! SendToNetwork(msg, sendingStrategy)
   }
+
+   */
 
   /**
     * Logic to process block parts got from another peer.

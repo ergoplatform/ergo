@@ -373,7 +373,6 @@ class ErgoWalletActor(settings: ErgoSettings,
     sender() ! txs
   }
 
-
   override def receive: Receive = emptyWallet
 
   private def wrapLegalExc[T](e: Throwable): Failure[T] =

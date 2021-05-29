@@ -287,28 +287,22 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   def transactionsR: Route = (path("transactions") & get & txParams) {
     case (minHeight, maxHeight, minConfNum, maxConfNum) =>
       if ((minHeight > 0 || maxHeight < Int.MaxValue) && // height is set
-        (minConfNum > 0 || maxConfNum < Int.MaxValue)    // confirmations are set
+        (minConfNum > 0 || maxConfNum < Int.MaxValue) // confirmations are set
       ) {
         BadRequest(s"Bad request: both heights and confirmations set")
-      } else {
-        val filteringOpts = if (minHeight == 0 && maxHeight == Int.MaxValue &&
-          minConfNum == 0 && maxConfNum == Int.MaxValue) {
-          None
-        } else if(minHeight > 0 || maxHeight < Int.MaxValue){
-          Some(FilterByHeight(minHeight, maxHeight))
-        } else {
-          Some(FilterByConfirmations(minConfNum, maxConfNum))
-        }
-
+      }
+      else if (minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
         withWallet {
-          _.transactions(filteringOpts)
+          _.transactions
             .map {
               _.filter(tx =>
-                tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId) &&
-                  tx.wtx.inclusionHeight >= minHeight && tx.wtx.inclusionHeight <= maxHeight &&
-                  tx.numConfirmations >= minConfNum && tx.numConfirmations <= maxConfNum
+                tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId)
               )
             }
+        }
+      } else {
+        withWallet {
+          _.filteredScanTransactions(List(Constants.PaymentsScanId, Constants.MiningScanId), minHeight, maxHeight, minConfNum, maxConfNum)
         }
       }
   }

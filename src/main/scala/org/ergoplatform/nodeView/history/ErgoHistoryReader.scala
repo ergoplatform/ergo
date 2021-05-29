@@ -155,7 +155,7 @@ trait ErgoHistoryReader
       branchingPointOpt.toSeq.flatMap { branchingPoint =>
         val otherNodeHeight = heightOf(branchingPoint).getOrElse(ErgoHistory.GenesisHeight)
         log.debug("Other node height: " + otherNodeHeight)
-        val heightTo = Math.min(headersHeight, otherNodeHeight + size)
+        val heightTo = Math.min(headersHeight, otherNodeHeight + size - 1)
         (otherNodeHeight to heightTo).flatMap { height =>
           bestHeaderIdAtHeight(height).map(id => Header.modifierTypeId -> id)
         }

@@ -346,7 +346,33 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     case GetScanTransactions(scanId: ScanId) =>
       sender() ! ScanRelatedTxsResponse(ergoWalletService.getScanTransactions(scanId, state.registry, state.fullHeight))
+
+    case GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum)  =>
+      getFiltered(state, scanIds, minHeight, maxHeight, minConfNum, maxConfNum)
+
   }
+
+  def getFiltered(state: ErgoWalletState, scanIds: List[ScanId], minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int): Unit = {
+    val heightFrom = if (maxConfNum == Int.MaxValue) {
+      minHeight
+    } else {
+      Math.max(minHeight, state.fullHeight - maxConfNum)
+    }
+    val heightTo = if (minConfNum == 0) {
+      maxHeight
+    } else {
+      Math.min(maxHeight,  - minConfNum)
+    }
+    log.info("Starting to read wallet transactions")
+    val ts0 = System.currentTimeMillis()
+    val txs = scanIds.flatMap(scan => state.registry.walletTxsBetween(scan, heightFrom, heightTo))
+      .sortBy(-_.inclusionHeight)
+      .map(tx => AugWalletTransaction(tx, state.fullHeight - tx.inclusionHeight))
+    val ts = System.currentTimeMillis()
+    log.info(s"Wallet: ${txs.size} read in ${ts-ts0} ms")
+    sender() ! txs
+  }
+
 
   override def receive: Receive = emptyWallet
 
@@ -587,7 +613,12 @@ object ErgoWalletActor extends ScorexLogging {
   /**
     * Get wallet-related transaction
     */
-  case class GetTransactions(filteringOptions: Option[WalletFiltering])
+  case object GetTransactions
+
+  /**
+    * Get filtered scan-related txs
+    */
+  case class GetFilteredScanTxs(scanId: List[ScanId], minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int)
 
   /**
     * Derive next key-pair according to BIP-32

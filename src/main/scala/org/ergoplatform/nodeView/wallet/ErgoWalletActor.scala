@@ -154,8 +154,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       val boxes = ergoWalletService.getScanBoxes(state, scanId, unspent, considerUnconfirmed)
       sender() ! boxes
 
-    case GetTransactions(filteringOptions) =>
-      sender() ! ergoWalletService.getTransactions(state.registry, state.fullHeight, filteringOptions)
+    case GetTransactions =>
+      sender() ! ergoWalletService.getTransactions(state.registry, state.fullHeight)
 
     case GetTransaction(txId) =>
       sender() ! ergoWalletService.getTransactionsByTxId(txId, state.registry, state.fullHeight)

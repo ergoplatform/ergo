@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSy
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.nodeView.wallet.{ErgoWallet, ErgoWalletReader}
+import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.FileUtils
 import scorex.core._

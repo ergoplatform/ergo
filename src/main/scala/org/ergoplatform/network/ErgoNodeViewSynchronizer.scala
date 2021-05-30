@@ -25,7 +25,6 @@ import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId
 
 import scala.collection.mutable
-import scala.collection.mutable.WrappedArray
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
@@ -54,11 +53,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val desiredSizeOfExpectingModifierQueue: Int = networkSettings.desiredInvObjects
   private val desiredSizeOfExpectingHeaderQueue: Int = desiredSizeOfExpectingModifierQueue * 5
 
-  private val minModifiersPerBucket = 5 // minimum of persistent modifiers to download by single peer
-  private val maxModifiersPerBucket = 20 // maximum of persistent modifiers to download by single peer
+  private val minModifiersPerBucket = 5 // minimum of persistent modifiers (excl. headers) to download by single peer
+  private val maxModifiersPerBucket = 20 // maximum of persistent modifiers (excl. headers) to download by single peer
 
-  private val minHeadersPerBucket = 50 // minimum of header modifiers to download by single peer
-  private val maxHeadersPerBucket = 400 // maximum of header modifiers to download by single peer
+  private val minHeadersPerBucket = 50 // minimum of headers to download by single peer
+  private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer
 
   override def preStart(): Unit = {
     val toDownloadCheckInterval = networkSettings.syncInterval
@@ -67,8 +66,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
   }
 
-  private def downloadRequired(historyReader: ErgoHistory)(id: ModifierId): Boolean =
+  private def downloadRequired(historyReader: ErgoHistory)(id: ModifierId): Boolean = {
     deliveryTracker.status(id, Array(historyReader)) == ModifiersStatus.Unknown
+  }
 
   /**
     * Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
@@ -78,6 +78,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case CheckModifiersToDownload =>
       historyReaderOpt.foreach { h =>
         val maxModifiers = desiredSizeOfExpectingModifierQueue - deliveryTracker.requestedSize
+        log.debug(s"Going to download $maxModifiers non-header modifiers")
         requestDownload(
           maxModifiers,
           minModifiersPerBucket,
@@ -88,7 +89,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
-  //sync info is coming from another node
+  //Processing sync info is coming from another node
   override protected def processSync(syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
 
     historyReaderOpt match {
@@ -103,20 +104,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         status match {
           case Unknown =>
-            log.warn("Peer status is still unknown")
+            // we do not know what to send to a peer with unknown status
+            log.info(s"Peer status is still unknown for $remote")
           case Nonsense =>
-            log.warn("Got nonsense")
+            // we do not know what to send to a peer with such status
+            log.info(s"Got nonsense status for $remote")
           case Younger | Fork =>
+            // send extension (up to 400 header ids) to a peer which chain is less developed or forked
             val ext = historyReader.continuationIds(syncInfo, size = 400)
             if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
             log.info(s"Sending extension of length ${ext.length}")
             log.debug(s"Extension ids: ${idsToString(ext)}")
             sendExtension(remote, status, ext)
           case Older =>
+            // asking headers from older peers
             val ids = syncInfo.lastHeaderIds.reverse
             val headerIds = ids.takeWhile(hId => !historyReader.isInBestChain(hId))
             if (headerIds.nonEmpty) {
               val maxModifiers = desiredSizeOfExpectingHeaderQueue - deliveryTracker.requestedSize
+              log.debug(s"Requesting $maxModifiers headers from older peers after getting sync info from $remote")
               requestDownload(
                 maxModifiers,
                 minHeadersPerBucket,
@@ -125,9 +131,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 Map(Header.modifierTypeId -> headerIds.reverse.filter(downloadRequired(historyReader)).take(howManyPerType))
               }
             }
-          case Equal => // does nothing for `Equal`
+          case Equal =>
+            // does nothing for `Equal`
+            log.debug(s"$remote has equal header-chain")
         }
-      case _ => // historyReader not initialized yet, it should not happen
+      case _ =>
+        // historyReader not initialized yet, it should not happen
+        log.error("historyReader not initialized when processing syncInfo")
     }
   }
 
@@ -136,8 +146,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @param callingPeer that can be used to download headers, it must be Older
     * @return available peers to download headers from together with the state/origin of the peer
     */
-  private def getPeersForDownloadingHeaders(callingPeer: ConnectedPeer): (PeerSyncState, Iterable[ConnectedPeer]) =
-    statusTracker.peersByStatus.get(Older).map(PeerSyncState.Older -> _).getOrElse(PeerSyncState.OlderCalling -> Array(callingPeer))
+  private def getPeersForDownloadingHeaders(callingPeer: ConnectedPeer): (PeerSyncState, Iterable[ConnectedPeer]) = {
+    statusTracker.peersByStatus
+      .get(Older)
+      .map(PeerSyncState.Older -> _)
+      .getOrElse(PeerSyncState.OlderCalling -> Array(callingPeer))
+  }
 
   /**
     * Other persistent modifiers besides headers should be downloaded from either Older or Equal node, with fallback to Unknown or Fork
@@ -166,7 +180,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected def requestDownload(maxModifiers: Int, minModifiersPerBucket: Int, maxModifiersPerBucket: Int)
                                (getPeersOpt: => Option[(PeerSyncState, Iterable[ConnectedPeer])])
-                               (fetchMax: Int => Map[ModifierTypeId, Seq[ModifierId]]): Unit =
+                               (fetchMax: Int => Map[ModifierTypeId, Seq[ModifierId]]): Unit = {
     getPeersOpt
       .foreach { case (peerStatus, peers) =>
         val modifiersByBucket = ElementPartitioner.distribute(peers, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
@@ -185,6 +199,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           }
         }
       }
+  }
 
   /**
     * Logic to process block parts got from another peer.

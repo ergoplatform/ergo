@@ -32,7 +32,7 @@ val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.1"
 
-val scorexVersion = "master-7d7d9bb7-SNAPSHOT"
+val scorexVersion = "main-a6fe1419-SNAPSHOT"
 val sigmaStateVersion = "4.0.3"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -56,7 +56,7 @@ libraryDependencies ++= Seq(
   "com.iheart" %% "ficus" % "1.4.7",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "com.google.guava" % "guava" % "21.0",
-  "com.joefkelley" %% "argyle" % "1.0.0",
+  "com.github.scopt" %% "scopt" % "4.0.1",
 
   "org.scala-lang.modules" %% "scala-async" % "0.9.7" % "test",
   "com.storm-enroute" %% "scalameter" % "0.8.+" % "test",

@@ -170,8 +170,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Modifier download method that is given min/max constraints and means of getting peers and modifiers.
-    * It sends requests for modifiers to optimal peers in optimally sized batches.
+    * Modifier download method that is given min/max constraints for modifiers to download from peers.
+    * It sends requests for modifiers to given peers in optimally sized batches.
     * @param maxModifiers maximum modifiers to download
     * @param minModifiersPerBucket minimum modifiers to download per bucket
     * @param maxModifiersPerBucket maximum modifiers to download per bucket
@@ -180,10 +180,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected def requestDownload(maxModifiers: Int, minModifiersPerBucket: Int, maxModifiersPerBucket: Int)
                                (getPeersOpt: => Option[(PeerSyncState, Iterable[ConnectedPeer])])
-                               (fetchMax: Int => Map[ModifierTypeId, Seq[ModifierId]]): Unit = {
+                               (fetchMax: Int => Map[ModifierTypeId, Seq[ModifierId]]): Unit =
     getPeersOpt
       .foreach { case (peerStatus, peers) =>
         val modifiersByBucket = ElementPartitioner.distribute(peers, maxModifiers, minModifiersPerBucket, maxModifiersPerBucket)(fetchMax)
+        // collect and log useful downloading progress information, don't worry it does not run frequently
         modifiersByBucket.headOption.foreach { _ =>
           modifiersByBucket
             .groupBy(_._1._2)
@@ -191,15 +192,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             .map { case (modType, batchSizes) =>
               s"Downloading from $peerStatus peers : type[$modType] of ${batchSizes.size} batches each of ~ size: ${batchSizes.take(2).max}"
             }.foreach(log.info(_))
-
-          modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
-            deliveryTracker.setRequested(modifierIds, modifierTypeId, Some(peer))
-            val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
-            networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
-          }
+        }
+        // bucket represents a peer and a modifierType as we cannot send mixed types to a peer
+        modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
+          deliveryTracker.setRequested(modifierIds, modifierTypeId, Some(peer))
+          val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
+          networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
         }
       }
-  }
 
   /**
     * Logic to process block parts got from another peer.

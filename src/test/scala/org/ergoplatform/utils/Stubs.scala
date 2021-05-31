@@ -1,6 +1,7 @@
 package org.ergoplatform.utils
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.pattern.StatusReply
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.{AutolykosSolution, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -99,9 +100,9 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
   class MinerStub extends Actor {
     def receive: Receive = {
       case ErgoMiner.PrepareCandidate(_, reply) => if (reply) {
-        sender() ! Future.successful(externalCandidateBlock)
+        sender() ! StatusReply.success(externalCandidateBlock)
       }
-      case _: AutolykosSolution => sender() ! Future.successful(())
+      case _: AutolykosSolution => sender() ! StatusReply.success(())
       case ErgoMiner.ReadMinerPk => sender() ! Some(pk)
     }
   }

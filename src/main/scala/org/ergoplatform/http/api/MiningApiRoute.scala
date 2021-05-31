@@ -37,7 +37,7 @@ case class MiningApiRoute(miner: ActorRef,
     */
   def candidateR: Route = (path("candidate") & pathEndOrSingleSlash & get) {
     val prepareCmd = ErgoMiner.PrepareCandidate(Seq.empty)
-    val candidateF = (miner ? prepareCmd).mapTo[Future[WorkMessage]].flatten
+    val candidateF = miner.askWithStatus(prepareCmd).mapTo[WorkMessage]
     ApiResponse(candidateF)
   }
 
@@ -49,13 +49,13 @@ case class MiningApiRoute(miner: ActorRef,
     & post & entity(as[Seq[ErgoTransaction]]) & withAuth) { txs =>
 
     val prepareCmd = ErgoMiner.PrepareCandidate(txs)
-    val candidateF = (miner ? prepareCmd).mapTo[Future[WorkMessage]].flatten
+    val candidateF = miner.askWithStatus(prepareCmd).mapTo[WorkMessage]
     ApiResponse(candidateF)
   }
 
   def solutionR: Route = (path("solution") & post & entity(as[AutolykosSolution])) { solution =>
     val result = if (ergoSettings.nodeSettings.useExternalMiner) {
-      (miner ? solution).mapTo[Future[Unit]].flatten
+      miner.askWithStatus(solution).mapTo[Unit]
     } else {
       Future.failed(new Exception("External miner support is inactive"))
     }

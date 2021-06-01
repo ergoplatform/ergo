@@ -57,14 +57,26 @@ order by range
 )
 ;
 
--- find blocks where cost is less than time_us
+-- find blocks where cost is less than time_us (v5)
 select round(ratio * 0.1, 1) as ratio, count(*)
 from (select height,
              tx_num,
-             cost + tx_num * 9000 as full_cost,
+             cost as full_cost,
              time / 1000          as time_us,
-             (time / 100) / (cost + tx_num * 9000) as ratio
+             (time / 100) / cost as ratio
       from applyTransactions
+      where time_us > full_cost)
+group by ratio
+;
+
+-- find blocks where cost is less than time_us (v4)
+select round(ratio * 0.1, 1) as ratio, count(*)
+from (select height,
+             tx_num,
+             cost as full_cost,
+             time / 1000          as time_us,
+             (time / 100) / cost as ratio
+      from applyTransactions4
       where time_us > full_cost)
 group by ratio
 ;
@@ -73,9 +85,9 @@ group by ratio
 select min(ratio), count(*), round(avg(tx_num), 2) as avg_tx_num
 from (select height,
              tx_num,
-             cost + tx_num * 9000 as full_cost,
+             cost as full_cost,
              time / 1000          as time_us,
-             (cost + tx_num * 9000) / (time / 1000)  as ratio
+             cost / (time / 1000)  as ratio
       from applyTransactions
       where time_us <= full_cost)
 group by ratio / 10
@@ -85,9 +97,9 @@ group by ratio / 10
 select min(ratio), count(*), round(avg(tx_num), 2) as avg_tx_num
 from (select height,
              tx_num,
-             cost + tx_num * 9000 as full_cost,
+             cost as full_cost,
              time / 1000          as time_us,
-             (cost + tx_num * 9000) / (time / 1000)  as ratio
+             cost / (time / 1000)  as ratio
       from applyTransactions4
       where time_us <= full_cost)
 group by ratio / 10

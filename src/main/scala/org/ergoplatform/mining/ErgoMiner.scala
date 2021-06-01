@@ -78,7 +78,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   // Flag which is set when a future with block candidate generation is running
   private var candidateGenerating: Boolean = false
 
-  private var prepareCandidateRetry: FiniteDuration = 100.millis
+  // duration to wait before new prepare candidate attempt (adjusted based on feedback from previous execution)
+  private var prepareCandidateRetryDelay: FiniteDuration = 100.millis
 
   // cached block candidate
   private var candidateOpt: Option[CandidateCache] = None
@@ -262,6 +263,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     candCache
   }
 
+  /**
+    * @return None if chain is not synced or Some of attempt to create candidate
+    */
   private def generateCandidate(h: ErgoHistoryReader,
                                 m: ErgoMemPoolReader,
                                 s: UtxoStateReader,
@@ -290,6 +294,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           Some(Failure(new Exception("Failed to produce candidate block.", e)))
       }
     } else {
+      // should not be synced probably due to racing condition when last block is not fully applied yet
       None
     }
   }
@@ -303,7 +308,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case prepareCandidate@PrepareCandidate(txsToInclude, reply) =>
       val msgSender = if (reply) Some(sender()) else None
       if (candidateGenerating) {
-        msgSender.foreach(s => context.system.scheduler.scheduleOnce(prepareCandidateRetry, self, prepareCandidate)(context.system.dispatcher, s))
+        msgSender.foreach(s => context.system.scheduler.scheduleOnce(prepareCandidateRetryDelay, self, prepareCandidate)(context.system.dispatcher, s))
       } else if (publicKeyOpt.isEmpty) {
         // this should never happen as we set pubKeyOpt at preStart
         msgSender.foreach(_ ! StatusReply.error("Candidate could not be generated, public key not available"))
@@ -324,7 +329,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 generateCandidate(h, m, s, publicKeyOpt.get, txsToInclude) match {
                   case Some(Success(candidate)) =>
                     val generationTook = System.currentTimeMillis() - start
-                    prepareCandidateRetry = generationTook.millis
+                    prepareCandidateRetryDelay = generationTook.millis
                     log.info(s"Generated new candidate requested by miner in $generationTook ms")
                     msgSender.foreach(_ ! StatusReply.success(candidate.externalVersion))
                   case Some(Failure(ex)) =>
@@ -332,7 +337,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                     msgSender.foreach(_ ! StatusReply.error(ex))
                   case None =>
                     log.warn("Can not generate block candidate: chain not synced (maybe last block not fully applied yet")
-                    msgSender.foreach(s => context.system.scheduler.scheduleOnce(prepareCandidateRetry, self, prepareCandidate)(context.system.dispatcher, s))
+                    msgSender.foreach(s => context.system.scheduler.scheduleOnce(prepareCandidateRetryDelay, self, prepareCandidate)(context.system.dispatcher, s))
                 }
                 candidateGenerating = false
               case _ =>

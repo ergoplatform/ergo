@@ -64,14 +64,19 @@ object metrics {
     * @param blockId          identifier of the related block
     * @param height           blockchain height of the block
     * @param nTransactionsOpt optional number of transactions in the block
+    * @param maxBlockCost     limit on the maximal cost of block validation
     */
-  case class BlockMetricData(blockId: ModifierId, height: Int, nTransactionsOpt: Option[Int])
+  case class BlockMetricData(
+    blockId: ModifierId,
+    height: Int,
+    nTransactionsOpt: Option[Int],
+    maxBlockCost: Long)
 
   implicit object BlockMetricRow extends MetricRow[BlockMetricData] {
-    override val fieldNames: Seq[String] = Array("blockId", "height", "tx_num")
+    override val fieldNames: Seq[String] = Array("blockId", "height", "tx_num", "maxCost")
     override def fieldValues(d: BlockMetricData): Seq[String] = {
       val nTx = d.nTransactionsOpt.map(_.toString).getOrElse("")
-      Array(d.blockId, d.height.toString, nTx)
+      Array(d.blockId, d.height.toString, nTx, d.maxBlockCost.toString)
     }
   }
 

@@ -3,7 +3,7 @@ package org.ergoplatform.utils
 import java.io.{OutputStreamWriter, Writer, ByteArrayOutputStream}
 
 import org.ergoplatform.nodeView.state.UtxoState._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.utils.metrics._
 import scalan.RType
 import scalan.util.FileUtil
@@ -63,19 +63,19 @@ class MetricsSpec extends ErgoPropertyTest {
 
   val blockData = BlockMetricData(
     ModifierId @@ "febd2cff9c9bded702d0c73b1f00a3662348d8bf1a59b45c45664faf8498095d",
-    1, Some(2))
+    1, Some(2), Parameters.MaxBlockCostDefault)
 
   val appendFullBlockRows = Seq[Seq[String]](
-    Array("blockId", "height", "tx_num", "cost"),
-    Array("febd2cff9c9bded702d0c73b1f00a3662348d8bf1a59b45c45664faf8498095d", "1", "2", "-1")
+    Array("blockId", "height", "tx_num", "maxCost", "cost"),
+    Array("febd2cff9c9bded702d0c73b1f00a3662348d8bf1a59b45c45664faf8498095d", "1", "2", Parameters.MaxBlockCostDefault.toString, "-1")
   )
   val applyTransactionsRows = Seq[Seq[String]](
-    Array("blockId", "height", "tx_num", "cost"),
-    Array("febd2cff9c9bded702d0c73b1f00a3662348d8bf1a59b45c45664faf8498095d", "1", "2", "10000")
+    Array("blockId", "height", "tx_num", "maxCost", "cost"),
+    Array("febd2cff9c9bded702d0c73b1f00a3662348d8bf1a59b45c45664faf8498095d", "1", "2", Parameters.MaxBlockCostDefault.toString, "10000")
   )
   val createUtxoStateRows = Seq[Seq[String]](
-    Array("blockId", "height", "tx_num", "cost"),
-    Array("febd2cff9c9bded702d0c73b1f00a3662348d8bf1a59b45c45664faf8498095d", "1", "2", "-1")
+    Array("blockId", "height", "tx_num", "maxCost", "cost"),
+    Array("febd2cff9c9bded702d0c73b1f00a3662348d8bf1a59b45c45664faf8498095d", "1", "2", Parameters.MaxBlockCostDefault.toString, "-1")
   )
 
   property("CsvCollector should output csv rows") {

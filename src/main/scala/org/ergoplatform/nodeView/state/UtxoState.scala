@@ -111,15 +111,18 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
         implicit val es = constants.settings
         val inRoot = rootHash
-        val blockData = BlockMetricData(fb.id, fb.height, Some(fb.blockTransactions.txs.length))
+        val blockData = BlockMetricData(fb.id, fb.height,
+          nTransactionsOpt = Some(fb.blockTransactions.txs.length),
+          maxBlockCost = stateContext.currentParameters.maxBlockCost)
         val stateTry = for {
           newStateContext <- measureOp(blockData, appendFullBlockMetric) {
             stateContext.appendFullBlock(fb)
           }
-          _ <- measureCostedOp(blockData, applyTransactionsMetric) {
+          data = blockData.copy(maxBlockCost = newStateContext.currentParameters.maxBlockCost)
+          _ <- measureCostedOp(data, applyTransactionsMetric) {
             applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext)
           }
-          state <- measureOp(blockData, createUtxoStateMetric)(Try {
+          state <- measureOp(data, createUtxoStateMetric)(Try {
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
             val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)

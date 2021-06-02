@@ -61,8 +61,8 @@ order by range
 select round(ratio * 0.1, 1) as ratio, count(*)
 from (select height,
              tx_num,
-             cost as full_cost,
-             time / 1000          as time_us,
+             cost                as full_cost,
+             time / 1000         as time_us,
              (time / 100) / cost as ratio
       from applyTransactions
       where time_us > full_cost)
@@ -73,8 +73,8 @@ group by ratio
 select round(ratio * 0.1, 1) as ratio, count(*)
 from (select height,
              tx_num,
-             cost as full_cost,
-             time / 1000          as time_us,
+             cost                as full_cost,
+             time / 1000         as time_us,
              (time / 100) / cost as ratio
       from applyTransactions4
       where time_us > full_cost)
@@ -85,9 +85,9 @@ group by ratio
 select min(ratio), count(*), round(avg(tx_num), 2) as avg_tx_num
 from (select height,
              tx_num,
-             cost as full_cost,
+             cost                 as full_cost,
              time / 1000          as time_us,
-             cost / (time / 1000)  as ratio
+             cost / (time / 1000) as ratio
       from applyTransactions
       where time_us <= full_cost)
 group by ratio / 10
@@ -97,11 +97,55 @@ group by ratio / 10
 select min(ratio), count(*), round(avg(tx_num), 2) as avg_tx_num
 from (select height,
              tx_num,
-             cost as full_cost,
+             cost                 as full_cost,
              time / 1000          as time_us,
-             cost / (time / 1000)  as ratio
+             cost / (time / 1000) as ratio
       from applyTransactions4
       where time_us <= full_cost)
 group by ratio / 10
 ;
 
+-- group blocks by maxCost
+select min(maxCost), count(*) from applyTransactions
+group by maxCost / 1000000
+;
+
+-- group block by maxCost/cost ratio
+select maxCost / cost as ratio, count(*), min(height) from applyTransactions
+group by ratio
+;
+
+-- group blocks with small ratio
+select round(maxCost * 10 / cost * 0.1, 1) as ratio, count(*), min(height) from applyTransactions
+where ratio <= 3
+group by ratio
+;
+
+-- smallest ratio block
+select round(t5.maxCost * 10 / t5.cost * 0.1, 1) as ratio,
+       t5.height, t5.tx_num, t5.maxCost,
+       t5.cost as cost_v5,
+       t5.time / 1000 as time_t5_us,
+       7030268 / (t5.time / 1000) as scalability_v5,
+       t4.cost as cost_v4,
+       t4.time / 1000 as time_t4_us
+from applyTransactions t5
+         join applyTransactions4 t4 on t5.blockId = t4.blockId
+where ratio < 2.6
+;
+
+-- group blocks with large ratio
+select round(maxCost * 10000 / cost * 0.0001, 4) as ratio, count(*), min(height) from applyTransactions
+where ratio >= 569
+group by ratio
+;
+
+select round(maxCost * 10 / cost * 0.1, 1) as ratio,
+       height, tx_num, maxCost, cost,
+       time / 1000                         as time_us
+from applyTransactions
+where ratio >= 569
+order by height desc
+limit 20
+
+;

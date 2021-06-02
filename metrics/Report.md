@@ -232,11 +232,11 @@ pd.read_sql_query(f"""
   <tbody>
     <tr>
       <th>0</th>
-      <td>488100</td>
-      <td>488100</td>
-      <td>488100</td>
-      <td>1321800</td>
-      <td>3823200</td>
+      <td>501900</td>
+      <td>501900</td>
+      <td>501900</td>
+      <td>1391500</td>
+      <td>4195700</td>
     </tr>
   </tbody>
 </table>
@@ -303,275 +303,61 @@ order by time_ratio;
     <tr>
       <th>0</th>
       <td>1</td>
-      <td>70293</td>
+      <td>71161</td>
     </tr>
     <tr>
       <th>1</th>
       <td>2</td>
-      <td>155027</td>
+      <td>176815</td>
     </tr>
     <tr>
       <th>2</th>
       <td>3</td>
-      <td>207666</td>
+      <td>190927</td>
     </tr>
     <tr>
       <th>3</th>
       <td>4</td>
-      <td>21667</td>
+      <td>26227</td>
     </tr>
     <tr>
       <th>4</th>
       <td>5</td>
-      <td>20585</td>
+      <td>21516</td>
     </tr>
     <tr>
-      <th>5</th>
-      <td>6</td>
-      <td>5678</td>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
     </tr>
     <tr>
-      <th>6</th>
-      <td>7</td>
-      <td>2472</td>
-    </tr>
-    <tr>
-      <th>7</th>
-      <td>8</td>
-      <td>1444</td>
-    </tr>
-    <tr>
-      <th>8</th>
-      <td>9</td>
-      <td>1020</td>
-    </tr>
-    <tr>
-      <th>9</th>
-      <td>10</td>
-      <td>666</td>
-    </tr>
-    <tr>
-      <th>10</th>
-      <td>11</td>
-      <td>437</td>
-    </tr>
-    <tr>
-      <th>11</th>
-      <td>12</td>
-      <td>283</td>
-    </tr>
-    <tr>
-      <th>12</th>
-      <td>13</td>
-      <td>186</td>
-    </tr>
-    <tr>
-      <th>13</th>
-      <td>14</td>
-      <td>106</td>
-    </tr>
-    <tr>
-      <th>14</th>
-      <td>15</td>
-      <td>66</td>
-    </tr>
-    <tr>
-      <th>15</th>
-      <td>16</td>
-      <td>73</td>
-    </tr>
-    <tr>
-      <th>16</th>
-      <td>17</td>
-      <td>57</td>
-    </tr>
-    <tr>
-      <th>17</th>
-      <td>18</td>
-      <td>41</td>
-    </tr>
-    <tr>
-      <th>18</th>
-      <td>19</td>
-      <td>38</td>
-    </tr>
-    <tr>
-      <th>19</th>
-      <td>20</td>
-      <td>34</td>
-    </tr>
-    <tr>
-      <th>20</th>
-      <td>21</td>
-      <td>26</td>
-    </tr>
-    <tr>
-      <th>21</th>
-      <td>22</td>
-      <td>37</td>
-    </tr>
-    <tr>
-      <th>22</th>
-      <td>23</td>
-      <td>35</td>
-    </tr>
-    <tr>
-      <th>23</th>
-      <td>24</td>
-      <td>25</td>
-    </tr>
-    <tr>
-      <th>24</th>
-      <td>25</td>
-      <td>24</td>
-    </tr>
-    <tr>
-      <th>25</th>
-      <td>26</td>
-      <td>18</td>
-    </tr>
-    <tr>
-      <th>26</th>
-      <td>27</td>
-      <td>10</td>
-    </tr>
-    <tr>
-      <th>27</th>
-      <td>28</td>
-      <td>11</td>
-    </tr>
-    <tr>
-      <th>28</th>
-      <td>29</td>
-      <td>16</td>
-    </tr>
-    <tr>
-      <th>29</th>
-      <td>30</td>
-      <td>4</td>
-    </tr>
-    <tr>
-      <th>30</th>
-      <td>31</td>
-      <td>5</td>
-    </tr>
-    <tr>
-      <th>31</th>
-      <td>32</td>
-      <td>5</td>
-    </tr>
-    <tr>
-      <th>32</th>
-      <td>33</td>
-      <td>9</td>
-    </tr>
-    <tr>
-      <th>33</th>
-      <td>34</td>
-      <td>7</td>
-    </tr>
-    <tr>
-      <th>34</th>
-      <td>35</td>
+      <th>61</th>
+      <td>201</td>
       <td>1</td>
     </tr>
     <tr>
-      <th>35</th>
-      <td>36</td>
-      <td>3</td>
-    </tr>
-    <tr>
-      <th>36</th>
-      <td>37</td>
-      <td>3</td>
-    </tr>
-    <tr>
-      <th>37</th>
-      <td>38</td>
-      <td>2</td>
-    </tr>
-    <tr>
-      <th>38</th>
-      <td>39</td>
+      <th>62</th>
+      <td>220</td>
       <td>1</td>
     </tr>
     <tr>
-      <th>39</th>
-      <td>40</td>
+      <th>63</th>
+      <td>224</td>
       <td>1</td>
     </tr>
     <tr>
-      <th>40</th>
-      <td>42</td>
-      <td>3</td>
-    </tr>
-    <tr>
-      <th>41</th>
-      <td>44</td>
+      <th>64</th>
+      <td>226</td>
       <td>1</td>
     </tr>
     <tr>
-      <th>42</th>
-      <td>47</td>
-      <td>2</td>
-    </tr>
-    <tr>
-      <th>43</th>
-      <td>49</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>44</th>
-      <td>51</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>45</th>
-      <td>52</td>
-      <td>2</td>
-    </tr>
-    <tr>
-      <th>46</th>
-      <td>132</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>47</th>
-      <td>139</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>48</th>
-      <td>166</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>49</th>
-      <td>208</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>50</th>
-      <td>215</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>51</th>
-      <td>229</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>52</th>
-      <td>292</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>53</th>
-      <td>327</td>
+      <th>65</th>
+      <td>237</td>
       <td>1</td>
     </tr>
   </tbody>
 </table>
+<p>66 rows × 2 columns</p>
 </div>
 
 
@@ -642,41 +428,41 @@ order by t.time_ratio / 10;
     <tr>
       <th>0</th>
       <td>1</td>
-      <td>148957</td>
-      <td>17974.0</td>
-      <td>15156.0</td>
-      <td>6.6</td>
+      <td>156281</td>
+      <td>18827.0</td>
+      <td>15793.0</td>
+      <td>6.7</td>
     </tr>
     <tr>
       <th>1</th>
       <td>2</td>
-      <td>170380</td>
-      <td>1193.0</td>
-      <td>425.0</td>
+      <td>191267</td>
+      <td>1246.0</td>
+      <td>445.0</td>
       <td>1.0</td>
     </tr>
     <tr>
       <th>2</th>
       <td>3</td>
-      <td>167950</td>
-      <td>1151.0</td>
-      <td>375.0</td>
+      <td>153325</td>
+      <td>1209.0</td>
+      <td>393.0</td>
       <td>1.0</td>
     </tr>
     <tr>
       <th>3</th>
       <td>4</td>
-      <td>256</td>
-      <td>3337.0</td>
-      <td>749.0</td>
-      <td>1.3</td>
+      <td>287</td>
+      <td>5385.0</td>
+      <td>1210.0</td>
+      <td>1.5</td>
     </tr>
     <tr>
       <th>4</th>
       <td>5</td>
-      <td>138</td>
-      <td>3965.0</td>
-      <td>725.0</td>
+      <td>135</td>
+      <td>4985.0</td>
+      <td>902.0</td>
       <td>1.3</td>
     </tr>
     <tr>
@@ -688,48 +474,48 @@ order by t.time_ratio / 10;
       <td>...</td>
     </tr>
     <tr>
-      <th>63</th>
-      <td>75</td>
+      <th>70</th>
+      <td>79</td>
       <td>1</td>
-      <td>31507.0</td>
-      <td>417.0</td>
+      <td>32010.0</td>
+      <td>402.0</td>
       <td>1.0</td>
     </tr>
     <tr>
-      <th>64</th>
-      <td>82</td>
+      <th>71</th>
+      <td>81</td>
       <td>1</td>
-      <td>32388.0</td>
-      <td>392.0</td>
+      <td>34432.0</td>
+      <td>420.0</td>
       <td>1.0</td>
     </tr>
     <tr>
-      <th>65</th>
-      <td>83</td>
+      <th>72</th>
+      <td>84</td>
       <td>1</td>
-      <td>33706.0</td>
-      <td>404.0</td>
+      <td>37181.0</td>
+      <td>438.0</td>
       <td>1.0</td>
     </tr>
     <tr>
-      <th>66</th>
-      <td>86</td>
+      <th>73</th>
+      <td>90</td>
       <td>1</td>
-      <td>41055.0</td>
-      <td>477.0</td>
+      <td>47346.0</td>
+      <td>525.0</td>
       <td>1.0</td>
     </tr>
     <tr>
-      <th>67</th>
-      <td>88</td>
+      <th>74</th>
+      <td>624</td>
       <td>1</td>
-      <td>31910.0</td>
-      <td>362.0</td>
+      <td>288505.0</td>
+      <td>461.0</td>
       <td>1.0</td>
     </tr>
   </tbody>
 </table>
-<p>68 rows × 5 columns</p>
+<p>75 rows × 5 columns</p>
 </div>
 
 
@@ -800,338 +586,466 @@ order by t.time_ratio / 10;
     <tr>
       <th>0</th>
       <td>1</td>
-      <td>1321331</td>
-      <td>1806.3</td>
-      <td>1765.3</td>
-      <td>2.9</td>
+      <td>1391051</td>
+      <td>1874.3</td>
+      <td>1828.9</td>
+      <td>3.0</td>
     </tr>
     <tr>
       <th>1</th>
       <td>2</td>
-      <td>154</td>
-      <td>7181.1</td>
-      <td>2900.2</td>
-      <td>6.1</td>
+      <td>143</td>
+      <td>6646.5</td>
+      <td>2658.4</td>
+      <td>5.8</td>
     </tr>
     <tr>
       <th>2</th>
       <td>3</td>
-      <td>63</td>
-      <td>11364.8</td>
-      <td>3407.0</td>
-      <td>8.5</td>
+      <td>68</td>
+      <td>14709.5</td>
+      <td>4136.0</td>
+      <td>9.7</td>
     </tr>
     <tr>
       <th>3</th>
       <td>4</td>
-      <td>43</td>
-      <td>14648.4</td>
-      <td>3341.8</td>
-      <td>7.6</td>
+      <td>36</td>
+      <td>11006.4</td>
+      <td>2473.1</td>
+      <td>6.1</td>
     </tr>
     <tr>
       <th>4</th>
       <td>5</td>
-      <td>24</td>
-      <td>12482.9</td>
-      <td>2229.4</td>
-      <td>4.5</td>
+      <td>20</td>
+      <td>9853.2</td>
+      <td>1804.8</td>
+      <td>5.0</td>
     </tr>
     <tr>
       <th>5</th>
       <td>6</td>
-      <td>30</td>
-      <td>11152.2</td>
-      <td>1712.3</td>
-      <td>4.7</td>
+      <td>20</td>
+      <td>14838.7</td>
+      <td>2328.2</td>
+      <td>5.5</td>
     </tr>
     <tr>
       <th>6</th>
       <td>7</td>
-      <td>24</td>
-      <td>22004.2</td>
-      <td>3038.2</td>
-      <td>6.2</td>
+      <td>16</td>
+      <td>10072.1</td>
+      <td>1350.2</td>
+      <td>3.1</td>
     </tr>
     <tr>
       <th>7</th>
       <td>8</td>
-      <td>14</td>
-      <td>9936.7</td>
-      <td>1192.9</td>
-      <td>3.0</td>
+      <td>9</td>
+      <td>11278.0</td>
+      <td>1329.9</td>
+      <td>3.2</td>
     </tr>
     <tr>
       <th>8</th>
       <td>9</td>
-      <td>7</td>
-      <td>18300.3</td>
-      <td>1928.6</td>
-      <td>5.1</td>
+      <td>8</td>
+      <td>16838.9</td>
+      <td>1812.3</td>
+      <td>4.3</td>
     </tr>
     <tr>
       <th>9</th>
       <td>10</td>
-      <td>10</td>
-      <td>10140.6</td>
-      <td>972.2</td>
-      <td>4.3</td>
+      <td>14</td>
+      <td>15309.4</td>
+      <td>1458.6</td>
+      <td>5.5</td>
     </tr>
     <tr>
       <th>10</th>
       <td>11</td>
-      <td>7</td>
-      <td>12251.3</td>
-      <td>1091.3</td>
-      <td>4.0</td>
+      <td>6</td>
+      <td>8631.2</td>
+      <td>759.0</td>
+      <td>1.5</td>
     </tr>
     <tr>
       <th>11</th>
       <td>12</td>
-      <td>9</td>
-      <td>66606.8</td>
-      <td>5249.7</td>
-      <td>12.3</td>
+      <td>6</td>
+      <td>58768.7</td>
+      <td>4656.2</td>
+      <td>14.0</td>
     </tr>
     <tr>
       <th>12</th>
       <td>13</td>
-      <td>6</td>
-      <td>55290.5</td>
-      <td>4154.7</td>
-      <td>12.3</td>
+      <td>5</td>
+      <td>15259.0</td>
+      <td>1124.4</td>
+      <td>4.6</td>
     </tr>
     <tr>
       <th>13</th>
       <td>14</td>
-      <td>2</td>
-      <td>25408.5</td>
-      <td>1772.5</td>
-      <td>2.0</td>
+      <td>7</td>
+      <td>13462.6</td>
+      <td>935.3</td>
+      <td>3.6</td>
     </tr>
     <tr>
       <th>14</th>
       <td>15</td>
-      <td>8</td>
-      <td>21613.8</td>
-      <td>1401.9</td>
-      <td>2.9</td>
+      <td>6</td>
+      <td>13018.3</td>
+      <td>847.0</td>
+      <td>2.3</td>
     </tr>
     <tr>
       <th>15</th>
       <td>16</td>
-      <td>3</td>
-      <td>24489.7</td>
-      <td>1463.7</td>
-      <td>3.7</td>
+      <td>7</td>
+      <td>15353.9</td>
+      <td>947.1</td>
+      <td>2.4</td>
     </tr>
     <tr>
       <th>16</th>
       <td>17</td>
-      <td>4</td>
-      <td>9498.5</td>
-      <td>547.8</td>
-      <td>1.3</td>
+      <td>3</td>
+      <td>12081.0</td>
+      <td>679.3</td>
+      <td>2.7</td>
     </tr>
     <tr>
       <th>17</th>
       <td>18</td>
-      <td>5</td>
-      <td>11864.2</td>
-      <td>646.8</td>
-      <td>2.0</td>
+      <td>1</td>
+      <td>17360.0</td>
+      <td>944.0</td>
+      <td>6.0</td>
     </tr>
     <tr>
       <th>18</th>
       <td>19</td>
-      <td>5</td>
-      <td>14664.4</td>
-      <td>739.6</td>
-      <td>1.8</td>
+      <td>4</td>
+      <td>18347.5</td>
+      <td>944.3</td>
+      <td>4.5</td>
     </tr>
     <tr>
       <th>19</th>
       <td>20</td>
-      <td>3</td>
-      <td>26642.3</td>
-      <td>1316.7</td>
-      <td>3.3</td>
+      <td>1</td>
+      <td>18032.0</td>
+      <td>864.0</td>
+      <td>2.0</td>
     </tr>
     <tr>
       <th>20</th>
       <td>21</td>
-      <td>5</td>
-      <td>10858.8</td>
-      <td>506.4</td>
-      <td>1.6</td>
+      <td>9</td>
+      <td>24950.0</td>
+      <td>1147.3</td>
+      <td>1.3</td>
     </tr>
     <tr>
       <th>21</th>
       <td>22</td>
-      <td>5</td>
-      <td>15152.0</td>
-      <td>675.6</td>
-      <td>3.0</td>
+      <td>2</td>
+      <td>16437.0</td>
+      <td>730.5</td>
+      <td>4.0</td>
     </tr>
     <tr>
       <th>22</th>
       <td>23</td>
-      <td>5</td>
-      <td>12719.6</td>
-      <td>543.8</td>
-      <td>1.4</td>
+      <td>3</td>
+      <td>10673.7</td>
+      <td>452.7</td>
+      <td>1.7</td>
     </tr>
     <tr>
       <th>23</th>
       <td>24</td>
-      <td>5</td>
-      <td>8051.6</td>
-      <td>323.2</td>
+      <td>4</td>
+      <td>11319.3</td>
+      <td>461.8</td>
       <td>1.0</td>
     </tr>
     <tr>
       <th>24</th>
-      <td>26</td>
-      <td>1</td>
-      <td>10179.0</td>
-      <td>377.0</td>
-      <td>1.0</td>
+      <td>25</td>
+      <td>3</td>
+      <td>12954.7</td>
+      <td>502.7</td>
+      <td>2.3</td>
     </tr>
     <tr>
       <th>25</th>
-      <td>34</td>
-      <td>2</td>
-      <td>7845.5</td>
-      <td>228.0</td>
+      <td>26</td>
+      <td>1</td>
+      <td>13534.0</td>
+      <td>503.0</td>
       <td>1.0</td>
     </tr>
     <tr>
       <th>26</th>
-      <td>35</td>
-      <td>2</td>
-      <td>27151.5</td>
-      <td>756.5</td>
-      <td>4.5</td>
+      <td>27</td>
+      <td>6</td>
+      <td>15642.8</td>
+      <td>565.2</td>
+      <td>1.2</td>
     </tr>
     <tr>
       <th>27</th>
-      <td>37</td>
-      <td>1</td>
-      <td>17464.0</td>
-      <td>464.0</td>
+      <td>28</td>
+      <td>2</td>
+      <td>11922.0</td>
+      <td>417.5</td>
       <td>1.0</td>
     </tr>
     <tr>
       <th>28</th>
-      <td>43</td>
+      <td>29</td>
       <td>1</td>
-      <td>42704.0</td>
-      <td>972.0</td>
-      <td>6.0</td>
+      <td>14977.0</td>
+      <td>500.0</td>
+      <td>1.0</td>
     </tr>
     <tr>
       <th>29</th>
-      <td>44</td>
+      <td>30</td>
       <td>1</td>
-      <td>6739.0</td>
-      <td>152.0</td>
+      <td>11400.0</td>
+      <td>379.0</td>
       <td>1.0</td>
     </tr>
     <tr>
       <th>30</th>
-      <td>48</td>
+      <td>31</td>
       <td>1</td>
-      <td>22134.0</td>
-      <td>460.0</td>
+      <td>14555.0</td>
+      <td>455.0</td>
       <td>1.0</td>
     </tr>
     <tr>
       <th>31</th>
-      <td>56</td>
-      <td>1</td>
-      <td>21106.0</td>
-      <td>373.0</td>
+      <td>35</td>
+      <td>2</td>
+      <td>18180.5</td>
+      <td>512.5</td>
       <td>1.0</td>
     </tr>
     <tr>
       <th>32</th>
-      <td>59</td>
-      <td>1</td>
-      <td>29897.0</td>
-      <td>505.0</td>
-      <td>1.0</td>
+      <td>36</td>
+      <td>2</td>
+      <td>50401.5</td>
+      <td>1372.5</td>
+      <td>2.5</td>
     </tr>
     <tr>
       <th>33</th>
-      <td>60</td>
-      <td>1</td>
-      <td>9782.0</td>
-      <td>160.0</td>
-      <td>1.0</td>
+      <td>37</td>
+      <td>3</td>
+      <td>30459.3</td>
+      <td>808.0</td>
+      <td>3.3</td>
     </tr>
     <tr>
       <th>34</th>
-      <td>61</td>
-      <td>1</td>
-      <td>17317.0</td>
-      <td>279.0</td>
-      <td>2.0</td>
+      <td>38</td>
+      <td>2</td>
+      <td>14596.5</td>
+      <td>378.5</td>
+      <td>1.5</td>
     </tr>
     <tr>
       <th>35</th>
-      <td>69</td>
+      <td>40</td>
       <td>1</td>
-      <td>25691.0</td>
-      <td>370.0</td>
-      <td>1.0</td>
+      <td>51299.0</td>
+      <td>1278.0</td>
+      <td>2.0</td>
     </tr>
     <tr>
       <th>36</th>
-      <td>72</td>
+      <td>43</td>
       <td>1</td>
-      <td>37181.0</td>
-      <td>509.0</td>
+      <td>16743.0</td>
+      <td>388.0</td>
       <td>1.0</td>
     </tr>
     <tr>
       <th>37</th>
-      <td>75</td>
+      <td>44</td>
       <td>1</td>
-      <td>36907.0</td>
-      <td>486.0</td>
+      <td>18163.0</td>
+      <td>409.0</td>
       <td>1.0</td>
     </tr>
     <tr>
       <th>38</th>
-      <td>82</td>
+      <td>45</td>
       <td>1</td>
-      <td>116033.0</td>
-      <td>1410.0</td>
-      <td>3.0</td>
+      <td>19001.0</td>
+      <td>418.0</td>
+      <td>1.0</td>
     </tr>
     <tr>
       <th>39</th>
-      <td>96</td>
-      <td>1</td>
-      <td>30594.0</td>
-      <td>317.0</td>
+      <td>46</td>
+      <td>2</td>
+      <td>12497.5</td>
+      <td>269.0</td>
       <td>1.0</td>
     </tr>
     <tr>
       <th>40</th>
-      <td>107</td>
+      <td>49</td>
       <td>1</td>
-      <td>34966.0</td>
-      <td>324.0</td>
+      <td>23217.0</td>
+      <td>467.0</td>
       <td>1.0</td>
     </tr>
     <tr>
       <th>41</th>
-      <td>129</td>
+      <td>50</td>
       <td>1</td>
-      <td>239188.0</td>
-      <td>1853.0</td>
+      <td>20143.0</td>
+      <td>396.0</td>
+      <td>1.0</td>
+    </tr>
+    <tr>
+      <th>42</th>
+      <td>52</td>
+      <td>1</td>
+      <td>7761.0</td>
+      <td>148.0</td>
+      <td>1.0</td>
+    </tr>
+    <tr>
+      <th>43</th>
+      <td>53</td>
+      <td>1</td>
+      <td>20400.0</td>
+      <td>383.0</td>
+      <td>1.0</td>
+    </tr>
+    <tr>
+      <th>44</th>
+      <td>55</td>
+      <td>1</td>
+      <td>263074.0</td>
+      <td>4770.0</td>
+      <td>3.0</td>
+    </tr>
+    <tr>
+      <th>45</th>
+      <td>57</td>
+      <td>2</td>
+      <td>8762.5</td>
+      <td>151.5</td>
+      <td>1.0</td>
+    </tr>
+    <tr>
+      <th>46</th>
+      <td>61</td>
+      <td>1</td>
+      <td>40988.0</td>
+      <td>662.0</td>
+      <td>4.0</td>
+    </tr>
+    <tr>
+      <th>47</th>
+      <td>64</td>
+      <td>1</td>
+      <td>32877.0</td>
+      <td>506.0</td>
+      <td>1.0</td>
+    </tr>
+    <tr>
+      <th>48</th>
+      <td>66</td>
+      <td>1</td>
+      <td>24995.0</td>
+      <td>374.0</td>
+      <td>1.0</td>
+    </tr>
+    <tr>
+      <th>49</th>
+      <td>75</td>
+      <td>1</td>
+      <td>21990.0</td>
+      <td>291.0</td>
       <td>2.0</td>
+    </tr>
+    <tr>
+      <th>50</th>
+      <td>88</td>
+      <td>1</td>
+      <td>30168.0</td>
+      <td>339.0</td>
+      <td>1.0</td>
+    </tr>
+    <tr>
+      <th>51</th>
+      <td>98</td>
+      <td>1</td>
+      <td>40378.0</td>
+      <td>410.0</td>
+      <td>2.0</td>
+    </tr>
+    <tr>
+      <th>52</th>
+      <td>104</td>
+      <td>2</td>
+      <td>64876.5</td>
+      <td>618.0</td>
+      <td>1.5</td>
+    </tr>
+    <tr>
+      <th>53</th>
+      <td>105</td>
+      <td>1</td>
+      <td>28879.0</td>
+      <td>274.0</td>
+      <td>2.0</td>
+    </tr>
+    <tr>
+      <th>54</th>
+      <td>110</td>
+      <td>2</td>
+      <td>131446.5</td>
+      <td>1192.5</td>
+      <td>6.5</td>
+    </tr>
+    <tr>
+      <th>55</th>
+      <td>142</td>
+      <td>1</td>
+      <td>305987.0</td>
+      <td>2140.0</td>
+      <td>2.0</td>
+    </tr>
+    <tr>
+      <th>56</th>
+      <td>158</td>
+      <td>1</td>
+      <td>225952.0</td>
+      <td>1421.0</td>
+      <td>10.0</td>
+    </tr>
+    <tr>
+      <th>57</th>
+      <td>160</td>
+      <td>1</td>
+      <td>385017.0</td>
+      <td>2406.0</td>
+      <td>12.0</td>
     </tr>
   </tbody>
 </table>
@@ -1203,82 +1117,82 @@ order by t.time_ratio;
     <tr>
       <th>0</th>
       <td>1.0</td>
-      <td>1211507</td>
-      <td>1934.7</td>
-      <td>1895.0</td>
-      <td>3.0</td>
+      <td>1241467</td>
+      <td>2049.9</td>
+      <td>2005.7</td>
+      <td>3.2</td>
     </tr>
     <tr>
       <th>1</th>
       <td>1.1</td>
-      <td>101236</td>
-      <td>337.2</td>
-      <td>299.3</td>
+      <td>140241</td>
+      <td>373.7</td>
+      <td>333.1</td>
       <td>1.2</td>
     </tr>
     <tr>
       <th>2</th>
       <td>1.2</td>
-      <td>6944</td>
-      <td>736.0</td>
-      <td>599.2</td>
+      <td>7639</td>
+      <td>715.8</td>
+      <td>583.3</td>
       <td>1.6</td>
     </tr>
     <tr>
       <th>3</th>
       <td>1.3</td>
-      <td>498</td>
-      <td>2257.4</td>
-      <td>1673.0</td>
-      <td>4.4</td>
+      <td>531</td>
+      <td>2484.9</td>
+      <td>1841.5</td>
+      <td>4.8</td>
     </tr>
     <tr>
       <th>4</th>
       <td>1.4</td>
-      <td>869</td>
-      <td>970.4</td>
-      <td>671.6</td>
-      <td>2.2</td>
+      <td>914</td>
+      <td>1056.6</td>
+      <td>731.4</td>
+      <td>2.3</td>
     </tr>
     <tr>
       <th>5</th>
       <td>1.5</td>
-      <td>102</td>
-      <td>4768.1</td>
-      <td>3073.3</td>
-      <td>6.2</td>
+      <td>100</td>
+      <td>4563.4</td>
+      <td>2956.9</td>
+      <td>7.4</td>
     </tr>
     <tr>
       <th>6</th>
       <td>1.6</td>
-      <td>51</td>
-      <td>5595.5</td>
-      <td>3370.3</td>
-      <td>9.6</td>
+      <td>61</td>
+      <td>6348.2</td>
+      <td>3862.5</td>
+      <td>6.8</td>
     </tr>
     <tr>
       <th>7</th>
       <td>1.7</td>
-      <td>44</td>
-      <td>8933.2</td>
-      <td>5113.4</td>
-      <td>10.8</td>
+      <td>47</td>
+      <td>14166.8</td>
+      <td>8054.3</td>
+      <td>17.6</td>
     </tr>
     <tr>
       <th>8</th>
       <td>1.8</td>
-      <td>42</td>
-      <td>6566.0</td>
-      <td>3518.1</td>
-      <td>8.1</td>
+      <td>27</td>
+      <td>9443.3</td>
+      <td>5183.7</td>
+      <td>11.7</td>
     </tr>
     <tr>
       <th>9</th>
       <td>1.9</td>
-      <td>38</td>
-      <td>4534.5</td>
-      <td>2315.4</td>
-      <td>3.6</td>
+      <td>24</td>
+      <td>14075.8</td>
+      <td>7210.2</td>
+      <td>20.3</td>
     </tr>
   </tbody>
 </table>
@@ -1339,7 +1253,7 @@ where t.time_ratio >= 12;
   <tbody>
     <tr>
       <th>0</th>
-      <td>9049</td>
+      <td>9792</td>
     </tr>
   </tbody>
 </table>
@@ -1355,9 +1269,6 @@ the script validation time
 - There is a few transactions where script validation not greater than 80% of tx validation time.
 - The results suggest that `validateStateful` doesn't require optimizations, or at least it can
 be done after the other parts of block validation had been optimized.
-
-### Block Validation Cost Analysis
-In this section we compare script validation costs against transaction and block validation costs.
 
 ## v5.0 vs v4.0 Cross Analysis
 
@@ -1449,10 +1360,10 @@ from (select count(*) as count_rows5 from applyTransactions),
   <tbody>
     <tr>
       <th>0</th>
-      <td>488100</td>
+      <td>501900</td>
       <td>473000</td>
       <td>473000</td>
-      <td>15100</td>
+      <td>28900</td>
     </tr>
   </tbody>
 </table>
@@ -1502,87 +1413,87 @@ group by speedup order by speedup;
     <tr>
       <th>0</th>
       <td>0</td>
-      <td>8048</td>
+      <td>12044</td>
     </tr>
     <tr>
       <th>1</th>
       <td>1</td>
-      <td>449950</td>
+      <td>447487</td>
     </tr>
     <tr>
       <th>2</th>
       <td>2</td>
-      <td>9866</td>
+      <td>8592</td>
     </tr>
     <tr>
       <th>3</th>
       <td>3</td>
-      <td>1950</td>
+      <td>1774</td>
     </tr>
     <tr>
       <th>4</th>
       <td>4</td>
-      <td>962</td>
+      <td>1041</td>
     </tr>
     <tr>
       <th>5</th>
       <td>5</td>
-      <td>734</td>
+      <td>626</td>
     </tr>
     <tr>
       <th>6</th>
       <td>6</td>
-      <td>547</td>
+      <td>558</td>
     </tr>
     <tr>
       <th>7</th>
       <td>7</td>
-      <td>206</td>
+      <td>193</td>
     </tr>
     <tr>
       <th>8</th>
       <td>8</td>
-      <td>191</td>
+      <td>188</td>
     </tr>
     <tr>
       <th>9</th>
       <td>9</td>
-      <td>132</td>
+      <td>124</td>
     </tr>
     <tr>
       <th>10</th>
       <td>10</td>
-      <td>103</td>
+      <td>94</td>
     </tr>
     <tr>
       <th>11</th>
       <td>11</td>
-      <td>69</td>
+      <td>49</td>
     </tr>
     <tr>
       <th>12</th>
       <td>12</td>
-      <td>37</td>
+      <td>34</td>
     </tr>
     <tr>
       <th>13</th>
       <td>13</td>
-      <td>28</td>
+      <td>26</td>
     </tr>
     <tr>
       <th>14</th>
       <td>14</td>
-      <td>25</td>
+      <td>21</td>
     </tr>
     <tr>
       <th>15</th>
       <td>15</td>
-      <td>9</td>
+      <td>17</td>
     </tr>
     <tr>
       <th>16</th>
       <td>16</td>
-      <td>16</td>
+      <td>11</td>
     </tr>
     <tr>
       <th>17</th>
@@ -1592,47 +1503,47 @@ group by speedup order by speedup;
     <tr>
       <th>18</th>
       <td>18</td>
-      <td>12</td>
+      <td>10</td>
     </tr>
     <tr>
       <th>19</th>
       <td>19</td>
-      <td>7</td>
+      <td>9</td>
     </tr>
     <tr>
       <th>20</th>
       <td>20</td>
-      <td>8</td>
+      <td>9</td>
     </tr>
     <tr>
       <th>21</th>
       <td>21</td>
-      <td>8</td>
+      <td>5</td>
     </tr>
     <tr>
       <th>22</th>
       <td>22</td>
-      <td>5</td>
+      <td>3</td>
     </tr>
     <tr>
       <th>23</th>
       <td>23</td>
-      <td>3</td>
+      <td>7</td>
     </tr>
     <tr>
       <th>24</th>
       <td>24</td>
-      <td>5</td>
+      <td>1</td>
     </tr>
     <tr>
       <th>25</th>
       <td>25</td>
-      <td>6</td>
+      <td>8</td>
     </tr>
     <tr>
       <th>26</th>
       <td>26</td>
-      <td>7</td>
+      <td>8</td>
     </tr>
     <tr>
       <th>27</th>
@@ -1647,52 +1558,52 @@ group by speedup order by speedup;
     <tr>
       <th>29</th>
       <td>29</td>
-      <td>7</td>
+      <td>6</td>
     </tr>
     <tr>
       <th>30</th>
       <td>30</td>
-      <td>2</td>
+      <td>3</td>
     </tr>
     <tr>
       <th>31</th>
       <td>31</td>
-      <td>3</td>
+      <td>7</td>
     </tr>
     <tr>
       <th>32</th>
       <td>32</td>
-      <td>4</td>
+      <td>6</td>
     </tr>
     <tr>
       <th>33</th>
       <td>33</td>
-      <td>4</td>
+      <td>2</td>
     </tr>
     <tr>
       <th>34</th>
       <td>34</td>
-      <td>11</td>
+      <td>2</td>
     </tr>
     <tr>
       <th>35</th>
       <td>35</td>
-      <td>3</td>
+      <td>4</td>
     </tr>
     <tr>
       <th>36</th>
-      <td>37</td>
-      <td>3</td>
+      <td>36</td>
+      <td>2</td>
     </tr>
     <tr>
       <th>37</th>
-      <td>38</td>
-      <td>1</td>
+      <td>37</td>
+      <td>2</td>
     </tr>
     <tr>
       <th>38</th>
-      <td>39</td>
-      <td>1</td>
+      <td>38</td>
+      <td>3</td>
     </tr>
     <tr>
       <th>39</th>
@@ -1701,41 +1612,26 @@ group by speedup order by speedup;
     </tr>
     <tr>
       <th>40</th>
-      <td>41</td>
+      <td>46</td>
       <td>1</td>
     </tr>
     <tr>
       <th>41</th>
-      <td>43</td>
+      <td>51</td>
       <td>1</td>
     </tr>
     <tr>
       <th>42</th>
-      <td>44</td>
+      <td>53</td>
       <td>1</td>
     </tr>
     <tr>
       <th>43</th>
-      <td>48</td>
+      <td>57</td>
       <td>1</td>
     </tr>
     <tr>
       <th>44</th>
-      <td>49</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>45</th>
-      <td>54</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>46</th>
-      <td>58</td>
-      <td>1</td>
-    </tr>
-    <tr>
-      <th>47</th>
       <td>62</td>
       <td>1</td>
     </tr>
@@ -1790,7 +1686,7 @@ group by speedup order by speedup
   <tbody>
     <tr>
       <th>0</th>
-      <td>15002</td>
+      <td>13469</td>
     </tr>
   </tbody>
 </table>
@@ -1845,32 +1741,32 @@ group by range order by range;
     <tr>
       <th>0</th>
       <td>0</td>
-      <td>1.26</td>
-      <td>97603</td>
+      <td>1.20</td>
+      <td>96792</td>
     </tr>
     <tr>
       <th>1</th>
       <td>1</td>
-      <td>1.29</td>
-      <td>98368</td>
+      <td>1.24</td>
+      <td>98003</td>
     </tr>
     <tr>
       <th>2</th>
       <td>2</td>
-      <td>1.34</td>
-      <td>99011</td>
+      <td>1.30</td>
+      <td>98005</td>
     </tr>
     <tr>
       <th>3</th>
       <td>3</td>
-      <td>1.40</td>
-      <td>98192</td>
+      <td>1.38</td>
+      <td>97122</td>
     </tr>
     <tr>
       <th>4</th>
       <td>4</td>
-      <td>1.45</td>
-      <td>71778</td>
+      <td>1.42</td>
+      <td>71034</td>
     </tr>
   </tbody>
 </table>
@@ -1926,32 +1822,32 @@ group by range order by range
     <tr>
       <th>0</th>
       <td>0</td>
-      <td>1.34</td>
-      <td>60383</td>
+      <td>1.37</td>
+      <td>31170</td>
     </tr>
     <tr>
       <th>1</th>
       <td>1</td>
-      <td>1.35</td>
-      <td>68973</td>
+      <td>1.36</td>
+      <td>45936</td>
     </tr>
     <tr>
       <th>2</th>
       <td>2</td>
-      <td>1.39</td>
-      <td>79345</td>
+      <td>1.40</td>
+      <td>62381</td>
     </tr>
     <tr>
       <th>3</th>
       <td>3</td>
-      <td>1.44</td>
-      <td>84885</td>
+      <td>1.45</td>
+      <td>73320</td>
     </tr>
     <tr>
       <th>4</th>
       <td>4</td>
-      <td>1.52</td>
-      <td>60029</td>
+      <td>1.51</td>
+      <td>53584</td>
     </tr>
   </tbody>
 </table>
@@ -1982,11 +1878,8 @@ from verifyScript as s),
 (select count(*) as total_rows4
 from verifyScript4 as s),
 (select count(*) as common_rows
-from verifyScript as t5
-         join verifyScript4 t4
-              on t5.blockId = t4.blockId
-                  and t5.txId = t4.txId
-                  and t5.boxIndex = t4.boxIndex);
+from verifyScript as t5 join verifyScript4 t4
+  on t5.blockId = t4.blockId and t5.txId = t4.txId and t5.boxIndex = t4.boxIndex);
 """, conn)
 
 ```
@@ -2021,10 +1914,10 @@ from verifyScript as t5
   <tbody>
     <tr>
       <th>0</th>
-      <td>3823200</td>
+      <td>4195700</td>
       <td>3537350</td>
       <td>3537350</td>
-      <td>285850</td>
+      <td>658350</td>
     </tr>
   </tbody>
 </table>
@@ -2051,6 +1944,7 @@ from (select sum(t5.time) as total_time5,
                         and t5.txId = t4.txId
                         and t5.boxIndex = t4.boxIndex) as times;
 """, conn)
+
 ```
 
 
@@ -2084,8 +1978,8 @@ from (select sum(t5.time) as total_time5,
     <tr>
       <th>0</th>
       <td>3175910119</td>
-      <td>2207370816</td>
-      <td>968539302</td>
+      <td>2249239412</td>
+      <td>926670707</td>
       <td>30.0</td>
     </tr>
   </tbody>
@@ -2093,3 +1987,980 @@ from (select sum(t5.time) as total_time5,
 </div>
 
 
+
+### Block Validation Cost Analysis
+In this section we compare block validation costs against block validation time in order to see how
+accurate cost estimation predicts the actual execution time.
+
+The validation complexity is estimated in cost units, one cost unit corresponds approximately to
+1 microsecond of execution time, thus when cost is 1000 then execution time is expected to be 1000
+microseconds.
+
+Since cost predition is a security measure, we want to be conservative and require that for most
+blocks the predicted cost is larger than execution time in microseconds.
+
+The following table counts blocks with execution time exceeding predicted cost. The blocks are
+grouped by `time / cost` ratio. We see that in v4.x only 50 blocks were validated longer than
+predicted. The one outlier block is measurement artefact and can be ignored.
+
+
+
+```python
+pd.read_sql_query(f"""
+-- find blocks where cost is less than time_us
+select min(ratio / 10) as ratio, count(*)
+from (select height,
+             tx_num,
+             cost,
+             time / 1000          as time_us,
+             (time / 1000) * 10 / cost as ratio
+      from applyTransactions4
+      where time_us > cost)
+group by ratio / 10
+""", conn)
+
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>ratio</th>
+      <th>count(*)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1</td>
+      <td>39</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>61</td>
+      <td>1</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+
+The same query with v5.0 execution data shows similar results.
+
+
+```python
+pd.read_sql_query(f"""
+-- find blocks where cost is less than time_us
+select min(ratio / 10) as ratio, count(*)
+from (select height,
+             tx_num,
+             cost as full_cost,
+             time / 1000          as time_us,
+             (time / 1000) * 10 / cost as ratio
+      from applyTransactions
+      where time_us > full_cost)
+group by ratio / 10
+""", conn)
+
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>ratio</th>
+      <th>count(*)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1</td>
+      <td>333</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2</td>
+      <td>45</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>3</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>23</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>334</td>
+      <td>1</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+We can conclude that both v4.x and v5.0 costing can be used as the upper bound of the actual block
+validation time, i.e. for most of the blocks the cost value is larger than execution time in
+microseconds. How accurate this bound?
+
+In v4.x the `cost / time` ratio is in [20 .. 70) range which is quite conservative, leaving a lot of
+room for improvement.
+
+
+```python
+pd.read_sql_query(f"""
+-- group and count blocks by cost/time ratio (v4)
+select min(ratio), count(*), round(avg(tx_num), 2) as avg_tx_num
+from (select height,
+             tx_num,
+             cost as full_cost,
+             time / 1000          as time_us,
+             cost / (time / 1000)  as ratio
+      from applyTransactions4
+      where time_us <= full_cost)
+group by ratio / 10
+""", conn)
+
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>min(ratio)</th>
+      <th>count(*)</th>
+      <th>avg_tx_num</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1</td>
+      <td>3044</td>
+      <td>2.53</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>10</td>
+      <td>21624</td>
+      <td>2.06</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>20</td>
+      <td>328774</td>
+      <td>1.28</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>30</td>
+      <td>42982</td>
+      <td>4.46</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>40</td>
+      <td>34351</td>
+      <td>5.64</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>50</td>
+      <td>26201</td>
+      <td>9.07</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>60</td>
+      <td>15744</td>
+      <td>10.41</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>70</td>
+      <td>49</td>
+      <td>5.90</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>80</td>
+      <td>59</td>
+      <td>8.20</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>90</td>
+      <td>108</td>
+      <td>9.34</td>
+    </tr>
+    <tr>
+      <th>10</th>
+      <td>100</td>
+      <td>22</td>
+      <td>9.77</td>
+    </tr>
+    <tr>
+      <th>11</th>
+      <td>110</td>
+      <td>1</td>
+      <td>15.00</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+Indeed, as can be seen in the following table, in v5.0 cost prediction is significantly improved so
+that the `cost / time` ratio is in [1 .. 19) range for most blocks.
+
+
+
+```python
+pd.read_sql_query(f"""
+-- group and count blocks by cost/time ratio (v5)
+select min(ratio), count(*), round(avg(tx_num), 2) as avg_tx_num
+from (select height,
+             tx_num,
+             cost as full_cost,
+             time / 1000          as time_us,
+             cost / (time / 1000)  as ratio
+      from applyTransactions
+      where time_us <= full_cost)
+group by ratio / 10
+""", conn)
+
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>min(ratio)</th>
+      <th>count(*)</th>
+      <th>avg_tx_num</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1</td>
+      <td>210011</td>
+      <td>3.94</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>10</td>
+      <td>289260</td>
+      <td>1.85</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>20</td>
+      <td>2246</td>
+      <td>12.82</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+The maximal cost of each block is limited by maxBlockCost parameter stored in block parameters
+section of each block. This parameter can be changed by miners via voting. The following table shows
+the distribution of blocks over range of cost limits.
+
+
+
+```python
+pd.read_sql_query(f"""
+select min(maxCost), count(*) from applyTransactions
+group by maxCost / 1000000
+""", conn)
+
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>min(maxCost)</th>
+      <th>count(*)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1000000</td>
+      <td>276298</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2006718</td>
+      <td>41984</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>3017580</td>
+      <td>70656</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>4026959</td>
+      <td>56320</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>5012407</td>
+      <td>26624</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>6055523</td>
+      <td>27648</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>7030268</td>
+      <td>2370</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+We see the cost limit significantly increased by the miners (in fact by the pool operators) from
+initial 1000000 up to 7030268 current value.
+
+Now that we have cost limits for each block, let's see how far the actual block validation costs
+from that limits.
+
+
+
+```python
+pd.read_sql_query(f"""
+select maxCost / cost as ratio, count(*), min(height) from applyTransactions
+group by ratio
+""", conn)
+
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>ratio</th>
+      <th>count(*)</th>
+      <th>min(height)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>2</td>
+      <td>48</td>
+      <td>193540</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>3</td>
+      <td>785</td>
+      <td>164828</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>4</td>
+      <td>764</td>
+      <td>36023</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>5</td>
+      <td>1951</td>
+      <td>3869</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>6</td>
+      <td>1952</td>
+      <td>39862</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>294</th>
+      <td>547</td>
+      <td>2195</td>
+      <td>485376</td>
+    </tr>
+    <tr>
+      <th>295</th>
+      <td>552</td>
+      <td>432</td>
+      <td>490498</td>
+    </tr>
+    <tr>
+      <th>296</th>
+      <td>558</td>
+      <td>861</td>
+      <td>491523</td>
+    </tr>
+    <tr>
+      <th>297</th>
+      <td>563</td>
+      <td>2615</td>
+      <td>493568</td>
+    </tr>
+    <tr>
+      <th>298</th>
+      <td>569</td>
+      <td>1018</td>
+      <td>499712</td>
+    </tr>
+  </tbody>
+</table>
+<p>299 rows × 3 columns</p>
+</div>
+
+
+
+We see that for all blocks the actual cost is at least 2x less then cost limit. However, we also see
+that for many blocks the cost is much smaller (569 times) than the limit value .
+Lets investigate further the blocks with lowest and highest ratios.
+
+
+
+```python
+pd.read_sql_query(f"""
+select round(maxCost * 10 / cost * 0.1, 1) as ratio, count(*), min(height) from applyTransactions
+where ratio <= 3
+group by ratio
+""", conn)
+
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>ratio</th>
+      <th>count(*)</th>
+      <th>min(height)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>2.4</td>
+      <td>1</td>
+      <td>429142</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2.6</td>
+      <td>3</td>
+      <td>419360</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>2.7</td>
+      <td>9</td>
+      <td>238226</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>2.8</td>
+      <td>11</td>
+      <td>193540</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>2.9</td>
+      <td>24</td>
+      <td>226115</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>3.0</td>
+      <td>33</td>
+      <td>193294</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+What is the block with lowest ratio?
+
+
+
+```python
+pd.read_sql_query(f"""
+select round(t5.maxCost * 10 / t5.cost * 0.1, 1) as ratio,
+       t5.height, t5.tx_num, t5.maxCost,
+       t5.cost as cost_v5,
+       t5.time / 1000 as time_t5_us,
+       7030268 / (t5.time / 1000) as scalability_v5,
+       t4.cost as cost_v4,
+       t4.time / 1000 as time_t4_us
+from applyTransactions t5
+         join applyTransactions4 t4 on t5.blockId = t4.blockId
+where ratio < 2.6
+""", conn)
+
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>ratio</th>
+      <th>height</th>
+      <th>tx_num</th>
+      <th>maxCost</th>
+      <th>cost_v5</th>
+      <th>time_t5_us</th>
+      <th>scalability_v5</th>
+      <th>cost_v4</th>
+      <th>time_t4_us</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>2.4</td>
+      <td>429142</td>
+      <td>114</td>
+      <td>4769136</td>
+      <td>1947948</td>
+      <td>70212</td>
+      <td>100</td>
+      <td>4753081</td>
+      <td>84152</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+This is the block deep in the blockchain with 114 transactions.
+Note, the v4 cost hit the cost limit, so this number of transaction was maximum possible at that
+time. This is a good example to illustrate the benefits of v5.0. Not only it executed the same
+transaction slightly faster, but also due to more accurate costing, the predicted cost is 2.5 times
+lower than v4 cost. This means the operator would have been able to include more than 300
+transactions in the block thus increasing network throughput and reduce congestion.
+
+Since then, the cost limit was increased by pool operators up to 7030268, almost 2x.
+Using these numbers we can roughly estimate the number of transactions in a block as
+114 * (7030268(maxCost) / 1947948(cost_v5)) = 411 transactions.
+
+We can also estimate the potential scalability of v5.0 if we compare the actual execution time with
+the current cost limit (see `scalability_v5`). With further tuning of the cost parameters (possible
+via voting) the number of such transactions in one block can be 114 * 100 = 11400 (even with the
+current unoptimized state management), or 11400 / 120 = 95 tx/second.
+
+At the same time, in this case, the total block validation would take 70212 * 100 = 7021200
+microseconds, which is above the recommended time limit of 5 seconds. This suggest that _pool
+operators need to postpone further increasing of the maxBlockCost parameter and instead switch on to tuning
+the cost parameters to make the cost prediction more accurate_.
+
+Now, what about the other side of the maxCost/cost ratio spectrum, where cost limit is much larger
+than the actual block cost.
+
+
+
+```python
+pd.read_sql_query(f"""
+select round(maxCost * 10 / cost * 0.1, 1) as ratio,
+       height, tx_num, maxCost, cost,
+       time / 1000                         as time_us
+from applyTransactions
+where ratio >= 569
+order by height desc
+limit 20
+""", conn)
+
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>ratio</th>
+      <th>height</th>
+      <th>tx_num</th>
+      <th>maxCost</th>
+      <th>cost</th>
+      <th>time_us</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>569.5</td>
+      <td>502080</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1043</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>569.5</td>
+      <td>502077</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1160</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>569.5</td>
+      <td>502075</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1043</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>569.5</td>
+      <td>502072</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1072</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>569.5</td>
+      <td>502070</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1039</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>569.5</td>
+      <td>502068</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1048</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>569.5</td>
+      <td>502066</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1108</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>569.5</td>
+      <td>502063</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1100</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>569.5</td>
+      <td>502061</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1123</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>569.5</td>
+      <td>502059</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1079</td>
+    </tr>
+    <tr>
+      <th>10</th>
+      <td>569.5</td>
+      <td>502056</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1078</td>
+    </tr>
+    <tr>
+      <th>11</th>
+      <td>569.5</td>
+      <td>502054</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1094</td>
+    </tr>
+    <tr>
+      <th>12</th>
+      <td>569.5</td>
+      <td>502052</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>2452</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>569.5</td>
+      <td>502050</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1091</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>569.5</td>
+      <td>502047</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1065</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>569.5</td>
+      <td>502045</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1090</td>
+    </tr>
+    <tr>
+      <th>16</th>
+      <td>569.5</td>
+      <td>502043</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1082</td>
+    </tr>
+    <tr>
+      <th>17</th>
+      <td>569.5</td>
+      <td>502041</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1073</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>569.5</td>
+      <td>502039</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1052</td>
+    </tr>
+    <tr>
+      <th>19</th>
+      <td>569.5</td>
+      <td>502036</td>
+      <td>1</td>
+      <td>7030268</td>
+      <td>12344</td>
+      <td>1055</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+We see many recent blocks (the highest `height`) with single simple transaction.
+
+#### Conclusions
+What this analysis of actual execution of Ergo Node v5.0 tell us:
+- the new cost estimation is properly estimates the actual execution time of all the existing
+blocks.
+- the cost estimation is reasonably conservative, i.e. for 95% blocks it overestimates the actual
+costs, but this overestimation is significantly lower than in v4.x
+- for all blocks the estimated costs are more than 2.5 times lower than the cost limits.
+- In the low boundary case shown above, the block which is the closest to the cost limit has 100+
+transactions. With v5.0 this number could be higher

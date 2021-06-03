@@ -25,6 +25,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
+  val blocksPaging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 1, "limit".as[Int] ? 50)
+
   override val route: Route = pathPrefix("blocks") {
     getBlocksR ~
       postBlocksR ~
@@ -102,7 +104,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   private val chainPagination: Directive[(Int, Int)] =
     parameters("fromHeight".as[Int] ? 0, "toHeight".as[Int] ? -1)
 
-  def getBlocksR: Route = (pathEndOrSingleSlash & get & paging) { (offset, limit) =>
+  def getBlocksR: Route = (pathEndOrSingleSlash & get & blocksPaging) { (offset, limit) =>
     ApiResponse(getHeaderIds(offset, limit))
   }
 

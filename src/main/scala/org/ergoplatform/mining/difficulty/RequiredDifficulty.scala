@@ -64,9 +64,9 @@ object RequiredDifficulty extends ScorexSerializer[NBits] {
   }
 
   /** Parse 4 bytes from the byte array (starting at the offset) as unsigned 32-bit integer in big endian format. */
-  private def readUint32BE(bytes: Array[Byte]): Long = ((bytes(0) & 0xffl) << 24) | ((bytes(1) & 0xffl) << 16) | ((bytes(2) & 0xffl) << 8) | (bytes(3) & 0xffl)
+  def readUint32BE(bytes: Array[Byte]): Long = ((bytes(0) & 0xffl) << 24) | ((bytes(1) & 0xffl) << 16) | ((bytes(2) & 0xffl) << 8) | (bytes(3) & 0xffl)
 
-  private def uint32ToByteArrayBE(value: Long): Array[Byte] = {
+  def uint32ToByteArrayBE(value: Long): Array[Byte] = {
     Array(0xFF & (value >> 24), 0xFF & (value >> 16), 0xFF & (value >> 8), 0xFF & value).map(_.toByte)
   }
 

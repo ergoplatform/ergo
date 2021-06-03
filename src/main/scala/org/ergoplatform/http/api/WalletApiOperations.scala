@@ -1,6 +1,5 @@
 package org.ergoplatform.http.api
 
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.{ErgoWalletReader, WalletBox}
 import akka.actor.ActorRef
 import akka.http.scaladsl.server.{Directive, Route}
@@ -9,6 +8,7 @@ import scorex.core.api.http.ApiResponse
 
 import scala.concurrent.Future
 import akka.pattern.ask
+import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 
 trait WalletApiOperations extends ErgoBaseApiRoute {
 

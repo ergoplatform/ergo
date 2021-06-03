@@ -1,16 +1,15 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.{ErgoBoxCandidate, Input, UnsignedInput}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.{ErgoBoxCandidate, Input}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ErgoGenerators
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import sigmastate.Values.ByteArrayConstant
-import sigmastate.interpreter.ContextExtension
+import sigmastate.interpreter.{ContextExtension, ProverResult}
 
 import scala.util.Random
 
@@ -66,21 +65,19 @@ class ErgoMemPoolSpec extends AnyFlatSpec
         val inputBox = wus.takeBoxes(1).head
         val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
 
-        val prover = ErgoProvingInterpreter(IndexedSeq.empty, parameters)
-
         def rndContext(n: Int): ContextExtension = ContextExtension(Map(
           (1: Byte) -> ByteArrayConstant(Array.fill(1 + n)(0: Byte)))
         )
 
-        val tx1Like = prover.sign(UnsignedErgoTransaction(
-          IndexedSeq(new UnsignedInput(inputBox.id, rndContext(n1))),
+        val tx1Like = ErgoTransaction(
+          IndexedSeq(new Input(inputBox.id, new ProverResult(Array.emptyByteArray, rndContext(n1)))),
           IndexedSeq(feeOut)
-        ), IndexedSeq(inputBox), IndexedSeq.empty, emptyStateContext).get
+        )
 
-        val tx2Like = prover.sign(UnsignedErgoTransaction(
-          IndexedSeq(new UnsignedInput(inputBox.id, rndContext(n2))),
+        val tx2Like = ErgoTransaction(
+          IndexedSeq(new Input(inputBox.id, new ProverResult(Array.emptyByteArray, rndContext(n2)))),
           IndexedSeq(feeOut)
-        ), IndexedSeq(inputBox), IndexedSeq.empty, emptyStateContext).get
+        )
 
         val tx1 = ErgoTransaction(tx1Like.inputs, tx1Like.outputCandidates)
         val tx2 = ErgoTransaction(tx2Like.inputs, tx2Like.outputCandidates)

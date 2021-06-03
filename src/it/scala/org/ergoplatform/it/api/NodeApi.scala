@@ -49,13 +49,13 @@ trait NodeApi {
 
   def getWihApiKey(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] = retrying {
     _get(s"http://$restAddress:$nodeRestPort$path")
-      .setHeader("api_key", "integration-test-rest-api")
+      .setHeader("api_key", "hello")
       .build()
   }
 
   def post(url: String, port: Int, path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] =
     retrying(f(
-      _post(s"$url:$port$path").setHeader("api_key", "integration-test-rest-api")
+      _post(s"$url:$port$path").setHeader("api_key", "hello")
     ).build())
 
   def postJson[A: Encoder](path: String, body: A): Future[Response] =

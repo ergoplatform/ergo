@@ -159,7 +159,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     forAll(smallPositiveInt) { forkLength: Int =>
       whenever(forkLength > 1 && chain.size > forkLength) {
         val si = ErgoSyncInfo(Seq(chain.headers(chain.size - forkLength - 1).id))
-        val continuation = history.continuationIds(si, forkLength)
+        val continuation = history.continuationIds(si, forkLength + 1)
         continuation.length shouldBe forkLength + 1
         continuation.last._2 shouldEqual chain.last.id
         continuation.head._2 shouldEqual chain.headers(chain.size - forkLength - 1).id

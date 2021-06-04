@@ -11,14 +11,12 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 /**
   * Information on sync status to be sent to peer over the wire
   *
-  * @param lastHeaderIds
-  * @param version - version of sync protocol
   */
 sealed trait ErgoSyncInfo extends SyncInfo {
 
   val syncData: Either[Seq[ModifierId], Header]
 
-  val version: Byte = 1
+  val version: Byte
 
   override def startingPoints: Seq[(ModifierTypeId, ModifierId)] = {
     syncData match {
@@ -32,6 +30,9 @@ sealed trait ErgoSyncInfo extends SyncInfo {
   override lazy val serializer: ScorexSerializer[ErgoSyncInfo] = ErgoSyncInfoSerializer
 }
 
+/**
+  * @param lastHeaderIds
+  */
 case class ErgoSyncInfoV1(lastHeaderIds: Seq[ModifierId]) extends ErgoSyncInfo {
   override val syncData: Either[Seq[ModifierId], Header] = Left(lastHeaderIds)
   override val version = 1

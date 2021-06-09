@@ -175,7 +175,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @param maxModifiers maximum modifiers to download
     * @param minModifiersPerBucket minimum modifiers to download per bucket
     * @param maxModifiersPerBucket maximum modifiers to download per bucket
-    * @param getPeersOpt optionally get peers to download from, all peers have the same [[PeerSyncState]]
+    * @param getPeersOpt optionally get peers to download from, all peers have the same PeerSyncState
     * @param fetchMax function that fetches modifiers, it is passed how many of them tops
     */
   protected def requestDownload(maxModifiers: Int, minModifiersPerBucket: Int, maxModifiersPerBucket: Int)
@@ -272,10 +272,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.status(id) == Requested
     }
 
+    // todo: consider rules for penalizing peers for spammy transactions
     if (spam.nonEmpty) {
-      log.info(s"Spam attempt: peer $remote has sent a non-requested modifiers of type $typeId with ids" +
-        s": ${spam.keys.map(encoder.encodeId)}")
-      penalizeSpammingPeer(remote)
+      if (typeId == Transaction.ModifierTypeId) {
+        log.info(s"Got spammy transactions: $modifiers")
+      } else {
+        log.info(s"Spam attempt: peer $remote has sent a non-requested modifiers of type $typeId with ids" +
+          s": ${spam.keys.map(encoder.encodeId)}")
+        penalizeSpammingPeer(remote)
+      }
     }
     requested
   }

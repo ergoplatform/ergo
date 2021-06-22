@@ -20,7 +20,7 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, ValidationState}
+import scorex.core.validation.{ValidationState, ModifierValidator, ValidationResult}
 import scorex.db.{ByteArrayUtils, ByteArrayWrapper}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{bytesToId, ScorexLogging, ModifierId}
@@ -31,7 +31,7 @@ import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
 
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Failure, Try}
 
 /**
   * ErgoTransaction is an atomic state transition operation. It destroys Boxes from the state
@@ -213,52 +213,68 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
       // Check inputs, the most expensive check usually, so done last.
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
-        val currentTxCost = validation.result.payload.get
-
-        val (res, time) = measureTimeNano {
-          val input = inputs(idx)
-          val proof = input.spendingProof
-          val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
-          val inputContext = InputContext(idx.toShort, proof.extension)
-
-          val ctx = new ErgoContext(
-            stateContext, transactionContext, inputContext,
-            costLimit = maxCost - currentTxCost, // remaining cost so far
-            initCost = 0)
-
-          val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
-          costTry.recover { case t =>
-            log.debug(s"Tx verification failed: ${t.getMessage}")
+        if (es.nodeSettings.collectMetrics) {
+          val (res, time) = measureTimeNano {
+            validateInput(validation, boxesToSpend, dataBoxes, stateContext, box, idx)
           }
 
-          val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
-
-          val currCost = addExact(currentTxCost, scriptCost)
-
-          validation
-            // Just in case, should always be true if client implementation is correct.
-            .validateEquals(txBoxToSpend, box.id, input.boxId)
-            // Check whether input box script interpreter raised exception
-            .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
-            // Check that cost of the transaction after checking the input becomes too big
-            .validate(bsBlockTransactionsCost, currCost <= maxCost, s"$id: cost exceeds limit after input #$idx")
-            .map(c => addExact(c, scriptCost))
+          val currentTxCost = validation.result.payload.get
+          collectMetricsTo(
+            verifyScriptMetric,
+            data = InputMetricData(
+              blockId = stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId),
+              txId = id,
+              index = idx),
+            cost = res.map { c =>
+              val scriptCost = c - currentTxCost // cost of script validation for this input
+              scriptCost
+            }.toTry.getOrElse(-1L),
+            time
+          )
+          res
+        } else {
+          validateInput(validation, boxesToSpend, dataBoxes, stateContext, box, idx)
         }
-
-        collectMetricsTo(
-          verifyScriptMetric,
-          data = InputMetricData(
-            blockId = stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId),
-            txId = id,
-            index = idx),
-          cost = res.map { c =>
-            val scriptCost = c - currentTxCost // cost of script validation for this input
-            scriptCost
-          }.toTry.getOrElse(-1L),
-          time
-        )
-        res
       }
+  }
+
+  private def validateInput(validation: ValidationState[Long],
+                    boxesToSpend: IndexedSeq[ErgoBox],
+                    dataBoxes: IndexedSeq[ErgoBox],
+                    stateContext: ErgoStateContext,
+                    box: ErgoBox, idx: Int)
+                   (implicit verifier: ErgoInterpreter): ValidationResult[Long] = {
+    val input = inputs(idx)
+    val proof = input.spendingProof
+    val transactionContext = TransactionContext(boxesToSpend, dataBoxes, this)
+    val inputContext = InputContext(idx.toShort, proof.extension)
+
+    // Cost limit per block
+    val maxCost = stateContext.currentParameters.maxBlockCost
+    val currentTxCost = validation.result.payload.get
+
+    val ctx = new ErgoContext(
+      stateContext, transactionContext, inputContext,
+      costLimit = maxCost - currentTxCost, // remaining cost so far
+      initCost = 0)
+
+    val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
+    costTry.recover { case t =>
+      log.debug(s"Tx verification failed: ${t.getMessage}")
+    }
+
+    val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
+
+    val currCost = addExact(currentTxCost, scriptCost)
+
+    validation
+      // Just in case, should always be true if client implementation is correct.
+      .validateEquals(txBoxToSpend, box.id, input.boxId)
+      // Check whether input box script interpreter raised exception
+      .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$idx => $costTry")
+      // Check that cost of the transaction after checking the input becomes too big
+      .validate(bsBlockTransactionsCost, currCost <= maxCost, s"$id: cost exceeds limit after input #$idx")
+      .map(c => addExact(c, scriptCost))
   }
 
   /**

@@ -113,19 +113,25 @@ object ErgoState extends ScorexLogging {
           .payload[Long](r.value)
           .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", e)) {
             case (_, (dataBoxes, toSpend)) =>
-              val (res, time) = measureTimeNano(
+              def validate(): ValidationResult[Long] = {
                 tx.validateStateful(
                   toSpend.toIndexedSeq,
                   dataBoxes.toIndexedSeq,
                   currentStateContext, accumulatedCost = r.value)(verifier).result
-              )
-              collectMetricsTo(
-                validateTxStatefulMetric,
-                TransactionMetricData(currentStateContext.lastHeaderIdOpt.getOrElse(emptyModifierId), tx.id),
-                cost = res.map(c => c - r.value).toTry.getOrElse(-1L),
-                time
-              )
-              res
+              }
+
+              if (es.nodeSettings.collectMetrics) {
+                val (res, time) = measureTimeNano { validate() }
+                collectMetricsTo(
+                  validateTxStatefulMetric,
+                  TransactionMetricData(currentStateContext.lastHeaderIdOpt.getOrElse(emptyModifierId), tx.id),
+                  cost = res.map(c => c - r.value).toTry.getOrElse(-1L),
+                  time
+                )
+                res
+              } else {
+                validate()
+              }
           }.result
 
         execTx(tail, res)

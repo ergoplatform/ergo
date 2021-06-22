@@ -222,7 +222,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           collectMetricsTo(
             verifyScriptMetric,
             data = InputMetricData(
-              blockId = stateContext.lastHeaderIdOpt.getOrElse(emptyModifierId),
+              blockId = stateContext.lastHeaderIdOpt,
               txId = id,
               index = idx),
             cost = res.map { c =>

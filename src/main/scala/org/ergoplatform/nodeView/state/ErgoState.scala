@@ -124,7 +124,7 @@ object ErgoState extends ScorexLogging {
                 val (res, time) = measureTimeNano { validate() }
                 collectMetricsTo(
                   validateTxStatefulMetric,
-                  TransactionMetricData(currentStateContext.lastHeaderIdOpt.getOrElse(emptyModifierId), tx.id),
+                  TransactionMetricData(currentStateContext.lastHeaderIdOpt, tx.id),
                   cost = res.map(c => c - r.value).toTry.getOrElse(-1L),
                   time
                 )

@@ -57,8 +57,6 @@ object metrics {
     def fieldValues(d: D): Seq[String] = row.fieldValues(d)
   }
 
-  val emptyModifierId: ModifierId = ModifierId @@ ""
-
   /** Metric data, which describes a block-related operations.
     *
     * @param blockId          identifier of the related block
@@ -85,12 +83,12 @@ object metrics {
     * @param blockId identifier of the related block
     * @param txId    identifier of the related transaction
     */
-  case class TransactionMetricData(blockId: ModifierId, txId: ModifierId)
+  case class TransactionMetricData(blockId: Option[ModifierId], txId: ModifierId)
 
   implicit object TransactionMetricRow extends MetricRow[TransactionMetricData] {
     override val fieldNames: Seq[String] = Array("blockId", "txId")
     override def fieldValues(d: TransactionMetricData): Seq[String] = {
-      Array(d.blockId, d.txId)
+      Array(d.blockId.getOrElse(""), d.txId)
     }
   }
 
@@ -100,12 +98,12 @@ object metrics {
     * @param txId    transaction identifier
     * @param index   zero-based index of the input in the transaction
     */
-  case class InputMetricData(blockId: ModifierId, txId: ModifierId, index: Int)
+  case class InputMetricData(blockId: Option[ModifierId], txId: ModifierId, index: Int)
 
   implicit object InputMetricRow extends MetricRow[InputMetricData] {
     override val fieldNames: Seq[String] = Array("blockId", "txId", "index")
     override def fieldValues(d: InputMetricData): Seq[String] =
-      Array(d.blockId, d.txId, d.index.toString)
+      Array(d.blockId.getOrElse(""), d.txId, d.index.toString)
   }
 
   /** Data obtained by measured operation. Consists of the metric data, the cost computed by the

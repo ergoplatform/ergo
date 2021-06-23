@@ -119,7 +119,7 @@ object ErgoInterpreter {
     * Preforms pre-compilation of the given scripts during instantiation.
     * Keeps pre-compiled data structures for the lifetime of JVM.
     */
-  val scriptProcessor: PrecompiledScriptProcessor = {
+  lazy val scriptProcessor: PrecompiledScriptProcessor = {
     /** Script compilation requires an instance of [[SigmaValidationSettings]].
       * The only way to pass it to the CacheLoader is via cache key.
       * So here we augment each script bytes with the instance of validation settings.

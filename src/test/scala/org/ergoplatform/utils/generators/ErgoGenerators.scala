@@ -6,7 +6,8 @@ import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.popow.{NipopowProof, PoPowHeader, PoPowParams}
-import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool

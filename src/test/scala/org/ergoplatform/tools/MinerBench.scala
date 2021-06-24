@@ -5,7 +5,7 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining._
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.utils.ErgoTestHelpers
 import scorex.crypto.hash.{Blake2b256, Blake2b512, CryptographicHash, Digest}
 

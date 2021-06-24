@@ -2,7 +2,7 @@ package org.ergoplatform.utils.generators
 
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.modifiers.history.{Header, HeaderChain}
+import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, PoPowHeader}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -10,6 +10,7 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{BoxUtils, ErgoTestConstants}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.Input
+import org.ergoplatform.modifiers.history.header.Header
 import scorex.core.block.Block.Version
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32

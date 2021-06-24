@@ -12,6 +12,7 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction

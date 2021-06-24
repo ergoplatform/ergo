@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView
 
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.StateType

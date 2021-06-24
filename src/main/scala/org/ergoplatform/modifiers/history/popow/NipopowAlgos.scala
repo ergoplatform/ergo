@@ -4,7 +4,7 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.extension.Extension.InterlinksVectorPrefix
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.Constants
 import scorex.crypto.authds.merkle.MerkleProof

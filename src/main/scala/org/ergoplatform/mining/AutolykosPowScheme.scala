@@ -7,6 +7,7 @@ import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
+import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer, HeaderWithoutPow}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof

@@ -3,6 +3,7 @@ package org.ergoplatform.sanity
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.header.HeaderSerializer
 import org.ergoplatform.modifiers.history.{BlockTransactions, HeaderSerializer}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool

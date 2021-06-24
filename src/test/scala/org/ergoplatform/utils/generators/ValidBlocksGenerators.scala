@@ -5,8 +5,8 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
-import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState

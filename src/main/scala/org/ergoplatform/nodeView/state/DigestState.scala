@@ -32,12 +32,12 @@ class DigestState protected(override val version: VersionTag,
     with ScorexLogging
     with ScorexEncoding {
 
+  store.lastVersionID
+    .foreach(id => require(version == bytesToVersion(id), "version should always be equal to store.lastVersionID"))
+
   override val constants: StateConstants = StateConstants(None, ergoSettings)
 
   private lazy val nodeSettings = ergoSettings.nodeSettings
-
-  store.lastVersionID
-    .foreach(id => assert(version == bytesToVersion(id), "version should always be equal to store.lastVersionID"))
 
   override lazy val maxRollbackDepth: Int = store.rollbackVersions().size
 

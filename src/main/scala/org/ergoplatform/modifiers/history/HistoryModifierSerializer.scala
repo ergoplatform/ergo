@@ -1,6 +1,7 @@
 package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 

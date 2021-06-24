@@ -1,8 +1,9 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
-import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain}
+import org.ergoplatform.modifiers.history.{Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos

@@ -2,6 +2,7 @@ package org.ergoplatform.settings
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import scorex.core.serialization.ScorexSerializer
@@ -59,7 +60,7 @@ object Constants {
   // Maximum extension size
   val MaxExtensionSize: Int = 32 * 1024
 
-  // Maximum extension size during bytes parsing. Allows to move MaxExtensionSize to Parameters in future
+  // Maximum extension size during bytes parsing
   val MaxExtensionSizeMax: Int = 1024 * 1024
 
 }

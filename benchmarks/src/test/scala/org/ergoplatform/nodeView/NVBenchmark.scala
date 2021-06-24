@@ -1,8 +1,9 @@
 package org.ergoplatform.nodeView
 
 import org.ergoplatform.Utils
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.modifiers.history.{BlockTransactions, Extension, Header}
+import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
 
 trait NVBenchmark {
 

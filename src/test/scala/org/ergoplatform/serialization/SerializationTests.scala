@@ -2,6 +2,7 @@ package org.ergoplatform.serialization
 
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.extension.ExtensionSerializer
 import org.ergoplatform.modifiers.history.popow.NipopowProofSerializer
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoSerializer

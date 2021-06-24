@@ -1,6 +1,7 @@
 package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, PoisonPill, Props}
+import akka.dispatch.{BoundedMessageQueueSemantics, RequiresMessageQueue}
 import akka.pattern.{StatusReply, ask}
 import akka.util.Timeout
 import com.google.common.primitives.Longs
@@ -52,7 +53,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                 viewHolderRef: ActorRef,
                 readersHolderRef: ActorRef,
                 timeProvider: NetworkTimeProvider,
-                inSecretKeyOpt: Option[DLogProverInput]) extends Actor with ScorexLogging {
+                inSecretKeyOpt: Option[DLogProverInput]) extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] with ScorexLogging {
 
   import ErgoMiner._
 
@@ -76,6 +77,9 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
   // Flag which is set when a future with block candidate generation is running
   private var candidateGenerating: Boolean = false
+
+  // duration to wait before new prepare candidate attempt (adjusted based on feedback from previous execution)
+  private var prepareCandidateRetryDelay: FiniteDuration = 100.millis
 
   // cached block candidate
   private var candidateOpt: Option[CandidateCache] = None
@@ -248,7 +252,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
   // helper method to update cached candidate block and corresponding message for external miners
   private def updateCandidate(candidate: CandidateBlock,
                               pk: ProveDlog,
-                              txsToInclude: Seq[ErgoTransaction]): CandidateCache = {
+                              txsToInclude: Seq[ErgoTransaction]): Try[CandidateCache] = Try {
     val ext = powScheme.deriveExternalCandidate(candidate, pk, txsToInclude.map(_.id))
     log.info(s"New candidate with msg ${Base16.encode(ext.msg)} generated")
     log.debug(s"Got candidate block at height ${ErgoHistory.heightOf(candidate.parentOpt) + 1}" +
@@ -259,10 +263,14 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     candCache
   }
 
+  /**
+    * @return None if chain is not synced or Some of attempt to create candidate
+    */
   private def generateCandidate(h: ErgoHistoryReader,
                                 m: ErgoMemPoolReader,
                                 s: UtxoStateReader,
-                                txsToInclude: Seq[ErgoTransaction]): Try[CandidateCache] = {
+                                pk: ProveDlog,
+                                txsToInclude: Seq[ErgoTransaction]): Option[Try[CandidateCache]] = {
     //mandatory transactions to include into next block taken from the previous candidate
     val unspentTxsToInclude = txsToInclude.filter { tx =>
       inputsNotSpent(tx, s)
@@ -273,23 +281,21 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       solvedBlock = None
     }
 
-    publicKeyOpt match {
-      case Some(pk) =>
-        if (solvedBlock.isEmpty && h.bestFullBlockOpt.map(_.id) == s.stateContext.lastHeaderOpt.map(_.id)) {
-          createCandidate(pk, h, m, desiredUpdate, s, unspentTxsToInclude) match {
-            case Success(candidate) =>
-              Success(updateCandidate(candidate, pk, unspentTxsToInclude))
-            case Failure(e) =>
-              log.warn("Failed to produce candidate block.", e)
-              //candidate cleared, including its mandatory transactions
-              candidateOpt = None
-              Failure(new Exception("Failed to produce candidate block.", e))
-          }
-        } else {
-          Failure(new Exception("Can not generate block candidate: chain not synced (maybe last block not fully applied yet"))
-        }
-      case None =>
-        Failure(new Exception("Candidate could not be generated: no public key available"))
+    def chainSynced = solvedBlock.isEmpty && h.bestFullBlockOpt.map(_.id) == s.stateContext.lastHeaderOpt.map(_.id)
+
+    if (chainSynced) {
+      createCandidate(pk, h, m, desiredUpdate, s, unspentTxsToInclude) match {
+        case Success(candidate) =>
+          Some(updateCandidate(candidate, pk, unspentTxsToInclude))
+        case Failure(e) =>
+          log.warn("Failed to produce candidate block.", e)
+          //candidate cleared, including its mandatory transactions
+          candidateOpt = None
+          Some(Failure(new Exception("Failed to produce candidate block.", e)))
+      }
+    } else {
+      // should not be synced probably due to racing condition when last block is not fully applied yet
+      None
     }
   }
 
@@ -299,10 +305,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         sender() ! StatusReply.error("Candidate creation is not supported when mining is disabled")
       }
 
-    case PrepareCandidate(txsToInclude, reply) =>
+    case prepareCandidate@PrepareCandidate(txsToInclude, reply) =>
       val msgSender = if (reply) Some(sender()) else None
       if (candidateGenerating) {
-        msgSender.foreach(_ ! StatusReply.error("Skipping candidate generation, one is already in progress"))
+        msgSender.foreach(s => context.system.scheduler.scheduleOnce(prepareCandidateRetryDelay, self, prepareCandidate)(context.system.dispatcher, s))
+      } else if (publicKeyOpt.isEmpty) {
+        // this should never happen as we set pubKeyOpt at preStart
+        msgSender.foreach(_ ! StatusReply.error("Candidate could not be generated, public key not available"))
       } else {
         candidateGenerating = true
         if (cachedFor(txsToInclude)) {
@@ -313,17 +322,24 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           }
           candidateGenerating = false
         } else {
-          log.info("Generating new candidate requested by miner")
+          val start = System.currentTimeMillis()
           (readersHolderRef ? GetReaders).mapTo[Readers]
             .onComplete {
               case Success(Readers(h, s: UtxoStateReader, m, _)) =>
-                val candidateVersionReply =
-                  generateCandidate(h, m, s, txsToInclude).fold(
-                    ex => StatusReply.error(ex),
-                    candidate => StatusReply.success(candidate.externalVersion)
-                  )
+                generateCandidate(h, m, s, publicKeyOpt.get, txsToInclude) match {
+                  case Some(Success(candidate)) =>
+                    val generationTook = System.currentTimeMillis() - start
+                    prepareCandidateRetryDelay = generationTook.millis
+                    log.info(s"Generated new candidate requested by miner in $generationTook ms")
+                    msgSender.foreach(_ ! StatusReply.success(candidate.externalVersion))
+                  case Some(Failure(ex)) =>
+                    log.error("Failed to generate new candidate", ex)
+                    msgSender.foreach(_ ! StatusReply.error(ex))
+                  case None =>
+                    log.warn("Can not generate block candidate: chain not synced (maybe last block not fully applied yet")
+                    msgSender.foreach(s => context.system.scheduler.scheduleOnce(prepareCandidateRetryDelay, self, prepareCandidate)(context.system.dispatcher, s))
+                }
                 candidateGenerating = false
-                msgSender.foreach(_ ! candidateVersionReply)
               case _ =>
                 candidateGenerating = false
                 msgSender.foreach(_ ! StatusReply.error("Invalid readers state, mining is possible in UTXO mode only"))

@@ -2,7 +2,6 @@ package org.ergoplatform.modifiers.history.popow
 
 import io.circe.{Decoder, Encoder}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.modifiers.history.{Header, HeaderSerializer}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions.LongOps

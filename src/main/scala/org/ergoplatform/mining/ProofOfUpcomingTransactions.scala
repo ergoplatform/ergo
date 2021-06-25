@@ -1,7 +1,7 @@
 package org.ergoplatform.mining
 
 import io.circe.{Encoder, Json}
-import org.ergoplatform.modifiers.history.{BlockTransactions, HeaderSerializer, HeaderWithoutPow}
+import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import org.ergoplatform.settings.Algos
 import io.circe.syntax._

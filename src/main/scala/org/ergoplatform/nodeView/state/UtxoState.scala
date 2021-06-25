@@ -5,7 +5,7 @@ import java.io.File
 import cats.Traverse
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF

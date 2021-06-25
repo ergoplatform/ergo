@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
@@ -23,7 +23,7 @@ import scala.concurrent.ExecutionContextExecutor
 class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
 
   override val historyGen: Gen[HT] =
-    generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, -1)
+    generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
 
   override val stateGen: Gen[WrappedUtxoState] =
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings))

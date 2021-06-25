@@ -8,6 +8,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
 import scorex.util.{ByteArrayBuilder, bytesToId}
+import scorex.util.Extensions._
 
 object HeaderSerializer extends ScorexSerializer[Header] {
 

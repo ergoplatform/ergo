@@ -2,7 +2,6 @@ package org.ergoplatform.mining
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen

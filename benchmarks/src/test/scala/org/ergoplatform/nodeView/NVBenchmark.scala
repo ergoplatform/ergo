@@ -4,7 +4,7 @@ import org.ergoplatform.Utils
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.modifiers.history.{BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.BlockTransactions
 
 trait NVBenchmark {
 

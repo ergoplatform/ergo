@@ -8,7 +8,7 @@ import org.ergoplatform.mining._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, Header}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState

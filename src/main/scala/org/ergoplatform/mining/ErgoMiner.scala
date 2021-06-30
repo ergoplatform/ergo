@@ -279,6 +279,8 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     //only transactions valid from against the current utxo state we take from the mem pool
     lazy val poolTransactions = m.getAllPrioritized
 
+    lazy val emissionTxOpt = ErgoMiner.collectEmission(s, pk, ergoSettings.chainSettings.emissionRules)
+
     // We clear cached solved block if it is not continuing last block applied
     if (solvedBlock.nonEmpty && (solvedBlock.map(_.parentId) != h.bestFullBlockOpt.map(_.id))) {
       solvedBlock = None
@@ -288,10 +290,10 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     def chainSynced = solvedBlock.isEmpty && h.bestFullBlockOpt.map(_.id) == s.stateContext.lastHeaderOpt.map(_.id)
 
     /** we don't want to build empty blocks */
-    def hasAnyMemPoolOrMinerTx = poolTransactions.nonEmpty || unspentTxsToInclude.nonEmpty
+    def hasAnyMemPoolOrMinerTx = poolTransactions.nonEmpty || unspentTxsToInclude.nonEmpty || emissionTxOpt.nonEmpty
 
     if (chainSynced && hasAnyMemPoolOrMinerTx) {
-      createCandidate(pk, h, desiredUpdate, s, poolTransactions, unspentTxsToInclude) match {
+      createCandidate(pk, h, desiredUpdate, s, poolTransactions, emissionTxOpt, unspentTxsToInclude) match {
         case Success(candidate) =>
           Some(updateCandidate(candidate, pk, unspentTxsToInclude))
         case Failure(e) =>
@@ -417,6 +419,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     * @param proposedUpdate          - votes for parameters and soft-fork
     * @param state                   - UTXO set reader
     * @param poolTxs                 - memory pool transactions
+    * @param emissionTxOpt           - optional emission transaction
     * @param prioritizedTransactions - transactions which are going into the block in the first place
     *                                (before transactions from the pool). No guarantee of inclusion in general case.
     * @return - block candidate or an error
@@ -426,6 +429,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                               proposedUpdate: ErgoValidationSettingsUpdate,
                               state: UtxoStateReader,
                               poolTxs: Seq[ErgoTransaction],
+                              emissionTxOpt: Option[ErgoTransaction],
                               prioritizedTransactions: Seq[ErgoTransaction]): Try[CandidateBlock] = Try {
     // Extract best header and extension of a best block user their data for assembling a new block
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
@@ -473,16 +477,13 @@ class ErgoMiner(ergoSettings: ErgoSettings,
 
     val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, proposedUpdate, version)
 
-    val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules)
-    val mt = emissionTxOpt.toSeq ++ prioritizedTransactions
-
     val (txs, toEliminate) = ErgoMiner.collectTxs(minerPk,
       state.stateContext.currentParameters.maxBlockCost,
       state.stateContext.currentParameters.maxBlockSize,
       maxTransactionComplexity,
       state,
       upcomingContext,
-      mt ++ poolTxs)(state.stateContext.validationSettings)
+      emissionTxOpt.toSeq ++ prioritizedTransactions ++ poolTxs)(state.stateContext.validationSettings)
 
     // remove transactions which turned out to be invalid
     if (toEliminate.nonEmpty) viewHolderRef ! EliminateTransactions(toEliminate)

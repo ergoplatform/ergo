@@ -331,7 +331,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
         }
       }
 
-    // solution found externally (by e.g. GPU miner)
+    // solution found by external (GPU) or internal miner
     case preSolution: AutolykosSolution =>
       // Inject node pk if it is not externally set (in Autolykos 2)
       val solution = if (preSolution.pk.isInfinity) {
@@ -371,7 +371,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
               StatusReply.error("Invalid miner state")
           }
         }
-      log.debug(s"Processed solution $solution with the result result $result")
+      log.debug(s"Processed solution $solution with the result $result")
       if (externalMinerMode) sender() ! result
   }
 

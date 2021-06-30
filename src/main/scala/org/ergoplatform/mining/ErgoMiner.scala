@@ -272,19 +272,26 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                                 pk: ProveDlog,
                                 txsToInclude: Seq[ErgoTransaction]): Option[Try[CandidateCache]] = {
     //mandatory transactions to include into next block taken from the previous candidate
-    val unspentTxsToInclude = txsToInclude.filter { tx =>
+    lazy val unspentTxsToInclude = txsToInclude.filter { tx =>
       inputsNotSpent(tx, s)
     }
+
+    //only transactions valid from against the current utxo state we take from the mem pool
+    lazy val poolTransactions = m.getAllPrioritized
 
     // We clear cached solved block if it is not continuing last block applied
     if (solvedBlock.nonEmpty && (solvedBlock.map(_.parentId) != h.bestFullBlockOpt.map(_.id))) {
       solvedBlock = None
     }
 
+    /** chain should not be synced probably due to racing condition when last block is not fully applied yet */
     def chainSynced = solvedBlock.isEmpty && h.bestFullBlockOpt.map(_.id) == s.stateContext.lastHeaderOpt.map(_.id)
 
-    if (chainSynced) {
-      createCandidate(pk, h, m, desiredUpdate, s, unspentTxsToInclude) match {
+    /** we don't want to build empty blocks */
+    def hasAnyMemPoolOrMinerTx = poolTransactions.nonEmpty || unspentTxsToInclude.nonEmpty
+
+    if (chainSynced && hasAnyMemPoolOrMinerTx) {
+      createCandidate(pk, h, desiredUpdate, s, poolTransactions, unspentTxsToInclude) match {
         case Success(candidate) =>
           Some(updateCandidate(candidate, pk, unspentTxsToInclude))
         case Failure(e) =>
@@ -294,7 +301,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
           Some(Failure(new Exception("Failed to produce candidate block.", e)))
       }
     } else {
-      // should not be synced probably due to racing condition when last block is not fully applied yet
       None
     }
   }
@@ -336,7 +342,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                     log.error("Failed to generate new candidate", ex)
                     msgSender.foreach(_ ! StatusReply.error(ex))
                   case None =>
-                    log.warn("Can not generate block candidate: chain not synced (maybe last block not fully applied yet")
+                    log.warn("Can not generate block candidate: either mempool is empty or chain is not synced (maybe last block not fully applied yet")
                     msgSender.foreach(s => context.system.scheduler.scheduleOnce(prepareCandidateRetryDelay, self, prepareCandidate)(context.system.dispatcher, s))
                 }
                 candidateGenerating = false
@@ -408,18 +414,18 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     *
     * @param minerPk                 - public key of the miner
     * @param history                 - blockchain reader (to extract parent)
-    * @param pool                    - memory pool reader
     * @param proposedUpdate          - votes for parameters and soft-fork
     * @param state                   - UTXO set reader
+    * @param poolTxs                 - memory pool transactions
     * @param prioritizedTransactions - transactions which are going into the block in the first place
     *                                (before transactions from the pool). No guarantee of inclusion in general case.
     * @return - block candidate or an error
     */
   private def createCandidate(minerPk: ProveDlog,
                               history: ErgoHistoryReader,
-                              pool: ErgoMemPoolReader,
                               proposedUpdate: ErgoValidationSettingsUpdate,
                               state: UtxoStateReader,
+                              poolTxs: Seq[ErgoTransaction],
                               prioritizedTransactions: Seq[ErgoTransaction]): Try[CandidateBlock] = Try {
     // Extract best header and extension of a best block user their data for assembling a new block
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
@@ -466,8 +472,6 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     }.getOrElse((interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion))
 
     val upcomingContext = state.stateContext.upcoming(minerPk.h, timestamp, nBits, votes, proposedUpdate, version)
-    //only transactions valid from against the current utxo state we take from the mem pool
-    val poolTxs = pool.getAllPrioritized
 
     val emissionTxOpt = ErgoMiner.collectEmission(state, minerPk, ergoSettings.chainSettings.emissionRules)
     val mt = emissionTxOpt.toSeq ++ prioritizedTransactions

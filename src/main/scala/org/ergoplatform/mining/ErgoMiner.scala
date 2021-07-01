@@ -316,7 +316,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case prepareCandidate@PrepareCandidate(txsToInclude, reply) =>
       val msgSender = if (reply) Some(sender()) else None
       if (candidateGenerating) {
-        msgSender.foreach(s => context.system.scheduler.scheduleOnce(prepareCandidateRetryDelay, self, prepareCandidate)(context.system.dispatcher, s))
+        msgSender.foreach(_ ! StatusReply.error("Skipping candidate generation, one is already in progress"))
       } else if (publicKeyOpt.isEmpty) {
         // this should never happen as we set pubKeyOpt at preStart
         msgSender.foreach(_ ! StatusReply.error("Candidate could not be generated, public key not available"))

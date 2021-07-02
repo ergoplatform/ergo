@@ -316,7 +316,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     case prepareCandidate@PrepareCandidate(txsToInclude, reply) =>
       val msgSender = if (reply) Some(sender()) else None
       if (candidateGenerating) {
-        msgSender.foreach(_ ! StatusReply.error("Skipping candidate generation, one is already in progress"))
+        msgSender.foreach(s => context.system.scheduler.scheduleOnce(prepareCandidateRetryDelay, self, prepareCandidate)(context.system.dispatcher, s))
       } else if (publicKeyOpt.isEmpty) {
         // this should never happen as we set pubKeyOpt at preStart
         msgSender.foreach(_ ! StatusReply.error("Candidate could not be generated, public key not available"))
@@ -369,6 +369,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       log.info("Got solution: " + solution)
       val result: StatusReply[Unit] =
         if (solvedBlock.nonEmpty) {
+          // this should happen only if newBlock applied from the solution did not trigger new candidate generation (yet?)
           log.info("Preparing new candidate due to duplicate solution: " + solution)
           refreshCandidate()
           StatusReply.error("Solution already submitted")

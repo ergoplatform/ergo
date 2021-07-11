@@ -408,11 +408,12 @@ class ErgoMiner(ergoSettings: ErgoSettings,
     *
     * @param minerPk                 - public key of the miner
     * @param history                 - blockchain reader (to extract parent)
-    * @param pool                    - memory pool reader
-    * @param proposedUpdate          - votes for parameters and soft-fork
+    * @param pool                    - memory pool reader (to read transactions)
+    * @param proposedUpdate          - votes for parameters update or/and soft-fork
     * @param state                   - UTXO set reader
     * @param prioritizedTransactions - transactions which are going into the block in the first place
-    *                                (before transactions from the pool). No guarantee of inclusion in general case.
+    *                                (before transactions from the pool).
+    *                                Inclusion of all the prioritized transactions is not guaranteed in general case.
     * @return - block candidate or an error
     */
   private def createCandidate(minerPk: ProveDlog,
@@ -421,6 +422,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
                               proposedUpdate: ErgoValidationSettingsUpdate,
                               state: UtxoStateReader,
                               prioritizedTransactions: Seq[ErgoTransaction]): Try[CandidateBlock] = Try {
+
     // Extract best header and extension of a best block user their data for assembling a new block
     val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
     val bestExtensionOpt: Option[Extension] = bestHeaderOpt
@@ -637,8 +639,12 @@ object ErgoMiner extends ScorexLogging {
                  maxTransactionComplexity: Int,
                  us: UtxoStateReader,
                  upcomingContext: ErgoStateContext,
-                 transactions: Iterable[ErgoTransaction])
+                 transactions: Seq[ErgoTransaction])
                 (implicit vs: ValidationSettings): (Seq[ErgoTransaction], Seq[ModifierId]) = {
+
+    log.info(s"Assembling a block candidate from ${transactions.length} transactions available")
+
+    val currentHeight = us.stateContext.currentHeight
 
     @tailrec
     def loop(mempoolTxs: Iterable[ErgoTransaction],
@@ -666,7 +672,7 @@ object ErgoMiner extends ScorexLogging {
                 val newBoxes = newTxs.flatMap(_._1.outputs)
 
                 val emissionRules = stateWithTxs.constants.settings.chainSettings.emissionRules
-                ErgoMiner.collectFees(stateWithTxs.stateContext.currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
+                ErgoMiner.collectFees(currentHeight, newTxs.map(_._1), minerPk, emissionRules) match {
                   case Some(feeTx) =>
                     val boxesToSpend = feeTx.inputs.flatMap(i => newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId)))
                     feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext) match {
@@ -678,11 +684,12 @@ object ErgoMiner extends ScorexLogging {
                           current -> invalidTxs
                         }
                       case Failure(e) =>
-                        log.debug(s"Fee collecting tx is invalid, return current: ${e.getMessage} from ${stateWithTxs.stateContext}")
+                        log.warn(s"Fee collecting tx is invalid, not including it, " +
+                                  s"details: ${e.getMessage} from ${stateWithTxs.stateContext}")
                         current -> invalidTxs
                     }
                   case None =>
-                    log.debug(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
+                    log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
                     val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
                     if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
                       loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs)

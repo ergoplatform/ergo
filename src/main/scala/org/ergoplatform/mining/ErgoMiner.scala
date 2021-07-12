@@ -642,9 +642,9 @@ object ErgoMiner extends ScorexLogging {
                  transactions: Seq[ErgoTransaction])
                 (implicit vs: ValidationSettings): (Seq[ErgoTransaction], Seq[ModifierId]) = {
 
-    log.info(s"Assembling a block candidate from ${transactions.length} transactions available")
-
     val currentHeight = us.stateContext.currentHeight
+
+    log.info(s"Assembling a block candidate for block #$currentHeight from ${transactions.length} transactions available")
 
     @tailrec
     def loop(mempoolTxs: Iterable[ErgoTransaction],
@@ -662,7 +662,7 @@ object ErgoMiner extends ScorexLogging {
           if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             //do these checks before validating the scripts to save time
-            current -> (invalidTxs :+ tx.id)
+            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
           } else {
             implicit val verifier: ErgoInterpreter = ErgoInterpreter(us.stateContext.currentParameters)
             // check validity and calculate transaction cost
@@ -707,7 +707,10 @@ object ErgoMiner extends ScorexLogging {
       }
     }
 
-    loop(transactions, Seq.empty, None, Seq.empty)
+    val res = loop(transactions, Seq.empty, None, Seq.empty)
+    log.info(s"Collected ${res._1.length} transactions For block #$currentHeight, " +
+              s"${res._2.length} transactions turned out to be invalid")
+    res
   }
 
   //Checks that transaction "tx" is not spending outputs spent already by transactions "txs"

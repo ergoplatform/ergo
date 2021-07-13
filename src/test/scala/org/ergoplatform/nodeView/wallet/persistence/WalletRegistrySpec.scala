@@ -108,7 +108,7 @@ class WalletRegistrySpec
         val registry = new WalletRegistry(store)(settings.walletSettings)
         val blockId = modifierIdGen.sample.get
         val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus))
-        registry.updateOnBlock(ScanResults(unspentBoxes, Seq.empty, Seq.empty), blockId, 100)
+        registry.updateOnBlock(ScanResults(unspentBoxes, Seq.empty, Seq.empty), blockId, 100).get
         registry.walletUnspentBoxes().toList should contain theSameElementsAs unspentBoxes
       }
     }
@@ -123,7 +123,7 @@ class WalletRegistrySpec
         bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus)
       }
       val inputs = outs.map(tb => SpentInputData(fakeTxId, tb))
-      registry.updateOnBlock(ScanResults(outs, inputs, Seq.empty), blockId, 100)
+      registry.updateOnBlock(ScanResults(outs, inputs, Seq.empty), blockId, 100).get
       registry.walletUnspentBoxes() shouldBe Seq.empty
     }
   }

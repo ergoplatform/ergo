@@ -190,7 +190,13 @@ class ErgoWalletActor(settings: ErgoSettings,
           historyReader.bestFullBlockAt(blockHeight) match {
             case Some(block) =>
               log.info(s"Wallet is going to scan a block ${block.id} in the past at height ${block.height}")
-              ergoWalletService.scanBlockUpdate(state, block)
+              ergoWalletService.scanBlockUpdate(state, block) match {
+                case Failure(ex) =>
+                  log.error("Scanning past block update failed", ex)
+                  state
+                case Success(updatedState) =>
+                  updatedState
+              }
             case None =>
               state // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
         }
@@ -206,7 +212,15 @@ class ErgoWalletActor(settings: ErgoSettings,
         val nextBlockHeight = state.expectedNextBlockHeight(newBlock.height, settings.nodeSettings.isFullBlocksPruned)
         if (nextBlockHeight == newBlock.height) {
           log.info(s"Wallet is going to scan a block ${newBlock.id} on chain at height ${newBlock.height}")
-          context.become(loadedWallet(ergoWalletService.scanBlockUpdate(state, newBlock)))
+          val newState =
+            ergoWalletService.scanBlockUpdate(state, newBlock) match {
+              case Failure(ex) =>
+                log.error("Scanning new block update failed", ex)
+                state
+              case Success(updatedState) =>
+                updatedState
+            }
+          context.become(loadedWallet(newState))
         } else if (nextBlockHeight < newBlock.height) {
           log.warn(s"Wallet: skipped blocks found starting from $nextBlockHeight, going back to scan them")
           self ! ScanInThePast(nextBlockHeight)

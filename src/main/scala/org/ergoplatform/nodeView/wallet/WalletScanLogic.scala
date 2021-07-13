@@ -13,6 +13,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scorex.util.bytesToId
 
 import scala.collection.mutable
+import scala.util.Try
 
 /**
   * Functions which do scan boxes, transactions and blocks to find boxes which belong to wallet's keys.
@@ -45,7 +46,7 @@ object WalletScanLogic extends ScorexLogging {
                             walletVars: WalletVars,
                             block: ErgoFullBlock,
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]]
-                           ): (WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]]) = {
+                           ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
     scanBlockTransactions(
       registry, offChainRegistry, stateContext, walletVars,
       block.height, block.id, block.transactions, cachedOutputsFilter)
@@ -72,7 +73,7 @@ object WalletScanLogic extends ScorexLogging {
                             blockId: ModifierId,
                             transactions: Seq[ErgoTransaction],
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]]
-                           ): (WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]]) = {
+                           ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
 
     // Take unspent wallet outputs Bloom Filter from cache
     // or recreate it from unspent outputs stored in the database
@@ -167,13 +168,14 @@ object WalletScanLogic extends ScorexLogging {
 
     // function effects: updating registry and offchainRegistry datasets
     registry.updateOnBlock(scanRes, blockId, height)
+      .map { _ =>
+        //data needed to update the offchain-registry
+        val walletUnspent = registry.walletUnspentBoxes()
+        val newOnChainIds = scanRes.outputs.map(x => encodedBoxId(x.box.id))
+        val updatedOffchainRegistry = offChainRegistry.updateOnBlock(height, walletUnspent, newOnChainIds)
 
-    //data needed to update the offchain-registry
-    val walletUnspent = registry.walletUnspentBoxes()
-    val newOnChainIds = scanRes.outputs.map(x => encodedBoxId(x.box.id))
-    val updatedOffchainRegistry = offChainRegistry.updateOnBlock(height, walletUnspent, newOnChainIds)
-
-    (registry, updatedOffchainRegistry, outputsFilter)
+        (registry, updatedOffchainRegistry, outputsFilter)
+      }
   }
 
 

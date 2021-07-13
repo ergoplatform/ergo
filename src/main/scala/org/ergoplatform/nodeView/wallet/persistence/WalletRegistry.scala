@@ -207,7 +207,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param blockId     - block identifier
     * @param blockHeight - block height
     */
-  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Unit = {
+  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Try[Unit] = Try {
 
     // first, put newly created outputs and related transactions into key-value bag
     val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)

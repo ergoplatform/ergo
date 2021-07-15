@@ -54,7 +54,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
   }
 
   val scanResults0 = ScanResults(boxes, Seq.empty, Seq.empty)
-  registry.updateOnBlock(scanResults0, ModifierId @@ Base16.encode(Array.fill(32)(0: Byte)), 1)
+  registry.updateOnBlock(scanResults0, ModifierId @@ Base16.encode(Array.fill(32)(0: Byte)), 1).get
   println("keys: " + walletVars.proverOpt.get.secretKeys.size)
 
   val bts0 = System.currentTimeMillis()
@@ -73,7 +73,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
   }
 
   val scanResults1 = ScanResults(Seq.empty, Seq.empty, txs)
-  registry.updateOnBlock(scanResults1, ModifierId @@ Base16.encode(Array.fill(32)(1: Byte)), 2)
+  registry.updateOnBlock(scanResults1, ModifierId @@ Base16.encode(Array.fill(32)(1: Byte)), 2).get
 
   val tts0 = System.currentTimeMillis()
   val txsRead = registry.allWalletTxs()

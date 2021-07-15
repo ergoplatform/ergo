@@ -172,7 +172,6 @@ class ErgoMiner(
   def started(minerState: MinerState): Receive = {
     case genCandidate@GenerateCandidate(_, _) =>
       minerState.candidateGeneratorRef forward genCandidate
-
     case solution: AutolykosSolution =>
       minerState.candidateGeneratorRef forward solution
 

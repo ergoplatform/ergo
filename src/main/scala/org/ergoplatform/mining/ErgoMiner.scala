@@ -310,7 +310,7 @@ class ErgoMiner(ergoSettings: ErgoSettings,
       if (candidateGenerating) {
         msgSender.foreach(s => context.system.scheduler.scheduleOnce(prepareCandidateRetryDelay, self, prepareCandidate)(context.system.dispatcher, s))
       } else if (publicKeyOpt.isEmpty) {
-        // this should never happen as we set pubKeyOpt at preStart
+        // Could happen if wallet is not initialized
         msgSender.foreach(_ ! StatusReply.error("Candidate could not be generated, public key not available"))
       } else {
         candidateGenerating = true

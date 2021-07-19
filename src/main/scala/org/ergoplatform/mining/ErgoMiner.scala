@@ -38,7 +38,7 @@ class ErgoMiner(
       log.info(
         "Trying to use secret key from wallet for mining, wallet must be unlocked."
       )
-      self ! QueryWallet(secret = true)
+      self ! QueryWalletSecret
     } else { // mining pubKey is needed in both mining modes
       ergoSettings.miningPubKey match {
         case Some(pk) =>
@@ -46,12 +46,12 @@ class ErgoMiner(
           onStart(secretKeyOpt, pk)
         case None =>
           log.info("Trying to use public key from wallet for mining")
-          self ! QueryWallet(secret = false)
+          self ! QueryWalletPublicKey
       }
     }
   }
 
-  // initialize miner state with secrets and candidate generator
+  /** Initializes miner state with secrets and candidate generator */
   private def onStart(
     secretKeyOpt: Option[DLogProverInput],
     publicKey: ProveDlog
@@ -68,9 +68,10 @@ class ErgoMiner(
     unstashAll() // due to StartMining message from ErgoApp
   }
 
-  // at first try to obtain secrets and public key as we cannot mine without it
   override def receive: Receive = {
-    case QueryWallet(secret) =>
+
+    /** at first keep trying to obtain secret and public key as we cannot mine without it */
+    case walletQuery: WalletQuery =>
       viewHolderRef ! GetDataFromCurrentView[
         ErgoHistory,
         DigestState,
@@ -78,43 +79,47 @@ class ErgoMiner(
         ErgoMemPool,
         Unit
       ] { v =>
-        if (secret) {
-          v.vault.firstSecret.onComplete {
-            _.flatten match {
-              case Failure(t) =>
-                log.warn(s"Miner can't load secret key from wallet: ${t.getMessage} ")
-                context.system.scheduler.scheduleOnce(
-                  4.seconds,
-                  self,
-                  QueryWallet(secret)
-                )(context.system.dispatcher)
-              case Success(proverInput: DLogProverInput) =>
-                self ! UpdateSecret(proverInput)
+        walletQuery match {
+          case QueryWalletSecret =>
+            v.vault.firstSecret.onComplete {
+              _.flatten match {
+                case Failure(t) =>
+                  log.warn(s"Miner can't load secret key from wallet: ${t.getMessage} ")
+                  context.system.scheduler.scheduleOnce(
+                    4.seconds,
+                    self,
+                    QueryWalletSecret
+                  )(context.system.dispatcher)
+                case Success(proverInput: DLogProverInput) =>
+                  log.info("Setting secret and public key")
+                  onStart(
+                    secretKeyOpt = Some(proverInput),
+                    publicKey    = proverInput.publicImage
+                  )
+
+              }
             }
-          }
-        } else {
-          v.vault.miningPubkey.onComplete {
-            case Failure(t) =>
-              log.warn(s"Miner can't load public key from wallet: ${t.getMessage} ")
-              context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet(secret))(
-                context.system.dispatcher
-              )
-            case Success(None) =>
-              log.info(s"Miner is waiting for wallet initialization")
-              context.system.scheduler.scheduleOnce(4.seconds, self, QueryWallet(secret))(
-                context.system.dispatcher
-              )
-            case Success(Some(miningPubKey)) =>
-              self ! UpdatePublicKey(miningPubKey)
-          }
+          case QueryWalletPublicKey =>
+            v.vault.miningPubkey.onComplete {
+              case Failure(t) =>
+                log.warn(s"Miner can't load public key from wallet: ${t.getMessage} ")
+                context.system.scheduler
+                  .scheduleOnce(4.seconds, self, QueryWalletPublicKey)(
+                    context.system.dispatcher
+                  )
+              case Success(None) =>
+                log.info(s"Miner is waiting for wallet initialization")
+                context.system.scheduler
+                  .scheduleOnce(4.seconds, self, QueryWalletPublicKey)(
+                    context.system.dispatcher
+                  )
+              case Success(Some(miningPubKey)) =>
+                log.info("Setting public key")
+                onStart(secretKeyOpt = secretKeyOpt, publicKey = miningPubKey)
+
+            }
         }
       }
-    case UpdateSecret(s) =>
-      log.info("Setting secret and public key")
-      onStart(secretKeyOpt = Some(s), publicKey = s.publicImage)
-    case UpdatePublicKey(pk) =>
-      log.info("Setting public key")
-      onStart(secretKeyOpt = secretKeyOpt, publicKey = pk)
     case _: scala.runtime.BoxedUnit =>
     // ignore, this message is caused by way of interaction with NodeViewHolder.
     case _ => // stashing all messages until miner is initialized, like StartMining message from ErgoApp
@@ -170,8 +175,9 @@ class ErgoMiner(
     * The reason is that replying is optional and it is not possible to obtain a sender reference from MiningApiRoute 'ask'.
     */
   def started(minerState: MinerState): Receive = {
-    case genCandidate@GenerateCandidate(_, _) =>
+    case genCandidate @ GenerateCandidate(_, _) =>
       minerState.candidateGeneratorRef forward genCandidate
+
     case solution: AutolykosSolution =>
       minerState.candidateGeneratorRef forward solution
 
@@ -185,9 +191,9 @@ class ErgoMiner(
 }
 
 object ErgoMiner extends ScorexLogging {
-  case class QueryWallet(secret: Boolean)
-  case class UpdateSecret(s: DLogProverInput)
-  case class UpdatePublicKey(pk: ProveDlog)
+  sealed trait WalletQuery
+  case object QueryWalletSecret extends WalletQuery
+  case object QueryWalletPublicKey extends WalletQuery
   case object ReadMinerPk
   case object StartMining
 

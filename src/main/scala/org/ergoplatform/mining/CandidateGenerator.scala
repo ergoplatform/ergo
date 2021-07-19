@@ -61,10 +61,10 @@ class CandidateGenerator(
   implicit private val dispatcher: ExecutionContextExecutor = context.system.dispatcher
   implicit private val timeout: Timeout                     = 5.seconds
 
-  // retrieve Readers once on start and then get updated by events
+  /** retrieve Readers once on start and then get updated by events */
   override def preStart(): Unit = readersHolderRef ! GetReaders
 
-  // checks that current candidate block is cached with given `txs`
+  /** checks that current candidate block is cached with given `txs` */
   private def cachedFor(
     candidateOpt: Option[Candidate],
     txs: Seq[ErgoTransaction]
@@ -76,7 +76,7 @@ class CandidateGenerator(
     }
   }
 
-  // we need new candidate if given block is not parent of our cached block
+  /** we need new candidate if given block is not parent of our cached block */
   private def needNewCandidate(
     cache: Option[Candidate],
     b: ErgoFullBlock
@@ -85,13 +85,13 @@ class CandidateGenerator(
     !parentHeaderIdOpt.contains(b.header.id)
   }
 
-  // clear solution and cached block candidate and generate fresh one
+  /** clear solution and cached block candidate and generate fresh one */
   private def restartState(state: CandidateGeneratorState): Unit = {
     context.become(initialized(state.copy(cache = None, solvedBlock = None)))
     self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
   }
 
-  // Send solved block to local blockchain controller
+  /** Send solved block to local blockchain controller */
   private def sendToNodeView(newBlock: ErgoFullBlock): Unit = {
     log.info(
       s"New block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
@@ -105,8 +105,8 @@ class CandidateGenerator(
     sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
   }
 
-  // first we need to get Readers
   override def receive: Receive = {
+    /** first we need to get Readers to have some initial state to work with */
     case Readers(h, s: UtxoStateReader, m, _) =>
       log.info("CandidateGenerator successfully initialized")
       context.become(

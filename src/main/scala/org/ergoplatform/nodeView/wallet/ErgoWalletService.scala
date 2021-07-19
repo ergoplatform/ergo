@@ -179,7 +179,7 @@ trait ErgoWalletService {
     * @param state current wallet state
     * @param block - block to scan
     */
-  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): ErgoWalletState
+  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): Try[ErgoWalletState]
 
   /**
     * Sign a transaction
@@ -520,11 +520,9 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
         Failure(new Exception("Unable to derive key, wallet is not initialized"))
     }
 
-  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): ErgoWalletState = {
-    val (reg, offReg, updatedOutputsFilter) =
+  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): Try[ErgoWalletState] =
       WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.stateContext, state.walletVars, block, state.outputsFilter)
-    state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
-  }
+        .map { case (reg, offReg, updatedOutputsFilter) => state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter)) }
 
   def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {

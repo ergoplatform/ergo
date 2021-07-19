@@ -39,10 +39,8 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
   val newBlockSignal: Class[SemanticallySuccessfulModifier[_]] = classOf[SemanticallySuccessfulModifier[_]]
   val newBlockDelay: FiniteDuration = 30 seconds
 
-  private def getWorkMessage(minerRef: ActorRef, mandatoryTransactions: Seq[ErgoTransaction]): WorkMessage = {
-    implicit val patienceConfig: PatienceConfig = PatienceConfig(1.seconds, 50.millis)
-    eventually(await(minerRef.askWithStatus(PrepareCandidate(mandatoryTransactions)).mapTo[WorkMessage]))
-  }
+  private def getWorkMessage(minerRef: ActorRef, mandatoryTransactions: Seq[ErgoTransaction]): WorkMessage =
+    await(minerRef.askWithStatus(PrepareCandidate(mandatoryTransactions)).mapTo[WorkMessage])
 
   val defaultSettings: ErgoSettings = {
     val empty = ErgoSettings.read()
@@ -277,7 +275,8 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
     val passiveMiner: ActorRef = minerRef
 
-    val wm = await(passiveMiner.askWithStatus(PrepareCandidate(Seq.empty)).mapTo[WorkMessage])
+    implicit val patienceConfig: PatienceConfig = PatienceConfig(1.second, 100.millis) // it takes a while before PK is set
+    val wm = eventually(await(passiveMiner.askWithStatus(PrepareCandidate(Seq.empty)).mapTo[WorkMessage]))
     wm.isInstanceOf[WorkMessage] shouldBe true
     system.terminate()
   }

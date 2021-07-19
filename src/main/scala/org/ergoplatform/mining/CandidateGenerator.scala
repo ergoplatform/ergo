@@ -134,13 +134,11 @@ class CandidateGenerator(
   }
 
   private def initialized(state: CandidateGeneratorState): Receive = {
-    case ChangedHistory(h: ErgoHistoryReader @unchecked)
-        if h.isInstanceOf[ErgoHistoryReader] =>
+    case ChangedHistory(h: ErgoHistoryReader) =>
       context.become(initialized(state.copy(hr = h)))
-    case ChangedState(s: UtxoStateReader @unchecked) if s.isInstanceOf[UtxoStateReader] =>
+    case ChangedState(s: UtxoStateReader) =>
       context.become(initialized(state.copy(sr = s)))
-    case ChangedMempool(mp: ErgoMemPoolReader @unchecked)
-        if mp.isInstanceOf[ErgoMemPoolReader] =>
+    case ChangedMempool(mp: ErgoMemPoolReader) =>
       context.become(initialized(state.copy(mpr = mp)))
     case _: NodeViewChange =>
     // Just ignore all other NodeView Changes

@@ -34,9 +34,6 @@ trait WalletTestOps extends NodeViewBaseOps {
   def getPublicKeys(implicit w: WalletFixture): Seq[P2PKAddress] =
     await(w.wallet.publicKeys(0, Int.MaxValue))
 
-  def getSecret(implicit w: WalletFixture): Option[DLogProverInput] =
-    await(w.wallet.firstSecret).toOption
-
   def getConfirmedBalances(implicit w: WalletFixture): WalletDigest =
     await(w.wallet.confirmedBalances)
 

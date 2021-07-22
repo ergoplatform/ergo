@@ -8,6 +8,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.DigestState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{FirstSecretResponse, GetFirstSecret, GetMiningPubKey, MiningPubKeyResponse}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
@@ -15,10 +16,13 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
+/** Responsible for complex mining initialization logic.
+  * It forwards requests of external miner to [[CandidateGenerator]]
+  * and boots up [[ErgoMiningThread]] which talks to [[CandidateGenerator]] directly.
+  * */
 class ErgoMiner(
   ergoSettings: ErgoSettings,
   viewHolderRef: ActorRef,
@@ -81,45 +85,35 @@ class ErgoMiner(
       ] { v =>
         walletQuery match {
           case QueryWalletSecret =>
-            v.vault.firstSecret.onComplete {
-              _.flatten match {
-                case Failure(t) =>
-                  log.warn(s"Miner can't load secret key from wallet: ${t.getMessage} ")
-                  context.system.scheduler.scheduleOnce(
-                    4.seconds,
-                    self,
-                    QueryWalletSecret
-                  )(context.system.dispatcher)
-                case Success(proverInput: DLogProverInput) =>
-                  log.info("Setting secret and public key")
-                  onStart(
-                    secretKeyOpt = Some(proverInput),
-                    publicKey    = proverInput.publicImage
-                  )
-
-              }
-            }
+            v.vault.walletActor ! GetFirstSecret
           case QueryWalletPublicKey =>
-            v.vault.miningPubkey.onComplete {
-              case Failure(t) =>
-                log.warn(s"Miner can't load public key from wallet: ${t.getMessage} ")
-                context.system.scheduler
-                  .scheduleOnce(4.seconds, self, QueryWalletPublicKey)(
-                    context.system.dispatcher
-                  )
-              case Success(None) =>
-                log.info(s"Miner is waiting for wallet initialization")
-                context.system.scheduler
-                  .scheduleOnce(4.seconds, self, QueryWalletPublicKey)(
-                    context.system.dispatcher
-                  )
-              case Success(Some(miningPubKey)) =>
-                log.info("Setting public key")
-                onStart(secretKeyOpt = secretKeyOpt, publicKey = miningPubKey)
-
-            }
+            v.vault.walletActor ! GetMiningPubKey
         }
       }
+    case MiningPubKeyResponse(None) =>
+      log.info(s"Miner is waiting for wallet initialization")
+      context.system.scheduler
+        .scheduleOnce(4.seconds, self, QueryWalletPublicKey)(
+          context.system.dispatcher
+        )
+    case MiningPubKeyResponse(Some(miningPubKey)) =>
+      log.info("Setting public key")
+      onStart(secretKeyOpt = secretKeyOpt, publicKey = miningPubKey)
+
+    case FirstSecretResponse(Success(proverInput: DLogProverInput)) =>
+      log.info("Setting secret and public key")
+      onStart(
+        secretKeyOpt = Some(proverInput),
+        publicKey    = proverInput.publicImage
+      )
+    case FirstSecretResponse(Failure(t)) =>
+      log.warn(s"Miner can't load secret key from wallet: ${t.getMessage} ")
+      context.system.scheduler.scheduleOnce(
+        4.seconds,
+        self,
+        QueryWalletSecret
+      )(context.system.dispatcher)
+
     case _: scala.runtime.BoxedUnit =>
     // ignore, this message is caused by way of interaction with NodeViewHolder.
     case _ => // stashing all messages until miner is initialized, like StartMining message from ErgoApp
@@ -197,6 +191,7 @@ object ErgoMiner extends ScorexLogging {
   case object ReadMinerPk
   case object StartMining
 
+  /** Internal ErgoMiner state to avoid global vars */
   case class MinerState(
     secretKeyOpt: Option[DLogProverInput], // first secret from wallet for internal miner
     publicKey: ProveDlog, // "miningPubkeyHex" setting in config has preference over wallet's secret key,

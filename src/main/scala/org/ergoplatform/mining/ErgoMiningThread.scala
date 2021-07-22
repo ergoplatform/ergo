@@ -9,6 +9,10 @@ import scorex.util.ScorexLogging
 import scala.concurrent.duration._
 import scala.util.Random
 
+/** ErgoMiningThread is a scala implementation of a miner using just CPU.
+  * It tries to mimic GPU miner's behavior as to polling for new Candidates
+  * and submitting solutions. Note that it is useful only for low mining difficulty
+  * as its hashrate is just 1000 h/s */
 class ErgoMiningThread(
   ergoSettings: ErgoSettings,
   candidateGenerator: ActorRef,

@@ -47,6 +47,9 @@ import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
 
+/** Responsible for generating block candidates and validating solutions.
+  * It is observing changes of history, utxo state, mempool and newly applied blocks
+  * to generate valid block candidates when it is needed. */
 class CandidateGenerator(
   minerPk: ProveDlog,
   readersHolderRef: ActorRef,
@@ -62,7 +65,10 @@ class CandidateGenerator(
   implicit private val timeout: Timeout                     = 5.seconds
 
   /** retrieve Readers once on start and then get updated by events */
-  override def preStart(): Unit = readersHolderRef ! GetReaders
+  override def preStart(): Unit = {
+    log.info("CandidateGenerator is starting")
+    readersHolderRef ! GetReaders
+  }
 
   /** checks that current candidate block is cached with given `txs` */
   private def cachedFor(
@@ -262,6 +268,7 @@ object CandidateGenerator extends ScorexLogging {
     reply: Boolean
   )
 
+  /** Local state of candidate generator to avoid mutable vars */
   case class CandidateGeneratorState(
     cache: Option[Candidate],
     solvedBlock: Option[ErgoFullBlock],
@@ -739,7 +746,7 @@ object CandidateGenerator extends ScorexLogging {
     res
   }
 
-  //Checks that transaction "tx" is not spending outputs spent already by transactions "txs"
+  /** Checks that transaction "tx" is not spending outputs spent already by transactions "txs" */
   def doublespend(txs: Seq[ErgoTransaction], tx: ErgoTransaction): Boolean = {
     val txsInputs = txs.flatMap(_.inputs.map(_.boxId))
     tx.inputs.exists(i => txsInputs.exists(_.sameElements(i.boxId)))

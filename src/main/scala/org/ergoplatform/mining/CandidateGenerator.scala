@@ -84,10 +84,13 @@ class CandidateGenerator(
     log.info(
       s"Preparing new candidate on getting new block at ${bestFullBlockOpt.map(_.height)}"
     )
-    if (bestFullBlockOpt.exists(needNewCandidate(state.cache, _)) || state.solvedBlock.nonEmpty && (state.solvedBlock
-          .map(_.parentId) != bestFullBlockOpt
-          .map(_.id))) {
-      context.become(initialized(state.copy(cache = None, solvedBlock = None)))
+    if (bestFullBlockOpt.exists(needNewCandidate(state.cache, _))) {
+      if (state.solvedBlock.nonEmpty && (state.solvedBlock
+        .map(_.parentId) != bestFullBlockOpt
+        .map(_.id)))
+        context.become(initialized(state.copy(cache = None, solvedBlock = None)))
+      else
+        context.become(initialized(state.copy(cache = None)))
       self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
     } else {
       context.become(initialized(state))

@@ -71,18 +71,27 @@ class CandidateGenerator(
   }
 
   /** When new block is applied, either one mined by us or received from peers,
-    * we need to generate new candidate and possibly discard existing solution */
+    * we need to generate new candidate and discard existing solution
+    * if either candidate or solution is behind
+    * This logic is called on both events SemanticallySuccessfulModifier and ChangedHistory
+    * as we don't have control over ordering of these two events,
+    * ChangedHistory must happen first to update the state's history before is used on SemanticallySuccessfulModifier
+    */
   private def onHistoryChangedEvent(
     state: CandidateGeneratorState,
     bestFullBlockOpt: Option[ErgoFullBlock]
   ): Unit = {
-    if (state.solvedBlock.nonEmpty && (state.solvedBlock.map(_.parentId) != bestFullBlockOpt
+    log.info(
+      s"Preparing new candidate on getting new block at ${bestFullBlockOpt.map(_.height)}"
+    )
+    if (bestFullBlockOpt.exists(needNewCandidate(state.cache, _)) || state.solvedBlock.nonEmpty && (state.solvedBlock
+          .map(_.parentId) != bestFullBlockOpt
           .map(_.id))) {
       context.become(initialized(state.copy(cache = None, solvedBlock = None)))
+      self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
     } else {
-      context.become(initialized(state.copy(cache = None)))
+      context.become(initialized(state))
     }
-    self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
   }
 
   /** Send solved block to local blockchain controller */
@@ -137,14 +146,7 @@ class CandidateGenerator(
 
   private def initialized(state: CandidateGeneratorState): Receive = {
     case ChangedHistory(h: ErgoHistoryReader) =>
-      val newState = state.copy(hr = h)
-      if (h.bestFullBlockOpt.exists(needNewCandidate(newState.cache, _))) {
-        // this logic is duplicated from SemanticallySuccessfulModifier as we don't have control
-        // over ordering of these two events, ChangedHistory must happen first to update the state's
-        // history before it is used on SemanticallySuccessfulModifier
-        onHistoryChangedEvent(newState, h.bestFullBlockOpt)
-      } else
-        context.become(initialized(newState))
+      onHistoryChangedEvent(state.copy(hr = h), h.bestFullBlockOpt)
     case ChangedState(s: UtxoStateReader) =>
       context.become(initialized(state.copy(sr = s)))
     case ChangedMempool(mp: ErgoMemPoolReader) =>
@@ -158,10 +160,8 @@ class CandidateGenerator(
       * That means that our candidate is outdated. Should produce new candidate for ourselves.
       * Stop all current threads and re-run them with newly produced candidate.
       */
-    case SemanticallySuccessfulModifier(mod: ErgoFullBlock)
-        if needNewCandidate(state.cache, mod) =>
-      log.info(s"Preparing new candidate on getting new block at ${mod.height}")
-      onHistoryChangedEvent(state, state.hr.bestFullBlockOpt)
+    case SemanticallySuccessfulModifier(mod: ErgoFullBlock) =>
+      onHistoryChangedEvent(state, Some(mod))
 
     case SemanticallySuccessfulModifier(_) =>
     // Just ignore all other modifiers.

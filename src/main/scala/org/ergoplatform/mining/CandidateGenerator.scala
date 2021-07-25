@@ -120,10 +120,10 @@ class CandidateGenerator(
       context.system.eventStream.subscribe(self, classOf[NodeViewChange])
     case Readers(_, _, _, _) =>
       log.error("Invalid readers state, mining is possible in UTXO mode only")
-    case gen @ GenerateCandidate(_, _) =>
+    case m =>
       // retry until initialized
       context.system.scheduler
-        .scheduleOnce(100.millis, self, gen)(context.dispatcher, sender())
+        .scheduleOnce(100.millis, self, m)(context.dispatcher, sender())
   }
 
   private def initialized(state: CandidateGeneratorState): Receive = {

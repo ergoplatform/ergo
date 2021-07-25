@@ -110,7 +110,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     val m3Count =
       testProbe.expectMsgClass(50.millis, classOf[ErgoMiningThread.SolvedBlocksCount])
 
-    List(m1Count, m2Count, m3Count).map(_.count).sum shouldBe 3
+    List(m1Count, m2Count, m3Count).map(_.count).sum should be >= 3
     system.terminate()
   }
 
@@ -132,6 +132,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         defaultSettings
       )
 
+    expectNoMessage(1.second)
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
 
     val block = testProbe.expectMsgPF(candidateGenDelay) {

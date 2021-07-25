@@ -1,7 +1,7 @@
 package org.ergoplatform.mining
 
 import akka.actor.{ActorRef, ActorSystem}
-import akka.pattern.ask
+import akka.pattern.{StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
@@ -38,8 +38,10 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
   implicit private val timeout: Timeout = defaultTimeout
 
-  val newBlockSignal: Class[SemanticallySuccessfulModifier[_]] = classOf[SemanticallySuccessfulModifier[_]]
-  val newBlockDelay: FiniteDuration = 30 seconds
+  private val newBlockSignal: Class[SemanticallySuccessfulModifier[_]] = classOf[SemanticallySuccessfulModifier[_]]
+  private val newBlockDelay: FiniteDuration = 30 seconds
+  private val candidateGenDelay: FiniteDuration    = 3.seconds
+  private val blockValidationDelay: FiniteDuration = 2.seconds
 
   private def getWorkMessage(minerRef: ActorRef, mandatoryTransactions: Seq[ErgoTransaction]): WorkMessage =
     await(minerRef.askWithStatus(GenerateCandidate(mandatoryTransactions, reply = true)).mapTo[Candidate].map(_.externalVersion))
@@ -94,7 +96,6 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val tx = defaultProver.sign(unsignedTx, IndexedSeq(boxToSpend), IndexedSeq(), r.s.stateContext).get
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx))
     expectNoMessage(1 seconds)
-    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 1
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
@@ -249,7 +250,15 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx1))
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-    minerRef.tell(GenerateCandidate(Seq(tx2), reply = false), testProbe.ref)
+    minerRef.tell(GenerateCandidate(Seq(tx2), reply = true), testProbe.ref)
+    testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        val block = defaultSettings.chainSettings.powScheme
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .get
+        minerRef.tell(block.header.powSolution, testProbe.ref)
+    }
+    testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)

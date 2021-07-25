@@ -128,6 +128,9 @@ class CandidateGenerator(
 
   private def initialized(state: CandidateGeneratorState): Receive = {
     case ChangedHistory(h: ErgoHistoryReader) =>
+      if (state.solvedBlock.nonEmpty && (state.solvedBlock.map(_.parentId) != state.hr.bestFullBlockOpt
+            .map(_.id)))
+        restartState(state)
       context.become(initialized(state.copy(hr = h)))
     case ChangedState(s: UtxoStateReader) =>
       context.become(initialized(state.copy(sr = s)))

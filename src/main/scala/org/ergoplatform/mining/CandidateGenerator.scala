@@ -29,6 +29,7 @@ import scorex.core.NodeViewHolder.ReceivableMessages.{
   EliminateTransactions,
   LocallyGeneratedModifier
 }
+import scorex.core.block.Block
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.ValidationSettings
@@ -41,7 +42,6 @@ import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ProverResult
 import special.collection.Coll
-
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
@@ -70,27 +70,6 @@ class CandidateGenerator(
     readersHolderRef ! GetReaders
   }
 
-  /** checks that current candidate block is cached with given `txs` */
-  private def cachedFor(
-    candidateOpt: Option[Candidate],
-    txs: Seq[ErgoTransaction]
-  ): Boolean = {
-    candidateOpt.isDefined && candidateOpt.exists { c =>
-      txs.isEmpty || (txs.size == c.txsToInclude.size && txs.forall(
-        c.txsToInclude.contains
-      ))
-    }
-  }
-
-  /** we need new candidate if given block is not parent of our cached block */
-  private def needNewCandidate(
-    cache: Option[Candidate],
-    b: ErgoFullBlock
-  ): Boolean = {
-    val parentHeaderIdOpt = cache.map(_.candidateBlock).flatMap(_.parentOpt).map(_.id)
-    !parentHeaderIdOpt.contains(b.header.id)
-  }
-
   /** clear solution and cached block candidate and generate fresh one */
   private def restartState(state: CandidateGeneratorState): Unit = {
     context.become(initialized(state.copy(cache = None, solvedBlock = None)))
@@ -112,9 +91,17 @@ class CandidateGenerator(
   }
 
   override def receive: Receive = {
+
     /** first we need to get Readers to have some initial state to work with */
     case Readers(h, s: UtxoStateReader, m, _) =>
-      log.info("CandidateGenerator successfully initialized")
+      val lastHeaders   = h.lastHeaders(500).headers
+      val avgMiningTime = getBlockMiningTimeAvg(lastHeaders.map(_.timestamp))
+      val avgTxsCount = getTxsPerBlockCountAvg(
+        lastHeaders.flatMap(h.getFullBlock).map(_.transactions.size)
+      )
+      log.info(
+        s"CandidateGenerator initialized, avgMiningTime: ${avgMiningTime.toSeconds}s, avgTxsCount: $avgTxsCount"
+      )
       context.become(
         initialized(
           CandidateGeneratorState(
@@ -298,7 +285,44 @@ object CandidateGenerator extends ScorexLogging {
       s"CandidateGenerator-${Random.alphanumeric.take(5).mkString}"
     )
 
-  // helper which is checking that inputs of the transaction are not spent
+  /** checks that current candidate block is cached with given `txs` */
+  def cachedFor(
+    candidateOpt: Option[Candidate],
+    txs: Seq[ErgoTransaction]
+  ): Boolean = {
+    candidateOpt.isDefined && candidateOpt.exists { c =>
+      txs.isEmpty || (txs.size == c.txsToInclude.size && txs.forall(
+        c.txsToInclude.contains
+      ))
+    }
+  }
+
+  /** we need new candidate if given block is not parent of our cached block */
+  def needNewCandidate(
+    cache: Option[Candidate],
+    b: ErgoFullBlock
+  ): Boolean = {
+    val parentHeaderIdOpt = cache.map(_.candidateBlock).flatMap(_.parentOpt).map(_.id)
+    !parentHeaderIdOpt.contains(b.header.id)
+  }
+
+  /** Calculate average mining time from latest block header timestamps */
+  def getBlockMiningTimeAvg(
+    timestamps: IndexedSeq[Block.Timestamp]
+  ): FiniteDuration = {
+    val miningTimes =
+      timestamps.sorted
+        .sliding(2, 1)
+        .map { case IndexedSeq(prev, next) => next - prev }
+        .toVector
+    Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
+  }
+
+  /** Get average count of transactions per block */
+  def getTxsPerBlockCountAvg(txsPerBlock: IndexedSeq[Int]): Long =
+    Math.round(txsPerBlock.sum / txsPerBlock.length.toDouble)
+
+  /** Helper which is checking that inputs of the transaction are not spent */
   private def inputsNotSpent(tx: ErgoTransaction, s: UtxoStateReader): Boolean =
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
 

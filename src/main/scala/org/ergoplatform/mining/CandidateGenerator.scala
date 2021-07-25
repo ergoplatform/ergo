@@ -70,9 +70,18 @@ class CandidateGenerator(
     readersHolderRef ! GetReaders
   }
 
-  /** clear solution and cached block candidate and generate fresh one */
-  private def restartState(state: CandidateGeneratorState): Unit = {
-    context.become(initialized(state.copy(cache = None, solvedBlock = None)))
+  /** When new block is applied, either one mined by us or received from peers,
+    * we need to generate new candidate and possibly discard existing solution */
+  private def onHistoryChangedEvent(
+    state: CandidateGeneratorState,
+    bestFullBlockOpt: Option[ErgoFullBlock]
+  ): Unit = {
+    if (state.solvedBlock.nonEmpty && (state.solvedBlock.map(_.parentId) != bestFullBlockOpt
+          .map(_.id))) {
+      context.become(initialized(state.copy(cache = None, solvedBlock = None)))
+    } else {
+      context.become(initialized(state.copy(cache = None)))
+    }
     self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
   }
 
@@ -128,10 +137,14 @@ class CandidateGenerator(
 
   private def initialized(state: CandidateGeneratorState): Receive = {
     case ChangedHistory(h: ErgoHistoryReader) =>
-      if (state.solvedBlock.nonEmpty && (state.solvedBlock.map(_.parentId) != state.hr.bestFullBlockOpt
-            .map(_.id)))
-        restartState(state)
-      context.become(initialized(state.copy(hr = h)))
+      val newState = state.copy(hr = h)
+      if (h.bestFullBlockOpt.exists(needNewCandidate(newState.cache, _))) {
+        // this logic is duplicated from SemanticallySuccessfulModifier as we don't have control
+        // over ordering of these two events, ChangedHistory must happen first to update the state's
+        // history before it is used on SemanticallySuccessfulModifier
+        onHistoryChangedEvent(newState, h.bestFullBlockOpt)
+      } else
+        context.become(initialized(newState))
     case ChangedState(s: UtxoStateReader) =>
       context.become(initialized(state.copy(sr = s)))
     case ChangedMempool(mp: ErgoMemPoolReader) =>
@@ -148,9 +161,7 @@ class CandidateGenerator(
     case SemanticallySuccessfulModifier(mod: ErgoFullBlock)
         if needNewCandidate(state.cache, mod) =>
       log.info(s"Preparing new candidate on getting new block at ${mod.height}")
-      if (state.solvedBlock.nonEmpty && (state.solvedBlock.map(_.parentId) != state.hr.bestFullBlockOpt
-            .map(_.id)))
-        restartState(state)
+      onHistoryChangedEvent(state, state.hr.bestFullBlockOpt)
 
     case SemanticallySuccessfulModifier(_) =>
     // Just ignore all other modifiers.

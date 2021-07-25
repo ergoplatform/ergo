@@ -219,8 +219,16 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
           .get
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
     }
-    testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    testProbe.fishForMessage(blockValidationDelay) {
+      case StatusReply.Success(())           => true
+      case SemanticallySuccessfulModifier(_) => false
+
+    }
+    testProbe.fishForMessage(newBlockDelay) {
+      case StatusReply.Success(())           => true
+      case SemanticallySuccessfulModifier(_) => false
+
+    }
 
     // new transaction should be cleared from pool after applying new block
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0

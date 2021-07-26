@@ -70,28 +70,6 @@ class CandidateGenerator(
     readersHolderRef ! GetReaders
   }
 
-  /** When new block is applied, either one mined by us or received from peers,
-    * we need to generate new candidate and discard existing solution
-    * if either candidate or solution is behind
-    */
-  private def onHistoryChangedEvent(
-    state: CandidateGeneratorState,
-    bestFullBlockOpt: Option[ErgoFullBlock]
-  ): Unit = {
-    log.info(
-      s"Preparing new candidate on getting new block at ${bestFullBlockOpt.map(_.height)}"
-    )
-    if (needNewCandidate(state.cache, bestFullBlockOpt)) {
-      if (needNewSolution(state.solvedBlock, bestFullBlockOpt))
-        context.become(initialized(state.copy(cache = None, solvedBlock = None)))
-      else
-        context.become(initialized(state.copy(cache = None)))
-      self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
-    } else {
-      context.become(initialized(state))
-    }
-  }
-
   /** Send solved block to local blockchain controller */
   private def sendToNodeView(newBlock: ErgoFullBlock): Unit = {
     log.info(
@@ -153,13 +131,22 @@ class CandidateGenerator(
     // Just ignore all other NodeView Changes
 
     /**
-      * Case when we are already mining by the time modifier arrives and
-      * get block from node view that has header's id which isn't equals to our candidate's parent id.
-      * That means that our candidate is outdated. Should produce new candidate for ourselves.
-      * Stop all current threads and re-run them with newly produced candidate.
+      * When new block is applied, either one mined by us or received from peers isn't equal to our candidate's parent,
+      * we need to generate new candidate and possibly also discard existing solution if it is also behind
       */
     case SemanticallySuccessfulModifier(mod: ErgoFullBlock) =>
-      onHistoryChangedEvent(state, Some(mod))
+      log.info(
+        s"Preparing new candidate on getting new block at ${mod.height}"
+      )
+      if (needNewCandidate(state.cache, mod)) {
+        if (needNewSolution(state.solvedBlock, mod))
+          context.become(initialized(state.copy(cache = None, solvedBlock = None)))
+        else
+          context.become(initialized(state.copy(cache = None)))
+        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+      } else {
+        context.become(initialized(state))
+      }
 
     case SemanticallySuccessfulModifier(_) =>
     // Just ignore all other modifiers.
@@ -312,17 +299,18 @@ object CandidateGenerator extends ScorexLogging {
   /** we need new candidate if given block is not parent of our cached block */
   def needNewCandidate(
     cache: Option[Candidate],
-    blockOpt: Option[ErgoFullBlock]
+    bestFullBlock: ErgoFullBlock
   ): Boolean = {
-    blockOpt.exists { block =>
-      val parentHeaderIdOpt = cache.map(_.candidateBlock).flatMap(_.parentOpt).map(_.id)
-      !parentHeaderIdOpt.contains(block.header.id)
-    }
+    val parentHeaderIdOpt = cache.map(_.candidateBlock).flatMap(_.parentOpt).map(_.id)
+    !parentHeaderIdOpt.contains(bestFullBlock.header.id)
   }
 
   /** Solution is valid only if bestFullBlock on the chain is its parent */
-  def needNewSolution(solvedBlock: Option[ErgoFullBlock], bestFullBlockOpt: Option[ErgoFullBlock]): Boolean =
-    solvedBlock.nonEmpty && (solvedBlock.map(_.parentId) != bestFullBlockOpt.map(_.id))
+  def needNewSolution(
+    solvedBlock: Option[ErgoFullBlock],
+    bestFullBlock: ErgoFullBlock
+  ): Boolean =
+    solvedBlock.nonEmpty && !solvedBlock.map(_.parentId).contains(bestFullBlock.id)
 
   /** Calculate average mining time from latest block header timestamps */
   def getBlockMiningTimeAvg(

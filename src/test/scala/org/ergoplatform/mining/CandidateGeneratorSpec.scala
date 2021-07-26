@@ -145,7 +145,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     // now block should be cached
     (0 to 20).foreach { _ =>
       candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
-      testProbe.expectMsgClass(2.millis, classOf[StatusReply[_]])
+      testProbe.expectMsgClass(5.millis, classOf[StatusReply[_]])
     }
 
     candidateGenerator.tell(block.header.powSolution, testProbe.ref)

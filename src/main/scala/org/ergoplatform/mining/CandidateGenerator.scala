@@ -112,26 +112,6 @@ class CandidateGenerator(
     sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
   }
 
-  /** Regenerate candidate to let new transactions in, miners are polling for candidate in ~ 100ms
-    * interval so they switch to it.
-    * If blockCandidateGenerationInterval elapsed since last block generation,
-    * then new tx in mempool is a reasonable trigger of candidate regeneration */
-  private def hasCandidateExpired(state: CandidateGeneratorState): Boolean = {
-    def candidateAge(c: Candidate): FiniteDuration =
-      (timeProvider.time() - c.candidateBlock.timestamp).millis
-    // non-empty solved block means we wait for newly mined block to be applied
-    if (state.solvedBlock.isEmpty) {
-      state.cachedCandidate match {
-        // if current candidate is older than candidateGenInterval
-        case Some(c) if candidateGenInterval.compare(candidateAge(c)) <= 0 =>
-          log.info(s"Regenerating block candidate")
-          true
-        case _ =>
-          false
-      }
-    } else false
-  }
-
   override def receive: Receive = {
 
     /** first we need to get Readers to have some initial state to work with */
@@ -174,7 +154,12 @@ class CandidateGenerator(
     case ChangedState(s: UtxoStateReader) =>
       context.become(initialized(state.copy(sr = s)))
     case ChangedMempool(mp: ErgoMemPoolReader) =>
-      if (hasCandidateExpired(state)) {
+      if (hasCandidateExpired(
+            state.cachedCandidate,
+            state.solvedBlock,
+            timeProvider,
+            candidateGenInterval
+          )) {
         context.become(initialized(state.copy(cachedCandidate = None, mpr = mp)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
       } else {
@@ -346,9 +331,9 @@ object CandidateGenerator extends ScorexLogging {
   /** we need new candidate if given block is not parent of our cached block */
   def needNewCandidate(
     cache: Option[Candidate],
-    blockOpt: Option[ErgoFullBlock]
+    bestFullBlockOpt: Option[ErgoFullBlock]
   ): Boolean = {
-    blockOpt.exists { block =>
+    bestFullBlockOpt.exists { block =>
       val parentHeaderIdOpt = cache.map(_.candidateBlock).flatMap(_.parentOpt).map(_.id)
       !parentHeaderIdOpt.contains(block.header.id)
     }
@@ -360,6 +345,31 @@ object CandidateGenerator extends ScorexLogging {
     bestFullBlockOpt: Option[ErgoFullBlock]
   ): Boolean =
     solvedBlock.nonEmpty && (solvedBlock.map(_.parentId) != bestFullBlockOpt.map(_.id))
+
+  /** Regenerate candidate to let new transactions in, miners are polling for candidate in ~ 100ms
+    * interval so they switch to it.
+    * If blockCandidateGenerationInterval elapsed since last block generation,
+    * then new tx in mempool is a reasonable trigger of candidate regeneration */
+  def hasCandidateExpired(
+    cachedCandidate: Option[Candidate],
+    solvedBlock: Option[ErgoFullBlock],
+    timeProvider: NetworkTimeProvider,
+    candidateGenInterval: FiniteDuration
+  ): Boolean = {
+    def candidateAge(c: Candidate): FiniteDuration =
+      (timeProvider.time() - c.candidateBlock.timestamp).millis
+    // non-empty solved block means we wait for newly mined block to be applied
+    if (solvedBlock.isEmpty) {
+      cachedCandidate match {
+        // if current candidate is older than candidateGenInterval
+        case Some(c) if candidateGenInterval.compare(candidateAge(c)) <= 0 =>
+          log.info(s"Regenerating block candidate")
+          true
+        case _ =>
+          false
+      }
+    } else false
+  }
 
   /** Calculate average mining time from latest block header timestamps */
   def getBlockMiningTimeAvg(

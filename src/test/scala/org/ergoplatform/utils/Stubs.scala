@@ -341,8 +341,8 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val minimalSuffix = 2
     val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, complexityLimit, miningDelay, useExternalMiner = false,
-      internalMinersCount = 1, internalMinerPollingInterval = 1.second,miningPubKeyHex = None,
+      PoPoWBootstrap, minimalSuffix, mining = false, complexityLimit, miningDelay, blockCandidateGenerationInterval = 45.seconds,
+      useExternalMiner = false, internalMinersCount = 1, internalMinerPollingInterval = 1.second,miningPubKeyHex = None,
       offlineGeneration = false, 200, 100000, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null

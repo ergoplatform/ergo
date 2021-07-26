@@ -64,6 +64,9 @@ class CandidateGenerator(
   implicit private val dispatcher: ExecutionContextExecutor = context.system.dispatcher
   implicit private val timeout: Timeout                     = 5.seconds
 
+  private val candidateGenInterval =
+    ergoSettings.nodeSettings.blockCandidateGenerationInterval
+
   /** retrieve Readers once on start and then get updated by events */
   override def preStart(): Unit = {
     log.info("CandidateGenerator is starting")
@@ -104,6 +107,23 @@ class CandidateGenerator(
       newBlock.mandatoryBlockSections
     }
     sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
+  }
+
+  /** Regenerate candidate to let new transactions in, miners are polling for candidate in ~ 100ms
+    * interval so they switch to it */
+  private def regenerateExpiredCandidate(state: CandidateGeneratorState): Unit = {
+    if (state.solvedBlock.isEmpty) { // non-empty solved block means we wait for newly mined block to be applied
+      state.cache.foreach { candidate =>
+        val candidateAge =
+          (timeProvider.time() - candidate.candidateBlock.timestamp).millis
+        // if current candidate is older than candidateGenInterval
+        if (candidateGenInterval.compare(candidateAge) <= 0) {
+          log.info(s"Generating new block candidate to replace expired one")
+          context.become(initialized(state.copy(cache = None)))
+          self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+        }
+      }
+    }
   }
 
   override def receive: Receive = {
@@ -148,6 +168,8 @@ class CandidateGenerator(
     case ChangedState(s: UtxoStateReader) =>
       context.become(initialized(state.copy(sr = s)))
     case ChangedMempool(mp: ErgoMemPoolReader) =>
+      // new tx in mempool is a reasonable trigger of candidate regeneration
+      regenerateExpiredCandidate(state)
       context.become(initialized(state.copy(mpr = mp)))
     case _: NodeViewChange =>
     // Just ignore all other NodeView Changes

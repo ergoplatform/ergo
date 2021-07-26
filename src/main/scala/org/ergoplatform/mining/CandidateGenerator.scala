@@ -73,9 +73,6 @@ class CandidateGenerator(
   /** When new block is applied, either one mined by us or received from peers,
     * we need to generate new candidate and discard existing solution
     * if either candidate or solution is behind
-    * This logic is called on both events SemanticallySuccessfulModifier and ChangedHistory
-    * as we don't have control over ordering of these two events,
-    * ChangedHistory must happen first to update the state's history before is used on SemanticallySuccessfulModifier
     */
   private def onHistoryChangedEvent(
     state: CandidateGeneratorState,
@@ -84,10 +81,8 @@ class CandidateGenerator(
     log.info(
       s"Preparing new candidate on getting new block at ${bestFullBlockOpt.map(_.height)}"
     )
-    if (bestFullBlockOpt.exists(needNewCandidate(state.cache, _))) {
-      if (state.solvedBlock.nonEmpty && (state.solvedBlock
-        .map(_.parentId) != bestFullBlockOpt
-        .map(_.id)))
+    if (needNewCandidate(state.cache, bestFullBlockOpt)) {
+      if (needNewSolution(state.solvedBlock, bestFullBlockOpt))
         context.become(initialized(state.copy(cache = None, solvedBlock = None)))
       else
         context.become(initialized(state.copy(cache = None)))
@@ -149,7 +144,7 @@ class CandidateGenerator(
 
   private def initialized(state: CandidateGeneratorState): Receive = {
     case ChangedHistory(h: ErgoHistoryReader) =>
-      onHistoryChangedEvent(state.copy(hr = h), h.bestFullBlockOpt)
+      context.become(initialized(state.copy(hr = h)))
     case ChangedState(s: UtxoStateReader) =>
       context.become(initialized(state.copy(sr = s)))
     case ChangedMempool(mp: ErgoMemPoolReader) =>
@@ -317,11 +312,17 @@ object CandidateGenerator extends ScorexLogging {
   /** we need new candidate if given block is not parent of our cached block */
   def needNewCandidate(
     cache: Option[Candidate],
-    b: ErgoFullBlock
+    blockOpt: Option[ErgoFullBlock]
   ): Boolean = {
-    val parentHeaderIdOpt = cache.map(_.candidateBlock).flatMap(_.parentOpt).map(_.id)
-    !parentHeaderIdOpt.contains(b.header.id)
+    blockOpt.exists { block =>
+      val parentHeaderIdOpt = cache.map(_.candidateBlock).flatMap(_.parentOpt).map(_.id)
+      !parentHeaderIdOpt.contains(block.header.id)
+    }
   }
+
+  /** Solution is valid only if bestFullBlock on the chain is its parent */
+  def needNewSolution(solvedBlock: Option[ErgoFullBlock], bestFullBlockOpt: Option[ErgoFullBlock]): Boolean =
+    solvedBlock.nonEmpty && (solvedBlock.map(_.parentId) != bestFullBlockOpt.map(_.id))
 
   /** Calculate average mining time from latest block header timestamps */
   def getBlockMiningTimeAvg(

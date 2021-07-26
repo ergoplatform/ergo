@@ -217,7 +217,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
-        expectNoMessage(100.millis) // let's pretend we are mining
+        // let's pretend we are mining at least a bit so it is realistic
+        expectNoMessage(100.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
     }
     // we fish either for ack or SSM as the order is non-deterministic

@@ -152,11 +152,11 @@ class CandidateGenerator(
       log.info(
         s"Preparing new candidate on getting new block at ${mod.height}"
       )
-      if (needNewCandidate(state.cache, mod)) {
+      if (needNewCandidate(state.cachedCandidate, mod)) {
         if (needNewSolution(state.solvedBlock, mod))
-          context.become(initialized(state.copy(cache = None, solvedBlock = None)))
+          context.become(initialized(state.copy(cachedCandidate = None, solvedBlock = None)))
         else
-          context.become(initialized(state.copy(cache = None)))
+          context.become(initialized(state.copy(cachedCandidate = None)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
       } else {
         context.become(initialized(state))

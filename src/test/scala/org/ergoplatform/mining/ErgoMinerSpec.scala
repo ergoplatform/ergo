@@ -258,9 +258,15 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
           .get
         minerRef.tell(block.header.powSolution, testProbe.ref)
     }
-    testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
-
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    // we fish either for ack or SSM as the order is non-deterministic
+    testProbe.fishForMessage(blockValidationDelay) {
+      case StatusReply.Success(())           => true
+      case SemanticallySuccessfulModifier(_) => false
+    }
+    testProbe.fishForMessage(newBlockDelay) {
+      case StatusReply.Success(())           => false
+      case SemanticallySuccessfulModifier(_) => true
+    }
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0

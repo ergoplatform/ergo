@@ -110,7 +110,9 @@ class CandidateGenerator(
   }
 
   /** Regenerate candidate to let new transactions in, miners are polling for candidate in ~ 100ms
-    * interval so they switch to it */
+    * interval so they switch to it.
+    * If blockCandidateGenerationInterval elapsed since last block generation,
+    * then new tx in mempool is a reasonable trigger of candidate regeneration */
   private def regenerateExpiredCandidate(state: CandidateGeneratorState): Unit = {
     if (state.solvedBlock.isEmpty) { // non-empty solved block means we wait for newly mined block to be applied
       state.cache.foreach { candidate =>
@@ -118,7 +120,9 @@ class CandidateGenerator(
           (timeProvider.time() - candidate.candidateBlock.timestamp).millis
         // if current candidate is older than candidateGenInterval
         if (candidateGenInterval.compare(candidateAge) <= 0) {
-          log.info(s"Generating new block candidate to replace expired one")
+          log.info(
+            s"Generating new block candidate to replace one old ${candidateAge.toSeconds} seconds"
+          )
           context.become(initialized(state.copy(cache = None)))
           self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
         }
@@ -168,9 +172,7 @@ class CandidateGenerator(
     case ChangedState(s: UtxoStateReader) =>
       context.become(initialized(state.copy(sr = s)))
     case ChangedMempool(mp: ErgoMemPoolReader) =>
-      // new tx in mempool is a reasonable trigger of candidate regeneration
-      regenerateExpiredCandidate(state)
-      context.become(initialized(state.copy(mpr = mp)))
+      regenerateExpiredCandidate(state.copy(mpr = mp))
     case _: NodeViewChange =>
     // Just ignore all other NodeView Changes
 
@@ -343,7 +345,10 @@ object CandidateGenerator extends ScorexLogging {
   }
 
   /** Solution is valid only if bestFullBlock on the chain is its parent */
-  def needNewSolution(solvedBlock: Option[ErgoFullBlock], bestFullBlockOpt: Option[ErgoFullBlock]): Boolean =
+  def needNewSolution(
+    solvedBlock: Option[ErgoFullBlock],
+    bestFullBlockOpt: Option[ErgoFullBlock]
+  ): Boolean =
     solvedBlock.nonEmpty && (solvedBlock.map(_.parentId) != bestFullBlockOpt.map(_.id))
 
   /** Calculate average mining time from latest block header timestamps */

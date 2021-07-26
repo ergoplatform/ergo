@@ -257,7 +257,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
         // let's pretend we are mining at least a bit so it is realistic
-        expectNoMessage(100.millis)
+        expectNoMessage(200.millis)
         minerRef.tell(block.header.powSolution, testProbe.ref)
     }
     // we fish either for ack or SSM as the order is non-deterministic

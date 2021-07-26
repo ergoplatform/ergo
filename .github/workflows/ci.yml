@@ -1,6 +1,13 @@
 name: CI
 on:
   push:
+    branches:
+      - master
+      - develop
+  pull_request:
+    types:
+      - opened
+      - synchronize
 jobs:
   test:
     strategy:

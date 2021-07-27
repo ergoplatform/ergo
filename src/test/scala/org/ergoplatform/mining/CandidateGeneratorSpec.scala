@@ -35,7 +35,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
 
-  val defaultSettings: ErgoSettings = {
+  private val defaultSettings: ErgoSettings = {
     val empty = ErgoSettings.read()
     val nodeSettings = empty.nodeSettings.copy(
       mining                       = true,
@@ -46,6 +46,19 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     )
     val chainSettings = empty.chainSettings.copy(blockInterval = 1.seconds)
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
+  }
+
+  // when solution is submitted, then ack reply and applied modifier event are racing
+  private def expectEitherAckOrModifier(testProbe: TestProbe): Any = {
+    // we fish either for ack or SSM as the order is non-deterministic
+    testProbe.fishForMessage(blockValidationDelay) {
+      case StatusReply.Success(())           => true
+      case SemanticallySuccessfulModifier(_) => false
+    }
+    testProbe.fishForMessage(newBlockDelay) {
+      case StatusReply.Success(())           => false
+      case SemanticallySuccessfulModifier(_) => true
+    }
   }
 
   it should "provide candidate to internal miner and verify and apply his solution" in new TestKit(
@@ -150,9 +163,9 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     }
 
     candidateGenerator.tell(block.header.powSolution, testProbe.ref)
-    testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
-    // after applying solution
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+
+    expectEitherAckOrModifier(testProbe)
+
     system.terminate()
   }
 
@@ -197,9 +210,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
     }
-    testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal) // new block applied
-
+    expectEitherAckOrModifier(testProbe)
     // build new transaction that uses miner's reward as input
     val prop: DLogProtocol.ProveDlog =
       DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
@@ -271,9 +282,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
           .get
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
     }
-    testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal) // new block applied
-
+    expectEitherAckOrModifier(testProbe)
     // build new transaction that uses miner's reward as input
     val prop: DLogProtocol.ProveDlog =
       DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
@@ -306,15 +315,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
     }
-    // we fish either for ack or SSM as the order is non-deterministic
-    testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(())           => true
-      case SemanticallySuccessfulModifier(_) => false
-    }
-    testProbe.fishForMessage(newBlockDelay) {
-      case StatusReply.Success(())           => false
-      case SemanticallySuccessfulModifier(_) => true
-    }
+
+    expectEitherAckOrModifier(testProbe)
 
     // new transaction should be cleared from pool after applying new block
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0

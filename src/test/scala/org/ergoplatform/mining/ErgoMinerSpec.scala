@@ -46,7 +46,19 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
   private def getWorkMessage(minerRef: ActorRef, mandatoryTransactions: Seq[ErgoTransaction]): WorkMessage =
     await(minerRef.askWithStatus(GenerateCandidate(mandatoryTransactions, reply = true)).mapTo[Candidate].map(_.externalVersion))
 
-  val defaultSettings: ErgoSettings = {
+  // when solution is submitted, then ack reply and applied modifier event are racing (order is non-deterministic)
+  private def expectEitherAckOrModifier(testProbe: TestProbe): Any = {
+    testProbe.fishForMessage(blockValidationDelay) {
+      case StatusReply.Success(())           => true
+      case SemanticallySuccessfulModifier(_) => false
+    }
+    testProbe.fishForMessage(newBlockDelay) {
+      case StatusReply.Success(())           => false
+      case SemanticallySuccessfulModifier(_) => true
+    }
+  }
+
+  private val defaultSettings: ErgoSettings = {
     val empty = ErgoSettings.read()
 
     val nodeSettings = empty.nodeSettings.copy(mining = true,
@@ -260,15 +272,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
         expectNoMessage(200.millis)
         minerRef.tell(block.header.powSolution, testProbe.ref)
     }
-    // we fish either for ack or SSM as the order is non-deterministic
-    testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(())           => true
-      case SemanticallySuccessfulModifier(_) => false
-    }
-    testProbe.fishForMessage(newBlockDelay) {
-      case StatusReply.Success(())           => false
-      case SemanticallySuccessfulModifier(_) => true
-    }
+    expectEitherAckOrModifier(testProbe)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0

@@ -38,11 +38,11 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
   val defaultSettings: ErgoSettings = {
     val empty = ErgoSettings.read()
     val nodeSettings = empty.nodeSettings.copy(
-      mining             = true,
-      stateType          = StateType.Utxo,
-      miningDelay        = 1.second,
-      offlineGeneration  = true,
-      verifyTransactions = true
+      mining                       = true,
+      stateType                    = StateType.Utxo,
+      internalMinerPollingInterval = 1.second,
+      offlineGeneration            = true,
+      verifyTransactions           = true
     )
     val chainSettings = empty.chainSettings.copy(blockInterval = 1.seconds)
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)

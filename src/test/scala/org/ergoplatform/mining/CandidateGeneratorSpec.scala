@@ -207,7 +207,6 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         val block = settingsWithShortRegeneration.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
-        expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
     }
     expectEitherAckOrModifier(testProbe)
@@ -312,7 +311,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
         // let's pretend we are mining at least a bit so it is realistic
-        expectNoMessage(200.millis)
+        expectNoMessage(500.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
     }
 

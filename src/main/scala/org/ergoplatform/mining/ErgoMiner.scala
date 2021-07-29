@@ -40,13 +40,13 @@ class ErgoMiner(
       log.error("Mining is disabled")
     } else if (secretKeyOpt.isEmpty && !ergoSettings.nodeSettings.useExternalMiner) {
       log.info(
-        "Trying to use secret key from wallet for mining, wallet must be unlocked."
+        "Trying to use secret key from wallet for CPU mining, wallet must be unlocked."
       )
       self ! QueryWalletSecret
     } else { // mining pubKey is needed in both mining modes
       ergoSettings.miningPubKey match {
         case Some(pk) =>
-          log.info(s"Using public key from settings")
+          log.info(s"Using mining public key from settings")
           onStart(secretKeyOpt, pk)
         case None =>
           log.info("Trying to use public key from wallet for mining")

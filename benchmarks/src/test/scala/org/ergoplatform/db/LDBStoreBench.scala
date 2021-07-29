@@ -39,7 +39,7 @@ object LDBStoreBench
   val txsWithDbGen: Gen[(Seq[BlockTransactions], LDBKVStore)] = txsGen.map { bts =>
     val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     val db = storeLDB()
-    toInsert.grouped(5).foreach(db.insert)
+    toInsert.grouped(5).foreach(db.insert(_).get)
     bts -> storeLDB
   }
 
@@ -55,7 +55,7 @@ object LDBStoreBench
   private def benchWriteLDB(bts: Seq[BlockTransactions]): Unit = {
     val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     val db = storeLDB()
-    toInsert.grouped(5).foreach(db.insert)
+    toInsert.grouped(5).foreach(db.insert(_).get)
   }
 
   private def benchReadLDB(bts: Seq[BlockTransactions], db: LDBKVStore): Unit = {

@@ -170,7 +170,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     case ChangedState(s: ErgoStateReader@unchecked) =>
       val stateContext = s.stateContext
-      state.storage.updateStateContext(stateContext)
+      state.storage.updateStateContext(stateContext) // TODO unhandled https://github.com/ergoplatform/ergo/issues/1398
       val cp = stateContext.currentParameters
       val newState = ergoWalletService.updateUtxoState(state.copy(stateReaderOpt = Some(s), parameters = cp))
       context.become(loadedWallet(newState))
@@ -326,7 +326,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case UpdateChangeAddress(address) =>
-      state.storage.updateChangeAddress(address)
+      state.storage.updateChangeAddress(address) // TODO unhandled https://github.com/ergoplatform/ergo/issues/1398
 
     case RemoveScan(scanId) =>
       ergoWalletService.removeScan(state, scanId) match {

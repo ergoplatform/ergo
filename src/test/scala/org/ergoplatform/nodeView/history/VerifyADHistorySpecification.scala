@@ -324,7 +324,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
     val invalidChain = chain.takeRight(2)
 
     val progressInfo = ProgressInfo[PM](Some(invalidChain.head.parentId), invalidChain, Seq.empty, Seq.empty)
-    val report = history.reportModifierIsInvalid(invalidChain.head.header, progressInfo)
+    val report = history.reportModifierIsInvalid(invalidChain.head.header, progressInfo).get
     history = report._1
     val processInfo = report._2
     processInfo.toApply.isEmpty shouldBe true
@@ -347,7 +347,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
       history.contains(parentHeader.ADProofsId) shouldBe true
 
       val progressInfo = ProgressInfo[PM](Some(parentHeader.id), Seq(fullBlock), Seq.empty, Seq.empty)
-      val (repHistory, _) = history.reportModifierIsInvalid(fullBlock.blockTransactions, progressInfo)
+      val (repHistory, _) = history.reportModifierIsInvalid(fullBlock.blockTransactions, progressInfo).get
       repHistory.bestFullBlockOpt.value.header shouldBe history.bestHeaderOpt.value
       repHistory.bestHeaderOpt.value shouldBe parentHeader
     }

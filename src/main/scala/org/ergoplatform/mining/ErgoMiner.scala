@@ -1,6 +1,7 @@
 package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props, Stash}
+import akka.pattern.StatusReply
 import org.ergoplatform.mining.CandidateGenerator.GenerateCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.Header
@@ -69,7 +70,7 @@ class ErgoMiner(
       ergoSettings
     )
     context.become(starting(MinerState(secretKeyOpt, publicKey, candidateGeneratorRef)))
-    unstashAll() // due to StartMining message from ErgoApp and ReadMinerPk
+    unstashAll() // due to StartMining message from ErgoApp
   }
 
   override def receive: Receive = {
@@ -114,6 +115,9 @@ class ErgoMiner(
         QueryWalletSecret
       )(context.system.dispatcher)
 
+    case ReadMinerPk =>
+      sender() ! StatusReply.error("Miner PK not initialized")
+
     case _: scala.runtime.BoxedUnit =>
     // ignore, this message is caused by way of interaction with NodeViewHolder.
     case _ => // stashing all messages until miner is initialized, like StartMining message from ErgoApp
@@ -149,7 +153,7 @@ class ErgoMiner(
       log.error(s"Unexpected state of missing secret key for internal mining")
 
     case ReadMinerPk => // used in /mining/rewardAddress API method
-      sender() ! minerState.publicKey
+      sender() ! StatusReply.success(minerState.publicKey)
 
     /**
       * Non obvious but case when mining is enabled, but miner isn't started yet. Initialization case.
@@ -179,7 +183,7 @@ class ErgoMiner(
       minerState.candidateGeneratorRef forward solution
 
     case ReadMinerPk => // used in /mining/rewardAddress API method
-      sender() ! minerState.publicKey
+      sender() ! StatusReply.success(minerState.publicKey)
 
     case m =>
       log.warn(s"Unexpected message $m of class: ${m.getClass}")

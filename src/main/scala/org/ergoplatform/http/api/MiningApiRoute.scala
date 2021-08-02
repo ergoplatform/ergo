@@ -65,7 +65,7 @@ case class MiningApiRoute(miner: ActorRef,
 
   def rewardAddressR: Route = (path("rewardAddress") & get) {
     val addressF: Future[ErgoAddress] =
-      (miner ? ErgoMiner.ReadMinerPk)
+      miner.askWithStatus(ErgoMiner.ReadMinerPk)
         .mapTo[ProveDlog]
         .map { pk =>
           val script = ErgoScriptPredef.rewardOutputScript(ergoSettings.chainSettings.monetary.minerRewardDelay, pk)

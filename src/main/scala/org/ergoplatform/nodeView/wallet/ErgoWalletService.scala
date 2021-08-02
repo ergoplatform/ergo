@@ -521,7 +521,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
     }
 
   def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): Try[ErgoWalletState] =
-      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.stateContext, state.walletVars, block, state.outputsFilter)
+      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter)
         .map { case (reg, offReg, updatedOutputsFilter) => state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter)) }
 
   def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {

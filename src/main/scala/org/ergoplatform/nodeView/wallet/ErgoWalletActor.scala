@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.wallet
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, DeathPactException, OneForOneStrategy, Stash}
+import akka.pattern.StatusReply
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
@@ -169,11 +170,16 @@ class ErgoWalletActor(settings: ErgoSettings,
       context.become(loadedWallet(newState))
 
     case ChangedState(s: ErgoStateReader@unchecked) =>
-      val stateContext = s.stateContext
-      state.storage.updateStateContext(stateContext) // TODO unhandled https://github.com/ergoplatform/ergo/issues/1398
-      val cp = stateContext.currentParameters
-      val newState = ergoWalletService.updateUtxoState(state.copy(stateReaderOpt = Some(s), parameters = cp))
-      context.become(loadedWallet(newState))
+      state.storage.updateStateContext(s.stateContext) match {
+        case Success(_) =>
+          val cp = s.stateContext.currentParameters
+          val newState = ergoWalletService.updateUtxoState(state.copy(stateReaderOpt = Some(s), parameters = cp))
+          context.become(loadedWallet(newState))
+        case Failure(t) =>
+          val errorMsg = s"Updating wallet state context failed : ${t.getMessage}"
+          log.error(errorMsg, t)
+          context.become(loadedWallet(state.copy(error = Some(errorMsg))))
+      }
 
     /** SCAN COMMANDS */
     //scan mempool transaction
@@ -192,8 +198,9 @@ class ErgoWalletActor(settings: ErgoSettings,
               log.info(s"Wallet is going to scan a block ${block.id} in the past at height ${block.height}")
               ergoWalletService.scanBlockUpdate(state, block) match {
                 case Failure(ex) =>
-                  log.error("Scanning past block update failed", ex)
-                  state
+                  val errorMsg = s"Scanning block ${block.id} at height $blockHeight failed : ${ex.getMessage}"
+                  log.error(errorMsg, ex)
+                  state.copy(error = Some(errorMsg))
                 case Success(updatedState) =>
                   updatedState
               }
@@ -215,8 +222,9 @@ class ErgoWalletActor(settings: ErgoSettings,
           val newState =
             ergoWalletService.scanBlockUpdate(state, newBlock) match {
               case Failure(ex) =>
-                log.error("Scanning new block update failed", ex)
-                state
+                val errorMsg = s"Scanning new block ${newBlock.id} on chain at height ${newBlock.height} failed : ${ex.getMessage}"
+                log.error(errorMsg, ex)
+                state.copy(error = Some(errorMsg))
               case Success(updatedState) =>
                 updatedState
             }
@@ -232,7 +240,9 @@ class ErgoWalletActor(settings: ErgoSettings,
     case Rollback(version: VersionTag) =>
       state.registry.rollback(version) match {
         case Failure(t) =>
-          log.error(s"Failed to rollback wallet registry to version $version due to: $t")
+          val errorMsg = s"Failed to rollback wallet registry to version $version due to: ${t.getMessage}"
+          log.error(errorMsg, t)
+          context.become(loadedWallet(state.copy(error = Some(errorMsg))))
         case _: Success[Unit] =>
           // Reset outputs Bloom filter to have it initialized again on next block scanned
           // todo: for offchain registry, refresh is also needed, https://github.com/ergoplatform/ergo/issues/1180
@@ -278,7 +288,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case GetWalletStatus =>
       val isSecretSet = state.secretIsSet(settings.walletSettings.testMnemonic)
       val isUnlocked = state.walletVars.proverOpt.isDefined
-      val status = WalletStatus(isSecretSet, isUnlocked, state.getChangeAddress, state.getWalletHeight)
+      val status = WalletStatus(isSecretSet, isUnlocked, state.getChangeAddress, state.getWalletHeight, state.error)
       sender() ! status
 
     case GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign) =>
@@ -326,7 +336,13 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case UpdateChangeAddress(address) =>
-      state.storage.updateChangeAddress(address) // TODO unhandled https://github.com/ergoplatform/ergo/issues/1398
+      state.storage.updateChangeAddress(address) match {
+        case Success(_) =>
+          sender() ! StatusReply.success(())
+        case Failure(t) =>
+          log.error(s"Unable to update change address", t)
+          sender() ! StatusReply.error(s"Unable to update change address : ${t.getMessage}")
+      }
 
     case RemoveScan(scanId) =>
       ergoWalletService.removeScan(state, scanId) match {
@@ -635,7 +651,8 @@ object ErgoWalletActor extends ScorexLogging {
   case class WalletStatus(initialized: Boolean,
                           unlocked: Boolean,
                           changeAddress: Option[P2PKAddress],
-                          height: ErgoHistory.Height)
+                          height: ErgoHistory.Height,
+                          error: Option[String])
 
   /**
     * Get root secret key (used in miner)

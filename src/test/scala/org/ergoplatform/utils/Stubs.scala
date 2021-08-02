@@ -105,7 +105,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
           sender() ! StatusReply.success(candidate)
         }
       case _: AutolykosSolution => sender() ! StatusReply.success(())
-      case ErgoMiner.ReadMinerPk => sender() ! pk
+      case ErgoMiner.ReadMinerPk => sender() ! StatusReply.success(pk)
     }
   }
 

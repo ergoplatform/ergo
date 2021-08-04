@@ -57,10 +57,10 @@ object FoundationBoxSigner extends App {
 
   //data which should be MANUALLY changed in order to interact with the program
   val seed = "..."
-  val action: ACTION = generateCommitment
+  val action: ACTION = sign
 
   // hints provided by a cosigner
-  val commitmentStringOpt: Option[String] = Some("0297bf3e1779805c1f85e6e870faa10ecfa7cd6d2989e9f19f8ad634fffa5bbc33")
+  val commitmentStringOpt: Option[String] = None
   val ownRandomnessStringOpt: Option[String] = None
   val partialSignatureStringOpt: Option[String] = None
   //signer is generating commitment and final valid sig
@@ -101,7 +101,7 @@ object FoundationBoxSigner extends App {
 
   //box and message to sign
   //copy "new out bytes" here
-  val gfBytes = Base16.decode("80f6a3edb9d98203100e040004c094400580809cde91e7b0010580acc7f03704be944004808948058080c7b7e4992c0580b4c4c32104fe884804c0fd4f0580bcc1960b04befd4f05000400ea03d192c1b2a5730000958fa373019a73029c73037e997304a305958fa373059a73069c73077e997308a305958fa373099c730a7e99730ba305730cd193c2a7c2b2a5730d00d5040800a0c21e00010e6f98040483030808cd039bb5fe52359a64c99a60fd944fc5e388cbdc4d37ff091cc841c3ee79060b864708cd031fb52cf6e805f80d97cde289f4f757d49accf0c83fb864b27d2cf982c37f9a8b08cd0352ac2a471339b0d23b3d2c5ce0db0e81c969f77891b9edf0bda7fd39a78184e7a9dd2054bd23a057bf736cedebf195e0ef78c3398b0918d1910157ead05705f200").get
+  val gfBytes = Base16.decode("80f4cab9c087fa02100e040004c094400580809cde91e7b0010580acc7f03704be944004808948058080c7b7e4992c0580b4c4c32104fe884804c0fd4f0580bcc1960b04befd4f05000400ea03d192c1b2a5730000958fa373019a73029c73037e997304a305958fa373059a73069c73077e997308a305958fa373099c730a7e99730ba305730cd193c2a7c2b2a5730d00d5040800c0de1f00010e6f98040483030808cd039bb5fe52359a64c99a60fd944fc5e388cbdc4d37ff091cc841c3ee79060b864708cd031fb52cf6e805f80d97cde289f4f757d49accf0c83fb864b27d2cf982c37f9a8b08cd0352ac2a471339b0d23b3d2c5ce0db0e81c969f77891b9edf0bda7fd39a78184e7f0a1e12267479761c2ad31a8c90d03c6848ec77f067f186a1129d5ea212821ba00").get
   val gfBox = ErgoBoxSerializer.parseBytes(gfBytes)
 
   println("Spending: " + Base16.encode(gfBox.id))

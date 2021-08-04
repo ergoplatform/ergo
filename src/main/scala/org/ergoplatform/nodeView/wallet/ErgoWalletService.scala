@@ -547,8 +547,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
       case None =>
         Failure(new Exception(s"Scan #$scanId not found"))
       case Some(_) =>
-        Try {
-          state.storage.removeScan(scanId)
+        state.storage.removeScan(scanId).map { _ =>
           state.copy(walletVars = state.walletVars.removeScan(scanId))
         }
     }

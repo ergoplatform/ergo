@@ -23,7 +23,8 @@ case class ErgoWalletState(
     stateReaderOpt: Option[ErgoStateReader], //todo: temporary 3.2.x collection and readers
     mempoolReaderOpt: Option[ErgoMemPoolReader],
     utxoStateReaderOpt: Option[UtxoStateReader],
-    parameters: Parameters
+    parameters: Parameters,
+    error: Option[String] = None
   ) extends ScorexLogging {
 
   /**

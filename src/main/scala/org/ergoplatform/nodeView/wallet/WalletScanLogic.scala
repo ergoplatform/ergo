@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.wallet
 import com.google.common.hash.BloomFilter
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanWalletInteraction}
@@ -42,13 +41,12 @@ object WalletScanLogic extends ScorexLogging {
 
   def scanBlockTransactions(registry: WalletRegistry,
                             offChainRegistry: OffChainRegistry,
-                            stateContext: ErgoStateContext,
                             walletVars: WalletVars,
                             block: ErgoFullBlock,
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]]
                            ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
     scanBlockTransactions(
-      registry, offChainRegistry, stateContext, walletVars,
+      registry, offChainRegistry, walletVars,
       block.height, block.id, block.transactions, cachedOutputsFilter)
   }
 
@@ -57,7 +55,6 @@ object WalletScanLogic extends ScorexLogging {
     *
     * @param registry            - versioned wallet database which is tracking on-chain state
     * @param offChainRegistry    - in-memory snapshot of current state, including off-chain transactions
-    * @param stateContext        - current blockchain and state context (used to check mining rewards only)
     * @param walletVars          - current wallet state
     * @param height              - block height
     * @param blockId             - block id
@@ -67,7 +64,6 @@ object WalletScanLogic extends ScorexLogging {
     */
   def scanBlockTransactions(registry: WalletRegistry,
                             offChainRegistry: OffChainRegistry,
-                            stateContext: ErgoStateContext,
                             walletVars: WalletVars,
                             height: Int,
                             blockId: ModifierId,

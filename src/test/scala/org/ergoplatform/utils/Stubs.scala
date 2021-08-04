@@ -167,7 +167,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case RescanWallet => sender ! Success(())
 
-      case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistory.GenesisHeight)
+      case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistory.GenesisHeight, error = None)
 
       case _: CheckSeed => sender() ! true
 

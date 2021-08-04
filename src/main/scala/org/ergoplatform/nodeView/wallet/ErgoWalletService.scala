@@ -285,15 +285,19 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
                     mnemonic: String,
                     mnemonicPassOpt: Option[String],
                     walletPass: String)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
-    Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage))
-      .flatMap { secretStorage =>
-        // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
-        recreateRegistry(state, settings).flatMap { stateV1 =>
-          recreateStorage(stateV1, settings).map { stateV2 =>
-            stateV2.copy(secretStorageOpt = Some(secretStorage))
+    if (settings.nodeSettings.isFullBlocksPruned)
+      Failure(new IllegalArgumentException("Unable to restore wallet when pruning is enabled"))
+    else
+      Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage))
+        .flatMap { secretStorage =>
+          // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
+          recreateRegistry(state, settings).flatMap { stateV1 =>
+            recreateStorage(stateV1, settings).map { stateV2 =>
+              stateV2.copy(secretStorageOpt = Some(secretStorage))
+            }
           }
         }
-      }
+
 
   def unlockWallet(state: ErgoWalletState,
                    walletPass: String,

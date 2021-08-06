@@ -17,7 +17,7 @@ import org.ergoplatform.settings._
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, P2PKAddress}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, ErgoBox, P2PKAddress}
 import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
 import scorex.core.utils.ScorexEncoding
@@ -69,9 +69,15 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   override def preStart(): Unit = {
     log.info("Initializing wallet actor")
-    context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
-    context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
-    self ! ReadWallet(ErgoWalletState.initial(settings))
+    ErgoWalletState.initial(settings) match {
+      case Success(state) =>
+        context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
+        context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
+        self ! ReadWallet(state)
+      case Failure(ex) =>
+        log.error("Unable to initialize wallet", ex)
+        ErgoApp.forceStopApplication(500)
+    }
   }
 
   private def emptyWallet: Receive = {

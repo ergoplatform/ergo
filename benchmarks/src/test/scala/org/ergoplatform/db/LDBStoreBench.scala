@@ -65,13 +65,13 @@ object LDBStoreBench
   private def benchWriteLVDB(bts: Seq[BlockTransactions]): Unit = {
     val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     val db = storeLVDB()
-    db.update(randomVersion, List.empty, toInsert)
+    db.update(randomVersion, List.empty, toInsert).get
   }
 
   private def benchWriteReadLVDB(bts: Seq[BlockTransactions]): Unit = {
     val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     val db = storeLVDB()
-    db.update(randomVersion, List.empty, toInsert)
+    db.update(randomVersion, List.empty, toInsert).get
     bts.foreach { bt => db.get(idToBytes(bt.headerId)) }
   }
 

@@ -18,9 +18,9 @@ class VersionedStoreSpec extends AnyPropSpec with Matchers with DBSpec {
 
   property("rollback (1 version back)") {
     withVersionedStore(10) { store =>
-      store.insert(v1, Seq(keyA -> valA))
-      store.insert(v2, Seq(keyB -> valB, keyC -> valC))
-      store.update(v3, Seq(keyC), Seq(keyA -> byteString("6"), keyD -> valD))
+      store.insert(v1, Seq(keyA -> valA)).get
+      store.insert(v2, Seq(keyB -> valB, keyC -> valC)).get
+      store.update(v3, Seq(keyC), Seq(keyA -> byteString("6"), keyD -> valD)).get
 
       store.getAll.toSeq.toBs should contain allElementsOf Seq(
         keyA -> byteString("6"),
@@ -40,10 +40,10 @@ class VersionedStoreSpec extends AnyPropSpec with Matchers with DBSpec {
 
   property("rollback (2 versions back)") {
     withVersionedStore(10) { store =>
-      store.insert(v1, Seq(keyA -> valA))
-      store.insert(v2, Seq(keyB -> valB, keyC -> valC))
-      store.update(v3, Seq(keyC), Seq(keyA -> byteString("6"), keyD -> valD))
-      store.update(v4, Seq(keyA), Seq(keyB -> byteString("7"), keyE -> valE))
+      store.insert(v1, Seq(keyA -> valA)).get
+      store.insert(v2, Seq(keyB -> valB, keyC -> valC)).get
+      store.update(v3, Seq(keyC), Seq(keyA -> byteString("6"), keyD -> valD)).get
+      store.update(v4, Seq(keyA), Seq(keyB -> byteString("7"), keyE -> valE)).get
 
       store.getAll.toSeq.toBs should contain allElementsOf Seq(keyB -> byteString("7"), keyE -> valE, keyD -> valD).toBs
       store.get(keyC) shouldBe None
@@ -59,12 +59,12 @@ class VersionedStoreSpec extends AnyPropSpec with Matchers with DBSpec {
 
   property("Outdated versions pruning") {
     withVersionedStore(2) { store =>
-      store.insert(v1, Seq(keyA -> valA))
-      store.insert(v2, Seq(keyB -> valB))
+      store.insert(v1, Seq(keyA -> valA)).get
+      store.insert(v2, Seq(keyB -> valB)).get
 
       store.versionIdExists(v1) shouldBe true
 
-      store.insert(v3, Seq(keyC -> valC))
+      store.insert(v3, Seq(keyC -> valC)).get
 
       store.versionIdExists(v3) shouldBe true
       store.versionIdExists(v2) shouldBe true

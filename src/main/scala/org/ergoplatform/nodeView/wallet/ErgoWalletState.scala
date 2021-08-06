@@ -13,6 +13,8 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import scorex.util.ScorexLogging
 
+import scala.util.Try
+
 case class ErgoWalletState(
     storage: WalletStorage,
     secretStorageOpt: Option[JsonSecretStorage],
@@ -130,22 +132,23 @@ object ErgoWalletState {
     */
   val noWalletFilter: FilterFn = (_: TrackedBox) => true
 
-  def initial(ergoSettings: ErgoSettings): ErgoWalletState = {
-    val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)(ergoSettings.addressEncoder)
-    val registry = WalletRegistry.apply(ergoSettings)
-    val offChainRegistry = OffChainRegistry.init(registry)
-    val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
-    ErgoWalletState(
-      ergoStorage,
-      secretStorageOpt = None,
-      registry,
-      offChainRegistry,
-      outputsFilter = None,
-      walletVars,
-      stateReaderOpt = None,
-      mempoolReaderOpt = None,
-      utxoStateReaderOpt = None,
-      LaunchParameters
-    )
+  def initial(ergoSettings: ErgoSettings): Try[ErgoWalletState] = {
+    WalletRegistry.apply(ergoSettings).map { registry =>
+      val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)(ergoSettings.addressEncoder)
+      val offChainRegistry = OffChainRegistry.init(registry)
+      val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
+      ErgoWalletState(
+        ergoStorage,
+        secretStorageOpt = None,
+        registry,
+        offChainRegistry,
+        outputsFilter = None,
+        walletVars,
+        stateReaderOpt = None,
+        mempoolReaderOpt = None,
+        utxoStateReaderOpt = None,
+        LaunchParameters
+      )
+    }
   }
 }

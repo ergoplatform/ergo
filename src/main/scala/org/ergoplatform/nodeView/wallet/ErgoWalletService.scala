@@ -328,12 +328,12 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
   }
 
   def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] =
-    Try {
+    WalletRegistry.apply(settings).map { reg =>
       val registryFolder = WalletRegistry.registryFolder(settings)
       log.info(s"Removing the registry folder $registryFolder")
       state.registry.close()
       FileUtils.deleteRecursive(registryFolder)
-      state.copy(registry = WalletRegistry.apply(settings))
+      state.copy(registry = reg)
     }
 
   def recreateStorage(state: ErgoWalletState, settings: ErgoSettings)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =

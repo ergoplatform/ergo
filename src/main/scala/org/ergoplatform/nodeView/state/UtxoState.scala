@@ -107,25 +107,23 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val inRoot = rootHash
 
         val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
-          applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).flatMap { _: Unit =>
+          applyTransactions(fb.blockTransactions.txs, fb.header.stateRoot, newStateContext).map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
             val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
-            Try {
-              val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
-              val proofHash = ADProofs.proofDigest(proofBytes)
-              if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
+            val proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
+            val proofHash = ADProofs.proofDigest(proofBytes)
+            if (fb.adProofs.isEmpty) onAdProofGenerated(ADProofs(fb.header.id, proofBytes))
 
-              if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
-                throw new Error("Storage kept roothash is not equal to the declared one")
-              } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
-                throw new Error("Calculated proofHash is not equal to the declared one")
-              } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
-                throw new Error("Calculated stateRoot is not equal to the declared one")
-              }
-              log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
-                s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
-              new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
+            if (!store.get(scorex.core.idToBytes(fb.id)).exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
+              throw new Error("Storage kept roothash is not equal to the declared one")
+            } else if (!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
+              throw new Error("Calculated proofHash is not equal to the declared one")
+            } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
+              throw new Error("Calculated stateRoot is not equal to the declared one")
             }
+            log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
+              s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
+            new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
         }
         stateTry.recoverWith[UtxoState] { case e =>

@@ -33,14 +33,14 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
 
   implicit val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
 
-  val registry = WalletRegistry(settings)
+  val registry = WalletRegistry(settings).get
   val storage = WalletStorage.readOrCreate(settings)(enc)
 
   val rootSecret = ExtendedSecretKey.deriveMasterKey(Array.fill(32)(0: Byte))
 
   val derivedSecrets = (1 to 15000).map { i =>
     val k = rootSecret.derive(DerivationPath.fromEncoded(s"m/44'/429'/0'/0/$i").get)
-    storage.addKey(k.publicKey)
+    storage.addKey(k.publicKey).get
     k
   }
 
@@ -54,7 +54,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
   }
 
   val scanResults0 = ScanResults(boxes, Seq.empty, Seq.empty)
-  registry.updateOnBlock(scanResults0, ModifierId @@ Base16.encode(Array.fill(32)(0: Byte)), 1)
+  registry.updateOnBlock(scanResults0, ModifierId @@ Base16.encode(Array.fill(32)(0: Byte)), 1).get
   println("keys: " + walletVars.proverOpt.get.secretKeys.size)
 
   val bts0 = System.currentTimeMillis()
@@ -73,7 +73,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
   }
 
   val scanResults1 = ScanResults(Seq.empty, Seq.empty, txs)
-  registry.updateOnBlock(scanResults1, ModifierId @@ Base16.encode(Array.fill(32)(1: Byte)), 2)
+  registry.updateOnBlock(scanResults1, ModifierId @@ Base16.encode(Array.fill(32)(1: Byte)), 2).get
 
   val tts0 = System.currentTimeMillis()
   val txsRead = registry.allWalletTxs()

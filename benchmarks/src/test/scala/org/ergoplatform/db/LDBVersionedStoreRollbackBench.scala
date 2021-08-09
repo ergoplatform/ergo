@@ -23,7 +23,7 @@ object LDBVersionedStoreRollbackBench extends App with FileUtils {
     val toRemove =
       if (i > 1) (0 to (elemsAtStep / 2)).map(_ => key(scala.util.Random.nextInt((i - 1) * elemsAtStep))) else Seq.empty
     val version = Algos.hash(key(i))
-    store.update(version, toRemove, toInsert)
+    store.update(version, toRemove, toInsert).get
   }
 
   private val version = store.rollbackVersions().head

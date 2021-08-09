@@ -285,15 +285,19 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
                     mnemonic: String,
                     mnemonicPassOpt: Option[String],
                     walletPass: String)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
-    Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage))
-      .flatMap { secretStorage =>
-        // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
-        recreateRegistry(state, settings).flatMap { stateV1 =>
-          recreateStorage(stateV1, settings).map { stateV2 =>
-            stateV2.copy(secretStorageOpt = Some(secretStorage))
+    if (settings.nodeSettings.isFullBlocksPruned)
+      Failure(new IllegalArgumentException("Unable to restore wallet when pruning is enabled"))
+    else
+      Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage))
+        .flatMap { secretStorage =>
+          // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
+          recreateRegistry(state, settings).flatMap { stateV1 =>
+            recreateStorage(stateV1, settings).map { stateV2 =>
+              stateV2.copy(secretStorageOpt = Some(secretStorage))
+            }
           }
         }
-      }
+
 
   def unlockWallet(state: ErgoWalletState,
                    walletPass: String,
@@ -324,12 +328,12 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
   }
 
   def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] =
-    Try {
+    WalletRegistry.apply(settings).map { reg =>
       val registryFolder = WalletRegistry.registryFolder(settings)
       log.info(s"Removing the registry folder $registryFolder")
       state.registry.close()
       FileUtils.deleteRecursive(registryFolder)
-      state.copy(registry = WalletRegistry.apply(settings))
+      state.copy(registry = reg)
     }
 
   def recreateStorage(state: ErgoWalletState, settings: ErgoSettings)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
@@ -521,7 +525,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
     }
 
   def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): Try[ErgoWalletState] =
-      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.stateContext, state.walletVars, block, state.outputsFilter)
+      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter)
         .map { case (reg, offReg, updatedOutputsFilter) => state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter)) }
 
   def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
@@ -543,8 +547,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
       case None =>
         Failure(new Exception(s"Scan #$scanId not found"))
       case Some(_) =>
-        Try {
-          state.storage.removeScan(scanId)
+        state.storage.removeScan(scanId).map { _ =>
           state.copy(walletVars = state.walletVars.removeScan(scanId))
         }
     }

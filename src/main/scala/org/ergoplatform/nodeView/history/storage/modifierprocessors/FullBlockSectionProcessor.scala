@@ -26,7 +26,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     * Otherwise - try to construct full block with this block section, if possible - process this new full block,
     * if not - just put new block section to storage.
     */
-  override protected def process(m: BlockSection): ProgressInfo[ErgoPersistentModifier] = {
+  override protected def process(m: BlockSection): Try[ProgressInfo[ErgoPersistentModifier]] = {
     m match {
       case _: ADProofs if !requireProofs =>
         // got proofs in UTXO mode. Don't need to try to update better chain
@@ -79,9 +79,10 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
     }
   }
 
-  private def justPutToHistory(m: BlockSection): ProgressInfo[ErgoPersistentModifier] = {
-    historyStorage.insert(Seq.empty, Seq(m))
-    ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+  private def justPutToHistory(m: BlockSection): Try[ProgressInfo[ErgoPersistentModifier]] = {
+    historyStorage.insert(Seq.empty, Seq(m)).map { _ =>
+      ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+    }
   }
 
   /**

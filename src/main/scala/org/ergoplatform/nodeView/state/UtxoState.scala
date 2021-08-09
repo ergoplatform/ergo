@@ -190,6 +190,9 @@ object UtxoState {
     new UtxoState(persistentProver, version, store, constants)
   }
 
+  /**
+    * Used in tests and to generate a genesis state.
+    */
   @SuppressWarnings(Array("OptionGet", "TryGet"))
   def fromBoxHolder(bh: BoxHolder,
                     currentEmissionBoxOpt: Option[ErgoBox],

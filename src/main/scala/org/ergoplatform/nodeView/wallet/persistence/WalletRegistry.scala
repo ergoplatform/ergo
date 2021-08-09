@@ -194,10 +194,8 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
   /**
     * Update aggregate wallet information
     */
-  def updateDigest(bag: KeyValuePairsBag)(updateF: WalletDigest => WalletDigest): KeyValuePairsBag = {
-    val digest = fetchDigest()
-    putDigest(bag, updateF(digest))
-  }
+  def updateDigest(bag: KeyValuePairsBag)(updateF: WalletDigest => Try[WalletDigest]): Try[KeyValuePairsBag] =
+    updateF(fetchDigest()).map(digest => putDigest(bag, digest))
 
   /**
     *
@@ -207,7 +205,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param blockId     - block identifier
     * @param blockHeight - block height
     */
-  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Unit = {
+  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Try[Unit] = {
 
     // first, put newly created outputs and related transactions into key-value bag
     val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
@@ -218,7 +216,7 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     val bag3 = processSpentBoxes(bag2, spentBoxesWithTx, blockHeight)
 
     // and update wallet digest
-    val bag4 = updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
+    updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
       if (height + 1 != blockHeight) {
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
@@ -253,13 +251,13 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
 
       val receivedAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId)).map(_.box.value).sum
       val newBalance = wBalance + receivedAmt - spentAmt
-      require(
-        (newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined,
-        "Balance could not be negative")
-      WalletDigest(blockHeight, newBalance, newTokensBalance.toSeq)
+      if ((newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined)
+        Success(WalletDigest(blockHeight, newBalance, newTokensBalance.toSeq))
+      else
+        Failure(new IllegalStateException("Balance could not be negative"))
+    }.flatMap { bag4 =>
+      bag4.transact(store, idToBytes(blockId))
     }
-
-    bag4.transact(store, idToBytes(blockId))
   }
 
   def rollback(version: VersionTag): Try[Unit] =
@@ -393,18 +391,19 @@ object WalletRegistry {
 
   def registryFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/registry")
 
-  def apply(settings: ErgoSettings): WalletRegistry = {
-    val dir = registryFolder(settings)
-    dir.mkdirs()
-
-    val store = new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
-
-    // Create pre-genesis state checkpoint
-    if (!store.versionIdExists(PreGenesisStateVersion)) store.update(PreGenesisStateVersion, Seq.empty, Seq.empty)
-
-    new WalletRegistry(store)(settings.walletSettings)
-  }
-
+  def apply(settings: ErgoSettings): Try[WalletRegistry] = Try {
+      val dir = registryFolder(settings)
+      dir.mkdirs()
+      new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
+    }.flatMap {
+      case store if !store.versionIdExists(PreGenesisStateVersion) =>
+        // Create pre-genesis state checkpoint
+        store.update(PreGenesisStateVersion, Seq.empty, Seq.empty).map { _ =>
+          new WalletRegistry(store)(settings.walletSettings)
+        }
+      case store =>
+        Success(new WalletRegistry(store)(settings.walletSettings))
+    }
 
   private val BoxKeyPrefix: Byte = 0x01
   private val TxKeyPrefix: Byte = 0x02
@@ -611,16 +610,18 @@ case class KeyValuePairsBag(toInsert: Seq[(Array[Byte], Array[Byte])],
     * Applies non-versioned transaction to a given `store`.
     *
     */
-  def transact(store: LDBVersionedStore): Unit = transact(store, None)
+  def transact(store: LDBVersionedStore): Try[Unit] = transact(store, None)
 
   /**
     * Applies versioned transaction to a given `store`.
     */
-  def transact(store: LDBVersionedStore, version: Array[Byte]): Unit = transact(store, Some(version))
+  def transact(store: LDBVersionedStore, version: Array[Byte]): Try[Unit] = transact(store, Some(version))
 
-  private def transact(store: LDBVersionedStore, versionOpt: Option[Array[Byte]]): Unit =
+  private def transact(store: LDBVersionedStore, versionOpt: Option[Array[Byte]]): Try[Unit] =
     if (toInsert.nonEmpty || toRemove.nonEmpty) {
       store.update(versionOpt.getOrElse(scorex.utils.Random.randomBytes()), toRemove, toInsert)
+    } else {
+      Success(())
     }
 
 }

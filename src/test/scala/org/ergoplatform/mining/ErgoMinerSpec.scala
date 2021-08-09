@@ -1,11 +1,12 @@
 package org.ergoplatform.mining
 
 import akka.actor.{ActorRef, ActorSystem}
-import akka.pattern.ask
+import akka.pattern.{StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
-import ErgoMiner.{PrepareCandidate, StartMining}
+import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
+import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
@@ -29,6 +30,7 @@ import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.utxo.CostTable
 
 import scala.annotation.tailrec
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -36,18 +38,20 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
   implicit private val timeout: Timeout = defaultTimeout
 
-  val newBlockSignal: Class[SemanticallySuccessfulModifier[_]] = classOf[SemanticallySuccessfulModifier[_]]
-  val newBlockDelay: FiniteDuration = 30 seconds
+  private val newBlockSignal: Class[SemanticallySuccessfulModifier[_]] = classOf[SemanticallySuccessfulModifier[_]]
+  private val newBlockDelay: FiniteDuration = 30 seconds
+  private val candidateGenDelay: FiniteDuration    = 3.seconds
+  private val blockValidationDelay: FiniteDuration = 2.seconds
 
   private def getWorkMessage(minerRef: ActorRef, mandatoryTransactions: Seq[ErgoTransaction]): WorkMessage =
-    await(minerRef.askWithStatus(PrepareCandidate(mandatoryTransactions)).mapTo[WorkMessage])
+    await(minerRef.askWithStatus(GenerateCandidate(mandatoryTransactions, reply = true)).mapTo[Candidate].map(_.externalVersion))
 
   val defaultSettings: ErgoSettings = {
     val empty = ErgoSettings.read()
 
     val nodeSettings = empty.nodeSettings.copy(mining = true,
       stateType = StateType.Utxo,
-      miningDelay = 2.second,
+      internalMinerPollingInterval = 2.second,
       offlineGeneration = true,
       verifyTransactions = true)
     val chainSettings = empty.chainSettings.copy(blockInterval = 2.seconds)
@@ -66,7 +70,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-    val minerRef: ActorRef = ErgoMinerRef(
+    val minerRef: ActorRef = ErgoMiner(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
@@ -92,7 +96,6 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val tx = defaultProver.sign(unsignedTx, IndexedSeq(boxToSpend), IndexedSeq(), r.s.stateContext).get
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx))
     expectNoMessage(1 seconds)
-    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 1
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
@@ -116,6 +119,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     // complex tx was removed from mempool
+    expectNoMessage(1 second)
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
     // complex tx was not included
     val state2 = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
@@ -137,7 +141,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val r: Readers = requestReaders
     val wallet: ErgoWalletReader = r.w
 
-    val minerRef: ActorRef = ErgoMinerRef(
+    val minerRef: ActorRef = ErgoMiner(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
@@ -209,7 +213,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-    val minerRef: ActorRef = ErgoMinerRef(
+    val minerRef: ActorRef = ErgoMiner(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
@@ -244,10 +248,27 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     // As double-spending transactions are filtered out in the mempool, the only way to push them is to order to
     // include double-spending transaction directly via mandatoryTransactions argument of PrepareCandidate command
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx1))
-    minerRef ! PrepareCandidate(Seq(tx2))
+    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    minerRef.tell(GenerateCandidate(Seq(tx2), reply = true), testProbe.ref)
+    testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        val block = defaultSettings.chainSettings.powScheme
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .get
+        // let's pretend we are mining at least a bit so it is realistic
+        expectNoMessage(200.millis)
+        minerRef.tell(block.header.powSolution, testProbe.ref)
+    }
+    // we fish either for ack or SSM as the order is non-deterministic
+    testProbe.fishForMessage(blockValidationDelay) {
+      case StatusReply.Success(())           => true
+      case SemanticallySuccessfulModifier(_) => false
+    }
+    testProbe.fishForMessage(newBlockDelay) {
+      case StatusReply.Success(())           => false
+      case SemanticallySuccessfulModifier(_) => true
+    }
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
@@ -265,7 +286,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-    def minerRef: ActorRef = ErgoMinerRef(
+    def minerRef: ActorRef = ErgoMiner(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
@@ -274,10 +295,10 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     )
 
     val passiveMiner: ActorRef = minerRef
+    passiveMiner ! StartMining
 
-    implicit val patienceConfig: PatienceConfig = PatienceConfig(1.second, 100.millis) // it takes a while before PK is set
-    val wm = eventually(await(passiveMiner.askWithStatus(PrepareCandidate(Seq.empty)).mapTo[WorkMessage]))
-    wm.isInstanceOf[WorkMessage] shouldBe true
+    implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 200.millis) // it takes a while before PK is set
+    eventually(await(passiveMiner.askWithStatus(GenerateCandidate(Seq.empty, reply = true)).mapTo[Candidate]))
     system.terminate()
   }
 
@@ -289,7 +310,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-    val minerRef: ActorRef = ErgoMinerRef(
+    val minerRef: ActorRef = ErgoMiner(
       ergoSettings,
       nodeViewHolderRef,
       readersHolderRef,
@@ -351,7 +372,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
       val nodeSettings = empty.nodeSettings.copy(mining = true,
         stateType = StateType.Utxo,
-        miningDelay = 2.second,
+        internalMinerPollingInterval = 2.second,
         offlineGeneration = true,
         verifyTransactions = true)
       val chainSettings = empty.chainSettings.copy(
@@ -368,7 +389,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(forkSettings, timeProvider)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-    val minerRef: ActorRef = ErgoMinerRef(
+    val minerRef: ActorRef = ErgoMiner(
       forkSettings,
       nodeViewHolderRef,
       readersHolderRef,

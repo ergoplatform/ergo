@@ -60,7 +60,7 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST] {
     val settings = ErgoSettings.read()
     val pool = ErgoMemPool.empty(settings)
     val v = h.openSurfaceIds().last
-    s.store.update(idToBytes(v), Seq(), Seq())
+    s.store.update(idToBytes(v), Seq(), Seq()).get
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val tp = new NetworkTimeProvider(settings.scorexSettings.ntp)
     val ncProbe = TestProbe("NetworkControllerProbe")

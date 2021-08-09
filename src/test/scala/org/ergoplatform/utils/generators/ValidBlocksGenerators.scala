@@ -2,7 +2,7 @@ package org.ergoplatform.utils.generators
 
 import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.mining.ErgoMiner
+import org.ergoplatform.mining.CandidateGenerator
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.header.Header
@@ -77,7 +77,7 @@ trait ValidBlocksGenerators
         case Some(emissionBox) if currentSize < sizeLimit - averageSize =>
           // Extract money to anyoneCanSpend output and put emission to separate var to avoid it's double usage inside one block
           val currentHeight: Int = emissionBox.creationHeight.toInt
-          val rewards = ErgoMiner.collectRewards(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, emission)
+          val rewards = CandidateGenerator.collectRewards(Some(emissionBox), currentHeight, Seq.empty, defaultMinerPk, emission)
           val outs = rewards.flatMap(_.outputs)
           val remainedBoxes = stateBoxes.filter(b => !isEmissionBox(b))
           createdEmissionBox = outs.filter(b => isEmissionBox(b))

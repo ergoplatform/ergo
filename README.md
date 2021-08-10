@@ -9,9 +9,9 @@ Ergo Platform website: [https://ergoplatform.org/](https://ergoplatform.org/)
 ## Differences from Bitcoin
 
 * Powerful contracts in the multi-stage extended UTXO model (see [ErgoScript whitepaper](https://ergoplatform.org/docs/ErgoScript.pdf)) 
-* Memory-hard non-outsourceable Proof-of-Work function [Autolykos](https://github.com/ergoplatform/autoleakus)
-* New modes of operation: [light-fullnode](https://eprint.iacr.org/2016/994),
-[light-SPV](http://fc16.ifca.ai/bitcoin/papers/KLS16.pdf), hybrid modes
+* Memory-hard Proof-of-Work function [Autolykos2](https://docs.ergoplatform.com/ErgoPow.pdf)
+* Support for stateless clients (asymmetric, based on [https://eprint.iacr.org/2016/994](https://eprint.iacr.org/2016/994)),
+[NiPoPoWs](https://eprint.iacr.org/2017/963.pdf), hybrid modes
 * [Alternative transactional language](https://github.com/ScorexFoundation/sigmastate-interpreter), which is more powerful that Bitcoin Script but also safe against
 heavy validation attacks
 * Alternative fee model with [mandatory storage-rent component](https://fc18.ifca.ai/bitcoin/papers/bitcoin18-final18.pdf )
@@ -114,14 +114,11 @@ which will run Project Import Wizard. The wizard will use SBT configuration
 You can open `File / Project Structure...` dialog to see project configuration.
 If everything is successful you can compile the project in IDE. 
 
+## Contributions
+
+Ergo is open-source and open movement, always in need for testers developers! Please feel free
+to discuss development in [Ergo Discord](https://discord.gg/kj7s7nb), #development channel. 
+
 ## FAQ
 [Frequently Asked Questions](FAQ.md)
 
-## Acknowledgements
-
-<img src="https://www.yourkit.com/images/yklogo.png" align="right" />
-
-YourKit supports open source projects with its full-featured Java Profiler.
-YourKit, LLC is the creator of <a href="https://www.yourkit.com/java/profiler/">YourKit Java Profiler</a>
-and <a href="https://www.yourkit.com/.net/profiler/">YourKit .NET Profiler</a>,
-innovative and intelligent tools for profiling Java and .NET applications.

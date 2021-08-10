@@ -145,7 +145,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
 
     case a: Any =>
-      log.info(s"Unhandled modifier: $a")
+      log.error(s"Unhandled unknown modifier: $a")
       Failure(new Exception("unknown modifier"))
   }
 

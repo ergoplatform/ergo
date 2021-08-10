@@ -147,6 +147,9 @@ object ErgoState extends ScorexLogging {
     (toRemove.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
   }
 
+  /**
+    * Helper method used to construct boxes for pre-genesis state (state before a genesis block)
+    */
   private def createGenesisBox(value: Long,
                         ergoTree: ErgoTree,
                         additionalTokens: Seq[(TokenId, Long)] = Seq.empty,

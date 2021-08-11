@@ -91,6 +91,15 @@ object DefaultBoxSelector extends BoxSelector {
     }
   }
 
+  /**
+    * This method calculates and creates change box for transaction
+    * or throws specific error if transaction is invalid
+    *
+    * @param foundBalance - Origin balance, balance from which we subtract other amount
+    * @param targetBalance - Subtracted amount
+    * @param foundBoxAssets - Origin asset balances
+    * @param targetBoxAssets - Subtracted asset amounts
+    */
   def formChangeBox(
                      foundBalance: Long,
                      targetBalance: Long,
@@ -105,18 +114,22 @@ object DefaultBoxSelector extends BoxSelector {
           s"There are no $id tokens in target"
         ))
       }
+      // First, we iterate over found tokens and subtract target
+      // assets from found if token exists, and throw exception otherwise
     }.flatMap {
       tMap =>
-        val changeTMap = foundBoxAssets.map { case (id, amount) => (id, amount - targetBoxAssets(id)) }
+        // Check if subtracted ERG amount is greater than balance and throw exception if so
         if (changeBalance < 0)
           Left(NotEnoughCoinsForChangeBoxError(s"Not enough ERG $changeBalance to create change box"))
-        else if (!changeTMap.forall { case (_, amount) => amount >= 0 })
-          Left(NotEnoughTokensError(s"Not enough tokens to create change box"))
-        else if (changeBalance == 0 && changeTMap.exists { case (_, am) => am > 0 })
-          Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs"))
-        else if (changeBalance == 0 && changeTMap.forall { case (_, amount) => amount == 0 }) Right(None)
+        // Check if all subtracted token amounts are less than token balances, throw exc if not
+        else if (!tMap.forall { case (_, amount) => amount >= 0 })
+          Left(NotEnoughTokensError(s"Not enough tokens to create change box", foundBoxAssets.toMap))
+        // Exclude situation when there are change tokens, but none of ERGs
+        else if (changeBalance == 0 && tMap.exists { case (_, am) => am > 0 })
+          Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", 0L))
+        // Found and target balances are equal so no change box is needed
+        else if (changeBalance == 0 && tMap.forall { case (_, amount) => amount == 0 }) Right(None)
         else Right(Some(ErgoBoxAssetsHolder(changeBalance, tMap)))
     }
   }
-
 }

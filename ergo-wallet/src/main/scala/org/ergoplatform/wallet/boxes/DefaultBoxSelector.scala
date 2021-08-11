@@ -126,7 +126,7 @@ object DefaultBoxSelector extends BoxSelector {
           Left(NotEnoughTokensError(s"Not enough tokens to create change box", foundBoxAssets.toMap))
         // Exclude situation when there are change tokens, but none of ERGs
         else if (changeBalance == 0 && tMap.exists { case (_, am) => am > 0 })
-          Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", 0L))
+          Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", foundBalance))
         // Found and target balances are equal so no change box is needed
         else if (changeBalance == 0 && tMap.forall { case (_, amount) => amount == 0 }) Right(None)
         else Right(Some(ErgoBoxAssetsHolder(changeBalance, tMap)))

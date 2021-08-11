@@ -193,7 +193,7 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
     Undo(versionID, key, value)
   }
 
-  def update(versionID: VersionID, toRemove: Iterable[Array[Byte]], toUpdate: Iterable[(Array[Byte], Array[Byte])]): Unit = {
+  def update(versionID: VersionID, toRemove: Iterable[Array[Byte]], toUpdate: Iterable[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
     lock.writeLock().lock()
     val lastLsn = lsn // remember current LSN value
     val batch = db.createWriteBatch()
@@ -237,9 +237,9 @@ class LDBVersionedStore(protected val dir: File, val keepVersions: Int) extends 
     }
   }
 
-  def insert(versionID: VersionID, toInsert: Seq[(K, V)]): Unit = update(versionID, Seq.empty, toInsert)
+  def insert(versionID: VersionID, toInsert: Seq[(K, V)]): Try[Unit] = update(versionID, Seq.empty, toInsert)
 
-  def remove(versionID: VersionID, toRemove: Seq[K]): Unit = update(versionID, toRemove, Seq.empty)
+  def remove(versionID: VersionID, toRemove: Seq[K]): Try[Unit] = update(versionID, toRemove, Seq.empty)
 
 
   // Keep last "count" versions and remove undo information for older versions

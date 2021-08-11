@@ -1,7 +1,8 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain, PoPowAlgos}
+import org.ergoplatform.modifiers.history.popow.NipopowAlgos
+import org.ergoplatform.modifiers.history.{Extension, Header, HeaderChain}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
@@ -9,6 +10,7 @@ import org.ergoplatform.utils.HistoryTestHelpers
 import scorex.core.consensus.History._
 import scorex.crypto.hash.Digest32
 
+import scala.util.Random
 
 class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
@@ -60,6 +62,13 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
         lastHeaders.last shouldBe popowHistory.bestHeaderOpt.get
       }
       lastHeaders.length shouldBe m
+    }
+  }
+
+  property("lastHeaders() should be sorted") {
+    forAll(smallInt) { m =>
+      val lastHeaderTimestamps = popowHistory.lastHeaders(m).headers.map(_.timestamp)
+      lastHeaderTimestamps shouldBe lastHeaderTimestamps.sorted
     }
   }
 
@@ -157,7 +166,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     forAll(smallPositiveInt) { forkLength: Int =>
       whenever(forkLength > 1 && chain.size > forkLength) {
         val si = ErgoSyncInfo(Seq(chain.headers(chain.size - forkLength - 1).id))
-        val continuation = history.continuationIds(si, forkLength)
+        val continuation = history.continuationIds(si, forkLength + 1)
         continuation.length shouldBe forkLength + 1
         continuation.last._2 shouldEqual chain.last.id
         continuation.head._2 shouldEqual chain.headers(chain.size - forkLength - 1).id
@@ -216,7 +225,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
         val fork1 = genHeaderChain(forkLength, history, diffBitsOpt = None, useRealTs = false).tail
         val common = fork1.headers(forkDepth)
         val commonInterlinks = history.typedModifierById[Extension](common.extensionId)
-          .map(ext => PoPowAlgos.unpackInterlinks(ext.fields).get)
+          .map(ext => NipopowAlgos.unpackInterlinks(ext.fields).get)
           .getOrElse(Seq.empty)
         val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common), commonInterlinks,
           defaultDifficultyControl, extensionHash, diffBitsOpt = None, useRealTs = false)
@@ -255,6 +264,24 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
       history.openSurfaceIds() shouldEqual Seq(header.id)
       history.heightOf(header.id).get shouldBe (inHeight + 1)
     }
+  }
+
+  property("bestHeadersAfter returns correct number of headers") {
+    val chainLength = 50
+
+    var history = genHistory()
+    val chain = genHeaderChain(chainLength, history, diffBitsOpt = None, useRealTs = false)
+
+    history = applyHeaderChain(history, chain)
+
+    val suffixLength = Random.nextInt(chainLength - 1) + 1
+    val hdr = chain.headers.takeRight(suffixLength).head
+    val count = Random.nextInt(suffixLength)
+    history.bestHeadersAfter(hdr, count).length shouldBe count
+
+    history.bestHeadersAfter(chain.last, 0).length shouldBe 0
+    history.bestHeadersAfter(chain.last, 1).length shouldBe 0
+    history.bestHeadersAfter(chain.last, Int.MaxValue).length shouldBe 0
   }
 
 }

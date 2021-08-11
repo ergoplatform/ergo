@@ -6,6 +6,7 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.{Difficulty, GenesisHeight}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
@@ -34,7 +35,9 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   val powScheme: AutolykosPowScheme
 
-  //Maximum time in future block header may contain
+  val nipopowAlgos: NipopowAlgos = new NipopowAlgos(powScheme)
+
+  // Maximum time in future block header may have
   protected lazy val MaxTimeDrift: Long = 10 * chainSettings.blockInterval.toMillis
 
   lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings)
@@ -85,20 +88,20 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
     * @param h - header to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
-  protected def process(h: Header): ProgressInfo[ErgoPersistentModifier] = synchronized {
+  protected def process(h: Header): Try[ProgressInfo[ErgoPersistentModifier]] = synchronized {
     val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = toInsert(h)
 
-    historyStorage.insert(dataToInsert._1, dataToInsert._2)
-
-    bestHeaderIdOpt match {
-      case Some(bestHeaderId) =>
-        // If we verify transactions, we don't need to send this header to state.
-        // If we don't and this is the best header, we should send this header to state to update state root hash
-        val toProcess = if (nodeSettings.verifyTransactions || !(bestHeaderId == h.id)) Seq.empty else Seq(h)
-        ProgressInfo(None, Seq.empty, toProcess, toDownload(h))
-      case None =>
-        log.error("Should always have best header after header application")
-        ErgoApp.forceStopApplication()
+    historyStorage.insert(dataToInsert._1, dataToInsert._2).map { _ =>
+      bestHeaderIdOpt match {
+        case Some(bestHeaderId) =>
+          // If we verify transactions, we don't need to send this header to state.
+          // If we don't and this is the best header, we should send this header to state to update state root hash
+          val toProcess = if (nodeSettings.verifyTransactions || !(bestHeaderId == h.id)) Seq.empty else Seq(h)
+          ProgressInfo(None, Seq.empty, toProcess, toDownload(h))
+        case None =>
+          log.error("Should always have best header after header application")
+          ErgoApp.forceStopApplication()
+      }
     }
   }
 
@@ -184,6 +187,10 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
         bytesToId(bs.take(32))
       }
     }
+  }
+
+  def bestHeaderAtHeight(h: Int): Option[Header] = bestHeaderIdAtHeight(h).flatMap { id =>
+    typedModifierById[Header](id)
   }
 
   /**

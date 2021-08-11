@@ -26,12 +26,12 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
   dirA.mkdirs(); dirB.mkdirs()
 
   val minerAConfig: Config = specialDataDirConfig(remoteVolumeA)
-    .withFallback(shortMiningDelayConfig)
+    .withFallback(shortInternalMinerPollingInterval)
     .withFallback(keepVersionsConfig(keepVersions))
     .withFallback(nodeSeedConfigs.head)
 
   val minerBConfig: Config = specialDataDirConfig(remoteVolumeB)
-    .withFallback(shortMiningDelayConfig)
+    .withFallback(shortInternalMinerPollingInterval)
     .withFallback(keepVersionsConfig(keepVersions))
     .withFallback(nodeSeedConfigs.last)
 

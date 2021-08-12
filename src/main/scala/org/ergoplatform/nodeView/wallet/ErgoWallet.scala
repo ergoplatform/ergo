@@ -31,11 +31,8 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
 
   override type NVCT = this.type
 
-  override val walletActor: ActorRef = {
-    val props = Props(classOf[ErgoWalletActor], settings, new ErgoWalletServiceImpl, boxSelector, historyReader)
-                  .withDispatcher(GlobalConstants.ApiDispatcher)
-    actorSystem.actorOf(props)
-  }
+  override val walletActor: ActorRef =
+    ErgoWalletActor(settings, new ErgoWalletServiceImpl, boxSelector, historyReader)
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     walletActor ! ScanOffChain(tx)

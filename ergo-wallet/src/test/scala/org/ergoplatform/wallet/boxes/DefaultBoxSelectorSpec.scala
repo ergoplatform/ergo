@@ -8,7 +8,7 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.helpers.TestingHelpers._
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import org.scalatest.EitherValues
-import org.ergoplatform.wallet.boxes.DefaultBoxSelector.{NoSuchTokensError, NotEnoughCoinsForChangeBoxError, NotEnoughErgsError, NotEnoughTokensError, formChangeBox}
+import org.ergoplatform.wallet.boxes.DefaultBoxSelector.{NotEnoughCoinsForChangeBoxError, NotEnoughErgsError, NotEnoughTokensError, formChangeBox}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 
@@ -36,54 +36,57 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     val fB2 = 90
     val tB2 = 100
     formChangeBox(fB2, tB2, foundAssets1, targetAssets1) shouldBe
-      Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -10 to create change box"))
+      Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -10"))
 
     val foundAssets2 = mutable.Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 20L)
     formChangeBox(fB2, tB2, foundAssets2, targetAssets1) shouldBe
-      Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -10 to create change box"))
+      Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -10"))
 
     val fB3 = 110
     val targetAssets5 = Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 20L)
     formChangeBox(fB3, fB3, foundAssets1, targetAssets5) shouldBe
-      Left(NotEnoughTokensError("Not enough tokens to create change box",
+      Left(NotEnoughTokensError("Not enough tokens",
         Map(ModifierId @@ "token1" -> 5, ModifierId @@ "token2" -> 20)))
 
     val targetAssets6 = Map(ModifierId @@ "token1" -> 4L, ModifierId @@ "token2" -> 25L)
     formChangeBox(fB3, fB3, foundAssets1, targetAssets6) shouldBe
-      Left(NotEnoughTokensError("Not enough tokens to create change box",
+      Left(NotEnoughTokensError("Not enough tokens",
         Map(ModifierId @@ "token1" -> 5, ModifierId @@ "token2" -> 20)))
 
     formChangeBox(fB2, fB3, foundAssets1, targetAssets1) shouldBe
-      Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -20 to create change box"))
+      Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -20"))
 
     val foundAssets4 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 20L)
     formChangeBox(fB3, fB3, foundAssets2, foundAssets4) shouldBe
-      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", 0L))
+      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", 110L))
 
     val tA6 = Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 15L)
     formChangeBox(fB3, fB3, foundAssets2, tA6) shouldBe
-      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", 0L))
+      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", 110L))
 
     val tA7 = Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 25L)
     formChangeBox(fB3, fB3, foundAssets2, tA7) shouldBe
-      Left(NotEnoughTokensError("Not enough tokens to create change box",
+      Left(NotEnoughTokensError("Not enough tokens",
         Map(ModifierId @@ "token1" -> 10, ModifierId @@ "token2" -> 20)))
 
     val tA5 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token4" -> 20L)
     formChangeBox(fB3, fB3, foundAssets2, tA5) shouldBe
-      Left(NoSuchTokensError("There are no token2 tokens in target"))
+      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs",110))
 
     formChangeBox(fB2, fB3, foundAssets2, tA5) shouldBe
-      Left(NoSuchTokensError("There are no token2 tokens in target"))
+      Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -20"))
+
+    formChangeBox(fB3, fB2, foundAssets2, tA5) shouldBe
+      Right(Some(ErgoBoxAssetsHolder(20,Map(ModifierId @@ "token1" -> 5, ModifierId @@ "token2" -> 20))))
 
     val tA8 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 25L)
     formChangeBox(fB3, tB2, foundAssets2, tA8) shouldBe
-      Left(NotEnoughTokensError("Not enough tokens to create change box",
+      Left(NotEnoughTokensError("Not enough tokens",
         Map(ModifierId @@ "token1" -> 10, ModifierId @@ "token2" -> 20)))
 
     val tA4 = Map(ModifierId @@ "token3" -> 5L, ModifierId @@ "token2" -> 20L)
     formChangeBox(fB3, fB3, foundAssets2, tA4) shouldBe
-      Left(NoSuchTokensError("There are no token1 tokens in target"))
+      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", 110))
 
     val targetAssets3 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 15L)
     formChangeBox(fB3, tB2, foundAssets1, targetAssets3) shouldBe Right( Some(

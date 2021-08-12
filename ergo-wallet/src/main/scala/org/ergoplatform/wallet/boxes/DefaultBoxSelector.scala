@@ -25,8 +25,6 @@ object DefaultBoxSelector extends BoxSelector {
 
   final case class NotEnoughCoinsForChangeBoxError(message: String) extends BoxSelectionError
 
-  final case class NoSuchTokensError(message: String) extends BoxSelectionError
-
   override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
                                           externalFilter: T => Boolean,
                                           targetBalance: Long,
@@ -109,10 +107,8 @@ object DefaultBoxSelector extends BoxSelector {
     val changeBalance = foundBalance - targetBalance
     foundBoxAssets.foldLeft[Either[BoxSelectionError, TokensMap]](Right(Map.empty)) { case (acc, (id, amount)) =>
       targetBoxAssets.get(id) match {
-        case Some(value) => acc.map(_.updated(id, amount - value))
-        case None => Left(NoSuchTokensError(
-          s"There are no $id tokens in target"
-        ))
+        case Some(targetAmount) => acc.map(_.updated(id, amount - targetAmount))
+        case None => acc.map(_ + (id -> amount))
       }
       // First, we iterate over found tokens and subtract target
       // assets from found if token exists, and throw exception otherwise
@@ -120,10 +116,10 @@ object DefaultBoxSelector extends BoxSelector {
       tMap =>
         // Check if subtracted ERG amount is greater than balance and throw exception if so
         if (changeBalance < 0)
-          Left(NotEnoughCoinsForChangeBoxError(s"Not enough ERG $changeBalance to create change box"))
+          Left(NotEnoughCoinsForChangeBoxError(s"Not enough ERG $changeBalance"))
         // Check if all subtracted token amounts are less than token balances, throw exc if not
-        else if (!tMap.forall { case (_, amount) => amount >= 0 })
-          Left(NotEnoughTokensError(s"Not enough tokens to create change box", foundBoxAssets.toMap))
+        else if (tMap.exists { case (_, amount) => amount < 0 })
+          Left(NotEnoughTokensError(s"Not enough tokens", foundBoxAssets.toMap))
         // Exclude situation when there are change tokens, but none of ERGs
         else if (changeBalance == 0 && tMap.exists { case (_, am) => am > 0 })
           Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", foundBalance))

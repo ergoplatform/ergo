@@ -11,7 +11,6 @@ import org.scalatest.EitherValues
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.{NotEnoughCoinsForChangeBoxError, NotEnoughErgsError, NotEnoughTokensError, formChangeBox}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
-
 import scala.collection.mutable
 
 class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues {

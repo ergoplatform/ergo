@@ -213,11 +213,6 @@ object ErgoApp extends ScorexLogging {
       help("help").text("prints this usage text")
   }
 
-  def main(args: Array[String]): Unit = argParser.parse(args, Args()) match {
-    case Some(argsParsed) => new ErgoApp(argsParsed).run()
-    case None => // Error message will be displayed when arguments are bad
-  }
-
   def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)
 
   def shutdown(system: ActorSystem, actors: Seq[ActorRef]): Unit = {
@@ -227,6 +222,11 @@ object ErgoApp extends ScorexLogging {
     val termination = system.terminate()
     Await.result(termination, 60.seconds)
     log.warn("Application has been terminated.")
+  }
+
+  def main(args: Array[String]): Unit = argParser.parse(args, Args()) match {
+    case Some(argsParsed) => new ErgoApp(argsParsed).run()
+    case None => // Error message will be displayed when arguments are bad
   }
 
 }

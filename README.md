@@ -116,7 +116,7 @@ If everything is successful you can compile the project in IDE.
 
 ## Contributions
 
-Ergo is open-source and open movement, always in need for testers developers! Please feel free
+Ergo is open-source and open movement, always in need for testers and developers! Please feel free
 to discuss development in [Ergo Discord](https://discord.gg/kj7s7nb), #development channel. 
 
 ## FAQ

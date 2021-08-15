@@ -7,7 +7,14 @@ import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 
 /**
-  * Extension block section with not filled header id
+  * Extension block section with header id not provided
+  *
+  * Useful when a header is not formed yet
+  *
+  * @param fields - key-value data extension section holds.
+  *               Keys must be of 2 bytes length, they must be unique.
+  *               Values must be no more than 64 bytes long.
+  *               Data must be 32,768 bytes max.
   */
 class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
   lazy val merkleTree: MerkleTree[Digest32] = Extension.merkleTree(fields)

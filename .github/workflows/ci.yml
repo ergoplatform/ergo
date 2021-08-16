@@ -45,6 +45,9 @@ jobs:
       - name: Runs tests
         run: sbt -Denv=test clean test
 
+      - name: Release
+        run: ci/publish_release_gpg2.sh
+
 #      - name: Publish a wallet snapshot ${{ github.ref }}
 #        run: sbt ++${{ matrix.scala }} +ergoWallet/publish
 #        env:

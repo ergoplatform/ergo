@@ -7,7 +7,7 @@ import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -147,6 +147,9 @@ object ErgoState extends ScorexLogging {
     (toRemove.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
   }
 
+  /**
+    * Helper method used to construct boxes for pre-genesis state (state before a genesis block)
+    */
   private def createGenesisBox(value: Long,
                         ergoTree: ErgoTree,
                         additionalTokens: Seq[(TokenId, Long)] = Seq.empty,

@@ -205,4 +205,9 @@ object ErgoApp extends ScorexLogging {
                     (implicit system: ActorSystem): Future[Done] =
     CoordinatedShutdown(system).run(reason)
 
+  def main(args: Array[String]): Unit = argParser.parse(args, Args()) match {
+    case Some(argsParsed) => new ErgoApp(argsParsed).run()
+    case None => // Error message will be displayed when arguments are bad
+  }
+
 }

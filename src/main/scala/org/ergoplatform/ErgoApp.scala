@@ -1,7 +1,7 @@
 package org.ergoplatform
 
 import akka.Done
-import akka.actor.{ActorRef, ActorSystem, CoordinatedShutdown, PoisonPill}
+import akka.actor.{ActorRef, ActorSystem, CoordinatedShutdown}
 import akka.http.scaladsl.Http
 import akka.stream.SystemMaterializer
 import org.ergoplatform.http._

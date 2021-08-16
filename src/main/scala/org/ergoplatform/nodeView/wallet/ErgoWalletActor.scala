@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorSystem, CoordinatedShutdown, DeathPactException, OneForOneStrategy, Props, Stash}
+import akka.actor._
 import akka.pattern.StatusReply
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.modifiers.ErgoFullBlock

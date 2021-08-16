@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
-import akka.actor.{ActorRef, ActorSystem, Props}
-import org.ergoplatform.GlobalConstants
+import akka.actor.{ActorRef, ActorSystem}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader

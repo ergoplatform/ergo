@@ -191,11 +191,6 @@ object ErgoApp extends ScorexLogging {
       help("help").text("prints this usage text")
   }
 
-  def main(args: Array[String]): Unit = argParser.parse(args, Args()) match {
-    case Some(argsParsed) => new ErgoApp(argsParsed).run()
-    case None => // Error message will be displayed when arguments are bad
-  }
-
   case object InternalShutdown extends CoordinatedShutdown.Reason
   case object RemoteShutdown extends CoordinatedShutdown.Reason
   case class CriticalSystemException(message: String) extends Exception(message)

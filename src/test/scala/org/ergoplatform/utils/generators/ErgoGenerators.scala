@@ -4,9 +4,10 @@ import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.popow.{ PoPowHeader, PoPowParams, NipopowProof}
-import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
-import org.ergoplatform.modifiers.history.{ADProofs, Extension, Header}
+import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.popow.{NipopowProof, PoPowParams}
+import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoV1}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -25,9 +26,10 @@ import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.{CryptoConstants, ProverResult}
 
+import sigmastate.interpreter.CryptoConstants
 import sigmastate.interpreter.ProverResult
+
 import scala.util.Random
 
 trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators with Matchers with ErgoTestConstants {

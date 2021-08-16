@@ -4,7 +4,8 @@ import java.io.File
 
 import cats.Traverse
 import org.ergoplatform.ErgoBox
-import org.ergoplatform.modifiers.history.{ADProofs, Header}
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
@@ -144,7 +145,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       Success(new UtxoState(persistentProver, idToVersion(h.id), this.store, constants))
 
     case a: Any =>
-      log.info(s"Unhandled modifier: $a")
+      log.error(s"Unhandled unknown modifier: $a")
       Failure(new Exception("unknown modifier"))
   }
 
@@ -189,6 +190,9 @@ object UtxoState {
     new UtxoState(persistentProver, version, store, constants)
   }
 
+  /**
+    * Used in tests and to generate a genesis state.
+    */
   @SuppressWarnings(Array("OptionGet", "TryGet"))
   def fromBoxHolder(bh: BoxHolder,
                     currentEmissionBoxOpt: Option[ErgoBox],

@@ -50,6 +50,23 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
     )
   }
 
+  property("restoring wallet should fail if pruning is enabled") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletState = initialState(store, versionedStore)
+        val walletService = new ErgoWalletServiceImpl
+        val settingsWithPruning = settings.copy(nodeSettings = settings.nodeSettings.copy(blocksToKeep = 0))
+        walletService.restoreWallet(
+          walletState,
+          settingsWithPruning,
+          mnemonic = "x",
+          mnemonicPassOpt = None,
+          walletPass = "y"
+        ).failed.get.getMessage shouldBe "Unable to restore wallet when pruning is enabled"
+      }
+    }
+  }
+
   property("it should prepare unsigned transaction") {
     val inputBoxes = {
       Seq(
@@ -129,7 +146,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
           val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(PaymentsScanId)))
           val spentBox = boxes.head.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId), scans = Set(PaymentsScanId))
           val allBoxes = unspentBoxes :+ spentBox
-          wState.registry.updateOnBlock(ScanResults(allBoxes, Seq.empty, Seq.empty), blockId, 100)
+          wState.registry.updateOnBlock(ScanResults(allBoxes, Seq.empty, Seq.empty), blockId, 100).get
 
           val walletService = new ErgoWalletServiceImpl
           val actualUnspentOnlyWalletBoxes = walletService.getWalletBoxes(wState, unspentOnly = true, considerUnconfirmed = false).toList

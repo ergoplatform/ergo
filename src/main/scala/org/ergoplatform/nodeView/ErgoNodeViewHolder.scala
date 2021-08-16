@@ -4,14 +4,15 @@ import java.io.File
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
-import org.ergoplatform.nodeView.wallet.{ErgoWallet, ErgoWalletReader}
+import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.FileUtils
 import scorex.core._
@@ -189,7 +190,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val recoveredStateTry = firstExtensionOpt
       .fold[Try[ErgoStateContext]](Failure(new Exception("Could not find extension to recover from"))
       )(ext => ErgoStateContext.recover(constants.genesisStateDigest, ext, lastHeaders)(settings))
-      .map { ctx =>
+      .flatMap { ctx =>
         val recoverVersion = idToVersion(lastHeaders.last.id)
         val recoverRoot = bestFullBlock.header.stateRoot
         DigestState.recover(recoverVersion, recoverRoot, ctx, stateDir(settings), constants)

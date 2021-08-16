@@ -1,7 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorRefFactory, Props}
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
@@ -189,7 +189,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @param maxModifiers maximum modifiers to download
     * @param minModifiersPerBucket minimum modifiers to download per bucket
     * @param maxModifiersPerBucket maximum modifiers to download per bucket
-    * @param getPeersOpt optionally get peers to download from, all peers have the same [[PeerSyncState]]
+    * @param getPeersOpt optionally get peers to download from, all peers have the same PeerSyncState
     * @param fetchMax function that fetches modifiers, it is passed how many of them tops
     */
   protected def requestDownload(maxModifiers: Int, minModifiersPerBucket: Int, maxModifiersPerBucket: Int)

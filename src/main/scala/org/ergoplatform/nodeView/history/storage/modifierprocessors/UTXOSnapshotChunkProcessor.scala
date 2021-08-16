@@ -16,11 +16,12 @@ trait UTXOSnapshotChunkProcessor extends ScorexLogging with ScorexEncoding {
 
   protected val historyStorage: HistoryStorage
 
-  def process(m: UTXOSnapshotChunk): ProgressInfo[ErgoPersistentModifier] = {
+  def process(m: UTXOSnapshotChunk): Try[ProgressInfo[ErgoPersistentModifier]] = {
     //TODO
     val toInsert = ???
-    historyStorage.insert(Seq.empty, toInsert)
-    ProgressInfo(None, Seq.empty, Seq(m), Seq.empty)
+    historyStorage.insert(Seq.empty, toInsert).map { _ =>
+      ProgressInfo(None, Seq.empty, Seq(m), Seq.empty)
+    }
   }
 
   def validate(m: UTXOSnapshotChunk): Try[Unit] = if (historyStorage.contains(m.id)) {

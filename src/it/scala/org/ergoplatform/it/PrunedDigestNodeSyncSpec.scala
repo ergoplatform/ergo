@@ -24,7 +24,7 @@ class PrunedDigestNodeSyncSpec extends AnyFlatSpec with IntegrationSuite {
   dir.mkdirs()
 
   val minerConfig: Config = nodeSeedConfigs.head
-    .withFallback(miningDelayConfig(10000))
+    .withFallback(internalMinerPollingIntervalConfig(10000))
     .withFallback(specialDataDirConfig(remoteVolume))
   val nodeForSyncingConfig: Config = minerConfig
     .withFallback(nonGeneratingPeerConfig)

@@ -133,6 +133,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   //todo: update state in async way?
+  /**
+    * Remote and local persistent modifiers need to be appended to history, applied to state
+    * which also needs to be propagated to mempool and wallet
+    * @param pmod Remote or local persistent modifier
+    */
   override protected def pmodModify(pmod: ErgoPersistentModifier): Unit =
     if (!history().contains(pmod.id)) {
       context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))

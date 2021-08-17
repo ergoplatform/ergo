@@ -407,6 +407,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
 object ErgoWalletActor extends ScorexLogging {
 
+  /** Start actor and register its proper closing into coordinated shutdown */
   def apply(settings: ErgoSettings,
             service: ErgoWalletService,
             boxSelector: BoxSelector,

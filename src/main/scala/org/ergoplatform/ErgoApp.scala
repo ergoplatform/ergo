@@ -191,11 +191,19 @@ object ErgoApp extends ScorexLogging {
       help("help").text("prints this usage text")
   }
 
+  /** Internal failure causing shutdown */
   case object InternalShutdown extends CoordinatedShutdown.Reason
+
+  /** Intentional user invoked remote shutdown */
   case object RemoteShutdown extends CoordinatedShutdown.Reason
+
+  /** Exception that triggers proper system shutdown */
   case class CriticalSystemException(message: String) extends Exception(message)
 
+  /** hard application exit in case actor system is not started yet*/
   def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)
+
+  /** The only proper way of application shutdown after actor system initialization */
   def shutdownSystem(reason: CoordinatedShutdown.Reason = InternalShutdown)
                     (implicit system: ActorSystem): Future[Done] =
     CoordinatedShutdown(system).run(reason)

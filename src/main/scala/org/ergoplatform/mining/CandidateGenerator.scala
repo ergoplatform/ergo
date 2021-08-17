@@ -740,7 +740,11 @@ object CandidateGenerator extends ScorexLogging {
                         if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
                           loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
                         } else {
-                          current -> invalidTxs
+                          if (costConsumed < maxBlockCost * 3 / 4) {
+                            current -> invalidTxs
+                          } else {
+                            current -> (invalidTxs :+ tx.id)
+                          }
                         }
                       case Failure(e) =>
                         log.warn(

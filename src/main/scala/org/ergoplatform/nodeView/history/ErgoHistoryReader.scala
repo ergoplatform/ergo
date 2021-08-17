@@ -92,7 +92,28 @@ trait ErgoHistoryReader
   override def compare(info: ErgoSyncInfo): HistoryComparisonResult = {
     syncInfo match {
       case syncV1: ErgoSyncInfoV1 => compareV1(syncV1)
-      case syncV2: ErgoSyncInfoV2 => ??? // todo: develop for v2
+      case syncV2Header: ErgoSyncInfoV2Header =>
+        bestHeaderOpt.map { myLastHeader =>
+          val myHeight = myLastHeader.height
+          val myDiff = myLastHeader.requiredDifficulty
+
+          val otherLastHeader = syncV2Header.lastHeader
+          val otherHeight = otherLastHeader.height
+          val otherDifficulty = otherLastHeader.requiredDifficulty
+          // todo: check PoW of otherLastHeader
+
+          if(otherHeight == myHeight) {
+            if (otherLastHeader.id == myLastHeader.id) {
+              Equal
+            } else {
+              Unknown
+            }
+          }
+
+
+        }
+
+      case syncV2: ErgoSyncInfoV2Header => ??? // todo: develop for other v2 modes
     }
   }
 

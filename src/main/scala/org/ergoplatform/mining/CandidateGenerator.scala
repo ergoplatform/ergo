@@ -743,7 +743,7 @@ object CandidateGenerator extends ScorexLogging {
                           if (costConsumed < maxBlockCost * 3 / 4) {
                             current -> invalidTxs
                           } else {
-                            current -> (invalidTxs :+ tx.id)
+                            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
                           }
                         }
                       case Failure(e) =>

@@ -33,7 +33,7 @@ class WalletStorageSpec
           val bytes = DerivationPathSerializer.toBytes(path)
           acc ++ Ints.toByteArray(bytes.length) ++ bytes
         }
-      store.insert(Seq(SecretPathsKey -> toInsert))
+      store.insert(Seq(SecretPathsKey -> toInsert)).get
     }
 
     forAll(Gen.nonEmptyListOf(derivationPathGen)) { paths =>
@@ -49,7 +49,7 @@ class WalletStorageSpec
     forAll(extendedPubKeyListGen) { pubKeys =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
-        pubKeys.foreach(storage.addKey)
+        pubKeys.foreach(storage.addKey(_).get)
         val keysRead = storage.readAllKeys()
         keysRead.length shouldBe pubKeys.length
         keysRead should contain theSameElementsAs pubKeys.toSet
@@ -67,7 +67,7 @@ class WalletStorageSpec
           ScanRequest(app.scanName, app.trackingRule, Some(ScanWalletInteraction.Off))
         }
         storageRequests.foreach(r => externalScanReqs.contains(r) shouldBe true)
-        storageApps.map(_.scanId).foreach(storage.removeScan)
+        storageApps.map(_.scanId).foreach(storage.removeScan(_).get)
         storage.allScans.length shouldBe 0
       }
     }
@@ -81,7 +81,7 @@ class WalletStorageSpec
 
         storage.lastUsedScanId shouldBe scan.scanId
 
-        storage.removeScan(scan.scanId)
+        storage.removeScan(scan.scanId).get
         storage.lastUsedScanId shouldBe scan.scanId
 
         val scan2 = storage.addScan(externalScanReq).get

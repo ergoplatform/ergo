@@ -21,7 +21,7 @@ trait BlockSectionProcessor extends ScorexEncoding {
     * @param m - modifier to process
     * @return ProgressInfo - info required for State to be consistent with History
     */
-  protected def process(m: BlockSection): ProgressInfo[ErgoPersistentModifier]
+  protected def process(m: BlockSection): Try[ProgressInfo[ErgoPersistentModifier]]
 
   /**
     * @param m - modifier to validate

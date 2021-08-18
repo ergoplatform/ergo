@@ -15,7 +15,7 @@ trait PoPoWProofsProcessor extends HeadersProcessor with ScorexLogging {
 
   def validate(m: NipopowProofModifier): Try[Unit]
 
-  def process(m: NipopowProofModifier): ProgressInfo[ErgoPersistentModifier]
+  def process(m: NipopowProofModifier): Try[ProgressInfo[ErgoPersistentModifier]]
 
   def lastHeaders(count: Int, offset: Int = 0): HeaderChain
 }

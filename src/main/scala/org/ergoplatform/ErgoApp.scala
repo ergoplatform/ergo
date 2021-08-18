@@ -1,15 +1,13 @@
 package org.ergoplatform
 
-import java.net.InetSocketAddress
-
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.http.scaladsl.Http
 import akka.stream.SystemMaterializer
 import org.ergoplatform.http._
-import org.ergoplatform.mining.ErgoMiner.StartMining
-import org.ergoplatform.http.api.{ScanApiRoute, _}
+import org.ergoplatform.http.api._
 import org.ergoplatform.local._
-import org.ergoplatform.mining.ErgoMinerRef
+import org.ergoplatform.mining.ErgoMiner
+import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
@@ -19,15 +17,15 @@ import scorex.core.app.{Application, ScorexContext}
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
 import scorex.core.network.message._
 import scorex.core.network.peer.PeerManagerRef
-import scorex.core.network.{NetworkControllerRef, PeerFeature, PeerSynchronizerRef, UPnP, UPnPGateway}
+import scorex.core.network._
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
 
+import java.net.InetSocketAddress
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 import scala.io.Source
-import scala.util.{Failure, Success}
 
 class ErgoApp(args: Args) extends ScorexLogging {
 
@@ -95,7 +93,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   // Create an instance of ErgoMiner actor if "mining = true" in config
   private val minerRefOpt: Option[ActorRef] =
     if (ergoSettings.nodeSettings.mining) {
-      Some(ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider))
+      Some(ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider))
     } else {
       None
     }
@@ -215,11 +213,6 @@ object ErgoApp extends ScorexLogging {
       help("help").text("prints this usage text")
   }
 
-  def main(args: Array[String]): Unit = argParser.parse(args, Args()) match {
-    case Some(argsParsed) => new ErgoApp(argsParsed).run()
-    case None => // Error message will be displayed when arguments are bad
-  }
-
   def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)
 
   def shutdown(system: ActorSystem, actors: Seq[ActorRef]): Unit = {
@@ -229,6 +222,11 @@ object ErgoApp extends ScorexLogging {
     val termination = system.terminate()
     Await.result(termination, 60.seconds)
     log.warn("Application has been terminated.")
+  }
+
+  def main(args: Array[String]): Unit = argParser.parse(args, Args()) match {
+    case Some(argsParsed) => new ErgoApp(argsParsed).run()
+    case None => // Error message will be displayed when arguments are bad
   }
 
 }

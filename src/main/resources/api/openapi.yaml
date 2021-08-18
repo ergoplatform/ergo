@@ -1114,7 +1114,7 @@ components:
           $ref: '#/components/schemas/ErgoAddress'
         ergValue:
           description: Optional, amount of ergs to be put into box with issued assets
-          type: integer
+          type: int64
         amount:
           description: Supply amount
           type: integer
@@ -1180,7 +1180,7 @@ components:
           type: string
           example: '0000000000000000'
         d:
-          type: integer
+          type: number
           example: 987654321
 
     BlockHeaderWithoutPow:
@@ -1530,9 +1530,24 @@ components:
         - currentNetworkTime
       properties:
         lastIncomingMessage:
-          $ref: '#/components/schemas/Timestamp'
+          type: integer
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
         currentNetworkTime:
-          $ref: '#/components/schemas/Timestamp'
+          type: integer
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+
+    BlacklistedPeers:
+      type: object
+      required:
+        - addresses
+      properties:
+        addresses:
+          type: array
+          items:
+            type: string
+            description: Blacklisted node address
 
     NodeInfo:
       type: object
@@ -1871,7 +1886,7 @@ components:
     Timestamp:
       description: Basic timestamp definition
       type: integer
-      format: int32
+      format: int64
       example: 1524143059077
 
     EmissionInfo:
@@ -2730,10 +2745,8 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
-                  description: Blacklisted node address
+                $ref: '#/components/schemas/BlacklistedPeers'
+
         default:
           description: Error
           content:

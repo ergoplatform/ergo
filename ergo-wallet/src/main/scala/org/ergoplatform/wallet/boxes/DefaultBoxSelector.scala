@@ -5,7 +5,6 @@ import org.ergoplatform.ErgoBoxAssets
 import org.ergoplatform.ErgoBoxAssetsHolder
 import org.ergoplatform.ErgoBox.MaxTokens
 import org.ergoplatform.wallet.{AssetUtils, TokensMap}
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 import org.ergoplatform.wallet.Utils._
@@ -107,8 +106,8 @@ object DefaultBoxSelector extends BoxSelector {
     val changeBalance = foundBalance - targetBalance
     foundBoxAssets.foldLeft[Either[BoxSelectionError, TokensMap]](Right(Map.empty)) { case (acc, (id, amount)) =>
       targetBoxAssets.get(id) match {
-        case Some(targetAmount) => acc.map(_.updated(id, amount - targetAmount))
-        case None => acc.map(_ + (id -> amount))
+        case Some(targetAmount) => acc.map(tMap => tMap.updated(id, amount - targetAmount))
+        case None => acc.map(tMap => tMap + (id -> amount))
       }
       // First, we iterate over found tokens and subtract target
       // assets from found if token exists, and throw exception otherwise

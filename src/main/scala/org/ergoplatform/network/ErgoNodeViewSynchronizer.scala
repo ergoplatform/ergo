@@ -4,23 +4,20 @@ import akka.actor.{ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.CheckModifiersToDownload
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{ModifiersFromRemote, TransactionsFromRemote}
 import scorex.core.NodeViewHolder._
+import scorex.core.app.Version
 import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
-import scorex.core.consensus.History._
 import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SemanticallySuccessfulModifier, SendLocalSyncInfo}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.network.message.{InvData, Message, ModifiersData}
-import scorex.core.network.{ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToRandom, SendToRandomFromChosen}
-import scorex.core.network.{ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToPeer}
+import scorex.core.network.{ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToPeer, SendToPeers, SyncTracker}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.Transaction
@@ -96,10 +93,33 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
+  def syncV2Supported(remote: ConnectedPeer): Boolean = {
+    val syncV2Version = Version(4, 0, 15)
+    remote.peerInfo.exists(_.peerSpec.protocolVersion >= syncV2Version)
+  }
+
+  override protected def sendSync(syncTracker: SyncTracker, history: ErgoHistory): Unit = {
+    val peers = statusTracker.peersToSyncWith()
+    val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
+    log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
+    if (peersV1.nonEmpty) {
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(history.syncInfo), None), SendToPeers(peersV1))
+    }
+    if (peersV2.nonEmpty) {
+      //todo: send only last header to peers which ae equal or younger
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(history.syncInfoV2), None), SendToPeers(peersV2))
+    }
+  }
+
+  def sendSyncToPeer(remote: ConnectedPeer,
+                     syncV2: ErgoSyncInfoV2): Unit = {
+    networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(syncV2), None), SendToPeer(remote))
+  }
+
   override protected def processSync(syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
     syncInfo match {
       case syncV1: ErgoSyncInfoV1 => processSyncV1(syncV1, remote)
-      case syncV2: ErgoSyncInfoV2 => ??? // todo:
+      case syncV2: ErgoSyncInfoV2 => processSyncV2(syncV2, remote)
     }
   }
 
@@ -149,6 +169,59 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             // does nothing for `Equal`
             log.debug(s"$remote has equal header-chain")
         }
+      case _ =>
+        // historyReader not initialized yet, it should not happen
+        log.error("historyReader not initialized when processing syncInfo")
+    }
+  }
+
+  //Processing sync info is coming from another node
+  protected def processSyncV2(syncInfo: ErgoSyncInfoV2, remote: ConnectedPeer): Unit = {
+    historyReaderOpt match {
+      case Some(historyReader) =>
+        val comparison = historyReader.compare(syncInfo)
+        log.debug(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +
+          s"Comparison result is $comparison.")
+
+        val status = comparison
+        statusTracker.updateStatus(remote, status)
+
+        status match {
+          case Unknown =>
+            // we do not know what to send to a peer with unknown status
+            log.info(s"Peer status is still unknown for $remote")
+
+            val syncInfo = historyReader.syncInfoV2
+            if(syncInfo.lastHeaders.nonEmpty) {
+              sendSyncToPeer(remote, syncInfo)
+            }
+
+          case Nonsense =>
+            // Shouldn't be the case for sync V2
+            log.warn(s"Got nonsense status in v2 for $remote")
+
+          case Younger =>
+            // send extension (up to 400 header ids) to a peer which chain is less developed or forked
+            val ext = historyReader.continuationIds(syncInfo, size = 400)
+            if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
+            log.info(s"Sending extension of length ${ext.length}")
+            log.debug(s"Extension ids: ${idsToString(ext)}")
+            sendExtension(remote, status, ext)
+
+          case Fork =>
+          case Older =>
+            // send sync to older
+            val syncInfo = historyReader.syncInfoV2
+            if(syncInfo.lastHeaders.nonEmpty) {
+              sendSyncToPeer(remote, syncInfo)
+            }
+
+
+          case Equal =>
+            // does nothing for `Equal`
+            log.debug(s"$remote has equal header-chain")
+        }
+
       case _ =>
         // historyReader not initialized yet, it should not happen
         log.error("historyReader not initialized when processing syncInfo")

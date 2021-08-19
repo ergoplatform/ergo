@@ -89,31 +89,52 @@ trait ErgoHistoryReader
     */
   def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
 
+  private def commonPoint(headers: Seq[Header]): Option[Header] = {
+    headers.find { h =>
+      contains(h.id)
+    }
+  }
+
   override def compare(info: ErgoSyncInfo): HistoryComparisonResult = {
     syncInfo match {
       case syncV1: ErgoSyncInfoV1 => compareV1(syncV1)
-      case syncV2Header: ErgoSyncInfoV2Header =>
+
+      case syncV2: ErgoSyncInfoV2 =>
         bestHeaderOpt.map { myLastHeader =>
-          val myHeight = myLastHeader.height
-          val myDiff = myLastHeader.requiredDifficulty
+          if (syncV2.lastHeaders.isEmpty) {
+            Younger
+          } else {
+            val myHeight = myLastHeader.height
 
-          val otherLastHeader = syncV2Header.lastHeader
-          val otherHeight = otherLastHeader.height
-          val otherDifficulty = otherLastHeader.requiredDifficulty
-          // todo: check PoW of otherLastHeader
+            val otherHeaders = syncV2.lastHeaders
+            val otherLastHeader = otherHeaders.head // always available
+            val otherHeight = otherLastHeader.height
+            // todo: check PoW of otherLastHeader
 
-          if(otherHeight == myHeight) {
-            if (otherLastHeader.id == myLastHeader.id) {
-              Equal
-            } else {
-              Unknown
+            if (otherHeight == myHeight) {
+              if (otherLastHeader.id == myLastHeader.id) {
+                // Last headers are the same => chains are equal
+                Equal
+              } else {
+                if (commonPoint(otherHeaders.tail).isDefined) {
+                  Fork
+                } else {
+                  Unknown
+                }
+              }
+            } else if (otherHeight > myHeight) {
+              Older // todo: check difficulty ?
+            } else { // otherHeight < myHeight
+              Younger //todo: check if the block is on my chain?
             }
           }
-
-
-        }
-
-      case syncV2: ErgoSyncInfoV2Header => ??? // todo: develop for other v2 modes
+        }.getOrElse {
+          if (syncV2.lastHeaders.isEmpty) {
+            Equal
+          } else {
+            Older
+          }
+        } // other peer is older if the node doesn't have any header yet
     }
   }
 
@@ -171,7 +192,20 @@ trait ErgoHistoryReader
   override def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds = {
     syncInfo match {
       case syncV1: ErgoSyncInfoV1 => continuationIdsV1(syncV1, size)
-      case syncV2: ErgoSyncInfoV2 => ??? // todo: develop for v2
+      case syncV2: ErgoSyncInfoV2 => if (syncV2.lastHeaders.isEmpty) {
+        (ErgoHistory.GenesisHeight to ErgoHistory.GenesisHeight + 400).flatMap { height =>
+          bestHeaderIdAtHeight(height)
+        }.map(h => Header.modifierTypeId -> h) //todo: remove modifierTypeId ?
+      } else {
+        commonPoint(syncV2.lastHeaders) match {
+          case Some(commonHeader) =>
+            ((commonHeader.height + 1) to (commonHeader.height + 400)).flatMap { height =>
+              bestHeaderIdAtHeight(height)
+            }.map(h => Header.modifierTypeId -> h) //todo: remove modifierTypeId ?
+          case None =>
+            Seq.empty
+        }
+      }
     }
   }
 
@@ -230,14 +264,30 @@ trait ErgoHistoryReader
   /**
     * @return Node ErgoSyncInfo
     */
-  override def syncInfo: ErgoSyncInfo = if (isEmpty) {
-    ErgoSyncInfoV1(Seq.empty)
-  } else {
-    val startingPoints = lastHeaders(ErgoSyncInfo.MaxBlockIds).headers
-    if (startingPoints.headOption.exists(_.isGenesis)) {
-      ErgoSyncInfoV1((PreGenesisHeader +: startingPoints).map(_.id))
+  override def syncInfo: ErgoSyncInfo = {
+    if (isEmpty) {
+      ErgoSyncInfoV1(Seq.empty)
     } else {
-      ErgoSyncInfoV1(startingPoints.map(_.id))
+      val startingPoints = lastHeaders(ErgoSyncInfo.MaxBlockIds).headers
+      if (startingPoints.headOption.exists(_.isGenesis)) {
+        ErgoSyncInfoV1((PreGenesisHeader +: startingPoints).map(_.id))
+      } else {
+        ErgoSyncInfoV1(startingPoints.map(_.id))
+      }
+    }
+  }
+
+  def syncInfoV2: ErgoSyncInfoV2 = {
+    if (isEmpty) {
+      ErgoSyncInfoV2(Seq.empty)
+    } else {
+      val h = headersHeight
+
+      val offsets = Array(0, 16, 128, 512)
+
+      val headers = offsets.flatMap(offset => bestHeaderAtHeight(h - offset))
+
+      ErgoSyncInfoV2(headers)
     }
   }
 

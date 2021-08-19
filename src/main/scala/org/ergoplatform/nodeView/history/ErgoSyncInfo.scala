@@ -14,14 +14,14 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
   */
 sealed trait ErgoSyncInfo extends SyncInfo {
 
-  val syncData: Either[Seq[ModifierId], Header]
+  val syncData: Either[Seq[ModifierId], Seq[Header]]
 
   val version: Byte
 
   override def startingPoints: Seq[(ModifierTypeId, ModifierId)] = {
     syncData match {
       case Left(v1Ids) => v1Ids.map(b => Header.modifierTypeId -> b)
-      case Right(v2header) => Array(Header.modifierTypeId -> v2header.id)
+      case Right(v2headers) => v2headers.map(h => Header.modifierTypeId -> h.id)
     }
   }
 
@@ -34,28 +34,21 @@ sealed trait ErgoSyncInfo extends SyncInfo {
   * @param lastHeaderIds
   */
 case class ErgoSyncInfoV1(lastHeaderIds: Seq[ModifierId]) extends ErgoSyncInfo {
-  override val syncData: Either[Seq[ModifierId], Header] = Left(lastHeaderIds)
+  override val syncData: Either[Seq[ModifierId], Seq[Header]] = Left(lastHeaderIds)
   override val version = 1
 }
 
-sealed trait ErgoSyncInfoV2 extends ErgoSyncInfo {
+case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo {
+  override val syncData: Either[Seq[ModifierId], Seq[Header]] = Right(lastHeaders)
   override val version = 2
-
-  val mode: Byte
 }
 
-case class ErgoSyncInfoV2Header(lastHeader: Header) extends ErgoSyncInfoV2 {
-
-  override val syncData: Either[Seq[ModifierId], Header] = Right(lastHeader)
-
-  val mode = ErgoSyncInfo.v2HeaderMode
-}
 
 object ErgoSyncInfo {
   // TODO move to config?
   val MaxBlockIds = 1000
 
-  val v2HeaderMode: Byte = 1
+  val v2HeaderMode: Byte = -1
 }
 
 object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with ScorexLogging {
@@ -65,12 +58,16 @@ object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with Scorex
       case v1: ErgoSyncInfoV1 =>
         w.putUShort(v1.lastHeaderIds.size)
         v1.lastHeaderIds.foreach(id => w.putBytes(idToBytes(id)))
-      case v2: ErgoSyncInfoV2Header =>
+      case v2: ErgoSyncInfoV2 =>
         w.putUShort(0)
-        w.put(v2.mode)
-        val headerBytes = v2.bytes
-        w.putUShort(headerBytes.length)
-        w.putBytes(headerBytes)
+        w.put(ErgoSyncInfo.v2HeaderMode)
+        w.put(v2.lastHeaders.length.toByte)
+        v2.lastHeaders.foreach { h =>
+          val headerBytes = h.bytes
+          w.putUShort(headerBytes.length)
+          w.putBytes(headerBytes)
+        }
+
       case _ =>
         log.error(s"Wrong SyncInfo version: $obj")
     }
@@ -81,11 +78,18 @@ object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with Scorex
     if (length == 0 && r.remaining > 1) {
       val mode = r.getByte()
       if (mode == ErgoSyncInfo.v2HeaderMode) {
-        val headerBytesCount = r.getUShort()
-        val headerBytes = r.getBytes(headerBytesCount)
-        val header = HeaderSerializer.parseBytes(headerBytes)
-        //todo: check PoW
-        ErgoSyncInfoV2Header(header)
+
+        val headersCount = r.getUByte()
+
+        require(headersCount < 20)
+
+        val headers = (1 to headersCount).map { _ =>
+          val headerBytesCount = r.getUShort()
+          require(headersCount < 1000)
+          val headerBytes = r.getBytes(headerBytesCount)
+          HeaderSerializer.parseBytes(headerBytes)
+        }
+        ErgoSyncInfoV2(headers)
       } else {
         throw new Exception(s"Wrong SyncInfo version: $r")
       }

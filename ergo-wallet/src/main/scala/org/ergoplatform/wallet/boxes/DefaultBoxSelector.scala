@@ -8,6 +8,7 @@ import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 import scala.annotation.tailrec
 import scala.collection.mutable
 import org.ergoplatform.wallet.Utils._
+import cats.syntax.either._
 
 /**
   * Default implementation of the box selector. It simply picks boxes till sum of their monetary values
@@ -106,12 +107,12 @@ object DefaultBoxSelector extends BoxSelector {
     val changeBalance = foundBalance - targetBalance
     foundBoxAssets.foldLeft[Either[BoxSelectionError, TokensMap]](Right(Map.empty)) { case (acc, (id, amount)) =>
       targetBoxAssets.get(id) match {
-        case Some(targetAmount) => acc.map(tMap => tMap.updated(id, amount - targetAmount))
-        case None => acc.map(tMap => tMap + (id -> amount))
+        case Some(targetAmount) => acc.mapRight(tMap => tMap.updated(id, amount - targetAmount))
+        case None => acc.mapRight(tMap => tMap + (id -> amount))
       }
       // First, we iterate over found tokens and subtract target
       // assets from found if token exists, and throw exception otherwise
-    }.flatMap {
+    }.flatMapRight {
       tMap =>
         // Check if subtracted ERG amount is greater than balance and throw exception if so
         if (changeBalance < 0)

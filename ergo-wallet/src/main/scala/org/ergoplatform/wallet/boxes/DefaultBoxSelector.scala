@@ -23,8 +23,6 @@ object DefaultBoxSelector extends BoxSelector {
 
   final case class NotEnoughTokensError(message: String, tokensFound: Map[ModifierId, Long]) extends BoxSelectionError
 
-  final case class NotEnoughCoinsForChangeBoxError(message: String) extends BoxSelectionError
-
   override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
                                           externalFilter: T => Boolean,
                                           targetBalance: Long,
@@ -116,7 +114,7 @@ object DefaultBoxSelector extends BoxSelector {
       tMap =>
         // Check if subtracted ERG amount is greater than balance and throw exception if so
         if (changeBalance < 0)
-          Left(NotEnoughCoinsForChangeBoxError(s"Not enough ERG $changeBalance"))
+          Left(NotEnoughErgsError(s"Not enough ERG $foundBalance", foundBalance))
         // Check if all subtracted token amounts are less than token balances, throw exc if not
         else if (tMap.exists { case (_, amount) => amount < 0 })
           Left(NotEnoughTokensError(s"Not enough tokens", foundBoxAssets.toMap))

@@ -8,7 +8,7 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.helpers.TestingHelpers._
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import org.scalatest.EitherValues
-import org.ergoplatform.wallet.boxes.DefaultBoxSelector.{NotEnoughCoinsForChangeBoxError, NotEnoughErgsError, NotEnoughTokensError, formChangeBox}
+import org.ergoplatform.wallet.boxes.DefaultBoxSelector.{NotEnoughErgsError, NotEnoughTokensError, formChangeBox}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scala.collection.mutable
@@ -35,11 +35,11 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     val fB2 = 90
     val tB2 = 100
     formChangeBox(fB2, tB2, foundAssets1, targetAssets1) shouldBe
-      Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -10"))
+      Left(NotEnoughErgsError(s"Not enough ERG $fB2", fB2))
 
     val foundAssets2 = mutable.Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 20L)
     formChangeBox(fB2, tB2, foundAssets2, targetAssets1) shouldBe
-      Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -10"))
+      Left(NotEnoughErgsError(s"Not enough ERG $fB2", fB2))
 
     val fB3 = 110
     val targetAssets5 = Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 20L)
@@ -53,7 +53,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
         Map(ModifierId @@ "token1" -> 5, ModifierId @@ "token2" -> 20)))
 
     formChangeBox(fB2, fB3, foundAssets1, targetAssets1) shouldBe
-      Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -20"))
+      Left(NotEnoughErgsError(s"Not enough ERG $fB2", fB2))
 
     val foundAssets4 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 20L)
     formChangeBox(fB3, fB3, foundAssets2, foundAssets4) shouldBe
@@ -73,7 +73,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
       Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs",110))
 
     formChangeBox(fB2, fB3, foundAssets2, tA5) shouldBe
-      Left(NotEnoughCoinsForChangeBoxError("Not enough ERG -20"))
+      Left(NotEnoughErgsError(s"Not enough ERG $fB2", fB2))
 
     formChangeBox(fB3, fB2, foundAssets2, tA5) shouldBe
       Right(Some(ErgoBoxAssetsHolder(20,Map(ModifierId @@ "token1" -> 5, ModifierId @@ "token2" -> 20))))
@@ -270,7 +270,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     s2.right.get.changeBox.toSeq(0).tokens(assetId8) shouldBe 10
 
     //todo: should selector fail in this case (if there's no monetary value to create a new box w. assets) ?
-    select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 1)).left.value shouldBe a [NotEnoughCoinsForChangeBoxError]
+    select(uBoxes.toIterator, noFilter, 1 * MinBoxValue, Map(assetId1 -> 1)).left.value shouldBe a [NotEnoughErgsError]
   }
 
 }

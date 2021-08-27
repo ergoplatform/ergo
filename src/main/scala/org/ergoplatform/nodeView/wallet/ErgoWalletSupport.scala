@@ -222,19 +222,19 @@ trait ErgoWalletSupport extends ScorexLogging {
 
     val userInputs = ErgoWalletService.stringsToBoxes(inputsRaw)
 
-    val (inputBoxes, filter) = if (userInputs.nonEmpty) {
+    val inputBoxes = if (userInputs.nonEmpty) {
       // make TrackedBox sequence out of boxes provided
       val boxesToFakeTracked =
         userInputs.map { box => // declare fake inclusion height in order to confirm the box is onchain
           TrackedBox(box.transactionId, box.index, Some(1), None, None, box, Set(PaymentsScanId))
         }
       //inputs are provided externally, no need for filtering
-      (boxesToFakeTracked, ErgoWalletState.noWalletFilter)
+      boxesToFakeTracked
     } else {
       state.walletVars.proverOpt match {
         case Some(_) =>
-          //inputs are to be selected by the wallet
-          (state.getBoxesToSpend, state.walletFilter)
+          //inputs are to be filtered by the wallet filter, which is removing boxes spent offchain
+          state.getBoxesToSpend.filter(box => state.walletFilter(box))
         case None =>
           throw new Exception(s"Cannot generateUnsignedTransaction($requests, $inputsRaw): wallet is locked")
       }
@@ -257,7 +257,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         val targetBalance = outputs.map(_.value).sum
         val targetAssets = TransactionBuilder.collectOutputTokens(outputs.filterNot(bx => assetIssueBox.contains(bx)))
 
-        val selectionOpt = boxSelector.select(inputBoxes.iterator, filter, targetBalance, targetAssets)
+        val selectionOpt = boxSelector.select(inputBoxes.iterator, targetBalance, targetAssets)
         val dataInputs = ErgoWalletService.stringsToBoxes(dataInputsRaw).toIndexedSeq
         selectionOpt.map { selectionResult =>
           val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress.map(_.pubkey)

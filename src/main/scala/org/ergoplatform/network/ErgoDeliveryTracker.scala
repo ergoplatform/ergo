@@ -8,7 +8,8 @@ import scala.concurrent.duration.FiniteDuration
 
 
 /**
-  * Ergo specialization of Scorex' delivery tracker. Not doing anything in addition to the basic class atm.
+  * Ergo specialization of Scorex' delivery tracker.
+  * Not doing anything in addition to the basic class at the moment.
   */
 class ErgoDeliveryTracker(system: ActorSystem,
                           deliveryTimeout: FiniteDuration,

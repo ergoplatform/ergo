@@ -70,6 +70,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
   }
 
+  /**
+    * Check whether block section (modifier) with identifier `id` is not stored locally
+    * (in history database available via `historyReader` interface, or delivery tracker cache, thus
+    * downloading of the modifier is needed.
+    */
   private def downloadRequired(historyReader: ErgoHistory)(id: ModifierId): Boolean = {
     deliveryTracker.status(id, Array(historyReader)) == ModifiersStatus.Unknown
   }
@@ -93,7 +98,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
+  /**
+    * Whether neighbour peer `remote` supports sync protocol V2.
+    */
   def syncV2Supported(remote: ConnectedPeer): Boolean = {
+    // If neighbour version is >= 4.0.15, the neighbour supports sync V2
     val syncV2Version = Version(4, 0, 15)
     remote.peerInfo.exists(_.peerSpec.protocolVersion >= syncV2Version)
   }
@@ -121,6 +130,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  /**
+    * Process sync message `syncInfo` got from neighbour peer `remote`
+    */
   override protected def processSync(syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
     syncInfo match {
       case syncV1: ErgoSyncInfoV1 => processSyncV1(syncV1, remote)
@@ -129,8 +141,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Processing sync info coming from another node
-    *
+    * Processing sync V1 message `syncInfo` got from neighbour peer `remote`
     */
   protected def processSyncV1(syncInfo: ErgoSyncInfoV1, remote: ConnectedPeer): Unit = {
 
@@ -184,14 +195,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Send V2 sync message to a concrete peer. Used in [[processSyncV2]] method.
+    * Send sync V2 message to a concrete peer. Used in [[processSyncV2]] method.
     */
   protected def sendSyncToPeer(remote: ConnectedPeer, syncV2: ErgoSyncInfoV2): Unit = {
     networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(syncV2), None), SendToPeer(remote))
   }
 
   /**
-    * Processing sync info coming from another node
+    * Processing sync V1 message `syncInfo` got from neighbour peer `remote`
     */
   protected def processSyncV2(syncInfo: ErgoSyncInfoV2, remote: ConnectedPeer): Unit = {
     historyReaderOpt match {

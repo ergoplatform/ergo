@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-import akka.actor.{Actor, ActorInitializationException, ActorKilledException, DeathPactException, OneForOneStrategy, Stash}
+import akka.actor._
 import akka.pattern.StatusReply
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -17,7 +17,7 @@ import org.ergoplatform.settings._
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
-import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, ErgoBox, P2PKAddress}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, ErgoBox, GlobalConstants, P2PKAddress}
 import scorex.core.VersionTag
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
 import scorex.core.utils.ScorexEncoding
@@ -76,7 +76,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         self ! ReadWallet(state)
       case Failure(ex) =>
         log.error("Unable to initialize wallet", ex)
-        ErgoApp.forceStopApplication(500)
+        ErgoApp.shutdownSystem()(context.system)
     }
   }
 
@@ -282,6 +282,12 @@ class ErgoWalletActor(settings: ErgoSettings,
       log.info("Locking wallet")
       context.become(loadedWallet(ergoWalletService.lockWallet(state)))
 
+    case CloseWallet =>
+      log.info("Closing wallet actor")
+      state.storage.close()
+      state.registry.close()
+      context stop self
+
     // We do wallet rescan by closing the wallet's database, deleting it from the disk, then reopening it and sending a rescan signal.
     case RescanWallet =>
       log.info(s"Rescanning the wallet")
@@ -400,6 +406,23 @@ class ErgoWalletActor(settings: ErgoSettings,
 }
 
 object ErgoWalletActor extends ScorexLogging {
+
+  /** Start actor and register its proper closing into coordinated shutdown */
+  def apply(settings: ErgoSettings,
+            service: ErgoWalletService,
+            boxSelector: BoxSelector,
+            historyReader: ErgoHistoryReader)(implicit actorSystem: ActorSystem): ActorRef = {
+    val props = Props(classOf[ErgoWalletActor], settings, service, boxSelector, historyReader)
+      .withDispatcher(GlobalConstants.ApiDispatcher)
+    val walletActorRef = actorSystem.actorOf(props)
+    CoordinatedShutdown(actorSystem).addActorTerminationTask(
+      CoordinatedShutdown.PhaseBeforeServiceUnbind,
+      s"closing-wallet",
+      walletActorRef,
+      Some(CloseWallet)
+    )
+    walletActorRef
+  }
 
   // Private signals the wallet actor sends to itself
   /**
@@ -638,6 +661,11 @@ object ErgoWalletActor extends ScorexLogging {
     * Lock wallet
     */
   case object LockWallet
+
+  /**
+    * Close wallet
+    */
+  case object CloseWallet
 
   /**
     * Rescan wallet

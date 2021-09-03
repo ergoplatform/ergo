@@ -22,9 +22,9 @@ nodes become unhealthy, because they will not be able to process blocks in time 
 sync with the network. Rational miners who care about network security need to understand
 performance of the node before voting for MaxBlockCost increase.
 
-Developers may do node optimizations and introduce new features via soft-forks. But how they know
-the new node release will be healthy on the network? Idealy, they should understand the performance
-of the node before publishing a new release.
+Developers may do node optimizations and introduce new features via soft-fork release. But how they know
+the newly released node will be healthy for the network? Ideally, they should understand the performance
+of the node before publishing the new version.
 
 The following sections describe Metrics sub-system of Ergo node, which can be turned-on in the
 configuration to collect runtime performance measurements and related cost estimations of blocks,

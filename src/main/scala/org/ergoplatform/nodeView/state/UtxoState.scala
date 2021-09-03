@@ -178,8 +178,13 @@ object UtxoState {
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
+  /** Metric descriptor for measuring ErgoStateContext.appendFullBlock method. */
   val appendFullBlockMetric = MetricDesc[BlockMetricData]("appendFullBlock")
+
+  /** Metric descriptor for measuring UtxoState.applyTransactions method. */
   val applyTransactionsMetric = MetricDesc[BlockMetricData]("applyTransactions")
+
+  /** Metric descriptor for measuring UtxoState creation after applyTransaction is executed. */
   val createUtxoStateMetric = MetricDesc[BlockMetricData]("createUtxoState")
 
   private def metadata(modId: VersionTag,

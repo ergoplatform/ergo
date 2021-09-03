@@ -79,6 +79,7 @@ object ErgoState extends ScorexLogging {
     StateChanges(toRemoveChanges, toInsertChanges, toLookup)
   }
 
+  /** Metrics descriptor for measuring of ErgoTransaction.validateStateful. */
   val validateTxStatefulMetric = MetricDesc[TransactionMetricData]("validateTxStateful")
 
   /**

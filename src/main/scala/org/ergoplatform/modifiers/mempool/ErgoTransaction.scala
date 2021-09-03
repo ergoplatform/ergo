@@ -103,6 +103,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     validateStateless().result.toTry
   }
 
+  /** Metrics descriptor for verification of a single input script. */
   val verifyScriptMetric = MetricDesc[InputMetricData]("verifyScript")
 
   /**
@@ -238,6 +239,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
   }
 
+  /** Validate spending of the given input in the given blockchain context. */
   private def validateInput(validation: ValidationState[Long],
                     boxesToSpend: IndexedSeq[ErgoBox],
                     dataBoxes: IndexedSeq[ErgoBox],

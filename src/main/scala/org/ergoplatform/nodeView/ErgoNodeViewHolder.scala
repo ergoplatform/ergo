@@ -60,10 +60,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   override protected def pmodModify(pmod: ErgoPersistentModifier): Unit = {
     if (settings.nodeSettings.collectMetrics)
       metrics.executeWithCollector(metricsCollector) {
-        super.pmodModify(pmod)
+        pmodModifyInternal(pmod)
       }
     else
-      super.pmodModify(pmod)
+      pmodModifyInternal(pmod)
   }
 
   override protected def txModify(tx: ErgoTransaction): Unit = {
@@ -150,7 +150,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * which also needs to be propagated to mempool and wallet
     * @param pmod Remote or local persistent modifier
     */
-  override protected def pmodModify(pmod: ErgoPersistentModifier): Unit =
+  private def pmodModifyInternal(pmod: ErgoPersistentModifier): Unit =
     if (!history().contains(pmod.id)) {
       context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
 

@@ -95,8 +95,10 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
   property("Compare headers chain") {
     var history = genHistory()
 
-    def getInfo(c: HeaderChain): ErgoSyncInfo = ErgoSyncInfoV1(c.headers.map(_.id))
+    def getInfoV1(c: HeaderChain): ErgoSyncInfo = ErgoSyncInfoV1(c.headers.map(_.id))
+    def getInfoV2(c: HeaderChain): ErgoSyncInfo = ErgoSyncInfoV2(Seq(c.headers.last))
 
+    // generate common chain prefix
     val common = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
     history = applyHeaderChain(history, common)
 
@@ -106,11 +108,19 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     history = applyHeaderChain(history, fork1.tail)
     history.bestHeaderOpt.get shouldBe fork1.last
 
-    history.compare(getInfo(fork2)) shouldBe Fork
-    history.compare(getInfo(fork1)) shouldBe Equal
-    history.compare(getInfo(fork1.take(BlocksInChain - 1))) shouldBe Fork
-    history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe Fork
-    history.compare(getInfo(fork2.tail)) shouldBe Older
+    // v1 sync
+    history.compare(getInfoV1(fork2)) shouldBe Fork
+    history.compare(getInfoV1(fork1)) shouldBe Equal
+    history.compare(getInfoV1(fork1.take(BlocksInChain - 1))) shouldBe Fork
+    history.compare(getInfoV1(fork2.take(BlocksInChain - 1))) shouldBe Fork
+    history.compare(getInfoV1(fork2.tail)) shouldBe Older
+
+    // v2 sync
+    history.compare(getInfoV2(fork2)) shouldBe Older
+    history.compare(getInfoV2(fork1)) shouldBe Equal
+    history.compare(getInfoV2(fork1.take(BlocksInChain - 1))) shouldBe Younger
+    history.compare(getInfoV2(fork2.take(BlocksInChain - 1))) shouldBe Younger
+    history.compare(getInfoV2(fork2.tail)) shouldBe Older
   }
 
   property("continuationIds() on forks") {
@@ -212,7 +222,6 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     from1to2Chain._1.get shouldEqual inChain.last.id
     from1to2Chain._2.headers.map(_.height) shouldEqual fork2.headers.map(_.height)
     from1to2Chain._2.headers shouldEqual fork2.headers
-
   }
 
   property("commonBlockThenSuffixes()") {

@@ -96,53 +96,63 @@ trait ErgoHistoryReader
   }
 
   override def compare(info: ErgoSyncInfo): HistoryComparisonResult = {
-    syncInfo match {
-      case syncV1: ErgoSyncInfoV1 => compareV1(syncV1)
-
+    info match {
+      case syncV1: ErgoSyncInfoV1 =>
+        compareV1(syncV1)
       case syncV2: ErgoSyncInfoV2 =>
-        bestHeaderOpt.map { myLastHeader =>
-          if (syncV2.lastHeaders.isEmpty) {
-            Younger
-          } else {
-            val myHeight = myLastHeader.height
-
-            val otherHeaders = syncV2.lastHeaders
-            val otherLastHeader = otherHeaders.head // always available
-            val otherHeight = otherLastHeader.height
-            // todo: check PoW of otherLastHeader
-
-            if (otherHeight == myHeight) {
-              if (otherLastHeader.id == myLastHeader.id) {
-                // Last headers are the same => chains are equal
-                Equal
-              } else {
-                if (commonPoint(otherHeaders.tail).isDefined) {
-                  Fork
-                } else {
-                  Unknown
-                }
-              }
-            } else if (otherHeight > myHeight) {
-              Older // todo: check difficulty ?
-            } else { // otherHeight < myHeight
-              Younger //todo: check if the block is on my chain?
-            }
-          }
-        }.getOrElse {
-          if (syncV2.lastHeaders.isEmpty) {
-            Equal
-          } else {
-            Older
-          }
-        } // other peer is older if the node doesn't have any header yet
+        compareV2(syncV2)
     }
   }
 
   /**
-    * Whether another's node syncinfo shows that another node is ahead or behind ours
+    * Whether another's node syncinfo indicates that another node is ahead or behind ours
     *
     * @param info other's node sync info
-    * @return Equal if nodes have the same history, Younger if another node is behind, Older if a new node is ahead
+    * @return Equal if nodes have the same history, Younger if another node is behind, Older if the neighbour is ahead
+    */
+  def compareV2(info: ErgoSyncInfoV2): HistoryComparisonResult = {
+    bestHeaderOpt.map { myLastHeader =>
+      if (info.lastHeaders.isEmpty) {
+        Younger
+      } else {
+        val myHeight = myLastHeader.height
+
+        val otherHeaders = info.lastHeaders
+        val otherLastHeader = otherHeaders.head // always available
+        val otherHeight = otherLastHeader.height
+        // todo: check PoW of otherLastHeader
+
+        if (otherHeight == myHeight) {
+          if (otherLastHeader.id == myLastHeader.id) {
+            // Last headers are the same => chains are equal
+            Equal
+          } else {
+            if (commonPoint(otherHeaders.tail).isDefined) {
+              Fork
+            } else {
+              Unknown
+            }
+          }
+        } else if (otherHeight > myHeight) {
+          Older // todo: check difficulty ?
+        } else { // otherHeight < myHeight
+          Younger //todo: check if the block is on my chain?
+        }
+      }
+    }.getOrElse {
+      if (info.lastHeaders.isEmpty) {
+        Equal
+      } else {
+        Older
+      }
+    } // other peer is older if the node doesn't have any header yet
+  }
+
+  /**
+    * Whether another's node syncinfo indicates that another node is ahead or behind ours
+    *
+    * @param info other's node sync info
+    * @return Equal if nodes have the same history, Younger if another node is behind, Older if the neighbour is ahead
     */
   def compareV1(info: ErgoSyncInfoV1): HistoryComparisonResult = {
     bestHeaderIdOpt match {
@@ -157,15 +167,9 @@ trait ErgoHistoryReader
         Younger
       case Some(_) =>
         //We are on different forks now.
-        val commonHeaderIdOpt = info.lastHeaderIds.view.reverse.find(m => contains(m) || m == PreGenesisHeader.id)
-        if (commonHeaderIdOpt.isDefined) {
+        if (info.lastHeaderIds.view.reverse.exists(m => contains(m) || m == PreGenesisHeader.id)) {
           //Return Younger, because we can send blocks from our fork that other node can download.
-          val commonHeaderId = commonHeaderIdOpt.get
-          if (commonHeaderId == PreGenesisHeader.id || isInBestChain(commonHeaderId)) {
-            Younger
-          } else {
-            Fork
-          }
+          Fork
         } else {
           //We don't have any of id's from other's node sync info in history.
           //We don't know whether we can sync with it and what blocks to send in Inv message.
@@ -262,7 +266,7 @@ trait ErgoHistoryReader
   }
 
   /**
-    * @return Node ErgoSyncInfo
+    * @return sync info for neigbour peers, V1 message
     */
   override def syncInfo: ErgoSyncInfo = {
     if (isEmpty) {
@@ -277,6 +281,10 @@ trait ErgoHistoryReader
     }
   }
 
+
+  /**
+    * @return sync info for neigbour peers, V2 message
+    */
   def syncInfoV2: ErgoSyncInfoV2 = {
     if (isEmpty) {
       ErgoSyncInfoV2(Seq.empty)

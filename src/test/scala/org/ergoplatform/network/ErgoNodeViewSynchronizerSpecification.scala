@@ -16,7 +16,7 @@ import org.scalatest.matchers.should.Matchers
 import scorex.core.PersistentNodeViewModifier
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.message.{InvSpec, Message}
+import scorex.core.network.message.{InvData, InvSpec, Message}
 import scorex.core.network.peer.PeerInfo
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
@@ -71,9 +71,10 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
+  val history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
+  val chain = genHeaderChain(10, history, diffBitsOpt = None, useRealTs = false)
+
   val historyGen: Gen[HT] = {
-    val history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
-    val chain = genHeaderChain(10, history, diffBitsOpt = None, useRealTs = false)
     if (history.isEmpty) applyHeaderChain(history, chain) else applyHeaderChain(history, chain.tail)
   }
 
@@ -154,10 +155,15 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       // Neighbour is sending
       val msgBytes = ErgoSyncInfoMessageSpec.toBytes(emptySync)
 
+      // we check that in case of neighbour with empty history (it has no any blocks),
+      // inv message with our block ids will be sent
       node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
-          case stn: SendToNetwork => stn.message.spec.messageCode == InvSpec.MessageCode
+          case stn: SendToNetwork =>
+            val msg = stn.message
+            msg.spec.messageCode == InvSpec.MessageCode &&
+              msg.data.get.asInstanceOf[InvData].ids.head == chain.head.id
           case _ => false
         }
       }

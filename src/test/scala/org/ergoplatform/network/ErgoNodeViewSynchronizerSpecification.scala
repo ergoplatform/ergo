@@ -72,13 +72,16 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   }
 
   val history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
-  val chain = genHeaderChain(10, history, diffBitsOpt = None, useRealTs = false)
+  val chain = genHeaderChain(2000, history, diffBitsOpt = None, useRealTs = false)
+  val localChain = chain.take(1000)
 
-  val historyGen: Gen[HT] = {
-    if (history.isEmpty) applyHeaderChain(history, chain) else applyHeaderChain(history, chain.tail)
+
+  val localHistoryGen: Gen[HT] = {
+    require(history.isEmpty)
+    applyHeaderChain(history, localChain)
   }
 
-  val stateGen: Gen[WrappedUtxoState] =
+  val localStateGen: Gen[WrappedUtxoState] =
     boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, settings))
 
   def semanticallyValidModifier(state: UTXO_ST): PM = {
@@ -104,9 +107,9 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   def nodeViewSynchronizer(implicit system: ActorSystem):
   (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM]) = {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-    val h = historyGen.sample.get
+    val h = localHistoryGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-    val s = stateGen.sample.get
+    val s = localStateGen.sample.get
     val settings = ErgoSettings.read()
     val pool = ErgoMemPool.empty(settings)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
@@ -164,6 +167,31 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
             val msg = stn.message
             msg.spec.messageCode == InvSpec.MessageCode &&
               msg.data.get.asInstanceOf[InvData].ids.head == chain.head.id
+          case _ => false
+        }
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: Message: SyncInfoSpec - older peer") {
+    withFixture { ctx =>
+      import ctx._
+
+      val sync = ErgoSyncInfoV2(Seq(chain.last))
+
+      // Neighbour is sending
+      val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
+
+      // we check that in case of neighbour with older history (it has more blocks),
+      // sync message will be sent by our node (to get invs from the neighbour),
+      // sync message will consist of 4 headers
+      node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork =>
+            val msg = stn.message
+            val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
+            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 4
           case _ => false
         }
       }

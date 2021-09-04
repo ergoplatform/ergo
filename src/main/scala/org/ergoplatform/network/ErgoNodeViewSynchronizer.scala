@@ -236,7 +236,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             log.debug(s"Extension ids: ${idsToString(ext)}")
             sendExtension(remote, status, ext)
 
-          case Fork =>
+          case Fork => //todo: what to do?
+
           case Older =>
             // send sync to older
             val syncInfo = historyReader.syncInfoV2

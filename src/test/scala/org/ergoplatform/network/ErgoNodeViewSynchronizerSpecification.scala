@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -18,7 +18,7 @@ import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.PersistentNodeViewModifier
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{RegisterMessageSpecs, SendToNetwork}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedHistory, ChangedMempool, DisconnectedPeer, HandshakedPeer, ModificationOutcome, ModifiersProcessingResult}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network.message.{InvData, InvSpec, Message, MessageSpec}
 import scorex.core.network.peer.PeerInfo
 import scorex.core.serialization.ScorexSerializer
@@ -78,7 +78,6 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
 
       // subscribe for history and mempool changes
       viewHolderRef ! GetNodeViewChanges(history = true, state = false, vault = false, mempool = true)
-
     }
 
     override protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
@@ -97,6 +96,11 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   val localChain = chain.take(1000)
   val altchain = genHeaderChain(1000, history, diffBitsOpt = None, useRealTs = false)
 
+  val forkedChain = {
+    val c = localChain.take(1000 - 512)
+    c ++ genHeaderChain(512, Some(c.last), diffBitsOpt = None, useRealTs = false).tail
+  }
+  val forkedHeight = forkedChain.last.height
 
   val localHistoryGen: Gen[HT] = {
     require(history.isEmpty)
@@ -225,6 +229,31 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       import ctx._
 
       val sync = ErgoSyncInfoV2(Seq(altchain.last))
+
+      // Neighbour is sending
+      val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
+
+      // we check that in case of neighbour with older history (it has more blocks),
+      // sync message will be sent by our node (to get invs from the neighbour),
+      // sync message will consist of 4 headers
+      node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork =>
+            val msg = stn.message
+            val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
+            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 4
+          case _ => false
+        }
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: Message: SyncInfoSpec - forked peer") {
+    withFixture { ctx =>
+      import ctx._
+
+      val sync = ErgoSyncInfoV2(ErgoHistoryReader.FullV2SyncOffsets.map(offset => forkedChain.apply(forkedHeight - offset - 1)))
 
       // Neighbour is sending
       val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)

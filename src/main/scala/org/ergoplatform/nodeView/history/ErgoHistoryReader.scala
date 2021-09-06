@@ -292,9 +292,9 @@ trait ErgoHistoryReader
       val h = headersHeight
 
       val offsets = if (full) {
-        Array(0, 16, 128, 512)
+        ErgoHistoryReader.FullV2SyncOffsets
       } else {
-        Array(0)
+        ErgoHistoryReader.ReducedV2SyncOffsets
       }
 
       val headers = offsets.flatMap(offset => bestHeaderAtHeight(h - offset))
@@ -495,4 +495,11 @@ trait ErgoHistoryReader
     nipopowAlgos.prove(this, headerIdOpt)(proofParams)
   }
 
+}
+
+
+object ErgoHistoryReader {
+  val FullV2SyncOffsets = Array(0, 16, 128, 512)
+
+  val ReducedV2SyncOffsets = Array(0)
 }

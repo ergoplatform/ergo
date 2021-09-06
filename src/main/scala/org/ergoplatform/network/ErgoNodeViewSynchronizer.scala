@@ -126,7 +126,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
     if (peersV2.nonEmpty) {
       //todo: send only last header to peers which ae equal or younger
-      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(history.syncInfoV2), None), SendToPeers(peersV2))
+      val v2SyncInfo = history.syncInfoV2(full = true)
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
     }
   }
 
@@ -198,11 +199,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Send sync V2 message to a concrete peer. Used in [[processSyncV2]] method.
     */
   protected def sendSyncToPeer(remote: ConnectedPeer, syncV2: ErgoSyncInfoV2): Unit = {
-    networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(syncV2), None), SendToPeer(remote))
+    if(syncV2.lastHeaders.nonEmpty) {
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(syncV2), None), SendToPeer(remote))
+    }
   }
 
   /**
-    * Processing sync V1 message `syncInfo` got from neighbour peer `remote`
+    * Processing sync V1 message `syncInfo` got from neighbour peer `remote` (supporting sync v2)
     */
   protected def processSyncV2(syncInfo: ErgoSyncInfoV2, remote: ConnectedPeer): Unit = {
     historyReaderOpt match {
@@ -218,11 +221,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           case Unknown =>
             // we do not know what to send to a peer with unknown status
             log.info(s"Peer status is still unknown for $remote")
-
-            val syncInfo = historyReader.syncInfoV2
-            if(syncInfo.lastHeaders.nonEmpty) {
-              sendSyncToPeer(remote, syncInfo)
-            }
+            val syncInfo = historyReader.syncInfoV2(full = true)
+            sendSyncToPeer(remote, syncInfo)
 
           case Nonsense =>
             // Shouldn't be the case for sync V2
@@ -240,10 +240,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
           case Older =>
             // send sync to older
-            val syncInfo = historyReader.syncInfoV2
-            if(syncInfo.lastHeaders.nonEmpty) {
-              sendSyncToPeer(remote, syncInfo)
-            }
+            val syncInfo = historyReader.syncInfoV2(full = false)
+            sendSyncToPeer(remote, syncInfo)
 
 
           case Equal =>

@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
-import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -13,10 +13,13 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.HistoryTestHelpers
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
+import scorex.core.NodeViewHolder.DownloadRequest
+import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.PersistentNodeViewModifier
 import scorex.core.network.ConnectedPeer
-import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.message.{InvData, InvSpec, Message}
+import scorex.core.network.NetworkController.ReceivableMessages.{RegisterMessageSpecs, SendToNetwork}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedHistory, ChangedMempool, DisconnectedPeer, HandshakedPeer, ModificationOutcome, ModifiersProcessingResult}
+import scorex.core.network.message.{InvData, InvSpec, Message, MessageSpec}
 import scorex.core.network.peer.PeerInfo
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
@@ -57,7 +60,25 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     override def preStart(): Unit = {
       this.historyReaderOpt = Some(history)
       this.mempoolReaderOpt = Some(pool)
-      super.preStart()
+
+      // register as a handler for synchronization-specific types of messages
+      val messageSpecs: Seq[MessageSpec[_]] = Seq(invSpec, requestModifierSpec, modifiersSpec, syncInfoSpec)
+      networkControllerRef ! RegisterMessageSpecs(messageSpecs, self)
+
+      // register as a listener for peers got connected (handshaked) or disconnected
+      context.system.eventStream.subscribe(self, classOf[HandshakedPeer])
+      context.system.eventStream.subscribe(self, classOf[DisconnectedPeer])
+
+      // subscribe for all the node view holder events involving modifiers and transactions
+      context.system.eventStream.subscribe(self, classOf[ChangedHistory[ErgoHistory]])
+      context.system.eventStream.subscribe(self, classOf[ChangedMempool[ErgoMemPool]])
+      context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
+      context.system.eventStream.subscribe(self, classOf[DownloadRequest])
+      context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult[ErgoPersistentModifier]])
+
+      // subscribe for history and mempool changes
+      viewHolderRef ! GetNodeViewChanges(history = true, state = false, vault = false, mempool = true)
+
     }
 
     override protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
@@ -74,6 +95,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
   val history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
   val chain = genHeaderChain(2000, history, diffBitsOpt = None, useRealTs = false)
   val localChain = chain.take(1000)
+  val altchain = genHeaderChain(1000, history, diffBitsOpt = None, useRealTs = false)
 
 
   val localHistoryGen: Gen[HT] = {
@@ -178,6 +200,31 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       import ctx._
 
       val sync = ErgoSyncInfoV2(Seq(chain.last))
+
+      // Neighbour is sending
+      val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
+
+      // we check that in case of neighbour with older history (it has more blocks),
+      // sync message will be sent by our node (to get invs from the neighbour),
+      // sync message will consist of 4 headers
+      node ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork =>
+            val msg = stn.message
+            val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
+            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 1
+          case _ => false
+        }
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: Message: SyncInfoSpec - unknown peer") {
+    withFixture { ctx =>
+      import ctx._
+
+      val sync = ErgoSyncInfoV2(Seq(altchain.last))
 
       // Neighbour is sending
       val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)

@@ -285,13 +285,17 @@ trait ErgoHistoryReader
   /**
     * @return sync info for neigbour peers, V2 message
     */
-  def syncInfoV2: ErgoSyncInfoV2 = {
+  def syncInfoV2(full: Boolean): ErgoSyncInfoV2 = {
     if (isEmpty) {
       ErgoSyncInfoV2(Seq.empty)
     } else {
       val h = headersHeight
 
-      val offsets = Array(0, 16, 128, 512)
+      val offsets = if (full) {
+        Array(0, 16, 128, 512)
+      } else {
+        Array(0)
+      }
 
       val headers = offsets.flatMap(offset => bestHeaderAtHeight(h - offset))
 

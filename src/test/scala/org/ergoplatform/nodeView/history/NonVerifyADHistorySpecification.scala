@@ -123,7 +123,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     history.compare(getInfoV2(fork2.tail)) shouldBe Older
   }
 
-  property("continuationIds() on forks") {
+  property("continuationIds() on forks - sync v1") {
     var history1 = genHistory()
     var history2 = genHistory()
     val inChain = genHeaderChain(2, history1, diffBitsOpt = None, useRealTs = false)
@@ -146,10 +146,9 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     val continuation = history1.continuationIds(si, BlocksInChain * 100)
 
     fork1.headers.foreach(h => continuation.exists(_._2 == h.id) shouldBe true)
-
   }
 
-  property("continuationIds() for empty ErgoSyncInfo should contain ids of all headers") {
+  property("continuationIds() for empty ErgoSyncInfo should contain ids of all headers - sync v1") {
     var history = genHistory()
     val chain = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
     history = applyHeaderChain(history, chain)
@@ -169,7 +168,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     chain.headers.map(_.id) should contain theSameElementsAs ci.map(_._2)
   }
 
-  property("continuationIds() for less developed chain should contain ids of next headers in our chain") {
+  property("continuationIds() for smaller chain should contain ids of next headers in our chain - sync v1") {
     var history = genHistory()
 
     history = ensureMinimalHeight(history, BlocksInChain + 1)

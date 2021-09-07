@@ -197,20 +197,10 @@ trait ErgoHistoryReader
   }
 
   /**
-    * Calculating continuation from common header which will send to another node
-    * if comparison status is YOUNGER of FORK.
     *
-    * @param syncInfo other's node sync info
-    * @param size max return size
-    * @return Ids of headers, that node with info should download and apply to synchronize
+    * Calculating continuation from common header which will be sent to another node
+    * if comparison status is YOUNGER of FORK, for sync message V1.
     */
-  override def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds = {
-    syncInfo match {
-      case syncV1: ErgoSyncInfoV1 => continuationIdsV1(syncV1, size)
-      case syncV2: ErgoSyncInfoV2 => continuationIdsV2(syncV2)
-    }
-  }
-
   def continuationIdsV1(syncInfo: ErgoSyncInfoV1, size: Int): ModifierIds =
     if (isEmpty) {
       // if no any header applied yet, return identifiers from other node's sync info
@@ -236,20 +226,43 @@ trait ErgoHistoryReader
       }
     }
 
-  def continuationIdsV2(syncV2: ErgoSyncInfoV2): ModifierIds = {
+  /**
+    *
+    * Calculating continuation from common header which will be sent to another node
+    * if comparison status is YOUNGER of FORK, for sync message V2.
+    */
+  def continuationIdsV2(syncV2: ErgoSyncInfoV2, size: Int): ModifierIds = {
     if (syncV2.lastHeaders.isEmpty) {
-      (ErgoHistory.GenesisHeight to ErgoHistory.GenesisHeight + 400).flatMap { height =>
-        bestHeaderIdAtHeight(height)
-      }.map(h => Header.modifierTypeId -> h) //todo: remove modifierTypeId ?
+      // if other node has no headers yet, send up to `size` headers from genesis
+      val heightTo = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
+      (ErgoHistory.GenesisHeight to heightTo)
+        .flatMap(height => bestHeaderIdAtHeight(height))
+        .map(h => Header.modifierTypeId -> h) //todo: remove modifierTypeId ?
     } else {
       commonPoint(syncV2.lastHeaders) match {
         case Some(commonHeader) =>
-          ((commonHeader.height + 1) to (commonHeader.height + 400)).flatMap { height =>
-            bestHeaderIdAtHeight(height)
-          }.map(h => Header.modifierTypeId -> h) //todo: remove modifierTypeId ?
+          val heightTo = Math.min(headersHeight, commonHeader.height + size - 1)
+          ((commonHeader.height + 1) to heightTo)
+            .flatMap(height => bestHeaderIdAtHeight(height))
+            .map(h => Header.modifierTypeId -> h) //todo: remove modifierTypeId ?
         case None =>
           Seq.empty
       }
+    }
+  }
+
+  /**
+    * Calculating continuation from common header which will be sent to another node
+    * if comparison status is YOUNGER of FORK.
+    *
+    * @param syncInfo other's node sync info
+    * @param size max return size
+    * @return Ids of headers, that node with info should download and apply to synchronize
+    */
+  override def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds = {
+    syncInfo match {
+      case syncV1: ErgoSyncInfoV1 => continuationIdsV1(syncV1, size)
+      case syncV2: ErgoSyncInfoV2 => continuationIdsV2(syncV2, size)
     }
   }
 

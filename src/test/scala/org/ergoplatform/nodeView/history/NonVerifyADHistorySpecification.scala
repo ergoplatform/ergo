@@ -148,24 +148,33 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     fork1.headers.foreach(h => continuation.exists(_._2 == h.id) shouldBe true)
   }
 
-  property("continuationIds() for empty ErgoSyncInfo should contain ids of all headers - sync v1") {
+  property("continuationIds() for empty ErgoSyncInfo should contain ids of all headers") {
     var history = genHistory()
     val chain = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
     history = applyHeaderChain(history, chain)
 
     val smallerLimit = 2
-    val ci0 = history.continuationIds(ErgoSyncInfoV1(Seq()), smallerLimit)
-    ci0.length shouldBe smallerLimit
+    val ci0v1 = history.continuationIds(ErgoSyncInfoV1(Seq()), smallerLimit)
+    ci0v1.length shouldBe smallerLimit
 
-    chain.headers.take(smallerLimit).map(_.encodedId) shouldEqual ci0.map(c => Algos.encode(c._2))
+    val ci0v2 = history.continuationIds(ErgoSyncInfoV2(Seq()), smallerLimit)
+    ci0v2.length shouldBe smallerLimit
+
+    chain.headers.take(smallerLimit).map(_.encodedId) shouldEqual ci0v1.map(c => Algos.encode(c._2))
+    chain.headers.take(smallerLimit).map(_.encodedId) shouldEqual ci0v2.map(c => Algos.encode(c._2))
 
     val biggerLimit = BlocksInChain + 2
-    val ci1 = history.continuationIds(ErgoSyncInfoV1(Seq()), biggerLimit)
-    chain.headers.map(_.id) should contain theSameElementsAs ci1.map(_._2)
+    val ci1v1 = history.continuationIds(ErgoSyncInfoV1(Seq()), biggerLimit)
+    chain.headers.map(_.id) should contain theSameElementsAs ci1v1.map(_._2)
+    val ci1v2 = history.continuationIds(ErgoSyncInfoV2(Seq()), biggerLimit)
+    chain.headers.map(_.id) should contain theSameElementsAs ci1v2.map(_._2)
 
-    val ci = history.continuationIds(ErgoSyncInfoV1(Seq()), BlocksInChain)
-    ci.foreach(c => c._1 shouldBe Header.modifierTypeId)
-    chain.headers.map(_.id) should contain theSameElementsAs ci.map(_._2)
+    val civ1 = history.continuationIds(ErgoSyncInfoV1(Seq()), BlocksInChain)
+    civ1.foreach(c => c._1 shouldBe Header.modifierTypeId)
+    chain.headers.map(_.id) should contain theSameElementsAs civ1.map(_._2)
+    val civ2 = history.continuationIds(ErgoSyncInfoV2(Seq()), BlocksInChain)
+    civ2.foreach(c => c._1 shouldBe Header.modifierTypeId)
+    chain.headers.map(_.id) should contain theSameElementsAs civ2.map(_._2)
   }
 
   property("continuationIds() for smaller chain should contain ids of next headers in our chain - sync v1") {

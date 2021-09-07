@@ -205,7 +205,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Processing sync V1 message `syncInfo` got from neighbour peer `remote` (supporting sync v2)
+    * Processing sync V2 message `syncInfo` got from neighbour peer `remote` (supporting sync v2)
     */
   protected def processSyncV2(syncInfo: ErgoSyncInfoV2, remote: ConnectedPeer): Unit = {
     historyReaderOpt match {

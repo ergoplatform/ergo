@@ -89,12 +89,23 @@ trait ErgoHistoryReader
     */
   def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
 
+  /**
+    * For given headers (sorted in inverse chronological order), find first one (most recent one) which is known
+    * to our history
+    */
   private def commonPoint(headers: Seq[Header]): Option[Header] = {
     headers.find { h =>
       contains(h.id)
     }
   }
 
+  /**
+    * Whether another's node syncinfo shows that another node is ahead or behind ours
+    *
+    * @param info other's node sync info
+    * @return Equal if nodes have the same history, Younger if another node is behind, Older if a new node is ahead,
+    *         Fork if other peer is on another chain, Unknown if we can't deduct neighbour's status
+    */
   override def compare(info: ErgoSyncInfo): HistoryComparisonResult = {
     info match {
       case syncV1: ErgoSyncInfoV1 =>
@@ -196,20 +207,7 @@ trait ErgoHistoryReader
   override def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds = {
     syncInfo match {
       case syncV1: ErgoSyncInfoV1 => continuationIdsV1(syncV1, size)
-      case syncV2: ErgoSyncInfoV2 => if (syncV2.lastHeaders.isEmpty) {
-        (ErgoHistory.GenesisHeight to ErgoHistory.GenesisHeight + 400).flatMap { height =>
-          bestHeaderIdAtHeight(height)
-        }.map(h => Header.modifierTypeId -> h) //todo: remove modifierTypeId ?
-      } else {
-        commonPoint(syncV2.lastHeaders) match {
-          case Some(commonHeader) =>
-            ((commonHeader.height + 1) to (commonHeader.height + 400)).flatMap { height =>
-              bestHeaderIdAtHeight(height)
-            }.map(h => Header.modifierTypeId -> h) //todo: remove modifierTypeId ?
-          case None =>
-            Seq.empty
-        }
-      }
+      case syncV2: ErgoSyncInfoV2 => continuationIdsV2(syncV2)
     }
   }
 
@@ -237,6 +235,23 @@ trait ErgoHistoryReader
         }
       }
     }
+
+  def continuationIdsV2(syncV2: ErgoSyncInfoV2): ModifierIds = {
+    if (syncV2.lastHeaders.isEmpty) {
+      (ErgoHistory.GenesisHeight to ErgoHistory.GenesisHeight + 400).flatMap { height =>
+        bestHeaderIdAtHeight(height)
+      }.map(h => Header.modifierTypeId -> h) //todo: remove modifierTypeId ?
+    } else {
+      commonPoint(syncV2.lastHeaders) match {
+        case Some(commonHeader) =>
+          ((commonHeader.height + 1) to (commonHeader.height + 400)).flatMap { height =>
+            bestHeaderIdAtHeight(height)
+          }.map(h => Header.modifierTypeId -> h) //todo: remove modifierTypeId ?
+        case None =>
+          Seq.empty
+      }
+    }
+  }
 
   /**
     *
@@ -492,11 +507,10 @@ trait ErgoHistoryReader
     */
   def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
     val proofParams = PoPowParams(m, k)
-    nipopowAlgos.prove(this, headerIdOpt)(proofParams)
+    nipopowAlgos.prove(histReader = this, headerIdOpt = headerIdOpt)(proofParams)
   }
 
 }
-
 
 object ErgoHistoryReader {
   val FullV2SyncOffsets = Array(0, 16, 128, 512)

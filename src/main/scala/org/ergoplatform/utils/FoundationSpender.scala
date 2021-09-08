@@ -19,6 +19,8 @@ import sigmastate.interpreter._
 import scorex.util.bytesToId
 import scorex.util.encode.Base16
 
+object FounderSpender
+
 /*
 object FounderSpender extends App {
   implicit lazy val ircontext: IRContext = new RuntimeIRContext

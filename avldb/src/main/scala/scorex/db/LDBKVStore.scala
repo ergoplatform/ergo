@@ -3,6 +3,8 @@ package scorex.db
 import org.iq80.leveldb.DB
 import scorex.util.ScorexLogging
 
+import scala.util.{Failure, Success, Try}
+
 
 /**
   * A LevelDB wrapper providing a convenient non-versioned database interface.
@@ -11,22 +13,23 @@ import scorex.util.ScorexLogging
   */
 class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging {
 
-  def update(toInsert: Seq[(K, V)], toRemove: Seq[K]): Unit = {
+  def update(toInsert: Seq[(K, V)], toRemove: Seq[K]): Try[Unit] = {
     val batch = db.createWriteBatch()
     try {
       toInsert.foreach { case (k, v) => batch.put(k, v) }
       toRemove.foreach(batch.delete)
       db.write(batch)
+      Success(Unit)
     } catch {
-      case t: Throwable => log.error("DB error: ", t)
+      case t: Throwable => Failure(t)
     } finally {
       batch.close()
     }
   }
 
-  def insert(values: Seq[(K, V)]): Unit = update(values, Seq.empty)
+  def insert(values: Seq[(K, V)]): Try[Unit] = update(values, Seq.empty)
 
-  def remove(keys: Seq[K]): Unit = update(Seq.empty, keys)
+  def remove(keys: Seq[K]): Try[Unit] = update(Seq.empty, keys)
 
   /**
     * Get last key within some range (inclusive) by used comparator.

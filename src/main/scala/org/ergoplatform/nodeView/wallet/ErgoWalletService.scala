@@ -46,7 +46,7 @@ trait ErgoWalletService {
   /**
     * Initializes JsonSecretStorage with new wallet file encrypted with given `walletPass`
     * @param state current wallet state
-    * @param settings [[ErgoSettings]]
+    * @param settings settings read from config file
     * @param walletPass to encrypt wallet file with
     * @param mnemonicPassOpt optional mnemonic password included into seed. Needed for restoring wallet
     * @return generated mnemonic the JsonSecretStorage was initialized with -> new wallet state
@@ -58,7 +58,7 @@ trait ErgoWalletService {
 
   /**
     * @param state current wallet state
-    * @param settings [[ErgoSettings]]
+    * @param settings settings read from config file
     * @param mnemonic that was used to initialize wallet with
     * @param mnemonicPassOpt that was used to initialize wallet with
     * @param walletPass that was used to initialize wallet with
@@ -71,7 +71,7 @@ trait ErgoWalletService {
                     walletPass: String)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState]
 
   /**
-    * Decrypt underlying [[JsonSecretStorage]] using `walletPass` and update public keys
+    * Decrypt underlying encrypted storage using `walletPass` and update public keys
     * @param state current wallet state
     * @param walletPass used for wallet initialization to decrypt wallet json file with
     * @param usePreEip3Derivation if true, the first key is the master key
@@ -80,7 +80,7 @@ trait ErgoWalletService {
   def unlockWallet(state: ErgoWalletState, walletPass: String, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState]
 
   /**
-    * Unset secret in [[JsonSecretStorage]] and reset prover
+    * Clear secret from previously decrypted json storage and reset prover
     * @param state current wallet state
     * @return Try of new wallet state
     */
@@ -89,7 +89,7 @@ trait ErgoWalletService {
   /**
     * Close it, recursively delete registryFolder from filesystem if present and create new registry
     * @param state current wallet state
-    * @param settings [[ErgoSettings]]
+    * @param settings settings read from config file
     * @return Try of new wallet state
     */
   def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState]
@@ -97,7 +97,7 @@ trait ErgoWalletService {
   /**
     * Close it, recursively delete storageFolder from filesystem if present and create new storage
     * @param state current wallet state
-    * @param settings [[ErgoSettings]]
+    * @param settings settings read from config file
     * @return Try of new wallet state
     */
   def recreateStorage(state: ErgoWalletState, settings: ErgoSettings)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState]
@@ -150,7 +150,7 @@ trait ErgoWalletService {
     * Derive next key from master key
     * @param state current wallet state
     * @param usePreEip3Derivation whether to use pre-EIP3 derivation or not
-    * @return Try of [[DeriveNextKeyResult]] and new wallet state
+    * @return Try of the derived key and new wallet state
     */
   def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[(DeriveNextKeyResult, ErgoWalletState)]
 
@@ -179,7 +179,7 @@ trait ErgoWalletService {
     * @param state current wallet state
     * @param block - block to scan
     */
-  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): ErgoWalletState
+  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): Try[ErgoWalletState]
 
   /**
     * Sign a transaction
@@ -285,15 +285,19 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
                     mnemonic: String,
                     mnemonicPassOpt: Option[String],
                     walletPass: String)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
-    Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage))
-      .flatMap { secretStorage =>
-        // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
-        recreateRegistry(state, settings).flatMap { stateV1 =>
-          recreateStorage(stateV1, settings).map { stateV2 =>
-            stateV2.copy(secretStorageOpt = Some(secretStorage))
+    if (settings.nodeSettings.isFullBlocksPruned)
+      Failure(new IllegalArgumentException("Unable to restore wallet when pruning is enabled"))
+    else
+      Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage))
+        .flatMap { secretStorage =>
+          // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
+          recreateRegistry(state, settings).flatMap { stateV1 =>
+            recreateStorage(stateV1, settings).map { stateV2 =>
+              stateV2.copy(secretStorageOpt = Some(secretStorage))
+            }
           }
         }
-      }
+
 
   def unlockWallet(state: ErgoWalletState,
                    walletPass: String,
@@ -324,12 +328,12 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
   }
 
   def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] =
-    Try {
+    WalletRegistry.apply(settings).map { reg =>
       val registryFolder = WalletRegistry.registryFolder(settings)
       log.info(s"Removing the registry folder $registryFolder")
       state.registry.close()
       FileUtils.deleteRecursive(registryFolder)
-      state.copy(registry = WalletRegistry.apply(settings))
+      state.copy(registry = reg)
     }
 
   def recreateStorage(state: ErgoWalletState, settings: ErgoSettings)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
@@ -520,11 +524,9 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
         Failure(new Exception("Unable to derive key, wallet is not initialized"))
     }
 
-  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): ErgoWalletState = {
-    val (reg, offReg, updatedOutputsFilter) =
-      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.stateContext, state.walletVars, block, state.outputsFilter)
-    state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
-  }
+  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): Try[ErgoWalletState] =
+      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter)
+        .map { case (reg, offReg, updatedOutputsFilter) => state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter)) }
 
   def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {
@@ -545,8 +547,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
       case None =>
         Failure(new Exception(s"Scan #$scanId not found"))
       case Some(_) =>
-        Try {
-          state.storage.removeScan(scanId)
+        state.storage.removeScan(scanId).map { _ =>
           state.copy(walletVars = state.walletVars.removeScan(scanId))
         }
     }

@@ -1,18 +1,19 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors.popow
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.PoPoWProof
+import org.ergoplatform.modifiers.history.NipopowProofModifier
 import scorex.core.consensus.History.ProgressInfo
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * Contains all functions required by History to process PoPoWProofs for regime that do not accept them.
   */
 trait EmptyPoPoWProofsProcessor extends PoPoWProofsProcessor {
 
-  def validate(m: PoPoWProof): Try[Unit] = Failure(new Error("Regime that do not process PoPoWProof"))
+  def validate(m: NipopowProofModifier): Try[Unit] = Failure(new Error("Regime that do not process PoPoWProof"))
 
-  def process(m: PoPoWProof): ProgressInfo[ErgoPersistentModifier] = ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+  def process(m: NipopowProofModifier): Try[ProgressInfo[ErgoPersistentModifier]] =
+    Success(ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty))
 }
 

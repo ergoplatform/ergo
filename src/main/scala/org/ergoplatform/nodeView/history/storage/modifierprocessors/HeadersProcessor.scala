@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import com.google.common.primitives.Ints
-import org.ergoplatform.ErgoApp
+import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.LinearDifficultyControl
 import org.ergoplatform.modifiers.ErgoPersistentModifier
@@ -23,7 +23,7 @@ import scorex.util._
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * Contains all functions required by History to process Headers.
@@ -92,16 +92,15 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   protected def process(h: Header): Try[ProgressInfo[ErgoPersistentModifier]] = synchronized {
     val dataToInsert: (Seq[(ByteArrayWrapper, Array[Byte])], Seq[ErgoPersistentModifier]) = toInsert(h)
 
-    historyStorage.insert(dataToInsert._1, dataToInsert._2).map { _ =>
+    historyStorage.insert(dataToInsert._1, dataToInsert._2).flatMap { _ =>
       bestHeaderIdOpt match {
         case Some(bestHeaderId) =>
           // If we verify transactions, we don't need to send this header to state.
           // If we don't and this is the best header, we should send this header to state to update state root hash
           val toProcess = if (nodeSettings.verifyTransactions || !(bestHeaderId == h.id)) Seq.empty else Seq(h)
-          ProgressInfo(None, Seq.empty, toProcess, toDownload(h))
+          Success(ProgressInfo(None, Seq.empty, toProcess, toDownload(h)))
         case None =>
-          log.error("Should always have best header after header application")
-          ErgoApp.forceStopApplication()
+          Failure(CriticalSystemException("History should always have best header on header application"))
       }
     }
   }

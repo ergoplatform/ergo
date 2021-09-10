@@ -20,6 +20,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
 import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate}
+import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
@@ -643,7 +644,7 @@ object CandidateGenerator extends ScorexLogging {
     val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
       val feeAmount = feeBoxes.map(_.value).sum
       val feeAssets =
-        feeBoxes.toColl.flatMap(_.additionalTokens).take(ErgoBox.MaxTokens - 1)
+        feeBoxes.toColl.flatMap(_.additionalTokens).take(MaxAssetsPerBox)
       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult.empty))
       val minerBox =
         new ErgoBoxCandidate(feeAmount, minerProp, nextHeight, feeAssets, Map())

@@ -11,6 +11,7 @@ import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.EphemerealNodeViewModifier
 import org.ergoplatform.wallet.protocol.context.{InputContext, TransactionContext}
@@ -272,8 +273,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
 object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding {
 
-  val MaxAssetsPerBox = 255
-
   /**
     * Extracts a mapping (assets -> total amount) from a set of boxes passed as a parameter.
     * That is, the method is checking amounts of assets in the boxes(i.e. that a box contains positive
@@ -285,7 +284,7 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
   def extractAssets(boxes: IndexedSeq[ErgoBoxCandidate]): Try[(Map[ByteArrayWrapper, Long], Int)] = Try {
     val map: mutable.Map[ByteArrayWrapper, Long] = mutable.Map[ByteArrayWrapper, Long]()
     val assetsNum = boxes.foldLeft(0) { case (acc, box) =>
-      require(box.additionalTokens.length <= ErgoTransaction.MaxAssetsPerBox, "too many assets in one box")
+      require(box.additionalTokens.length <= MaxAssetsPerBox, "too many assets in one box")
       box.additionalTokens.foreach { case (assetId, amount) =>
         val aiWrapped = ByteArrayWrapper(assetId)
         val total = map.getOrElse(aiWrapped, 0L)

@@ -27,6 +27,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
   property("properly validate creation of change box") {
     val nanoErg = 1000000000L
+
     val fB1 = 100 * nanoErg
     val tB1 = 100 * nanoErg
     val foundAssets1 = mutable.Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 20L)

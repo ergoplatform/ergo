@@ -8,9 +8,10 @@ import scorex.crypto.hash.{Blake2b256, Digest32}
 import sigmastate.helpers.TestingHelpers._
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import org.scalatest.EitherValues
-import org.ergoplatform.wallet.boxes.DefaultBoxSelector.{NotEnoughErgsError, NotEnoughTokensError, formChangeBox}
+import org.ergoplatform.wallet.boxes.DefaultBoxSelector.{ConstraintViolation, NotEnoughErgsError, NotEnoughTokensError, formChangeBox}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
+
 import scala.collection.mutable
 
 class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues {
@@ -25,15 +26,18 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
   val StartHeight: Int = 0
 
   property("properly validate creation of change box") {
-    val fB1 = 100
-    val tB1 = 100
+    val nanoErg = 1000000000L
+    val fB1 = 100 * nanoErg
+    val tB1 = 100 * nanoErg
     val foundAssets1 = mutable.Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 20L)
     val targetAssets1 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 20L)
+    val targetAssets3 = Map(ModifierId @@ "token7" -> 5L, ModifierId @@ "token2" -> 20L)
+
     formChangeBox(fB1, tB1, foundAssets1, targetAssets1) shouldBe
       Right(None)
 
-    val fB2 = 90
-    val tB2 = 100
+    val fB2 = 90 * nanoErg
+    val tB2 = 100 * nanoErg
     formChangeBox(fB2, tB2, foundAssets1, targetAssets1) shouldBe
       Left(NotEnoughErgsError(s"Not enough ERG $fB2", fB2))
 
@@ -41,9 +45,13 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
     formChangeBox(fB2, tB2, foundAssets2, targetAssets1) shouldBe
       Left(NotEnoughErgsError(s"Not enough ERG $fB2", fB2))
 
-    val fB3 = 110
+    val fB3 = 110 * nanoErg
     val targetAssets5 = Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 20L)
     formChangeBox(fB3, fB3, foundAssets1, targetAssets5) shouldBe
+      Left(NotEnoughTokensError("Not enough tokens",
+        Map(ModifierId @@ "token1" -> 5, ModifierId @@ "token2" -> 20)))
+
+    formChangeBox(fB3, fB2, foundAssets1, targetAssets3 ) shouldBe
       Left(NotEnoughTokensError("Not enough tokens",
         Map(ModifierId @@ "token1" -> 5, ModifierId @@ "token2" -> 20)))
 
@@ -52,16 +60,13 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
       Left(NotEnoughTokensError("Not enough tokens",
         Map(ModifierId @@ "token1" -> 5, ModifierId @@ "token2" -> 20)))
 
-    formChangeBox(fB2, fB3, foundAssets1, targetAssets1) shouldBe
-      Left(NotEnoughErgsError(s"Not enough ERG $fB2", fB2))
-
     val foundAssets4 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 20L)
     formChangeBox(fB3, fB3, foundAssets2, foundAssets4) shouldBe
-      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", 110L))
+      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", fB3))
 
     val tA6 = Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 15L)
     formChangeBox(fB3, fB3, foundAssets2, tA6) shouldBe
-      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", 110L))
+      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", fB3))
 
     val tA7 = Map(ModifierId @@ "token1" -> 10L, ModifierId @@ "token2" -> 25L)
     formChangeBox(fB3, fB3, foundAssets2, tA7) shouldBe
@@ -70,13 +75,24 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
     val tA5 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token4" -> 20L)
     formChangeBox(fB3, fB3, foundAssets2, tA5) shouldBe
-      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs",110))
+      Left(NotEnoughTokensError("Not enough tokens",Map(ModifierId @@ "token1" -> 10, ModifierId @@ "token2" -> 20)))
+
+    val testBalance = 10000
+    val testBalance1 = 5000
+    formChangeBox(testBalance, testBalance1, foundAssets2, targetAssets1) shouldBe
+      Left(NotEnoughErgsError(s"Not enough ERG $testBalance", testBalance))
 
     formChangeBox(fB2, fB3, foundAssets2, tA5) shouldBe
       Left(NotEnoughErgsError(s"Not enough ERG $fB2", fB2))
 
+    val testAsset = (1 to 258).toList.map{ x => (ModifierId @@ x.toString, (x + 1).toLong) }.toMap
+    val testAsset2 = (1 to 258).toList.map{ x => (ModifierId @@ x.toString, x.toLong) }.toMap
+    val immAsset1 = collection.mutable.Map(testAsset.toSeq: _*)
+    formChangeBox(fB3, fB2, immAsset1, testAsset2) shouldBe
+      Left(ConstraintViolation("MaxTokens constraint violation", 258))
+
     formChangeBox(fB3, fB2, foundAssets2, tA5) shouldBe
-      Right(Some(ErgoBoxAssetsHolder(20,Map(ModifierId @@ "token1" -> 5, ModifierId @@ "token2" -> 20))))
+      Left(NotEnoughTokensError("Not enough tokens",Map(ModifierId @@ "token1" -> 10, ModifierId @@ "token2" -> 20)))
 
     val tA8 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 25L)
     formChangeBox(fB3, tB2, foundAssets2, tA8) shouldBe
@@ -85,31 +101,31 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
     val tA4 = Map(ModifierId @@ "token3" -> 5L, ModifierId @@ "token2" -> 20L)
     formChangeBox(fB3, fB3, foundAssets2, tA4) shouldBe
-      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", 110))
+      Left(NotEnoughTokensError("Not enough tokens",Map(ModifierId @@ "token1" -> 10, ModifierId @@ "token2" -> 20)))
 
-    val targetAssets3 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 15L)
-    formChangeBox(fB3, tB2, foundAssets1, targetAssets3) shouldBe Right( Some(
+    formChangeBox(fB3, fB3, foundAssets2, tA6) shouldBe
+      Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", fB3))
+
+    val targetAssets8 = Map(ModifierId @@ "token1" -> 5L, ModifierId @@ "token2" -> 15L)
+    formChangeBox(fB3, tB2, foundAssets1, targetAssets8) shouldBe Right( Some(
       ErgoBoxAssetsHolder(
-        10,
+        fB3 - tB2,
         Map(
-          ModifierId @@ "token1" -> 0,
           ModifierId @@ "token2" -> 5L))))
 
     val targetAssets4 = Map(ModifierId @@ "token1" -> 1L, ModifierId @@ "token2" -> 15L)
     formChangeBox(fB3, tB2, foundAssets1, targetAssets4) shouldBe Right( Some(
       ErgoBoxAssetsHolder(
-        10,
+        fB3 - tB2,
         Map(
           ModifierId @@ "token1" -> 4L,
           ModifierId @@ "token2" -> 5L))))
 
-    formChangeBox(110, tB1, foundAssets1, targetAssets1) shouldBe
+    formChangeBox(fB3, tB1, foundAssets1, targetAssets1) shouldBe
       Right( Some(
         ErgoBoxAssetsHolder(
-          10,
-          Map(
-            ModifierId @@ "token1" -> 0,
-            ModifierId @@ "token2" -> 0))))
+          fB3 - tB1,
+          Map())))
   }
 
   property("returns error when it is impossible to select coins") {

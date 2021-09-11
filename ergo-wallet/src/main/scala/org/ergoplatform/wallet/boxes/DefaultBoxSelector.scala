@@ -23,6 +23,8 @@ object DefaultBoxSelector extends BoxSelector {
 
   final case class NotEnoughTokensError(message: String, tokensFound: Map[ModifierId, Long]) extends BoxSelectionError
 
+  final case class ConstraintViolation(message: String, numTokens: Int) extends BoxSelectionError
+
   override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
                                           externalFilter: T => Boolean,
                                           targetBalance: Long,
@@ -103,6 +105,8 @@ object DefaultBoxSelector extends BoxSelector {
                      targetBoxAssets: TokensMap
                    ): Either[BoxSelectionError, Option[ErgoBoxAssets]] = {
     val changeBalance = foundBalance - targetBalance
+    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxTokens).toSeq
+    val missedAssets = targetBoxAssets.toList.flatMap { case (id, amount) => foundBoxAssets.get(id).fold[Option[(ModifierId, Long)]](Some(id -> amount))(_ => None) }
     foundBoxAssets.foldLeft[Either[BoxSelectionError, TokensMap]](Right(Map.empty)) { case (acc, (id, amount)) =>
       targetBoxAssets.get(id) match {
         case Some(targetAmount) => acc.mapRight(tMap => tMap.updated(id, amount - targetAmount))
@@ -112,18 +116,28 @@ object DefaultBoxSelector extends BoxSelector {
       // assets from found if token exists, and throw exception otherwise
     }.flatMapRight {
       tMap =>
+        val cleanedTokens = tMap.filterNot{ case (_, amount) => amount == 0 }
         // Check if subtracted ERG amount is greater than balance and throw exception if so
         if (changeBalance < 0)
           Left(NotEnoughErgsError(s"Not enough ERG $foundBalance", foundBalance))
+        //Not all target assets found
+        else if (missedAssets.nonEmpty)
+          Left(NotEnoughTokensError("Not enough tokens", foundBoxAssets.toMap))
         // Check if all subtracted token amounts are less than token balances, throw exc if not
-        else if (tMap.exists { case (_, amount) => amount < 0 })
-          Left(NotEnoughTokensError(s"Not enough tokens", foundBoxAssets.toMap))
+        else if (cleanedTokens.exists { case (_, amount) => amount < 0 })
+          Left(NotEnoughTokensError("Not enough tokens", foundBoxAssets.toMap))
         // Exclude situation when there are change tokens, but none of ERGs
-        else if (changeBalance == 0 && tMap.exists { case (_, am) => am > 0 })
+        else if (changeBalance == 0 && cleanedTokens.exists { case (_, am) => am > 0 })
           Left(NotEnoughErgsError("Cannot create change box out of tokens without ERGs", foundBalance))
         // Found and target balances are equal so no change box is needed
-        else if (changeBalance == 0 && tMap.forall { case (_, amount) => amount == 0 }) Right(None)
-        else Right(Some(ErgoBoxAssetsHolder(changeBalance, tMap)))
+        else if (changeBalance == 0 && cleanedTokens.isEmpty) Right(None)
+        //At least a minimum amount of ERG should be assigned per a created box
+        else if (changeBoxesAssets.size * MinBoxValue > changeBalance)
+          Left(NotEnoughErgsError(s"Not enough ERG $foundBalance", foundBalance))
+        //Too many tokens
+        else if (cleanedTokens.size > MaxTokens)
+          Left(ConstraintViolation("MaxTokens constraint violation", cleanedTokens.size))
+        else Right(Some(ErgoBoxAssetsHolder(changeBalance, cleanedTokens)))
     }
   }
 }

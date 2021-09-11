@@ -1,10 +1,13 @@
 package org.ergoplatform.nodeView
 
-import java.io.File
+import akka.actor.SupervisorStrategy.Escalate
 
-import akka.actor.{ActorRef, ActorSystem, Props}
+import java.io.File
+import akka.actor.{ActorRef, ActorSystem, OneForOneStrategy, Props}
 import org.ergoplatform.ErgoApp
-import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
@@ -15,7 +18,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.FileUtils
 import scorex.core._
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{FailedTransaction, SuccessfulTransaction}
+import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 
@@ -38,11 +41,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   override protected lazy val modifiersCache =
     new ErgoModifiersCache(settings.scorexSettings.network.maxModifiersCacheSize)
 
-  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
-    super.preRestart(reason, message)
-    reason.printStackTrace()
-    System.exit(100) // this actor shouldn't be restarted at all so kill the whole app if that happened
-  }
+  override val supervisorStrategy: OneForOneStrategy =
+    OneForOneStrategy() {
+      case e: Throwable =>
+        log.error(s"NodeViewHolder failed, killing whole application ...", e)
+        Escalate
+    }
 
   override def postStop(): Unit = {
     log.warn("Stopping ErgoNodeViewHolder")
@@ -113,14 +117,76 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
     val constants = StateConstants(Some(self), settings)
-    val state = restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[MS], history)
-    log.info("State database read, state synchronized")
-    val wallet = ErgoWallet.readOrGenerate(
-      history.getReader.asInstanceOf[ErgoHistoryReader],
-      settings)
-    log.info("Wallet database read")
-    Some((history, state, wallet, memPool))
+    restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[MS], history) match {
+      case Success(state) =>
+        log.info("State database read, state synchronized")
+        val wallet = ErgoWallet.readOrGenerate(
+          history.getReader.asInstanceOf[ErgoHistoryReader],
+          settings)
+        log.info("Wallet database read")
+        Some((history, state, wallet, memPool))
+      case Failure(ex) =>
+        log.error("Failed to recover state, try to resync from genesis manually", ex)
+        ErgoApp.shutdownSystem()(context.system)
+        None
+    }
   }
+
+  //todo: update state in async way?
+  /**
+    * Remote and local persistent modifiers need to be appended to history, applied to state
+    * which also needs to be propagated to mempool and wallet
+    * @param pmod Remote or local persistent modifier
+    */
+  override protected def pmodModify(pmod: ErgoPersistentModifier): Unit =
+    if (!history().contains(pmod.id)) {
+      context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
+
+      log.info(s"Apply modifier ${pmod.encodedId} of type ${pmod.modifierTypeId} to nodeViewHolder")
+
+      history().append(pmod) match {
+        case Success((historyBeforeStUpdate, progressInfo)) =>
+          log.debug(s"Going to apply modifications to the state: $progressInfo")
+          context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod))
+          context.system.eventStream.publish(NewOpenSurface(historyBeforeStUpdate.openSurfaceIds()))
+
+          if (progressInfo.toApply.nonEmpty) {
+            val (newHistory, newStateTry, blocksApplied) =
+              updateState(historyBeforeStUpdate, minimalState(), progressInfo, IndexedSeq())
+
+            newStateTry match {
+              case Success(newMinState) =>
+                val newMemPool = updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool(), newMinState)
+
+                //we consider that vault always able to perform a rollback needed
+                @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+                val newVault = if (progressInfo.chainSwitchingNeeded) {
+                  vault().rollback(idToVersion(progressInfo.branchPoint.get)).get
+                } else vault()
+                blocksApplied.foreach(newVault.scanPersistent)
+
+                log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
+                updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
+
+              case Failure(e) =>
+                log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to minimal state", e)
+                updateNodeView(updatedHistory = Some(newHistory))
+                context.system.eventStream.publish(SemanticallyFailedModification(pmod, e))
+            }
+          } else {
+            requestDownloads(progressInfo)
+            updateNodeView(updatedHistory = Some(historyBeforeStUpdate))
+          }
+        case Failure(CriticalSystemException(error)) =>
+          log.error(error)
+          ErgoApp.shutdownSystem()(context.system)
+        case Failure(e) =>
+          log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to history", e)
+          context.system.eventStream.publish(SyntacticallyFailedModification(pmod, e))
+      }
+    } else {
+      log.warn(s"Trying to apply modifier ${pmod.encodedId} that's already in history")
+    }
 
   @SuppressWarnings(Array("AsInstanceOf"))
   private def recreatedState(): State = {
@@ -136,7 +202,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       )
   }
 
-  private def restoreConsistentState(stateIn: State, history: ErgoHistory): State = {
+  private def restoreConsistentState(stateIn: State, history: ErgoHistory): Try[State] = {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
       case (ErgoState.genesisStateVersion, None, _) =>
         log.info("State and history are both empty on startup")
@@ -164,12 +230,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         }
         toApply.foldLeft[Try[State]](Success(initState))((acc, m) => acc.flatMap(_.applyModifier(m)))
     }
-  } match {
-    case Failure(e) =>
-      log.error("Failed to recover state, try to resync from genesis manually", e)
-      ErgoApp.forceStopApplication(500)
-    case Success(state) =>
-      state
   }
 
   /**

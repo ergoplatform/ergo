@@ -4,10 +4,10 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, Props, Stash}
 import akka.pattern.StatusReply
 import org.ergoplatform.mining.CandidateGenerator.GenerateCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.nodeView.state.DigestState
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.DigestState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{FirstSecretResponse, GetFirstSecret, GetMiningPubKey, MiningPubKeyResponse}
 import org.ergoplatform.settings.ErgoSettings
@@ -170,6 +170,9 @@ class ErgoMiner(
       * Just ignore all other modifiers.
       */
     case SemanticallySuccessfulModifier(_) =>
+
+    case GenerateCandidate(_, _) =>
+      sender() ! StatusReply.error("Miner has not started yet")
   }
 
   /** Bridge between external miner and CandidateGenerator (Internal mining threads are talking to CandidateGenerator directly.)

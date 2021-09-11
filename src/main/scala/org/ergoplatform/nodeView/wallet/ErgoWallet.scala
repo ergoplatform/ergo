@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
-import akka.actor.{ActorRef, ActorSystem, Props}
-import org.ergoplatform.GlobalConstants
+import akka.actor.{ActorRef, ActorSystem}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
@@ -31,11 +30,8 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
 
   override type NVCT = this.type
 
-  override val walletActor: ActorRef = {
-    val props = Props(classOf[ErgoWalletActor], settings, new ErgoWalletServiceImpl, boxSelector, historyReader)
-                  .withDispatcher(GlobalConstants.ApiDispatcher)
-    actorSystem.actorOf(props)
-  }
+  override val walletActor: ActorRef =
+    ErgoWalletActor(settings, new ErgoWalletServiceImpl, boxSelector, historyReader)
 
   override def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     walletActor ! ScanOffChain(tx)

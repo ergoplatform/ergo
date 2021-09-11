@@ -1,6 +1,7 @@
 package org.ergoplatform
 
-import akka.actor.{ActorRef, ActorSystem, PoisonPill}
+import akka.Done
+import akka.actor.{ActorRef, ActorSystem, CoordinatedShutdown}
 import akka.http.scaladsl.Http
 import akka.stream.SystemMaterializer
 import org.ergoplatform.http._
@@ -15,16 +16,15 @@ import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
 import scorex.core.app.{Application, ScorexContext}
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
+import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PeerManagerRef
-import scorex.core.network._
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
 
 import java.net.InetSocketAddress
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.io.Source
 
 class ErgoApp(args: Args) extends ScorexLogging {
@@ -101,13 +101,11 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val statsCollectorRef: ActorRef =
     ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider)
 
-  private val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
       ergoSettings, timeProvider)
 
   // Launching PeerSynchronizer actor which is then registering itself at network controller
-  private val peerSynchronizer: ActorRef = PeerSynchronizerRef("PeerSynchronizer",
-    networkControllerRef, peerManagerRef, settings.network, featureSerializers)
+  PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, settings.network, featureSerializers)
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
@@ -138,16 +136,17 @@ class ErgoApp(args: Args) extends ScorexLogging {
     minerRefOpt.get ! StartMining
   }
 
-  private val actorsToStop: Seq[ActorRef] = Seq(
-    peerManagerRef,
+  private val coordinatedShutdown = CoordinatedShutdown(actorSystem)
+  coordinatedShutdown.addActorTerminationTask(
+    CoordinatedShutdown.PhaseBeforeServiceUnbind,
+    s"closing-network",
     networkControllerRef,
-    readersHolderRef,
-    nodeViewSynchronizer,
-    statsCollectorRef,
-    nodeViewHolderRef
-  ) ++ minerRefOpt.toSeq
+    Some(ShutdownNetwork)
+  )
 
-  sys.addShutdownHook(ErgoApp.shutdown(actorSystem, actorsToStop))
+  coordinatedShutdown.addTask(CoordinatedShutdown.PhaseBeforeServiceUnbind, "stop-upnpGateway") { () =>
+    Future(upnpGateway.foreach(_.deletePort(settings.network.bindAddress.getPort))).map(_ => Done)
+  }
 
   if (!ergoSettings.nodeSettings.stateType.requireProofs) {
     MempoolAuditorRef(nodeViewHolderRef, networkControllerRef, ergoSettings)
@@ -166,28 +165,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     val bindAddress = settings.restApi.bindAddress
 
     Http().newServerAt(bindAddress.getAddress.getHostAddress, bindAddress.getPort).bindFlow(httpService.compositeRoute)
-
-    //on unexpected shutdown
-    Runtime.getRuntime.addShutdownHook(new Thread() {
-      override def run() {
-        log.error("Unexpected shutdown")
-        stopAll()
-      }
-    })
   }
-
-  private def stopAll(): Unit = synchronized {
-    log.info("Stopping network services")
-    upnpGateway.foreach(_.deletePort(settings.network.bindAddress.getPort))
-    networkControllerRef ! ShutdownNetwork
-
-    log.info("Stopping actors (incl. block generator)")
-    actorSystem.terminate().onComplete { _ =>
-      log.info("Exiting from the app...")
-      System.exit(0)
-    }
-  }
-
 }
 
 object ErgoApp extends ScorexLogging {
@@ -213,20 +191,26 @@ object ErgoApp extends ScorexLogging {
       help("help").text("prints this usage text")
   }
 
+  /** Internal failure causing shutdown */
+  case object InternalShutdown extends CoordinatedShutdown.Reason
+
+  /** Intentional user invoked remote shutdown */
+  case object RemoteShutdown extends CoordinatedShutdown.Reason
+
+  /** Exception that triggers proper system shutdown */
+  case class CriticalSystemException(message: String) extends Exception(message)
+
+  /** hard application exit in case actor system is not started yet*/
+  def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)
+
+  /** The only proper way of application shutdown after actor system initialization */
+  def shutdownSystem(reason: CoordinatedShutdown.Reason = InternalShutdown)
+                    (implicit system: ActorSystem): Future[Done] =
+    CoordinatedShutdown(system).run(reason)
+
   def main(args: Array[String]): Unit = argParser.parse(args, Args()) match {
     case Some(argsParsed) => new ErgoApp(argsParsed).run()
     case None => // Error message will be displayed when arguments are bad
-  }
-
-  def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)
-
-  def shutdown(system: ActorSystem, actors: Seq[ActorRef]): Unit = {
-    log.warn("Terminating Actors")
-    actors.foreach { a => a ! PoisonPill }
-    log.warn("Terminating ActorSystem")
-    val termination = system.terminate()
-    Await.result(termination, 60.seconds)
-    log.warn("Application has been terminated.")
   }
 
 }

@@ -1,4 +1,5 @@
 name: CI
+
 on:
   push:
     branches:
@@ -8,8 +9,15 @@ on:
     types:
       - opened
       - synchronize
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 jobs:
-  test:
+  test_wallet:
+    name: Run wallet tests and publish a wallet snapshot
+    env:
+      HAS_SECRETS: ${{ secrets.SONATYPE_PASSWORD != '' }}
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -39,14 +47,86 @@ jobs:
               ~/Library/Caches/Coursier/v1
           key: ${{ runner.os }}-sbt-cache-v2-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
-      - name: Runs tests for the wallet
-        run: sbt +ergoWallet/test
+      - name: Runs wallet tests
+        run: sbt ++${{ matrix.scala }} ergoWallet/test
 
-      - name: Runs tests
-        run: sbt -Denv=test clean test
+      - name: Publish a wallet snapshot ${{ github.ref }}
+        run: sbt ++${{ matrix.scala }} +ergoWallet/publish
+        env:
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
 
-#      - name: Publish a wallet snapshot ${{ github.ref }}
-#        run: sbt ++${{ matrix.scala }} +ergoWallet/publish
-#        env:
-#          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
-#          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+  test_node:
+    name: Run node tests
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        scala: [2.12.10, 2.11.12]
+        java: [adopt@1.8]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout current branch (full)
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java and Scala
+        uses: olafurpg/setup-scala@v10
+        with:
+          java-version: ${{ matrix.java }}
+
+      - name: Cache sbt
+        uses: actions/cache@v2
+        with:
+          path: |
+              ~/.sbt
+              ~/.ivy2/cache
+              ~/.coursier/cache/v1
+              ~/.cache/coursier/v1
+              ~/AppData/Local/Coursier/Cache/v1
+              ~/Library/Caches/Coursier/v1
+          key: ${{ runner.os }}-sbt-cache-v2-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+
+      - name: Runs wallet tests
+        run: sbt ++${{ matrix.scala }} ergoWallet/test
+
+      - name: Publish a wallet snapshot ${{ github.ref }}
+        run: sbt ++${{ matrix.scala }} +ergoWallet/publish
+        env:
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+
+  test_node:
+    name: Run node tests
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        scala: [2.12.10, 2.11.12]
+        java: [adopt@1.8]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout current branch (full)
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java and Scala
+        uses: olafurpg/setup-scala@v10
+        with:
+          java-version: ${{ matrix.java }}
+
+      - name: Cache sbt
+        uses: actions/cache@v2
+        with:
+          path: |
+              ~/.sbt
+              ~/.ivy2/cache
+              ~/.coursier/cache/v1
+              ~/.cache/coursier/v1
+              ~/AppData/Local/Coursier/Cache/v1
+              ~/Library/Caches/Coursier/v1
+          key: ${{ runner.os }}-sbt-cache-v2-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+
+      - name: Runs node tests
+        run: sbt -Denv=test clean ++${{ matrix.scala }} test
+

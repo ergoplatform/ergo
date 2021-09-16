@@ -234,6 +234,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
             log.info(s"Sending extension of length ${ext.length}")
             log.debug(s"Extension ids: ${idsToString(ext)}")
+            sendSyncToPeer(remote, syncInfo)
             sendExtension(remote, status, ext)
 
           case Fork =>

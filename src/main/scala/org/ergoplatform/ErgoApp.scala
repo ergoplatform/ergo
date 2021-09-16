@@ -46,7 +46,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
   private val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
 
-  private val timeProvider = new NetworkTimeProvider(settings.ntp)
+  private val timeProvider: NetworkTimeProvider = new NetworkTimeProvider(settings.ntp)
 
   private val upnpGateway: Option[UPnPGateway] =
     if (settings.network.upnpEnabled) UPnP.getValidGateway(settings.network) else None
@@ -101,8 +101,12 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val statsCollectorRef: ActorRef =
     ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider)
 
-    ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      ergoSettings, timeProvider)
+  private val nodeViewSynchronizerRef = ErgoNodeViewSynchronizer(
+    networkControllerRef,
+    nodeViewHolderRef,
+    ErgoSyncInfoMessageSpec,
+    ergoSettings,
+    timeProvider)
 
   // Launching PeerSynchronizer actor which is then registering itself at network controller
   PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, settings.network, featureSerializers)
@@ -110,7 +114,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
-    PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
+    ErgoPeersApiRoute(peerManagerRef, networkControllerRef, nodeViewSynchronizerRef, timeProvider, settings.restApi),
     InfoApiRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),

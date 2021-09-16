@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec, ErgoSyncInfoV1, ErgoSyncInfoV2}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, GetPeersFullInfo, PeerSyncState}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{ModifiersFromRemote, TransactionsFromRemote}
@@ -47,6 +47,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
+
+  override protected val statusTracker = new ErgoSyncTracker(self, context, networkSettings, timeProvider)
 
   /**
     * Approximate number of modifiers to be downloaded simultaneously, headers are much faster to process
@@ -135,6 +137,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Process sync message `syncInfo` got from neighbour peer `remote`
     */
   override protected def processSync(syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
+    println("Got syncInfo version: " + syncInfo.version)
     syncInfo match {
       case syncV1: ErgoSyncInfoV1 => processSyncV1(syncV1, remote)
       case syncV2: ErgoSyncInfoV2 => processSyncV2(syncV2, remote)
@@ -216,6 +219,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         val status = comparison
         statusTracker.updateStatus(remote, status)
+        statusTracker.updateHeight(remote, syncInfo.lastHeaders.headOption.map(_.height).getOrElse(0))
 
         status match {
           case Unknown =>
@@ -234,6 +238,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
             log.info(s"Sending extension of length ${ext.length}")
             log.debug(s"Extension ids: ${idsToString(ext)}")
+            sendSyncToPeer(remote, syncInfo)
             sendExtension(remote, status, ext)
 
           case Fork =>
@@ -499,6 +504,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     onSemanticallySuccessfulModifier orElse
       onCheckModifiersToDownload orElse
       super.viewHolderEvents
+
+  protected def peersInfo: Receive = {
+    case GetPeersFullInfo =>
+      val res = statusTracker.fullInfo()
+      println("res: " + res)
+      sender() ! res
+  }
+
+  override def receive: Receive = {
+    peersInfo orElse super.receive
+  }
+
 }
 
 object ErgoNodeViewSynchronizer {
@@ -521,6 +538,8 @@ object ErgoNodeViewSynchronizer {
     context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider))
 
   case object CheckModifiersToDownload
+
+  case object GetPeersFullInfo
 
   /** Alternative Peer Status dedicated only for peer syncing */
   sealed trait PeerSyncState

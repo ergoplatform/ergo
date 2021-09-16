@@ -219,7 +219,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         val status = comparison
         statusTracker.updateStatus(remote, status)
-        val neighbourHeight = syncInfo.lastHeaders.headOption.map(_.height).getOrElse(ErgoHistory.EmptyHistoryHeight)
+        val neighbourHeight = syncInfo.height
         statusTracker.updateHeight(remote, neighbourHeight)
 
         status match {

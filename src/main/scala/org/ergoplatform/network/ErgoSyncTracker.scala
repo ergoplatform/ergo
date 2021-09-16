@@ -2,6 +2,7 @@ package org.ergoplatform.network
 
 import akka.actor.{ActorContext, ActorRef}
 import io.circe.{Encoder, Json}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.network.{ConnectedPeer, SyncTracker}
 import scorex.core.settings.NetworkSettings
@@ -39,8 +40,9 @@ class ErgoSyncTracker(nvsRef: ActorRef,
   val heights = mutable.Map[ConnectedPeer, Height]()
 
   def fullInfo(): Iterable[ErgoPeerStatus] = {
-    statuses.keys.toSeq.flatMap { cp =>
-      heights.get(cp).map(h => ErgoPeerStatus(cp, h))
+    statuses.keys.toSeq.map { cp =>
+      val height = heights.getOrElse(cp, ErgoHistory.EmptyHistoryHeight)
+      ErgoPeerStatus(cp, height)
     }
   }
 

@@ -4,6 +4,7 @@ import akka.actor.{ActorContext, ActorRef}
 import io.circe.{Encoder, Json}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import scorex.core.consensus.History.{HistoryComparisonResult, Unknown}
 import scorex.core.network.{ConnectedPeer, SyncTracker}
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.TimeProvider
@@ -12,7 +13,7 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
-case class ErgoPeerStatus(peer: ConnectedPeer, height: Height) {
+case class ErgoPeerStatus(peer: ConnectedPeer, status: HistoryComparisonResult, height: Height, lastUpdate: Long) {
   val mode: Option[ModeFeature] = ErgoPeerStatus.mode(peer)
 }
 
@@ -30,7 +31,9 @@ object ErgoPeerStatus {
     Json.obj(
       "address" -> status.peer.peerInfo.get.peerSpec.address.toString.asJson,
       "mode" -> status.mode.asJson,
-      "height" -> status.height.asJson
+      "status" -> status.status.toString.asJson,
+      "height" -> status.height.asJson,
+      "lastUpdate" -> status.lastUpdate.asJson
     )
   }
 
@@ -47,7 +50,9 @@ class ErgoSyncTracker(nvsRef: ActorRef,
   def fullInfo(): Iterable[ErgoPeerStatus] = {
     statuses.keys.toSeq.map { cp =>
       val height = heights.getOrElse(cp, ErgoHistory.EmptyHistoryHeight)
-      ErgoPeerStatus(cp, height)
+      val status = statuses.getOrElse(cp, Unknown)
+      val lastUpdate = lastSyncSentTime.getOrElse(cp, 0L)
+      ErgoPeerStatus(cp, status, height, lastUpdate)
     }
   }
 

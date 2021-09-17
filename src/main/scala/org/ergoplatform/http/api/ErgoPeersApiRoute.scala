@@ -2,12 +2,13 @@ package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
+import akka.util.Timeout
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.GetPeersFullInfo
 import org.ergoplatform.network.ErgoPeerStatus
 import scorex.core.api.http.{ApiResponse, PeersApiRoute}
 import scorex.core.settings.RESTApiSettings
 import scorex.core.utils.NetworkTimeProvider
-
+import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext
 
 class ErgoPeersApiRoute(peerManager: ActorRef,
@@ -17,6 +18,8 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
                         override val settings: RESTApiSettings)
                        (override implicit val context: ActorRefFactory, override val ec: ExecutionContext)
   extends PeersApiRoute(peerManager, networkController, timeProvider, settings)(context, ec) {
+
+  override implicit lazy val timeout: Timeout = Timeout(1.minute)
 
   override lazy val route: Route = pathPrefix("peers") {
     allPeers ~ connectedPeers ~ blacklistedPeers ~ connect ~ peersStatus ~ fullInfo

@@ -10,25 +10,28 @@ import scorex.core.utils.TimeProvider
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 
 case class ErgoPeerStatus(peer: ConnectedPeer, height: Height) {
   val mode: Option[ModeFeature] = ErgoPeerStatus.mode(peer)
 }
 
 object ErgoPeerStatus {
+
   import io.circe.syntax._
 
   def mode(peer: ConnectedPeer): Option[ModeFeature] = peer.peerInfo.flatMap(_.peerSpec.features.collectFirst[ModeFeature]({
     case mf: ModeFeature => mf
   }))
 
-  implicit val jsonEncoder: Encoder[ErgoPeerStatus] = {status: ErgoPeerStatus =>
+  implicit val jsonEncoder: Encoder[ErgoPeerStatus] = { status: ErgoPeerStatus =>
     Json.obj(
       "address" -> status.peer.peerInfo.get.peerSpec.address.toString.asJson,
       "mode" -> status.mode.toString.asJson,
       "height" -> status.height.asJson
     )
   }
+
 }
 
 class ErgoSyncTracker(nvsRef: ActorRef,
@@ -44,6 +47,11 @@ class ErgoSyncTracker(nvsRef: ActorRef,
       val height = heights.getOrElse(cp, ErgoHistory.EmptyHistoryHeight)
       ErgoPeerStatus(cp, height)
     }
+  }
+
+  def isOutdated(peer: ConnectedPeer): Boolean = {
+    heights.get(peer).isEmpty ||
+      (timeProvider.time() - lastSyncSentTime.getOrElse(peer, 0L)).millis > maxInterval()
   }
 
   def updateHeight(peer: ConnectedPeer, height: Height): Unit = {

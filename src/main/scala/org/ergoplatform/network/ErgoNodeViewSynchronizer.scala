@@ -137,7 +137,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Process sync message `syncInfo` got from neighbour peer `remote`
     */
   override protected def processSync(syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
-    println("Got syncInfo version: " + syncInfo.version + " : " + syncInfo)
     syncInfo match {
       case syncV1: ErgoSyncInfoV1 => processSyncV1(syncV1, remote)
       case syncV2: ErgoSyncInfoV2 => processSyncV2(syncV2, remote)
@@ -203,6 +202,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected def sendSyncToPeer(remote: ConnectedPeer, syncV2: ErgoSyncInfoV2): Unit = {
     if(syncV2.lastHeaders.nonEmpty) {
+      statusTracker.updateLastSyncSentTime(remote)
       networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(syncV2), None), SendToPeer(remote))
     }
   }
@@ -226,8 +226,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           case Unknown =>
             // we do not know what to send to a peer with unknown status
             log.info(s"Peer status is still unknown for $remote")
-            val ownSyncInfo = historyReader.syncInfoV2(full = true)
-            sendSyncToPeer(remote, ownSyncInfo)
 
           case Nonsense =>
             // Shouldn't be the case for sync V2
@@ -239,23 +237,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
             log.info(s"Sending extension of length ${ext.length}")
             log.debug(s"Extension ids: ${idsToString(ext)}")
-            val ownSyncInfo = historyReader.syncInfoV2(full = true)
-            sendSyncToPeer(remote, ownSyncInfo)
             sendExtension(remote, status, ext)
 
           case Fork =>
-            val syncInfo = historyReader.syncInfoV2(full = true)
-            sendSyncToPeer(remote, syncInfo)
+            log.info(s"Fork detected with peer $remote, its sync message $syncInfo")
 
           case Older =>
-            // send sync to older
-            val syncInfo = historyReader.syncInfoV2(full = false)
-            sendSyncToPeer(remote, syncInfo)
-
+            log.info(s"Peer $remote is older, its height ${syncInfo.height}")
 
           case Equal =>
             // does nothing for `Equal`
             log.debug(s"$remote has equal header-chain")
+        }
+
+        if (statusTracker.isOutdated(remote)) {
+          val ownSyncInfo = historyReader.syncInfoV2(full = true)
+          sendSyncToPeer(remote, ownSyncInfo)
         }
 
       case _ =>
@@ -509,9 +506,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def peersInfo: Receive = {
     case GetPeersFullInfo =>
+      val ms0 = System.currentTimeMillis()
       val res = statusTracker.fullInfo()
       println("res: " + res)
       sender() ! res
+      val ms = System.currentTimeMillis()
+      println("time: " + (ms - ms0) + " ms. ")
   }
 
   override def receive: Receive = {

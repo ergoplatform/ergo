@@ -56,6 +56,10 @@ object ErgoSyncInfo {
 
 object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with ScorexLogging {
 
+  val MaxHeadersInMessage = 20
+
+  val MaxHeaderSize = 1000
+
   override def serialize(obj: ErgoSyncInfo, w: Writer): Unit = {
     obj match {
       case v1: ErgoSyncInfoV1 =>
@@ -80,15 +84,15 @@ object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with Scorex
     val length = r.getUShort()
     if (length == 0 && r.remaining > 1) {
       val mode = r.getByte()
-      if (mode == ErgoSyncInfo.v2HeaderMode) {
+      if (mode == ErgoSyncInfo.v2HeaderMode) { // parse v2
 
         val headersCount = r.getUByte()
 
-        require(headersCount < 20)
+        require(headersCount < MaxHeadersInMessage)
 
         val headers = (1 to headersCount).map { _ =>
           val headerBytesCount = r.getUShort()
-          require(headersCount < 1000)
+          require(headersCount < MaxHeaderSize)
           val headerBytes = r.getBytes(headerBytesCount)
           HeaderSerializer.parseBytes(headerBytes)
         }

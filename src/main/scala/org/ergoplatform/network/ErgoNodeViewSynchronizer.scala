@@ -221,8 +221,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           case Unknown =>
             // we do not know what to send to a peer with unknown status
             log.info(s"Peer status is still unknown for $remote")
-            val syncInfo = historyReader.syncInfoV2(full = true)
-            sendSyncToPeer(remote, syncInfo)
+            val ownSyncInfo = historyReader.syncInfoV2(full = true)
+            sendSyncToPeer(remote, ownSyncInfo)
 
           case Nonsense =>
             // Shouldn't be the case for sync V2
@@ -234,7 +234,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
             log.info(s"Sending extension of length ${ext.length}")
             log.debug(s"Extension ids: ${idsToString(ext)}")
-            sendSyncToPeer(remote, syncInfo)
+            val ownSyncInfo = historyReader.syncInfoV2(full = true)
+            sendSyncToPeer(remote, ownSyncInfo)
             sendExtension(remote, status, ext)
 
           case Fork =>

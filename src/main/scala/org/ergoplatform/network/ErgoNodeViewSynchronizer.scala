@@ -217,6 +217,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +
           s"Comparison result is $comparison.")
 
+        val oldStatus = statusTracker.getStatus(remote).getOrElse(Nonsense)
         val status = comparison
         statusTracker.updateStatus(remote, status)
         val neighbourHeight = syncInfo.height
@@ -250,7 +251,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             log.debug(s"$remote has equal header-chain")
         }
 
-        if (statusTracker.isOutdated(remote)) {
+        if ((oldStatus != status) || statusTracker.isOutdated(remote)) {
           val ownSyncInfo = historyReader.syncInfoV2(full = true)
           sendSyncToPeer(remote, ownSyncInfo)
         }

@@ -25,9 +25,11 @@ object ErgoPeerStatus {
   }))
 
   implicit val jsonEncoder: Encoder[ErgoPeerStatus] = { status: ErgoPeerStatus =>
+    implicit val mfEnc = ModeFeature.jsonEncoder
+
     Json.obj(
       "address" -> status.peer.peerInfo.get.peerSpec.address.toString.asJson,
-      "mode" -> status.mode.toString.asJson,
+      "mode" -> status.mode.asJson,
       "height" -> status.height.asJson
     )
   }

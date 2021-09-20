@@ -507,12 +507,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def peersInfo: Receive = {
     case GetPeersFullInfo =>
-      val ms0 = System.currentTimeMillis()
-      val res = statusTracker.fullInfo()
-      println("res: " + res)
-      sender() ! res
-      val ms = System.currentTimeMillis()
-      println("time: " + (ms - ms0) + " ms. ")
+      sender() ! statusTracker.fullInfo()
   }
 
   override def receive: Receive = {

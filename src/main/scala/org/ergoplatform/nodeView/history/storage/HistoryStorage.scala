@@ -33,7 +33,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
 
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
     Option(modifiersCache.getIfPresent(id)) orElse
-      objectsStore.get(idToBytes(id)).flatMap { bytes =>
+      get(id).flatMap { bytes =>
         HistoryModifierSerializer.parseBytesTry(bytes) match {
           case Success(pm) =>
             log.trace(s"Cache miss for existing modifier $id")

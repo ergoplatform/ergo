@@ -165,6 +165,7 @@ trait ErgoHistory
         }
       case None =>
         //No headers become invalid. Just valid this modifier as invalid
+        log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is missing corresponding header")
         historyStorage.insert(
           Seq(validityKey(modifier.id) -> Array(0.toByte)),
           Seq.empty).map { _ =>

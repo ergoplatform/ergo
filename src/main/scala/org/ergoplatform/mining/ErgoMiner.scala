@@ -170,6 +170,9 @@ class ErgoMiner(
       * Just ignore all other modifiers.
       */
     case SemanticallySuccessfulModifier(_) =>
+
+    case GenerateCandidate(_, _) =>
+      sender() ! StatusReply.error("Miner has not started yet")
   }
 
   /** Bridge between external miner and CandidateGenerator (Internal mining threads are talking to CandidateGenerator directly.)

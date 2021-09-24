@@ -1,9 +1,7 @@
 package org.ergoplatform.nodeView.state
 
-import io.circe.Encoder
 import org.ergoplatform.nodeView.state.StateType.StateTypeCode
 
-import scala.reflect.ClassTag
 
 sealed trait StateType {
   def stateTypeCode: StateTypeCode

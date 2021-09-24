@@ -3171,6 +3171,7 @@ paths:
                   - isUnlocked
                   - changeAddress
                   - walletHeight
+                  - error
                 properties:
                   isInitialized:
                     type: boolean
@@ -3187,6 +3188,9 @@ paths:
                   walletHeight:
                     type: integer
                     description: last scanned height for the wallet (and external scans)
+                  error:
+                    type: string
+                    description: last wallet error caught
         default:
           description: Error
           content:

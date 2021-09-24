@@ -184,10 +184,19 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
+        // let's pretend we are mining at least a bit so it is realistic
+        expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
     }
-    testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal) // new block applied
+    // we fish either for ack or SSM as the order is non-deterministic
+    testProbe.fishForMessage(blockValidationDelay) {
+      case StatusReply.Success(())           => true
+      case SemanticallySuccessfulModifier(_) => false
+    }
+    testProbe.fishForMessage(newBlockDelay) {
+      case StatusReply.Success(())           => false
+      case SemanticallySuccessfulModifier(_) => true
+    }
 
     // build new transaction that uses miner's reward as input
     val prop: DLogProtocol.ProveDlog =

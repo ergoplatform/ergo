@@ -190,12 +190,14 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
 
         // we fish either for ack or SSM as the order is non-deterministic
         testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(())           => true
-          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) => false
-        }
-        testProbe.fishForMessage(newBlockDelay) {
-          case StatusReply.Success(())           => false
-          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId => true
+          case StatusReply.Success(()) =>
+            testProbe.expectMsgPF(candidateGenDelay) {
+              case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            }
+            true
+          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            testProbe.expectMsg(StatusReply.Success(()))
+            true
         }
     }
 
@@ -220,7 +222,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         .get
     )
 
-    expectNoMessage(200.millis)
+    testProbe.expectNoMessage(200.millis)
     // mine a block with that transaction
     candidateGenerator.tell(GenerateCandidate(Seq(tx), reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
@@ -228,16 +230,19 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
+        testProbe.expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
 
         // we fish either for ack or SSM as the order is non-deterministic
         testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(())           => true
-          case SemanticallySuccessfulModifier(_) => false
-        }
-        testProbe.fishForMessage(newBlockDelay) {
-          case StatusReply.Success(())           => false
-          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId => true
+          case StatusReply.Success(()) =>
+            testProbe.expectMsgPF(candidateGenDelay) {
+              case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            }
+            true
+          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            testProbe.expectMsg(StatusReply.Success(()))
+            true
         }
     }
 

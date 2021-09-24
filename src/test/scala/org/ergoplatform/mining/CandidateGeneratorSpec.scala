@@ -187,15 +187,16 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         // let's pretend we are mining at least a bit so it is realistic
         expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
-    }
-    // we fish either for ack or SSM as the order is non-deterministic
-    testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(())           => true
-      case SemanticallySuccessfulModifier(_) => false
-    }
-    testProbe.fishForMessage(newBlockDelay) {
-      case StatusReply.Success(())           => false
-      case SemanticallySuccessfulModifier(_) => true
+
+        // we fish either for ack or SSM as the order is non-deterministic
+        testProbe.fishForMessage(blockValidationDelay) {
+          case StatusReply.Success(())           => true
+          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) => false
+        }
+        testProbe.fishForMessage(newBlockDelay) {
+          case StatusReply.Success(())           => false
+          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId => true
+        }
     }
 
     // build new transaction that uses miner's reward as input
@@ -229,15 +230,16 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         // let's pretend we are mining at least a bit so it is realistic
         expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
-    }
-    // we fish either for ack or SSM as the order is non-deterministic
-    testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(())           => true
-      case SemanticallySuccessfulModifier(_) => false
-    }
-    testProbe.fishForMessage(newBlockDelay) {
-      case StatusReply.Success(())           => false
-      case SemanticallySuccessfulModifier(_) => true
+
+        // we fish either for ack or SSM as the order is non-deterministic
+        testProbe.fishForMessage(blockValidationDelay) {
+          case StatusReply.Success(())           => true
+          case SemanticallySuccessfulModifier(_) => false
+        }
+        testProbe.fishForMessage(newBlockDelay) {
+          case StatusReply.Success(())           => false
+          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId => true
+        }
     }
 
     // new transaction should be cleared from pool after applying new block

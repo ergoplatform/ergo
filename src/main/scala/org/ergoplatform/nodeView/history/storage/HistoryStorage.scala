@@ -8,7 +8,7 @@ import scorex.core.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBKVStore}
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /**
   * Storage for Ergo history
@@ -58,23 +58,27 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
   def contains(id: ModifierId): Boolean = objectsStore.get(idToBytes(id)).isDefined
 
   def insert(indexesToInsert: Seq[(ByteArrayWrapper, Array[Byte])],
-             objectsToInsert: Seq[ErgoPersistentModifier]): Unit = {
-    objectsToInsert.foreach(o => modifiersCache.put(o.id, o))
+             objectsToInsert: Seq[ErgoPersistentModifier]): Try[Unit] = {
     objectsStore.insert(
       objectsToInsert.map(m => idToBytes(m.id) -> HistoryModifierSerializer.toBytes(m))
-    )
-    if (indexesToInsert.nonEmpty) {
-      indexesToInsert.foreach(kv => indexCache.put(kv._1, kv._2))
-      indexStore.insert(indexesToInsert.map { case (k, v) => k.data -> v })
+    ).flatMap { _ =>
+      objectsToInsert.foreach(o => modifiersCache.put(o.id, o))
+      if (indexesToInsert.nonEmpty) {
+        indexStore.insert(indexesToInsert.map { case (k, v) => k.data -> v }).map { _ =>
+          indexesToInsert.foreach(kv => indexCache.put(kv._1, kv._2))
+          ()
+        }
+      } else Success(())
     }
   }
 
-  def remove(idsToRemove: Seq[ModifierId]): Unit = {
-    idsToRemove.foreach { id =>
-      modifiersCache.invalidate(id)
+  def remove(idsToRemove: Seq[ModifierId]): Try[Unit] =
+    objectsStore.remove(idsToRemove.map(idToBytes)).map { _ =>
+      idsToRemove.foreach { id =>
+        modifiersCache.invalidate(id)
+      }
+      ()
     }
-    objectsStore.remove(idsToRemove.map(idToBytes))
-  }
 
   override def close(): Unit = {
     log.warn("Closing history storage...")

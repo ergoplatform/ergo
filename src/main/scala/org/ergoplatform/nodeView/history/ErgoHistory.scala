@@ -5,6 +5,7 @@ import java.io.File
 import org.ergoplatform.ErgoLikeContext
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.state.UTXOSnapshotChunk
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
@@ -19,7 +20,7 @@ import scorex.core.validation.RecoverableModifierError
 import scorex.db.LDBFactory
 import scorex.util.{ScorexLogging, idToBytes}
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * History implementation. It is processing persistent modifiers generated locally or coming from the network.
@@ -52,18 +53,18 @@ trait ErgoHistory
     */
   override def append(modifier: ErgoPersistentModifier): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
     log.debug(s"Trying to append modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} to history")
-    applicableTry(modifier).map { _ =>
+    applicableTry(modifier).flatMap { _ =>
       modifier match {
         case header: Header =>
-          (this, process(header))
+          process(header)
         case section: BlockSection =>
-          (this, process(section))
+          process(section)
         case poPoWProof: NipopowProofModifier =>
-          (this, process(poPoWProof))
+          process(poPoWProof)
         case chunk: UTXOSnapshotChunk =>
-          (this, process(chunk))
+          process(chunk)
       }
-    }.recoverWith { case e =>
+    }.map(this -> _).recoverWith { case e =>
       if (!e.isInstanceOf[RecoverableModifierError]) {
         log.warn(s"Error while applying modifier ${modifier.encodedId} of type ${modifier.modifierTypeId}, " +
           s"reason: ${LoggingUtil.getReasonMsg(e)} ")
@@ -75,7 +76,7 @@ trait ErgoHistory
   /**
     * Mark modifier as valid
     */
-  override def reportModifierIsValid(modifier: ErgoPersistentModifier): ErgoHistory = synchronized {
+  override def reportModifierIsValid(modifier: ErgoPersistentModifier): Try[ErgoHistory] = synchronized {
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid ")
     modifier match {
       case fb: ErgoFullBlock =>
@@ -85,14 +86,13 @@ trait ErgoHistory
         if (nonMarkedIds.nonEmpty) {
           historyStorage.insert(
             nonMarkedIds.map(id => validityKey(id) -> Array(1.toByte)),
-            Seq.empty)
-        }
+            Seq.empty).map(_ => this)
+        } else Success(this)
       case _ =>
         historyStorage.insert(
           Seq(validityKey(modifier.id) -> Array(1.toByte)),
-          Seq.empty)
+          Seq.empty).map(_ => this)
     }
-    this
   }
 
   /**
@@ -104,7 +104,7 @@ trait ErgoHistory
   @SuppressWarnings(Array("OptionGet", "TraversableHead"))
   override def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
                                        progressInfo: ProgressInfo[ErgoPersistentModifier]
-                                      ): (ErgoHistory, ProgressInfo[ErgoPersistentModifier]) = synchronized {
+                                      ): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {
       case Some(invalidatedHeader) =>
@@ -118,8 +118,9 @@ trait ErgoHistory
         (bestHeaderIsInvalidated, bestFullIsInvalidated) match {
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
-            historyStorage.insert(validityRow, Seq.empty)
-            this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+            historyStorage.insert(validityRow, Seq.empty).map { _ =>
+              this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+            }
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
             val newBestHeaderOpt = loopHeightDown(headersHeight, id => !invalidatedIds.contains(id))
@@ -129,8 +130,9 @@ trait ErgoHistory
               historyStorage.insert(
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq,
                 Seq.empty
-              )
-              this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+              ).map { _ =>
+                this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+              }
             } else {
               val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
                 .flatMap(f => headerChainBack(fullBlockHeight + 1, f.header, h => !invalidatedIds.contains(h.id)).headers)
@@ -155,18 +157,19 @@ trait ErgoHistory
               val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow
-              historyStorage.insert(toInsert, Seq.empty)
-              val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
-
-              this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
+              historyStorage.insert(toInsert, Seq.empty).map { _ =>
+                val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
+                this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
+              }
             }
         }
       case None =>
         //No headers become invalid. Just valid this modifier as invalid
         historyStorage.insert(
           Seq(validityKey(modifier.id) -> Array(0.toByte)),
-          Seq.empty)
-        this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+          Seq.empty).map { _ =>
+            this -> ProgressInfo[ErgoPersistentModifier](None, Seq.empty, Seq.empty, Seq.empty)
+         }
     }
   }
 

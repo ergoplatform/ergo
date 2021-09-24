@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.history._
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Algos
@@ -10,7 +11,7 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeMap
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * Contains functions required by History to process Transactions and Proofs when we have them.
@@ -45,7 +46,7 @@ trait FullBlockProcessor extends HeadersProcessor {
     * @return ProgressInfo required for State to process to be consistent with the history
     */
   protected def processFullBlock(fullBlock: ErgoFullBlock,
-                                 newMod: ErgoPersistentModifier): ProgressInfo[ErgoPersistentModifier] = {
+                                 newMod: ErgoPersistentModifier): Try[ProgressInfo[ErgoPersistentModifier]] = {
     val bestFullChainAfter = calculateBestChain(fullBlock.header)
     val newBestBlockHeader = typedModifierById[Header](bestFullChainAfter.last).ensuring(_.isDefined)
     processing(ToProcess(fullBlock, newMod, newBestBlockHeader, bestFullChainAfter))
@@ -73,8 +74,9 @@ trait FullBlockProcessor extends HeadersProcessor {
         .flatten
       logStatus(Seq(), toApply, fullBlock, None)
       val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker)
-      updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes)
-      ProgressInfo(None, Seq.empty, headers.headers.dropRight(1) ++ toApply, Seq.empty)
+      updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes).map { _ =>
+        ProgressInfo(None, Seq.empty, headers.headers.dropRight(1) ++ toApply, Seq.empty)
+      }
   }
 
   private def processBetterChain: BlockProcessing = {
@@ -97,19 +99,19 @@ trait FullBlockProcessor extends HeadersProcessor {
       // insert updated chains statuses
       val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
         toRemove.map(b => chainStatusKey(b.id) -> FullBlockProcessor.NonBestChainMarker)
-      updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes)
+      updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes).map { _ =>
+        // remove block ids which have no chance to be applied
+        val minForkRootHeight = toApply.last.height - nodeSettings.keepVersions
+        if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
 
-      // remove block ids which have no chance to be applied
-      val minForkRootHeight = toApply.last.height - nodeSettings.keepVersions
-      if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
-
-      if (nodeSettings.isFullBlocksPruned) {
-        val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
-        val bestHeight: Int = newBestBlockHeader.height
-        val diff = bestHeight - prevBest.header.height
-        pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
+        if (nodeSettings.isFullBlocksPruned) {
+          val lastKept = pruningProcessor.updateBestFullBlock(fullBlock.header)
+          val bestHeight: Int = newBestBlockHeader.height
+          val diff = bestHeight - prevBest.header.height
+          pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
+        }
+        ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
       }
-      ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
   }
 
   /**
@@ -132,8 +134,9 @@ trait FullBlockProcessor extends HeadersProcessor {
       }
       //Orphaned block or full chain is not initialized yet
       logStatus(Seq(), Seq(), params.fullBlock, None)
-      historyStorage.insert(Seq.empty, Seq(params.newModRow))
-      ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+      historyStorage.insert(Seq.empty, Seq(params.newModRow)).map { _ =>
+        ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+      }
   }
 
   /**
@@ -154,12 +157,12 @@ trait FullBlockProcessor extends HeadersProcessor {
       }
     }
 
-    if (bestFullBlockIdOpt.exists(_ == header.parentId)) {
+    if (bestFullBlockIdOpt.contains(header.parentId)) {
       true
     } else {
       // follow links back until main chain or absent section is reached
       val headOpt = loop(header.parentId, header.height - 1, Seq.empty).headOption
-      headOpt.exists(_ == Header.GenesisParentId) ||
+      headOpt.contains(Header.GenesisParentId) ||
         headOpt.orElse(Some(header.parentId))
           .flatMap(id => typedModifierById[Header](id).flatMap(getFullBlock)) // check whether first block actually exists
           .isDefined
@@ -225,7 +228,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       s"going to apply ${toApply.length}$toRemoveStr modifiers. $newStatusStr")
   }
 
-  private def pruneBlockDataAt(heights: Seq[Int]): Try[Unit] = Try {
+  private def pruneBlockDataAt(heights: Seq[Int]): Try[Unit] = {
     val toRemove: Seq[ModifierId] = heights.flatMap(h => headerIdsAtHeight(h))
       .flatMap(id => typedModifierById[Header](id))
       .flatMap(_.sectionIds.map(_._2))
@@ -234,18 +237,22 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   private def updateStorage(newModRow: ErgoPersistentModifier,
                             bestFullHeaderId: ModifierId,
-                            additionalIndexes: Seq[(ByteArrayWrapper, Array[Byte])] = Seq.empty): Unit = {
+                            additionalIndexes: Seq[(ByteArrayWrapper, Array[Byte])] = Seq.empty): Try[Unit] = {
     val indicesToInsert = Seq(BestFullBlockKey -> idToBytes(bestFullHeaderId)) ++ additionalIndexes
-    historyStorage.insert(indicesToInsert, Seq(newModRow))
-      .ensuring(headersHeight >= fullBlockHeight, s"Headers height $headersHeight should be >= " +
-        s"full height $fullBlockHeight")
+    historyStorage.insert(indicesToInsert, Seq(newModRow)).flatMap { _ =>
+      if (headersHeight >= fullBlockHeight)
+        Success(())
+      else
+        Failure(new RuntimeException(s"Headers height $headersHeight should be >= " +
+          s"full height $fullBlockHeight"))
+    }
   }
 
 }
 
 object FullBlockProcessor {
 
-  type BlockProcessing = PartialFunction[ToProcess, ProgressInfo[ErgoPersistentModifier]]
+  type BlockProcessing = PartialFunction[ToProcess, Try[ProgressInfo[ErgoPersistentModifier]]]
 
   case class ToProcess(fullBlock: ErgoFullBlock,
                        newModRow: ErgoPersistentModifier,

@@ -251,7 +251,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
           "isInitialized" -> walletStatus.initialized.asJson,
           "isUnlocked" -> walletStatus.unlocked.asJson,
           "changeAddress" -> walletStatus.changeAddress.map(_.toString()).getOrElse("").asJson,
-          "walletHeight" -> walletStatus.height.asJson
+          "walletHeight" -> walletStatus.height.asJson,
+          "error" -> walletStatus.error.getOrElse("").asJson
         )
     }
   }
@@ -400,7 +401,6 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   def updateChangeAddressR: Route = (path("updateChangeAddress") & post & p2pkAddress) { p2pk =>
     withWallet { w =>
       w.updateChangeAddress(p2pk)
-      Future.successful(())
     }
   }
 

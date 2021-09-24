@@ -58,9 +58,9 @@ trait IntegrationTestConstants extends ErgoTestConstants {
     """.stripMargin
   )
 
-  def miningDelayConfig(millis: Int): Config = ConfigFactory.parseString(
+  def internalMinerPollingIntervalConfig(millis: Int): Config = ConfigFactory.parseString(
     s"""
-      |ergo.node.miningDelay=${millis}ms
+      |ergo.node.internalMinerPollingInterval=${millis}ms
     """.stripMargin
   )
 
@@ -96,7 +96,7 @@ trait IntegrationTestConstants extends ErgoTestConstants {
     """.stripMargin
   )
 
-  val shortMiningDelayConfig: Config = miningDelayConfig(500)
+  val shortInternalMinerPollingInterval: Config = internalMinerPollingIntervalConfig(500)
 
   val digestStatePeerConfig: Config = ConfigFactory.parseString(
     """

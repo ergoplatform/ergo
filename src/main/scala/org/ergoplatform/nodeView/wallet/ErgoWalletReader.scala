@@ -20,7 +20,6 @@ import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -71,12 +70,6 @@ trait ErgoWalletReader extends VaultReader {
   def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] =
     (walletActor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
 
-  def miningPubkey: Future[Option[ProveDlog]] =
-    (walletActor ? GetMiningPubKey).mapTo[Option[ProveDlog]]
-
-  def firstSecret: Future[Try[DLogProverInput]] =
-    (walletActor ? GetFirstSecret).mapTo[Try[DLogProverInput]]
-
   def walletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean): Future[Seq[WalletBox]] =
     (walletActor ? GetWalletBoxes(unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]
 
@@ -85,8 +78,8 @@ trait ErgoWalletReader extends VaultReader {
                considerUnconfirmed: Boolean = false): Future[Seq[WalletBox]] =
     (walletActor ? GetScanBoxes(scanId, unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]
 
-  def updateChangeAddress(address: P2PKAddress): Unit =
-    walletActor ! UpdateChangeAddress(address)
+  def updateChangeAddress(address: P2PKAddress): Future[Unit] =
+    walletActor.askWithStatus(UpdateChangeAddress(address)).mapTo[Unit]
 
   def transactions: Future[Seq[AugWalletTransaction]] =
     (walletActor ? GetTransactions).mapTo[Seq[AugWalletTransaction]]

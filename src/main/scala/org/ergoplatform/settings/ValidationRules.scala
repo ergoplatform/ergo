@@ -49,7 +49,7 @@ object ValidationRules {
     txInputsUnique -> RuleStatus(s => fatal(s"There should be no duplicate inputs. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txAssetsInOneBox -> RuleStatus(s => fatal(s"A number of tokens within a box should not exceed $MaxAssetsPerBox" +
+    txAssetsInOneBox -> RuleStatus(s => fatal(s"A number of tokens within a box should not exceed ${ErgoTransaction.MaxAssetsPerBox}" +
       s" and sum of assets of one type should not exceed ${Long.MaxValue}. $s"),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),

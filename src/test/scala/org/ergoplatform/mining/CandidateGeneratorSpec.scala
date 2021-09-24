@@ -220,6 +220,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         .get
     )
 
+    expectNoMessage(200.millis)
     // mine a block with that transaction
     candidateGenerator.tell(GenerateCandidate(Seq(tx), reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
@@ -227,8 +228,6 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
-        // let's pretend we are mining at least a bit so it is realistic
-        expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
 
         // we fish either for ack or SSM as the order is non-deterministic

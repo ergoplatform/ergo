@@ -250,14 +250,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx1))
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
+    expectNoMessage(200.millis)
     minerRef.tell(GenerateCandidate(Seq(tx2), reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
-        // let's pretend we are mining at least a bit so it is realistic
-        expectNoMessage(200.millis)
         minerRef.tell(block.header.powSolution, testProbe.ref)
 
         // we fish either for ack or SSM as the order is non-deterministic

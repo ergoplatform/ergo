@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.13"
+  version: "4.0.14"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -3171,6 +3171,7 @@ paths:
                   - isUnlocked
                   - changeAddress
                   - walletHeight
+                  - error
                 properties:
                   isInitialized:
                     type: boolean
@@ -3187,6 +3188,9 @@ paths:
                   walletHeight:
                     type: integer
                     description: last scanned height for the wallet (and external scans)
+                  error:
+                    type: string
+                    description: last wallet error caught
         default:
           description: Error
           content:

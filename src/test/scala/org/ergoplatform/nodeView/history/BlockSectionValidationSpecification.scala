@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -58,7 +58,7 @@ class BlockSectionValidationSpecification extends HistoryTestHelpers {
     commonChecks(history, block.extension, block.header)
   }
 
-  private def init(version: Version = Header.InitialVersion) = {
+  private def init(version: Version = Header.InitialVersion): (ErgoHistory, ErgoFullBlock) = {
     var history = genHistory()
     val chain = genChain(2, history, version)
     history = applyBlock(history, chain.head)

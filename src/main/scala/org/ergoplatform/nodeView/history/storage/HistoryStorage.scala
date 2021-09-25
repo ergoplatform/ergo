@@ -13,8 +13,8 @@ import scala.util.{Failure, Success, Try}
 /**
   * Storage for Ergo history
   *
-  * @param indexStore   - Additional key-value storage for indexes, required by History for efficient work.
-  *                     contains links to bestHeader, bestFullBlock, heights and scores for different blocks, etc.
+  * @param indexStore   - Additional key-value storage for indexes used for efficient queries.
+  *                     Contains links to bestHeader, bestFullBlock, heights and scores for different blocks, etc.
   * @param objectsStore - key-value store, where key is id of ErgoPersistentModifier and value is it's bytes
   * @param config       - cache configs
   */
@@ -23,10 +23,12 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
     with AutoCloseable
     with ScorexEncoding {
 
+  // in-memory cache for modifiers
   private val modifiersCache = CacheBuilder.newBuilder()
     .maximumSize(config.modifiersCacheSize)
-    .build[String, ErgoPersistentModifier]
+    .build[ModifierId, ErgoPersistentModifier]
 
+  // in-memory cache for indexes
   private val indexCache = CacheBuilder.newBuilder()
     .maximumSize(config.indexesCacheSize)
     .build[ByteArrayWrapper, Array[Byte]]
@@ -81,7 +83,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
     }
 
   override def close(): Unit = {
-    log.warn("Closing history storage...")
+    log.info("Closing history storage...")
     indexStore.close()
     objectsStore.close()
   }

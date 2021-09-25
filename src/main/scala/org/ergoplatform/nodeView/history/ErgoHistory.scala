@@ -85,13 +85,15 @@ trait ErgoHistory
 
         if (nonMarkedIds.nonEmpty) {
           historyStorage.insert(
-            nonMarkedIds.map(id => validityKey(id) -> Array(1.toByte)),
-            Seq.empty).map(_ => this)
-        } else Success(this)
+            indexesToInsert = nonMarkedIds.map(id => validityKey(id) -> Array(1.toByte)),
+            objectsToInsert = Seq.empty).map(_ => this)
+        } else {
+          Success(this)
+        }
       case _ =>
         historyStorage.insert(
-          Seq(validityKey(modifier.id) -> Array(1.toByte)),
-          Seq.empty).map(_ => this)
+          indexesToInsert = Seq(validityKey(modifier.id) -> Array(1.toByte)),
+          objectsToInsert = Seq.empty).map(_ => this)
     }
   }
 
@@ -105,7 +107,7 @@ trait ErgoHistory
   override def reportModifierIsInvalid(modifier: ErgoPersistentModifier,
                                        progressInfo: ProgressInfo[ErgoPersistentModifier]
                                       ): Try[(ErgoHistory, ProgressInfo[ErgoPersistentModifier])] = synchronized {
-    log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
+    log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {
       case Some(invalidatedHeader) =>
         val invalidatedHeaders = continuationHeaderChains(invalidatedHeader, _ => true).flatten.distinct

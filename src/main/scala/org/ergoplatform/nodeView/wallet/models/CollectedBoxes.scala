@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet.models
 
-import io.circe.generic.encoding.DerivedObjectEncoder.deriveEncoder
+import io.circe.generic.encoding.DerivedAsObjectEncoder.deriveEncoder
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.{ErgoBox, JsonCodecs}
@@ -20,4 +20,5 @@ object CollectedBoxes extends JsonCodecs {
       "boxes" -> request.boxes.asJson,
       "changeBoxes" -> request.changeBoxes.asJson
     )
+
 }

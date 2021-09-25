@@ -45,7 +45,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
   }
 
   val prover = ErgoProvingInterpreter(rootSecret +: derivedSecrets, parameters)
-  var walletVars = WalletVars.apply(storage, settings).withProver(prover)
+  val walletVars = WalletVars.apply(storage, settings).withProver(prover)
 
   val boxes = walletVars.proverOpt.get.hdPubKeys.map { pk =>
     createBox(1000000000, pk.key, 1)

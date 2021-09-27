@@ -290,7 +290,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       if ((minHeight > 0 || maxHeight < Int.MaxValue) && // height is set
         (minConfNum > 0 || maxConfNum < Int.MaxValue) // confirmations are set
       ) {
-        BadRequest(s"Bad request: both heights and confirmations set")
+        BadRequest("Bad request: both heights and confirmations set")
       }
       else if (minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
         withWallet {
@@ -316,7 +316,9 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get & txParams) {
     case (id, minHeight, maxHeight, minConfNum, maxConfNum) =>
-      if (minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
+      if ((minHeight > 0 || maxHeight < Int.MaxValue) && (minConfNum > 0 || maxConfNum < Int.MaxValue))
+        BadRequest("Bad request: both heights and confirmations set")
+      else if (minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
         withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort)) {
           resp => ApiResponse(resp.result.asJson)
         }

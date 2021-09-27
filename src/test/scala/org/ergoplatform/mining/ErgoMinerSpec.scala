@@ -250,24 +250,27 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx1))
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
+    testProbe.expectNoMessage(200.millis)
     minerRef.tell(GenerateCandidate(Seq(tx2), reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
-        // let's pretend we are mining at least a bit so it is realistic
-        expectNoMessage(200.millis)
+        testProbe.expectNoMessage(200.millis)
         minerRef.tell(block.header.powSolution, testProbe.ref)
-    }
-    // we fish either for ack or SSM as the order is non-deterministic
-    testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(())           => true
-      case SemanticallySuccessfulModifier(_) => false
-    }
-    testProbe.fishForMessage(newBlockDelay) {
-      case StatusReply.Success(())           => false
-      case SemanticallySuccessfulModifier(_) => true
+
+        // we fish either for ack or SSM as the order is non-deterministic
+        testProbe.fishForMessage(blockValidationDelay) {
+          case StatusReply.Success(()) =>
+            testProbe.expectMsgPF(candidateGenDelay) {
+              case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            }
+            true
+          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            testProbe.expectMsg(StatusReply.Success(()))
+            true
+        }
     }
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 

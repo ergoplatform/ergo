@@ -23,7 +23,7 @@ import sigmastate.lang.SigmaCompiler
 import sigmastate.serialization.ValueSerializer
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 
 case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
@@ -37,8 +37,8 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   override val route: Route = pathPrefix("script") {
     toStrictEntity(10.seconds) {
-      // p2shAddressR ~
-      p2sAddressR ~
+      p2shAddressR ~
+        p2sAddressR ~
         addressToTreeR ~
         addressToBytesR ~
         executeWithContextR
@@ -84,7 +84,6 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     }
   }
 
-  //todo: temporarily switched off due to https://github.com/ergoplatform/ergo/issues/936
   def p2shAddressR: Route = (path("p2shAddress") & post & source) { source =>
     withWalletOp(_.publicKeys(0, loadMaxKeys)) { addrs =>
       compileSource(source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SHAddress.apply).fold(

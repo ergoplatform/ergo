@@ -27,11 +27,11 @@ class SWDBVersionedStoreSpecification extends AnyPropSpec
         Blake2b256(version.map(_.head).getOrElse(0: Byte) +: b))
       keys += pair
       val nextVersion = Longs.toByteArray(version.map(Longs.fromByteArray).getOrElse(0L) + 1)
-      store.update(nextVersion, Seq(), Seq(pair))
+      store.update(nextVersion, Seq(), Seq(pair)).get
 
       if (version.isDefined) {
         store.rollbackTo(version.get)
-        store.update(nextVersion, Seq(), Seq(pair))
+        store.update(nextVersion, Seq(), Seq(pair)).get
       }
       version = Some(nextVersion)
       keys.foreach(k => store(k._1).sameElements(k._2) shouldBe true)

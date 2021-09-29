@@ -1,6 +1,5 @@
 package scorex.db
 
-import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import swaydb._
 

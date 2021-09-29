@@ -50,7 +50,7 @@ class VersionedSWDBAVLStorage[D <: Digest](store: SWDBVersionedStore,
     store.getWithFilter{ case (_, v) => v.head == LeafPrefix }
 
   override def update[K <: Array[Byte], V <: Array[Byte]](prover: BatchAVLProver[D, _],
-                                                          additionalData: Seq[(K, V)]): Try[Unit] = Try {
+                                                          additionalData: Seq[(K, V)]): Try[Unit] = {
     val digestWrapper = prover.digest
     val indexes = Seq(TopNodeKey -> nodeKey(prover.topNode), TopNodeHeight -> Ints.toByteArray(prover.rootNodeHeight))
     val toInsert = serializedVisitedNodes(prover.topNode, isTop = true)
@@ -59,9 +59,6 @@ class VersionedSWDBAVLStorage[D <: Digest](store: SWDBVersionedStore,
     val toUpdateWithWrapped = toUpdate ++ additionalData
 
     store.update(digestWrapper, toRemove, toUpdateWithWrapped)
-  }.recoverWith { case e =>
-    log.error("Failed to update tree", e)
-    Failure(e)
   }
 
   private def serializedVisitedNodes(node: ProverNodes[D],

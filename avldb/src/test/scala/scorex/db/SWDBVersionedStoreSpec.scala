@@ -18,19 +18,19 @@ class SWDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     val versionNum = Random.nextInt().toLong
     val versionId = Longs.toByteArray(versionNum)
 
-    store.update(versionId, Seq.empty, Seq(versionId -> versionId))
+    store.update(versionId, Seq.empty, Seq(versionId -> versionId)).get
 
     store.lastVersionID.get.sameElements(versionId) shouldBe true
 
     val versionId2 = Longs.toByteArray(versionNum + 1)
 
-    store.update(versionId2, Seq(versionId), Seq.empty)
+    store.update(versionId2, Seq(versionId), Seq.empty).get
 
     store.lastVersionID.get.sameElements(versionId2) shouldBe true
 
     val versionId3 = Longs.toByteArray(versionNum + 3)
 
-    store.update(versionId3, Seq.empty, Seq(versionId -> versionId))
+    store.update(versionId3, Seq.empty, Seq(versionId -> versionId)).get
 
     store.lastVersionID.get.sameElements(versionId3) shouldBe true
 
@@ -50,7 +50,7 @@ class SWDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     val k2 = Longs.toByteArray(Int.MaxValue + 2)
     val v1 = Longs.toByteArray(Int.MaxValue + 100)
     val v2 = Longs.toByteArray(Int.MaxValue + 200)
-    store.update(version, Seq.empty, Seq(k1 -> v1, k2 -> v2))
+    store.update(version, Seq.empty, Seq(k1 -> v1, k2 -> v2)).get
 
     //read all keys
     val keys = store.getWithFilter((_) => true).toSeq.map(_._1)
@@ -72,7 +72,7 @@ class SWDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     buffer.contains(v1.toSeq) shouldBe true
     buffer.contains(v2.toSeq) shouldBe true
 
-    store.update(Longs.toByteArray(Long.MinValue), keys , Seq.empty)
+    store.update(Longs.toByteArray(Long.MinValue), keys , Seq.empty).get
 
     store.getWithFilter((_) => true).toSeq.length shouldBe 0
 

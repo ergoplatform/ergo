@@ -50,6 +50,23 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
     )
   }
 
+  property("restoring wallet should fail if pruning is enabled") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletState = initialState(store, versionedStore)
+        val walletService = new ErgoWalletServiceImpl
+        val settingsWithPruning = settings.copy(nodeSettings = settings.nodeSettings.copy(blocksToKeep = 0))
+        walletService.restoreWallet(
+          walletState,
+          settingsWithPruning,
+          mnemonic = "x",
+          mnemonicPassOpt = None,
+          walletPass = "y"
+        ).failed.get.getMessage shouldBe "Unable to restore wallet when pruning is enabled"
+      }
+    }
+  }
+
   property("it should prepare unsigned transaction") {
     val inputBoxes = {
       Seq(

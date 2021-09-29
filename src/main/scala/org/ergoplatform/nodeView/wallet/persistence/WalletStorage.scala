@@ -47,13 +47,13 @@ final class WalletStorage(store: SWDBStore, settings: ErgoSettings)
   /**
     * Remove pre-3.3.0 derivation paths
     */
-  def removePaths(): Unit = store.remove(Seq(SecretPathsKey))
+  def removePaths(): Try[Unit] = store.remove(Seq(SecretPathsKey))
 
   /**
     * Store wallet-related public key in the database
     * @param publicKey - public key to store
     */
-  def addKey(publicKey: ExtendedPublicKey): Unit = {
+  def addKey(publicKey: ExtendedPublicKey): Try[Unit] = {
     store.insert(Seq(pubKeyPrefixKey(publicKey) -> ExtendedPublicKeySerializer.toBytes(publicKey)))
   }
 
@@ -69,7 +69,7 @@ final class WalletStorage(store: SWDBStore, settings: ErgoSettings)
     * Write state context into the database
     * @param ctx - state context
     */
-  def updateStateContext(ctx: ErgoStateContext): Unit = store
+  def updateStateContext(ctx: ErgoStateContext): Try[Unit] = store
     .insert(Seq(StateContextKey -> ctx.bytes))
 
   /**
@@ -85,7 +85,7 @@ final class WalletStorage(store: SWDBStore, settings: ErgoSettings)
     * Update address used by the wallet for change outputs
     * @param address - new changed address
     */
-  def updateChangeAddress(address: P2PKAddress): Unit = {
+  def updateChangeAddress(address: P2PKAddress): Try[Unit] = {
     val bytes = addressEncoder.toString(address).getBytes(Constants.StringEncoding)
     store.insert(Seq(ChangeAddressKey -> bytes))
   }
@@ -110,10 +110,10 @@ final class WalletStorage(store: SWDBStore, settings: ErgoSettings)
   def addScan(scanReq: ScanRequest): Try[Scan] = {
     val id = ScanId @@ (lastUsedScanId + 1).toShort
     scanReq.toScan(id).flatMap { app =>
-      Try(store.insert(Seq(
+      store.insert(Seq(
         scanPrefixKey(id) -> ScanSerializer.toBytes(app),
         lastUsedScanIdKey -> Shorts.toByteArray(id)
-      ))).map(_ => app)
+      )).map(_ => app)
     }
   }
 
@@ -121,7 +121,7 @@ final class WalletStorage(store: SWDBStore, settings: ErgoSettings)
     * Remove an scan from the database
     * @param id scan identifier
     */
-  def removeScan(id: Short): Unit =
+  def removeScan(id: Short): Try[Unit] =
     store.remove(Seq(scanPrefixKey(id)))
 
   /**

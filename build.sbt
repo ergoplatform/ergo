@@ -34,6 +34,7 @@ val akkaHttpVersion = "10.2.1"
 
 val scorexVersion = "main-a6fe1419-SNAPSHOT"
 val sigmaStateVersion = "4.0.3"
+val swayDBVersion = "0.16.2"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
@@ -49,7 +50,7 @@ libraryDependencies ++= Seq(
   //in future, it could be reasonable to have special builds with this Java db only, and for most of platforms use
   //jni wrapper over native library included in leveldbjni-all
   "org.iq80.leveldb" % "leveldb" % "0.12",
-  
+  "io.swaydb" %% "swaydb" % swayDBVersion,
   ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
   
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",

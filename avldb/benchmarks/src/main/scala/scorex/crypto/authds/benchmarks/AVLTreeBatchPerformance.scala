@@ -4,9 +4,9 @@ import java.util.concurrent.TimeUnit
 
 import org.openjdk.jmh.annotations._
 import org.slf4j.LoggerFactory
-import scorex.crypto.authds.avltree.batch.{Operation, PersistentBatchAVLProver, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.{Operation, PersistentBatchAVLProver, VersionedSWDBAVLStorage}
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.db.LDBVersionedStore
+import scorex.db.SWDBVersionedStore
 
 object AVLTreeBatchPerformance extends {
 
@@ -20,8 +20,8 @@ object AVLTreeBatchPerformance extends {
 
     val logger = LoggerFactory.getLogger("TEST")
     var prover: Prover = _
-    var store: LDBVersionedStore = _
-    var storage: VersionedLDBAVLStorage[Digest32] = _
+    var store: SWDBVersionedStore = _
+    var storage: VersionedSWDBAVLStorage[Digest32] = _
     var operations: Array[Operation] = _
 
     @Setup(Level.Iteration)

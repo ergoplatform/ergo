@@ -18,7 +18,7 @@ import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
-import scorex.db.{LDBKVStore, LDBVersionedStore}
+import scorex.db.{SWDBStore, SWDBVersionedStore}
 import scorex.util.encode.Base16
 import sigmastate.Values.{ByteArrayConstant, EvaluatedValue}
 import sigmastate.helpers.TestingHelpers.testBox
@@ -35,7 +35,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
 
   override def afterAll(): Unit = try super.afterAll() finally x.stop()
 
-  private def initialState(store: LDBKVStore, versionedStore: LDBVersionedStore) = {
+  private def initialState(store: SWDBStore, versionedStore: SWDBVersionedStore) = {
     ErgoWalletState(
       new WalletStorage(store, settings),
       secretStorageOpt = Option.empty,

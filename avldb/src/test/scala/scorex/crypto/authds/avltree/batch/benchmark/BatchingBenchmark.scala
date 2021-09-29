@@ -2,10 +2,10 @@ package scorex.crypto.authds.avltree.batch.benchmark
 
 import scorex.crypto.authds._
 import scorex.crypto.authds.avltree.batch.helpers.FileHelper
-import scorex.crypto.authds.avltree.batch.{VersionedLDBAVLStorage, _}
+import scorex.crypto.authds.avltree.batch.{VersionedSWDBAVLStorage, _}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.utils.Random
-import scorex.db.LDBVersionedStore
+import scorex.db.SWDBVersionedStore
 
 object BatchingBenchmark extends App with FileHelper {
   val KeyLength = 26
@@ -18,8 +18,8 @@ object BatchingBenchmark extends App with FileHelper {
   implicit val hf = Blake2b256
   type HF = Blake2b256.type
 
-  val store = new LDBVersionedStore(getRandomTempDir, keepVersions = 10)
-  val storage = new VersionedLDBAVLStorage(store, NodeParameters(KeyLength, Some(ValueLength), LabelLength))
+  val store = new SWDBVersionedStore(getRandomTempDir, keepVersions = 10)
+  val storage = new VersionedSWDBAVLStorage(store, NodeParameters(KeyLength, Some(ValueLength), LabelLength))
   require(storage.isEmpty)
   val mods = generateModifications()
   var digest: ADDigest = ADDigest @@ Array[Byte]()

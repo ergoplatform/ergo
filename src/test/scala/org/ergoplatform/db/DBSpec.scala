@@ -4,8 +4,7 @@ import akka.util.ByteString
 import org.ergoplatform.settings.Algos
 import org.iq80.leveldb.{DB, Options}
 import scorex.testkit.utils.FileUtils
-import scorex.db.LDBFactory.factory
-import scorex.db.{LDBKVStore, LDBVersionedStore}
+import scorex.db.{SWDBFactory, SWDBStore, SWDBVersionedStore}
 
 trait DBSpec extends FileUtils {
 
@@ -21,22 +20,15 @@ trait DBSpec extends FileUtils {
 
   protected def byteString32(s: String): Array[Byte] = Algos.hash(byteString(s))
 
-  protected def withDb(body: DB => Unit): Unit = {
-    val options = new Options()
-    options.createIfMissing(true)
-    options.verifyChecksums(true)
-    options.maxOpenFiles(2000)
-    val db = factory.open(createTempDir, options)
+  protected def versionId(s: String): Array[Byte] = byteString32(s)
+
+  protected def withStore(body: SWDBStore => Unit): Unit = {
+    val db = SWDBFactory.create(createTempDir)
     try body(db) finally db.close()
   }
 
-  protected def versionId(s: String): Array[Byte] = byteString32(s)
-
-  protected def withStore(body: LDBKVStore => Unit): Unit =
-    withDb { db: DB => body(new LDBKVStore(db)) }
-
-  protected def withVersionedStore(keepVersions: Int)(body: LDBVersionedStore => Unit): Unit = {
-    val db = new LDBVersionedStore(createTempDir, keepVersions)
+  protected def withVersionedStore(keepVersions: Int)(body: SWDBVersionedStore => Unit): Unit = {
+    val db = new SWDBVersionedStore(createTempDir, keepVersions)
     try body(db) finally db.close()
   }
 

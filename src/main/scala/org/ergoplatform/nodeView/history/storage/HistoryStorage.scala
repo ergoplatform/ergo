@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.settings.{Algos, CacheSettings}
 import scorex.core.utils.ScorexEncoding
-import scorex.db.{ByteArrayWrapper, LDBKVStore}
+import scorex.db.{ByteArrayWrapper, SWDBStore}
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success}
@@ -18,7 +18,7 @@ import scala.util.{Failure, Success}
   * @param objectsStore - key-value store, where key is id of ErgoPersistentModifier and value is it's bytes
   * @param config       - cache configs
   */
-class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: CacheSettings)
+class HistoryStorage(indexStore: SWDBStore, objectsStore: SWDBStore, config: CacheSettings)
   extends ScorexLogging
     with AutoCloseable
     with ScorexEncoding {

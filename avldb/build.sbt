@@ -2,6 +2,8 @@ import sbt.Keys.testFrameworks
 
 name := "avldb"
 
+val swayDBVersion = "0.16.2"
+
 libraryDependencies ++= Seq(
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
@@ -16,6 +18,7 @@ libraryDependencies ++= Seq(
 )
 
 libraryDependencies ++= Seq(
+  "io.swaydb" %% "swaydb" % swayDBVersion,
   "org.ethereum" % "leveldbjni-all"     % "1.18.3"
 )
 

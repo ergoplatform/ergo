@@ -6,12 +6,12 @@ import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage.SecretPathsKey
 import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.utils.generators.WalletGenerators
-import org.ergoplatform.wallet.secrets.{DerivationPathSerializer, DerivationPath}
+import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer}
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scorex.db.LDBKVStore
+import scorex.db.SWDBStore
 import scorex.testkit.utils.FileUtils
 
 class WalletStorageSpec
@@ -26,7 +26,7 @@ class WalletStorageSpec
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
 
   it should "add and read derivation paths" in {
-    def addPath(store: LDBKVStore, storedPaths: Seq[DerivationPath], derivationPath: DerivationPath): Unit = {
+    def addPath(store: SWDBStore, storedPaths: Seq[DerivationPath], derivationPath: DerivationPath): Unit = {
       val updatedPaths = (storedPaths :+ derivationPath).toSet
       val toInsert = Ints.toByteArray(updatedPaths.size) ++ updatedPaths
         .foldLeft(Array.empty[Byte]) { case (acc, path) =>

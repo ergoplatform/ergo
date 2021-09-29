@@ -8,8 +8,9 @@ import org.ergoplatform.wallet.secrets.{DerivationPath, DerivationPathSerializer
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
-import scorex.db.{LDBFactory, LDBKVStore}
+import scorex.db.{SWDBFactory, SWDBStore}
 import java.io.File
+
 import scala.util.{Success, Try}
 
 /**
@@ -22,7 +23,7 @@ import scala.util.{Success, Try}
   * * ErgoStateContext (not version-agnostic, but state changes including rollbacks it is updated externally)
   * * external scans
   */
-final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
+final class WalletStorage(store: SWDBStore, settings: ErgoSettings)
                          (implicit val addressEncoder: ErgoAddressEncoder) {
 
   import WalletStorage._
@@ -213,7 +214,7 @@ object WalletStorage {
 
   def readOrCreate(settings: ErgoSettings)
                   (implicit addressEncoder: ErgoAddressEncoder): WalletStorage = {
-    val db = LDBFactory.createKvDb(storageFolder(settings).getPath)
+    val db = SWDBFactory.create(storageFolder(settings).getPath)
     new WalletStorage(db, settings)
   }
 

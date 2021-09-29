@@ -15,7 +15,7 @@ import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
-import scorex.db.LDBVersionedStore
+import scorex.db.SWDBVersionedStore
 
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
@@ -32,7 +32,7 @@ import scala.collection.mutable
   * * boxes, spent or not
   *
   */
-class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
+class WalletRegistry(store: SWDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
 
@@ -397,7 +397,7 @@ object WalletRegistry {
     val dir = registryFolder(settings)
     dir.mkdirs()
 
-    val store = new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
+    val store = new SWDBVersionedStore(dir, settings.nodeSettings.keepVersions)
 
     // Create pre-genesis state checkpoint
     if (!store.versionIdExists(PreGenesisStateVersion)) store.update(PreGenesisStateVersion, Seq.empty, Seq.empty)
@@ -611,14 +611,14 @@ case class KeyValuePairsBag(toInsert: Seq[(Array[Byte], Array[Byte])],
     * Applies non-versioned transaction to a given `store`.
     *
     */
-  def transact(store: LDBVersionedStore): Unit = transact(store, None)
+  def transact(store: SWDBVersionedStore): Unit = transact(store, None)
 
   /**
     * Applies versioned transaction to a given `store`.
     */
-  def transact(store: LDBVersionedStore, version: Array[Byte]): Unit = transact(store, Some(version))
+  def transact(store: SWDBVersionedStore, version: Array[Byte]): Unit = transact(store, Some(version))
 
-  private def transact(store: LDBVersionedStore, versionOpt: Option[Array[Byte]]): Unit =
+  private def transact(store: SWDBVersionedStore, versionOpt: Option[Array[Byte]]): Unit =
     if (toInsert.nonEmpty || toRemove.nonEmpty) {
       store.update(versionOpt.getOrElse(scorex.utils.Random.randomBytes()), toRemove, toInsert)
     }

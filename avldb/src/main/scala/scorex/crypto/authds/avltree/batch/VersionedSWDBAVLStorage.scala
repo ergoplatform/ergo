@@ -1,13 +1,14 @@
 package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
-import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{InternalNodePrefix, LeafPrefix}
+import scorex.crypto.authds.avltree.batch.VersionedSWDBAVLStorage.{InternalNodePrefix, LeafPrefix}
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue, Balance}
 import scorex.util.encode.Base58
 import scorex.crypto.hash
 import scorex.crypto.hash.{CryptographicHash, Digest}
-import scorex.db.LDBVersionedStore
+import scorex.db.SWDBVersionedStore
 import scorex.util.ScorexLogging
+
 import scala.util.{Failure, Try}
 
 /**
@@ -18,9 +19,9 @@ import scala.util.{Failure, Try}
   * @param hf - hash function used to construct the tree
   * @tparam D - type of hash function digest
   */
-class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
-                                          nodeParameters: NodeParameters)
-                                         (implicit val hf: CryptographicHash[D]) extends VersionedAVLStorage[D] with ScorexLogging {
+class VersionedSWDBAVLStorage[D <: Digest](store: SWDBVersionedStore,
+                                           nodeParameters: NodeParameters)
+                                          (implicit val hf: CryptographicHash[D]) extends VersionedAVLStorage[D] with ScorexLogging {
 
   private lazy val labelSize = nodeParameters.labelSize
 
@@ -32,7 +33,7 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
   override def rollback(version: ADDigest): Try[(ProverNodes[D], Int)] = Try {
     store.rollbackTo(version)
 
-    val top = VersionedLDBAVLStorage.fetch[D](ADKey @@ store.get(TopNodeKey).get)(hf, store, nodeParameters)
+    val top = VersionedSWDBAVLStorage.fetch[D](ADKey @@ store.get(TopNodeKey).get)(hf, store, nodeParameters)
     val topHeight = Ints.fromByteArray(store.get(TopNodeHeight).get)
 
     top -> topHeight
@@ -98,12 +99,12 @@ class VersionedLDBAVLStorage[D <: Digest](store: LDBVersionedStore,
 }
 
 
-object VersionedLDBAVLStorage {
+object VersionedSWDBAVLStorage {
   val InternalNodePrefix: Byte = 0: Byte
   val LeafPrefix: Byte = 1: Byte
 
   def fetch[D <: hash.Digest](key: ADKey)(implicit hf: CryptographicHash[D],
-                                          store: LDBVersionedStore,
+                                          store: SWDBVersionedStore,
                                           nodeParameters: NodeParameters): ProverNodes[D] = {
     val bytes = store(key)
     lazy val keySize = nodeParameters.keySize

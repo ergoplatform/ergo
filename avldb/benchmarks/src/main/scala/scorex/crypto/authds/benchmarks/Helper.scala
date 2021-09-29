@@ -4,7 +4,7 @@ import com.google.common.primitives.Longs
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADKey, ADValue}
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.db.SWDBVersionedStore
+import scorex.db.{SWDBFactory, SWDBVersionedStore}
 import scorex.utils.Random
 
 object Helper {
@@ -37,7 +37,7 @@ object Helper {
                                          baseOperationsCount: Int = 0): (Prover, SWDBVersionedStore, VersionedSWDBAVLStorage[Digest32]) = {
     val dir = java.nio.file.Files.createTempDirectory("bench_testing_" + scala.util.Random.alphanumeric.take(15)).toFile
     dir.deleteOnExit()
-    val store = new SWDBVersionedStore(dir, keepVersions = keepVersions)
+    val store = SWDBFactory.createdir, keepVersions = keepVersions)
     val storage = new VersionedSWDBAVLStorage(store, NodeParameters(kl, Some(vl), ll))
     require(storage.isEmpty)
     val prover = new BatchAVLProver[Digest32, HF](kl, Some(vl))

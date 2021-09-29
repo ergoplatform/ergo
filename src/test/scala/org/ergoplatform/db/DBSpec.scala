@@ -28,7 +28,7 @@ trait DBSpec extends FileUtils {
   }
 
   protected def withVersionedStore(keepVersions: Int)(body: SWDBVersionedStore => Unit): Unit = {
-    val db = new SWDBVersionedStore(createTempDir, keepVersions)
+    val db = SWDBFactory.create(createTempDir, keepVersions)
     try body(db) finally db.close()
   }
 

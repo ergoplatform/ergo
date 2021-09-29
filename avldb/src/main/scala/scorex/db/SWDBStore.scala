@@ -10,7 +10,7 @@ import scala.util.Try
   *
   * Both keys and values are var-sized byte arrays.
   */
-class SWDBStore(protected val db: Map[Array[Byte], Array[Byte], Nothing, IO.ApiIO]) extends SWDBStoreReader with ScorexLogging {
+class SWDBStore(val db: Map[Array[Byte], Array[Byte], Nothing, IO.ApiIO]) extends SWDBStoreReader with ScorexLogging {
 
   def update(toInsert: Seq[(K, V)], toRemove: Seq[K]): Try[Unit] = Try {
     db.put(toInsert).toTry.flatMap(_ => db.remove(toRemove).toTry).map(_ => ())

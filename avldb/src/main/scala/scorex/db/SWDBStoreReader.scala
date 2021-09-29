@@ -12,8 +12,7 @@ trait SWDBStoreReader extends AutoCloseable {
   type K = Array[Byte]
   type V = Array[Byte]
 
-  protected val db:Map[Array[Byte], Array[Byte], Nothing, IO.ApiIO]
-
+  val db:Map[Array[Byte], Array[Byte], Nothing, IO.ApiIO]
 
   /**
     * Read database element by its key
@@ -89,5 +88,6 @@ trait SWDBStoreReader extends AutoCloseable {
     */
   def close(): Unit = {
     db.close()
+    SWDBFactory.unlink(this)
   }
 }

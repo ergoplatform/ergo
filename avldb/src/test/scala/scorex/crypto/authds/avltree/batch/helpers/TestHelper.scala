@@ -4,7 +4,7 @@ import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.util.encode.Base58
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.db.SWDBVersionedStore
+import scorex.db.{SWDBFactory, SWDBVersionedStore}
 
 trait TestHelper extends FileHelper {
 
@@ -25,7 +25,7 @@ trait TestHelper extends FileHelper {
 
   def createVersionedStore(keepVersions: Int = 10): SWDBVersionedStore = {
     val dir = getRandomTempDir
-    new SWDBVersionedStore(dir, keepVersions = keepVersions)
+    SWDBFactory.create(dir, keepVersions = keepVersions)
   }
 
   def createVersionedStorage(store: SWDBVersionedStore): STORAGE =

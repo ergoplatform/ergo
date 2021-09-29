@@ -12,8 +12,8 @@ import scala.util.Random
 class SWDBVersionedStoreSpec extends AnyPropSpec with Matchers {
 
   private val dir = getRandomTempDir
-  private val store = new SWDBVersionedStore(dir, 100)
-/*
+  private val store = SWDBFactory.create(dir, 100)
+
   property("last version correct && versionIdExists && rollbackVersions") {
     val versionNum = Random.nextInt().toLong
     val versionId = Longs.toByteArray(versionNum)
@@ -43,7 +43,7 @@ class SWDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     //versions are coming in recent-first order
     store.rollbackVersions().toSeq.map(_.toSeq) shouldBe Seq(versionId3.toSeq, versionId2.toSeq, versionId.toSeq)
   }
-*/
+
   property("processAll && getWithFilter") {
     val version = Longs.toByteArray(Long.MaxValue)
     val k1 = Longs.toByteArray(Int.MaxValue + 1)

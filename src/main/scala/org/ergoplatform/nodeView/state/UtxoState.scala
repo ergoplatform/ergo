@@ -20,7 +20,7 @@ import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
-import scorex.db.{ByteArrayWrapper, SWDBVersionedStore}
+import scorex.db.{ByteArrayWrapper, SWDBFactory, SWDBVersionedStore}
 
 import scala.util.{Failure, Success, Try}
 
@@ -178,7 +178,7 @@ object UtxoState {
   }
 
   def create(dir: File, constants: StateConstants): UtxoState = {
-    val store = new SWDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = SWDBFactory.create(dir, keepVersions = constants.keepVersions)
     val version = store.get(bestVersionKey).map(w => bytesToVersion(w))
       .getOrElse(ErgoState.genesisStateVersion)
     val persistentProver: PersistentBatchAVLProver[Digest32, HF] = {
@@ -204,7 +204,7 @@ object UtxoState {
       p.performOneOperation(Insert(b.id, ADValue @@ b.bytes)).ensuring(_.isSuccess)
     }
 
-    val store = new SWDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = SWDBFactory.create(dir, keepVersions = constants.keepVersions)
 
     implicit val votingSettings: VotingSettings = constants.votingSettings
 

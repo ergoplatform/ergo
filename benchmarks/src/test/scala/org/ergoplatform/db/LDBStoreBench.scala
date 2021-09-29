@@ -22,7 +22,7 @@ object LDBStoreBench
 
 
   private def storeLDB() = SWDBFactory.create(createTempDir)
-  private def storeLVDB() = new SWDBVersionedStore(createTempDir, keepVersions = 400)
+  private def storeLVDB() = SWDBFactory.create(createTempDir, keepVersions = 400)
 
   private val modsNumGen = Gen.enumeration("modifiers number")(1000)
 

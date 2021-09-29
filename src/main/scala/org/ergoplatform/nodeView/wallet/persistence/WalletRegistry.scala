@@ -15,7 +15,7 @@ import Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.PreGenesisHeader
-import scorex.db.SWDBVersionedStore
+import scorex.db.{SWDBFactory, SWDBVersionedStore}
 
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
@@ -394,7 +394,7 @@ object WalletRegistry {
   def apply(settings: ErgoSettings): Try[WalletRegistry] = Try {
       val dir = registryFolder(settings)
       dir.mkdirs()
-      new SWDBVersionedStore(dir, settings.nodeSettings.keepVersions)
+      SWDBFactory.create(dir, settings.nodeSettings.keepVersions)
     }.flatMap {
       case store if !store.versionIdExists(PreGenesisStateVersion) =>
         // Create pre-genesis state checkpoint

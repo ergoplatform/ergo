@@ -160,7 +160,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
               stateContext: ErgoStateContext,
               dir: File,
               constants: StateConstants): Try[DigestState] = {
-    val store SWDBFactory.create(dir, keepVersions = constants.keepVersions)
+    val store = SWDBFactory.create(dir, keepVersions = constants.keepVersions)
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
     store.update(scorex.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>

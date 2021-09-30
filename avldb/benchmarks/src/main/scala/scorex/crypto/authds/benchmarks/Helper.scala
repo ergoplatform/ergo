@@ -37,7 +37,7 @@ object Helper {
                                          baseOperationsCount: Int = 0): (Prover, SWDBVersionedStore, VersionedSWDBAVLStorage[Digest32]) = {
     val dir = java.nio.file.Files.createTempDirectory("bench_testing_" + scala.util.Random.alphanumeric.take(15)).toFile
     dir.deleteOnExit()
-    val store = SWDBFactory.createdir, keepVersions = keepVersions)
+    val store = SWDBFactory.create(dir, keepVersions = keepVersions)
     val storage = new VersionedSWDBAVLStorage(store, NodeParameters(kl, Some(vl), ll))
     require(storage.isEmpty)
     val prover = new BatchAVLProver[Digest32, HF](kl, Some(vl))

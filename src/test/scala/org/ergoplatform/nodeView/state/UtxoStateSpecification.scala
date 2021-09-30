@@ -205,7 +205,7 @@ class UtxoStateSpecification extends ErgoPropertyTest with ErgoTransactionGenera
     chain.foreach { fb =>
       us2 = us2.applyModifier(fb).get
     }
-    Await.result(f, Duration.Inf);
+    Await.result(f, Duration.Inf)
   }
 
   property("proofsForTransactions() to be deterministic") {

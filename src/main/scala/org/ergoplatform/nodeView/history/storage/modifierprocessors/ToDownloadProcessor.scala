@@ -40,6 +40,7 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
 
   /**
     * Get modifier ids to download to synchronize full blocks
+    *
     * @param howManyPerType how many ModifierIds per ModifierTypeId to fetch
     * @param condition filter only ModifierIds that pass this condition
     * @return next max howManyPerType ModifierIds by ModifierTypeId to download filtered by condition
@@ -56,7 +57,9 @@ trait ToDownloadProcessor extends BasicReaders with ScorexLogging {
         if (headersAtThisHeight.nonEmpty) {
           val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter(m => condition(m._2))
           // add new modifiers to download to accumulator
-          val newAcc = toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) => newAcc.adjust(mType)(_.fold(Vector(mId))(_ :+ mId)) }
+          val newAcc = toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) =>
+            newAcc.adjust(mType)(_.fold(Vector(mId))(_ :+ mId))
+          }
           continuation(height + 1, newAcc)
         } else {
           acc
@@ -114,6 +117,7 @@ object ToDownloadProcessor {
   implicit class MapPimp[K, V](underlying: Map[K, V]) {
     /**
       * One liner for updating a Map with the possibility to handle case of missing Key
+      *
       * @param k map key
       * @param f function that is passed Option depending on Key being present or missing, returning new Value
       * @return new Map with value updated under given key

@@ -162,17 +162,17 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def sendTransactionR: Route =
     (path("transaction" / "send") & post & entity(as[RequestsHolder])) { holder =>
-      sendTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+      sendTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw)
     }
 
   def generateTransactionR: Route =
     (path("transaction" / "generate") & post & entity(as[RequestsHolder])) { holder =>
-      generateTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+      generateTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw)
     }
 
   def generateUnsignedTransactionR: Route =
     (path("transaction" / "generateUnsigned") & post & entity(as[RequestsHolder])) { holder =>
-      generateUnsignedTransaction(holder.withFee, holder.inputsRaw, holder.dataInputsRaw)
+      generateUnsignedTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw)
     }
 
   def generateCommitmentsR: Route = (path("generateCommitments")

@@ -13,13 +13,13 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 
-class ErgoSyncTracker(nvsRef: ActorRef,
-                      context: ActorContext,
-                      networkSettings: NetworkSettings,
-                      timeProvider: TimeProvider)(implicit ec: ExecutionContext)
+final case class ErgoSyncTracker( nvsRef: ActorRef,
+                                  context: ActorContext,
+                                  networkSettings: NetworkSettings,
+                                  timeProvider: TimeProvider)(implicit ec: ExecutionContext)
  extends SyncTracker(nvsRef, context, networkSettings, timeProvider)(ec) {
 
-  val heights = mutable.Map[ConnectedPeer, Height]()
+  val heights: mutable.Map[ConnectedPeer, Height] = mutable.Map[ConnectedPeer, Height]()
 
   def fullInfo(): Iterable[ErgoPeerStatus] = {
     statuses.keys.toSeq.map { cp =>

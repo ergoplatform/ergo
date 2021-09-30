@@ -48,7 +48,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
-  override protected val statusTracker = new ErgoSyncTracker(self, context, networkSettings, timeProvider)
+  override protected val statusTracker = ErgoSyncTracker(self, context, networkSettings, timeProvider)
 
   /**
     * Approximate number of modifiers to be downloaded simultaneously, headers are much faster to process

@@ -19,9 +19,8 @@ object SWDBFactory {
   }
 
   def create(file: File, keepVersions: Int): SWDBVersionedStore = {
-    val path = file.toPath
-    synchronized {
-      map.getOrElseUpdate(path, new SWDBVersionedStore(file, keepVersions)).asInstanceOf[SWDBVersionedStore]
+     synchronized {
+      map.getOrElseUpdate(new File(file,  "main").toPath, new SWDBVersionedStore(file, keepVersions)).asInstanceOf[SWDBVersionedStore]
     }
   }
 

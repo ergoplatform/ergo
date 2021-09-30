@@ -88,7 +88,7 @@ trait SWDBStoreReader extends AutoCloseable {
     * Close the database
     */
   def close(): Unit = {
-    db.close()
     SWDBFactory.unlink(this)
+    db.close()
   }
 }

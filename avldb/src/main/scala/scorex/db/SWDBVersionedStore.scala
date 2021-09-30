@@ -28,11 +28,11 @@ class SWDBVersionedStore(protected val dir: File, val keepVersions: Int) extends
 
   type LSN = Long // logical serial number: type used to provide order of records in undo list
 
-  override val db: Map[K, V, Nothing, ApiIO] = persistent.Map[K, V, Nothing, IO.ApiIO](dir = new File(dir, "ldb_main").toPath).get
+  override val db: Map[K, V, Nothing, ApiIO] = persistent.Map[K, V, Nothing, IO.ApiIO](dir = new File(dir, "main").toPath).get
   private val lock = new ReentrantReadWriteLock()
 
   private val undo = {
-    persistent.Map[LSN, V, Nothing, IO.ApiIO](dir = new File(dir, "ldb_undo").toPath).get
+    persistent.Map[LSN, V, Nothing, IO.ApiIO](dir = new File(dir, "undo").toPath).get
   }
   private var lsn: LSN = getLastLSN // last assigned logical serial number
   private val versionLsn = ArrayBuffer.empty[LSN] // LSNs of versions

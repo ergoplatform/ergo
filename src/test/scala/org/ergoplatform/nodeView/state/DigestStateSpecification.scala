@@ -30,6 +30,7 @@ class DigestStateSpecification extends ErgoPropertyTest {
       val state = DigestState.create(None, None, dir2, stateConstants)
       state.version shouldEqual fb.header.id
       state.rootHash shouldEqual fb.header.stateRoot
+      state.close()
     }
   }
 

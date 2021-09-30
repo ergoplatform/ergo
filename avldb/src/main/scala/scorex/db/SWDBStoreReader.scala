@@ -71,7 +71,8 @@ trait SWDBStoreReader extends AutoCloseable {
     * @return
     */
   def getRange(start: K, end: K): Seq[(K, V)] = {
-    db.from(start).takeWhile(kv => ByteArrayUtils.compare(kv._1, end) <= 0).materialize.get
+    db.fromOrAfter(start).takeWhile(kv =>
+      ByteArrayUtils.compare(kv._1, end) <= 0).materialize.get
   }
 
   /**

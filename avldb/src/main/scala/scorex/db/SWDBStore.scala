@@ -3,7 +3,7 @@ package scorex.db
 import swaydb._
 import scorex.util.ScorexLogging
 
-import scala.util.Try
+import scala.util.{Success, Try}
 
 /**
   * A LevelDB wrapper providing a convenient non-versioned database interface.
@@ -13,11 +13,22 @@ import scala.util.Try
 class SWDBStore(val db: Map[Array[Byte], Array[Byte], Nothing, IO.ApiIO]) extends SWDBStoreReader with ScorexLogging {
 
   def update(toInsert: Seq[(K, V)], toRemove: Seq[K]): Try[Unit] = Try {
-    db.put(toInsert).toTry.flatMap(_ => db.remove(toRemove).toTry).map(_ => ())
+    insert(toInsert).flatMap(_ => remove(toRemove))
   }
 
-  def insert(values: Seq[(K, V)]): Try[Unit] = db.put(values).toTry.map(_ => ())
+  def insert(values: Seq[(K, V)]): Try[Unit] = {
+    if (!values.isEmpty) {
+      db.put(values).toTry.map(_ => ())
+    } else {
+      Success(())
+    }
+  }
 
-  def remove(keys: Seq[K]): Try[Unit] = db.remove(keys).toTry.map(_ => ())
-
+  def remove(keys: Seq[K]): Try[Unit] = {
+    if (!keys.isEmpty) {
+      db.remove(keys).toTry.map(_ => ())
+    } else {
+      Success(())
+    }
+  }
 }

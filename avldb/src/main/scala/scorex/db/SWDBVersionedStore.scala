@@ -221,7 +221,7 @@ class SWDBVersionedStore(protected val dir: File, val keepVersions: Int) extends
     lock.writeLock().lock()
     try {
       undo.close()
-      db.close()
+      super.close()
     } finally {
       lock.writeLock().unlock()
     }

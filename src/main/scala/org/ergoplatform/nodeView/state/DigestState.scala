@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.state.ErgoState.ModifierProcessing
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
+import scorex.db.{ByteArrayWrapper, SWDBFactory, SWDBVersionedStore}
 import scorex.core._
 import scorex.core.transaction.state.ModifierValidation
 import scorex.core.utils.ScorexEncoding
@@ -26,7 +26,7 @@ import scala.util.{Failure, Success, Try}
   */
 class DigestState protected(override val version: VersionTag,
                             override val rootHash: ADDigest,
-                            override val store: LDBVersionedStore,
+                            override val store: SWDBVersionedStore,
                             ergoSettings: ErgoSettings)
   extends ErgoState[DigestState]
     with ModifierValidation[ErgoPersistentModifier]
@@ -160,7 +160,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
               stateContext: ErgoStateContext,
               dir: File,
               constants: StateConstants): Try[DigestState] = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = SWDBFactory.create(dir, keepVersions = constants.keepVersions)
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
     store.update(scorex.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>
@@ -172,7 +172,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
              rootHashOpt: Option[ADDigest],
              dir: File,
              constants: StateConstants): DigestState = {
-    val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
+    val store = SWDBFactory.create(dir, keepVersions = constants.keepVersions)
     Try {
       val context = ErgoStateReader.storageStateContext(store, constants)
       (versionOpt, rootHashOpt) match {

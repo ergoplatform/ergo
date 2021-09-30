@@ -8,8 +8,8 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.authds.{ADDigest, ADKey, ADValue}
 import scorex.util.encode.Base16
-import scorex.crypto.hash.{Digest32, Blake2b256}
-import scorex.db.LDBVersionedStore
+import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.db.SWDBVersionedStore
 import scorex.utils.{Random => RandomBytes}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -18,7 +18,7 @@ import scala.concurrent.{Await, Future}
 import scala.util.{Success, Try}
 import scala.language.implicitConversions
 
-class VersionedLDBAVLStorageSpecification extends AnyPropSpec
+class VersionedSWDBAVLStorageSpecification extends AnyPropSpec
   with ScalaCheckPropertyChecks
   with Matchers
   with TestHelper {
@@ -201,7 +201,7 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
     noException should be thrownBy storage.rollbackVersions.foreach(v => prover.rollback(v).get)
   }
 
-  def testAddInfoSaving(createStore: Int => LDBVersionedStore): Unit = {
+  def testAddInfoSaving(createStore: Int => SWDBVersionedStore): Unit = {
     val store = createStore(1000)
     val storage = createVersionedStorage(store)
     val prover = createPersistentProver(storage)
@@ -245,7 +245,7 @@ class VersionedLDBAVLStorageSpecification extends AnyPropSpec
 
   }
 
-  def removeFromLargerSetSingleRandomElementTest(createStore: Int => LDBVersionedStore): Unit = {
+  def removeFromLargerSetSingleRandomElementTest(createStore: Int => SWDBVersionedStore): Unit = {
     val minSetSize = 10000
     val maxSetSize = 200000
 

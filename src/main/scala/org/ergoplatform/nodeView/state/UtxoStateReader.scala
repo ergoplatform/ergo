@@ -10,7 +10,7 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
-import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedSWDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
@@ -23,7 +23,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
   val constants: StateConstants
 
   private lazy val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)
-  protected lazy val storage = new VersionedLDBAVLStorage(store, np)
+  protected lazy val storage = new VersionedSWDBAVLStorage(store, np)
 
   protected val persistentProver: PersistentBatchAVLProver[Digest32, HF]
 

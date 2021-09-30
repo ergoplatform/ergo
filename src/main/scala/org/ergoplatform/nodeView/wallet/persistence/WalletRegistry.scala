@@ -15,7 +15,7 @@ import Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.PreGenesisHeader
-import scorex.db.LDBVersionedStore
+import scorex.db.{SWDBFactory, SWDBVersionedStore}
 
 import scala.util.{Failure, Success, Try}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
@@ -32,7 +32,7 @@ import scala.collection.mutable
   * * boxes, spent or not
   *
   */
-class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
+class WalletRegistry(store: SWDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
 
@@ -394,7 +394,7 @@ object WalletRegistry {
   def apply(settings: ErgoSettings): Try[WalletRegistry] = Try {
       val dir = registryFolder(settings)
       dir.mkdirs()
-      new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
+      SWDBFactory.create(dir, settings.nodeSettings.keepVersions)
     }.flatMap {
       case store if !store.versionIdExists(PreGenesisStateVersion) =>
         // Create pre-genesis state checkpoint
@@ -610,14 +610,14 @@ case class KeyValuePairsBag(toInsert: Seq[(Array[Byte], Array[Byte])],
     * Applies non-versioned transaction to a given `store`.
     *
     */
-  def transact(store: LDBVersionedStore): Try[Unit] = transact(store, None)
+  def transact(store: SWDBVersionedStore): Try[Unit] = transact(store, None)
 
   /**
     * Applies versioned transaction to a given `store`.
     */
-  def transact(store: LDBVersionedStore, version: Array[Byte]): Try[Unit] = transact(store, Some(version))
+  def transact(store: SWDBVersionedStore, version: Array[Byte]): Try[Unit] = transact(store, Some(version))
 
-  private def transact(store: LDBVersionedStore, versionOpt: Option[Array[Byte]]): Try[Unit] =
+  private def transact(store: SWDBVersionedStore, versionOpt: Option[Array[Byte]]): Try[Unit] =
     if (toInsert.nonEmpty || toRemove.nonEmpty) {
       store.update(versionOpt.getOrElse(scorex.utils.Random.randomBytes()), toRemove, toInsert)
     } else {

@@ -11,8 +11,7 @@ import org.scalameter.picklers.Implicits._
 import scorex.crypto.hash.Digest32
 import scorex.testkit.utils.FileUtils
 import scorex.util.idToBytes
-import scorex.db.LDBFactory.factory
-import scorex.db.{LDBKVStore, LDBVersionedStore}
+import scorex.db.{SWDBFactory, SWDBStore, SWDBVersionedStore}
 
 import scala.util.Random
 
@@ -21,12 +20,9 @@ object LDBStoreBench
     with ErgoTransactionGenerators
     with FileUtils {
 
-  private val options = new Options()
-  options.createIfMissing(true)
-  private val db1 = factory.open(createTempDir, options)
 
-  private def storeLDB() = new LDBKVStore(db1)
-  private def storeLVDB() = new LDBVersionedStore(createTempDir, keepVersions = 400)
+  private def storeLDB() = SWDBFactory.create(createTempDir)
+  private def storeLVDB() = SWDBFactory.create(createTempDir, keepVersions = 400)
 
   private val modsNumGen = Gen.enumeration("modifiers number")(1000)
 
@@ -36,7 +32,7 @@ object LDBStoreBench
     }
   }
 
-  val txsWithDbGen: Gen[(Seq[BlockTransactions], LDBKVStore)] = txsGen.map { bts =>
+  val txsWithDbGen: Gen[(Seq[BlockTransactions], SWDBStore)] = txsGen.map { bts =>
     val toInsert = bts.map(bt => idToBytes(bt.headerId) -> bt.bytes)
     val db = storeLDB()
     toInsert.grouped(5).foreach(db.insert(_).get)
@@ -58,7 +54,7 @@ object LDBStoreBench
     toInsert.grouped(5).foreach(db.insert(_).get)
   }
 
-  private def benchReadLDB(bts: Seq[BlockTransactions], db: LDBKVStore): Unit = {
+  private def benchReadLDB(bts: Seq[BlockTransactions], db: SWDBStore): Unit = {
     bts.foreach { bt => db.get(idToBytes(bt.headerId)) }
   }
 

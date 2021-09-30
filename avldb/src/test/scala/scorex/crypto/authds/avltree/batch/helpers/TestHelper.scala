@@ -4,7 +4,7 @@ import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.util.encode.Base58
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.db.LDBVersionedStore
+import scorex.db.{SWDBFactory, SWDBVersionedStore}
 
 trait TestHelper extends FileHelper {
 
@@ -15,7 +15,7 @@ trait TestHelper extends FileHelper {
   type PROVER = BatchAVLProver[D, HF]
   type VERIFIER = BatchAVLVerifier[D, HF]
   type PERSISTENT_PROVER = PersistentBatchAVLProver[D, HF]
-  type STORAGE = VersionedLDBAVLStorage[D]
+  type STORAGE = VersionedSWDBAVLStorage[D]
 
   protected val KL: Int
   protected val VL: Int
@@ -23,13 +23,13 @@ trait TestHelper extends FileHelper {
 
   implicit val hf: HF = Blake2b256
 
-  def createVersionedStore(keepVersions: Int = 10): LDBVersionedStore = {
+  def createVersionedStore(keepVersions: Int = 10): SWDBVersionedStore = {
     val dir = getRandomTempDir
-    new LDBVersionedStore(dir, keepVersions = keepVersions)
+    SWDBFactory.create(dir, keepVersions = keepVersions)
   }
 
-  def createVersionedStorage(store: LDBVersionedStore): STORAGE =
-    new VersionedLDBAVLStorage(store, NodeParameters(KL, Some(VL), LL))
+  def createVersionedStorage(store: SWDBVersionedStore): STORAGE =
+    new VersionedSWDBAVLStorage(store, NodeParameters(KL, Some(VL), LL))
 
   def createPersistentProver(storage: STORAGE): PERSISTENT_PROVER = {
     val prover = new BatchAVLProver[D, HF](KL, Some(VL))

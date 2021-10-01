@@ -5,7 +5,9 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.consensus.History.HistoryComparisonResult
 import scorex.core.network.ConnectedPeer
 
-case class ErgoPeerStatus(peer: ConnectedPeer, status: HistoryComparisonResult, height: Height, lastUpdate: Long) {
+case class ErgoPeerStatus(peer: ConnectedPeer,
+                          status: HistoryComparisonResult,
+                          height: Height, lastUpdate: Long) {
   val mode: Option[ModeFeature] = ErgoPeerStatus.mode(peer)
 }
 

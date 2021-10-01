@@ -14,6 +14,8 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
   */
 sealed trait ErgoSyncInfo extends SyncInfo {
 
+  val nonEmpty: Boolean
+
   val syncData: Either[Seq[ModifierId], Seq[Header]]
 
   val version: Byte
@@ -36,6 +38,7 @@ sealed trait ErgoSyncInfo extends SyncInfo {
 case class ErgoSyncInfoV1(lastHeaderIds: Seq[ModifierId]) extends ErgoSyncInfo {
   override val syncData: Either[Seq[ModifierId], Seq[Header]] = Left(lastHeaderIds)
   override val version = 1
+  override val nonEmpty: Boolean = lastHeaderIds.nonEmpty
 }
 
 case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo {
@@ -44,6 +47,8 @@ case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo {
 
   override val syncData: Either[Seq[ModifierId], Seq[Header]] = Right(lastHeaders)
   override val version = 2
+
+  override val nonEmpty: Boolean = lastHeaders.nonEmpty
 }
 
 

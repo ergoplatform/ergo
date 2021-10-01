@@ -396,6 +396,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // parse all modifiers and put them to modifiers cache
         val parsed: Iterable[ErgoPersistentModifier] = parseModifiers(requestedModifiers, serializer, remote)
         val valid = parsed.filter(validateAndSetStatus(remote, _))
+        if (valid.head.isInstanceOf[Header]) {
+          println("hs: " + valid.map(_.asInstanceOf[Header].height).mkString(","))
+        }
         if (valid.nonEmpty) viewHolderRef ! ModifiersFromRemote[ErgoPersistentModifier](valid)
       case _ =>
         log.error(s"Undefined serializer for modifier of type $typeId")
@@ -441,10 +444,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.status(id) == Requested
     }
 
-    // todo: consider rules for penalizing peers for spammy transactions
     if (spam.nonEmpty) {
       if (typeId == Transaction.ModifierTypeId) {
         log.info(s"Got spammy transactions: $modifiers")
+        // todo: consider rules for penalizing peers for spammy transactions
       } else {
         log.info(s"Spam attempt: peer $remote has sent a non-requested modifiers of type $typeId with ids" +
           s": ${spam.keys.map(encoder.encodeId)}")

@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
-
 import java.io.File
+
 import akka.actor.{ActorRef, ActorSystem, OneForOneStrategy, Props}
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -17,11 +17,15 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.FileUtils
+import scorex.core.NodeViewHolder.ReceivableMessages.ModifiersFromRemote
 import scorex.core._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
+import spire.syntax.all.cfor
 
+import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
@@ -70,6 +74,71 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (_, ProcessingOutcome.Declined(e)) => // do nothing
         log.debug(s"Transaction $tx declined, reason: ${e.getMessage}")
     }
+  }
+
+  /**
+    * Process new modifiers from remote.
+    * Put all candidates to modifiersCache and then try to apply as much modifiers from cache as possible.
+    * Clear cache if it's size exceeds size limit.
+    * Publish `ModifiersProcessingResult` message with all just applied and removed from cache modifiers.
+    */
+  override protected def processRemoteModifiers: Receive = {
+    case ModifiersFromRemote(mods: Seq[ErgoPersistentModifier]@unchecked) =>
+      mods.headOption match {
+        case Some(h) if h.isInstanceOf[Header] =>
+          val sorted = mods.sortBy(_.asInstanceOf[Header].height)
+
+          val applied = if(sorted.head.asInstanceOf[Header].height == history().headersHeight + 1) {
+
+            val appliedBuffer = mutable.Buffer[Header]()
+            var expectedHeight = history().headersHeight + 1
+            var linkBroken = false
+
+            cfor(0)(_ < mods.length, _ + 1){idx =>
+              val header = mods(idx).asInstanceOf[Header]
+              if(!linkBroken && header.height == expectedHeight){
+                pmodModify(header)
+                appliedBuffer += header
+                expectedHeight += 1
+              } else {
+                if(!linkBroken) {
+                  linkBroken = true
+                }
+                modifiersCache.put(header.id, header)
+              }
+            }
+            appliedBuffer
+          } else {
+            mods.foreach(m => modifiersCache.put(m.id, m))
+            Seq.empty
+          }
+
+          val cleared = modifiersCache.cleanOverfull()
+          context.system.eventStream.publish(ModifiersProcessingResult(applied, cleared))
+          log.debug(s"Cache size after: ${modifiersCache.size}")
+
+        case _ =>
+          mods.foreach(m => modifiersCache.put(m.id, m))
+
+          log.debug(s"Cache size before: ${modifiersCache.size}")
+
+          @tailrec
+          def applyLoop(applied: Seq[ErgoPersistentModifier]): Seq[ErgoPersistentModifier] = {
+            modifiersCache.popCandidate(history()) match {
+              case Some(mod) =>
+                pmodModify(mod)
+                applyLoop(mod +: applied)
+              case None =>
+                applied
+            }
+          }
+
+          val applied = applyLoop(Seq())
+          val cleared = modifiersCache.cleanOverfull()
+
+          context.system.eventStream.publish(ModifiersProcessingResult(applied, cleared))
+          log.debug(s"Cache size after: ${modifiersCache.size}")
+      }
   }
 
   /**

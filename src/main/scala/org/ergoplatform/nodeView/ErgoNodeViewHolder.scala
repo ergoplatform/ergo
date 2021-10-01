@@ -14,9 +14,10 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSy
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
+import org.ergoplatform.utils.metrics.CsvFileCollector
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform.utils.FileUtils
+import org.ergoplatform.settings.{Constants, Algos, ErgoSettings}
+import org.ergoplatform.utils.{metrics, FileUtils}
 import scorex.core._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.settings.ScorexSettings
@@ -31,6 +32,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   private implicit lazy val actorSystem: ActorSystem = context.system
 
   override val scorexSettings: ScorexSettings = settings.scorexSettings
+
+  private lazy val metricsCollector = new CsvFileCollector(settings.directory + "/metrics")
 
   override type MS = State
   override type SI = ErgoSyncInfo
@@ -52,6 +55,15 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     log.warn("Stopping ErgoNodeViewHolder")
     history().closeStorage()
     minimalState().closeStorage()
+  }
+
+  override protected def pmodModify(pmod: ErgoPersistentModifier): Unit = {
+    if (settings.nodeSettings.collectMetrics)
+      metrics.executeWithCollector(metricsCollector) {
+        pmodModifyInternal(pmod)
+      }
+    else
+      pmodModifyInternal(pmod)
   }
 
   override protected def txModify(tx: ErgoTransaction): Unit = {
@@ -138,7 +150,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * which also needs to be propagated to mempool and wallet
     * @param pmod Remote or local persistent modifier
     */
-  override protected def pmodModify(pmod: ErgoPersistentModifier): Unit =
+  private def pmodModifyInternal(pmod: ErgoPersistentModifier): Unit =
     if (!history().contains(pmod.id)) {
       context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
 

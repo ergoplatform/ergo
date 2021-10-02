@@ -1,5 +1,7 @@
 package scorex.testkit.properties
 
+import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -13,18 +15,23 @@ import scorex.testkit.generators.SyntacticallyTargetedModifierProducer
 import scorex.util.ScorexLogging
 
 
-trait HistoryTests[TX <: Transaction, PM <: PersistentNodeViewModifier, SI <: SyncInfo, HT <: History[PM, SI, HT]]
+trait HistoryTests
   extends AnyPropSpec
     with ScalaCheckPropertyChecks
     with Matchers
     with ScorexLogging
     with TestkitHelpers
-    with SyntacticallyTargetedModifierProducer[PM, SI, HT] {
+    with SyntacticallyTargetedModifierProducer {
 
-  val historyGen: Gen[HT]
+  val historyGen: Gen[ErgoHistory]
 
-  lazy val generatorWithValidModifier: Gen[(HT, PM)] = historyGen.map { h => (h, syntacticallyValidModifier(h))}
-  lazy val generatorWithInvalidModifier: Gen[(HT, PM)] = historyGen.map { h => (h, syntacticallyInvalidModifier(h))}
+  lazy val generatorWithValidModifier: Gen[(ErgoHistory, ErgoPersistentModifier)] = {
+    historyGen.map { h => (h, syntacticallyValidModifier(h))}
+  }
+
+  lazy val generatorWithInvalidModifier: Gen[(ErgoHistory, ErgoPersistentModifier)] = {
+    historyGen.map { h => (h, syntacticallyInvalidModifier(h))}
+  }
 
   private def propertyNameGenerator(propName: String): String = s"HistoryTests: $propName"
 

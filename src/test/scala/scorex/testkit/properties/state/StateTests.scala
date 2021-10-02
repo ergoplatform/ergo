@@ -9,14 +9,14 @@ import scorex.core.transaction.state.MinimalState
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.generators.{SemanticallyValidModifierProducer, SemanticallyInvalidModifierProducer, CoreGenerators}
 
-trait StateTests[PM <: PersistentNodeViewModifier, ST <: MinimalState[PM, ST]]
+trait StateTests[ST <: MinimalState[ST]]
   extends AnyPropSpec
     with ScalaCheckPropertyChecks
     with Matchers
     with CoreGenerators
     with TestkitHelpers
-    with SemanticallyValidModifierProducer[PM, ST]
-    with SemanticallyInvalidModifierProducer[PM, ST] {
+    with SemanticallyValidModifierProducer[ST]
+    with SemanticallyInvalidModifierProducer[ST] {
 
   val checksToMake = 10
 

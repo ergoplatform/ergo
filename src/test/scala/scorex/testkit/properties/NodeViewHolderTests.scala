@@ -2,17 +2,15 @@ package scorex.testkit.properties
 
 import akka.actor._
 import akka.testkit.TestProbe
+import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.ObjectGenerators
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, ModifiersFromRemote}
-import scorex.core.PersistentNodeViewModifier
-import scorex.core.consensus.{History, SyncInfo}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.transaction.state.MinimalState
-import scorex.core.transaction.wallet.Vault
-import scorex.core.transaction.{MemoryPool, Transaction}
 import scorex.testkit.generators._
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
@@ -22,22 +20,17 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 @SuppressWarnings(Array("org.wartremover.warts.TraversableOps"))
-trait NodeViewHolderTests[TX <: Transaction,
-PM <: PersistentNodeViewModifier,
-ST <: MinimalState[PM, ST],
-SI <: SyncInfo,
-HT <: History[PM, SI, HT],
-MPool <: MemoryPool[TX, MPool]]
+trait NodeViewHolderTests[ST <: MinimalState[ST]]
   extends AnyPropSpec
     with Matchers
     with ScorexLogging
-    with SyntacticallyTargetedModifierProducer[PM, SI, HT]
-    with TotallyValidModifierProducer[PM, ST, SI, HT]
-    with SemanticallyInvalidModifierProducer[PM, ST]
-    with CustomModifierProducer[PM, ST, SI, HT]
+    with SyntacticallyTargetedModifierProducer
+    with TotallyValidModifierProducer[ST]
+    with SemanticallyInvalidModifierProducer[ST]
+    with CustomModifierProducer[ST]
     with ObjectGenerators {
 
-  def nodeViewHolder(implicit system: ActorSystem): (ActorRef, TestProbe, PM, ST, HT)
+  def nodeViewHolder(implicit system: ActorSystem): (ActorRef, TestProbe, ErgoPersistentModifier, ST, ErgoHistory)
 
   class HolderFixture extends AkkaFixture {
     @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
@@ -53,13 +46,13 @@ MPool <: MemoryPool[TX, MPool]]
     }
   }
 
-  private type CurrentViewType = CurrentView[HT, ST, Vault[TX, PM, _], MPool]
+  private type CurrentViewType = CurrentView[ST]
 
   private def withView[T](node: ActorRef)(f: CurrentViewType => T)
                          (implicit system: ActorSystem): T = {
     val probe = TestProbe()
     probe.send(node,
-      GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, CurrentViewType] { view => view })
+      GetDataFromCurrentView[ST, CurrentViewType] { view => view })
     val view = probe.expectMsgClass(10.seconds, classOf[CurrentViewType])
     f(view)
   }
@@ -69,9 +62,9 @@ MPool <: MemoryPool[TX, MPool]]
       import ctx._
       val p = TestProbe()
 
-      system.eventStream.subscribe(eventListener.ref, classOf[ModifiersProcessingResult[PM]])
-      p.send(node, ModifiersFromRemote[PM](Seq(mod)))
-      eventListener.expectMsgType[ModifiersProcessingResult[PM]]
+      system.eventStream.subscribe(eventListener.ref, classOf[ModifiersProcessingResult])
+      p.send(node, ModifiersFromRemote(Seq(mod)))
+      eventListener.expectMsgType[ModifiersProcessingResult]
     }
   }
 
@@ -80,11 +73,11 @@ MPool <: MemoryPool[TX, MPool]]
       import ctx._
       val p = TestProbe()
 
-      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier[PM]])
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, PM] { v => totallyValidModifiers(v.history, v.state, 2).head })
-      val mod = p.expectMsgClass(classOf[PersistentNodeViewModifier])
+      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier])
+      p.send(node, GetDataFromCurrentView[ST, ErgoPersistentModifier] { v => totallyValidModifiers(v.history, v.state, 2).head })
+      val mod = p.expectMsgClass(classOf[ErgoPersistentModifier])
       p.send(node, LocallyGeneratedModifier(mod))
-      eventListener.expectMsgType[SyntacticallySuccessfulModifier[PM]]
+      eventListener.expectMsgType[SyntacticallySuccessfulModifier]
     }
   }
 
@@ -93,10 +86,10 @@ MPool <: MemoryPool[TX, MPool]]
       import ctx._
       val p = TestProbe()
 
-      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallyFailedModification[PM]])
+      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallyFailedModification])
       val invalid = syntacticallyInvalidModifier(h)
       p.send(node, LocallyGeneratedModifier(invalid))
-      eventListener.expectMsgType[SyntacticallyFailedModification[PM]]
+      eventListener.expectMsgType[SyntacticallyFailedModification]
     }
   }
 
@@ -105,13 +98,13 @@ MPool <: MemoryPool[TX, MPool]]
       import ctx._
       val p = TestProbe()
 
-      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier[PM]])
-      system.eventStream.subscribe(eventListener.ref, classOf[SemanticallySuccessfulModifier[PM]])
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, PM] { v => totallyValidModifiers(v.history, v.state, 2).head })
-      val mod = p.expectMsgClass(classOf[PersistentNodeViewModifier])
+      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier])
+      system.eventStream.subscribe(eventListener.ref, classOf[SemanticallySuccessfulModifier])
+      p.send(node, GetDataFromCurrentView[ST, ErgoPersistentModifier] { v => totallyValidModifiers(v.history, v.state, 2).head })
+      val mod = p.expectMsgClass(classOf[ErgoPersistentModifier])
       p.send(node, LocallyGeneratedModifier(mod))
-      eventListener.expectMsgType[SyntacticallySuccessfulModifier[PM]]
-      eventListener.expectMsgType[SemanticallySuccessfulModifier[PM]]
+      eventListener.expectMsgType[SyntacticallySuccessfulModifier]
+      eventListener.expectMsgType[SemanticallySuccessfulModifier]
     }
   }
 
@@ -120,13 +113,13 @@ MPool <: MemoryPool[TX, MPool]]
       import ctx._
       val p = TestProbe()
 
-      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier[PM]])
-      system.eventStream.subscribe(eventListener.ref, classOf[SemanticallyFailedModification[PM]])
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, PM] { v => semanticallyInvalidModifier(v.state) })
-      val invalid = p.expectMsgClass(classOf[PersistentNodeViewModifier])
+      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier])
+      system.eventStream.subscribe(eventListener.ref, classOf[SemanticallyFailedModification])
+      p.send(node, GetDataFromCurrentView[ST, ErgoPersistentModifier] { v => semanticallyInvalidModifier(v.state) })
+      val invalid = p.expectMsgClass(classOf[ErgoPersistentModifier])
       p.send(node, LocallyGeneratedModifier(invalid))
-      eventListener.expectMsgType[SyntacticallySuccessfulModifier[PM]]
-      eventListener.expectMsgType[SemanticallyFailedModification[PM]]
+      eventListener.expectMsgType[SyntacticallySuccessfulModifier]
+      eventListener.expectMsgType[SemanticallyFailedModification]
     }
   }
 
@@ -135,13 +128,13 @@ MPool <: MemoryPool[TX, MPool]]
       import ctx._
       val p = TestProbe()
 
-      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier[PM]])
-      system.eventStream.subscribe(eventListener.ref, classOf[SemanticallySuccessfulModifier[PM]])
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, PM] { v => totallyValidModifiers(v.history, v.state, 2).head })
-      val mod = p.expectMsgClass(classOf[PersistentNodeViewModifier])
+      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier])
+      system.eventStream.subscribe(eventListener.ref, classOf[SemanticallySuccessfulModifier])
+      p.send(node, GetDataFromCurrentView[ST, ErgoPersistentModifier] { v => totallyValidModifiers(v.history, v.state, 2).head })
+      val mod = p.expectMsgClass(classOf[ErgoPersistentModifier])
       p.send(node, LocallyGeneratedModifier(mod))
-      eventListener.expectMsgType[SyntacticallySuccessfulModifier[PM]]
-      eventListener.expectMsgType[SemanticallySuccessfulModifier[PM]]
+      eventListener.expectMsgType[SyntacticallySuccessfulModifier]
+      eventListener.expectMsgType[SemanticallySuccessfulModifier]
     }
   }
 
@@ -150,7 +143,7 @@ MPool <: MemoryPool[TX, MPool]]
       import ctx._
       val p = TestProbe()
 
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, Boolean] { v =>
+      p.send(node, GetDataFromCurrentView[ST, Boolean] { v =>
         v.state.version == s.version
       })
       p.expectMsg(true)
@@ -162,7 +155,7 @@ MPool <: MemoryPool[TX, MPool]]
       import ctx._
       val p = TestProbe()
 
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, Boolean] { v =>
+      p.send(node, GetDataFromCurrentView[ST, Boolean] { v =>
         v.history.applicableTry(mod).isSuccess
       })
       p.expectMsg(true)
@@ -174,18 +167,18 @@ MPool <: MemoryPool[TX, MPool]]
       import ctx._
       val p = TestProbe()
 
-      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier[PM]])
-      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallyFailedModification[PM]])
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, Seq[PM]] { v =>
+      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier])
+      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallyFailedModification])
+      p.send(node, GetDataFromCurrentView[ST, Seq[ErgoPersistentModifier]] { v =>
         totallyValidModifiers(v.history, v.state, 10) //todo: fix magic number
       })
-      val mods = p.expectMsgClass(classOf[Seq[PersistentNodeViewModifier]])
+      val mods = p.expectMsgClass(classOf[Seq[ErgoPersistentModifier]])
 
       mods.foreach { mod =>
         p.send(node, LocallyGeneratedModifier(mod))
       }
 
-      (1 to mods.size).foreach(_ => eventListener.expectMsgType[SyntacticallySuccessfulModifier[PM]])
+      (1 to mods.size).foreach(_ => eventListener.expectMsgType[SyntacticallySuccessfulModifier])
     }
   }
 
@@ -194,20 +187,20 @@ MPool <: MemoryPool[TX, MPool]]
       import ctx._
       val p = TestProbe()
 
-      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier[PM]])
-      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallyFailedModification[PM]])
+      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier])
+      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallyFailedModification])
 
       val invalid = syntacticallyInvalidModifier(h)
 
       p.send(node, LocallyGeneratedModifier(invalid))
 
-      eventListener.expectMsgType[SyntacticallyFailedModification[PM]]
+      eventListener.expectMsgType[SyntacticallyFailedModification]
 
       p.send(node, LocallyGeneratedModifier(mod))
 
-      eventListener.expectMsgType[SyntacticallySuccessfulModifier[PM]]
+      eventListener.expectMsgType[SyntacticallySuccessfulModifier]
 
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, Boolean] { v =>
+      p.send(node, GetDataFromCurrentView[ST,  Boolean] { v =>
         v.state.version == s.version && v.history.contains(mod.id)
       })
 
@@ -222,32 +215,32 @@ MPool <: MemoryPool[TX, MPool]]
 
       val waitDuration = 5.seconds
 
-      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier[PM]])
-      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallyFailedModification[PM]])
+      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier])
+      system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallyFailedModification])
 
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, Seq[PM]] { v => totallyValidModifiers(v.history, v.state, 2) })
-      val initMods = p.expectMsgClass(waitDuration, classOf[Seq[PersistentNodeViewModifier]])
+      p.send(node, GetDataFromCurrentView[ST, Seq[ErgoPersistentModifier]] { v => totallyValidModifiers(v.history, v.state, 2) })
+      val initMods = p.expectMsgClass(waitDuration, classOf[Seq[ErgoPersistentModifier]])
       initMods.foreach { mod =>
         p.send(node, LocallyGeneratedModifier(mod))
-        eventListener.expectMsgType[SyntacticallySuccessfulModifier[PM]]
+        eventListener.expectMsgType[SyntacticallySuccessfulModifier]
       }
 
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, PM] { v =>
+      p.send(node, GetDataFromCurrentView[ST, ErgoPersistentModifier] { v =>
         totallyValidModifiers(v.history, v.state, 2).head
       })
-      val fork1Mod = p.expectMsgClass(waitDuration, classOf[PersistentNodeViewModifier])
+      val fork1Mod = p.expectMsgClass(waitDuration, classOf[ErgoPersistentModifier])
 
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, PM] { v =>
+      p.send(node, GetDataFromCurrentView[ST, ErgoPersistentModifier] { v =>
         totallyValidModifiers(v.history, v.state, 2).head
       })
-      val fork2Mod = p.expectMsgClass(waitDuration, classOf[PersistentNodeViewModifier])
+      val fork2Mod = p.expectMsgClass(waitDuration, classOf[ErgoPersistentModifier])
 
       p.send(node, LocallyGeneratedModifier(fork1Mod))
       p.send(node, LocallyGeneratedModifier(fork2Mod))
-      eventListener.expectMsgType[SyntacticallySuccessfulModifier[PM]]
-      eventListener.expectMsgType[SyntacticallySuccessfulModifier[PM]]
+      eventListener.expectMsgType[SyntacticallySuccessfulModifier]
+      eventListener.expectMsgType[SyntacticallySuccessfulModifier]
 
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, Boolean] { v =>
+      p.send(node, GetDataFromCurrentView[ST, Boolean] { v =>
         v.history.contains(fork1Mod.id) || v.history.contains(fork2Mod.id)
       })
 
@@ -273,28 +266,28 @@ MPool <: MemoryPool[TX, MPool]]
       val waitDuration = 10.seconds
 
       //some base operations, we don't wanna have fork right from genesis
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, Seq[PM]] { v =>
+      p.send(node, GetDataFromCurrentView[ST, Seq[ErgoPersistentModifier]] { v =>
         totallyValidModifiers(v.history, v.state, opCountBeforeFork)
       })
-      val plainMods = p.expectMsgClass(waitDuration, classOf[Seq[PersistentNodeViewModifier]])
+      val plainMods = p.expectMsgClass(waitDuration, classOf[Seq[ErgoPersistentModifier]])
       plainMods.foreach { mod => p.send(node, LocallyGeneratedModifier(mod)) }
 
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, Seq[PM]] { v =>
+      p.send(node, GetDataFromCurrentView[ST, Seq[ErgoPersistentModifier]] { v =>
         val mods = totallyValidModifiers(v.history, v.state, fork1OpCount)
         assert(mods.head.parentId == v.history.openSurfaceIds().head)
         mods
       })
-      val fork1Mods = p.expectMsgClass(waitDuration, classOf[Seq[PersistentNodeViewModifier]])
+      val fork1Mods = p.expectMsgClass(waitDuration, classOf[Seq[ErgoPersistentModifier]])
 
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, Seq[PM]] { v =>
+      p.send(node, GetDataFromCurrentView[ST, Seq[ErgoPersistentModifier]] { v =>
         totallyValidModifiers(v.history, v.state, fork2OpCount)
       })
-      val fork2Mods = p.expectMsgClass(waitDuration, classOf[Seq[PersistentNodeViewModifier]])
+      val fork2Mods = p.expectMsgClass(waitDuration, classOf[Seq[ErgoPersistentModifier]])
 
       fork1Mods.foreach { mod => p.send(node, LocallyGeneratedModifier(mod)) }
       fork2Mods.foreach { mod => p.send(node, LocallyGeneratedModifier(mod)) }
 
-      p.send(node, GetDataFromCurrentView[HT, ST, Vault[TX, PM, _], MPool, Boolean] { v =>
+      p.send(node, GetDataFromCurrentView[ST, Boolean] { v =>
         v.history.openSurfaceIds().contains(fork2Mods.last.id)
       })
       p.expectMsg(true)

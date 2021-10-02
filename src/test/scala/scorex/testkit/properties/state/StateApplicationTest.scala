@@ -1,15 +1,20 @@
 package scorex.testkit.properties.state
 
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.scalacheck.Gen
-import scorex.core.PersistentNodeViewModifier
 import scorex.core.transaction.state.MinimalState
 
 import scala.collection.mutable.ListBuffer
 
-trait StateApplicationTest[PM <: PersistentNodeViewModifier, ST <: MinimalState[PM, ST]] extends StateTests[PM, ST] {
+trait StateApplicationTest[ST <: MinimalState[ST]] extends StateTests[ST] {
 
-  lazy val stateGenWithValidModifier: Gen[(ST, PM)] = stateGen.map { s => (s, semanticallyValidModifier(s))}
-  lazy val stateGenWithInvalidModifier: Gen[(ST, PM)] = stateGen.map { s => (s, semanticallyInvalidModifier(s))}
+  lazy val stateGenWithValidModifier: Gen[(ST, ErgoPersistentModifier)] = {
+    stateGen.map { s => (s, semanticallyValidModifier(s)) }
+  }
+
+  lazy val stateGenWithInvalidModifier: Gen[(ST, ErgoPersistentModifier)] = {
+    stateGen.map { s => (s, semanticallyInvalidModifier(s))}
+  }
 
   private def propertyNameGenerator(propName: String): String = s"StateTests: $propName"
 
@@ -64,7 +69,7 @@ trait StateApplicationTest[PM <: PersistentNodeViewModifier, ST <: MinimalState[
     forAll(stateGen) { s =>
       @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
       val rollbackDepth = Gen.chooseNum(1, s.maxRollbackDepth).sample.get
-      val buf = new ListBuffer[PM]()
+      val buf = new ListBuffer[ErgoPersistentModifier]()
       val ver = s.version
 
       val s2 = (0 until rollbackDepth).foldLeft(s) { case (state, _) =>

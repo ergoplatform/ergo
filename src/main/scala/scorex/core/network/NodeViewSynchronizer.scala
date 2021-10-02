@@ -3,9 +3,11 @@ package scorex.core.network
 
 import java.net.InetSocketAddress
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.actor.{Actor, ActorRef}
+import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.NodeViewHolder.DownloadRequest
-import scorex.core.NodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
+import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.consensus.History._
 import scorex.core.consensus.{History, HistoryReader, SyncInfo}
 import scorex.core.network.ModifiersStatus.Requested
@@ -45,7 +47,7 @@ import scala.util.{Failure, Success}
   * @param timeProvider         network time provider
   * @param modifierSerializers  dictionary of modifiers serializers
   */
-class NodeViewSynchronizer[TX <: Transaction, SI <: SyncInfo, SIS <: SyncInfoMessageSpec[SI],
+abstract class NodeViewSynchronizer[TX <: Transaction, SI <: SyncInfo, SIS <: SyncInfoMessageSpec[SI],
 PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR <: MempoolReader[TX] : ClassTag]
 (networkControllerRef: ActorRef,
  viewHolderRef: ActorRef,
@@ -88,7 +90,7 @@ PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[MR]])
     context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
-    context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult[PMOD]])
+    context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult])
 
     // subscribe for history and mempool changes
     viewHolderRef ! GetNodeViewChanges(history = true, state = false, vault = false, mempool = true)
@@ -144,7 +146,7 @@ PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR
     * when our modifier is not synced yet, but no modifiers are expected from other peers
     * or request modifiers we need with known ids, that are not applied yet.
     */
-  protected def requestMoreModifiers(applied: Seq[PMOD]): Unit = {}
+  protected def requestMoreModifiers(applied: Seq[ErgoPersistentModifier]): Unit = {}
 
   protected def peerManagerEvents: Receive = {
     case HandshakedPeer(remote) =>
@@ -262,31 +264,7 @@ PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR
     * Filter out non-requested modifiers (with a penalty to spamming peer),
     * parse modifiers and send valid modifiers to NodeViewHolder
     */
-  protected def modifiersFromRemote(data: ModifiersData, remote: ConnectedPeer): Unit = {
-      val typeId = data.typeId
-      val modifiers = data.modifiers
-      log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: $remote")
-      log.trace(s"Received modifier ids ${modifiers.keySet.map(encoder.encodeId).mkString(",")}")
-
-      // filter out non-requested modifiers
-      val requestedModifiers = processSpam(remote, typeId, modifiers)
-
-      modifierSerializers.get(typeId) match {
-        case Some(serializer: ScorexSerializer[TX]@unchecked) if typeId == Transaction.ModifierTypeId =>
-          // parse all transactions and send them to node view holder
-          val parsed: Iterable[TX] = parseModifiers(requestedModifiers, serializer, remote)
-          viewHolderRef ! TransactionsFromRemote(parsed)
-
-        case Some(serializer: ScorexSerializer[PMOD]@unchecked) =>
-          // parse all modifiers and put them to modifiers cache
-          val parsed: Iterable[PMOD] = parseModifiers(requestedModifiers, serializer, remote)
-          val valid: Iterable[PMOD] = parsed.filter(validateAndSetStatus(remote, _))
-          if (valid.nonEmpty) viewHolderRef ! ModifiersFromRemote[PMOD](valid)
-
-        case _ =>
-          log.error(s"Undefined serializer for modifier of type $typeId")
-      }
-  }
+  protected def modifiersFromRemote(data: ModifiersData, remote: ConnectedPeer): Unit
 
   /**
     * Move `pmod` to `Invalid` if it is permanently invalid, to `Received` otherwise
@@ -524,13 +502,13 @@ object NodeViewSynchronizer {
 
     case class NewOpenSurface(newSurface: Seq[ModifierId]) extends NodeViewHolderEvent
 
-    case class StartingPersistentModifierApplication[PMOD <: PersistentNodeViewModifier](modifier: PMOD) extends NodeViewHolderEvent
+    case class StartingPersistentModifierApplication(modifier: ErgoPersistentModifier) extends NodeViewHolderEvent
 
     /**
       * After application of batch of modifiers from cache to History, NodeViewHolder sends this message,
       * containing all just applied modifiers and cleared from cache
       */
-    case class ModifiersProcessingResult[PMOD <: PersistentNodeViewModifier](applied: Seq[PMOD], cleared: Seq[PMOD])
+    case class ModifiersProcessingResult(applied: Seq[ErgoPersistentModifier], cleared: Seq[ErgoPersistentModifier])
 
     // hierarchy of events regarding modifiers application outcome
     trait ModificationOutcome extends NodeViewHolderEvent
@@ -540,66 +518,16 @@ object NodeViewSynchronizer {
       */
     case class FailedTransaction(transactionId: ModifierId, error: Throwable, immediateFailure: Boolean) extends ModificationOutcome
 
-    case class SuccessfulTransaction[TX <: Transaction](transaction: TX) extends ModificationOutcome
+    case class SuccessfulTransaction(transaction: ErgoTransaction) extends ModificationOutcome
 
-    case class SyntacticallyFailedModification[PMOD <: PersistentNodeViewModifier](modifier: PMOD, error: Throwable) extends ModificationOutcome
+    case class SyntacticallyFailedModification(modifier: ErgoPersistentModifier, error: Throwable) extends ModificationOutcome
 
-    case class SemanticallyFailedModification[PMOD <: PersistentNodeViewModifier](modifier: PMOD, error: Throwable) extends ModificationOutcome
+    case class SemanticallyFailedModification(modifier: ErgoPersistentModifier, error: Throwable) extends ModificationOutcome
 
-    case class SyntacticallySuccessfulModifier[PMOD <: PersistentNodeViewModifier](modifier: PMOD) extends ModificationOutcome
+    case class SyntacticallySuccessfulModifier(modifier: ErgoPersistentModifier) extends ModificationOutcome
 
-    case class SemanticallySuccessfulModifier[PMOD <: PersistentNodeViewModifier](modifier: PMOD) extends ModificationOutcome
+    case class SemanticallySuccessfulModifier(modifier: ErgoPersistentModifier) extends ModificationOutcome
 
   }
 
-}
-
-object NodeViewSynchronizerRef {
-  def props[TX <: Transaction,
-  SI <: SyncInfo,
-  SIS <: SyncInfoMessageSpec[SI],
-  PMOD <: PersistentNodeViewModifier,
-  HR <: HistoryReader[PMOD, SI] : ClassTag,
-  MR <: MempoolReader[TX] : ClassTag]
-  (networkControllerRef: ActorRef,
-   viewHolderRef: ActorRef,
-   syncInfoSpec: SIS,
-   networkSettings: NetworkSettings,
-   timeProvider: NetworkTimeProvider,
-   modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: NodeViewModifier]])(implicit ec: ExecutionContext): Props =
-    Props(new NodeViewSynchronizer[TX, SI, SIS, PMOD, HR, MR](networkControllerRef, viewHolderRef, syncInfoSpec,
-      networkSettings, timeProvider, modifierSerializers))
-
-  def apply[TX <: Transaction,
-  SI <: SyncInfo,
-  SIS <: SyncInfoMessageSpec[SI],
-  PMOD <: PersistentNodeViewModifier,
-  HR <: HistoryReader[PMOD, SI] : ClassTag,
-  MR <: MempoolReader[TX] : ClassTag]
-  (networkControllerRef: ActorRef,
-   viewHolderRef: ActorRef,
-   syncInfoSpec: SIS,
-   networkSettings: NetworkSettings,
-   timeProvider: NetworkTimeProvider,
-   modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: NodeViewModifier]])
-  (implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
-    system.actorOf(props[TX, SI, SIS, PMOD, HR, MR](networkControllerRef, viewHolderRef,
-      syncInfoSpec, networkSettings, timeProvider, modifierSerializers))
-
-  def apply[TX <: Transaction,
-  SI <: SyncInfo,
-  SIS <: SyncInfoMessageSpec[SI],
-  PMOD <: PersistentNodeViewModifier,
-  HR <: HistoryReader[PMOD, SI] : ClassTag,
-  MR <: MempoolReader[TX] : ClassTag]
-  (name: String,
-   networkControllerRef: ActorRef,
-   viewHolderRef: ActorRef,
-   syncInfoSpec: SIS,
-   networkSettings: NetworkSettings,
-   timeProvider: NetworkTimeProvider,
-   modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: NodeViewModifier]])
-  (implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
-    system.actorOf(props[TX, SI, SIS, PMOD, HR, MR](networkControllerRef, viewHolderRef,
-      syncInfoSpec, networkSettings, timeProvider, modifierSerializers), name)
 }

@@ -31,7 +31,7 @@ case class BlockTransactions(headerId: ModifierId,
                              blockVersion: Version,
                              txs: Seq[ErgoTransaction],
                              override val sizeOpt: Option[Int] = None)
-  extends BlockSection with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
+  extends BlockSection with TransactionsCarryingPersistentNodeViewModifier {
 
   assert(txs.nonEmpty, "Block should always contain at least 1 coinbase-like transaction")
 

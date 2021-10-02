@@ -2,11 +2,14 @@ package scorex.testkit.properties
 
 import akka.actor._
 import akka.testkit.TestProbe
+import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote}
-import scorex.core.PersistentNodeViewModifier
 import scorex.core.consensus.History.{Equal, Nonsense, Older, Younger}
 import scorex.core.consensus.{History, SyncInfo}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
@@ -18,7 +21,6 @@ import scorex.core.network.peer.PenaltyType
 import scorex.util.serialization._
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.transaction.state.MinimalState
-import scorex.core.transaction.{MemoryPool, Transaction}
 import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
@@ -29,23 +31,17 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 @SuppressWarnings(Array("org.wartremover.warts.IsInstanceOf"))
-trait NodeViewSynchronizerTests[TX <: Transaction,
-                                PM <: PersistentNodeViewModifier,
-                                ST <: MinimalState[PM, ST],
-                                SI <: SyncInfo,
-                                HT <: History[PM, SI, HT],
-                                MP <: MemoryPool[TX, MP]
-] extends AnyPropSpec
+trait NodeViewSynchronizerTests[ST <: MinimalState[ST]] extends AnyPropSpec
   with Matchers
   with ScorexLogging
-  with SyntacticallyTargetedModifierProducer[PM, SI, HT]
-  with TotallyValidModifierProducer[PM, ST, SI, HT] {
+  with SyntacticallyTargetedModifierProducer
+  with TotallyValidModifierProducer[ST] {
 
-  val historyGen: Gen[HT]
-  val memPool: MP
+  val historyGen: Gen[ErgoHistory]
+  val memPool: ErgoMemPool
 
   def nodeViewSynchronizer(implicit system: ActorSystem):
-    (ActorRef, SI, PM, TX, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[PM])
+    (ActorRef, ErgoSyncInfo, ErgoPersistentModifier, ErgoTransaction, ConnectedPeer, TestProbe, TestProbe, TestProbe, TestProbe, ScorexSerializer[ErgoPersistentModifier])
 
   class SynchronizerFixture extends AkkaFixture {
     @SuppressWarnings(Array("org.wartremover.warts.PublicInference"))
@@ -66,7 +62,7 @@ trait NodeViewSynchronizerTests[TX <: Transaction,
   property("NodeViewSynchronizer: SuccessfulTransaction") {
     withFixture { ctx =>
       import ctx._
-      node ! SuccessfulTransaction[TX](tx)
+      node ! SuccessfulTransaction(tx)
       ncProbe.fishForMessage(3 seconds) { case m => m.isInstanceOf[SendToNetwork] }
     }
   }
@@ -235,7 +231,7 @@ trait NodeViewSynchronizerTests[TX <: Transaction,
 
       node ! Message(modifiersSpec, Left(msgBytes), Option(peer))
       val messages = vhProbe.receiveWhile(max = 3 seconds, idle = 1 second) { case m => m }
-      assert(!messages.exists(_.isInstanceOf[ModifiersFromRemote[PM]]))
+      assert(!messages.exists(_.isInstanceOf[ModifiersFromRemote]))
     }
   }
 
@@ -253,7 +249,7 @@ trait NodeViewSynchronizerTests[TX <: Transaction,
       node ! Message(invSpec, Left(invMsgBytes), Option(peer))
       node ! Message(modifiersSpec, Left(modMsgBytes), Option(peer))
       vhProbe.fishForMessage(3 seconds) {
-        case m: ModifiersFromRemote[PM] => m.modifiers.toSeq.contains(mod)
+        case m: ModifiersFromRemote => m.modifiers.toSeq.contains(mod)
         case _ => false
       }
     }

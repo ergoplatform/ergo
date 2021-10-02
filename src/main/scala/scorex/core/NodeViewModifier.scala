@@ -1,6 +1,7 @@
 package scorex.core
 
 import com.typesafe.config.ConfigFactory
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.BytesSerializable
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
@@ -49,8 +50,8 @@ trait PersistentNodeViewModifier extends NodeViewModifier {
 }
 
 
-trait TransactionsCarryingPersistentNodeViewModifier[TX <: Transaction]
+trait TransactionsCarryingPersistentNodeViewModifier
   extends PersistentNodeViewModifier {
 
-  def transactions: Seq[TX]
+  def transactions: Seq[ErgoTransaction]
 }

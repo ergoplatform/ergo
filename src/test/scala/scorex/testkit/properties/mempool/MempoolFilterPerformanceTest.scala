@@ -2,19 +2,20 @@ package scorex.testkit.properties.mempool
 
 import java.security.MessageDigest
 
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scorex.core.transaction.{MemoryPool, Transaction}
 import scorex.core.utils._
 
-trait MempoolFilterPerformanceTest[TX <: Transaction, MPool <: MemoryPool[TX, MPool]]
+trait MempoolFilterPerformanceTest
   extends AnyPropSpec
     with ScalaCheckPropertyChecks
     with Matchers
-    with MemoryPoolTest[TX, MPool] {
+    with MemoryPoolTest {
 
-  var initializedMempool: Option[MPool] = None
+  var initializedMempool: Option[ErgoMemPool] = None
 
   val thresholdInHashes = 500000
 
@@ -31,9 +32,9 @@ trait MempoolFilterPerformanceTest[TX <: Transaction, MPool <: MemoryPool[TX, MP
   }
 
   property("Mempool should be able to store a lot of transactions") {
-    var m: MPool = memPool
+    var m: ErgoMemPool = memPool
     (0 until 1000) foreach { _ =>
-      forAll(transactionGenerator) { tx: TX =>
+      forAll(transactionGenerator) { tx: ErgoTransaction =>
         m = m.put(tx).get
       }
     }
@@ -44,7 +45,7 @@ trait MempoolFilterPerformanceTest[TX <: Transaction, MPool <: MemoryPool[TX, MP
   property("Mempool filter of non-existing transaction should be fast") {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val m = initializedMempool.get
-    forAll(transactionGenerator) { tx: TX =>
+    forAll(transactionGenerator) { tx: ErgoTransaction =>
       val (time, _) = profile(m.filter(Seq(tx)))
       assert(time < thresholdSecs)
     }
@@ -53,10 +54,11 @@ trait MempoolFilterPerformanceTest[TX <: Transaction, MPool <: MemoryPool[TX, MP
   property("Mempool filter of existing transaction should be fast") {
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     var m = initializedMempool.get
-    forAll(transactionGenerator) { tx: TX =>
+    forAll(transactionGenerator) { tx: ErgoTransaction =>
       m = m.put(tx).get
       val (time, _) = profile(m.filter(Seq(tx)))
       assert(time < thresholdSecs)
     }
   }
+
 }

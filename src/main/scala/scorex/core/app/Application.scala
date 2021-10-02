@@ -21,9 +21,6 @@ trait Application extends ScorexLogging {
 
   import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
 
-  type TX <: Transaction
-  type PMOD <: PersistentNodeViewModifier
-  type NVHT <: NodeViewHolder[TX, PMOD]
 
   //settings
   implicit val settings: ScorexSettings

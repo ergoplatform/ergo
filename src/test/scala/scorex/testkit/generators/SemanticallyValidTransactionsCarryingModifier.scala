@@ -1,17 +1,12 @@
 package scorex.testkit.generators
 
-import scorex.core.{PersistentNodeViewModifier, TransactionsCarryingPersistentNodeViewModifier}
-import scorex.core.transaction.Transaction
-import scorex.core.transaction.box.proposition.Proposition
+import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.transaction.state.MinimalState
 
+trait SemanticallyValidTransactionsCarryingModifier[ST <: MinimalState[ST]] {
 
-trait SemanticallyValidTransactionsCarryingModifier[TX <: Transaction,
-                                                    PM <: PersistentNodeViewModifier,
-                                                    CTM <: PM with TransactionsCarryingPersistentNodeViewModifier[TX],
-                                                    ST <: MinimalState[PM, ST]] {
-
-  def semanticallyValidModifier(state: ST): CTM
-  def genValidTransactionPair(state: ST): Seq[TX]
-  def semanticallyValidModifierWithCustomTransactions(state: ST, transactions: Seq[TX]): CTM
+  def semanticallyValidModifier(state: ST): BlockTransactions
+  def genValidTransactionPair(state: ST): Seq[ErgoTransaction]
+  def semanticallyValidModifierWithCustomTransactions(state: ST, transactions: Seq[ErgoTransaction]): BlockTransactions
 }

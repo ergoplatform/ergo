@@ -1,7 +1,7 @@
 package scorex.testkit.generators
 
-import scorex.core.PersistentNodeViewModifier
-import scorex.core.consensus.{History, SyncInfo}
+import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.transaction.state.MinimalState
 
 sealed trait ModifierProducerTemplateItem
@@ -9,10 +9,9 @@ sealed trait ModifierProducerTemplateItem
 case object SynInvalid extends ModifierProducerTemplateItem
 case object Valid extends ModifierProducerTemplateItem
 
-trait CustomModifierProducer[PM <: PersistentNodeViewModifier, ST <: MinimalState[PM, ST],
-SI <: SyncInfo, HT <: History[PM, SI, HT]] {
+trait CustomModifierProducer[ST <: MinimalState[ST]] {
 
-  def customModifiers(history: HT,
+  def customModifiers(history: ErgoHistory,
                       state: ST,
-                      template: Seq[ModifierProducerTemplateItem]): Seq[PM]
+                      template: Seq[ModifierProducerTemplateItem]): Seq[ErgoPersistentModifier]
 }

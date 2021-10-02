@@ -1,15 +1,19 @@
 package scorex.core
 
 import akka.actor.Actor
+import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.nodeView.wallet.ErgoWallet
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.consensus.{History, SyncInfo}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.NodeViewHolderEvent
 import scorex.core.settings.ScorexSettings
-import scorex.core.transaction._
-import scorex.core.transaction.state.{MinimalState, TransactionValidation}
-import scorex.core.transaction.wallet.Vault
+import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
 import scorex.util.ScorexLogging
+
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
@@ -21,37 +25,28 @@ import scala.util.{Failure, Success, Try}
   * The instances are read-only for external world.
   * Updates of the composite view(the instances are to be performed atomically.
   *
-  * @tparam TX
-  * @tparam PMOD
   */
-trait NodeViewHolder[TX <: Transaction, PMOD <: PersistentNodeViewModifier]
-  extends Actor with ScorexLogging with ScorexEncoding {
+trait NodeViewHolder[State <: ErgoState[State]] extends Actor with ScorexLogging with ScorexEncoding {
 
   import NodeViewHolder.ReceivableMessages._
   import NodeViewHolder._
   import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 
-  type SI <: SyncInfo
-  type HIS <: History[PMOD, SI, HIS]
-  type MS <: MinimalState[PMOD, MS]
-  type VL <: Vault[TX, PMOD, VL]
-  type MP <: MemoryPool[TX, MP]
 
-  type NodeView = (HIS, MS, VL, MP)
+  type NodeView = (ErgoHistory, State, ErgoWallet, ErgoMemPool)
 
-  case class UpdateInformation(history: HIS,
-                               state: MS,
-                               failedMod: Option[PMOD],
-                               alternativeProgressInfo: Option[ProgressInfo[PMOD]],
-                               suffix: IndexedSeq[PMOD])
+  case class UpdateInformation(history: ErgoHistory,
+                               state: State,
+                               failedMod: Option[ErgoPersistentModifier],
+                               alternativeProgressInfo: Option[ProgressInfo[ErgoPersistentModifier]],
+                               suffix: IndexedSeq[ErgoPersistentModifier])
 
   val scorexSettings: ScorexSettings
 
   /**
     * Cache for modifiers. If modifiers are coming out-of-order, they are to be stored in this cache.
     */
-  protected lazy val modifiersCache: ModifiersCache[PMOD, HIS] =
-    new DefaultModifiersCache[PMOD, HIS](scorexSettings.network.maxModifiersCacheSize)
+  protected def modifiersCache: ModifiersCache[ErgoPersistentModifier, ErgoHistory]
 
   /**
     * The main data structure a node software is taking care about, a node view consists
@@ -73,42 +68,15 @@ trait NodeViewHolder[TX <: Transaction, PMOD <: PersistentNodeViewModifier]
   protected def genesisState: NodeView
 
 
-  protected def history(): HIS = nodeView._1
+  protected def history(): ErgoHistory = nodeView._1
 
-  protected def minimalState(): MS = nodeView._2
+  protected def minimalState(): State = nodeView._2
 
-  protected def vault(): VL = nodeView._3
+  protected def vault(): ErgoWallet = nodeView._3
 
-  protected def memoryPool(): MP = nodeView._4
+  protected def memoryPool(): ErgoMemPool = nodeView._4
 
-  protected def txModify(tx: TX): Unit = {
-    //todo: async validation?
-    val errorOpt: Option[Throwable] = minimalState() match {
-      case txValidator: TransactionValidation[TX] =>
-        txValidator.validate(tx) match {
-          case Success(_) => None
-          case Failure(e) => Some(e)
-        }
-      case _ => None
-    }
-
-    errorOpt match {
-      case None =>
-        memoryPool().put(tx) match {
-          case Success(newPool) =>
-            log.debug(s"Unconfirmed transaction $tx added to the memory pool")
-            val newVault = vault().scanOffchain(tx)
-            updateNodeView(updatedVault = Some(newVault), updatedMempool = Some(newPool))
-            context.system.eventStream.publish(SuccessfulTransaction[TX](tx))
-
-          case Failure(e) =>
-            context.system.eventStream.publish(FailedTransaction(tx.id, e, immediateFailure = true))
-        }
-
-      case Some(e) =>
-        context.system.eventStream.publish(FailedTransaction(tx.id, e, immediateFailure = true))
-    }
-  }
+  protected def txModify(tx: ErgoTransaction): Unit
 
   /**
     * Update NodeView with new components and notify subscribers of changed components
@@ -118,10 +86,10 @@ trait NodeViewHolder[TX <: Transaction, PMOD <: PersistentNodeViewModifier]
     * @param updatedVault
     * @param updatedMempool
     */
-  protected def updateNodeView(updatedHistory: Option[HIS] = None,
-                               updatedState: Option[MS] = None,
-                               updatedVault: Option[VL] = None,
-                               updatedMempool: Option[MP] = None): Unit = {
+  protected def updateNodeView(updatedHistory: Option[ErgoHistory] = None,
+                               updatedState: Option[State] = None,
+                               updatedVault: Option[ErgoWallet] = None,
+                               updatedMempool: Option[ErgoMemPool] = None): Unit = {
     val newNodeView = (updatedHistory.getOrElse(history()),
       updatedState.getOrElse(minimalState()),
       updatedVault.getOrElse(vault()),
@@ -141,14 +109,17 @@ trait NodeViewHolder[TX <: Transaction, PMOD <: PersistentNodeViewModifier]
     nodeView = newNodeView
   }
 
-  protected def extractTransactions(mod: PMOD): Seq[TX] = mod match {
-    case tcm: TransactionsCarryingPersistentNodeViewModifier[TX] => tcm.transactions
+  protected def extractTransactions(mod: ErgoPersistentModifier): Seq[ErgoTransaction] = mod match {
+    case tcm: TransactionsCarryingPersistentNodeViewModifier => tcm.transactions
     case _ => Seq()
   }
 
   //todo: this method causes delays in a block processing as it removes transactions from mempool and checks
   //todo: validity of remaining transactions in a synchronous way. Do this job async!
-  protected def updateMemPool(blocksRemoved: Seq[PMOD], blocksApplied: Seq[PMOD], memPool: MP, state: MS): MP = {
+  protected def updateMemPool(blocksRemoved: Seq[ErgoPersistentModifier],
+                              blocksApplied: Seq[ErgoPersistentModifier],
+                              memPool: ErgoMemPool,
+                              state: State): ErgoMemPool = {
     val rolledBackTxs = blocksRemoved.flatMap(extractTransactions)
 
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
@@ -156,19 +127,20 @@ trait NodeViewHolder[TX <: Transaction, PMOD <: PersistentNodeViewModifier]
     memPool.putWithoutCheck(rolledBackTxs).filter { tx =>
       !appliedTxs.exists(t => t.id == tx.id) && {
         state match {
-          case v: TransactionValidation[TX] => v.validate(tx).isSuccess
+          case v: TransactionValidation => v.validate(tx).isSuccess
           case _ => true
         }
       }
     }
   }
 
-  protected def requestDownloads(pi: ProgressInfo[PMOD]): Unit =
+  protected def requestDownloads(pi: ProgressInfo[ErgoPersistentModifier]): Unit =
     pi.toDownload.foreach { case (tid, id) =>
       context.system.eventStream.publish(DownloadRequest(tid, id))
     }
 
-  private def trimChainSuffix(suffix: IndexedSeq[PMOD], rollbackPoint: scorex.util.ModifierId): IndexedSeq[PMOD] = {
+  private def trimChainSuffix(suffix: IndexedSeq[ErgoPersistentModifier],
+                              rollbackPoint: scorex.util.ModifierId): IndexedSeq[ErgoPersistentModifier] = {
     val idx = suffix.indexWhere(_.id == rollbackPoint)
     if (idx == -1) IndexedSeq() else suffix.drop(idx)
   }
@@ -206,13 +178,13 @@ trait NodeViewHolder[TX <: Transaction, PMOD <: PersistentNodeViewModifier]
    **/
 
   @tailrec
-  protected final def updateState(history: HIS,
-                          state: MS,
-                          progressInfo: ProgressInfo[PMOD],
-                          suffixApplied: IndexedSeq[PMOD]): (HIS, Try[MS], Seq[PMOD]) = {
+  protected final def updateState(history: ErgoHistory,
+                          state: State,
+                          progressInfo: ProgressInfo[ErgoPersistentModifier],
+                          suffixApplied: IndexedSeq[ErgoPersistentModifier]): (ErgoHistory, Try[State], Seq[ErgoPersistentModifier]) = {
     requestDownloads(progressInfo)
 
-    val (stateToApplyTry: Try[MS], suffixTrimmed: IndexedSeq[PMOD]) = if (progressInfo.chainSwitchingNeeded) {
+    val (stateToApplyTry: Try[State], suffixTrimmed: IndexedSeq[ErgoPersistentModifier]) = if (progressInfo.chainSwitchingNeeded) {
         @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
         val branchingPoint = progressInfo.branchPoint.get //todo: .get
         if (state.version != branchingPoint) {
@@ -243,10 +215,10 @@ trait NodeViewHolder[TX <: Transaction, PMOD <: PersistentNodeViewModifier]
     }
   }
 
-  private def applyState(history: HIS,
-                           stateToApply: MS,
-                           suffixTrimmed: IndexedSeq[PMOD],
-                           progressInfo: ProgressInfo[PMOD]): Try[UpdateInformation] = {
+  private def applyState(history: ErgoHistory,
+                           stateToApply: State,
+                           suffixTrimmed: IndexedSeq[ErgoPersistentModifier],
+                           progressInfo: ProgressInfo[ErgoPersistentModifier]): Try[UpdateInformation] = {
     val updateInfoSample = UpdateInformation(history, stateToApply, None, None, suffixTrimmed)
     progressInfo.toApply.foldLeft[Try[UpdateInformation]](Success(updateInfoSample)) {
       case (f@Failure(ex), _) =>
@@ -271,7 +243,7 @@ trait NodeViewHolder[TX <: Transaction, PMOD <: PersistentNodeViewModifier]
   }
 
   //todo: update state in async way?
-  protected def pmodModify(pmod: PMOD): Unit =
+  protected def pmodModify(pmod: ErgoPersistentModifier): Unit =
     if (!history().contains(pmod.id)) {
       context.system.eventStream.publish(StartingPersistentModifierApplication(pmod))
 
@@ -326,13 +298,13 @@ trait NodeViewHolder[TX <: Transaction, PMOD <: PersistentNodeViewModifier]
     * Publish `ModifiersProcessingResult` message with all just applied and removed from cache modifiers.
     */
   protected def processRemoteModifiers: Receive = {
-    case ModifiersFromRemote(mods: Seq[PMOD]) =>
+    case ModifiersFromRemote(mods: Seq[ErgoPersistentModifier]) =>
       mods.foreach(m => modifiersCache.put(m.id, m))
 
       log.debug(s"Cache size before: ${modifiersCache.size}")
 
       @tailrec
-      def applyLoop(applied: Seq[PMOD]): Seq[PMOD] = {
+      def applyLoop(applied: Seq[ErgoPersistentModifier]): Seq[ErgoPersistentModifier] = {
         modifiersCache.popCandidate(history()) match {
           case Some(mod) =>
             pmodModify(mod)
@@ -350,7 +322,7 @@ trait NodeViewHolder[TX <: Transaction, PMOD <: PersistentNodeViewModifier]
   }
 
   protected def transactionsProcessing: Receive = {
-    case newTxs: NewTransactions[TX] =>
+    case newTxs: NewTransactions =>
       newTxs.txs.foreach(txModify)
     case EliminateTransactions(ids) =>
       val updatedPool = memoryPool().filter(tx => !ids.contains(tx.id))
@@ -362,7 +334,7 @@ trait NodeViewHolder[TX <: Transaction, PMOD <: PersistentNodeViewModifier]
   }
 
   protected def processLocallyGeneratedModifiers: Receive = {
-    case lm: LocallyGeneratedModifier[PMOD] =>
+    case lm: LocallyGeneratedModifier =>
       log.info(s"Got locally generated modifier ${lm.pmod.encodedId} of type ${lm.pmod.modifierTypeId}")
       pmodModify(lm.pmod)
   }
@@ -398,22 +370,22 @@ object NodeViewHolder {
     // Explicit request of NodeViewChange events of certain types.
     case class GetNodeViewChanges(history: Boolean, state: Boolean, vault: Boolean, mempool: Boolean)
 
-    case class GetDataFromCurrentView[HIS, MS, VL, MP, A](f: CurrentView[HIS, MS, VL, MP] => A)
+    case class GetDataFromCurrentView[State, A](f: CurrentView[State] => A)
 
     // Modifiers received from the remote peer with new elements in it
-    case class ModifiersFromRemote[PM <: PersistentNodeViewModifier](modifiers: Iterable[PM])
+    case class ModifiersFromRemote(modifiers: Iterable[ErgoPersistentModifier])
 
-    sealed trait NewTransactions[TX <: Transaction]{
-      val txs: Iterable[TX]
+    sealed trait NewTransactions{
+      val txs: Iterable[ErgoTransaction]
     }
 
-    case class LocallyGeneratedTransaction[TX <: Transaction](tx: TX) extends NewTransactions[TX] {
-      override val txs: Iterable[TX] = Iterable(tx)
+    case class LocallyGeneratedTransaction(tx: ErgoTransaction) extends NewTransactions {
+      override val txs: Iterable[ErgoTransaction] = Iterable(tx)
     }
 
-    case class TransactionsFromRemote[TX <: Transaction](txs: Iterable[TX]) extends NewTransactions[TX]
+    case class TransactionsFromRemote(override val txs: Iterable[ErgoTransaction]) extends NewTransactions
 
-    case class LocallyGeneratedModifier[PMOD <: PersistentNodeViewModifier](pmod: PMOD)
+    case class LocallyGeneratedModifier(pmod: ErgoPersistentModifier)
 
     case class EliminateTransactions(ids: Seq[scorex.util.ModifierId])
 
@@ -422,12 +394,12 @@ object NodeViewHolder {
   // fixme: No actor is expecting this ModificationApplicationStarted and DownloadRequest messages
   // fixme: Even more, ModificationApplicationStarted seems not to be sent at all
   // fixme: should we delete these messages?
-  case class ModificationApplicationStarted[PMOD <: PersistentNodeViewModifier](modifier: PMOD)
+  case class ModificationApplicationStarted(modifier: ErgoPersistentModifier)
     extends NodeViewHolderEvent
 
   case class DownloadRequest(modifierTypeId: ModifierTypeId,
                              modifierId: scorex.util.ModifierId) extends NodeViewHolderEvent
 
-  case class CurrentView[HIS, MS, VL, MP](history: HIS, state: MS, vault: VL, pool: MP)
+  case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)
 
 }

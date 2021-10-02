@@ -25,7 +25,7 @@ import scorex.util.ModifierId
   */
 
 trait Block[TX <: Transaction]
-  extends TransactionsCarryingPersistentNodeViewModifier[TX] {
+  extends TransactionsCarryingPersistentNodeViewModifier {
 
   def version: Version
 

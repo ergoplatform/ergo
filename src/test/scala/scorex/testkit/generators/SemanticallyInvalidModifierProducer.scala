@@ -1,9 +1,10 @@
 package scorex.testkit.generators
 
+import org.ergoplatform.modifiers.ErgoPersistentModifier
 import scorex.core.PersistentNodeViewModifier
 import scorex.core.transaction.state.MinimalState
 
 
-trait SemanticallyInvalidModifierProducer[PM <: PersistentNodeViewModifier, ST <: MinimalState[PM, ST]] {
-  def semanticallyInvalidModifier(state: ST): PM
+trait SemanticallyInvalidModifierProducer[ST <: MinimalState[ST]] {
+  def semanticallyInvalidModifier(state: ST): ErgoPersistentModifier
 }

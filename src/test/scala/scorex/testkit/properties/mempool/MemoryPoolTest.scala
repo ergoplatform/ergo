@@ -1,12 +1,12 @@
 package scorex.testkit.properties.mempool
 
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.scalacheck.Gen
-import scorex.core.transaction.box.proposition.Proposition
-import scorex.core.transaction.{MemoryPool, Transaction}
 
 
-trait MemoryPoolTest[TX <: Transaction, MPool <: MemoryPool[TX, MPool]] {
-  val memPool: MPool
-  val memPoolGenerator: Gen[MPool]
-  val transactionGenerator: Gen[TX]
+trait MemoryPoolTest {
+  val memPool: ErgoMemPool
+  val memPoolGenerator: Gen[ErgoMemPool]
+  val transactionGenerator: Gen[ErgoTransaction]
 }

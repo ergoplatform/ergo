@@ -28,8 +28,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
 
   implicit private val timeout: Timeout = defaultTimeout
 
-  private val newBlockSignal: Class[SemanticallySuccessfulModifier[_]] =
-    classOf[SemanticallySuccessfulModifier[_]]
+  private val newBlockSignal: Class[SemanticallySuccessfulModifier] =
+    classOf[SemanticallySuccessfulModifier]
   private val newBlockDelay: FiniteDuration        = 30.seconds
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds

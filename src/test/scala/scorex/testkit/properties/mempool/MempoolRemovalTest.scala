@@ -1,5 +1,8 @@
 package scorex.testkit.properties.mempool
 
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -11,31 +14,25 @@ import scorex.testkit.TestkitHelpers
 import scorex.testkit.generators.ArbitraryTransactionsCarryingModifierProducer
 import scorex.util.ScorexLogging
 
-trait MempoolRemovalTest[
-TX <: Transaction,
-MPool <: MemoryPool[TX, MPool],
-PM <: PersistentNodeViewModifier,
-CTM <: PM with TransactionsCarryingPersistentNodeViewModifier[TX],
-HT <: History[PM, SI, HT],
-SI <: SyncInfo] extends AnyPropSpec
+trait MempoolRemovalTest extends AnyPropSpec
   with ScalaCheckPropertyChecks
   with Matchers
   with ScorexLogging
   with TestkitHelpers
-  with MemoryPoolTest[TX, MPool]
-  with ArbitraryTransactionsCarryingModifierProducer[TX, MPool, PM, CTM] {
+  with MemoryPoolTest
+  with ArbitraryTransactionsCarryingModifierProducer {
 
-  val historyGen: Gen[HT]
+  val historyGen: Gen[ErgoHistory]
 
   //todo: this test doesn't check anything. It should be reworked as a test for node view holder
   property("Transactions once added to block should be removed from Mempool") {
     val min = 1
     val max = 10
     forAll(Gen.choose(min, max)) { noOfTransactionsFromMempool: Int =>
-      var m: MPool = memPool
+      var m: ErgoMemPool = memPool
       @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-      var h: HT = historyGen.sample.get
-      forAll(transactionGenerator) { tx: TX =>
+      var h: ErgoHistory = historyGen.sample.get
+      forAll(transactionGenerator) { tx: ErgoTransaction =>
         m = m.put(tx).get
       }
       // var prevMempoolSize = m.size

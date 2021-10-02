@@ -177,15 +177,13 @@ trait ErgoHistoryReader
         //Other history is empty, our contain some headers
         Younger
       case Some(_) =>
-        //We are on different forks now.
         if (info.lastHeaderIds.view.reverse.exists(m => contains(m) || m == PreGenesisHeader.id)) {
-          //Return Younger, because we can send blocks from our fork that other node can download.
+          //We are on different forks now.
           Fork
         } else {
           //We don't have any of id's from other's node sync info in history.
           //We don't know whether we can sync with it and what blocks to send in Inv message.
-          //Assume it is older and far ahead from us
-          Older
+          Unknown
         }
       case None if info.lastHeaderIds.isEmpty =>
         //Both nodes do not keep any blocks

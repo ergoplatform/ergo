@@ -86,6 +86,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     case ModifiersFromRemote(mods: Seq[ErgoPersistentModifier]@unchecked) =>
       mods.headOption match {
         case Some(h) if h.isInstanceOf[Header] =>
+          val ms0 = System.currentTimeMillis()
           val sorted = mods.sortBy(_.asInstanceOf[Header].height)
 
           val applied = if(sorted.head.asInstanceOf[Header].height == history().headersHeight + 1) {
@@ -116,7 +117,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           val cleared = modifiersCache.cleanOverfull()
           context.system.eventStream.publish(ModifiersProcessingResult(applied, cleared))
           log.debug(s"Cache size after: ${modifiersCache.size}")
-
+          val ms = System.currentTimeMillis()
+          println(s"Headers application time (for ${mods.length} headers) is ${ms-ms0} ms.")
         case _ =>
           mods.foreach(m => modifiersCache.put(m.id, m))
 

@@ -193,7 +193,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Some(historyReader) =>
 
         val comparison = historyReader.compare(syncInfo)
-        log.debug(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +
+        log.info(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +
           s"Comparison result is $comparison.")
 
         val oldStatus = statusTracker.getStatus(remote).getOrElse(Unknown)
@@ -234,8 +234,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             log.debug(s"$remote has equal header-chain")
         }
 
-        if ((oldStatus != status) || status == Older || statusTracker.isOutdated(remote)) {
-          val ownSyncInfo = historyReader.syncInfoV2(full = true)
+        if ((oldStatus != status) || statusTracker.isOutdated(remote)) {
+          val ownSyncInfo = historyReader.syncInfo
           sendSyncToPeer(remote, ownSyncInfo)
         }
 
@@ -299,7 +299,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             log.debug(s"$remote has equal header-chain")
         }
 
-        if ((oldStatus != status) || status == Older || statusTracker.isOutdated(remote)) {
+        if ((oldStatus != status) || statusTracker.isOutdated(remote)) {
           val ownSyncInfo = historyReader.syncInfoV2(full = true)
           sendSyncToPeer(remote, ownSyncInfo)
         }
@@ -396,10 +396,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // parse all modifiers and put them to modifiers cache
         val parsed: Iterable[ErgoPersistentModifier] = parseModifiers(requestedModifiers, serializer, remote)
         val valid = parsed.filter(validateAndSetStatus(remote, _))
-        if (valid.head.isInstanceOf[Header]) {
+        if (valid.headOption.exists(_.isInstanceOf[Header])) {
           println("hs: " + valid.map(_.asInstanceOf[Header].height).mkString(","))
         }
-        if (valid.nonEmpty) viewHolderRef ! ModifiersFromRemote[ErgoPersistentModifier](valid)
+        if (valid.nonEmpty) {
+          viewHolderRef ! ModifiersFromRemote[ErgoPersistentModifier](valid)
+
+          if (valid.head.isInstanceOf[Header] && historyReaderOpt.isDefined) {
+            val historyReader = historyReaderOpt.get
+            val syncInfo = if (syncV2Supported(remote)) {
+              historyReader.syncInfoV2(false)
+            } else {
+              historyReader.syncInfo
+            }
+            sendSyncToPeer(remote, syncInfo)
+          }
+        }
       case _ =>
         log.error(s"Undefined serializer for modifier of type $typeId")
     }
@@ -508,6 +520,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             invData.ids.filter(mid => deliveryTracker.status(mid, history) == ModifiersStatus.Unknown)
         }
 
+        log.info(s"Going to request ${newModifierIds.length} modifiers of type ${modifierTypeId} from $peer")
         if (newModifierIds.nonEmpty) {
           val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, newModifierIds)), None)
           peer.handlerRef ! msg

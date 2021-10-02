@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoMessageSpec, _}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, GetPeersFullInfo, PeerSyncState}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
@@ -37,7 +37,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                viewHolderRef: ActorRef,
                                syncInfoSpec: ErgoSyncInfoMessageSpec.type,
                                settings: ErgoSettings,
-                               timeProvider: NetworkTimeProvider)
+                               timeProvider: NetworkTimeProvider,
+                               syncTracker: ErgoSyncTracker
+                              )
                               (implicit ex: ExecutionContext)
   extends NodeViewSynchronizer[ErgoTransaction, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier,
     ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec,
@@ -61,7 +63,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   override protected val deliveryTracker =
     new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
 
-  override protected val statusTracker = ErgoSyncTracker(context, networkSettings, timeProvider)
+  override protected val statusTracker = syncTracker
 
   // var historyReaderOpt: Option[ErgoHistory] = None
   // var mempoolReaderOpt: Option[ErgoMemPoolReader] = None
@@ -569,14 +571,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       onCheckModifiersToDownload orElse
       super.viewHolderEvents
 
-  protected def peersInfo: Receive = {
-    case GetPeersFullInfo =>
-      sender() ! statusTracker.fullInfo()
-  }
-
-  override def receive: Receive = {
-    peersInfo orElse super.receive
-  }
+  override def receive: Receive = super.receive
 
 }
 
@@ -586,22 +581,22 @@ object ErgoNodeViewSynchronizer {
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider)
+            timeProvider: NetworkTimeProvider,
+            syncTracker: ErgoSyncTracker)
            (implicit ex: ExecutionContext): Props =
     Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
-      timeProvider))
+      timeProvider, syncTracker))
 
   def apply(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
             settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider)
+            timeProvider: NetworkTimeProvider,
+            syncTracker: ErgoSyncTracker)
            (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider))
+    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider, syncTracker))
 
   case object CheckModifiersToDownload
-
-  case object GetPeersFullInfo
 
   /** Alternative Peer Status dedicated only for peer syncing */
   sealed trait PeerSyncState

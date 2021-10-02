@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import java.net.InetSocketAddress
 
-import akka.actor.ActorContext
+import akka.actor.{ActorContext, ActorSystem}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.consensus.History.{Fork, HistoryComparisonResult, Older, Unknown}
@@ -17,10 +17,10 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 
-final case class ErgoSyncTracker( context: ActorContext,
+final case class ErgoSyncTracker( system: ActorSystem,
                                   networkSettings: NetworkSettings,
                                   timeProvider: TimeProvider)(implicit ec: ExecutionContext)
- extends SyncTracker(null, context, networkSettings, timeProvider)(ec) {
+ extends SyncTracker(null, null, networkSettings, timeProvider)(ec) {
 
   val heights: mutable.Map[ConnectedPeer, Height] = mutable.Map[ConnectedPeer, Height]()
 
@@ -84,10 +84,10 @@ final case class ErgoSyncTracker( context: ActorContext,
     if (seniorsBefore > 0 && seniorsAfter == 0) {
       log.info("Syncing is done, switching to stable regime")
       stableSyncRegime = true
-      context.system.eventStream.publish(NoBetterNeighbour)
+      system.eventStream.publish(NoBetterNeighbour)
     }
     if (seniorsBefore == 0 && seniorsAfter > 0) {
-      context.system.eventStream.publish(BetterNeighbourAppeared)
+      system.eventStream.publish(BetterNeighbourAppeared)
     }
   }
 

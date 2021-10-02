@@ -5,6 +5,7 @@ import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.network.ErgoSyncTracker
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
@@ -62,6 +63,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     val vhProbe = TestProbe("ViewHolderProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
     val eventListener = TestProbe("EventListener")
+    val syncTracker = ErgoSyncTracker(system, settings.scorexSettings.network, timeProvider)
     val ref = system.actorOf(Props(
       new SyncronizerMock(
         ncProbe.ref,
@@ -70,7 +72,8 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
         settings,
         tp,
         h,
-        pool)
+        pool,
+        syncTracker)
     ))
     val m = totallyValidModifier(h, s)
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))

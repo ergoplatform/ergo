@@ -10,7 +10,7 @@ import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizer
+import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings}
@@ -66,9 +66,11 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
+  val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
+
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      ergoSettings, timeProvider)
+      ergoSettings, timeProvider, syncTracker)
 
 }
 

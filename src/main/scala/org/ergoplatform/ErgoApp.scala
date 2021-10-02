@@ -9,7 +9,7 @@ import org.ergoplatform.http.api._
 import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.ErgoMiner.StartMining
-import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
+import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
@@ -22,8 +22,8 @@ import scorex.core.network.peer.PeerManagerRef
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
-
 import java.net.InetSocketAddress
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.Source
 
@@ -101,12 +101,16 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val statsCollectorRef: ActorRef =
     ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider)
 
+  private val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
+
   private val nodeViewSynchronizerRef = ErgoNodeViewSynchronizer(
     networkControllerRef,
     nodeViewHolderRef,
     ErgoSyncInfoMessageSpec,
     ergoSettings,
-    timeProvider)
+    timeProvider,
+    syncTracker
+  )
 
   // Launching PeerSynchronizer actor which is then registering itself at network controller
   PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, settings.network, featureSerializers)
@@ -114,7 +118,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
-    ErgoPeersApiRoute(peerManagerRef, networkControllerRef, nodeViewSynchronizerRef, timeProvider, settings.restApi),
+    ErgoPeersApiRoute(peerManagerRef, networkControllerRef, syncTracker, timeProvider, settings.restApi),
     InfoApiRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),

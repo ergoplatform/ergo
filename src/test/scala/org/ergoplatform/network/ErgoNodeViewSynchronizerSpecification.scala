@@ -49,13 +49,15 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
                         settings: ErgoSettings,
                         timeProvider: NetworkTimeProvider,
                         history: ErgoHistory,
-                        pool: ErgoMemPool)
+                        pool: ErgoMemPool,
+                        syncTracker: ErgoSyncTracker)
                        (implicit ec: ExecutionContext) extends ErgoNodeViewSynchronizer(
     networkControllerRef,
     viewHolderRef,
     syncInfoSpec,
     settings,
-    timeProvider)(ec) {
+    timeProvider,
+    syncTracker)(ec) {
 
     override def preStart(): Unit = {
       this.historyReaderOpt = Some(history)
@@ -144,6 +146,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     val vhProbe = TestProbe("ViewHolderProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
     val eventListener = TestProbe("EventListener")
+    val syncTracker = ErgoSyncTracker(system, settings.scorexSettings.network, timeProvider)
     val ref = system.actorOf(Props(
       new SyncronizerMock(
         ncProbe.ref,
@@ -152,7 +155,8 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
         settings,
         tp,
         h,
-        pool)
+        pool,
+        syncTracker)
     ))
     val m = totallyValidModifier(h, s)
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))

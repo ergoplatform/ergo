@@ -1,15 +1,11 @@
 package scorex.core
 
-import com.typesafe.config.ConfigFactory
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.core.serialization.BytesSerializable
-import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 
-import scala.util.Try
 
-sealed trait NodeViewModifier extends BytesSerializable with ScorexEncoding {
-  self =>
+sealed trait NodeViewModifier extends BytesSerializable with ScorexEncoding {self =>
 
   val modifierTypeId: ModifierTypeId
 
@@ -22,6 +18,7 @@ sealed trait NodeViewModifier extends BytesSerializable with ScorexEncoding {
     case that: NodeViewModifier => (that.id == id) && (that.modifierTypeId == modifierTypeId)
     case _ => false
   }
+
 }
 
 trait EphemerealNodeViewModifier extends NodeViewModifier
@@ -31,9 +28,7 @@ trait EphemerealNodeViewModifier extends NodeViewModifier
   * have identifiers of the some length fixed with the ModifierIdSize constant
   */
 object NodeViewModifier {
-  private val DefaultIdSize: Byte = 32 // in bytes
-
-  val ModifierIdSize: Int = Try(ConfigFactory.load().getConfig("app").getInt("modifierIdSize")).getOrElse(DefaultIdSize)
+  val ModifierIdSize: Int = 32 // in bytes
 }
 
 /**

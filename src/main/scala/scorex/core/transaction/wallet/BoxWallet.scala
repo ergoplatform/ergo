@@ -2,11 +2,10 @@ package scorex.core.transaction.wallet
 
 import scorex.util.serialization._
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
-import scorex.core.{NodeViewModifier, PersistentNodeViewModifier}
+import scorex.core.NodeViewModifier
 import scorex.core.transaction.Transaction
 import scorex.core.transaction.box.Box
-import scorex.core.transaction.box.proposition.{ProofOfKnowledgeProposition, Proposition}
-import scorex.core.transaction.state.Secret
+import scorex.core.transaction.box.proposition.Proposition
 import scorex.core.utils.ScorexEncoding
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
@@ -47,28 +46,3 @@ case class BoxWalletTransaction[P <: Proposition, TX <: Transaction](proposition
                                                                      tx: TX,
                                                                      blockId: Option[ModifierId],
                                                                      createdAt: Long)
-
-
-/**
-  * Abstract interface for a wallet
-  */
-trait BoxWallet[P <: Proposition, TX <: Transaction, PMOD <: PersistentNodeViewModifier, W <: BoxWallet[P, TX, PMOD, W]]
-  extends Vault[TX, PMOD, W] {
-  self: W =>
-
-  type S <: Secret
-  type PI <: ProofOfKnowledgeProposition[S]
-
-  def generateNewSecret(): W
-
-  def historyTransactions: Seq[BoxWalletTransaction[P, TX]]
-
-  def boxes(): Seq[WalletBox[P, _ <: Box[P]]]
-
-  def publicKeys: Set[PI]
-
-  //todo: protection?
-  def secrets: Set[S]
-
-  def secretByPublicImage(publicImage: PI): Option[S]
-}

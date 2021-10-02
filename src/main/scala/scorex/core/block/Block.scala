@@ -40,17 +40,3 @@ object Block {
   val BlockIdLength: Int = NodeViewModifier.ModifierIdSize
 
 }
-
-trait BlockCompanion[P <: Proposition, TX <: Transaction, B <: Block[TX]]
-  extends ScorexSerializer[B] {
-
-  def isValid(block: B): Boolean
-
-  /**
-    * Get block producers(miners/forgers). Usually one miner produces a block, but in some proposals not
-    * (see e.g. Proof-of-Activity paper of Bentov et al. http://eprint.iacr.org/2014/452.pdf)
-    *
-    * @return blocks' producers
-    */
-  def producers(block: B, history: History[B, _, _]): Seq[P]
-}

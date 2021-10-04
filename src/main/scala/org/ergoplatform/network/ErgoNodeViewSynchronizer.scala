@@ -277,11 +277,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.status(id) == Requested
     }
 
-    // todo: consider rules for penalizing peers for spammy transactions
     if (spam.nonEmpty) {
       if (typeId == Transaction.ModifierTypeId) {
         val spammyTxs = modifiers.filterKeys(id => !blockAppliedTxsCache.contains(id))
-        log.info(s"Got spammy transactions: $spammyTxs")
+        if (spammyTxs.nonEmpty) {
+          log.info(s"Got spammy transactions: $spammyTxs")
+          penalizeSpammingPeer(remote)
+        }
       } else {
         log.info(s"Spam attempt: peer $remote has sent a non-requested modifiers of type $typeId with ids" +
           s": ${spam.keys.map(encoder.encodeId)}")

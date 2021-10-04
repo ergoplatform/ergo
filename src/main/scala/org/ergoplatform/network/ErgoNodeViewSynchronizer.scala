@@ -47,6 +47,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   override protected val deliveryTracker =
     new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
 
+  // cache of transaction ids that were already applied to history
   private var blockAppliedTxsCache: TreeMap[ModifierId, Long] = TreeMap.empty[ModifierId, Long]
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
@@ -279,7 +280,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // todo: consider rules for penalizing peers for spammy transactions
     if (spam.nonEmpty) {
       if (typeId == Transaction.ModifierTypeId) {
-        log.info(s"Got spammy transactions: $modifiers")
+        val spammyTxs = modifiers.filterKeys(id => !blockAppliedTxsCache.contains(id))
+        log.info(s"Got spammy transactions: $spammyTxs")
       } else {
         log.info(s"Spam attempt: peer $remote has sent a non-requested modifiers of type $typeId with ids" +
           s": ${spam.keys.map(encoder.encodeId)}")
@@ -332,8 +334,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             if (!settings.nodeSettings.stateType.requireProofs &&
               history.isHeadersChainSynced &&
               history.fullBlockHeight == history.headersHeight) {
-              val notInMempoolTxs = invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
-              notInMempoolTxs.filterNot(blockAppliedTxsCache.contains)
+              val unknownMods =
+                invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
+              // filter out transactions that were already applied to history
+              unknownMods.filterNot(blockAppliedTxsCache.contains)
             } else {
               Seq.empty
             }
@@ -384,7 +388,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case BlockAppliedTransactions(transactionIds: Seq[ModifierId]) =>
       val ts = System.currentTimeMillis()
       val blockTxsCount = transactionIds.size
-      val cacheSizeLimit = blockTxsCount * 5 // let's cache txs from last 5 blocks
+      val cacheSizeLimit = blockTxsCount * 5 // let's cache txs from approximately last 5 blocks
       val inv =
         if (blockAppliedTxsCache.size >= cacheSizeLimit)
           blockAppliedTxsCache.drop(blockTxsCount)

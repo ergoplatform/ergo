@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.{Constants, ErgoSettings}
@@ -24,6 +25,7 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId
 
+import scala.collection.immutable.TreeMap
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -44,6 +46,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   override protected val deliveryTracker =
     new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
+
+  private var blockAppliedTxsCache: TreeMap[ModifierId, Long] = TreeMap.empty[ModifierId, Long]
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -328,7 +332,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             if (!settings.nodeSettings.stateType.requireProofs &&
               history.isHeadersChainSynced &&
               history.fullBlockHeight == history.headersHeight) {
-              invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
+              val notInMempoolTxs = invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
+              notInMempoolTxs.filterNot(blockAppliedTxsCache.contains)
             } else {
               Seq.empty
             }
@@ -372,6 +377,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       broadcastInvForNewModifier(mod)
   }
 
+  /**
+    * We collect applied TXs in order to avoid banning peers that sent these afterwards
+    */
+  private val onBlockAppliedTransactions: Receive = {
+    case BlockAppliedTransactions(transactionIds: Seq[ModifierId]) =>
+      val ts = System.currentTimeMillis()
+      val blockTxsCount = transactionIds.size
+      val cacheSizeLimit = blockTxsCount * 5 // let's cache txs from last 5 blocks
+      val inv =
+        if (blockAppliedTxsCache.size >= cacheSizeLimit)
+          blockAppliedTxsCache.drop(blockTxsCount)
+        else
+          blockAppliedTxsCache
+
+      blockAppliedTxsCache = inv ++ transactionIds.map(_ -> ts)
+  }
+
   protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {
     mod match {
       case fb: ErgoFullBlock if fb.header.isNew(timeProvider, 1.hour) => fb.toSeq.foreach(s => broadcastModifierInv(s))
@@ -381,8 +403,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   override protected def viewHolderEvents: Receive =
     onSemanticallySuccessfulModifier orElse
-      onCheckModifiersToDownload orElse
-      super.viewHolderEvents
+    onCheckModifiersToDownload orElse
+    onBlockAppliedTransactions orElse
+    super.viewHolderEvents
 }
 
 object ErgoNodeViewSynchronizer {

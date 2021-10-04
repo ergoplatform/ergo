@@ -10,6 +10,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
@@ -83,7 +84,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                                        state: MS): MP = {
     val rolledBackTxs = blocksRemoved.flatMap(extractTransactions)
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
-
+    context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
     memPool.putWithoutCheck(rolledBackTxs).filter(tx => !appliedTxs.exists(_.id == tx.id))
   }
 
@@ -320,4 +321,8 @@ object ErgoNodeViewRef {
   def apply(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
     system.actorOf(props(settings, timeProvider))
+}
+
+object ErgoNodeViewHolder {
+  case class BlockAppliedTransactions(txs: Seq[scorex.util.ModifierId])
 }

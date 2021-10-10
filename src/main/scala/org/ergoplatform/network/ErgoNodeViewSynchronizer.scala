@@ -23,7 +23,7 @@ import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId
-
+import scorex.core.network.DeliveryTracker
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -43,7 +43,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     settings.scorexSettings.network, timeProvider, Constants.modifierSerializers) {
 
   override protected val deliveryTracker =
-    new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
+    new DeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self)
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 

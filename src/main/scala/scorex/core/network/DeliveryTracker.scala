@@ -50,6 +50,9 @@ class DeliveryTracker(system: ActorSystem,
   // when our node received a modifier we put it to `received`
   protected val received: mutable.Map[ModifierId, ConnectedPeer] = mutable.Map()
 
+  /** how many Requested modifiers DeliveryTracker holds */
+  def requestedSize: Int = requested.size
+
   /**
     * @return status of modifier `id`.
     *         Since this class do not keep statuses for modifiers that are already in NodeViewHolder,

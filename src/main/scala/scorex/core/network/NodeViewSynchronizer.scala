@@ -6,6 +6,8 @@ import java.net.InetSocketAddress
 import akka.actor.{Actor, ActorRef}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import scorex.core.NodeViewHolder.DownloadRequest
 import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.consensus.History._
@@ -29,17 +31,11 @@ import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.reflect.ClassTag
 import scala.util.{Failure, Success}
 
 /**
   * A component which is synchronizing local node view (processed by NodeViewHolder) with the p2p network.
   *
-  * @tparam TX   transaction
-  * @tparam SIS  SyncInfoMessage specification
-  * @tparam PMOD Basic trait of persistent modifiers type family
-  * @tparam HR   History reader type
-  * @tparam MR   Mempool reader type
   * @param networkControllerRef reference to network controller actor
   * @param viewHolderRef        reference to node view holder actor
   * @param syncInfoSpec         SyncInfo specification
@@ -47,11 +43,10 @@ import scala.util.{Failure, Success}
   * @param timeProvider         network time provider
   * @param modifierSerializers  dictionary of modifiers serializers
   */
-abstract class NodeViewSynchronizer[TX <: Transaction, SI <: SyncInfo, SIS <: SyncInfoMessageSpec[SI],
-PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR <: MempoolReader[TX] : ClassTag]
+abstract class NodeViewSynchronizer
 (networkControllerRef: ActorRef,
  viewHolderRef: ActorRef,
- syncInfoSpec: SIS,
+ syncInfoSpec: ErgoSyncInfoMessageSpec.type,
  networkSettings: NetworkSettings,
  timeProvider: NetworkTimeProvider,
  modifierSerializers: Map[ModifierTypeId, ScorexSerializer[_ <: NodeViewModifier]])(implicit ec: ExecutionContext)
@@ -64,7 +59,7 @@ PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR
   protected val modifiersSpec = new ModifiersSpec(networkSettings.maxPacketSize)
 
   protected val msgHandlers: PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
-    case (_: SIS @unchecked, data: SI @unchecked, remote) => processSync(data, remote)
+    case (_: ErgoSyncInfoMessageSpec.type @unchecked, data: ErgoSyncInfo @unchecked, remote) => processSync(data, remote)
     case (_: InvSpec, data: InvData, remote)              => processInv(data, remote)
     case (_: RequestModifierSpec, data: InvData, remote)  => modifiersReq(data, remote)
     case (_: ModifiersSpec, data: ModifiersData, remote)  => modifiersFromRemote(data, remote)
@@ -73,8 +68,8 @@ PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR
   protected val deliveryTracker = new DeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self)
   protected val statusTracker = new SyncTracker(self, context, networkSettings, timeProvider)
 
-  protected var historyReaderOpt: Option[HR] = None
-  protected var mempoolReaderOpt: Option[MR] = None
+  protected var historyReaderOpt: Option[ErgoHistory] = None
+  protected var mempoolReaderOpt: Option[ErgoMemPool] = None
 
   override def preStart(): Unit = {
     // register as a handler for synchronization-specific types of messages
@@ -86,8 +81,8 @@ PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR
     context.system.eventStream.subscribe(self, classOf[DisconnectedPeer])
 
     // subscribe for all the node view holder events involving modifiers and transactions
-    context.system.eventStream.subscribe(self, classOf[ChangedHistory[HR]])
-    context.system.eventStream.subscribe(self, classOf[ChangedMempool[MR]])
+    context.system.eventStream.subscribe(self, classOf[ChangedHistory[ErgoHistory]])
+    context.system.eventStream.subscribe(self, classOf[ChangedMempool[ErgoMemPool]])
     context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult])
@@ -98,7 +93,9 @@ PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR
     statusTracker.scheduleSendSyncInfo()
   }
 
-  private def readersOpt: Option[(HR, MR)] = historyReaderOpt.flatMap(h => mempoolReaderOpt.map(mp => (h, mp)))
+  private def readersOpt: Option[(ErgoHistory, ErgoMemPool)] = {
+    historyReaderOpt.flatMap(h => mempoolReaderOpt.map(mp => (h, mp)))
+  }
 
   protected def broadcastModifierInv[M <: NodeViewModifier](m: M): Unit = {
     val msg = Message(invSpec, Right(InvData(m.modifierTypeId, Seq(m.id))), None)
@@ -127,13 +124,13 @@ PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR
     case SemanticallyFailedModification(mod, _) =>
       deliveryTracker.setInvalid(mod.id).foreach(penalizeMisbehavingPeer)
 
-    case ChangedHistory(reader: HR) =>
+    case ChangedHistory(reader: ErgoHistory) =>
       historyReaderOpt = Some(reader)
 
-    case ChangedMempool(reader: MR) =>
+    case ChangedMempool(reader: ErgoMemPool) =>
       mempoolReaderOpt = Some(reader)
 
-    case ModifiersProcessingResult(applied: Seq[PMOD], cleared: Seq[PMOD]) =>
+    case ModifiersProcessingResult(applied: Seq[ErgoPersistentModifier], cleared: Seq[ErgoPersistentModifier]) =>
       // stop processing for cleared modifiers
       // applied modifiers state was already changed at `SyntacticallySuccessfulModifier`
       cleared.foreach(m => deliveryTracker.setUnknown(m.id))
@@ -161,7 +158,7 @@ PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR
       historyReaderOpt.foreach(sendSync(statusTracker, _))
   }
 
-  protected def sendSync(syncTracker: SyncTracker, history: HR): Unit = {
+  protected def sendSync(syncTracker: SyncTracker, history: ErgoHistory): Unit = {
     val peers = statusTracker.peersToSyncWith()
     if (peers.nonEmpty) {
       networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(history.syncInfo), None), SendToPeers(peers))
@@ -173,22 +170,8 @@ PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR
   }
 
   //sync info is coming from another node
-  protected def processSync(syncInfo: SI, remote: ConnectedPeer): Unit = {
-      historyReaderOpt match {
-        case Some(historyReader) =>
-          val ext = historyReader.continuationIds(syncInfo, networkSettings.desiredInvObjects)
-          val comparison = historyReader.compare(syncInfo)
-          log.debug(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +
-            s"Comparison result is $comparison. Sending extension of length ${ext.length}")
-          log.debug(s"Extension ids: ${idsToString(ext)}")
+  protected def processSync(syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit
 
-          if (!(ext.nonEmpty || comparison != Younger))
-            log.warn("Extension is empty while comparison is younger")
-
-          self ! OtherNodeSyncingStatus(remote, comparison, ext)
-        case _ =>
-      }
-  }
 
   // Send history extension to the (less developed) peer 'remote' which does not have it.
   def sendExtension(remote: ConnectedPeer,
@@ -221,27 +204,7 @@ PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR
     * Filter out modifier ids that are already in process (requested, received or applied),
     * request unknown ids from peer and set this ids to requested state.
     */
-  protected def processInv(invData: InvData, peer: ConnectedPeer): Unit = {
-      (mempoolReaderOpt, historyReaderOpt) match {
-        case (Some(mempool), Some(history)) =>
-          val modifierTypeId = invData.typeId
-          val newModifierIds = modifierTypeId match {
-            case Transaction.ModifierTypeId =>
-              invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
-            case _ =>
-              invData.ids.filter(mid => deliveryTracker.status(mid, history) == ModifiersStatus.Unknown)
-          }
-
-          if (newModifierIds.nonEmpty) {
-            val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, newModifierIds)), None)
-            peer.handlerRef ! msg
-            deliveryTracker.setRequested(newModifierIds, modifierTypeId, Some(peer))
-          }
-
-        case _ =>
-          log.warn(s"Got data from peer while readers are not ready ${(mempoolReaderOpt, historyReaderOpt)}")
-      }
-  }
+  protected def processInv(invData: InvData, peer: ConnectedPeer): Unit
 
   //other node asking for objects by their ids
   protected def modifiersReq(invData: InvData, remote: ConnectedPeer): Unit = {
@@ -270,7 +233,7 @@ PMOD <: PersistentNodeViewModifier, HR <: HistoryReader[PMOD, SI] : ClassTag, MR
     * Move `pmod` to `Invalid` if it is permanently invalid, to `Received` otherwise
     */
   @SuppressWarnings(Array("org.wartremover.warts.IsInstanceOf"))
-  private def validateAndSetStatus(remote: ConnectedPeer, pmod: PMOD): Boolean = {
+  private def validateAndSetStatus(remote: ConnectedPeer, pmod: ErgoPersistentModifier): Boolean = {
     historyReaderOpt match {
       case Some(hr) =>
         hr.applicableTry(pmod) match {

@@ -38,8 +38,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                settings: ErgoSettings,
                                timeProvider: NetworkTimeProvider)
                               (implicit ex: ExecutionContext)
-  extends NodeViewSynchronizer[ErgoTransaction, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier,
-    ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec,
+  extends NodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec,
     settings.scorexSettings.network, timeProvider, Constants.modifierSerializers) {
 
   override protected val deliveryTracker =

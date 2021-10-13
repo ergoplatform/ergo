@@ -1,6 +1,8 @@
 package scorex.core.network
 
 import akka.actor.{ActorRef, ActorSystem, Cancellable}
+import org.ergoplatform.nodeView.mempool.{BloomFilterLike, ExpiringFifoBloomFilter}
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.consensus.ContainsModifiers
 import scorex.core.network.ModifiersStatus._
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.CheckDelivery
@@ -33,19 +35,22 @@ import scala.util.{Failure, Try}
   *
   * This class is not thread-save so it should be used only as a local field of an actor
   * and its methods should not be called from lambdas, Future, Future.map, etc.
+
+  * @param deliveryTimeout of a single check for transition of modifier from Requested to Received
+  * @param maxDeliveryChecks how many times to check whether modifier was delivered in given timeout
+  * @param invalidModifierBF Bloom Filter with invalid modifier ids
+  * @param nvsRef nodeViewSynchronizer actor reference
   */
 class DeliveryTracker(system: ActorSystem,
                       deliveryTimeout: FiniteDuration,
                       maxDeliveryChecks: Int,
+                      invalidModifierBF: BloomFilterLike[String],
                       nvsRef: ActorRef) extends ScorexLogging with ScorexEncoding {
 
   protected case class RequestedInfo(peer: Option[ConnectedPeer], cancellable: Cancellable, checks: Int)
 
   // when a remote peer is asked for a modifier we add the requested data to `requested`
   protected val requested: mutable.Map[ModifierId, RequestedInfo] = mutable.Map()
-
-  // when our node received invalid modifier we put it to `invalid`
-  protected val invalid: mutable.HashSet[ModifierId] = mutable.HashSet()
 
   // when our node received a modifier we put it to `received`
   protected val received: mutable.Map[ModifierId, ConnectedPeer] = mutable.Map()
@@ -61,7 +66,7 @@ class DeliveryTracker(system: ActorSystem,
   def status(modifierId: ModifierId, modifierKeepers: Seq[ContainsModifiers[_]]): ModifiersStatus =
     if (received.contains(modifierId)) Received
     else if (requested.contains(modifierId)) Requested
-    else if (invalid.contains(modifierId)) Invalid
+    else if (invalidModifierBF.mightContain(modifierId)) Invalid
     else if (modifierKeepers.exists(_.contains(modifierId))) Held
     else Unknown
 
@@ -124,7 +129,7 @@ class DeliveryTracker(system: ActorSystem,
           case _ =>
             None
         }
-        invalid.add(modifierId)
+        invalidModifierBF.put(modifierId)
         senderOpt
       }
   }
@@ -210,4 +215,24 @@ class DeliveryTracker(system: ActorSystem,
         log.warn("Unexpected error", e)
         Failure(e)
     }
+}
+
+object DeliveryTracker {
+  def empty(system: ActorSystem,
+            deliveryTimeout: FiniteDuration,
+            maxDeliveryChecks: Int,
+            nvsRef: ActorRef,
+            settings: ErgoSettings): DeliveryTracker = {
+    val bloomFilterCapacity = settings.nodeSettings.invalidModifiersBloomFilterCapacity
+    val bloomFilterExpirationRate = settings.nodeSettings.invalidModifiersBloomFilterExpirationRate
+    val cacheSize = settings.nodeSettings.invalidModifiersCacheSize
+    val cacheExpiration = settings.nodeSettings.invalidModifiersCacheExpiration
+    new DeliveryTracker(
+      system,
+      deliveryTimeout,
+      maxDeliveryChecks,
+      ExpiringFifoBloomFilter.empty(bloomFilterCapacity, bloomFilterExpirationRate, cacheSize, cacheExpiration),
+      nvsRef
+    )
+  }
 }

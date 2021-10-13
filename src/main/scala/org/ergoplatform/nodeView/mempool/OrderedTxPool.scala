@@ -188,12 +188,14 @@ object OrderedTxPool {
   private implicit val ordBoxId: Ordering[BoxId] = Ordering[String].on(b => Algos.encode(b))
 
   def empty(settings: ErgoSettings): OrderedTxPool = {
-    val blacklistCapacity = settings.nodeSettings.blacklistCapacity
-    val blacklistExpirationRate = settings.nodeSettings.blacklistExpirationRate
+    val bloomFilterCapacity = settings.nodeSettings.invalidModifiersBloomFilterCapacity
+    val bloomFilterExpirationRate = settings.nodeSettings.invalidModifiersBloomFilterExpirationRate
+    val cacheSize = settings.nodeSettings.invalidModifiersCacheSize
+    val cacheExpiration = settings.nodeSettings.invalidModifiersCacheExpiration
     OrderedTxPool(
       TreeMap.empty[WeightedTxId, ErgoTransaction],
       TreeMap.empty[ModifierId, WeightedTxId],
-      ExpiringFifoBloomFilter.empty(blacklistCapacity, blacklistExpirationRate),
+      ExpiringFifoBloomFilter.empty(bloomFilterCapacity, bloomFilterExpirationRate, cacheSize, cacheExpiration),
       TreeMap.empty[BoxId, WeightedTxId],
       TreeMap.empty[BoxId, WeightedTxId])(settings)
   }

@@ -285,7 +285,7 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
   def extractAssets(boxes: IndexedSeq[ErgoBoxCandidate]): Try[(Map[ByteArrayWrapper, Long], Int)] = Try {
     val map: mutable.Map[ByteArrayWrapper, Long] = mutable.Map[ByteArrayWrapper, Long]()
     val assetsNum = boxes.foldLeft(0) { case (acc, box) =>
-      require(box.additionalTokens.length <= MaxAssetsPerBox, "too many assets in one box")
+      require(box.additionalTokens.length <= ErgoTransaction.MaxAssetsPerBox, "too many assets in one box")
       box.additionalTokens.foreach { case (assetId, amount) =>
         val aiWrapped = ByteArrayWrapper(assetId)
         val total = map.getOrElse(aiWrapped, 0L)

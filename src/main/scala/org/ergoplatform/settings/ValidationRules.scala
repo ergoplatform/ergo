@@ -7,7 +7,6 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import scorex.core.validation.ModifierValidator
 import scorex.core.validation.ValidationResult.Invalid
 

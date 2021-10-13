@@ -38,9 +38,6 @@ val sigmaStateVersion = "4.0.3"
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
 val effectiveSigma = "org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion
 
-val networkDependencies = Seq(
-)
-
 val apiDependencies = Seq(
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
@@ -58,7 +55,6 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
   "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
   "com.typesafe.akka" %% "akka-parsing" % akkaHttpVersion,
-  "com.typesafe.akka" %% "akka-protobuf" % akkaVersion,
   "com.typesafe.akka" %% "akka-stream" % akkaVersion,
   "org.bitlet" % "weupnp" % "0.1.4",
   "commons-net" % "commons-net" % "3.6",

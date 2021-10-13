@@ -41,6 +41,11 @@ object Constants {
   val CoinType = 429
 
   /**
+    * There needs to be reasonable amount of tokens in a box due to a byte size limit for ergo box
+    * */
+  val MaxAssetsPerBox = 100
+
+  /**
     * Pre - EIP3 derivation path
     */
   val preEip3DerivationPath: DerivationPath = DerivationPath.fromEncoded("m/1").get

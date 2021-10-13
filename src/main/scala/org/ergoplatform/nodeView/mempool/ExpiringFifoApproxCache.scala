@@ -6,29 +6,33 @@ import java.nio.charset.Charset
 import scala.collection.immutable.TreeMap
 import scala.concurrent.duration.FiniteDuration
 
-sealed trait BloomFilterLike[T] {
-  def put(elem: T): ExpiringFifoBloomFilter
+sealed trait ApproxCacheLike[T] {
+  def put(elem: T): ExpiringFifoApproxCache
   def mightContain(elem: T): Boolean
   def approximateElementCount: Long
 }
 
 /**
-  * Size-limited FIFO collection of BloomFilters which do not have means of element expiration,
-  * so a collection of BloomFilters that gradually expire is a viable alternative.
+  * Size-limited FIFO collection of BloomFilters with a hash based time expiring cache in front,
+  * so that lower number of elements is tested for presence accurately and huge number of elements only approximately.
+  * Bloom filters do not have means of element expiration, so a collection of BloomFilters that gradually expire is a viable alternative.
   * Ie. we expire whole bloom filters instead of expiring elements and we check all bloom filters for element presence
   *
   * @param bloomFilterQueueSize how many bloom filters at maximum to keep in FIFO queue
   * @param bloomFilterApproxElemCount approximate element size of a single bloom filter
   * @param bloomFilterQueue fifo collection of bloom filters with tracking index
+  * @param frontCacheMaxSize maximum number of elements to keep in cache, following elems are kept in bloom filters
+  * @param frontCacheElemExpirationMs for how long to keep elems in cache
+  * @param frontCache time expiring cache in front of boom filters
   */
-case class ExpiringFifoBloomFilter(
+case class ExpiringFifoApproxCache(
   bloomFilterQueueSize: Int,
   bloomFilterApproxElemCount: Int,
   bloomFilterQueue: Vector[(Long, BloomFilter[String])],
   frontCacheMaxSize: Int,
   frontCacheElemExpirationMs: Long,
   frontCache: TreeMap[String, Long]
-) extends BloomFilterLike[String] {
+) extends ApproxCacheLike[String] {
 
   private def createNewFilter =
     BloomFilter.create[String](
@@ -38,11 +42,11 @@ case class ExpiringFifoBloomFilter(
     )
 
   /**
-    * Puts an element into this BloomFilter.
-    * Ensures that subsequent invocations of mightContain with the same element will always return
+    * Puts an element into this Cache.
+    * Ensures that subsequent invocations of mightContain with the same element will always return True
     * @return new copy of this instance
     */
-  override def put(elem: String): ExpiringFifoBloomFilter = {
+  override def put(elem: String): ExpiringFifoApproxCache = {
     val now = System.currentTimeMillis()
     val updatedCache = frontCache.dropWhile {
       case (_, timestamp) =>
@@ -76,7 +80,7 @@ case class ExpiringFifoBloomFilter(
   }
 
   /**
-    * Returns True if the element might have been put in this Bloom filter, False if this is definitely not the case.
+    * Returns True if the element might have been put in this Cache, False if this is definitely not the case.
     */
   override def mightContain(elem: String): Boolean =
     frontCache.contains(elem) || bloomFilterQueue.exists(_._2.mightContain(elem))
@@ -88,10 +92,10 @@ case class ExpiringFifoBloomFilter(
   override def approximateElementCount: Long =
     bloomFilterQueue.foldLeft(0L) {
       case (acc, bf) => acc + bf._2.approximateElementCount()
-    }
+    } + frontCache.size
 }
 
-object ExpiringFifoBloomFilter {
+object ExpiringFifoApproxCache {
 
   /**
     * @param bloomFilterCapacity Maximum number of elements to store in bloom filters
@@ -105,12 +109,12 @@ object ExpiringFifoBloomFilter {
     bloomFilterExpirationRate: Double,
     cacheSize: Int,
     cacheExpiration: FiniteDuration
-  ): ExpiringFifoBloomFilter = {
+  ): ExpiringFifoApproxCache = {
     require(
       bloomFilterExpirationRate > 0 && bloomFilterExpirationRate < 1,
       "expirationRate must be (0 - 1) exclusive"
     )
-    ExpiringFifoBloomFilter(
+    ExpiringFifoApproxCache(
       bloomFilterQueueSize = Math.round(1 / bloomFilterExpirationRate).toInt,
       bloomFilterApproxElemCount =
         Math.round(bloomFilterCapacity * bloomFilterExpirationRate).toInt,

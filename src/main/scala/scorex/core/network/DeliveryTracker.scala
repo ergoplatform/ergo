@@ -1,7 +1,7 @@
 package scorex.core.network
 
 import akka.actor.{ActorRef, ActorSystem, Cancellable}
-import org.ergoplatform.nodeView.mempool.{BloomFilterLike, ExpiringFifoBloomFilter}
+import org.ergoplatform.nodeView.mempool.{ApproxCacheLike, ExpiringFifoApproxCache}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.consensus.ContainsModifiers
 import scorex.core.network.ModifiersStatus._
@@ -44,7 +44,7 @@ import scala.util.{Failure, Try}
 class DeliveryTracker(system: ActorSystem,
                       deliveryTimeout: FiniteDuration,
                       maxDeliveryChecks: Int,
-                      invalidModifierBF: BloomFilterLike[String],
+                      invalidModifierBF: ApproxCacheLike[String],
                       nvsRef: ActorRef) extends ScorexLogging with ScorexEncoding {
 
   protected case class RequestedInfo(peer: Option[ConnectedPeer], cancellable: Cancellable, checks: Int)
@@ -231,7 +231,7 @@ object DeliveryTracker {
       system,
       deliveryTimeout,
       maxDeliveryChecks,
-      ExpiringFifoBloomFilter.empty(bloomFilterCapacity, bloomFilterExpirationRate, cacheSize, cacheExpiration),
+      ExpiringFifoApproxCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, cacheSize, cacheExpiration),
       nvsRef
     )
   }

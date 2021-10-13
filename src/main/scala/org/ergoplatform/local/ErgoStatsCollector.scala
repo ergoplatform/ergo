@@ -49,6 +49,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   private var nodeInfo = NodeInfo(
     settings.scorexSettings.network.nodeName,
     Version.VersionString,
+    settings.networkType.verboseName,
     0,
     0,
     None,
@@ -142,6 +143,7 @@ object ErgoStatsCollector {
 
   case class NodeInfo(nodeName: String,
                       appVersion: String,
+                      network: String,
                       unconfirmedCount: Int,
                       peersCount: Int,
                       stateRoot: Option[String],
@@ -164,6 +166,7 @@ object ErgoStatsCollector {
       Map(
         "name" -> ni.nodeName.asJson,
         "appVersion" -> Version.VersionString.asJson,
+        "network" -> ni.network.asJson,
         "headersHeight" -> ni.bestHeaderOpt.map(_.height).asJson,
         "fullHeight" -> ni.bestFullBlockOpt.map(_.header.height).asJson,
         "bestHeaderId" -> ni.bestHeaderOpt.map(_.encodedId).asJson,

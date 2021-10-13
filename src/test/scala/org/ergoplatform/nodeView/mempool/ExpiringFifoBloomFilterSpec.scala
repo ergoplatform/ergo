@@ -64,7 +64,7 @@ class ExpiringFifoBloomFilterSpec extends AnyFlatSpec with Matchers {
     assert(updatedBf.mightContain("101"), s"101 should be in bloom filter")
 
     // test that all elements in front cache expire
-    Thread.sleep(500)
+    Thread.sleep(550)
     updatedBf.put("102").frontCache.size shouldBe 1
   }
 }

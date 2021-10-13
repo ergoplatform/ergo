@@ -39,7 +39,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
+    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
     context.system.scheduler.scheduleAtFixedRate(10.seconds, 20.seconds, networkController, GetConnectedPeers)(ec, self)
     context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(ec, self)
   }

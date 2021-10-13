@@ -23,7 +23,7 @@ import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId
-
+import scorex.core.network.DeliveryTracker
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -38,12 +38,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                settings: ErgoSettings,
                                timeProvider: NetworkTimeProvider)
                               (implicit ex: ExecutionContext)
-  extends NodeViewSynchronizer[ErgoTransaction, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier,
-    ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec,
+  extends NodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec,
     settings.scorexSettings.network, timeProvider, Constants.modifierSerializers) {
 
   override protected val deliveryTracker =
-    new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
+    new DeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self)
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -206,7 +205,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Filter out non-requested block parts (with a penalty to spamming peer),
     * parse block parts and send valid modifiers to NodeViewHolder
     *
-    * Currently just a copy from private method in basic trait!
     */
   override protected def modifiersFromRemote(data: ModifiersData, remote: ConnectedPeer): Unit = {
     val typeId = data.typeId
@@ -227,7 +225,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // parse all modifiers and put them to modifiers cache
         val parsed: Iterable[ErgoPersistentModifier] = parseModifiers(requestedModifiers, serializer, remote)
         val valid = parsed.filter(validateAndSetStatus(remote, _))
-        if (valid.nonEmpty) viewHolderRef ! ModifiersFromRemote[ErgoPersistentModifier](valid)
+        if (valid.nonEmpty) viewHolderRef ! ModifiersFromRemote(valid)
       case _ =>
         log.error(s"Undefined serializer for modifier of type $typeId")
     }

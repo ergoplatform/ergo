@@ -105,7 +105,7 @@ class CandidateGenerator(
       )
       self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
       context.system.eventStream
-        .subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
+        .subscribe(self, classOf[SemanticallySuccessfulModifier])
       context.system.eventStream.subscribe(self, classOf[NodeViewChange])
     case Readers(_, _, _, _) =>
       log.error("Invalid readers state, mining is possible in UTXO mode only")

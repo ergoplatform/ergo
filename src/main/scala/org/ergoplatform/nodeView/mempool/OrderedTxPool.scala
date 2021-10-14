@@ -169,7 +169,7 @@ object OrderedTxPool {
   /**
     * Weighted transaction id
     *
-    * @param id       - Transcation id
+    * @param id       - Transaction id
     * @param weight   - Weight of transaction
     * @param feePerKb - Transaction's fee per KB
     * @param created  - Transaction creation time
@@ -190,12 +190,12 @@ object OrderedTxPool {
   def empty(settings: ErgoSettings): OrderedTxPool = {
     val bloomFilterCapacity = settings.nodeSettings.invalidModifiersBloomFilterCapacity
     val bloomFilterExpirationRate = settings.nodeSettings.invalidModifiersBloomFilterExpirationRate
-    val cacheSize = settings.nodeSettings.invalidModifiersCacheSize
-    val cacheExpiration = settings.nodeSettings.invalidModifiersCacheExpiration
+    val frontCacheSize = settings.nodeSettings.invalidModifiersCacheSize
+    val frontCacheExpiration = settings.nodeSettings.invalidModifiersCacheExpiration
     OrderedTxPool(
       TreeMap.empty[WeightedTxId, ErgoTransaction],
       TreeMap.empty[ModifierId, WeightedTxId],
-      ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, cacheSize, cacheExpiration),
+      ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration),
       TreeMap.empty[BoxId, WeightedTxId],
       TreeMap.empty[BoxId, WeightedTxId])(settings)
   }

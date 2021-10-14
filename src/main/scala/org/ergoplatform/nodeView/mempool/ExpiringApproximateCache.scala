@@ -100,14 +100,14 @@ object ExpiringApproximateCache {
     * @param bloomFilterCapacity Maximum number of elements to store in bloom filters
     * @param bloomFilterExpirationRate fraction of 1 that represents a rate of expiration as the cache grows in size,
     *                       only values from open interval (0,1) are valid
-    * @param cacheSize Maximum number of elements to store in cache
-    * @param cacheExpiration Maximum period to keep cached elements before expiration
+    * @param frontCacheSize Maximum number of elements to store in front-cache
+    * @param frontCacheExpiration Maximum period to keep cached elements before expiration
     */
   def empty(
-    bloomFilterCapacity: Int,
-    bloomFilterExpirationRate: Double,
-    cacheSize: Int,
-    cacheExpiration: FiniteDuration
+             bloomFilterCapacity: Int,
+             bloomFilterExpirationRate: Double,
+             frontCacheSize: Int,
+             frontCacheExpiration: FiniteDuration
   ): ExpiringApproximateCache = {
     require(
       bloomFilterExpirationRate > 0 && bloomFilterExpirationRate < 1,
@@ -118,8 +118,8 @@ object ExpiringApproximateCache {
       bloomFilterApproxElemCount =
         Math.round(bloomFilterCapacity * bloomFilterExpirationRate).toInt,
       bloomFilterQueue           = Vector.empty,
-      frontCacheMaxSize          = cacheSize,
-      frontCacheElemExpirationMs = cacheExpiration.toMillis,
+      frontCacheMaxSize          = frontCacheSize,
+      frontCacheElemExpirationMs = frontCacheExpiration.toMillis,
       frontCache                 = TreeMap.empty[String, Long]
     )
   }

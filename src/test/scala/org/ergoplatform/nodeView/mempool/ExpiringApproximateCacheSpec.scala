@@ -10,8 +10,8 @@ class ExpiringApproximateCacheSpec extends AnyFlatSpec with Matchers {
     val cache = ExpiringApproximateCache.empty(
       bloomFilterCapacity       = 500,
       bloomFilterExpirationRate = 0.2,
-      cacheSize                 = 0,
-      cacheExpiration           = 1.hour
+      frontCacheSize                 = 0,
+      frontCacheExpiration           = 1.hour
     )
     cache.bloomFilterQueueSize shouldBe 5
     cache.bloomFilterApproxElemCount shouldBe 100
@@ -47,8 +47,8 @@ class ExpiringApproximateCacheSpec extends AnyFlatSpec with Matchers {
     val cache = ExpiringApproximateCache.empty(
       bloomFilterCapacity       = 500,
       bloomFilterExpirationRate = 0.2,
-      cacheSize                 = 100,
-      cacheExpiration           = 500.millis
+      frontCacheSize                 = 100,
+      frontCacheExpiration           = 500.millis
     )
     // let's add 100 elems directly to front cache
     val fullCache = (1 to 100).map(_.toString).foldLeft(cache) { case (acc, n) => acc.put(n) }

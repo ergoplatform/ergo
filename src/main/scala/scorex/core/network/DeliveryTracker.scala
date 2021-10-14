@@ -225,13 +225,13 @@ object DeliveryTracker {
             settings: ErgoSettings): DeliveryTracker = {
     val bloomFilterCapacity = settings.nodeSettings.invalidModifiersBloomFilterCapacity
     val bloomFilterExpirationRate = settings.nodeSettings.invalidModifiersBloomFilterExpirationRate
-    val cacheSize = settings.nodeSettings.invalidModifiersCacheSize
-    val cacheExpiration = settings.nodeSettings.invalidModifiersCacheExpiration
+    val frontCacheSize = settings.nodeSettings.invalidModifiersCacheSize
+    val frontCacheExpiration = settings.nodeSettings.invalidModifiersCacheExpiration
     new DeliveryTracker(
       system,
       deliveryTimeout,
       maxDeliveryChecks,
-      ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, cacheSize, cacheExpiration),
+      ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, frontCacheSize, frontCacheExpiration),
       nvsRef
     )
   }

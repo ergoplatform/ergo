@@ -19,7 +19,7 @@ import scala.collection.immutable.TreeMap
   */
 case class OrderedTxPool(orderedTransactions: TreeMap[WeightedTxId, ErgoTransaction],
                          transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
-                         invalidatedTxIds: ApproxCacheLike[String],
+                         invalidatedTxIds: ApproximateCacheLike[String],
                          outputs: TreeMap[BoxId, WeightedTxId],
                          inputs: TreeMap[BoxId, WeightedTxId])
                         (implicit settings: ErgoSettings) extends ScorexLogging {
@@ -195,7 +195,7 @@ object OrderedTxPool {
     OrderedTxPool(
       TreeMap.empty[WeightedTxId, ErgoTransaction],
       TreeMap.empty[ModifierId, WeightedTxId],
-      ExpiringFifoApproxCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, cacheSize, cacheExpiration),
+      ExpiringApproximateCache.empty(bloomFilterCapacity, bloomFilterExpirationRate, cacheSize, cacheExpiration),
       TreeMap.empty[BoxId, WeightedTxId],
       TreeMap.empty[BoxId, WeightedTxId])(settings)
   }

@@ -1,19 +1,18 @@
 package org.ergoplatform.nodeView.mempool
 
 import com.google.common.hash.{BloomFilter, Funnels}
-
 import java.nio.charset.Charset
 import scala.collection.immutable.TreeMap
 import scala.concurrent.duration.FiniteDuration
 
-sealed trait ApproxCacheLike[T] {
-  def put(elem: T): ExpiringFifoApproxCache
+sealed trait ApproximateCacheLike[T] {
+  def put(elem: T): ExpiringApproximateCache
   def mightContain(elem: T): Boolean
   def approximateElementCount: Long
 }
 
 /**
-  * Size-limited FIFO collection of BloomFilters with a hash based time expiring cache in front,
+  * Time-based expiring TreeMap in front of size-limited FIFO collection of BloomFilters,
   * so that lower number of elements is tested for presence accurately and huge number of elements only approximately.
   * Bloom filters do not have means of element expiration, so a collection of BloomFilters that gradually expire is a viable alternative.
   * Ie. we expire whole bloom filters instead of expiring elements and we check all bloom filters for element presence
@@ -25,14 +24,14 @@ sealed trait ApproxCacheLike[T] {
   * @param frontCacheElemExpirationMs for how long to keep elems in cache
   * @param frontCache time expiring cache in front of boom filters
   */
-case class ExpiringFifoApproxCache(
+case class ExpiringApproximateCache(
   bloomFilterQueueSize: Int,
   bloomFilterApproxElemCount: Int,
   bloomFilterQueue: Vector[(Long, BloomFilter[String])],
   frontCacheMaxSize: Int,
   frontCacheElemExpirationMs: Long,
   frontCache: TreeMap[String, Long]
-) extends ApproxCacheLike[String] {
+) extends ApproximateCacheLike[String] {
 
   private def createNewFilter =
     BloomFilter.create[String](
@@ -46,7 +45,7 @@ case class ExpiringFifoApproxCache(
     * Ensures that subsequent invocations of mightContain with the same element will always return True
     * @return new copy of this instance
     */
-  override def put(elem: String): ExpiringFifoApproxCache = {
+  override def put(elem: String): ExpiringApproximateCache = {
     val now = System.currentTimeMillis()
     val updatedCache = frontCache.dropWhile {
       case (_, timestamp) =>
@@ -90,12 +89,12 @@ case class ExpiringFifoApproxCache(
     * Bloom filter. This approximation is reasonably accurate if Bloom Filter has not overflown
     */
   override def approximateElementCount: Long =
-    bloomFilterQueue.foldLeft(0L) {
+    frontCache.size + bloomFilterQueue.foldLeft(0L) {
       case (acc, bf) => acc + bf._2.approximateElementCount()
-    } + frontCache.size
+    }
 }
 
-object ExpiringFifoApproxCache {
+object ExpiringApproximateCache {
 
   /**
     * @param bloomFilterCapacity Maximum number of elements to store in bloom filters
@@ -109,12 +108,12 @@ object ExpiringFifoApproxCache {
     bloomFilterExpirationRate: Double,
     cacheSize: Int,
     cacheExpiration: FiniteDuration
-  ): ExpiringFifoApproxCache = {
+  ): ExpiringApproximateCache = {
     require(
       bloomFilterExpirationRate > 0 && bloomFilterExpirationRate < 1,
       "expirationRate must be (0 - 1) exclusive"
     )
-    ExpiringFifoApproxCache(
+    ExpiringApproximateCache(
       bloomFilterQueueSize = Math.round(1 / bloomFilterExpirationRate).toInt,
       bloomFilterApproxElemCount =
         Math.round(bloomFilterCapacity * bloomFilterExpirationRate).toInt,

@@ -4,10 +4,10 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
 
-class ExpiringFifoApproxCacheSpec extends AnyFlatSpec with Matchers {
+class ExpiringApproximateCacheSpec extends AnyFlatSpec with Matchers {
 
   it should "behave as fixed sized FIFO collection of bloom filters" in {
-    val cache = ExpiringFifoApproxCache.empty(
+    val cache = ExpiringApproximateCache.empty(
       bloomFilterCapacity       = 500,
       bloomFilterExpirationRate = 0.2,
       cacheSize                 = 0,
@@ -44,7 +44,7 @@ class ExpiringFifoApproxCacheSpec extends AnyFlatSpec with Matchers {
   }
 
   it should "have a fixed size expiring cache before bloom filters" in {
-    val cache = ExpiringFifoApproxCache.empty(
+    val cache = ExpiringApproximateCache.empty(
       bloomFilterCapacity       = 500,
       bloomFilterExpirationRate = 0.2,
       cacheSize                 = 100,

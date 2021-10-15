@@ -224,7 +224,12 @@ class NetworkController(settings: NetworkSettings,
         log.debug(s"Looking for a new random connection")
         val randomPeerF = peerManagerRef ? RandomPeerExcluding(connections.values.flatMap(_.peerInfo).toSeq)
         randomPeerF.mapTo[Option[PeerInfo]].foreach { peerInfoOpt =>
-          peerInfoOpt.foreach(peerInfo => self ! ConnectTo(peerInfo))
+          peerInfoOpt.foreach { peerInfo =>
+            getPeerAddress(peerInfo).foreach { remote =>
+              if (connectionForPeerAddress(remote).isEmpty && !unconfirmedConnections.contains(remote))
+                self ! ConnectTo(peerInfo)
+            }
+          }
         }
       }
     }

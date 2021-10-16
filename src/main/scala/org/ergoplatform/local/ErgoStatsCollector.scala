@@ -7,7 +7,7 @@ import org.ergoplatform.Version
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
@@ -39,7 +39,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ChangedHistory[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
+    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
     context.system.scheduler.scheduleAtFixedRate(10.seconds, 20.seconds, networkController, GetConnectedPeers)(ec, self)
     context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(ec, self)
   }
@@ -49,6 +49,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   private var nodeInfo = NodeInfo(
     settings.scorexSettings.network.nodeName,
     Version.VersionString,
+    settings.networkType.verboseName,
     0,
     0,
     None,
@@ -142,6 +143,7 @@ object ErgoStatsCollector {
 
   case class NodeInfo(nodeName: String,
                       appVersion: String,
+                      network: String,
                       unconfirmedCount: Int,
                       peersCount: Int,
                       stateRoot: Option[String],
@@ -164,6 +166,7 @@ object ErgoStatsCollector {
       Map(
         "name" -> ni.nodeName.asJson,
         "appVersion" -> Version.VersionString.asJson,
+        "network" -> ni.network.asJson,
         "headersHeight" -> ni.bestHeaderOpt.map(_.height).asJson,
         "fullHeight" -> ni.bestFullBlockOpt.map(_.header.height).asJson,
         "bestHeaderId" -> ni.bestHeaderOpt.map(_.encodedId).asJson,

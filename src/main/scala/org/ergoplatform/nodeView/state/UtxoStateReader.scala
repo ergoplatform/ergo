@@ -16,7 +16,7 @@ import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
-trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTransaction] {
+trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
 
   protected implicit val hf: HF = Algos.hash
 
@@ -95,6 +95,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTra
     }
   }
 
+  // used in tests only
   def randomBox(): Option[ErgoBox] = persistentProver.synchronized {
     persistentProver.avlProver.randomWalk().map(_._1).flatMap(boxById)
   }

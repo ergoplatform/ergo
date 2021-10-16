@@ -1,13 +1,11 @@
 package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props, Stash}
+import akka.pattern.StatusReply
 import org.ergoplatform.mining.CandidateGenerator.GenerateCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
-import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.DigestState
-import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{FirstSecretResponse, GetFirstSecret, GetMiningPubKey, MiningPubKeyResponse}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
@@ -40,13 +38,13 @@ class ErgoMiner(
       log.error("Mining is disabled")
     } else if (secretKeyOpt.isEmpty && !ergoSettings.nodeSettings.useExternalMiner) {
       log.info(
-        "Trying to use secret key from wallet for mining, wallet must be unlocked."
+        "Trying to use secret key from wallet for CPU mining, wallet must be unlocked."
       )
       self ! QueryWalletSecret
     } else { // mining pubKey is needed in both mining modes
       ergoSettings.miningPubKey match {
         case Some(pk) =>
-          log.info(s"Using public key from settings")
+          log.info(s"Using mining public key from settings")
           onStart(secretKeyOpt, pk)
         case None =>
           log.info("Trying to use public key from wallet for mining")
@@ -60,7 +58,7 @@ class ErgoMiner(
     secretKeyOpt: Option[DLogProverInput],
     publicKey: ProveDlog
   ): Unit = {
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
+    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
     val candidateGeneratorRef = CandidateGenerator(
       publicKey,
       readersHolderRef,
@@ -76,13 +74,7 @@ class ErgoMiner(
 
     /** at first keep trying to obtain secret and public key as we cannot mine without it */
     case walletQuery: WalletQuery =>
-      viewHolderRef ! GetDataFromCurrentView[
-        ErgoHistory,
-        DigestState,
-        ErgoWallet,
-        ErgoMemPool,
-        Unit
-      ] { v =>
+      viewHolderRef ! GetDataFromCurrentView[DigestState, Unit] { v =>
         walletQuery match {
           case QueryWalletSecret =>
             v.vault.walletActor ! GetFirstSecret
@@ -114,6 +106,9 @@ class ErgoMiner(
         QueryWalletSecret
       )(context.system.dispatcher)
 
+    case ReadMinerPk =>
+      sender() ! StatusReply.error("Miner PK not initialized")
+
     case _: scala.runtime.BoxedUnit =>
     // ignore, this message is caused by way of interaction with NodeViewHolder.
     case _ => // stashing all messages until miner is initialized, like StartMining message from ErgoApp
@@ -141,12 +136,15 @@ class ErgoMiner(
         }
       }
       context.system.eventStream
-        .unsubscribe(self, classOf[SemanticallySuccessfulModifier[_]])
+        .unsubscribe(self, classOf[SemanticallySuccessfulModifier])
       context.become(started(minerState))
 
     case StartMining =>
       // unexpected, we made sure that either external mining is used or secret key is set at this state for internal mining
       log.error(s"Unexpected state of missing secret key for internal mining")
+
+    case ReadMinerPk => // used in /mining/rewardAddress API method
+      sender() ! StatusReply.success(minerState.publicKey)
 
     /**
       * Non obvious but case when mining is enabled, but miner isn't started yet. Initialization case.
@@ -163,6 +161,9 @@ class ErgoMiner(
       * Just ignore all other modifiers.
       */
     case SemanticallySuccessfulModifier(_) =>
+
+    case GenerateCandidate(_, _) =>
+      sender() ! StatusReply.error("Miner has not started yet")
   }
 
   /** Bridge between external miner and CandidateGenerator (Internal mining threads are talking to CandidateGenerator directly.)
@@ -176,7 +177,7 @@ class ErgoMiner(
       minerState.candidateGeneratorRef forward solution
 
     case ReadMinerPk => // used in /mining/rewardAddress API method
-      sender() ! minerState.publicKey // PK is always set when we get to 'started` state
+      sender() ! StatusReply.success(minerState.publicKey)
 
     case m =>
       log.warn(s"Unexpected message $m of class: ${m.getClass}")

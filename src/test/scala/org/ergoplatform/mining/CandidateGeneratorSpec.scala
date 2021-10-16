@@ -1,13 +1,13 @@
 package org.ergoplatform.mining
 
 import akka.actor.{ActorRef, ActorSystem}
-import akka.pattern.{ask, StatusReply}
+import akka.pattern.{StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
@@ -29,9 +29,11 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
 
   implicit private val timeout: Timeout = defaultTimeout
 
-  private val newBlockSignal: Class[SemanticallySuccessfulModifier[_]] =
-    classOf[SemanticallySuccessfulModifier[_]]
+
   private val newBlockDelay: FiniteDuration        = 3.seconds
+  private val newBlockSignal: Class[SemanticallySuccessfulModifier] =
+    classOf[SemanticallySuccessfulModifier]
+ 
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
 

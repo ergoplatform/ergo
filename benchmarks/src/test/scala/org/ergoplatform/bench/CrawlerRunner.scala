@@ -6,13 +6,11 @@ import akka.actor.ActorRef
 import org.ergoplatform.bench.misc.{CrawlerConfig, TempDir}
 import org.ergoplatform.http.api.{BlocksApiRoute, ErgoUtilsApiRoute, InfoApiRoute, TransactionsApiRoute}
 import org.ergoplatform.local.ErgoStatsCollectorRef
-import org.ergoplatform.mining.ErgoMinerRef
+import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import scorex.core.api.http.{ApiRoute, PeersApiRoute}
 import scorex.core.app.Application
@@ -24,10 +22,6 @@ import scala.concurrent.ExecutionContextExecutor
 import scala.io.Source
 
 class CrawlerRunner(args: Array[String]) extends Application {
-
-  override type TX = ErgoTransaction
-  override type PMOD = ErgoPersistentModifier
-  override type NVHT = ErgoNodeViewHolder[_]
 
   lazy val fileToSave: String = args.headOption.getOrElse("/")
   lazy val threshold: Int = args.lift(1).getOrElse("15000").toInt
@@ -53,7 +47,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
-  val minerRef: ActorRef = ErgoMinerRef(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
+  val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, timeProvider)
 
   val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(nodeViewHolderRef, networkControllerRef, ergoSettings, timeProvider)
 

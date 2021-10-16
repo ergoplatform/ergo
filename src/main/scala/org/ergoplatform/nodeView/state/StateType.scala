@@ -1,9 +1,7 @@
 package org.ergoplatform.nodeView.state
 
-import io.circe.Encoder
 import org.ergoplatform.nodeView.state.StateType.StateTypeCode
 
-import scala.reflect.ClassTag
 
 sealed trait StateType {
   def stateTypeCode: StateTypeCode
@@ -48,14 +46,5 @@ object StateType {
   implicit final object UtxoEvidence extends Evidence[UtxoType, UtxoState]
 
   implicit final object DigestEvidence extends Evidence[DigestType, DigestState]
-
-  def forState[T <: ErgoState[T]](implicit tag: ClassTag[T]): StateType = {
-    if (classOf[DigestState].isAssignableFrom(tag.runtimeClass)) Digest else Utxo
-  }
-
-  /** This is for json representation of [[StateType]] instances
-    */
-  implicit val jsonEncoder: Encoder[StateType] =
-    Encoder.encodeString.contramap[StateType](_.stateTypeName)
 
 }

@@ -7,7 +7,6 @@ import org.ergoplatform.P2PKAddress
 import org.ergoplatform.mining.CandidateGenerator.Candidate
 import org.ergoplatform.mining.{AutolykosSolution, CandidateBlock, CandidateGenerator, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -28,6 +27,11 @@ import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
+import org.ergoplatform.P2PKAddress
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
+import org.ergoplatform.nodeView.wallet.scanning.Scan
+import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.scalacheck.Gen
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
@@ -105,7 +109,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
           sender() ! StatusReply.success(candidate)
         }
       case _: AutolykosSolution => sender() ! StatusReply.success(())
-      case ErgoMiner.ReadMinerPk => sender() ! pk
+      case ErgoMiner.ReadMinerPk => sender() ! StatusReply.success(pk)
     }
   }
 
@@ -167,7 +171,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
 
       case RescanWallet => sender ! Success(())
 
-      case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistory.GenesisHeight)
+      case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistory.GenesisHeight, error = None)
 
       case _: CheckSeed => sender() ! true
 
@@ -179,7 +183,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! boxes.sortBy(_.trackedBox.inclusionHeightOpt)
 
-      case GetTransactions(_) =>
+      case GetTransactions =>
         sender() ! walletTxs
 
       case DeriveKey(_) => sender() ! Success(WalletActorStub.address)

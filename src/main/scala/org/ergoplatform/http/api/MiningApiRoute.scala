@@ -65,7 +65,7 @@ case class MiningApiRoute(miner: ActorRef,
 
   def rewardAddressR: Route = (path("rewardAddress") & get) {
     val addressF: Future[ErgoAddress] =
-      (miner ? ErgoMiner.ReadMinerPk)
+      miner.askWithStatus(ErgoMiner.ReadMinerPk)
         .mapTo[ProveDlog]
         .map { pk =>
           val script = ErgoScriptPredef.rewardOutputScript(ergoSettings.chainSettings.monetary.minerRewardDelay, pk)
@@ -76,7 +76,7 @@ case class MiningApiRoute(miner: ActorRef,
   }
 
   def rewardPublicKeyR: Route = (path("rewardPublicKey") & get) {
-    val pkF = (miner ? ErgoMiner.ReadMinerPk).mapTo[ProveDlog]
+    val pkF = miner.askWithStatus(ErgoMiner.ReadMinerPk).mapTo[ProveDlog]
     ApiResponse(pkF.map(pk => Json.obj("rewardPubkey" -> pk.asJson)))
   }
 

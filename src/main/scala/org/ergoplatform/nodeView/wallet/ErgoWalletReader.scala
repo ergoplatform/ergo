@@ -78,11 +78,11 @@ trait ErgoWalletReader extends VaultReader {
                considerUnconfirmed: Boolean = false): Future[Seq[WalletBox]] =
     (walletActor ? GetScanBoxes(scanId, unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]
 
-  def updateChangeAddress(address: P2PKAddress): Unit =
-    walletActor ! UpdateChangeAddress(address)
+  def updateChangeAddress(address: P2PKAddress): Future[Unit] =
+    walletActor.askWithStatus(UpdateChangeAddress(address)).mapTo[Unit]
 
-  def transactions(filteringOpts: Option[WalletFiltering]): Future[Seq[AugWalletTransaction]] =
-    (walletActor ? GetTransactions(filteringOpts)).mapTo[Seq[AugWalletTransaction]]
+  def transactions: Future[Seq[AugWalletTransaction]] =
+    (walletActor ? GetTransactions).mapTo[Seq[AugWalletTransaction]]
 
   def transactionById(id: ModifierId): Future[Option[AugWalletTransaction]] =
     (walletActor ? GetTransaction(id)).mapTo[Option[AugWalletTransaction]]
@@ -140,5 +140,8 @@ trait ErgoWalletReader extends VaultReader {
 
   def transactionsByScanId(scanId: ScanId): Future[ScanRelatedTxsResponse] =
     (walletActor ? GetScanTransactions(scanId)).mapTo[ScanRelatedTxsResponse]
+
+  def filteredScanTransactions(scanIds: List[ScanId], minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int): Future[Seq[AugWalletTransaction]] =
+    (walletActor ? GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum)).mapTo[Seq[AugWalletTransaction]]
 
 }

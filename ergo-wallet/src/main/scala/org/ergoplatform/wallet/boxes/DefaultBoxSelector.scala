@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.boxes
 import scorex.util.ModifierId
 import org.ergoplatform.ErgoBoxAssets
 import org.ergoplatform.ErgoBoxAssetsHolder
-import org.ergoplatform.ErgoBox.MaxTokens
+import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.{AssetUtils, TokensMap}
 
 import scala.annotation.tailrec
@@ -19,9 +19,9 @@ object DefaultBoxSelector extends BoxSelector {
 
   import BoxSelector._
 
-  final case class NotEnoughErgsError(message: String) extends BoxSelectionError
+  final case class NotEnoughErgsError(message: String, balanceFound: Long) extends BoxSelectionError
 
-  final case class NotEnoughTokensError(message: String) extends BoxSelectionError
+  final case class NotEnoughTokensError(message: String, tokensFound: Map[ModifierId, Long]) extends BoxSelectionError
 
   final case class NotEnoughCoinsForChangeBoxesError(message: String) extends BoxSelectionError
 
@@ -78,10 +78,14 @@ object DefaultBoxSelector extends BoxSelector {
           BoxSelectionResult(res, changeBoxes)
         }
       } else {
-        Left(NotEnoughTokensError(s"not enough boxes to meet token needs $targetAssets (found only $currentAssets)"))
+        Left(NotEnoughTokensError(
+          s"not enough boxes to meet token needs $targetAssets (found only $currentAssets)", currentAssets.toMap)
+        )
       }
     } else {
-      Left(NotEnoughErgsError(s"not enough boxes to meet ERG needs $targetBalance (found only $currentBalance)"))
+      Left(NotEnoughErgsError(
+        s"not enough boxes to meet ERG needs $targetBalance (found only $currentBalance)", currentBalance)
+      )
     }
   }
 
@@ -92,7 +96,7 @@ object DefaultBoxSelector extends BoxSelector {
                        targetBoxAssets: TokensMap
                      ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
     AssetUtils.subtractAssetsMut(foundBoxAssets, targetBoxAssets)
-    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxTokens).toSeq
+    val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxAssetsPerBox).toSeq
     val changeBalance = foundBalance - targetBalance
     //at least a minimum amount of ERG should be assigned per a created box
     if (changeBoxesAssets.size * MinBoxValue > changeBalance) {

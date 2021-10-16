@@ -5,7 +5,7 @@ import akka.actor.{Actor, ActorInitializationException, ActorKilledException, Ac
 import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.ErgoSettings
@@ -52,14 +52,14 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       Restart
   }
 
-  private var stateReaderOpt: Option[TransactionValidation[ErgoTransaction]] = None
+  private var stateReaderOpt: Option[TransactionValidation] = None
   private var poolReaderOpt: Option[ErgoMemPoolReader] = None
 
   private val worker: ActorRef =
     context.actorOf(Props(new CleanupWorker(nodeViewHolderRef, settings.nodeSettings)))
 
   override def preStart(): Unit = {
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
+    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
   }
 
   override def receive: Receive = awaiting
@@ -74,7 +74,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       poolReaderOpt = Some(mp)
       stateReaderOpt.foreach(st => initiateCleanup(st, mp))
 
-    case ChangedState(st: TransactionValidation[ErgoTransaction@unchecked]) =>
+    case ChangedState(st: TransactionValidation) =>
       stateReaderOpt = Some(st)
       poolReaderOpt.foreach(mp => initiateCleanup(st, mp))
 
@@ -93,8 +93,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     case _ => // ignore other triggers until work is done
   }
 
-  private def initiateCleanup(validator: TransactionValidation[ErgoTransaction],
-                              mempool: ErgoMemPoolReader): Unit = {
+  private def initiateCleanup(validator: TransactionValidation, mempool: ErgoMemPoolReader): Unit = {
     log.info("Initiating cleanup. Switching to working mode")
     worker ! RunCleanup(validator, mempool)
     context become working // ignore other triggers until work is done

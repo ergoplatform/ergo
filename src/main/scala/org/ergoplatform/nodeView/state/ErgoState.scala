@@ -7,7 +7,7 @@ import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.history.Header
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.{Insertion, Lookup, Removal, StateChanges}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -38,8 +38,7 @@ import scala.util.Try
   * transformations of UTXO set presented in form of authenticated dynamic dictionary are needed to check validity of
   * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
-trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
-  extends MinimalState[ErgoPersistentModifier, IState] with ErgoStateReader {
+trait ErgoState[IState <: MinimalState[IState]] extends MinimalState[IState] with ErgoStateReader {
 
   self: IState =>
 
@@ -147,14 +146,20 @@ object ErgoState extends ScorexLogging {
     (toRemove.sortBy(_._1).map(_._2), toInsert.toSeq.sortBy(_._1).map(_._2))
   }
 
-  private def createBox(value: Long,
+  /**
+    * Helper method used to construct boxes for pre-genesis state (state before a genesis block)
+    */
+  private def createGenesisBox(value: Long,
                         ergoTree: ErgoTree,
-                        creationHeight: Int,
-                        additionalTokens: Seq[(TokenId, Long)] = Nil,
-                        additionalRegisters: AdditionalRegisters = Map.empty,
-                        transactionId: ModifierId = ErgoBox.allZerosModifierId,
-                        boxIndex: Short = 0): ErgoBox = {
+                        additionalTokens: Seq[(TokenId, Long)] = Seq.empty,
+                        additionalRegisters: AdditionalRegisters = Map.empty): ErgoBox = {
     import sigmastate.eval._
+
+    val creationHeight: Int = ErgoHistory.EmptyHistoryHeight
+
+    val transactionId: ModifierId = ErgoBox.allZerosModifierId
+    val boxIndex: Short = 0: Short
+
     new ErgoBox(value, ergoTree,
       CostingSigmaDslBuilder.Colls.fromArray(additionalTokens.toArray[(TokenId, Long)]),
       additionalRegisters,
@@ -175,7 +180,7 @@ object ErgoState extends ScorexLogging {
     val protectionBytes = ValueSerializer.serialize(protection)
     val value = emission.foundersCoinsTotal - EmissionRules.CoinsInOneErgo
     val prop = ErgoScriptPredef.foundationScript(settings.monetary)
-    createBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map(R4 -> ByteArrayConstant(protectionBytes)))
+    createGenesisBox(value, prop, Seq.empty, Map(R4 -> ByteArrayConstant(protectionBytes)))
   }
 
   /**
@@ -185,7 +190,7 @@ object ErgoState extends ScorexLogging {
   private def genesisEmissionBox(chainSettings: ChainSettings): ErgoBox = {
     val value = chainSettings.emissionRules.minersCoinsTotal
     val prop = chainSettings.monetary.emissionBoxProposition
-    createBox(value, prop, ErgoHistory.EmptyHistoryHeight, Seq(), Map())
+    createGenesisBox(value, prop)
   }
 
   /**
@@ -195,7 +200,7 @@ object ErgoState extends ScorexLogging {
   private def noPremineBox(chainSettings: ChainSettings): ErgoBox = {
     val proofsBytes = chainSettings.noPremineProof.map(b => ByteArrayConstant(b.getBytes("UTF-8")))
     val proofs = ErgoBox.nonMandatoryRegisters.zip(proofsBytes).toMap
-    createBox(EmissionRules.CoinsInOneErgo, Constants.FalseLeaf, ErgoHistory.EmptyHistoryHeight, Seq(), proofs)
+    createGenesisBox(EmissionRules.CoinsInOneErgo, Constants.FalseLeaf, Seq.empty, proofs)
   }
 
   /**

@@ -248,7 +248,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         // this triggers mempool change that triggers candidate regeneration
-        viewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx))
+        viewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(tx))
         expectNoMessage(candidateGenDelay)
         candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
         testProbe.expectMsgPF(candidateGenDelay) {

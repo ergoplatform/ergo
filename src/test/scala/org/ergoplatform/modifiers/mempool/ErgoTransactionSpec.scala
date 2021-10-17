@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoBox._
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext, VotingData}
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
-import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txBoxSize}
+import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txAssetsInOneBox, txBoxSize}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -256,7 +256,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   property("spam simulation (transaction validation cost with too many tokens exceeds block limit)") {
     val bxsQty = 400
     val (inputs, tx) = validErgoTransactionGenTemplate(1, 1, 8, 16).sample.get // it takes too long to test with `forAll`
-    val tokens = (0 until 255).map(_ => (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextInt(100000000).toLong))
+    val tokens = (0 until 255).map(_ => (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextLong))
     val (in, out) = {
       val in0 = inputs.head
       val out0 = tx.outputs.head
@@ -276,8 +276,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
     val validFailure = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext)
-    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(txBoxSize, "").take(30))
-
+    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(txAssetsInOneBox, "").take(30))
   }
 
   property("transaction with too many inputs should be rejected") {

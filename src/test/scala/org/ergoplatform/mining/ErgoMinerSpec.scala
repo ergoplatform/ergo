@@ -38,7 +38,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
   implicit private val timeout: Timeout = defaultTimeout
 
-  private val newBlockSignal: Class[SemanticallySuccessfulModifier[_]] = classOf[SemanticallySuccessfulModifier[_]]
+  private val newBlockSignal: Class[SemanticallySuccessfulModifier] = classOf[SemanticallySuccessfulModifier]
   private val newBlockDelay: FiniteDuration = 30 seconds
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
@@ -94,7 +94,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val outputs = (0 until 10).map(_ => output)
     val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
     val tx = defaultProver.sign(unsignedTx, IndexedSeq(boxToSpend), IndexedSeq(), r.s.stateContext).get
-    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx))
+    nodeViewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(tx))
     expectNoMessage(1 seconds)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
@@ -112,7 +112,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
     val complexTx = defaultProver.sign(unsignedComplexTx, tx.outputs, IndexedSeq(), r.s.stateContext).get
     tx.outputs.map(_.ergoTree.complexity).sum should be > ergoSettings.nodeSettings.maxTransactionComplexity
     // send complex transaction to the mempool
-    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(complexTx))
+    nodeViewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(complexTx))
 
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
@@ -247,7 +247,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
 
     // As double-spending transactions are filtered out in the mempool, the only way to push them is to order to
     // include double-spending transaction directly via mandatoryTransactions argument of PrepareCandidate command
-    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](ErgoTransaction(tx1))
+    nodeViewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(tx1))
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     testProbe.expectNoMessage(200.millis)

@@ -155,7 +155,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
                               inputsRaw: Seq[String],
                               dataInputsRaw: Seq[String]): Route = {
     generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, { tx =>
-      nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+      nodeViewActorRef ! LocallyGeneratedTransaction(tx)
       ApiResponse(tx.id)
     })
   }

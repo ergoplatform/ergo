@@ -32,25 +32,44 @@ val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val scorexVersion = "main-c216a482-SNAPSHOT"
 val sigmaStateVersion = "4.0.3"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
 val effectiveSigmaStateVersion = Option(System.getenv().get("SIGMASTATE_VERSION")).getOrElse(sigmaStateVersion)
 val effectiveSigma = "org.scorexfoundation" %% "sigma-state" % effectiveSigmaStateVersion
 
+val apiDependencies = Seq(
+  "io.circe" %% "circe-core" % circeVersion,
+  "io.circe" %% "circe-generic" % circeVersion,
+  "io.circe" %% "circe-parser" % circeVersion,
+  "de.heikoseeberger" %% "akka-http-circe" % "1.20.0"
+)
+
 libraryDependencies ++= Seq(
   effectiveSigma.force()
     .exclude("ch.qos.logback", "logback-classic")
     .exclude("org.scorexfoundation", "scrypto"),
 
+  // network dependencies 
+  "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+  "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
+  "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
+  "com.typesafe.akka" %% "akka-parsing" % akkaHttpVersion,
+  "com.typesafe.akka" %% "akka-stream" % akkaVersion,
+  "org.bitlet" % "weupnp" % "0.1.4",
+  "commons-net" % "commons-net" % "3.6",
+  
+  // api dependencies 
+  "io.circe" %% "circe-core" % circeVersion,
+  "io.circe" %% "circe-generic" % circeVersion,
+  "io.circe" %% "circe-parser" % circeVersion,
+  "de.heikoseeberger" %% "akka-http-circe" % "1.20.0",
+  
   "org.ethereum" % "leveldbjni-all" % "1.18.3",
   //the following pure-java leveldb implementation is needed only on specific platforms, such as 32-bit Raspberry Pi
   //in future, it could be reasonable to have special builds with this Java db only, and for most of platforms use
   //jni wrapper over native library included in leveldbjni-all
   "org.iq80.leveldb" % "leveldb" % "0.12",
-  
-  ("org.scorexfoundation" %% "scorex-core" % scorexVersion).exclude("ch.qos.logback", "logback-classic"),
   
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "com.iheart" %% "ficus" % "1.4.7",
@@ -64,7 +83,6 @@ libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "3.1.1" % "test,it",
   "org.scalacheck" %% "scalacheck" % "1.14.+" % "test",
   "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test,
-  "org.scorexfoundation" %% "scorex-testkit" % scorexVersion % "test",
 
   "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
   "io.circe" %% "circe-core" % circeVersion,

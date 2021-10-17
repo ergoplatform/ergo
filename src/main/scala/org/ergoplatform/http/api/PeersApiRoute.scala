@@ -1,20 +1,19 @@
-package scorex.core.api.http
-
-import java.net.{InetAddress, InetSocketAddress}
+package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import io.circe.generic.semiauto._
-import io.circe.syntax._
+import io.circe.syntax.EncoderOps
 import io.circe.{Encoder, Json}
-import scorex.core.api.http.PeersApiRoute.{BlacklistedPeers, PeerInfoResponse, PeersStatusResponse}
+import org.ergoplatform.http.api.PeersApiRoute.{BlacklistedPeers, PeerInfoResponse, PeersStatusResponse}
+import scorex.core.api.http.{ApiError, ApiResponse, ApiRoute}
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{ConnectTo, GetConnectedPeers, GetPeersStatus}
-import scorex.core.network.peer.{PeerInfo, PeersStatus}
 import scorex.core.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
+import scorex.core.network.peer.{PeerInfo, PeersStatus}
 import scorex.core.settings.RESTApiSettings
 import scorex.core.utils.NetworkTimeProvider
-
+import java.net.{InetAddress, InetSocketAddress}
 import scala.concurrent.ExecutionContext
 
 case class PeersApiRoute(peerManager: ActorRef,
@@ -68,6 +67,9 @@ case class PeersApiRoute(peerManager: ActorRef,
 
   private val addressAndPortRegexp = "([\\w\\.]+):(\\d{1,5})".r
 
+  /**
+    * Try to connect this peer unless it is already connected
+    */
   def connect: Route = (path("connect") & post & withAuth & entity(as[Json])) { json =>
     val maybeAddress = json.asString.flatMap(addressAndPortRegexp.findFirstMatchIn)
     maybeAddress match {

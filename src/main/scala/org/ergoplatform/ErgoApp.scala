@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
-import scorex.core.app.{Application, ScorexContext}
+import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
 import scorex.core.network._
 import scorex.core.network.message._
@@ -155,7 +155,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private def swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
   private def run(): Unit = {
-    require(settings.network.agentName.length <= Application.ApplicationNameLimit)
+    require(settings.network.agentName.length <= ErgoApp.ApplicationNameLimit)
 
     log.debug(s"Available processors: ${Runtime.getRuntime.availableProcessors}")
     log.debug(s"Max memory available: ${Runtime.getRuntime.maxMemory}")
@@ -169,7 +169,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 }
 
 object ErgoApp extends ScorexLogging {
-
+  val ApplicationNameLimit: Int = 50
   val argParser = new scopt.OptionParser[Args]("ergo") {
       opt[String]("config")
         .abbr("c")

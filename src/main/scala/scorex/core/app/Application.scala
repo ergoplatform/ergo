@@ -1,7 +1,5 @@
 package scorex.core.app
 
-import java.net.InetSocketAddress
-
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler, Route}
@@ -10,11 +8,10 @@ import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PeerManagerRef
 import scorex.core.settings.ScorexSettings
-import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.{NodeViewHolder, PersistentNodeViewModifier}
 import scorex.util.ScorexLogging
 
+import java.net.InetSocketAddress
 import scala.concurrent.ExecutionContext
 
 trait Application extends ScorexLogging {
@@ -91,7 +88,8 @@ trait Application extends ScorexLogging {
   lazy val combinedRoute: Route = CompositeHttpService(actorSystem, apiRoutes, settings.restApi, swaggerConfig).compositeRoute
 
   def run(): Unit = {
-    require(settings.network.agentName.length <= Application.ApplicationNameLimit)
+    val applicationNameLimit: Int = 50
+    require(settings.network.agentName.length <= applicationNameLimit)
 
     log.debug(s"Available processors: ${Runtime.getRuntime.availableProcessors}")
     log.debug(s"Max memory available: ${Runtime.getRuntime.maxMemory}")
@@ -121,9 +119,4 @@ trait Application extends ScorexLogging {
       System.exit(0)
     }
   }
-}
-
-object Application {
-
-  val ApplicationNameLimit: Int = 50
 }

@@ -24,7 +24,6 @@ import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
-import scorex.core.block.Block
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.ValidationSettings
@@ -310,7 +309,7 @@ object CandidateGenerator extends ScorexLogging {
 
   /** Calculate average mining time from latest block header timestamps */
   def getBlockMiningTimeAvg(
-    timestamps: IndexedSeq[Block.Timestamp]
+    timestamps: IndexedSeq[Header.Timestamp]
   ): FiniteDuration = {
     val miningTimes =
       timestamps.sorted

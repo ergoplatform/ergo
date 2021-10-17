@@ -1,8 +1,6 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.modifiers.history.header.Header
-import scorex.core.block.Block
-import scorex.core.block.Block.Timestamp
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import sigmastate.interpreter.CryptoConstants.EcPointType
@@ -18,12 +16,12 @@ class DefaultFakePowScheme(k: Int, n: Int) extends AutolykosPowScheme(k, n) {
   override def validate(header: Header): Try[Unit] = Success(Unit)
 
   override def prove(parentOpt: Option[Header],
-                     version: Block.Version,
+                     version: Header.Version,
                      nBits: Long,
                      stateRoot: ADDigest,
                      adProofsRoot: Digest32,
                      transactionsRoot: Digest32,
-                     timestamp: Timestamp,
+                     timestamp: Header.Timestamp,
                      extensionHash: Digest32,
                      votes: Array[Byte],
                      sk: PrivateKey,

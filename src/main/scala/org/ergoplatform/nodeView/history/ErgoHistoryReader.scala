@@ -199,7 +199,7 @@ trait ErgoHistoryReader
   /**
     *
     * Calculating continuation from common header which will be sent to another node
-    * if comparison status is YOUNGER of FORK, for sync message V1.
+    * if comparison status is YOUNGER or FORK, for sync message V1.
     */
   def continuationIdsV1(syncInfo: ErgoSyncInfoV1, size: Int): ModifierIds =
     if (isEmpty) {

@@ -108,12 +108,7 @@ trait Generators {
     registers <- additionalRegistersGen(cnt)
   } yield registers
 
-  def validValueGen(proposition: ErgoTree,
-                    additionalTokens: Seq[(TokenId, Long)] = Seq(),
-                    additionalRegisters: Map[NonMandatoryRegisterId, _ <: EvaluatedValue[_ <: SType]] = Map(),
-                    transactionId: ModifierId = bytesToId(Array.fill[Byte](32)(0.toByte)),
-                    boxId: Short = 0,
-                    creationHeight: Long = 0): Gen[Long] = {
+  def validValueGen: Gen[Long] = {
     //there are outputs in tests of 183 bytes, and maybe in some tests at least 2 outputs are required
     //thus we put in an input a monetary value which is at least enough for storing 400 bytes of outputs
     val minValue = MinValuePerByteIncreaseTest * 400
@@ -130,7 +125,7 @@ trait Generators {
     boxId: Short <- boxIndexGen
     ar <- additionalRegistersGen
     tokens <- tokensGen
-    value <- valueGenOpt.getOrElse(validValueGen(prop, tokens, ar, bytesToId(transactionId), boxId))
+    value <- valueGenOpt.getOrElse(validValueGen)
   } yield {
     val box = testBox(value, prop, h, tokens, ar, transactionId.toModifierId, boxId)
     if (box.bytes.length < ErgoBox.MaxBoxSize) {

@@ -226,10 +226,10 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
         val fork1 = genHeaderChain(forkLength, history, diffBitsOpt = None, useRealTs = false).tail
         val common = fork1.headers(forkDepth)
-        val commonInterlinks = history.typedModifierById[Extension](common.extensionId)
+        history.typedModifierById[Extension](common.extensionId)
           .map(ext => NipopowAlgos.unpackInterlinks(ext.fields).get)
           .getOrElse(Seq.empty)
-        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common), commonInterlinks,
+        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common),
           defaultDifficultyControl, extensionHash, diffBitsOpt = None, useRealTs = false)
         val fork1SuffixIds = fork1.headers.drop(forkDepth + 1).map(_.encodedId)
         val fork2SuffixIds = fork2.headers.drop(forkDepth + 1).map(_.encodedId)

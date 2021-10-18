@@ -2,12 +2,12 @@ package org.ergoplatform.utils.generators
 
 import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
-import org.ergoplatform.modifiers.history.extension.Extension
-import org.ergoplatform.modifiers.history.popow.{NipopowProof, PoPowHeader, PoPowParams}
+import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
 import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.popow.{NipopowProof, PoPowParams}
 import org.ergoplatform.network.ModeFeature
 import org.ergoplatform.nodeView.history.ErgoSyncInfo
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -26,8 +26,7 @@ import sigmastate.Values.ErgoTree
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 import sigmastate.basics.{DiffieHellmanTupleProverInput, ProveDHTuple}
 import sigmastate.interpreter.CryptoConstants.EcPointType
-import sigmastate.interpreter.CryptoConstants
-import sigmastate.interpreter.ProverResult
+import sigmastate.interpreter.{CryptoConstants, ProverResult}
 
 import scala.util.Random
 
@@ -50,8 +49,8 @@ trait ErgoGenerators extends CoreGenerators with ChainGenerator with Generators 
     secret <- genBytes(32).map(seed => BigIntegers.fromUnsignedByteArray(seed))
     g <- genECPoint
     h <- genECPoint
-    u: EcPointType = CryptoConstants.dlogGroup.exponentiate(g, secret)
-    v: EcPointType = CryptoConstants.dlogGroup.exponentiate(h, secret)
+    u = CryptoConstants.dlogGroup.exponentiate(g, secret)
+    v = CryptoConstants.dlogGroup.exponentiate(h, secret)
     dhtpi = DiffieHellmanTupleProverInput(secret, ProveDHTuple(g, h, u, v))
   } yield (dhtpi, dhtpi.publicImage)
 

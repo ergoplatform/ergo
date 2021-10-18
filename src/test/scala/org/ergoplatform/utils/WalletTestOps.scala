@@ -17,7 +17,7 @@ import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.ErgoTree
-import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
+import sigmastate.basics.DLogProtocol.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.eval._
 import sigmastate.interpreter.ProverResult
@@ -109,7 +109,10 @@ trait WalletTestOps extends NodeViewBaseOps {
   }
 
   private def replaceNewAssetStub(assets: Seq[(TokenId, Long)], inputs: Seq[Input]): Seq[(TokenId, Long)] = {
-    def isNewAsset(tokenId: TokenId, value: Long): Boolean = java.util.Arrays.equals(tokenId, newAssetIdStub)
+    def isNewAsset(tokenId: TokenId, value: Long): Boolean = {
+      assert(value > 0)
+      java.util.Arrays.equals(tokenId, newAssetIdStub)
+    }
 
     val (newAsset, spentAssets) = assets.partition((isNewAsset _).tupled)
     newAsset.map(Digest32 @@ inputs.head.boxId -> _._2) ++ spentAssets

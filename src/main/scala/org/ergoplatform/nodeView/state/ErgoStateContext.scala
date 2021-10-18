@@ -231,7 +231,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }
   }
 
-  def appendHeader(header: Header, votingSettings: VotingSettings): Try[ErgoStateContext] = {
+  def appendHeader(header: Header): Try[ErgoStateContext] = {
     validateVotes(header)
       .result
       .toTry

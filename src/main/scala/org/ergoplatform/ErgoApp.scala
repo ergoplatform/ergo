@@ -3,7 +3,7 @@ package org.ergoplatform
 import akka.Done
 import akka.actor.{ActorRef, ActorSystem, CoordinatedShutdown}
 import akka.http.scaladsl.Http
-import akka.stream.SystemMaterializer
+import akka.http.scaladsl.Http.ServerBinding
 import org.ergoplatform.http._
 import org.ergoplatform.http.api._
 import org.ergoplatform.local._
@@ -154,14 +154,13 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private def swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
-  private def run(): Unit = {
+  private def run(): Future[ServerBinding] = {
     require(settings.network.agentName.length <= ErgoApp.ApplicationNameLimit)
 
     log.debug(s"Available processors: ${Runtime.getRuntime.availableProcessors}")
     log.debug(s"Max memory available: ${Runtime.getRuntime.maxMemory}")
     log.debug(s"RPC is allowed at ${settings.restApi.bindAddress.toString}")
 
-    implicit val mat: SystemMaterializer = SystemMaterializer.get(actorSystem)
     val bindAddress = settings.restApi.bindAddress
 
     Http().newServerAt(bindAddress.getAddress.getHostAddress, bindAddress.getPort).bindFlow(httpService.compositeRoute)
@@ -208,9 +207,9 @@ object ErgoApp extends ScorexLogging {
                     (implicit system: ActorSystem): Future[Done] =
     CoordinatedShutdown(system).run(reason)
 
-  def main(args: Array[String]): Unit = argParser.parse(args, Args()) match {
-    case Some(argsParsed) => new ErgoApp(argsParsed).run()
-    case None => // Error message will be displayed when arguments are bad
+  def main(args: Array[String]): Unit =
+    argParser.parse(args, Args()).foreach { argsParsed =>
+      new ErgoApp(argsParsed).run()
   }
 
 }

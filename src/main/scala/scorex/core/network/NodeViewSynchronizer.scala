@@ -12,7 +12,6 @@ import scorex.core.NodeViewHolder.DownloadRequest
 import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.consensus.History._
 import scorex.core.consensus.{History, HistoryReader, SyncInfo}
-import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs, SendToNetwork}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network.message.{InvSpec, RequestModifierSpec, _}
@@ -23,15 +22,12 @@ import scorex.core.transaction.state.StateReader
 import scorex.core.transaction.wallet.VaultReader
 import scorex.core.transaction.{MempoolReader, Transaction}
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
-import scorex.core.validation.MalformedModifierError
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import scala.language.postfixOps
-import scala.util.{Failure, Success}
 
 /**
   * A component which is synchronizing local node view (processed by NodeViewHolder) with the p2p network.
@@ -143,7 +139,9 @@ abstract class NodeViewSynchronizer
     * when our modifier is not synced yet, but no modifiers are expected from other peers
     * or request modifiers we need with known ids, that are not applied yet.
     */
-  protected def requestMoreModifiers(applied: Seq[ErgoPersistentModifier]): Unit = {}
+  protected def requestMoreModifiers(applied: Seq[ErgoPersistentModifier]): Unit = {
+    assert(applied != null) // to satisfy scalac
+  }
 
   protected def peerManagerEvents: Receive = {
     case HandshakedPeer(remote) =>
@@ -155,10 +153,10 @@ abstract class NodeViewSynchronizer
 
   protected def getLocalSyncInfo: Receive = {
     case SendLocalSyncInfo =>
-      historyReaderOpt.foreach(sendSync(statusTracker, _))
+      historyReaderOpt.foreach(sendSync)
   }
 
-  protected def sendSync(syncTracker: SyncTracker, history: ErgoHistory): Unit = {
+  protected def sendSync(history: ErgoHistory): Unit = {
     val peers = statusTracker.peersToSyncWith()
     if (peers.nonEmpty) {
       networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(history.syncInfo), None), SendToPeers(peers))
@@ -175,7 +173,6 @@ abstract class NodeViewSynchronizer
 
   // Send history extension to the (less developed) peer 'remote' which does not have it.
   def sendExtension(remote: ConnectedPeer,
-                    status: HistoryComparisonResult,
                     ext: Seq[(ModifierTypeId, ModifierId)]): Unit =
     ext.groupBy(_._1).mapValues(_.map(_._2)).foreach {
       case (mid, mods) =>
@@ -194,7 +191,7 @@ abstract class NodeViewSynchronizer
         case Nonsense =>
           log.warn("Got nonsense")
         case Younger | Fork =>
-          sendExtension(remote, status, ext)
+          sendExtension(remote, ext)
         case _ => // does nothing for `Equal` and `Older`
       }
   }
@@ -228,75 +225,6 @@ abstract class NodeViewSynchronizer
     * parse modifiers and send valid modifiers to NodeViewHolder
     */
   protected def modifiersFromRemote(data: ModifiersData, remote: ConnectedPeer): Unit
-
-  /**
-    * Move `pmod` to `Invalid` if it is permanently invalid, to `Received` otherwise
-    */
-  @SuppressWarnings(Array("org.wartremover.warts.IsInstanceOf"))
-  private def validateAndSetStatus(remote: ConnectedPeer, pmod: ErgoPersistentModifier): Boolean = {
-    historyReaderOpt match {
-      case Some(hr) =>
-        hr.applicableTry(pmod) match {
-          case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
-            log.warn(s"Modifier ${pmod.encodedId} is permanently invalid", e)
-            deliveryTracker.setInvalid(pmod.id)
-            penalizeMisbehavingPeer(remote)
-            false
-          case _ =>
-            deliveryTracker.setReceived(pmod.id, remote)
-            true
-        }
-      case None =>
-        log.error("Got modifier while history reader is not ready")
-        deliveryTracker.setReceived(pmod.id, remote)
-        true
-    }
-  }
-
-  /**
-    * Parse modifiers using specified serializer, check that its id is equal to the declared one,
-    * penalize misbehaving peer for every incorrect modifier,
-    * call deliveryTracker.onReceive() for every correct modifier to update its status
-    *
-    * @return collection of parsed modifiers
-    */
-  private def parseModifiers[M <: NodeViewModifier](modifiers: Map[ModifierId, Array[Byte]],
-                                                    serializer: ScorexSerializer[M],
-                                                    remote: ConnectedPeer): Iterable[M] = {
-    modifiers.flatMap { case (id, bytes) =>
-      serializer.parseBytesTry(bytes) match {
-        case Success(mod) if id == mod.id =>
-          Some(mod)
-        case _ =>
-          // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
-          penalizeMisbehavingPeer(remote)
-          log.warn(s"Failed to parse modifier with declared id ${encoder.encodeId(id)} from ${remote.toString}")
-          None
-      }
-    }
-  }
-
-  /**
-    * Get modifiers from remote peer,
-    * filter out spam modifiers and penalize peer for spam
-    *
-    * @return ids and bytes of modifiers that were requested by our node
-    */
-  private def processSpam(remote: ConnectedPeer,
-                          typeId: ModifierTypeId,
-                          modifiers: Map[ModifierId, Array[Byte]]): Map[ModifierId, Array[Byte]] = {
-
-    val (requested, spam) = modifiers.partition { case (id, _) =>
-      deliveryTracker.status(id) == Requested
-    }
-
-    if (spam.nonEmpty) {
-      log.info(s"Spam attempt: peer $remote has sent a non-requested modifiers of type $typeId with ids" +
-        s": ${spam.keys.map(encoder.encodeId)}")
-      penalizeSpammingPeer(remote)
-    }
-    requested
-  }
 
   /**
     * Scheduler asking node view synchronizer to check whether requested modifiers have been delivered.

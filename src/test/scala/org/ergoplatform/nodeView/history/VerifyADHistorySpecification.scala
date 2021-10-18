@@ -123,7 +123,7 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
           chain.indices.map(blockIndex => (chainIndex, blockIndex))
         }
 
-        var appended: ArrayBuffer[ErgoFullBlock] = ArrayBuffer.empty
+        val appended: ArrayBuffer[ErgoFullBlock] = ArrayBuffer.empty
 
         def findBestBlock(appendedToCheck: Seq[ErgoFullBlock]): ErgoFullBlock = {
           def firstInAppended(h: Header): Header = {

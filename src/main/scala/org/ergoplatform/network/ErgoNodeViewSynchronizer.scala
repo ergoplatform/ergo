@@ -6,7 +6,6 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{ModifiersFromRemote, TransactionsFromRemote}
 import scorex.core.NodeViewHolder._
@@ -114,7 +113,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
             log.info(s"Sending extension of length ${ext.length}")
             log.debug(s"Extension ids: ${idsToString(ext)}")
-            sendExtension(remote, status, ext)
+            sendExtension(remote, ext)
           case Older =>
             // asking headers from older peers
             val ids = syncInfo.lastHeaderIds.reverse
@@ -357,7 +356,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         self ! CheckModifiersToDownload
       } else {
         // headers chain is not synced yet, but our requested list is half empty - ask for more headers
-        sendSync(statusTracker, h)
+        sendSync(h)
       }
     }
   }

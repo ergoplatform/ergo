@@ -5,8 +5,9 @@ import akka.pattern.StatusReply
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateBlock, CandidateGenerator, ErgoMiner, WorkMessage}
+import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -27,11 +28,6 @@ import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
-import org.ergoplatform.P2PKAddress
-import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
-import org.ergoplatform.nodeView.wallet.scanning.Scan
-import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.scalacheck.Gen
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
@@ -189,7 +185,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
       case DeriveKey(_) => sender() ! Success(WalletActorStub.address)
 
       case DeriveNextKey => sender() !
-        DeriveNextKeyResult(Success(WalletActorStub.path, WalletActorStub.address, WalletActorStub.secretKey))
+        DeriveNextKeyResult(Success((WalletActorStub.path, WalletActorStub.address, WalletActorStub.secretKey)))
 
       case ReadPublicKeys(from, until) =>
         sender() ! trackedAddresses.slice(from, until)
@@ -220,7 +216,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! res
 
-      case StopTracking(scanId, boxId) =>
+      case StopTracking(_, _) =>
         sender() ! StopTrackingResponse(Success(()))
 
       case ReadScans =>

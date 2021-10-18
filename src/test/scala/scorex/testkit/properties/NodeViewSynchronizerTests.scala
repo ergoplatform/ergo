@@ -18,12 +18,12 @@ import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PenaltyType
-import scorex.util.serialization._
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.transaction.state.MinimalState
 import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
+import scorex.util.serialization._
 
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -121,7 +121,6 @@ trait NodeViewSynchronizerTests[ST <: MinimalState[ST]] extends AnyPropSpec
       })
 
       val dummySyncInfo: SyncInfo = new SyncInfo {
-        def answer: Boolean = true
 
         def startingPoints: History.ModifierIds = Seq((mod.modifierTypeId, mod.id))
 

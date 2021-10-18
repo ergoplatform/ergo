@@ -5,7 +5,6 @@ import java.io.File
 import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.settings.Algos.HF

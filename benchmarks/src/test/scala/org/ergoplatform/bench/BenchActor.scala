@@ -23,7 +23,7 @@ class BenchActor(threshold: Int, state: StateType) extends Actor with ScorexLogg
   val timeout: FiniteDuration = 2 hours
 
   override def preStart(): Unit = {
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
+    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
     context.system.scheduler.scheduleOnce(timeout, self, BenchActor.Timeout)
   }
 

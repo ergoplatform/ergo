@@ -37,7 +37,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                 override val store: LDBVersionedStore,
                 override val constants: StateConstants)
   extends ErgoState[UtxoState]
-    with TransactionValidation[ErgoTransaction]
+    with TransactionValidation
     with UtxoStateReader
     with ScorexEncoding {
 

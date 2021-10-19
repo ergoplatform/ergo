@@ -49,6 +49,8 @@ class ModifiersSpecification extends ErgoPropertyTest with DecodingUtils {
 
     messageLength shouldBe 261
 
+    getBytes(bb, 4)
+
     // read modifier type id (1 byte)
     val modifierTypeId = getByte(bb) // should read one byte only
 

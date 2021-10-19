@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import scorex.core.{ModifierTypeId, NodeViewModifier}
+import scorex.core.NodeViewModifier
 import scorex.core.consensus.SyncInfo
 import scorex.core.network.message.SyncInfoMessageSpec
 import scorex.core.serialization.ScorexSerializer
@@ -14,17 +14,6 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
   */
 sealed trait ErgoSyncInfo extends SyncInfo {
 
-  val syncData: Either[Seq[ModifierId], Seq[Header]]
-
-  val version: Byte
-
-  override def startingPoints: Seq[(ModifierTypeId, ModifierId)] = {
-    syncData match {
-      case Left(v1Ids) => v1Ids.map(b => Header.modifierTypeId -> b)
-      case Right(v2headers) => v2headers.map(h => Header.modifierTypeId -> h.id)
-    }
-  }
-
   override type M = ErgoSyncInfo
 
   override lazy val serializer: ScorexSerializer[ErgoSyncInfo] = ErgoSyncInfoSerializer
@@ -33,18 +22,12 @@ sealed trait ErgoSyncInfo extends SyncInfo {
 /**
   * @param lastHeaderIds - last header ids known to a peer
   */
-case class ErgoSyncInfoV1(lastHeaderIds: Seq[ModifierId]) extends ErgoSyncInfo {
-  override val syncData: Either[Seq[ModifierId], Seq[Header]] = Left(lastHeaderIds)
-  override val version = 1
-}
+case class ErgoSyncInfoV1(lastHeaderIds: Seq[ModifierId]) extends ErgoSyncInfo
 
 /**
   * @param lastHeaders - some recent headers (inlcuding last one) known to a peer
   */
-case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo {
-  override val syncData: Either[Seq[ModifierId], Seq[Header]] = Right(lastHeaders)
-  override val version = 2
-}
+case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo
 
 object ErgoSyncInfo {
   val MaxBlockIds = 1000

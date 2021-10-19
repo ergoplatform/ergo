@@ -204,7 +204,7 @@ trait ErgoHistoryReader
   def continuationIdsV1(syncInfo: ErgoSyncInfoV1, size: Int): ModifierIds =
     if (isEmpty) {
       // if no any header applied yet, return identifiers from other node's sync info
-      syncInfo.startingPoints
+      syncInfo.lastHeaderIds.map(b => Header.modifierTypeId -> b)
     } else if (syncInfo.lastHeaderIds.isEmpty) {
       // if other node has no headers yet, send up to `size` headers from genesis
       val heightTo = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)

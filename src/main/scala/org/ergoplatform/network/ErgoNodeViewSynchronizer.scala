@@ -148,7 +148,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Some(historyReader) =>
 
         val comparison = historyReader.compare(syncInfo)
-        log.debug(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +
+        log.debug(s"Comparison with $remote having starting points ${syncInfo.lastHeaderIds}. " +
           s"Comparison result is $comparison.")
 
         val status = comparison
@@ -209,7 +209,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     historyReaderOpt match {
       case Some(historyReader) =>
         val comparison = historyReader.compare(syncInfo)
-        log.debug(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +
+        log.debug(s"Comparison with $remote having starting points ${syncInfo.lastHeaders}. " +
           s"Comparison result is $comparison.")
 
         val status = comparison

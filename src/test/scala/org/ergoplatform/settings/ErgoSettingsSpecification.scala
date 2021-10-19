@@ -31,14 +31,27 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       offlineGeneration                         = false,
       keepVersions                              = 200,
       mempoolCapacity                           = 100000,
-      invalidModifiersBloomFilterCapacity       = 10000000,
-      invalidModifiersBloomFilterExpirationRate = 0.1,
-      invalidModifiersCacheSize                 = 10000,
-      invalidModifiersCacheExpiration           = 6.hours,
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100
+    )
+    settings.cacheSettings shouldBe CacheSettings(
+      HistoryCacheSettings(
+        100, 1000
+      ),
+      NetworkCacheSettings(
+        invalidModifiersBloomFilterCapacity       = 10000000,
+        invalidModifiersBloomFilterExpirationRate = 0.1,
+        invalidModifiersCacheSize                 = 10000,
+        invalidModifiersCacheExpiration           = 6.hours,
+      ),
+      MempoolCacheSettings(
+        invalidModifiersBloomFilterCapacity       = 10000000,
+        invalidModifiersBloomFilterExpirationRate = 0.1,
+        invalidModifiersCacheSize                 = 10000,
+        invalidModifiersCacheExpiration           = 6.hours,
+      )
     )
   }
 
@@ -59,14 +72,27 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       offlineGeneration                         = false,
       keepVersions                              = 200,
       mempoolCapacity                           = 100000,
-      invalidModifiersBloomFilterCapacity       = 10000000,
-      invalidModifiersBloomFilterExpirationRate = 0.1,
-      invalidModifiersCacheSize                 = 10000,
-      invalidModifiersCacheExpiration           = 6.hours,
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100
+    )
+    settings.cacheSettings shouldBe CacheSettings(
+      HistoryCacheSettings(
+        100, 1000
+      ),
+      NetworkCacheSettings(
+        invalidModifiersBloomFilterCapacity       = 10000000,
+        invalidModifiersBloomFilterExpirationRate = 0.1,
+        invalidModifiersCacheSize                 = 10000,
+        invalidModifiersCacheExpiration           = 6.hours,
+      ),
+      MempoolCacheSettings(
+        invalidModifiersBloomFilterCapacity       = 10000000,
+        invalidModifiersBloomFilterExpirationRate = 0.1,
+        invalidModifiersCacheSize                 = 10000,
+        invalidModifiersCacheExpiration           = 6.hours,
+      )
     )
   }
 
@@ -87,14 +113,27 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       offlineGeneration                         = false,
       keepVersions                              = 200,
       mempoolCapacity                           = 100000,
-      invalidModifiersBloomFilterCapacity       = 10000000,
-      invalidModifiersBloomFilterExpirationRate = 0.1,
-      invalidModifiersCacheSize                 = 10000,
-      invalidModifiersCacheExpiration           = 6.hours,
       mempoolCleanupDuration                    = 10.seconds,
       rebroadcastCount                          = 3,
       minimalFeeAmount                          = 0,
       headerChainDiff                           = 100
+    )
+    settings.cacheSettings shouldBe CacheSettings(
+      HistoryCacheSettings(
+        100, 1000
+      ),
+      NetworkCacheSettings(
+        invalidModifiersBloomFilterCapacity       = 10000000,
+        invalidModifiersBloomFilterExpirationRate = 0.1,
+        invalidModifiersCacheSize                 = 10000,
+        invalidModifiersCacheExpiration           = 6.hours,
+      ),
+      MempoolCacheSettings(
+        invalidModifiersBloomFilterCapacity       = 10000000,
+        invalidModifiersBloomFilterExpirationRate = 0.1,
+        invalidModifiersCacheSize                 = 10000,
+        invalidModifiersCacheExpiration           = 6.hours,
+      )
     )
   }
 

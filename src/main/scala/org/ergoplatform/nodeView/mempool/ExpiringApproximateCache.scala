@@ -5,6 +5,10 @@ import java.nio.charset.Charset
 import scala.collection.immutable.TreeMap
 import scala.concurrent.duration.FiniteDuration
 
+/**
+  * Any Cache that is not accurate but it involves some level of probability (eg. bloom filter based cache)
+  * @tparam T type of cache's element
+  */
 sealed trait ApproximateCacheLike[T] {
   def put(elem: T): ExpiringApproximateCache
   def mightContain(elem: T): Boolean
@@ -69,10 +73,11 @@ case class ExpiringApproximateCache(
           val bf     = createNewFilter
           bf.put(elem)
           val newFilters =
-            if (bloomFilterQueue.size >= bloomFilterQueueSize)
+            if (bloomFilterQueue.size >= bloomFilterQueueSize) {
               bloomFilterQueue.dropRight(1)
-            else
+            } else {
               bloomFilterQueue
+            }
           this.copy(bloomFilterQueue = (newIdx -> bf) +: newFilters)
       }
     }
@@ -98,8 +103,9 @@ object ExpiringApproximateCache {
 
   /**
     * @param bloomFilterCapacity Maximum number of elements to store in bloom filters
-    * @param bloomFilterExpirationRate fraction of 1 that represents a rate of expiration as the cache grows in size,
-    *                       only values from open interval (0,1) are valid
+    * @param bloomFilterExpirationRate Non-zero fraction of 1 as a rate of element expiration when capacity is full,
+    *                                  the lower the more gradual expiration.
+    *                                  example : 0.1 is represented as 10 bloom filters expiring one by one
     * @param frontCacheSize Maximum number of elements to store in front-cache
     * @param frontCacheExpiration Maximum period to keep cached elements before expiration
     */

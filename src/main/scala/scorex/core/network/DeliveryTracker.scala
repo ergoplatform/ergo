@@ -223,10 +223,11 @@ object DeliveryTracker {
             maxDeliveryChecks: Int,
             nvsRef: ActorRef,
             settings: ErgoSettings): DeliveryTracker = {
-    val bloomFilterCapacity = settings.nodeSettings.invalidModifiersBloomFilterCapacity
-    val bloomFilterExpirationRate = settings.nodeSettings.invalidModifiersBloomFilterExpirationRate
-    val frontCacheSize = settings.nodeSettings.invalidModifiersCacheSize
-    val frontCacheExpiration = settings.nodeSettings.invalidModifiersCacheExpiration
+    val cacheSettings = settings.cacheSettings.network
+    val bloomFilterCapacity = cacheSettings.invalidModifiersBloomFilterCapacity
+    val bloomFilterExpirationRate = cacheSettings.invalidModifiersBloomFilterExpirationRate
+    val frontCacheSize = cacheSettings.invalidModifiersCacheSize
+    val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
     new DeliveryTracker(
       system,
       deliveryTimeout,

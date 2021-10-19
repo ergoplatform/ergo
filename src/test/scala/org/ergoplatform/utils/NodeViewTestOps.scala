@@ -25,11 +25,11 @@ import scala.util.{Failure, Success, Try}
 trait NodeViewBaseOps extends ErgoTestHelpers {
 
   type Ctx = NodeViewTestContext
-  type CurView = CurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool]
+  type CurView = CurrentView[ErgoState[_]]
   implicit private val timeout: Timeout = defaultTimeout
 
   def getCurrentView(implicit ctx: Ctx): CurView = {
-    val request = GetDataFromCurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool, CurView](view => view)
+    val request = GetDataFromCurrentView[ErgoState[_], CurView](view => view)
     await((nodeViewHolderRef ? request).mapTo[CurView])
   }
 
@@ -74,8 +74,8 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
   }
 
   def subscribeModificationOutcome()(implicit ctx: Ctx): Unit = {
-    subscribeEvents(classOf[SyntacticallySuccessfulModifier[_]])
-    subscribeEvents(classOf[SyntacticallyFailedModification[_]])
+    subscribeEvents(classOf[SyntacticallySuccessfulModifier])
+    subscribeEvents(classOf[SyntacticallyFailedModification])
   }
 
   def expectModificationOutcome(section: ErgoPersistentModifier)(implicit ctx: Ctx): Try[Unit] = {

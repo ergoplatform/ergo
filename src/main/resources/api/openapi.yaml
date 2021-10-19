@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.14"
+  version: "4.0.15"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -3417,14 +3417,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /wallet/transactionsByScanId:
+  /wallet/transactionsByScanId/{scanId}:
     parameters:
       - in: query
-        name: scanId
-        required: true
-        description: Scan id
+        name: minInclusionHeight
+        required: false
+        description: Minimal tx inclusion height
         schema:
-          type: string
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: maxInclusionHeight
+        required: false
+        description: Maximal tx inclusion height
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: minConfirmations
+        required: false
+        description: Minimal confirmations number
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
+      - in: query
+        name: maxConfirmations
+        required: false
+        description: Maximal confirmations number
+        schema:
+          type: integer
+          format: int32
+          minimum: 0
     get:
       security:
         - ApiKeyAuth: [ api_key ]
@@ -3432,6 +3458,14 @@ paths:
       operationId: walletTransactionsByScanId
       tags:
         - wallet
+      parameters:
+        - in: path
+          name: scanId
+          required: true
+          description: identifier of a scan
+          schema:
+            type: integer
+            format: int32
       responses:
         '200':
           description: Scan-related transactions

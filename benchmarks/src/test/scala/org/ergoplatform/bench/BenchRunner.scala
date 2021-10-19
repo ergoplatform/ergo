@@ -54,7 +54,7 @@ object BenchRunner extends ScorexLogging with NVBenchmark {
       * It's a hack to set minimalFullBlockHeightVar to 0 and to avoid "Header Is Not Synced" error, cause
       * in our case we are considering only locally pre-generated modifiers.
       */
-    nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool, Unit](adjust)
+    nodeViewHolderRef ! GetDataFromCurrentView[ErgoState[_], Unit](adjust)
 
     log.info("Starting to read modifiers.")
     log.info("Finished read modifiers, starting to bench.")
@@ -62,7 +62,7 @@ object BenchRunner extends ScorexLogging with NVBenchmark {
     runBench(benchRef, nodeViewHolderRef, (readHeaders ++ readExtensions ++ readPayloads).toVector)
   }
 
-  private def adjust(v: CurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool]): Unit = {
+  private def adjust(v: CurrentView[ErgoState[_]]): Unit = {
     import scala.reflect.runtime.{universe => ru}
     val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
     val procInstance = runtimeMirror.reflect(v.history.asInstanceOf[ToDownloadProcessor])

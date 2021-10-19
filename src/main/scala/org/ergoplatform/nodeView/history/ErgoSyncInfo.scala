@@ -53,6 +53,11 @@ object ErgoSyncInfo {
 
 object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with ScorexLogging {
 
+  val MaxHeadersAllowed = 20 // in sync v2 message, no more than 20 headers allowed
+
+  val MaxHeaderSize = 1000 // currently header is about 200+ bytes, but new fields can be added via a SF,
+                           // anyway we set hard max header size limit
+
   override def serialize(obj: ErgoSyncInfo, w: Writer): Unit = {
     obj match {
       case v1: ErgoSyncInfoV1 =>
@@ -81,11 +86,11 @@ object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with Scorex
 
         val headersCount = r.getUByte()
 
-        require(headersCount < 20)
+        require(headersCount <= MaxHeadersAllowed)
 
         val headers = (1 to headersCount).map { _ =>
           val headerBytesCount = r.getUShort()
-          require(headersCount < 1000)
+          require(headerBytesCount < MaxHeaderSize)
           val headerBytes = r.getBytes(headerBytesCount)
           HeaderSerializer.parseBytes(headerBytes)
         }

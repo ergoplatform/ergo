@@ -100,8 +100,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Whether neighbour peer `remote` supports sync protocol V2.
     */
   def syncV2Supported(remote: ConnectedPeer): Boolean = {
-    // If neighbour version is >= 4.0.15, the neighbour supports sync V2
-    val syncV2Version = Version(4, 0, 15)
+    // If neighbour version is >= 4.0.16, the neighbour supports sync V2
+    val syncV2Version = Version(4, 0, 16)
     remote.peerInfo.exists(_.peerSpec.protocolVersion >= syncV2Version)
   }
 

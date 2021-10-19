@@ -31,13 +31,16 @@ sealed trait ErgoSyncInfo extends SyncInfo {
 }
 
 /**
-  * @param lastHeaderIds
+  * @param lastHeaderIds - last header ids known to a peer
   */
 case class ErgoSyncInfoV1(lastHeaderIds: Seq[ModifierId]) extends ErgoSyncInfo {
   override val syncData: Either[Seq[ModifierId], Seq[Header]] = Left(lastHeaderIds)
   override val version = 1
 }
 
+/**
+  * @param lastHeaders - some recent headers (inlcuding last one) known to a peer
+  */
 case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo {
   override val syncData: Either[Seq[ModifierId], Seq[Header]] = Right(lastHeaders)
   override val version = 2

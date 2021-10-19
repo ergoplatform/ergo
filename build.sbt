@@ -125,8 +125,7 @@ val opts = Seq(
 
 // -J prefix is required by the bash script
 javaOptions in run ++= opts
-scalacOptions ++= Seq("-Xfatal-warnings", "-feature", "-deprecation")
-scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard")
+scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Xcheckinit")
 
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"

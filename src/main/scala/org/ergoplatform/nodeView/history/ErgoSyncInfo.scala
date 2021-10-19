@@ -43,15 +43,13 @@ case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo {
   override val version = 2
 }
 
-
 object ErgoSyncInfo {
-  // TODO move to config?
   val MaxBlockIds = 1000
-
-  val v2HeaderMode: Byte = -1
 }
 
 object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with ScorexLogging {
+
+  val v2HeaderMode: Byte = -1
 
   val MaxHeadersAllowed = 20 // in sync v2 message, no more than 20 headers allowed
 
@@ -65,7 +63,7 @@ object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with Scorex
         v1.lastHeaderIds.foreach(id => w.putBytes(idToBytes(id)))
       case v2: ErgoSyncInfoV2 =>
         w.putUShort(0)
-        w.put(ErgoSyncInfo.v2HeaderMode)
+        w.put(v2HeaderMode)
         w.put(v2.lastHeaders.length.toByte)
         v2.lastHeaders.foreach { h =>
           val headerBytes = h.bytes
@@ -82,7 +80,7 @@ object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with Scorex
     val length = r.getUShort()
     if (length == 0 && r.remaining > 1) {
       val mode = r.getByte()
-      if (mode == ErgoSyncInfo.v2HeaderMode) {
+      if (mode == v2HeaderMode) {
 
         val headersCount = r.getUByte()
 

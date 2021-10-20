@@ -259,7 +259,7 @@ trait ErgoHistoryReader
 
   /**
     * Calculating continuation from common header which will be sent to another node
-    * if comparison status is YOUNGER of FORK.
+    * if comparison status is YOUNGER or FORK.
     *
     * @param syncInfo other's node sync info
     * @param size max return size

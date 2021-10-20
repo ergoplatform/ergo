@@ -300,9 +300,14 @@ trait ErgoHistoryReader
   }
 
   /**
-    * @return sync info for neigbour peers, V1 message
+    * Information about our node synchronization status. Other node should be able to compare it's view with ours by
+    * this syncInfo message and calculate modifiers missed by our node.
+    *
+    * V1 version (last header ids to be sent)
+    *
+    * @return
     */
-  override def syncInfo: ErgoSyncInfo = {
+  def syncInfoV1: ErgoSyncInfo = {
     if (isEmpty) {
       ErgoSyncInfoV1(Seq.empty)
     } else {

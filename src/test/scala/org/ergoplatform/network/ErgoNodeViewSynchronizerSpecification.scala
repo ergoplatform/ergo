@@ -167,7 +167,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       Some(peerInfo)
     )
     val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
-    (ref, h.syncInfo, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener, serializer)
+    (ref, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener, serializer)
   }
 
   class SynchronizerFixture extends AkkaFixture {

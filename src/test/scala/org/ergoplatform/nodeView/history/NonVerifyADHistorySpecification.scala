@@ -141,7 +141,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     history2.bestHeaderOpt.get shouldBe fork2.take(BlocksInChain / 2).last
     history1.bestHeaderOpt.get shouldBe fork1.last
 
-    val si = history2.syncInfo
+    val si = history2.syncInfoV1
     val continuation = history1.continuationIds(si, BlocksInChain * 100)
     fork1.headers.foreach(h => continuation.exists(_._2 == h.id) shouldBe true)
 

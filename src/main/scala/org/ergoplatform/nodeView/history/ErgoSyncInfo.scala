@@ -31,6 +31,8 @@ case class ErgoSyncInfoV1(lastHeaderIds: Seq[ModifierId]) extends ErgoSyncInfo {
   * @param lastHeaders - some recent headers (inlcuding last one) known to a peer
   */
 case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo {
+  val height = lastHeaders.headOption.map(_.height).getOrElse(ErgoHistory.EmptyHistoryHeight)
+
   override val nonEmpty: Boolean = lastHeaders.nonEmpty
 }
 

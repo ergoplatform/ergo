@@ -6,6 +6,7 @@ import java.net.InetSocketAddress
 import akka.actor.{Actor, ActorRef}
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.network.ErgoSyncTracker
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import scorex.core.NodeViewHolder.DownloadRequest
@@ -66,7 +67,7 @@ abstract class NodeViewSynchronizer
   }
 
   protected val deliveryTracker = new DeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self)
-  protected val statusTracker = new SyncTracker(self, context, networkSettings, timeProvider)
+  protected val statusTracker: ErgoSyncTracker
 
   protected var historyReaderOpt: Option[ErgoHistory] = None
   protected var mempoolReaderOpt: Option[ErgoMemPool] = None

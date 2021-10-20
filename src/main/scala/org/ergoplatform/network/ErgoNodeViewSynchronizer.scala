@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoMessageSpec, _}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
-import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
 import scorex.core.NodeViewHolder._
@@ -99,7 +99,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[ErgoMemPoolReader]])
     context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
-    context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult[ErgoPersistentModifier]])
+    context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult])
 
     // subscribe for history and mempool changes
     viewHolderRef ! GetNodeViewChanges(history = true, state = false, vault = false, mempool = true)
@@ -176,14 +176,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Send sync V2 message to a concrete peer. Used in [[processSyncV2]] method.
+    * Send sync message to a concrete peer. Used in [[processSync]] and [[processSyncV2]] methods.
     */
-  protected def sendSyncV2ToPeer(remote: ConnectedPeer, syncV2: ErgoSyncInfoV2): Unit = {
-    if(syncV2.lastHeaders.nonEmpty) {
-      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(syncV2), None), SendToPeer(remote))
+  protected def sendSyncToPeer(remote: ConnectedPeer, sync: ErgoSyncInfo): Unit = {
+    if (sync.nonEmpty) {
+      statusTracker.updateLastSyncSentTime(remote)
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(sync), None), SendToPeer(remote))
     }
   }
-
   /**
     * Process sync message `syncInfo` got from neighbour peer `remote`
     */
@@ -245,7 +245,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
 
         if ((oldStatus != status) || statusTracker.isOutdated(remote)) {
-          val ownSyncInfo = historyReader.syncInfo
+          val ownSyncInfo = historyReader.syncInfoV1
           sendSyncToPeer(remote, ownSyncInfo)
         }
 
@@ -301,7 +301,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         if ((oldStatus != status) || statusTracker.isOutdated(remote)) {
           val ownSyncInfo = historyReader.syncInfoV2(full = true)
-          sendSyncV2ToPeer(remote, ownSyncInfo)
+          sendSyncToPeer(remote, ownSyncInfo)
         }
 
       case _ =>
@@ -399,14 +399,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           println("hs: " + valid.map(_.asInstanceOf[Header].height).mkString(","))
         }
         if (valid.nonEmpty) {
-          viewHolderRef ! ModifiersFromRemote[ErgoPersistentModifier](valid)
+          viewHolderRef ! ModifiersFromRemote(valid)
 
           if (valid.head.isInstanceOf[Header] && historyReaderOpt.isDefined) {
             val historyReader = historyReaderOpt.get
             val syncInfo = if (syncV2Supported(remote)) {
               historyReader.syncInfoV2(false)
             } else {
-              historyReader.syncInfo
+              historyReader.syncInfoV1
             }
             sendSyncToPeer(remote, syncInfo)
           }

@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import java.net.InetSocketAddress
 
-import akka.actor.{ActorSystem, Cancellable}
+import akka.actor.ActorSystem
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.consensus.History.{Fork, HistoryComparisonResult, Older, Unknown}
@@ -45,14 +45,10 @@ final case class ErgoSyncTracker(system: ActorSystem,
     heights += peer -> height
   }
 
-  var schedule: Option[Cancellable] = None
-
   protected val statuses = mutable.Map[ConnectedPeer, HistoryComparisonResult]()
   protected val lastSyncSentTime = mutable.Map[ConnectedPeer, Time]()
 
   protected var lastSyncInfoSentTime: Time = 0L
-
-  protected var stableSyncRegime = false
 
   /**
     * Get synchronization status for given connected peer
@@ -69,7 +65,6 @@ final case class ErgoSyncTracker(system: ActorSystem,
     // todo: we should also send NoBetterNeighbour signal when all the peers around are not seniors initially
     if (seniorsBefore > 0 && seniorsAfter == 0) {
       log.info("Syncing is done, switching to stable regime")
-      stableSyncRegime = true
       system.eventStream.publish(NoBetterNeighbour)
     }
     if (seniorsBefore == 0 && seniorsAfter > 0) {
@@ -95,8 +90,6 @@ final case class ErgoSyncTracker(system: ActorSystem,
     lastSyncSentTime(peer) = currentTime
     lastSyncInfoSentTime = currentTime
   }
-
-  def elapsedTimeSinceLastSync(): Long = timeProvider.time() - lastSyncInfoSentTime
 
   protected def outdatedPeers(): Seq[ConnectedPeer] =
     lastSyncSentTime.filter(t => (timeProvider.time() - t._2).millis > SyncThreshold).keys.toSeq

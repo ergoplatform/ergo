@@ -35,9 +35,9 @@ object ErgoSyncInfo {
 
 object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with ScorexLogging {
 
-  val v2HeaderMode: Byte = -1
+  val v2HeaderMode: Byte = -1 // used to mark sync v2 messages
 
-  val MaxHeadersAllowed = 20 // in sync v2 message, no more than 20 headers allowed
+  val MaxHeadersAllowed = 50 // in sync v2 message, no more than 50 headers allowed
 
   val MaxHeaderSize = 1000 // currently header is about 200+ bytes, but new fields can be added via a SF,
                            // anyway we set hard max header size limit
@@ -45,12 +45,13 @@ object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with Scorex
   override def serialize(obj: ErgoSyncInfo, w: Writer): Unit = {
     obj match {
       case v1: ErgoSyncInfoV1 =>
+        // in sync message we just write number of last header ids and then ids themselves
         w.putUShort(v1.lastHeaderIds.size)
         v1.lastHeaderIds.foreach(id => w.putBytes(idToBytes(id)))
       case v2: ErgoSyncInfoV2 =>
-        w.putUShort(0)
-        w.put(v2HeaderMode)
-        w.put(v2.lastHeaders.length.toByte)
+        w.putUShort(0) // to stop sync v1 parser
+        w.put(v2HeaderMode) // signal that v2 message started
+        w.put(v2.lastHeaders.length.toByte) // number of headers peer is announcing
         v2.lastHeaders.foreach { h =>
           val headerBytes = h.bytes
           w.putUShort(headerBytes.length)
@@ -67,14 +68,14 @@ object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with Scorex
     if (length == 0 && r.remaining > 1) {
       val mode = r.getByte()
       if (mode == v2HeaderMode) {
-
+        // parse v2 sync message
         val headersCount = r.getUByte()
 
-        require(headersCount <= MaxHeadersAllowed)
+        require(headersCount <= MaxHeadersAllowed) // check to avoid spam
 
         val headers = (1 to headersCount).map { _ =>
           val headerBytesCount = r.getUShort()
-          require(headerBytesCount < MaxHeaderSize)
+          require(headerBytesCount < MaxHeaderSize) // check to avoid spam
           val headerBytes = r.getBytes(headerBytesCount)
           HeaderSerializer.parseBytes(headerBytes)
         }
@@ -82,7 +83,7 @@ object ErgoSyncInfoSerializer extends ScorexSerializer[ErgoSyncInfo] with Scorex
       } else {
         throw new Exception(s"Wrong SyncInfo version: $r")
       }
-    } else { // parse v1
+    } else { // parse v1 sync message
       require(length <= ErgoSyncInfo.MaxBlockIds + 1, "Too many block ids in sync info")
       val ids = (1 to length).map(_ => bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize)))
       ErgoSyncInfoV1(ids)

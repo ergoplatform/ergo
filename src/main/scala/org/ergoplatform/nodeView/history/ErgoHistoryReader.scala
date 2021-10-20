@@ -90,7 +90,7 @@ trait ErgoHistoryReader
   def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
 
   /**
-    * For given headers (sorted in inverse chronological order), find first one (most recent one) which is known
+    * For given headers (sorted in reverse chronological order), find first one (most recent one) which is known
     * to our history
     */
   private def commonPoint(headers: Seq[Header]): Option[Header] = {
@@ -116,10 +116,13 @@ trait ErgoHistoryReader
   }
 
   /**
-    * Whether another's node syncinfo indicates that another node is ahead or behind ours
+    * Whether another's node syncinfo indicates that another node is ahead or behind ours, or on fork
     *
     * @param info other's node sync info
-    * @return Equal if nodes have the same history, Younger if another node is behind, Older if the neighbour is ahead
+    * @return Equal if nodes have the same history,
+    *         Younger if another node is behind,
+    *         Older if the neighbour is ahead,
+    *         Fork if the neighbour is on a fork
     */
   def compareV2(info: ErgoSyncInfoV2): HistoryComparisonResult = {
     bestHeaderOpt.map { myLastHeader =>
@@ -163,7 +166,10 @@ trait ErgoHistoryReader
     * Whether another's node syncinfo indicates that another node is ahead or behind ours
     *
     * @param info other's node sync info
-    * @return Equal if nodes have the same history, Younger if another node is behind, Older if the neighbour is ahead
+    * @return Equal if nodes have the same history,
+    *         Younger if another node is behind,
+    *         Older if the neighbour is ahead,
+    *         Fork if the neighbour is on a fork
     */
   def compareV1(info: ErgoSyncInfoV1): HistoryComparisonResult = {
     bestHeaderIdOpt match {
@@ -312,6 +318,8 @@ trait ErgoHistoryReader
 
   /**
     * @return sync info for neigbour peers, V2 message
+    * @param full - if false, only last header to be sent, otherwise, multiple headers
+    *               full info is needed when
     */
   def syncInfoV2(full: Boolean): ErgoSyncInfoV2 = {
     if (isEmpty) {
@@ -526,7 +534,10 @@ trait ErgoHistoryReader
 }
 
 object ErgoHistoryReader {
+  // When we need to help other peer to find a common block when its status is unknown,
+  // we send headers with offsets (from the blockchain tip) from below
   val FullV2SyncOffsets = Array(0, 16, 128, 512)
 
+  // When only last header to be sent in sync v2 message
   val ReducedV2SyncOffsets = Array(0)
 }

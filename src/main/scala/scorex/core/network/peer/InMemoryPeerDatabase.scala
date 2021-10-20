@@ -1,9 +1,11 @@
 package scorex.core.network.peer
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.net.{InetAddress, InetSocketAddress}
 
-import scorex.core.settings.NetworkSettings
+import scorex.core.settings.ScorexSettings
 import scorex.core.utils.TimeProvider
+import scorex.db.LDBFactory
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
@@ -11,10 +13,12 @@ import scala.concurrent.duration._
 /**
   * In-memory peer database implementation supporting temporal blacklisting.
   */
-final class InMemoryPeerDatabase(settings: NetworkSettings, timeProvider: TimeProvider)
+final class InMemoryPeerDatabase(settings: ScorexSettings, timeProvider: TimeProvider)
   extends PeerDatabase with ScorexLogging {
 
-  private var peers = Map.empty[InetSocketAddress, PeerInfo]
+  private val objectStore = LDBFactory.createKvDb(s"${settings.dataDir}/peers")
+
+  private var peers = loadPeers
 
   /**
     * banned peer ip -> ban expiration timestamp
@@ -26,6 +30,39 @@ final class InMemoryPeerDatabase(settings: NetworkSettings, timeProvider: TimePr
     */
   private var penaltyBook = Map.empty[InetAddress, (Int, Long)]
 
+  /*
+   * Serialize object using standard Java serializer
+   */
+  private def serialize(obj: Object): Array[Byte] = {
+    val stream: ByteArrayOutputStream = new ByteArrayOutputStream()
+    val oos = new ObjectOutputStream(stream)
+    oos.writeObject(obj)
+    oos.close
+    stream.toByteArray
+  }
+
+  /*
+   * Deserialize object using standard Java serializer
+   */
+  private def deserialize(bytes: Array[Byte]) : Object =
+  {
+    val ois = new ObjectInputStream(new ByteArrayInputStream(bytes))
+    ois.readObject()
+  }
+
+  /*
+   * Load peers from persistent storage
+   */
+  private def loadPeers(): Map[InetSocketAddress, PeerInfo] = {
+    var peers = Map.empty[InetSocketAddress, PeerInfo]
+    for ((addr,peer) <- objectStore.getAll) {
+      val address = deserialize(addr).asInstanceOf[InetSocketAddress]
+      val peerInfo = deserialize(peer).asInstanceOf[PeerInfo]
+      peers += address -> peerInfo
+    }
+    peers
+  }
+
   override def get(peer: InetSocketAddress): Option[PeerInfo] = peers.get(peer)
 
   override def addOrUpdateKnownPeer(peerInfo: PeerInfo): Unit = {
@@ -33,13 +70,14 @@ final class InMemoryPeerDatabase(settings: NetworkSettings, timeProvider: TimePr
       peerInfo.peerSpec.address.foreach { address =>
         log.debug(s"Updating peer info for $address")
         peers += address -> peerInfo
+        objectStore.insert(Seq((serialize(address), serialize(peerInfo))))
       }
     }
   }
 
   override def addToBlacklist(socketAddress: InetSocketAddress,
                               penaltyType: PenaltyType): Unit = {
-    peers -= socketAddress
+    remove(socketAddress)
     Option(socketAddress.getAddress).foreach { address =>
       penaltyBook -= address
       if (!blacklist.keySet.contains(address))
@@ -55,6 +93,7 @@ final class InMemoryPeerDatabase(settings: NetworkSettings, timeProvider: TimePr
 
   override def remove(address: InetSocketAddress): Unit = {
     peers -= address
+    objectStore.remove(Seq(serialize(address)))
   }
 
   override def knownPeers: Map[InetSocketAddress, PeerInfo] = peers
@@ -81,13 +120,13 @@ final class InMemoryPeerDatabase(settings: NetworkSettings, timeProvider: TimePr
   def penalize(socketAddress: InetSocketAddress, penaltyType: PenaltyType): Boolean =
     Option(socketAddress.getAddress).exists { address =>
       val currentTime = timeProvider.time()
-      val safeInterval = settings.penaltySafeInterval.toMillis
+      val safeInterval = settings.network.penaltySafeInterval.toMillis
       val (penaltyScoreAcc, lastPenaltyTs) = penaltyBook.getOrElse(address, (0, 0L))
       val applyPenalty = currentTime - lastPenaltyTs - safeInterval > 0 || penaltyType.isPermanent
       val newPenaltyScore =
         if (applyPenalty) penaltyScoreAcc + penaltyScore(penaltyType)
         else penaltyScoreAcc
-      if (newPenaltyScore > settings.penaltyScoreThreshold) true
+      if (newPenaltyScore > settings.network.penaltyScoreThreshold) true
       else {
         penaltyBook += address -> (newPenaltyScore -> timeProvider.time())
         false
@@ -124,7 +163,7 @@ final class InMemoryPeerDatabase(settings: NetworkSettings, timeProvider: TimePr
   private def penaltyDuration(penalty: PenaltyType): Long =
     penalty match {
       case PenaltyType.NonDeliveryPenalty | PenaltyType.MisbehaviorPenalty | PenaltyType.SpamPenalty =>
-        settings.temporalBanDuration.toMillis
+        settings.network.temporalBanDuration.toMillis
       case PenaltyType.PermanentPenalty =>
         (360 * 10).days.toMillis
     }

@@ -161,7 +161,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Method sends V1/V2 sync messages based on neighbour version.
     *
     */
-  override protected def sendSync(syncTracker: SyncTracker, history: ErgoHistory): Unit = {
+  override protected def sendSync(syncTracker: ErgoSyncTracker, history: ErgoHistory): Unit = {
     val peers = statusTracker.peersToSyncWith()
     val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
     log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")

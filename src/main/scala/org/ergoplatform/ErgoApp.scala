@@ -103,7 +103,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
 
-  private val nodeViewSynchronizerRef = ErgoNodeViewSynchronizer(
+  // touch it to run preStart method of the actor which is in turn running schedulers
+  ErgoNodeViewSynchronizer(
     networkControllerRef,
     nodeViewHolderRef,
     ErgoSyncInfoMessageSpec,

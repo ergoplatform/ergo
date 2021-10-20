@@ -2,25 +2,25 @@ package org.ergoplatform.network
 
 import java.net.InetSocketAddress
 
-import akka.actor.{ActorContext, ActorSystem}
+import akka.actor.{ActorSystem, Cancellable}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.consensus.History.{Fork, HistoryComparisonResult, Older, Unknown}
 import scorex.core.network.NodeViewSynchronizer.Events.{BetterNeighbourAppeared, NoBetterNeighbour}
-import scorex.core.network.{ConnectedPeer, SyncTracker}
+import scorex.core.network.ConnectedPeer
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.TimeProvider
 import scorex.core.utils.TimeProvider.Time
+import scorex.util.ScorexLogging
 
 import scala.collection.mutable
-import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 
-final case class ErgoSyncTracker( system: ActorSystem,
-                                  networkSettings: NetworkSettings,
-                                  timeProvider: TimeProvider)(implicit ec: ExecutionContext)
- extends SyncTracker(null, null, networkSettings, timeProvider)(ec) {
+final case class ErgoSyncTracker(system: ActorSystem,
+                                 networkSettings: NetworkSettings,
+                                 timeProvider: TimeProvider)
+ extends ScorexLogging {
 
   val heights: mutable.Map[ConnectedPeer, Height] = mutable.Map[ConnectedPeer, Height]()
 
@@ -45,37 +45,23 @@ final case class ErgoSyncTracker( system: ActorSystem,
     heights += peer -> height
   }
 
-  // var schedule: Option[Cancellable] = None
+  var schedule: Option[Cancellable] = None
 
-  override protected val statuses = mutable.Map[ConnectedPeer, HistoryComparisonResult]()
-  override protected val lastSyncSentTime = mutable.Map[ConnectedPeer, Time]()
+  protected val statuses = mutable.Map[ConnectedPeer, HistoryComparisonResult]()
+  protected val lastSyncSentTime = mutable.Map[ConnectedPeer, Time]()
 
- // override protected var lastSyncInfoSentTime: Time = 0L
+  protected var lastSyncInfoSentTime: Time = 0L
 
- // override protected var stableSyncRegime = false
-
-  override def scheduleSendSyncInfo(): Unit = {
-    log.error("scheduleSendSyncInfo called")
-  }
-
-  override def maxInterval(): FiniteDuration = {
-    log.error("maxInterval called")
-    SyncThreshold
-  }
-
-  override def minInterval(): FiniteDuration = {
-    log.error("minInterval called")
-    SyncThreshold
-  }
+  protected var stableSyncRegime = false
 
   /**
     * Get synchronization status for given connected peer
     */
-  override def getStatus(peer: ConnectedPeer): Option[HistoryComparisonResult] = {
+  def getStatus(peer: ConnectedPeer): Option[HistoryComparisonResult] = {
     statuses.get(peer)
   }
 
-  override def updateStatus(peer: ConnectedPeer, status: HistoryComparisonResult): Unit = {
+  def updateStatus(peer: ConnectedPeer, status: HistoryComparisonResult): Unit = {
     val seniorsBefore = numOfSeniors()
     statuses += peer -> status
     val seniorsAfter = numOfSeniors()
@@ -92,7 +78,7 @@ final case class ErgoSyncTracker( system: ActorSystem,
   }
 
   //todo: combine both?
-  override def clearStatus(remote: InetSocketAddress): Unit = {
+  def clearStatus(remote: InetSocketAddress): Unit = {
     statuses.find(_._1.connectionId.remoteAddress == remote) match {
       case Some((peer, _)) => statuses -= peer
       case None => log.warn(s"Trying to clear status for $remote, but it is not found")
@@ -104,22 +90,22 @@ final case class ErgoSyncTracker( system: ActorSystem,
     }
   }
 
-  override def updateLastSyncSentTime(peer: ConnectedPeer): Unit = {
+  def updateLastSyncSentTime(peer: ConnectedPeer): Unit = {
     val currentTime = timeProvider.time()
     lastSyncSentTime(peer) = currentTime
     lastSyncInfoSentTime = currentTime
   }
 
-  override def elapsedTimeSinceLastSync(): Long = timeProvider.time() - lastSyncInfoSentTime
+  def elapsedTimeSinceLastSync(): Long = timeProvider.time() - lastSyncInfoSentTime
 
-  override protected def outdatedPeers(): Seq[ConnectedPeer] =
+  protected def outdatedPeers(): Seq[ConnectedPeer] =
     lastSyncSentTime.filter(t => (timeProvider.time() - t._2).millis > SyncThreshold).keys.toSeq
 
 
-  override def peersByStatus: Map[HistoryComparisonResult, Iterable[ConnectedPeer]] =
+  def peersByStatus: Map[HistoryComparisonResult, Iterable[ConnectedPeer]] =
     statuses.groupBy(_._2).mapValues(_.keys).view.force
 
-  override protected def numOfSeniors(): Int = statuses.count(_._2 == Older)
+  protected def numOfSeniors(): Int = statuses.count(_._2 == Older)
 
   /**
     * Return the peers to which this node should send a sync signal, including:
@@ -127,7 +113,7 @@ final case class ErgoSyncTracker( system: ActorSystem,
     * `Older` status.
     * Updates lastSyncSentTime for all returned peers as a side effect
     */
-  override def peersToSyncWith(): Seq[ConnectedPeer] = {
+  def peersToSyncWith(): Seq[ConnectedPeer] = {
     val outdated = outdatedPeers()
     val peers =
       if (outdated.nonEmpty) outdated

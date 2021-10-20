@@ -10,11 +10,10 @@ import org.ergoplatform.network.ErgoSyncTracker
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import scorex.core.NodeViewHolder.DownloadRequest
-import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.consensus.History._
 import scorex.core.consensus.{History, HistoryReader, SyncInfo}
 import scorex.core.network.ModifiersStatus.Requested
-import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs, SendToNetwork}
+import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network.message.{InvSpec, RequestModifierSpec, _}
 import scorex.core.network.peer.PenaltyType
@@ -71,28 +70,6 @@ abstract class NodeViewSynchronizer
 
   protected var historyReaderOpt: Option[ErgoHistory] = None
   protected var mempoolReaderOpt: Option[ErgoMemPool] = None
-
-  override def preStart(): Unit = {
-    // register as a handler for synchronization-specific types of messages
-    val messageSpecs: Seq[MessageSpec[_]] = Seq(invSpec, requestModifierSpec, modifiersSpec, syncInfoSpec)
-    networkControllerRef ! RegisterMessageSpecs(messageSpecs, self)
-
-    // register as a listener for peers got connected (handshaked) or disconnected
-    context.system.eventStream.subscribe(self, classOf[HandshakedPeer])
-    context.system.eventStream.subscribe(self, classOf[DisconnectedPeer])
-
-    // subscribe for all the node view holder events involving modifiers and transactions
-    context.system.eventStream.subscribe(self, classOf[ChangedHistory[ErgoHistory]])
-    context.system.eventStream.subscribe(self, classOf[ChangedMempool[ErgoMemPool]])
-    context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
-    context.system.eventStream.subscribe(self, classOf[DownloadRequest])
-    context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult])
-
-    // subscribe for history and mempool changes
-    viewHolderRef ! GetNodeViewChanges(history = true, state = false, vault = false, mempool = true)
-
-    statusTracker.scheduleSendSyncInfo()
-  }
 
   private def readersOpt: Option[(ErgoHistory, ErgoMemPool)] = {
     historyReaderOpt.flatMap(h => mempoolReaderOpt.map(mp => (h, mp)))
@@ -159,7 +136,7 @@ abstract class NodeViewSynchronizer
       historyReaderOpt.foreach(sendSync(statusTracker, _))
   }
 
-  protected def sendSync(syncTracker: SyncTracker, history: ErgoHistory): Unit
+  protected def sendSync(syncTracker: ErgoSyncTracker, history: ErgoHistory): Unit
 
   protected def processDataFromPeer: Receive = {
     case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(spec, msgBytes, source)

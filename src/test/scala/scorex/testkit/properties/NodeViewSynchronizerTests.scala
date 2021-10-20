@@ -121,10 +121,6 @@ trait NodeViewSynchronizerTests[ST <: MinimalState[ST]] extends AnyPropSpec
       })
 
       val dummySyncInfo: SyncInfo = new SyncInfo {
-        def answer: Boolean = true
-
-        def startingPoints: History.ModifierIds = Seq((mod.modifierTypeId, mod.id))
-
         type M = BytesSerializable
 
         def serializer: ScorexSerializer[M] = throw new Exception

@@ -123,9 +123,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(history.syncInfoV1), None), SendToPeers(peersV1))
     }
     if (peersV2.nonEmpty) {
-      //todo: send only last header to peers which ae equal or younger
+      //todo: send only last header to peers which are equal or younger
       val v2SyncInfo = history.syncInfoV2(full = true)
       networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
+    }
+  }
+
+  /**
+    * Send sync V2 message to a concrete peer. Used in [[processSyncV2]] method.
+    */
+  protected def sendSyncV2ToPeer(remote: ConnectedPeer, syncV2: ErgoSyncInfoV2): Unit = {
+    if(syncV2.lastHeaders.nonEmpty) {
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(syncV2), None), SendToPeer(remote))
     }
   }
 
@@ -194,15 +203,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Send sync V2 message to a concrete peer. Used in [[processSyncV2]] method.
-    */
-  protected def sendSyncToPeer(remote: ConnectedPeer, syncV2: ErgoSyncInfoV2): Unit = {
-    if(syncV2.lastHeaders.nonEmpty) {
-      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(syncV2), None), SendToPeer(remote))
-    }
-  }
-
-  /**
     * Processing sync V2 message `syncInfo` got from neighbour peer `remote` (supporting sync v2)
     */
   protected def processSyncV2(syncInfo: ErgoSyncInfoV2, remote: ConnectedPeer): Unit = {
@@ -220,7 +220,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             // we do not know what to send to a peer with unknown status
             log.info(s"Peer status is still unknown for $remote")
             val ownSyncInfo = historyReader.syncInfoV2(full = true)
-            sendSyncToPeer(remote, ownSyncInfo)
+            sendSyncV2ToPeer(remote, ownSyncInfo)
 
           case Nonsense =>
             // Shouldn't be the case for sync V2
@@ -233,18 +233,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             log.info(s"Sending extension of length ${ext.length}")
             log.debug(s"Extension ids: ${idsToString(ext)}")
             val ownSyncInfo = historyReader.syncInfoV2(full = true)
-            sendSyncToPeer(remote, ownSyncInfo)
+            sendSyncV2ToPeer(remote, ownSyncInfo)
             sendExtension(remote, status, ext)
 
           case Fork =>
             val syncInfo = historyReader.syncInfoV2(full = true)
-            sendSyncToPeer(remote, syncInfo)
+            sendSyncV2ToPeer(remote, syncInfo)
 
           case Older =>
             // send sync to older
             val syncInfo = historyReader.syncInfoV2(full = false)
-            sendSyncToPeer(remote, syncInfo)
-
+            sendSyncV2ToPeer(remote, syncInfo)
 
           case Equal =>
             // does nothing for `Equal`

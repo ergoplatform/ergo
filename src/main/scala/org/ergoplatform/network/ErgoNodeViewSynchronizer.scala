@@ -24,7 +24,7 @@ import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId
-
+import scorex.core.network.DeliveryTracker
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -41,8 +41,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                syncTracker: ErgoSyncTracker
                               )
                               (implicit ex: ExecutionContext)
-  extends NodeViewSynchronizer[ErgoTransaction, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier,
-    ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec,
+  extends NodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec,
     settings.scorexSettings.network, timeProvider, Constants.modifierSerializers) {
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
@@ -61,7 +60,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   override protected val deliveryTracker =
-    new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
+    new DeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self)
 
   override protected val statusTracker = syncTracker
 
@@ -147,8 +146,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Whether neighbour peer `remote` supports sync protocol V2.
     */
   def syncV2Supported(remote: ConnectedPeer): Boolean = {
-    // If neighbour version is >= 4.0.15, the neighbour supports sync V2
-    val syncV2Version = Version(4, 0, 15)
+    // If neighbour version is >= 4.0.16, the neighbour supports sync V2
+    val syncV2Version = Version(4, 0, 16)
     remote.peerInfo.exists(_.peerSpec.protocolVersion >= syncV2Version)
   }
 
@@ -167,12 +166,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
     log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
     if (peersV1.nonEmpty) {
-      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(history.syncInfo), None), SendToPeers(peersV1))
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(history.syncInfoV1), None), SendToPeers(peersV1))
     }
     if (peersV2.nonEmpty) {
-      //todo: send only last header to peers which ae equal or younger
+      //todo: send only last header to peers which are equal or younger
       val v2SyncInfo = history.syncInfoV2(full = true)
       networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
+    }
+  }
+
+  /**
+    * Send sync V2 message to a concrete peer. Used in [[processSyncV2]] method.
+    */
+  protected def sendSyncV2ToPeer(remote: ConnectedPeer, syncV2: ErgoSyncInfoV2): Unit = {
+    if(syncV2.lastHeaders.nonEmpty) {
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(syncV2), None), SendToPeer(remote))
     }
   }
 
@@ -195,7 +203,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Some(historyReader) =>
 
         val comparison = historyReader.compare(syncInfo)
-        log.info(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +
+        log.debug(s"Comparison with $remote having starting points ${syncInfo.lastHeaderIds}. " +
           s"Comparison result is $comparison.")
 
         val oldStatus = statusTracker.getStatus(remote).getOrElse(Unknown)
@@ -248,23 +256,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Send sync message to a concrete peer. Used in [[processSync]] and [[processSyncV2]] methods.
-    */
-  protected def sendSyncToPeer(remote: ConnectedPeer, sync: ErgoSyncInfo): Unit = {
-    if (sync.nonEmpty) {
-      statusTracker.updateLastSyncSentTime(remote)
-      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(sync), None), SendToPeer(remote))
-    }
-  }
-
-  /**
     * Processing sync V2 message `syncInfo` got from neighbour peer `remote` (supporting sync v2)
     */
   protected def processSyncV2(syncInfo: ErgoSyncInfoV2, remote: ConnectedPeer): Unit = {
     historyReaderOpt match {
       case Some(historyReader) =>
         val comparison = historyReader.compare(syncInfo)
-        log.debug(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +
+        log.debug(s"Comparison with $remote having starting points ${syncInfo.lastHeaders}. " +
           s"Comparison result is $comparison.")
 
         val oldStatus = statusTracker.getStatus(remote).getOrElse(Unknown)
@@ -303,7 +301,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         if ((oldStatus != status) || statusTracker.isOutdated(remote)) {
           val ownSyncInfo = historyReader.syncInfoV2(full = true)
-          sendSyncToPeer(remote, ownSyncInfo)
+          sendSyncV2ToPeer(remote, ownSyncInfo)
         }
 
       case _ =>
@@ -377,7 +375,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Filter out non-requested block parts (with a penalty to spamming peer),
     * parse block parts and send valid modifiers to NodeViewHolder
     *
-    * Currently just a copy from private method in basic trait!
     */
   override protected def modifiersFromRemote(data: ModifiersData, remote: ConnectedPeer): Unit = {
     val typeId = data.typeId

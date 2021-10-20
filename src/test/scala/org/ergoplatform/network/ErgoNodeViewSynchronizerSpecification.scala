@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -76,7 +76,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       context.system.eventStream.subscribe(self, classOf[ChangedMempool[ErgoMemPool]])
       context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
       context.system.eventStream.subscribe(self, classOf[DownloadRequest])
-      context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult[ErgoPersistentModifier]])
+      context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult])
 
       // subscribe for history and mempool changes
       viewHolderRef ! GetNodeViewChanges(history = true, state = false, vault = false, mempool = true)
@@ -171,7 +171,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
       Some(peerInfo)
     )
     val serializer: ScorexSerializer[PM] = HeaderSerializer.asInstanceOf[ScorexSerializer[PM]]
-    (ref, h.syncInfo, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener, serializer)
+    (ref, h.syncInfoV1, m, tx, p, pchProbe, ncProbe, vhProbe, eventListener, serializer)
   }
 
   class SynchronizerFixture extends AkkaFixture {

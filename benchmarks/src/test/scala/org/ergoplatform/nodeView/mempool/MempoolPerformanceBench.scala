@@ -7,7 +7,7 @@ import org.scalatest.propspec.AnyPropSpec
 import scorex.testkit.properties.mempool.MempoolFilterPerformanceTest
 
 class MempoolPerformanceBench extends AnyPropSpec
-  with MempoolFilterPerformanceTest[ErgoTransaction, ErgoMemPool]
+  with MempoolFilterPerformanceTest
   with ErgoGenerators
   with ErgoTransactionGenerators {
 

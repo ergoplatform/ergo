@@ -12,7 +12,7 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import scorex.core.api.http.{ApiRoute, PeersApiRoute}
 import scorex.core.app.Application
@@ -24,10 +24,6 @@ import scala.concurrent.ExecutionContextExecutor
 import scala.io.Source
 
 class CrawlerRunner(args: Array[String]) extends Application {
-
-  override type TX = ErgoTransaction
-  override type PMOD = ErgoPersistentModifier
-  override type NVHT = ErgoNodeViewHolder[_]
 
   lazy val fileToSave: String = args.headOption.getOrElse("/")
   lazy val threshold: Int = args.lift(1).getOrElse("15000").toInt

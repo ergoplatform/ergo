@@ -38,8 +38,7 @@ import scala.util.Try
   * transformations of UTXO set presented in form of authenticated dynamic dictionary are needed to check validity of
   * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
-trait ErgoState[IState <: MinimalState[ErgoPersistentModifier, IState]]
-  extends MinimalState[ErgoPersistentModifier, IState] with ErgoStateReader {
+trait ErgoState[IState <: MinimalState[IState]] extends MinimalState[IState] with ErgoStateReader {
 
   self: IState =>
 

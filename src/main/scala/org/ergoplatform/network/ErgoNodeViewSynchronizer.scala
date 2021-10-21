@@ -47,14 +47,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                settings: ErgoSettings,
                                timeProvider: NetworkTimeProvider,
                                syncTracker: ErgoSyncTracker
-                              )
-                              (implicit ex: ExecutionContext)
+                              )(implicit ex: ExecutionContext)
   extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
   protected val deliveryTimeout: FiniteDuration = networkSettings.deliveryTimeout
   protected val maxDeliveryChecks: Int = networkSettings.maxDeliveryChecks
+
   protected val invSpec = new InvSpec(networkSettings.maxInvObjects)
   protected val requestModifierSpec = new RequestModifierSpec(networkSettings.maxInvObjects)
   protected val modifiersSpec = new ModifiersSpec(networkSettings.maxPacketSize)
@@ -69,15 +69,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected val deliveryTracker =
     new DeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self)
 
-  protected val statusTracker: ErgoSyncTracker = syncTracker
-
   protected var historyReaderOpt: Option[ErgoHistory] = None
   protected var mempoolReaderOpt: Option[ErgoMemPool] = None
-
-  private def readersOpt: Option[(ErgoHistory, ErgoMemPool)] = {
-    historyReaderOpt.flatMap(h => mempoolReaderOpt.map(mp => (h, mp)))
-  }
-
 
   /**
     * Approximate number of modifiers to be downloaded simultaneously, headers are much faster to process
@@ -120,19 +113,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
 
-    scheduleSendSyncInfo()
-  }
-
-  protected var schedule: Option[Cancellable] = None
-  def scheduleSendSyncInfo(): Unit = {
-    schedule foreach {
-      _.cancel()
-    }
-
     val interval = networkSettings.syncInterval
-
     val syncTask = context.system.scheduler.scheduleWithFixedDelay(2.seconds, interval, self, SendLocalSyncInfo)
-    schedule = Some(syncTask)
   }
 
   protected def broadcastModifierInv(m: NodeViewModifier): Unit = {
@@ -169,7 +151,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     *
     */
   protected def sendSync(syncTracker: ErgoSyncTracker, history: ErgoHistory): Unit = {
-    val peers = statusTracker.peersToSyncWith()
+    val peers = syncTracker.peersToSyncWith()
     val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
     log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
     if (peersV1.nonEmpty) {
@@ -187,7 +169,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected def sendSyncToPeer(remote: ConnectedPeer, sync: ErgoSyncInfo): Unit = {
     if (sync.nonEmpty) {
-      statusTracker.updateLastSyncSentTime(remote)
+      syncTracker.updateLastSyncSentTime(remote)
       networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(sync), None), SendToPeer(remote))
     }
   }
@@ -223,9 +205,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug(s"Comparison with $remote having starting points ${syncInfo.lastHeaderIds}. " +
           s"Comparison result is $comparison.")
 
-        val oldStatus = statusTracker.getStatus(remote).getOrElse(Unknown)
+        val oldStatus = syncTracker.getStatus(remote).getOrElse(Unknown)
         val status = comparison
-        statusTracker.updateStatus(remote, status, height = None)
+        syncTracker.updateStatus(remote, status, height = None)
 
         status match {
           case Unknown =>
@@ -261,7 +243,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             log.debug(s"$remote has equal header-chain")
         }
 
-        if ((oldStatus != status) || statusTracker.isOutdated(remote)) {
+        if ((oldStatus != status) || syncTracker.isOutdated(remote)) {
           val ownSyncInfo = historyReader.syncInfoV1
           sendSyncToPeer(remote, ownSyncInfo)
         }
@@ -282,9 +264,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug(s"Comparison with $remote having starting points ${syncInfo.lastHeaders}. " +
           s"Comparison result is $comparison.")
 
-        val oldStatus = statusTracker.getStatus(remote).getOrElse(Unknown)
+        val oldStatus = syncTracker.getStatus(remote).getOrElse(Unknown)
         val status = comparison
-        statusTracker.updateStatus(remote, status, syncInfo.height)
+        syncTracker.updateStatus(remote, status, syncInfo.height)
 
         status match {
           case Unknown =>
@@ -314,7 +296,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             log.debug(s"$remote has equal header-chain")
         }
 
-        if ((oldStatus != status) || statusTracker.isOutdated(remote)) {
+        if ((oldStatus != status) || syncTracker.isOutdated(remote)) {
           val ownSyncInfo = historyReader.syncInfoV2(full = true)
           sendSyncToPeer(remote, ownSyncInfo)
         }
@@ -331,7 +313,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @return available peers to download headers from together with the state/origin of the peer
     */
   private def getPeersForDownloadingHeaders(callingPeer: ConnectedPeer): (PeerSyncState, Iterable[ConnectedPeer]) = {
-    statusTracker.peersByStatus
+    syncTracker.peersByStatus
       .get(Older)
       .map(PeerSyncState.Older -> _)
       .getOrElse(PeerSyncState.OlderCalling -> Array(callingPeer))
@@ -342,7 +324,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @return available peers to download persistent modifiers from together with the state/origin of the peer
     */
   private def getPeersForDownloadingBlocks: Option[(PeerSyncState, Iterable[ConnectedPeer])] = {
-    val peersByStatus = statusTracker.peersByStatus
+    val peersByStatus = syncTracker.peersByStatus
     Option(peersByStatus.getOrElse(Older, mutable.WrappedArray.empty) ++ peersByStatus.getOrElse(Equal, mutable.WrappedArray.empty))
       .filter(_.nonEmpty)
       .map(PeerSyncState.OlderOrEqual -> _)
@@ -507,7 +489,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             invData.ids.filter(mid => deliveryTracker.status(mid, history) == ModifiersStatus.Unknown)
         }
 
-        log.info(s"Going to request ${newModifierIds.length} modifiers of type ${modifierTypeId} from $peer")
+        log.info(s"Going to request ${newModifierIds.length} modifiers of type $modifierTypeId from $peer")
         if (newModifierIds.nonEmpty) {
           val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, newModifierIds)), None)
           peer.handlerRef ! msg
@@ -531,25 +513,27 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         self ! CheckModifiersToDownload
       } else {
         // headers chain is not synced yet, but our requested list is half empty - ask for more headers
-        sendSync(statusTracker, h)
+        sendSync(syncTracker, h)
       }
     }
   }
 
   //other node asking for objects by their ids
   protected def modifiersReq(invData: InvData, remote: ConnectedPeer): Unit = {
-    readersOpt.foreach { readers =>
       val objs: Seq[NodeViewModifier] = invData.typeId match {
         case typeId: ModifierTypeId if typeId == Transaction.ModifierTypeId =>
-          readers._2.getAll(invData.ids)
+          mempoolReaderOpt.toSeq.flatMap {mp =>
+            mp.getAll(invData.ids)
+          }
         case _: ModifierTypeId =>
-          invData.ids.flatMap(id => readers._1.modifierById(id))
+          historyReaderOpt.toSeq.flatMap { h =>
+            invData.ids.flatMap(id => h.modifierById(id))
+          }
       }
 
       log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
         s"sending ${objs.length} modifiers ${idsToString(invData.typeId, objs.map(_.id))} ")
       self ! ResponseFromLocal(remote, invData.typeId, objs)
-    }
   }
 
   /**
@@ -682,15 +666,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def peerManagerEvents: Receive = {
     case HandshakedPeer(remote) =>
-      statusTracker.updateStatus(remote, status = Unknown, height = None)
+      syncTracker.updateStatus(remote, status = Unknown, height = None)
 
     case DisconnectedPeer(remote) =>
-      statusTracker.clearStatus(remote)
+      syncTracker.clearStatus(remote)
   }
 
   protected def getLocalSyncInfo: Receive = {
     case SendLocalSyncInfo =>
-      historyReaderOpt.foreach(sendSync(statusTracker, _))
+      historyReaderOpt.foreach(sendSync(syncTracker, _))
   }
 
 

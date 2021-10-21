@@ -14,6 +14,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.ScorexEncoding
+import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -366,7 +367,7 @@ trait ErgoHistoryReader
       case chunk: UTXOSnapshotChunk =>
         validate(chunk)
       case m: Any =>
-        Failure(new Error(s"Modifier $m has incorrect type"))
+        Failure(new MalformedModifierError(s"Modifier $m has incorrect type"))
     }
   }
 

@@ -25,7 +25,7 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
 import scorex.core.block.Block
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.ValidationSettings
 import scorex.crypto.hash.Digest32

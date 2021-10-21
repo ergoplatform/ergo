@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import scorex.core.consensus.History.ProgressInfo
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.NodeViewHolderEvent
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.NodeViewHolderEvent
 import scorex.core.settings.ScorexSettings
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
@@ -30,7 +30,7 @@ trait NodeViewHolder[State <: ErgoState[State]] extends Actor with ScorexLogging
 
   import NodeViewHolder.ReceivableMessages._
   import NodeViewHolder._
-  import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+  import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 
 
   type NodeView = (ErgoHistory, State, ErgoWallet, ErgoMemPool)

@@ -18,7 +18,7 @@ import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.PersistentNodeViewModifier
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{RegisterMessageSpecs, SendToNetwork}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network.message.{InvData, InvSpec, Message, MessageSpec}
 import scorex.core.network.peer.PeerInfo
 import scorex.core.serialization.ScorexSerializer

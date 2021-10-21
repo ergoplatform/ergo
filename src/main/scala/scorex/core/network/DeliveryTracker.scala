@@ -3,7 +3,7 @@ package scorex.core.network
 import akka.actor.{ActorRef, ActorSystem, Cancellable}
 import scorex.core.consensus.ContainsModifiers
 import scorex.core.network.ModifiersStatus._
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.CheckDelivery
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.CheckDelivery
 import scorex.core.utils.ScorexEncoding
 import scorex.core.{ModifierTypeId, NodeViewModifier}
 import scorex.util.{ModifierId, ScorexLogging}
@@ -187,7 +187,7 @@ class DeliveryTracker(system: ActorSystem,
       case _ => false
     }
 
-  private[network] def clearStatusForModifier(id: ModifierId, oldStatus: ModifiersStatus): Unit =
+  def clearStatusForModifier(id: ModifierId, oldStatus: ModifiersStatus): Unit =
     oldStatus match {
       case Requested =>
         requested(id).cancellable.cancel()

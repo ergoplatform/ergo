@@ -6,7 +6,7 @@ import akka.actor.ActorSystem
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.consensus.History.{Fork, HistoryComparisonResult, Older, Unknown}
-import scorex.core.network.NodeViewSynchronizer.Events.{BetterNeighbourAppeared, NoBetterNeighbour}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.Events.{BetterNeighbourAppeared, NoBetterNeighbour}
 import scorex.core.network.ConnectedPeer
 import scorex.core.settings.NetworkSettings
 import scorex.core.utils.TimeProvider

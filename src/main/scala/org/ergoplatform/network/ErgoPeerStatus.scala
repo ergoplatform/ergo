@@ -5,6 +5,13 @@ import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import scorex.core.consensus.History.HistoryComparisonResult
 import scorex.core.network.ConnectedPeer
 
+/**
+  * Container for status of another peer
+  *
+  * @param peer - peer information (public address, exposed info on operating mode etc)
+  * @param status - peer's blockchain status (is it ahead or behind our, or on fork)
+  * @param height - peer's height
+  */
 case class ErgoPeerStatus(peer: ConnectedPeer,
                           status: HistoryComparisonResult,
                           height: Height) {
@@ -15,6 +22,9 @@ object ErgoPeerStatus {
 
   import io.circe.syntax._
 
+  /**
+    * Helper method to get operating mode of the peer
+    */
   def mode(peer: ConnectedPeer): Option[ModeFeature] = {
     peer.peerInfo.flatMap(_.peerSpec.features.collectFirst[ModeFeature]({ case mf: ModeFeature => mf}))
   }

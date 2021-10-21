@@ -5,7 +5,7 @@ import org.ergoplatform.Utils
 import org.ergoplatform.Utils.BenchReport
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.StateType
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext

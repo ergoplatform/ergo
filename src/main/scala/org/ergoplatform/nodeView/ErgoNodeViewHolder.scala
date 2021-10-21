@@ -19,7 +19,7 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.FileUtils
 import scorex.core.NodeViewHolder.ReceivableMessages.ModifiersFromRemote
 import scorex.core._
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import spire.syntax.all.cfor

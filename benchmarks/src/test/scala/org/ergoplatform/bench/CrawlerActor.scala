@@ -2,8 +2,8 @@ package org.ergoplatform.bench
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.bench.misc.CrawlerConfig
-import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.util.ScorexLogging
 
 class CrawlerActor(c: CrawlerConfig) extends Actor with ScorexLogging {

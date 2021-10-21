@@ -12,7 +12,7 @@ import org.scalatest.propspec.AnyPropSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote}
 import scorex.core.consensus.SyncInfo
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PenaltyType

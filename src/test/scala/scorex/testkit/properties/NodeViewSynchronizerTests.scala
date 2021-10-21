@@ -11,7 +11,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote}
 import scorex.core.consensus.History.{Equal, Nonsense, Older, Younger}
-import scorex.core.consensus.{History, SyncInfo}
+import scorex.core.consensus.SyncInfo
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import scorex.core.network.NodeViewSynchronizer.Events.{BetterNeighbourAppeared, NoBetterNeighbour, NodeViewSynchronizerEvent}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._

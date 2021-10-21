@@ -23,7 +23,7 @@ trait ChainGenerator extends ErgoTestConstants {
 
   private def emptyProofs = SerializedAdProof @@ scorex.utils.Random.randomBytes(Random.nextInt(5000))
 
-  /** Generates a [[HeaderChain]] of given height starting from a History last block
+  /** Generates a [[HeaderChain]] of given height starting from last block of the `history`
     */
   def genHeaderChain(height: Int,
                      history: ErgoHistory,

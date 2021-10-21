@@ -156,12 +156,7 @@ abstract class NodeViewSynchronizer
       historyReaderOpt.foreach(sendSync)
   }
 
-  protected def sendSync(history: ErgoHistory): Unit = {
-    val peers = statusTracker.peersToSyncWith()
-    if (peers.nonEmpty) {
-      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(history.syncInfo), None), SendToPeers(peers))
-    }
-  }
+  protected def sendSync(history: ErgoHistory): Unit
 
   protected def processDataFromPeer: Receive = {
     case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(spec, msgBytes, source)

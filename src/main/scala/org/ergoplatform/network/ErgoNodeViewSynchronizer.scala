@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import java.net.InetSocketAddress
 
-import akka.actor.{Actor, ActorRef, ActorRefFactory, Cancellable, Props}
+import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}

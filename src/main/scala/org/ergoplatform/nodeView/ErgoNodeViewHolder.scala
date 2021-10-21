@@ -78,25 +78,36 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     */
   override protected def processRemoteModifiers: Receive = {
     case ModifiersFromRemote(mods: Seq[ErgoPersistentModifier]@unchecked) =>
+      @tailrec
+      def applyLoop(applied: Seq[ErgoPersistentModifier]): Seq[ErgoPersistentModifier] = {
+        modifiersCache.popCandidate(history()) match {
+          case Some(mod) =>
+            pmodModify(mod)
+            applyLoop(mod +: applied)
+          case None =>
+            applied
+        }
+      }
+
       mods.headOption match {
         case Some(h) if h.isInstanceOf[Header] =>
           val ms0 = System.currentTimeMillis()
           val sorted = mods.sortBy(_.asInstanceOf[Header].height)
 
-          val applied = if(sorted.head.asInstanceOf[Header].height == history().headersHeight + 1) {
+          val applied0 = if(sorted.head.asInstanceOf[Header].height == history().headersHeight + 1) {
 
             val appliedBuffer = mutable.Buffer[Header]()
             var expectedHeight = history().headersHeight + 1
             var linkBroken = false
 
-            cfor(0)(_ < mods.length, _ + 1){idx =>
-              val header = mods(idx).asInstanceOf[Header]
-              if(!linkBroken && header.height == expectedHeight){
+            cfor(0)(_ < sorted.length, _ + 1) { idx =>
+              val header = sorted(idx).asInstanceOf[Header]
+              if (!linkBroken && header.height == expectedHeight) {
                 pmodModify(header)
                 appliedBuffer += header
                 expectedHeight += 1
               } else {
-                if(!linkBroken) {
+                if (!linkBroken) {
                   linkBroken = true
                 }
                 modifiersCache.put(header.id, header)
@@ -104,9 +115,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             }
             appliedBuffer
           } else {
-            mods.foreach(m => modifiersCache.put(m.id, m))
+            mods.foreach(h => modifiersCache.put(h.id, h))
             Seq.empty
           }
+
+          val applied = applied0 ++ applyLoop(Seq())
 
           val cleared = modifiersCache.cleanOverfull()
           context.system.eventStream.publish(ModifiersProcessingResult(applied, cleared))
@@ -117,17 +130,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           mods.foreach(m => modifiersCache.put(m.id, m))
 
           log.debug(s"Cache size before: ${modifiersCache.size}")
-
-          @tailrec
-          def applyLoop(applied: Seq[ErgoPersistentModifier]): Seq[ErgoPersistentModifier] = {
-            modifiersCache.popCandidate(history()) match {
-              case Some(mod) =>
-                pmodModify(mod)
-                applyLoop(mod +: applied)
-              case None =>
-                applied
-            }
-          }
 
           val applied = applyLoop(Seq())
           val cleared = modifiersCache.cleanOverfull()

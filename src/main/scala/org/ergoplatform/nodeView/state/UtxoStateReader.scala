@@ -16,7 +16,7 @@ import scorex.crypto.hash.Digest32
 
 import scala.util.{Failure, Success, Try}
 
-trait UtxoStateReader extends ErgoStateReader with TransactionValidation[ErgoTransaction] {
+trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
 
   protected implicit val hf: HF = Algos.hash
 

@@ -4,27 +4,28 @@ import akka.actor.{ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
+import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{ModifiersFromRemote, TransactionsFromRemote}
 import scorex.core.NodeViewHolder._
-import scorex.core.consensus.History._
+import scorex.core.app.Version
+import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.network.message.{InvData, Message, ModifiersData}
-import scorex.core.network.{ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToPeer}
+import scorex.core.network.{ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToPeer, SendToPeers, SyncTracker}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId
-
+import scorex.core.network.DeliveryTracker
 import scala.collection.immutable.TreeMap
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
@@ -40,12 +41,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                settings: ErgoSettings,
                                timeProvider: NetworkTimeProvider)
                               (implicit ex: ExecutionContext)
-  extends NodeViewSynchronizer[ErgoTransaction, ErgoSyncInfo, ErgoSyncInfoMessageSpec.type, ErgoPersistentModifier,
-    ErgoHistory, ErgoMemPool](networkControllerRef, viewHolderRef, syncInfoSpec,
+  extends NodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec,
     settings.scorexSettings.network, timeProvider, Constants.modifierSerializers) {
 
   override protected val deliveryTracker =
-    new ErgoDeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self, timeProvider)
+    new DeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self)
 
   // cache of transaction ids that were already applied to history
   private var blockAppliedTxsCache: TreeMap[ModifierId, Long] = TreeMap.empty[ModifierId, Long]
@@ -64,6 +64,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val minHeadersPerBucket = 50 // minimum of headers to download by single peer
   private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer
 
+  /**
+    * Register periodic events
+    */
   override def preStart(): Unit = {
     val toDownloadCheckInterval = networkSettings.syncInterval
     super.preStart()
@@ -72,6 +75,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
   }
 
+  /**
+    * Check whether block section (modifier) with identifier `id` is not stored locally
+    * (in history database available via `historyReader` interface, or delivery tracker cache, thus
+    * downloading of the modifier is needed.
+    */
   private def downloadRequired(historyReader: ErgoHistory)(id: ModifierId): Boolean = {
     deliveryTracker.status(id, Array(historyReader)) == ModifiersStatus.Unknown
   }
@@ -95,14 +103,68 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
-  //Processing sync info is coming from another node
+  /**
+    * Whether neighbour peer `remote` supports sync protocol V2.
+    */
+  def syncV2Supported(remote: ConnectedPeer): Boolean = {
+    // If neighbour version is >= 4.0.16, the neighbour supports sync V2
+    val syncV2Version = Version(4, 0, 16)
+    remote.peerInfo.exists(_.peerSpec.protocolVersion >= syncV2Version)
+  }
+
+  /**
+    * Send synchronization statuses to neighbour peers
+    *
+    * The method sends sync messages to whether peers not received sync from the node for
+    * some time (see syncStatusRefreshStable / syncStatusRefreshStable settings),
+    * or peers with Unknown / Fork / Older statuses.
+    *
+    * Method sends V1/V2 sync messages based on neighbour version.
+    *
+    */
+  override protected def sendSync(syncTracker: SyncTracker, history: ErgoHistory): Unit = {
+    val peers = statusTracker.peersToSyncWith()
+    val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
+    log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
+    if (peersV1.nonEmpty) {
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(history.syncInfoV1), None), SendToPeers(peersV1))
+    }
+    if (peersV2.nonEmpty) {
+      //todo: send only last header to peers which are equal or younger
+      val v2SyncInfo = history.syncInfoV2(full = true)
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
+    }
+  }
+
+  /**
+    * Send sync V2 message to a concrete peer. Used in [[processSyncV2]] method.
+    */
+  protected def sendSyncV2ToPeer(remote: ConnectedPeer, syncV2: ErgoSyncInfoV2): Unit = {
+    if(syncV2.lastHeaders.nonEmpty) {
+      networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(syncV2), None), SendToPeer(remote))
+    }
+  }
+
+  /**
+    * Process sync message `syncInfo` got from neighbour peer `remote`
+    */
   override protected def processSync(syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
+    syncInfo match {
+      case syncV1: ErgoSyncInfoV1 => processSyncV1(syncV1, remote)
+      case syncV2: ErgoSyncInfoV2 => processSyncV2(syncV2, remote)
+    }
+  }
+
+  /**
+    * Processing sync V1 message `syncInfo` got from neighbour peer `remote`
+    */
+  protected def processSyncV1(syncInfo: ErgoSyncInfoV1, remote: ConnectedPeer): Unit = {
 
     historyReaderOpt match {
       case Some(historyReader) =>
 
         val comparison = historyReader.compare(syncInfo)
-        log.debug(s"Comparison with $remote having starting points ${idsToString(syncInfo.startingPoints)}. " +
+        log.debug(s"Comparison with $remote having starting points ${syncInfo.lastHeaderIds}. " +
           s"Comparison result is $comparison.")
 
         val status = comparison
@@ -141,6 +203,60 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             // does nothing for `Equal`
             log.debug(s"$remote has equal header-chain")
         }
+      case _ =>
+        // historyReader not initialized yet, it should not happen
+        log.error("historyReader not initialized when processing syncInfo")
+    }
+  }
+
+  /**
+    * Processing sync V2 message `syncInfo` got from neighbour peer `remote` (supporting sync v2)
+    */
+  protected def processSyncV2(syncInfo: ErgoSyncInfoV2, remote: ConnectedPeer): Unit = {
+    historyReaderOpt match {
+      case Some(historyReader) =>
+        val comparison = historyReader.compare(syncInfo)
+        log.debug(s"Comparison with $remote having starting points ${syncInfo.lastHeaders}. " +
+          s"Comparison result is $comparison.")
+
+        val status = comparison
+        statusTracker.updateStatus(remote, status)
+
+        status match {
+          case Unknown =>
+            // we do not know what to send to a peer with unknown status
+            log.info(s"Peer status is still unknown for $remote")
+            val ownSyncInfo = historyReader.syncInfoV2(full = true)
+            sendSyncV2ToPeer(remote, ownSyncInfo)
+
+          case Nonsense =>
+            // Shouldn't be the case for sync V2
+            log.warn(s"Got nonsense status in v2 for $remote")
+
+          case Younger =>
+            // send extension (up to 400 header ids) to a peer which chain is less developed or forked
+            val ext = historyReader.continuationIds(syncInfo, size = 400)
+            if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
+            log.info(s"Sending extension of length ${ext.length}")
+            log.debug(s"Extension ids: ${idsToString(ext)}")
+            val ownSyncInfo = historyReader.syncInfoV2(full = true)
+            sendSyncV2ToPeer(remote, ownSyncInfo)
+            sendExtension(remote, status, ext)
+
+          case Fork =>
+            val syncInfo = historyReader.syncInfoV2(full = true)
+            sendSyncV2ToPeer(remote, syncInfo)
+
+          case Older =>
+            // send sync to older
+            val syncInfo = historyReader.syncInfoV2(full = false)
+            sendSyncV2ToPeer(remote, syncInfo)
+
+          case Equal =>
+            // does nothing for `Equal`
+            log.debug(s"$remote has equal header-chain")
+        }
+
       case _ =>
         // historyReader not initialized yet, it should not happen
         log.error("historyReader not initialized when processing syncInfo")
@@ -212,13 +328,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Filter out non-requested block parts (with a penalty to spamming peer),
     * parse block parts and send valid modifiers to NodeViewHolder
     *
-    * Currently just a copy from private method in basic trait!
     */
   override protected def modifiersFromRemote(data: ModifiersData, remote: ConnectedPeer): Unit = {
     val typeId = data.typeId
     val modifiers = data.modifiers
     log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: $remote")
-    log.trace(s"Received modifier ids ${modifiers.keySet.map(encoder.encodeId).mkString(",")}")
+    log.debug("Modifier ids: " + modifiers.keys)
 
     // filter out non-requested modifiers
     val requestedModifiers = processSpam(remote, typeId, modifiers)
@@ -233,7 +348,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // parse all modifiers and put them to modifiers cache
         val parsed: Iterable[ErgoPersistentModifier] = parseModifiers(requestedModifiers, serializer, remote)
         val valid = parsed.filter(validateAndSetStatus(remote, _))
-        if (valid.nonEmpty) viewHolderRef ! ModifiersFromRemote[ErgoPersistentModifier](valid)
+        if (valid.nonEmpty) viewHolderRef ! ModifiersFromRemote(valid)
       case _ =>
         log.error(s"Undefined serializer for modifier of type $typeId")
     }

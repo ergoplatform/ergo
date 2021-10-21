@@ -29,13 +29,11 @@ import scorex.utils.Random
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
-trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT]
-  with StateApplicationTest[PM, ST]
-  //with WalletSecretsTest[P, TX, PM]
-  with MempoolTransactionsTest[TX, MPool]
-  with MempoolRemovalTest[TX, MPool, PM, CTM, HT, SI]
-  //with BoxStateChangesGenerationTest[P, TX, PM, B, ST]
-  with NodeViewSynchronizerTests[TX, PM, ST, SI, HT, MPool]
+trait ErgoSanity[ST <: MinimalState[ST]] extends HistoryTests
+  with StateApplicationTest[ST]
+  with MempoolTransactionsTest
+  with MempoolRemovalTest
+  with NodeViewSynchronizerTests[ST]
   with ErgoTestHelpers
   with HistoryTestHelpers {
 

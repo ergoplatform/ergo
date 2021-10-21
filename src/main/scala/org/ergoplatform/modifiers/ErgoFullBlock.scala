@@ -16,7 +16,7 @@ case class ErgoFullBlock(header: Header,
                          extension: Extension,
                          adProofs: Option[ADProofs])
   extends ErgoPersistentModifier
-    with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
+    with TransactionsCarryingPersistentNodeViewModifier {
 
   override type M = ErgoFullBlock
 

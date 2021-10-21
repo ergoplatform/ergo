@@ -65,7 +65,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef, nodeViewActorRef: Actor
 
   def sendTransactionR: Route = (pathEnd & post & entity(as[ErgoTransaction])) { tx =>
     validateTransactionAndProcess(tx) { tx =>
-      nodeViewActorRef ! LocallyGeneratedTransaction[ErgoTransaction](tx)
+      nodeViewActorRef ! LocallyGeneratedTransaction(tx)
     }
   }
 

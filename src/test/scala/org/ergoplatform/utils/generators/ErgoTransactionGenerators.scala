@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, LaunchParameters, Parameters}
 import org.ergoplatform.utils.BoxUtils
-import org.ergoplatform.wallet.Constants.ScanId
+import org.ergoplatform.wallet.Constants.{MaxAssetsPerBox, ScanId}
 import org.ergoplatform.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.UnsignedInput
 import org.ergoplatform.modifiers.history.header.Header
@@ -108,7 +108,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     * Generates a transaction that is valid if correct boxes were provided.
     * Generated transaction may still be invalid, if:
     * - default prover does not know how to sign at least one input
-    * - number of assets exceeds Transaction.MaxTokens
+    * - number of assets exceeds MaxAssetsPerBox
     */
   def validUnsignedTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
                                         rnd: Random = new Random,
@@ -158,13 +158,13 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
     val tokenAmounts: mutable.IndexedSeq[mutable.Map[ByteArrayWrapper, Long]] =
       mutable.IndexedSeq.fill(outputsCount)(mutable.Map[ByteArrayWrapper, Long]())
 
-    var availableTokenSlots = outputsCount * ErgoBox.MaxTokens
+    var availableTokenSlots = outputsCount * MaxAssetsPerBox
 
     if (assetsMap.nonEmpty) {
       do {
         val in = assetsMap.head
         val outIdx = Stream.from(1, 1).map(_ => rnd.nextInt(tokenAmounts.size))
-          .find(idx => tokenAmounts(idx).size < ErgoBox.MaxTokens).get
+          .find(idx => tokenAmounts(idx).size < MaxAssetsPerBox).get
         val out = tokenAmounts(outIdx)
         val contains = out.contains(in._1)
 

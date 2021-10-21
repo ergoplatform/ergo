@@ -37,7 +37,7 @@ case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo {
   /**
     * Height of a chain reported by a peer (so most recent header it shows)
     */
-  val height = lastHeaders.headOption.map(_.height).getOrElse(ErgoHistory.EmptyHistoryHeight)
+  val height = lastHeaders.headOption.map(_.height)
 
   override val nonEmpty: Boolean = lastHeaders.nonEmpty
 }

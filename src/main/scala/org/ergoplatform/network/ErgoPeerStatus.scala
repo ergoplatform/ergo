@@ -7,8 +7,7 @@ import scorex.core.network.ConnectedPeer
 
 case class ErgoPeerStatus(peer: ConnectedPeer,
                           status: HistoryComparisonResult,
-                          height: Height,
-                          lastUpdate: Long) {
+                          height: Height) {
   val mode: Option[ModeFeature] = ErgoPeerStatus.mode(peer)
 }
 
@@ -27,8 +26,7 @@ object ErgoPeerStatus {
       "address" -> status.peer.peerInfo.get.peerSpec.address.toString.asJson,
       "mode" -> status.mode.asJson,
       "status" -> status.status.toString.asJson,
-      "height" -> status.height.asJson,
-      "lastUpdate" -> status.lastUpdate.asJson
+      "height" -> status.height.asJson
     )
   }
 

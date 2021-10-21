@@ -208,7 +208,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         val oldStatus = statusTracker.getStatus(remote).getOrElse(Unknown)
         val status = comparison
-        statusTracker.updateStatus(remote, status)
+        statusTracker.updateStatus(remote, status, height = None)
 
         status match {
           case Unknown =>
@@ -267,9 +267,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         val oldStatus = statusTracker.getStatus(remote).getOrElse(Unknown)
         val status = comparison
-        statusTracker.updateStatus(remote, status)
-        val neighbourHeight = syncInfo.height
-        statusTracker.updateHeight(remote, neighbourHeight)
+        statusTracker.updateStatus(remote, status, syncInfo.height)
 
         status match {
           case Unknown =>

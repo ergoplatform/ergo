@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInf
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import scorex.core.NodeViewHolder.DownloadRequest
 import scorex.core.consensus.History._
-import scorex.core.consensus.{History, HistoryReader, SyncInfo}
+import scorex.core.consensus.{HistoryReader, SyncInfo}
 import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
@@ -125,7 +125,7 @@ abstract class NodeViewSynchronizer
 
   protected def peerManagerEvents: Receive = {
     case HandshakedPeer(remote) =>
-      statusTracker.updateStatus(remote, Unknown)
+      statusTracker.updateStatus(remote, status = Unknown, height = None)
 
     case DisconnectedPeer(remote) =>
       statusTracker.clearStatus(remote)
@@ -154,23 +154,6 @@ abstract class NodeViewSynchronizer
       case (mid, mods) =>
         networkControllerRef ! SendToNetwork(Message(invSpec, Right(InvData(mid, mods)), None), SendToPeer(remote))
     }
-
-  //view holder is telling other node status
-  protected def processSyncStatus: Receive = {
-    case OtherNodeSyncingStatus(remote, status, ext) =>
-      statusTracker.updateStatus(remote, status)
-
-      status match {
-        case Unknown =>
-          //todo: should we ban peer if its status is unknown after getting info from it?
-          log.warn("Peer status is still unknown")
-        case Nonsense =>
-          log.warn("Got nonsense")
-        case Younger | Fork =>
-          sendExtension(remote, status, ext)
-        case _ => // does nothing for `Equal` and `Older`
-      }
-  }
 
   /**
     * Object ids coming from other node.
@@ -371,7 +354,6 @@ abstract class NodeViewSynchronizer
     processDataFromPeer orElse
     onDownloadRequest orElse
       getLocalSyncInfo orElse
-      processSyncStatus orElse
       responseFromLocal orElse
       viewHolderEvents orElse
       peerManagerEvents orElse
@@ -409,10 +391,6 @@ object NodeViewSynchronizer {
     case class CheckDelivery(source: Option[ConnectedPeer],
                              modifierTypeId: ModifierTypeId,
                              modifierId: ModifierId)
-
-    case class OtherNodeSyncingStatus[SI <: SyncInfo](remote: ConnectedPeer,
-                                                      status: History.HistoryComparisonResult,
-                                                      extension: Seq[(ModifierTypeId, ModifierId)])
 
     trait PeerManagerEvent
 

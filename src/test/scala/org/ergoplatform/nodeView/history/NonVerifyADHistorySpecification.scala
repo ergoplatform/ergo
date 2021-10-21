@@ -95,8 +95,10 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
   property("Compare headers chain") {
     var history = genHistory()
 
-    def getInfo(c: HeaderChain): ErgoSyncInfo = ErgoSyncInfo(c.headers.map(_.id))
+    def getInfoV1(c: HeaderChain): ErgoSyncInfo = ErgoSyncInfoV1(c.headers.map(_.id))
+    def getInfoV2(c: HeaderChain): ErgoSyncInfo = ErgoSyncInfoV2(Seq(c.headers.last))
 
+    // generate common chain prefix
     val common = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
     history = applyHeaderChain(history, common)
 
@@ -106,18 +108,25 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     history = applyHeaderChain(history, fork1.tail)
     history.bestHeaderOpt.get shouldBe fork1.last
 
-    history.compare(getInfo(fork2)) shouldBe Fork
-    history.compare(getInfo(fork1)) shouldBe Equal
-    history.compare(getInfo(fork1.take(BlocksInChain - 1))) shouldBe Fork
-    history.compare(getInfo(fork2.take(BlocksInChain - 1))) shouldBe Fork
-    history.compare(getInfo(fork2.tail)) shouldBe Older
+    // v1 sync
+    history.compare(getInfoV1(fork2)) shouldBe Fork
+    history.compare(getInfoV1(fork1)) shouldBe Equal
+    history.compare(getInfoV1(fork1.take(BlocksInChain - 1))) shouldBe Fork
+    history.compare(getInfoV1(fork2.take(BlocksInChain - 1))) shouldBe Fork
+    history.compare(getInfoV1(fork2.tail)) shouldBe Older
+
+    // v2 sync
+    history.compare(getInfoV2(fork2)) shouldBe Older
+    history.compare(getInfoV2(fork1)) shouldBe Equal
+    history.compare(getInfoV2(fork1.take(BlocksInChain - 1))) shouldBe Younger
+    history.compare(getInfoV2(fork2.take(BlocksInChain - 1))) shouldBe Younger
+    history.compare(getInfoV2(fork2.tail)) shouldBe Older
   }
 
   property("continuationIds() on forks") {
     var history1 = genHistory()
     var history2 = genHistory()
-    val inChain = genHeaderChain(2, history1, diffBitsOpt = None, useRealTs = false)
-
+    val inChain = genHeaderChain(20, history1, diffBitsOpt = None, useRealTs = false)
 
     //put genesis
     history1 = applyHeaderChain(history1, inChain)
@@ -132,11 +141,13 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     history2.bestHeaderOpt.get shouldBe fork2.take(BlocksInChain / 2).last
     history1.bestHeaderOpt.get shouldBe fork1.last
 
-    val si = history2.syncInfo
+    val si = history2.syncInfoV1
     val continuation = history1.continuationIds(si, BlocksInChain * 100)
-
     fork1.headers.foreach(h => continuation.exists(_._2 == h.id) shouldBe true)
 
+    val si2 = history2.syncInfoV2(full = true)
+    val continuation2 = history1.continuationIds(si2, BlocksInChain * 100)
+    fork1.headers.foreach(h => continuation2.exists(_._2 == h.id) shouldBe true)
   }
 
   property("continuationIds() for empty ErgoSyncInfo should contain ids of all headers") {
@@ -145,21 +156,30 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     history = applyHeaderChain(history, chain)
 
     val smallerLimit = 2
-    val ci0 = history.continuationIds(ErgoSyncInfo(Seq()), smallerLimit)
-    ci0.length shouldBe smallerLimit
+    val ci0v1 = history.continuationIds(ErgoSyncInfoV1(Seq()), smallerLimit)
+    ci0v1.length shouldBe smallerLimit
 
-    chain.headers.take(smallerLimit).map(_.encodedId) shouldEqual ci0.map(c => Algos.encode(c._2))
+    val ci0v2 = history.continuationIds(ErgoSyncInfoV2(Seq()), smallerLimit)
+    ci0v2.length shouldBe smallerLimit
+
+    chain.headers.take(smallerLimit).map(_.encodedId) shouldEqual ci0v1.map(c => Algos.encode(c._2))
+    chain.headers.take(smallerLimit).map(_.encodedId) shouldEqual ci0v2.map(c => Algos.encode(c._2))
 
     val biggerLimit = BlocksInChain + 2
-    val ci1 = history.continuationIds(ErgoSyncInfo(Seq()), biggerLimit)
-    chain.headers.map(_.id) should contain theSameElementsAs ci1.map(_._2)
+    val ci1v1 = history.continuationIds(ErgoSyncInfoV1(Seq()), biggerLimit)
+    chain.headers.map(_.id) should contain theSameElementsAs ci1v1.map(_._2)
+    val ci1v2 = history.continuationIds(ErgoSyncInfoV2(Seq()), biggerLimit)
+    chain.headers.map(_.id) should contain theSameElementsAs ci1v2.map(_._2)
 
-    val ci = history.continuationIds(ErgoSyncInfo(Seq()), BlocksInChain)
-    ci.foreach(c => c._1 shouldBe Header.modifierTypeId)
-    chain.headers.map(_.id) should contain theSameElementsAs ci.map(_._2)
+    val civ1 = history.continuationIds(ErgoSyncInfoV1(Seq()), BlocksInChain)
+    civ1.foreach(c => c._1 shouldBe Header.modifierTypeId)
+    chain.headers.map(_.id) should contain theSameElementsAs civ1.map(_._2)
+    val civ2 = history.continuationIds(ErgoSyncInfoV2(Seq()), BlocksInChain)
+    civ2.foreach(c => c._1 shouldBe Header.modifierTypeId)
+    chain.headers.map(_.id) should contain theSameElementsAs civ2.map(_._2)
   }
 
-  property("continuationIds() for less developed chain should contain ids of next headers in our chain") {
+  property("continuationIds() for smaller chain should contain ids of next headers in our chain") {
     var history = genHistory()
 
     history = ensureMinimalHeight(history, BlocksInChain + 1)
@@ -167,11 +187,17 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
     forAll(smallPositiveInt) { forkLength: Int =>
       whenever(forkLength > 1 && chain.size > forkLength) {
-        val si = ErgoSyncInfo(Seq(chain.headers(chain.size - forkLength - 1).id))
-        val continuation = history.continuationIds(si, forkLength + 1)
-        continuation.length shouldBe forkLength + 1
-        continuation.last._2 shouldEqual chain.last.id
-        continuation.head._2 shouldEqual chain.headers(chain.size - forkLength - 1).id
+        val siv1 = ErgoSyncInfoV1(Seq(chain.headers(chain.size - forkLength - 1).id))
+        val continuation1 = history.continuationIds(siv1, forkLength + 1)
+        continuation1.length shouldBe forkLength + 1
+        continuation1.last._2 shouldEqual chain.last.id
+        continuation1.head._2 shouldEqual chain.headers(chain.size - forkLength - 1).id
+
+        val siv2 = ErgoSyncInfoV2(Seq(chain.headers(chain.size - forkLength - 1)))
+        val continuation2 = history.continuationIds(siv2, forkLength + 1)
+        continuation2.length shouldBe forkLength
+        continuation2.last._2 shouldEqual chain.last.id
+        continuation2.head._2 shouldEqual chain.headers(chain.size - forkLength).id
       }
     }
   }
@@ -212,7 +238,6 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     from1to2Chain._1.get shouldEqual inChain.last.id
     from1to2Chain._2.headers.map(_.height) shouldEqual fork2.headers.map(_.height)
     from1to2Chain._2.headers shouldEqual fork2.headers
-
   }
 
   property("commonBlockThenSuffixes()") {

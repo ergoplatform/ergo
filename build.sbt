@@ -26,6 +26,12 @@ lazy val commonSettings = Seq(
   homepage := Some(url("http://ergoplatform.org/")),
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode")),
   publishTo := sonatypePublishToBundle.value,
+  scmInfo := Some(
+      ScmInfo(
+          url("https://github.com/ergoplatform/ergo"),
+          "scm:git@github.com:ergoplatform/ergo.git"
+      )
+  ),
 )
 
 val circeVersion = "0.13.0"

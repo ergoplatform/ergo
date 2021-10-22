@@ -3,7 +3,7 @@ package scorex.core.network.peer
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.net.{InetAddress, InetSocketAddress}
 
-import scorex.core.settings.ScorexSettings
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.utils.TimeProvider
 import scorex.db.LDBFactory
 import scorex.util.ScorexLogging
@@ -13,9 +13,9 @@ import scala.concurrent.duration._
 /**
   * In-memory peer database implementation supporting temporal blacklisting.
   */
-final class PeerDatabase(settings: ScorexSettings, timeProvider: TimeProvider) extends ScorexLogging {
+final class PeerDatabase(settings: ErgoSettings, timeProvider: TimeProvider) extends ScorexLogging {
 
-  private val objectStore = LDBFactory.createKvDb(s"${settings.dataDir}/peers")
+  private val objectStore = LDBFactory.createKvDb(s"${settings.directory}/peers")
 
   private var peers = loadPeers()
 
@@ -121,7 +121,7 @@ final class PeerDatabase(settings: ScorexSettings, timeProvider: TimeProvider) e
   def penalize(socketAddress: InetSocketAddress, penaltyType: PenaltyType): Boolean =
     Option(socketAddress.getAddress).exists { address =>
       val currentTime = timeProvider.time()
-      val safeInterval = settings.network.penaltySafeInterval.toMillis
+      val safeInterval = settings.scorexSettings.network.penaltySafeInterval.toMillis
       val (penaltyScoreAcc, lastPenaltyTs) = penaltyBook.getOrElse(address, (0, 0L))
       val applyPenalty = currentTime - lastPenaltyTs - safeInterval > 0 || penaltyType.isPermanent
       val newPenaltyScore = if (applyPenalty) {
@@ -130,7 +130,7 @@ final class PeerDatabase(settings: ScorexSettings, timeProvider: TimeProvider) e
         penaltyScoreAcc
       }
 
-      if (newPenaltyScore > settings.network.penaltyScoreThreshold) {
+      if (newPenaltyScore > settings.scorexSettings.network.penaltyScoreThreshold) {
         true
       } else {
         penaltyBook += address -> (newPenaltyScore -> timeProvider.time())
@@ -168,7 +168,7 @@ final class PeerDatabase(settings: ScorexSettings, timeProvider: TimeProvider) e
   private def penaltyDuration(penalty: PenaltyType): Long =
     penalty match {
       case PenaltyType.NonDeliveryPenalty | PenaltyType.MisbehaviorPenalty | PenaltyType.SpamPenalty =>
-        settings.network.temporalBanDuration.toMillis
+        settings.scorexSettings.network.temporalBanDuration.toMillis
       case PenaltyType.PermanentPenalty =>
         (360 * 10).days.toMillis
     }

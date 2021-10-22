@@ -5,14 +5,13 @@ import java.net.InetSocketAddress
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.{ExceptionHandler, RejectionHandler, Route}
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.api.http.{ApiErrorHandler, ApiRejectionHandler, ApiRoute, CompositeHttpService}
 import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PeerManagerRef
 import scorex.core.settings.ScorexSettings
-import scorex.core.transaction.Transaction
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.{NodeViewHolder, PersistentNodeViewModifier}
 import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext
@@ -23,6 +22,7 @@ trait Application extends ScorexLogging {
 
 
   //settings
+  val ergoSettings: ErgoSettings
   implicit val settings: ScorexSettings
 
   //api
@@ -80,7 +80,7 @@ trait Application extends ScorexLogging {
     externalNodeAddress = externalSocketAddress
   )
 
-  val peerManagerRef = PeerManagerRef(settings, scorexContext)
+  val peerManagerRef = PeerManagerRef(ergoSettings, scorexContext)
 
   val networkControllerRef: ActorRef = NetworkControllerRef(
     "networkController", settings.network, peerManagerRef, scorexContext)

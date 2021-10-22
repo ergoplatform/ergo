@@ -179,7 +179,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     val (node, syncInfo, mod, tx, peer, pchProbe, ncProbe, vhProbe, eventListener, modSerializer) = nodeViewSynchronizer
   }
 
-  property("NodeViewSynchronizer: Message: SyncInfoSpec - younger peer") {
+  property("NodeViewSynchronizer: Message: SyncInfoSpec V2 - younger peer") {
     withFixture { ctx =>
       import ctx._
 
@@ -203,7 +203,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
-  property("NodeViewSynchronizer: Message: SyncInfoSpec - older peer") {
+  property("NodeViewSynchronizer: Message: SyncInfoSpec V2 - older peer") {
     withFixture { ctx =>
       import ctx._
 
@@ -221,14 +221,14 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
           case stn: SendToNetwork =>
             val msg = stn.message
             val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
-            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 1
+            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 4
           case _ => false
         }
       }
     }
   }
 
-  property("NodeViewSynchronizer: Message: SyncInfoSpec - unknown peer") {
+  property("NodeViewSynchronizer: Message: SyncInfoSpec V2 - unknown peer") {
     withFixture { ctx =>
       import ctx._
 
@@ -253,7 +253,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     }
   }
 
-  property("NodeViewSynchronizer: Message: SyncInfoSpec - forked peer") {
+  property("NodeViewSynchronizer: Message: SyncInfoSpec V2 - forked peer") {
     withFixture { ctx =>
       import ctx._
 

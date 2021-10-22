@@ -243,7 +243,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             log.debug(s"$remote has equal header-chain")
         }
 
-        if ((oldStatus != status) || syncTracker.isOutdated(remote)) {
+        if ((oldStatus != status) || syncTracker.isOutdated(remote) || status == Older || status == Fork) {
           val ownSyncInfo = historyReader.syncInfoV1
           sendSyncToPeer(remote, ownSyncInfo)
         }
@@ -260,13 +260,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def processSyncV2(syncInfo: ErgoSyncInfoV2, remote: ConnectedPeer): Unit = {
     historyReaderOpt match {
       case Some(historyReader) =>
-        val comparison = historyReader.compare(syncInfo)
-        log.debug(s"Comparison with $remote having starting points ${syncInfo.lastHeaders}. " +
-          s"Comparison result is $comparison.")
 
         val oldStatus = syncTracker.getStatus(remote).getOrElse(Unknown)
-        val status = comparison
+        val status = historyReader.compare(syncInfo)
         syncTracker.updateStatus(remote, status, syncInfo.height)
+
+        log.debug(s"Comparison with $remote having starting points ${syncInfo.lastHeaders}. " +
+          s"Comparison result is $status.")
 
         status match {
           case Unknown =>
@@ -296,7 +296,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             log.debug(s"$remote has equal header-chain")
         }
 
-        if ((oldStatus != status) || syncTracker.isOutdated(remote)) {
+        if ((oldStatus != status) || syncTracker.isOutdated(remote) || status == Older || status == Fork) {
           val ownSyncInfo = historyReader.syncInfoV2(full = true)
           sendSyncToPeer(remote, ownSyncInfo)
         }

@@ -19,15 +19,18 @@ class PeerManager(settings: ScorexSettings, scorexContext: ScorexContext) extend
 
   import PeerManager.ReceivableMessages._
 
-  private val peerDatabase = new InMemoryPeerDatabase(settings, scorexContext.timeProvider)
+  private val peerDatabase = new PeerDatabase(settings, scorexContext.timeProvider)
 
   if (peerDatabase.isEmpty) {
     // fill database with peers from config file if empty
+    log.info("No peers in database, seeding peers database with nodes from config")
     settings.network.knownPeers.foreach { address =>
       if (!isSelf(address)) {
         peerDatabase.addOrUpdateKnownPeer(PeerInfo.fromAddress(address))
       }
     }
+  } else {
+    log.info(s"${peerDatabase.knownPeers.size} peers read from the database")
   }
 
   override def receive: Receive = peersManagement orElse apiInterface orElse {
@@ -39,8 +42,11 @@ class PeerManager(settings: ScorexSettings, scorexContext: ScorexContext) extend
 
     case ConfirmConnection(connectionId, handlerRef) =>
       log.info(s"Connection confirmation request: $connectionId")
-      if (peerDatabase.isBlacklisted(connectionId.remoteAddress)) sender() ! ConnectionDenied(connectionId, handlerRef)
-      else sender() ! ConnectionConfirmed(connectionId, handlerRef)
+      if (peerDatabase.isBlacklisted(connectionId.remoteAddress)) {
+        sender() ! ConnectionDenied(connectionId, handlerRef)
+      } else {
+        sender() ! ConnectionConfirmed(connectionId, handlerRef)
+      }
 
     case AddOrUpdatePeer(peerInfo) =>
       // We have connected to a peer and got his peerInfo from him
@@ -158,8 +164,11 @@ object PeerManager {
           excludedPeers.exists(_.peerSpec.address == p.peerSpec.address) &&
             blacklistedPeers.exists(addr => p.peerSpec.address.map(_.getAddress).contains(addr))
         }.toSeq
-        if (candidates.nonEmpty) Some(candidates(Random.nextInt(candidates.size)))
-        else None
+        if (candidates.nonEmpty) {
+          Some(candidates(Random.nextInt(candidates.size)))
+        } else {
+          None
+        }
       }
     }
 

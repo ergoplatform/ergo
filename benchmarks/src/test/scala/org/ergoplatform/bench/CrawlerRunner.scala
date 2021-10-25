@@ -1,10 +1,9 @@
 package org.ergoplatform.bench
 
 import java.io.File
-
 import akka.actor.ActorRef
 import org.ergoplatform.bench.misc.{CrawlerConfig, TempDir}
-import org.ergoplatform.http.api.{BlocksApiRoute, ErgoUtilsApiRoute, InfoApiRoute, TransactionsApiRoute}
+import org.ergoplatform.http.api.{BlocksApiRoute, ErgoUtilsApiRoute, InfoApiRoute, PeersApiRoute, TransactionsApiRoute}
 import org.ergoplatform.local.ErgoStatsCollectorRef
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
@@ -12,7 +11,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings}
-import scorex.core.api.http.{ApiRoute, PeersApiRoute}
+import scorex.core.api.http.ApiRoute
 import scorex.core.app.Application
 import scorex.core.network.PeerFeature
 import scorex.core.network.message.MessageSpec

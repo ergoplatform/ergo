@@ -7,9 +7,6 @@ import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scorex.core.{PersistentNodeViewModifier, TransactionsCarryingPersistentNodeViewModifier}
-import scorex.core.consensus.{History, SyncInfo}
-import scorex.core.transaction.{MemoryPool, Transaction}
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.generators.ArbitraryTransactionsCarryingModifierProducer
 import scorex.util.ScorexLogging
@@ -28,15 +25,14 @@ trait MempoolRemovalTest extends AnyPropSpec
   property("Transactions once added to block should be removed from Mempool") {
     val min = 1
     val max = 10
-    forAll(Gen.choose(min, max)) { noOfTransactionsFromMempool: Int =>
+    forAll(Gen.choose(min, max)) { _ =>
       var m: ErgoMemPool = memPool
-      @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-      var h: ErgoHistory = historyGen.sample.get
+      // var h: ErgoHistory = historyGen.sample.get
       forAll(transactionGenerator) { tx: ErgoTransaction =>
         m = m.put(tx).get
       }
       // var prevMempoolSize = m.size
-      val b = modifierWithTransactions(Some(m), None)
+      // val b = modifierWithTransactions(Some(m), None)
       //todo: fix    (m.size + b.transactions.get.size) shouldEqual prevMempoolSize
     }
   }

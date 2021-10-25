@@ -21,7 +21,7 @@ case class UTXOSnapshotManifest(chunkRootHashes: Seq[Array[Byte]], blockId: Modi
 
   override type M = UTXOSnapshotManifest
 
-  override lazy val serializer: ScorexSerializer[UTXOSnapshotManifest] = ???
+  override def serializer: ScorexSerializer[UTXOSnapshotManifest] = ???
 
   override def parentId: ModifierId = ???
 

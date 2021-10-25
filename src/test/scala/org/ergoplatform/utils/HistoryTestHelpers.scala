@@ -4,6 +4,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{EmptyBlockSectionProcessor, FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
+import org.ergoplatform.tools.ChainGenerator.settings
 import org.scalacheck.Gen
 import scorex.core.settings.ScorexSettings
 import scorex.util.encode.Base16
@@ -46,7 +47,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix, mining = false, complexityLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None,
-      offlineGeneration = false, 200, 100000, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
+      offlineGeneration = false, 200, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null
     val chainSettings = initialDiffOpt match {
@@ -59,7 +60,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
-      nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
+      nodeSettings, scorexSettings, walletSettings, settings.cacheSettings)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }

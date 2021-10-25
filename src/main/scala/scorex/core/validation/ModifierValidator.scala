@@ -104,7 +104,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
   def validateEquals[A](id: Short, given: => A, expected: => A): ValidationState[T] = {
     pass((given, expected) match {
       case _ if !settings.isActive(id) => result
-      case (a: Array[_], b: Array[_]) if a sameElements b => result
+      case (a: Array[_], b: Array[_]) if a sameElements[Any] b => result
       case (_: Array[_], _) => settings.getError(id, s"Given: $given, expected: $expected. Use validateEqualIds when comparing Arrays")
       case _ if given == expected => result
       case _ => settings.getError(id, s"Given: $given, expected $expected")

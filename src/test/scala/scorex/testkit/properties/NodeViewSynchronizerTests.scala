@@ -11,19 +11,19 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote}
 import scorex.core.consensus.History.{Equal, Nonsense, Older, Younger}
-import scorex.core.consensus.{History, SyncInfo}
+import scorex.core.consensus.SyncInfo
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import scorex.core.network.NodeViewSynchronizer.Events.{BetterNeighbourAppeared, NoBetterNeighbour, NodeViewSynchronizerEvent}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PenaltyType
-import scorex.util.serialization._
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.transaction.state.MinimalState
 import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
+import scorex.util.serialization._
 
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global

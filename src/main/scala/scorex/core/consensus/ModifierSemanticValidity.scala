@@ -1,5 +1,8 @@
 package scorex.core.consensus
 
+/**
+  * Outcome of modifier semantic validation
+  */
 sealed trait ModifierSemanticValidity {
   val code: Byte
 }

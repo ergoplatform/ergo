@@ -130,7 +130,7 @@ object ChainGenerator extends App with ErgoTestHelpers {
         val amount = input.value
         val outs = (0 until qty).map(_ => new ErgoBoxCandidate(amount, selfAddressScript, height))
         val x = outs
-          .foldLeft(Seq.empty[ErgoTransaction], input) { case ((acc, in), out) =>
+          .foldLeft((Seq.empty[ErgoTransaction], input)) { case ((acc, in), out) =>
             val inputs = IndexedSeq(in)
             val unsignedTx = UnsignedErgoTransaction(
               inputs.map(_.id).map(id => new UnsignedInput(id)),

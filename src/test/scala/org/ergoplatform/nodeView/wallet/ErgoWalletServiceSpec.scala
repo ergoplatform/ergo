@@ -222,7 +222,7 @@ class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with Erg
         val walletState = initialState(store, versionedStore)
         val walletService = new ErgoWalletServiceImpl
         val pass = Random.nextString(10)
-        val (mnemonic, initializedState) = walletService.initWallet(walletState, settings, pass, Option.empty).get
+        val initializedState = walletService.initWallet(walletState, settings, pass, Option.empty).get._2
 
         // Wallet unlocked after init, so we're locking it
         val initLockedWalletState = walletService.lockWallet(initializedState)

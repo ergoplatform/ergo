@@ -2,7 +2,6 @@ package scorex.testkit.generators
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
-import scorex.core.consensus.{History, SyncInfo}
 import scorex.core.transaction.state.MinimalState
 
 

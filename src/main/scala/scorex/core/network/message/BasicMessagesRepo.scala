@@ -73,7 +73,7 @@ class InvSpec(maxInvObjects: Int) extends MessageSpecV1[InvData] {
     val count = r.getUInt().toIntExact
     require(count > 0, "empty inv list")
     require(count <= maxInvObjects, s"$count elements in a message while limit is $maxInvObjects")
-    val elems = (0 until count).map { c =>
+    val elems = (0 until count).map { _ =>
       bytesToId(r.getBytes(NodeViewModifier.ModifierIdSize))
     }
 
@@ -141,7 +141,7 @@ class ModifiersSpec(maxMessageSize: Int) extends MessageSpecV1[ModifiersData] wi
     val modifiers = data.modifiers
     require(modifiers.nonEmpty, "empty modifiers list")
 
-    val (msgCount, msgSize) = modifiers.foldLeft((0, HeaderLength)) { case ((c, s), (id, modifier)) =>
+    val (msgCount, msgSize) = modifiers.foldLeft((0, HeaderLength)) { case ((c, s), (_, modifier)) =>
       val size = s + NodeViewModifier.ModifierIdSize + 4 + modifier.length
       val count = if (size <= maxMessageSize) c + 1 else c
       count -> size

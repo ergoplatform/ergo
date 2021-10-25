@@ -6,7 +6,8 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.{ErgoSyncInfoMessageSpec, _}
+import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
@@ -14,14 +15,17 @@ import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
 import scorex.core.NodeViewHolder._
 import scorex.core.app.Version
-import scorex.core.consensus.History.{Equal, Fork, HistoryComparisonResult, Nonsense, Older, Unknown, Younger}
+import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.consensus.{HistoryReader, SyncInfo}
 import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
-import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs, SendToNetwork}
+import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import scorex.core.network.message.{InvData, InvSpec, Message, MessageSpec, ModifiersData, ModifiersSpec, RequestModifierSpec}
+import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
+import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+import scorex.core.network.message.{InvData, Message, ModifiersData}
+import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.{MempoolReader, Transaction}
@@ -67,7 +71,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case (_: ModifiersSpec, data: ModifiersData, remote)  => modifiersFromRemote(data, remote)
   }
 
-  protected val deliveryTracker =
+  protected val deliveryTracker: DeliveryTracker =
     DeliveryTracker.empty(context.system, deliveryTimeout, maxDeliveryChecks, self, settings)
 
   protected var historyReaderOpt: Option[ErgoHistory] = None
@@ -115,7 +119,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
 
     val interval = networkSettings.syncInterval
-    val syncTask = context.system.scheduler.scheduleWithFixedDelay(2.seconds, interval, self, SendLocalSyncInfo)
+    context.system.scheduler.scheduleWithFixedDelay(2.seconds, interval, self, SendLocalSyncInfo)
   }
 
   protected def broadcastModifierInv(m: NodeViewModifier): Unit = {
@@ -177,7 +181,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   // Send history extension to the (less developed) peer 'remote' which does not have it.
   def sendExtension(remote: ConnectedPeer,
-                    status: HistoryComparisonResult,
                     ext: Seq[(ModifierTypeId, ModifierId)]): Unit =
     ext.groupBy(_._1).mapValues(_.map(_._2)).foreach {
       case (mid, mods) =>
@@ -223,7 +226,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
             log.info(s"Sending extension of length ${ext.length}")
             log.debug(s"Extension ids: ${idsToString(ext)}")
-            sendExtension(remote, status, ext)
+            sendExtension(remote, ext)
           case Older =>
             // asking headers from older peers
             val ids = syncInfo.lastHeaderIds.reverse
@@ -284,7 +287,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
             log.info(s"Sending extension of length ${ext.length}")
             log.debug(s"Extension ids: ${idsToString(ext)}")
-            sendExtension(remote, status, ext)
+            sendExtension(remote, ext)
 
           case Fork =>
             log.info(s"Fork detected with peer $remote, its sync message $syncInfo")

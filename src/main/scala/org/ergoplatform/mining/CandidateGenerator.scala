@@ -2,7 +2,6 @@ package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import akka.pattern.StatusReply
-import akka.util.Timeout
 import com.google.common.primitives.Longs
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
@@ -14,6 +13,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedHistory, ChangedMempool, ChangedState, NodeViewChange, SemanticallySuccessfulModifier}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -24,10 +24,7 @@ import org.ergoplatform.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import scorex.core.NodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedModifier}
-import scorex.core.block.Block
-import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.core.utils.NetworkTimeProvider
-import scorex.core.validation.ValidationSettings
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
@@ -39,7 +36,6 @@ import sigmastate.interpreter.ProverResult
 import special.collection.Coll
 
 import scala.annotation.tailrec
-import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
 
@@ -56,9 +52,6 @@ class CandidateGenerator(
   with ScorexLogging {
 
   import org.ergoplatform.mining.CandidateGenerator._
-
-  implicit private val dispatcher: ExecutionContextExecutor = context.system.dispatcher
-  implicit private val timeout: Timeout                     = 5.seconds
 
   /** retrieve Readers once on start and then get updated by events */
   override def preStart(): Unit = {
@@ -310,7 +303,7 @@ object CandidateGenerator extends ScorexLogging {
 
   /** Calculate average mining time from latest block header timestamps */
   def getBlockMiningTimeAvg(
-    timestamps: IndexedSeq[Block.Timestamp]
+    timestamps: IndexedSeq[Header.Timestamp]
   ): FiniteDuration = {
     val miningTimes =
       timestamps.sorted
@@ -492,7 +485,7 @@ object CandidateGenerator extends ScorexLogging {
         state,
         upcomingContext,
         emissionTxs ++ prioritizedTransactions ++ poolTxs
-      )(state.stateContext.validationSettings)
+      )
 
       val eliminateTransactions = EliminateTransactions(toEliminate)
 
@@ -683,7 +676,7 @@ object CandidateGenerator extends ScorexLogging {
     us: UtxoStateReader,
     upcomingContext: ErgoStateContext,
     transactions: Seq[ErgoTransaction]
-  )(implicit vs: ValidationSettings): (Seq[ErgoTransaction], Seq[ModifierId]) = {
+  ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
 
     val currentHeight = us.stateContext.currentHeight
 

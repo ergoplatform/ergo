@@ -2,9 +2,9 @@ package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.header.Header._
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.Constants
-import scorex.core.block.Block._
 import scorex.util._
 import sigmastate.eval.CGroupElement
 import sigmastate.eval.Extensions._

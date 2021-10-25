@@ -10,6 +10,7 @@ class CrawlerActor(c: CrawlerConfig) extends Actor with ScorexLogging {
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
+    ()
   }
 
   override def receive: Receive = {

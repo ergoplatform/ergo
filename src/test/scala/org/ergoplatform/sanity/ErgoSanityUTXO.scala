@@ -77,7 +77,7 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST] with ErgoTestHelpers {
     ))
     val m = totallyValidModifier(h, s)
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-    val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
+    val tx = validErgoTransactionGenTemplate(minAssets = 0, maxAssets = 0).sample.get._2
 
 
     val peerInfo = PeerInfo(defaultPeerSpec, timeProvider.time())

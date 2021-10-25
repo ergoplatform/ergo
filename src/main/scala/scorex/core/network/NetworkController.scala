@@ -20,7 +20,6 @@ import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import scala.language.{existentials, postfixOps}
 import scala.util.Try
 
 /**
@@ -50,9 +49,7 @@ class NetworkController(settings: NetworkSettings,
       Restart
   }
 
-  private implicit val system: ActorSystem = context.system
-
-  private implicit val timeout: Timeout = Timeout(settings.controllerTimeout.getOrElse(5 seconds))
+  private implicit val timeout: Timeout = Timeout(settings.controllerTimeout.getOrElse(5.seconds))
 
   private var messageHandlers = Map.empty[MessageCode, ActorRef]
 
@@ -314,8 +311,7 @@ class NetworkController(settings: NetworkSettings,
 
     val connectionDescription = ConnectionDescription(connection, connectionId, selfAddressOpt, peerFeatures)
 
-    val handlerProps: Props = PeerConnectionHandlerRef.props(settings, self, peerManagerRef,
-      scorexContext, connectionDescription)
+    val handlerProps: Props = PeerConnectionHandlerRef.props(settings, self, scorexContext, connectionDescription)
 
     val handler = context.actorOf(handlerProps) // launch connection handler
     context.watch(handler)

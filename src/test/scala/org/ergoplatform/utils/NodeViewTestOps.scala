@@ -3,7 +3,7 @@ package org.ergoplatform.utils
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
-import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
@@ -94,8 +94,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
   /** Creates next block in chain from transactions, works only for UTXO configurations
     */
   def makeNextBlock(utxoState: UtxoState,
-                    txs: Seq[ErgoTransaction],
-                    ext: ExtensionCandidate = ExtensionCandidate(Seq()))
+                    txs: Seq[ErgoTransaction])
                    (implicit ctx: Ctx): ErgoFullBlock = {
     val time = timeProvider.time()
     val parent = getHistory.bestFullBlockOpt

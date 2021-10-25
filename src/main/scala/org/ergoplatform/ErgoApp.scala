@@ -3,7 +3,7 @@ package org.ergoplatform
 import akka.Done
 import akka.actor.{ActorRef, ActorSystem, CoordinatedShutdown}
 import akka.http.scaladsl.Http
-import akka.stream.SystemMaterializer
+import akka.http.scaladsl.Http.ServerBinding
 import org.ergoplatform.http._
 import org.ergoplatform.http.api._
 import org.ergoplatform.local._
@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
 import scorex.core.api.http._
-import scorex.core.app.{Application, ScorexContext}
+import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
 import scorex.core.network._
 import scorex.core.network.message._
@@ -163,14 +163,13 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private def swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
-  private def run(): Unit = {
-    require(scorexSettings.network.agentName.length <= Application.ApplicationNameLimit)
+  private def run(): Future[ServerBinding] = {
+    require(scorexSettings.network.agentName.length <= ErgoApp.ApplicationNameLimit)
 
     log.debug(s"Available processors: ${Runtime.getRuntime.availableProcessors}")
     log.debug(s"Max memory available: ${Runtime.getRuntime.maxMemory}")
     log.debug(s"RPC is allowed at ${scorexSettings.restApi.bindAddress.toString}")
 
-    implicit val mat: SystemMaterializer = SystemMaterializer.get(actorSystem)
     val bindAddress = scorexSettings.restApi.bindAddress
 
     Http().newServerAt(bindAddress.getAddress.getHostAddress, bindAddress.getPort).bindFlow(httpService.compositeRoute)
@@ -178,7 +177,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 }
 
 object ErgoApp extends ScorexLogging {
-
+  val ApplicationNameLimit: Int = 50
   val argParser = new scopt.OptionParser[Args]("ergo") {
       opt[String]("config")
         .abbr("c")
@@ -217,9 +216,9 @@ object ErgoApp extends ScorexLogging {
                     (implicit system: ActorSystem): Future[Done] =
     CoordinatedShutdown(system).run(reason)
 
-  def main(args: Array[String]): Unit = argParser.parse(args, Args()) match {
-    case Some(argsParsed) => new ErgoApp(argsParsed).run()
-    case None => // Error message will be displayed when arguments are bad
+  def main(args: Array[String]): Unit =
+    argParser.parse(args, Args()).foreach { argsParsed =>
+      new ErgoApp(argsParsed).run()
   }
 
 }

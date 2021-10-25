@@ -27,3 +27,5 @@ addSbtPlugin("com.jsuereth" % "sbt-pgp" % "2.0.0")
 addSbtPlugin("net.bzzt" % "sbt-reproducible-builds" % "0.25")
 
 addSbtPlugin("com.dwijnand" % "sbt-dynver" % "4.1.1")
+
+addSbtPlugin("io.github.davidgregory084" % "sbt-tpolecat" % "0.1.20")

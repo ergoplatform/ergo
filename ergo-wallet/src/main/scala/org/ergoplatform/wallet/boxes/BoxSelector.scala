@@ -42,7 +42,7 @@ object BoxSelector {
 
   // from https://github.com/ergoplatform/ergo/blob/2ce78a0380977b8ca354518edca93a5269ac9f53/src/main/scala/org/ergoplatform/settings/Parameters.scala#L258-L258
   private val MinValuePerByteDefault = 30 * 12
-  val MinBoxValue: Long = (MaxBoxSize.value / 2) * MinValuePerByteDefault
+  val MinBoxValue: Long = (MaxBoxSize.value / 2L) * MinValuePerByteDefault
 
   final case class BoxSelectionResult[T <: ErgoBoxAssets](boxes: Seq[T], changeBoxes: Seq[ErgoBoxAssets])
 

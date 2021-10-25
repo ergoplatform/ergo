@@ -123,7 +123,7 @@ class DigestState protected(override val version: VersionTag,
     case h: Header =>
       log.info(s"Got new Header ${h.encodedId} with root ${Algos.encoder.encode(h.stateRoot)}")
       val version: VersionTag = idToVersion(h.id)
-      stateContext.appendHeader(h, votingSettings) match {
+      stateContext.appendHeader(h) match {
         case Success(sc) => update(version, h.stateRoot, sc)
         case Failure(e) =>
           log.error(s"Can't modify state context due to ${e.getMessage} ", e)

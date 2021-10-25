@@ -26,6 +26,12 @@ lazy val commonSettings = Seq(
   homepage := Some(url("http://ergoplatform.org/")),
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode")),
   publishTo := sonatypePublishToBundle.value,
+  scmInfo := Some(
+      ScmInfo(
+          url("https://github.com/ergoplatform/ergo"),
+          "scm:git@github.com:ergoplatform/ergo.git"
+      )
+  ),
 )
 
 val circeVersion = "0.13.0"
@@ -125,7 +131,7 @@ val opts = Seq(
 
 // -J prefix is required by the bash script
 javaOptions in run ++= opts
-scalacOptions ++= Seq("-Xfatal-warnings", "-feature", "-deprecation")
+scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
 
 sourceGenerators in Compile += Def.task {
   val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"
@@ -314,35 +320,6 @@ credentials ++= (for {
   password <- Option(System.getenv().get("SONATYPE_PASSWORD"))
 } yield Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", username, password)).toSeq
 
-enablePlugins(GitVersioning)
-
-version in ThisBuild := {
-  if (git.gitCurrentTags.value.nonEmpty) {
-    git.gitDescribedVersion.value.get
-  } else {
-    if (git.gitHeadCommit.value.contains(git.gitCurrentBranch.value)) {
-      // see https://docs.travis-ci.com/user/environment-variables/#default-environment-variables
-      if (Try(sys.env("TRAVIS")).getOrElse("false") == "true") {
-        // pull request number, "false" if not a pull request
-        if (Try(sys.env("TRAVIS_PULL_REQUEST")).getOrElse("false") != "false") {
-          // build is triggered by a pull request
-          val prBranchName = Try(sys.env("TRAVIS_PULL_REQUEST_BRANCH")).get
-          val prHeadCommitSha = Try(sys.env("TRAVIS_PULL_REQUEST_SHA")).get
-          prBranchName + "-" + prHeadCommitSha.take(8) + "-SNAPSHOT"
-        } else {
-          // build is triggered by a push
-          val branchName = Try(sys.env("TRAVIS_BRANCH")).get
-          branchName + "-" + git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
-        }
-      } else {
-        git.gitHeadCommit.value.get.take(8) + "-SNAPSHOT"
-      }
-    } else {
-      git.gitCurrentBranch.value + "-" + git.gitHeadCommit.value.getOrElse("").take(8) + "-SNAPSHOT"
-    }
-  }
-}
-
 def javacReleaseOption = {
   if (System.getProperty("java.version").startsWith("1.")) 
     // java <9 "--release" is not supported
@@ -350,3 +327,8 @@ def javacReleaseOption = {
   else
     Seq("--release", "8")
 }
+
+// prefix version with "-SNAPSHOT" for builds without a git tag
+dynverSonatypeSnapshots in ThisBuild := true
+// use "-" instead of default "+"
+dynverSeparator in ThisBuild := "-"

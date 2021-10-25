@@ -11,8 +11,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer, Head
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
-import scorex.core.block.Block
-import scorex.core.block.Block.{Timestamp, Version}
+import org.ergoplatform.modifiers.history.header.Header.{Timestamp, Version}
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
@@ -223,10 +222,10 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Generate element of Autolykos equation.
     */
-  private def genElement(version: Block.Version,
+  private def genElement(version: Header.Version,
                          m: Array[Byte],
-                         pk: Array[Byte],  // not used in v2
-                         w: Array[Byte],   // not used in v2
+                         pk: Array[Byte], // not used in v2
+                         w: Array[Byte], // not used in v2
                          indexBytes: Array[Byte],
                          heightBytes: => Array[Byte] // not used in v1
                         ): BigInt = {
@@ -246,7 +245,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * correct solution of the Autolykos PoW puzzle.
     */
   def prove(parentOpt: Option[Header],
-            version: Block.Version,
+            version: Header.Version,
             nBits: Long,
             stateRoot: ADDigest,
             adProofsRoot: Digest32,
@@ -274,7 +273,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * correct solution of the Autolykos PoW puzzle.
     */
   def proveBlock(parentOpt: Option[Header],
-                 version: Block.Version,
+                 version: Header.Version,
                  nBits: Long,
                  stateRoot: ADDigest,
                  adProofBytes: SerializedAdProof,
@@ -325,7 +324,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * Check nonces from `startNonce` to `endNonce` for message `m`, secrets `sk` and `x`, difficulty `b`.
     * Return AutolykosSolution if there is any valid nonce in this interval.
     */
-  private[mining] def checkNonces(version: Block.Version,
+  private[mining] def checkNonces(version: Header.Version,
                                   h: Array[Byte],
                                   m: Array[Byte],
                                   sk: BigInt,

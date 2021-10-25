@@ -5,7 +5,6 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
 import scorex.util.encode.Base16
 import io.circe.{Decoder, Encoder}
-import io.circe.generic.auto._
 import io.circe.syntax._
 import org.ergoplatform.http.api.ApiCodecs
 import sigmastate.SType

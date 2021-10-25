@@ -237,7 +237,7 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   private def updateStorage(newModRow: ErgoPersistentModifier,
                             bestFullHeaderId: ModifierId,
-                            additionalIndexes: Seq[(ByteArrayWrapper, Array[Byte])] = Seq.empty): Try[Unit] = {
+                            additionalIndexes: Seq[(ByteArrayWrapper, Array[Byte])]): Try[Unit] = {
     val indicesToInsert = Seq(BestFullBlockKey -> idToBytes(bestFullHeaderId)) ++ additionalIndexes
     historyStorage.insert(indicesToInsert, Seq(newModRow)).flatMap { _ =>
       if (headersHeight >= fullBlockHeight)

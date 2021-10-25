@@ -155,13 +155,13 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private def swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
   private def run(): Future[ServerBinding] = {
-    require(settings.network.agentName.length <= ErgoApp.ApplicationNameLimit)
+    require(scorexSettings.network.agentName.length <= ErgoApp.ApplicationNameLimit)
 
     log.debug(s"Available processors: ${Runtime.getRuntime.availableProcessors}")
     log.debug(s"Max memory available: ${Runtime.getRuntime.maxMemory}")
     log.debug(s"RPC is allowed at ${scorexSettings.restApi.bindAddress.toString}")
 
-    val bindAddress = settings.restApi.bindAddress
+    val bindAddress = scorexSettings.restApi.bindAddress
 
     Http().newServerAt(bindAddress.getAddress.getHostAddress, bindAddress.getPort).bindFlow(httpService.compositeRoute)
   }

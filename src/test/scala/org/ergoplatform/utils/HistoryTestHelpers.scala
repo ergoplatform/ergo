@@ -4,7 +4,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{EmptyBlockSectionProcessor, FullBlockPruningProcessor, ToDownloadProcessor}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
-import org.ergoplatform.tools.ChainGenerator.settings
 import org.scalacheck.Gen
 import scorex.core.settings.ScorexSettings
 import scorex.util.encode.Base16

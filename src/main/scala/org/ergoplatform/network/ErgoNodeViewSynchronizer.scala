@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoMessageSpec, _}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
@@ -67,7 +68,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   protected val deliveryTracker =
-    new DeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self)
+    DeliveryTracker.empty(context.system, deliveryTimeout, maxDeliveryChecks, self, settings)
 
   protected var historyReaderOpt: Option[ErgoHistory] = None
   protected var mempoolReaderOpt: Option[ErgoMemPool] = None

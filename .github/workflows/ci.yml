@@ -51,6 +51,7 @@ jobs:
         run: sbt ++${{ matrix.scala }} ergoWallet/test
 
       - name: Publish a wallet snapshot ${{ github.ref }}
+        if: env.HAS_SECRETS == 'true'
         run: sbt ++${{ matrix.scala }} ergoWallet/publish
         env:
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}

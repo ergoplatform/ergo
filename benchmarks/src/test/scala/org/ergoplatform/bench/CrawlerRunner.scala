@@ -36,7 +36,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 
-  lazy val ergoSettings: ErgoSettings = ErgoSettings.read(Args(cfgPath, None))
+  override val ergoSettings: ErgoSettings = ErgoSettings.read(Args(cfgPath, None))
 
   lazy val emission = new EmissionRules(ergoSettings.chainSettings.monetary)
 

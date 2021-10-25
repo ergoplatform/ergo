@@ -8,6 +8,8 @@ import scorex.core.network.{ConnectionDirection, PeerSpec}
 /**
   * Information about peer to be stored in PeerDatabase
   *
+  * In case of updating this class check database backwards compatibility also!
+  *
   * @param peerSpec       - general information about the peer
   * @param lastHandshake  - timestamp when last handshake was done
   * @param connectionType - type of connection (Incoming/Outgoing) established to this peer if any

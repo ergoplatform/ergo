@@ -139,9 +139,7 @@ abstract class NodeViewSynchronizer
     * when our modifier is not synced yet, but no modifiers are expected from other peers
     * or request modifiers we need with known ids, that are not applied yet.
     */
-  protected def requestMoreModifiers(applied: Seq[ErgoPersistentModifier]): Unit = {
-    assert(applied != null) // to satisfy scalac
-  }
+  protected def requestMoreModifiers(applied: Seq[ErgoPersistentModifier]): Unit = {}
 
   protected def peerManagerEvents: Receive = {
     case HandshakedPeer(remote) =>

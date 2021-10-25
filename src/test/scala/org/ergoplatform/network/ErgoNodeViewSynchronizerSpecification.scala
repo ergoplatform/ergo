@@ -114,10 +114,7 @@ class ErgoNodeViewSynchronizerSpecification extends HistoryTestHelpers with Matc
     statefulyValidFullBlock(state.asInstanceOf[WrappedUtxoState])
   }
 
-  def semanticallyInvalidModifier(state: UTXO_ST): PM = {
-    assert(state != null)
-    invalidErgoFullBlockGen.sample.get
-  }
+  def semanticallyInvalidModifier(state: UTXO_ST): PM = invalidErgoFullBlockGen.sample.get
 
   def totallyValidModifier(history: HT, state: UTXO_ST): PM = {
     val parentOpt = history.bestFullBlockOpt

@@ -109,10 +109,7 @@ trait WalletTestOps extends NodeViewBaseOps {
   }
 
   private def replaceNewAssetStub(assets: Seq[(TokenId, Long)], inputs: Seq[Input]): Seq[(TokenId, Long)] = {
-    def isNewAsset(tokenId: TokenId, value: Long): Boolean = {
-      assert(value > 0)
-      java.util.Arrays.equals(tokenId, newAssetIdStub)
-    }
+    def isNewAsset(tokenId: TokenId, value: Long): Boolean = java.util.Arrays.equals(tokenId, newAssetIdStub)
 
     val (newAsset, spentAssets) = assets.partition((isNewAsset _).tupled)
     newAsset.map(Digest32 @@ inputs.head.boxId -> _._2) ++ spentAssets

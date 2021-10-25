@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import scorex.core.NodeViewHolder.ReceivableMessages.{ModifiersFromRemote, TransactionsFromRemote}
 import scorex.core.NodeViewHolder._
@@ -41,8 +42,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   extends NodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec,
     settings.scorexSettings.network, timeProvider, Constants.modifierSerializers) {
 
-  override protected val deliveryTracker =
-    new DeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self)
+  override protected val deliveryTracker: DeliveryTracker =
+    DeliveryTracker.empty(context.system, deliveryTimeout, maxDeliveryChecks, self, settings)
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 

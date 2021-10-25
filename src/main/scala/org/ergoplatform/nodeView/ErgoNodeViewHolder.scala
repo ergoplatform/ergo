@@ -286,6 +286,7 @@ private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
   */
 sealed abstract class ErgoNodeViewProps[ST <: StateType, S <: ErgoState[S], N <: ErgoNodeViewHolder[S]]
 (implicit ev: StateType.Evidence[ST, S]) {
+  assert(ev != null) // just to satisfy scalac
   def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider, digestType: ST): Props
 }
 
@@ -308,8 +309,8 @@ object ErgoNodeViewRef {
   def props(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider): Props =
     settings.nodeSettings.stateType match {
-      case digestType@StateType.Digest => DigestNodeViewProps(settings, timeProvider, digestType)
-      case utxoType@StateType.Utxo => UtxoNodeViewProps(settings, timeProvider, utxoType)
+      case StateType.Digest => DigestNodeViewProps(settings, timeProvider, StateType.Digest)
+      case StateType.Utxo => UtxoNodeViewProps(settings, timeProvider, StateType.Utxo)
     }
 
   def apply(settings: ErgoSettings,

@@ -18,7 +18,7 @@ import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.network.message.{InvData, Message, ModifiersData}
-import scorex.core.network.{ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToPeer, SendToPeers, SyncTracker}
+import scorex.core.network.{ConnectedPeer, ModifiersStatus, NodeViewSynchronizer, SendToPeer, SendToPeers}
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.settings.NetworkSettings
 import scorex.core.transaction.Transaction
@@ -44,8 +44,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   extends NodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec,
     settings.scorexSettings.network, timeProvider, Constants.modifierSerializers) {
 
-  override protected val deliveryTracker =
-    new DeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self)
+  override protected val deliveryTracker: DeliveryTracker =
+    DeliveryTracker.empty(context.system, deliveryTimeout, maxDeliveryChecks, self, settings)
 
   // cache of transaction ids that were already applied to history
   private var blockAppliedTxsCache: TreeMap[ModifierId, Long] = TreeMap.empty[ModifierId, Long]
@@ -122,7 +122,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Method sends V1/V2 sync messages based on neighbour version.
     *
     */
-  override protected def sendSync(syncTracker: SyncTracker, history: ErgoHistory): Unit = {
+  override protected def sendSync(history: ErgoHistory): Unit = {
     val peers = statusTracker.peersToSyncWith()
     val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
     log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
@@ -183,7 +183,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             if (ext.isEmpty) log.warn("Extension is empty while comparison is younger")
             log.info(s"Sending extension of length ${ext.length}")
             log.debug(s"Extension ids: ${idsToString(ext)}")
-            sendExtension(remote, status, ext)
+            sendExtension(remote, ext)
           case Older =>
             // asking headers from older peers
             val ids = syncInfo.lastHeaderIds.reverse
@@ -241,7 +241,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             log.debug(s"Extension ids: ${idsToString(ext)}")
             val ownSyncInfo = historyReader.syncInfoV2(full = true)
             sendSyncV2ToPeer(remote, ownSyncInfo)
-            sendExtension(remote, status, ext)
+            sendExtension(remote, ext)
 
           case Fork =>
             val syncInfo = historyReader.syncInfoV2(full = true)
@@ -486,7 +486,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         self ! CheckModifiersToDownload
       } else {
         // headers chain is not synced yet, but our requested list is half empty - ask for more headers
-        sendSync(statusTracker, h)
+        sendSync(h)
       }
     }
   }

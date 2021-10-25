@@ -92,7 +92,7 @@ class NipopowAlgos(powScheme: AutolykosPowScheme) {
   }
 
   /**
-    * Computes max level (μ) of the given [[Header]], such that μ = log(T) − log(id(B))
+    * Computes max level (μ) of the given header, such that μ = log(T) − log(id(B))
     */
   def maxLevelOf(header: Header): Int =
     if (!header.isGenesis) {

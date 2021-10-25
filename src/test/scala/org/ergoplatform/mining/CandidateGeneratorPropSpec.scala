@@ -102,7 +102,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     val tx = validErgoTransactionGen.sample.get._2
     CandidateGenerator.doublespend(Seq(tx), tx) shouldBe true
 
-    val inputs = validErgoTransactionGenTemplate(0, -1, 100).sample.get._1
+    val inputs = validErgoTransactionGenTemplate(minAssets = 0, maxAssets = -1).sample.get._1
     val (l, r) = inputs.splitAt(50)
     val tx_1   = validTransactionFromBoxes(l)
     val tx_2   = validTransactionFromBoxes(r :+ l.last) //conflicting with tx_1
@@ -151,7 +151,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
           us,
           upcomingContext,
           Seq(head)
-        )(validationSettingsNoIl)
+        )
         ._1
       fromSmallMempool.size shouldBe 2
       fromSmallMempool.contains(head) shouldBe true
@@ -165,7 +165,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
           us,
           upcomingContext,
           txsWithFees
-        )(validationSettingsNoIl)
+        )
         ._1
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
@@ -250,7 +250,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     val expectedReward = emission.minersRewardAtHeight(us.stateContext.currentHeight)
 
     forAll(
-      Gen.nonEmptyListOf(validErgoTransactionGenTemplate(0, propositionGen = feeProp))
+      Gen.nonEmptyListOf(validErgoTransactionGenTemplate(minAssets = 0, propositionGen = feeProp))
     ) { btxs =>
       val blockTxs = btxs.map(_._2)
       val height   = ErgoHistory.EmptyHistoryHeight

@@ -6,7 +6,6 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
-import scorex.ObjectGenerators
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, ModifiersFromRemote}
 import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
@@ -17,7 +16,6 @@ import scorex.util.ScorexLogging
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 @SuppressWarnings(Array("org.wartremover.warts.TraversableOps"))
 trait NodeViewHolderTests[ST <: MinimalState[ST]]

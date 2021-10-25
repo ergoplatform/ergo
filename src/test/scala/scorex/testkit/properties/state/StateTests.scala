@@ -4,10 +4,9 @@ import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scorex.core.PersistentNodeViewModifier
 import scorex.core.transaction.state.MinimalState
 import scorex.testkit.TestkitHelpers
-import scorex.testkit.generators.{SemanticallyValidModifierProducer, SemanticallyInvalidModifierProducer, CoreGenerators}
+import scorex.testkit.generators.{CoreGenerators, SemanticallyInvalidModifierProducer, SemanticallyValidModifierProducer}
 
 trait StateTests[ST <: MinimalState[ST]]
   extends AnyPropSpec

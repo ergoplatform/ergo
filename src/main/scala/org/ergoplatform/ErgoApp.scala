@@ -38,33 +38,33 @@ class ErgoApp(args: Args) extends ScorexLogging {
   log.info(s"Working directory: ${ergoSettings.directory}")
   log.info(s"Secret directory: ${ergoSettings.walletSettings.secretStorage.secretDir}")
 
-  implicit private def settings: ScorexSettings = ergoSettings.scorexSettings
+  implicit private def scorexSettings: ScorexSettings = ergoSettings.scorexSettings
 
-  implicit private val actorSystem: ActorSystem = ActorSystem(settings.network.agentName)
+  implicit private val actorSystem: ActorSystem = ActorSystem(scorexSettings.network.agentName)
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
 
   private val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
   private val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
 
-  private val timeProvider = new NetworkTimeProvider(settings.ntp)
+  private val timeProvider = new NetworkTimeProvider(scorexSettings.ntp)
 
   private val upnpGateway: Option[UPnPGateway] =
-    if (settings.network.upnpEnabled) UPnP.getValidGateway(settings.network) else None
-  upnpGateway.foreach(_.addPort(settings.network.bindAddress.getPort))
+    if (scorexSettings.network.upnpEnabled) UPnP.getValidGateway(scorexSettings.network) else None
+  upnpGateway.foreach(_.addPort(scorexSettings.network.bindAddress.getPort))
 
   //an address to send to peers
   private val externalSocketAddress: Option[InetSocketAddress] =
-    settings.network.declaredAddress orElse {
-      upnpGateway.map(u => new InetSocketAddress(u.externalAddress, settings.network.bindAddress.getPort))
+    scorexSettings.network.declaredAddress orElse {
+      upnpGateway.map(u => new InetSocketAddress(u.externalAddress, scorexSettings.network.bindAddress.getPort))
     }
 
   private val basicSpecs = {
-    val invSpec = new InvSpec(settings.network.maxInvObjects)
-    val requestModifierSpec = new RequestModifierSpec(settings.network.maxInvObjects)
-    val modifiersSpec = new ModifiersSpec(settings.network.maxPacketSize)
+    val invSpec = new InvSpec(scorexSettings.network.maxInvObjects)
+    val requestModifierSpec = new RequestModifierSpec(scorexSettings.network.maxInvObjects)
+    val modifiersSpec = new ModifiersSpec(scorexSettings.network.maxPacketSize)
     Seq(
       GetPeersSpec,
-      new PeersSpec(featureSerializers, settings.network.maxPeerSpecObjects),
+      new PeersSpec(featureSerializers, scorexSettings.network.maxPeerSpecObjects),
       invSpec,
       requestModifierSpec,
       modifiersSpec
@@ -81,10 +81,10 @@ class ErgoApp(args: Args) extends ScorexLogging {
     externalNodeAddress = externalSocketAddress
   )
 
-  private val peerManagerRef = PeerManagerRef(settings, scorexContext)
+  private val peerManagerRef = PeerManagerRef(ergoSettings, scorexContext)
 
   private val networkControllerRef: ActorRef = NetworkControllerRef(
-    "networkController", settings.network, peerManagerRef, scorexContext)
+    "networkController", scorexSettings.network, peerManagerRef, scorexContext)
 
   private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
 
@@ -105,25 +105,25 @@ class ErgoApp(args: Args) extends ScorexLogging {
       ergoSettings, timeProvider)
 
   // Launching PeerSynchronizer actor which is then registering itself at network controller
-  PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, settings.network, featureSerializers)
+  PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, scorexSettings.network, featureSerializers)
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
-    PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
-    InfoApiRoute(statsCollectorRef, settings.restApi, timeProvider),
+    PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, scorexSettings.restApi),
+    InfoApiRoute(statsCollectorRef, scorexSettings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
-    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi),
+    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, scorexSettings.restApi),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
-    UtxoApiRoute(readersHolderRef, settings.restApi),
+    UtxoApiRoute(readersHolderRef, scorexSettings.restApi),
     ScriptApiRoute(readersHolderRef, ergoSettings),
     ScanApiRoute(readersHolderRef, ergoSettings),
     NodeApiRoute(ergoSettings)
   ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
 
 
-  private val swaggerRoute = SwaggerRoute(settings.restApi, swaggerConfig)
+  private val swaggerRoute = SwaggerRoute(scorexSettings.restApi, swaggerConfig)
   private val panelRoute = NodePanelRoute()
 
   private val httpService = ErgoHttpService(apiRoutes, swaggerRoute, panelRoute)
@@ -145,7 +145,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   )
 
   coordinatedShutdown.addTask(CoordinatedShutdown.PhaseBeforeServiceUnbind, "stop-upnpGateway") { () =>
-    Future(upnpGateway.foreach(_.deletePort(settings.network.bindAddress.getPort))).map(_ => Done)
+    Future(upnpGateway.foreach(_.deletePort(scorexSettings.network.bindAddress.getPort))).map(_ => Done)
   }
 
   if (!ergoSettings.nodeSettings.stateType.requireProofs) {
@@ -159,7 +159,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
     log.debug(s"Available processors: ${Runtime.getRuntime.availableProcessors}")
     log.debug(s"Max memory available: ${Runtime.getRuntime.maxMemory}")
-    log.debug(s"RPC is allowed at ${settings.restApi.bindAddress.toString}")
+    log.debug(s"RPC is allowed at ${scorexSettings.restApi.bindAddress.toString}")
 
     val bindAddress = settings.restApi.bindAddress
 

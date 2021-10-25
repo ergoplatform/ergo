@@ -42,8 +42,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   extends NodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec,
     settings.scorexSettings.network, timeProvider, Constants.modifierSerializers) {
 
-  override protected val deliveryTracker =
-    new DeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self)
+  override protected val deliveryTracker: DeliveryTracker =
+    DeliveryTracker.empty(context.system, deliveryTimeout, maxDeliveryChecks, self, settings)
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 

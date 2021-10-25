@@ -342,14 +342,14 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix, mining = false, complexityLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second,miningPubKeyHex = None,
-      offlineGeneration = false, 200, 100000, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
+      offlineGeneration = false, 200, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null
     val chainSettings = settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
-      nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
+      nodeSettings, scorexSettings, walletSettings, settings.cacheSettings)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }

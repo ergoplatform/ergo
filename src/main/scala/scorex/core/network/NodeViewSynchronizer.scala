@@ -61,7 +61,7 @@ abstract class NodeViewSynchronizer
     case (_: ModifiersSpec, data: ModifiersData, remote)  => modifiersFromRemote(data, remote)
   }
 
-  protected val deliveryTracker = new DeliveryTracker(context.system, deliveryTimeout, maxDeliveryChecks, self)
+  protected val deliveryTracker: DeliveryTracker
   protected val statusTracker = new SyncTracker(self, context, networkSettings, timeProvider)
 
   protected var historyReaderOpt: Option[ErgoHistory] = None

@@ -2,6 +2,7 @@ package org.ergoplatform.network
 
 import io.circe.{Encoder, Json}
 import org.ergoplatform.nodeView.history.ErgoHistory.Height
+import scorex.core.app.Version
 import scorex.core.consensus.History.HistoryComparisonResult
 import scorex.core.network.ConnectedPeer
 
@@ -16,6 +17,8 @@ case class ErgoPeerStatus(peer: ConnectedPeer,
                           status: HistoryComparisonResult,
                           height: Height) {
   val mode: Option[ModeFeature] = ErgoPeerStatus.mode(peer)
+
+  def version: Option[Version] = peer.peerInfo.map(_.peerSpec.protocolVersion)
 }
 
 object ErgoPeerStatus {
@@ -34,6 +37,7 @@ object ErgoPeerStatus {
 
     Json.obj(
       "address" -> status.peer.peerInfo.get.peerSpec.address.toString.asJson,
+      "version" -> status.version.map(_.toString).getOrElse("N/A"),
       "mode" -> status.mode.asJson,
       "status" -> status.status.toString.asJson,
       "height" -> status.height.asJson

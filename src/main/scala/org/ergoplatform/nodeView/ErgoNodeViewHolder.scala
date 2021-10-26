@@ -17,15 +17,10 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.FileUtils
-import scorex.core.NodeViewHolder.ReceivableMessages.ModifiersFromRemote
 import scorex.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
-import spire.syntax.all.cfor
-
-import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,

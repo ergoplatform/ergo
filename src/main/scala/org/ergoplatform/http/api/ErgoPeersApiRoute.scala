@@ -32,10 +32,10 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
   override implicit lazy val timeout: Timeout = Timeout(1.minute)
 
   override lazy val route: Route = pathPrefix("peers") {
-    allPeers ~ connectedPeers ~ blacklistedPeers ~ connect ~ peersStatus ~ fullInfo
+    allPeers ~ connectedPeers ~ blacklistedPeers ~ connect ~ peersStatus ~ syncInfo
   }
 
-  def fullInfo: Route = (path("fullInfo") & get) {
+  def syncInfo: Route = (path("syncInfo") & get) {
     ApiResponse(syncTracker.fullInfo())
   }
 

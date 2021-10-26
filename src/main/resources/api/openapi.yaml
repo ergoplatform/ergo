@@ -2817,9 +2817,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /peers/fullInfo:
+  /peers/syncInfo:
     get:
-      summary: Get peers info, including versions, current status and height (if available)
+      summary: Get sync info reported by peers, including versions, current status and height (if available)
       operationId: getPeersFullInfo
       tags:
         - peers

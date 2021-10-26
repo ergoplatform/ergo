@@ -11,25 +11,27 @@ case class Version(firstDigit: Byte, secondDigit: Byte, thirdDigit: Byte) extend
 
   override def serializer: ScorexSerializer[Version] = ApplicationVersionSerializer
 
-  override def compare(that: Version): Int = if (this.firstDigit != that.firstDigit) {
-    this.firstDigit - that.firstDigit
-  } else if (this.secondDigit != that.secondDigit) {
-    this.secondDigit - that.secondDigit
-  } else {
-    this.thirdDigit - that.thirdDigit
+  override def compare(that: Version): Int = {
+    if (this.firstDigit != that.firstDigit) {
+      this.firstDigit - that.firstDigit
+    } else if (this.secondDigit != that.secondDigit) {
+      this.secondDigit - that.secondDigit
+    } else {
+      this.thirdDigit - that.thirdDigit
+    }
   }
 
   override def toString: String = s"$firstDigit.$secondDigit.$thirdDigit"
 }
 
 object Version {
+
   def apply(v: String): Version = {
     val splitted = v.split("\\.")
     Version(splitted(0).toByte, splitted(1).toByte, splitted(2).toByte)
   }
 
   val initial: Version = Version(0, 0, 1)
-  val last: Version = Version(0, 0, 1)
 
 }
 

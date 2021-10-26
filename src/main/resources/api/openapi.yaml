@@ -2809,7 +2809,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PeersStatus'
+                type: array
+                items:
+                  $ref: '#/components/schemas/PeersInfo'
         default:
           description: Error
           content:
@@ -2829,7 +2831,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PeersInfo'
+                type: array
+                items:
+                  $ref: '#/components/schemas/PeersInfo'
         default:
           description: Error
           content:

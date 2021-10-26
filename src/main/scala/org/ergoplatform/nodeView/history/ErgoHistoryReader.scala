@@ -81,11 +81,6 @@ trait ErgoHistoryReader
   override def contains(id: ModifierId): Boolean = historyStorage.contains(id)
 
   /**
-    * Id of the best full block known
-    */
-  override def openSurfaceIds(): Seq[ModifierId] = bestFullBlockIdOpt.orElse(bestHeaderIdOpt).toSeq
-
-  /**
     * Check, that it's possible to apply modifier to history
     */
   def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess

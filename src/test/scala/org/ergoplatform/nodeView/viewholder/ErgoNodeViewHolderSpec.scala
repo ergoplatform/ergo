@@ -45,7 +45,6 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getHistoryHeight shouldBe ErgoHistory.GenesisHeight
     getHeightOf(block.header.id) shouldBe Some(ErgoHistory.GenesisHeight)
     getLastHeadersLength(10) shouldBe 1
-    getOpenSurfaces shouldBe Seq(block.header.id)
     getBestHeaderOpt shouldBe Some(block.header)
   }
 

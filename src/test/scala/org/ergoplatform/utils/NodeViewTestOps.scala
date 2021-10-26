@@ -140,7 +140,6 @@ trait NodeViewTestOps extends NodeViewBaseOps {
 
   def getBestHeaderEncodedId(implicit ctx: Ctx): Option[String] = getBestHeaderOpt.map(_.encodedId)
 
-  def getOpenSurfaces(implicit ctx: Ctx): Seq[ModifierId] = getHistory.openSurfaceIds()
 
   def getHistoryHeight(implicit ctx: Ctx): Int = getHistory.headersHeight
 

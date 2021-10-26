@@ -141,7 +141,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         case Success((historyBeforeStUpdate, progressInfo)) =>
           log.debug(s"Going to apply modifications to the state: $progressInfo")
           context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod))
-          context.system.eventStream.publish(NewOpenSurface(historyBeforeStUpdate.openSurfaceIds()))
 
           if (progressInfo.toApply.nonEmpty) {
             val (newHistory, newStateTry, blocksApplied) =

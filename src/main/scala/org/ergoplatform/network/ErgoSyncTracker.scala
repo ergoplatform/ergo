@@ -101,9 +101,9 @@ final case class ErgoSyncTracker(system: ActorSystem,
       if (outdated.nonEmpty) {
         outdated
       } else {
-        val unknowns = statuses.filter(_._2.status == Unknown).keys.toIndexedSeq
-        val forks = statuses.filter(_._2.status == Fork).keys.toIndexedSeq
-        val elders = statuses.filter(_._2.status == Older).keys.toIndexedSeq
+        val unknowns = statuses.filter(_._2.status == Unknown).keys.toSeq
+        val forks = statuses.filter(_._2.status == Fork).keys
+        val elders = statuses.filter(_._2.status == Older).keys.toSeq
         val nonOutdated =
           (if (elders.nonEmpty) elders(scala.util.Random.nextInt(elders.size)) +: unknowns else unknowns) ++ forks
         nonOutdated.filter(p => (timeProvider.time() - lastSyncSentTime.getOrElse(p, 0L)).millis >= MinSyncInterval)

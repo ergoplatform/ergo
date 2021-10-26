@@ -37,7 +37,7 @@ object ErgoPeerStatus {
 
     Json.obj(
       "address" -> status.peer.peerInfo.get.peerSpec.address.toString.asJson,
-      "version" -> status.version.map(_.toString).getOrElse("N/A"),
+      "version" -> status.version.map(_.toString).getOrElse("N/A").asJson,
       "mode" -> status.mode.asJson,
       "status" -> status.status.toString.asJson,
       "height" -> status.height.asJson

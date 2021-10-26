@@ -25,8 +25,8 @@ final case class ErgoSyncTracker(system: ActorSystem,
   val MinSyncInterval: FiniteDuration = 20.seconds
   val SyncThreshold: FiniteDuration = 1.minute
 
-  protected val statuses = mutable.Map[ConnectedPeer, ErgoPeerStatus]()
-  protected val lastSyncSentTime = mutable.Map[ConnectedPeer, Time]()
+  private[network] val statuses = mutable.Map[ConnectedPeer, ErgoPeerStatus]()
+  private[network] val lastSyncSentTime = mutable.Map[ConnectedPeer, Time]()
 
   protected var lastSyncInfoSentTime: Time = 0L
 
@@ -69,7 +69,7 @@ final case class ErgoSyncTracker(system: ActorSystem,
     }
 
     lastSyncSentTime.find(_._1.connectionId.remoteAddress == remote) match {
-      case Some((peer, _)) => statuses -= peer
+      case Some((peer, _)) => lastSyncSentTime -= peer
       case None => log.warn(s"Trying to clear last sync time for $remote, but it is not found")
     }
   }

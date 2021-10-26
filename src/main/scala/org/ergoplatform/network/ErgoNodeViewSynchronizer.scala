@@ -95,7 +95,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   override def preStart(): Unit = {
     val toDownloadCheckInterval = networkSettings.syncInterval
 
-    // super.preStart below
     // register as a handler for synchronization-specific types of messages
     val messageSpecs: Seq[MessageSpec[_]] = Seq(invSpec, requestModifierSpec, modifiersSpec, syncInfoSpec)
     networkControllerRef ! RegisterMessageSpecs(messageSpecs, self)
@@ -394,16 +393,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // parse all modifiers and put them to modifiers cache
         val parsed: Iterable[ErgoPersistentModifier] = parseModifiers(requestedModifiers, serializer, remote)
         val valid = parsed.filter(validateAndSetStatus(remote, _))
-        if (valid.headOption.exists(_.isInstanceOf[Header])) {
-          println("hs: " + valid.map(_.asInstanceOf[Header].height).mkString(","))
-        }
         if (valid.nonEmpty) {
           viewHolderRef ! ModifiersFromRemote(valid)
 
+          // send sync message to the peer to get new headers quickly
           if (valid.head.isInstanceOf[Header] && historyReaderOpt.isDefined) {
             val historyReader = historyReaderOpt.get
             val syncInfo = if (syncV2Supported(remote)) {
-              historyReader.syncInfoV2(false)
+              historyReader.syncInfoV2(full = false)
             } else {
               historyReader.syncInfoV1
             }

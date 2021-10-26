@@ -114,8 +114,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // subscribe for history and mempool changes
     viewHolderRef ! GetNodeViewChanges(history = true, state = false, vault = false, mempool = true)
 
-    context.system.scheduler.scheduleWithFixedDelay(10.seconds, 1.minute, self, SendLocalSyncInfo)
-
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
 
     val interval = networkSettings.syncInterval
@@ -155,7 +153,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Method sends V1/V2 sync messages based on neighbour version.
     *
     */
-  protected def sendSync(syncTracker: ErgoSyncTracker, history: ErgoHistory): Unit = {
+  protected def sendSync(history: ErgoHistory): Unit = {
     val peers = syncTracker.peersToSyncWith()
     val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
     log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
@@ -517,7 +515,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         self ! CheckModifiersToDownload
       } else {
         // headers chain is not synced yet, but our requested list is half empty - ask for more headers
-        sendSync(syncTracker, h)
+        sendSync(h)
       }
     }
   }
@@ -678,7 +676,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def getLocalSyncInfo: Receive = {
     case SendLocalSyncInfo =>
-      historyReaderOpt.foreach(sendSync(syncTracker, _))
+      historyReaderOpt.foreach(sendSync(_))
   }
 
 

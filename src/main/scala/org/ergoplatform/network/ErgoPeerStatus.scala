@@ -36,7 +36,7 @@ object ErgoPeerStatus {
     implicit val mfEnc: Encoder[ModeFeature] = ModeFeature.jsonEncoder
 
     Json.obj(
-      "address" -> status.peer.peerInfo.get.peerSpec.address.toString.asJson,
+      "address" -> status.peer.peerInfo.get.peerSpec.address.getOrElse(_.toString, "N/A").asJson,
       "version" -> status.version.map(_.toString).getOrElse("N/A").asJson,
       "mode" -> status.mode.asJson,
       "status" -> status.status.toString.asJson,

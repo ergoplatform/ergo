@@ -18,6 +18,8 @@ case class Version(firstDigit: Byte, secondDigit: Byte, thirdDigit: Byte) extend
   } else {
     this.thirdDigit - that.thirdDigit
   }
+
+  override def toString: String = s"$firstDigit.$secondDigit.$thirdDigit"
 }
 
 object Version {

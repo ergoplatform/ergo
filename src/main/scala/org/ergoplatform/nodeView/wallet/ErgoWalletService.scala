@@ -194,6 +194,25 @@ trait ErgoWalletService {
                       stateContext: ErgoStateContext)(extract: BoxId => Option[ErgoBox]): Try[ErgoTransaction]
 
   /**
+    * Sign a message
+    */
+  def signMessage(proverOpt: Option[ErgoProvingInterpreter],
+                  tx: UnsignedErgoTransaction,
+                  secrets: Seq[ExternalSecret],
+                  hints: TransactionHintsBag,
+                  boxesToSpendOpt: Option[Seq[ErgoBox]],
+                  dataBoxesOpt: Option[Seq[ErgoBox]],
+                  parameters: Parameters,
+                  stateContext: ErgoStateContext,
+                  message: Option[Seq[String]])(extract: BoxId => Option[ErgoBox]): Try[Array[Byte]] // Try[ErgoMessage]
+
+  def verifyMessage(proverOpt: Option[ErgoProvingInterpreter],
+                    secrets: Seq[ExternalSecret],
+                    parameters: Parameters,
+                    signedMessage: Option[String],
+                    message: Option[Seq[String]]): Try[Array[Byte]]
+
+  /**
     * Generate signed or unsigned transaction.
     */
   def generateTransaction(state: ErgoWalletState,
@@ -572,6 +591,73 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
     secretsProver
       .sign(tx, boxesToSpend.toIndexedSeq, dataBoxes.toIndexedSeq, stateContext, hints)
       .map(ErgoTransaction.apply)
+  }
+
+  def signMessage(proverOpt: Option[ErgoProvingInterpreter],
+                  tx: UnsignedErgoTransaction,
+                  secrets: Seq[ExternalSecret],
+                  hints: TransactionHintsBag,
+                  boxesToSpendOpt: Option[Seq[ErgoBox]],
+                  dataBoxesOpt: Option[Seq[ErgoBox]],
+                  parameters: Parameters,
+                  stateContext: ErgoStateContext,
+                  messageToSign: Option[Seq[String]])(extract: BoxId => Option[ErgoBox]): Try[Array[Byte]] = { // Try[ErgoMessage] = {
+
+    // val boxesToSpend = boxesToSpendOpt.getOrElse(tx.inputs.flatMap { input => extract(input.boxId) })
+    // val dataBoxes = dataBoxesOpt.getOrElse(tx.dataInputs.flatMap { dataInput => extract(dataInput.boxId) })
+    // val message : Array[Byte] = "hello world".getBytes() // testing
+
+    val proverSecrets = proverOpt.map(_.secretKeys).getOrElse(Seq.empty)
+    val secretsWrapped = secrets.map(_.key).toIndexedSeq
+    val secretsProver = ErgoProvingInterpreter(secretsWrapped ++ proverSecrets, parameters)
+    val publicKey = secretsProver.publicKeys.head
+    val message = messageToSign.flatMap(_.headOption).getOrElse(new String(""))
+    val signedMessage = secretsProver
+      // for now, just sign first message (_headOption); ?? is array of message even needed?
+      .signMessage(publicKey, message.getBytes(), hints.allHintsForInput(0))
+      .fold(
+        e => e.getMessage,
+        bytes => Base16.encode(bytes)
+      )
+
+    // return message; ?? anything else? opCode/other for diagnostics temporary
+    val res = Try(
+      s"""
+         |{
+         |  "signedMessge": "${signedMessage}",
+         |  "message": "${message}",
+         |  "publicKey.opCode": "${publicKey.opCode}"s
+         |}
+         |""".stripMargin.getBytes()
+    )
+    res
+  }
+
+  def verifyMessage(proverOpt: Option[ErgoProvingInterpreter],
+                    secrets: Seq[ExternalSecret],
+                    parameters: Parameters,
+                    signedMessage: Option[String],
+                    messageToSign: Option[Seq[String]]): Try[Array[Byte]] = {
+
+    val proverSecrets = proverOpt.map(_.secretKeys).getOrElse(Seq.empty)
+    val secretsWrapped = secrets.map(_.key).toIndexedSeq
+    val secretsProver = ErgoProvingInterpreter(secretsWrapped ++ proverSecrets, parameters)
+    val sigmaTree = secretsProver.publicKeys.head
+    val message = messageToSign.flatMap(_.headOption).getOrElse(new String("")).getBytes()
+    val signature = signedMessage.getOrElse(new String("")).getBytes()
+    val isValid = secretsProver
+      .verifySignature(sigmaTree, message, signature)
+
+    val res = Try(
+      s"""
+         |{
+         |  "signedMessage": "${signedMessage.getOrElse(new String(""))}",
+         |  "signature": "${messageToSign.flatMap(_.headOption).getOrElse(new String(""))}",
+         |  "isValid": "${isValid}"
+         |}
+         |""".stripMargin.getBytes()
+    )
+    res
   }
 
 }

@@ -25,6 +25,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -37,6 +38,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   import ErgoWalletActor._
 
+  private implicit val ec: ExecutionContextExecutor = scala.concurrent.ExecutionContext.global
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
   override val supervisorStrategy: OneForOneStrategy =
@@ -326,6 +328,34 @@ class ErgoWalletActor(settings: ErgoSettings,
         )(state.readBoxFromUtxoWithWalletFallback)
       sender() ! txTry
 
+    case SignMessage(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, message) =>
+      val txTry =
+        ergoWalletService.signMessage(
+          state.walletVars.proverOpt,
+          tx,
+          secrets,
+          hints,
+          boxesToSpendOpt,
+          dataBoxesOpt,
+          state.parameters,
+          state.stateContext,
+          message
+        )(state.readBoxFromUtxoWithWalletFallback)
+      sender() ! txTry
+
+    case VerifyMessage(tx, secrets, hints, signedMessage, message) =>
+      val txTry =
+        ergoWalletService.verifyMessage(
+          state.walletVars.proverOpt,
+          secrets,
+          state.parameters,
+          signedMessage,
+          message
+        )
+      sender() ! txTry
+
+
+
     case ExtractHints(tx, real, simulated, boxesToSpendOpt, dataBoxesOpt) =>
       val bag = ergoWalletService.extractHints(state, tx, real, simulated, boxesToSpendOpt, dataBoxesOpt)
       sender() ! ExtractHintsResult(bag)
@@ -526,6 +556,28 @@ object ErgoWalletActor extends ScorexLogging {
                              hints: TransactionHintsBag,
                              boxesToSpend: Option[Seq[ErgoBox]],
                              dataBoxes: Option[Seq[ErgoBox]])
+
+  /**
+    * A request to sign a message
+    *
+    * @param utx          - unsigned transaction
+    * @param secrets      - additional secrets given to the prover
+    * @param hints        - hints used for transaction signing (commitments and partial proofs)
+    * @param boxesToSpend - boxes the transaction is spending
+    * @param dataBoxes    - read-only inputs of the transaction
+    */
+  case class SignMessage(utx: UnsignedErgoTransaction,
+                         secrets: Seq[ExternalSecret],
+                         hints: TransactionHintsBag,
+                         boxesToSpend: Option[Seq[ErgoBox]],
+                         dataBoxes: Option[Seq[ErgoBox]],
+                         message: Option[Seq[String]])
+
+  case class VerifyMessage(utx: UnsignedErgoTransaction,
+                           secrets: Seq[ExternalSecret],
+                           hints: TransactionHintsBag,
+                           signedMessage: Option[String],
+                           message: Option[Seq[String]])
 
   /**
     *

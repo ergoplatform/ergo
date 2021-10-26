@@ -62,6 +62,8 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
         deriveNextKeyR ~
         updateChangeAddressR ~
         signTransactionR ~
+        signMessageR ~
+        verifyMessageR ~
         checkSeedR ~
         rescanWalletR ~
         extractHintsR
@@ -222,6 +224,61 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
       _.fold(
         e => BadRequest(s"Malformed request: ${e.getMessage}"),
         tx => ApiResponse(tx.asJson)
+      )
+    }
+  }
+
+  def signMessageR: Route = (path("message" / "sign")
+    & post & entity(as[MessageSigningRequest])) { msr =>
+
+    val tx = msr.unsignedTx
+    val secrets = msr.externalSecrets
+    val hints = msr.hints
+    val message = msr.message
+
+    def signWithReaders(r: Readers): Future[Try[Array[Byte]]] = {
+      if (msr.inputs.isDefined) {
+        val boxesToSpend = msr.inputs.get
+          .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
+        val dataBoxes = msr.dataInputs.getOrElse(Seq.empty)
+          .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
+
+        if (boxesToSpend.size == tx.inputs.size && dataBoxes.size == tx.dataInputs.size) {
+          r.w.signMessage(tx, secrets, hints, Some(boxesToSpend), Some(dataBoxes), message)
+        } else {
+          Future(Failure(new Exception("Can't parse input boxes provided")))
+        }
+      } else {
+        r.w.signMessage(tx, secrets, hints, None, None, message)
+      }
+    }
+
+    onSuccess {
+      (readersHolder ? GetReaders)
+        .mapTo[Readers]
+        .flatMap(r => signWithReaders(r))
+    } {
+      _.fold(
+        e => BadRequest(s"Malformed request: ${e.getMessage}"),
+        msg => ApiResponse(msg.map(_.toChar).mkString.asJson)
+      )
+    }
+  }
+
+  def verifyMessageR: Route = (path("message" / "verify") & post & entity(as[MessageVerifyRequest])) { mvr =>
+
+    val tx = mvr.unsignedTx
+    val secrets = mvr.externalSecrets
+    val hints = mvr.hints
+
+    onSuccess {
+      (readersHolder ? GetReaders)
+        .mapTo[Readers]
+        .flatMap(r => r.w.verifyMessage(tx, secrets, hints, mvr.signedMessage, mvr.message))
+    } {
+      _.fold(
+        e => BadRequest(s"Malformed request: ${e.getMessage}"),
+        msg => ApiResponse(msg.map(_.toChar).mkString.asJson)
       )
     }
   }

@@ -12,7 +12,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.ErgoAlgos
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
-import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, GenerateCommitmentsRequest, TransactionSigningRequest}
+import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, GenerateCommitmentsRequest, TransactionSigningRequest, MessageSigningRequest, MessageVerifyRequest}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
@@ -51,7 +51,7 @@ trait ApiCodecs extends JsonCodecs {
 
   implicit val sideEncoder: Encoder[Side] = _.toByte.asJson
 
-  protected implicit def merkleProofEncoder[D <: Digest]: Encoder[MerkleProof[D]] = { proof =>
+  implicit def merkleProofEncoder[D <: Digest]: Encoder[MerkleProof[D]] = { proof =>
     Json.obj(
       "leafData" -> proof.leafData.asJson,
       "levels" -> proof.levels.asJson,
@@ -419,6 +419,53 @@ trait ApiCodecs extends JsonCodecs {
       dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
       secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
     } yield TransactionSigningRequest(tx, hints.getOrElse(TransactionHintsBag.empty), secrets, inputs, dataInputs)
+  }
+
+  implicit val messageSigningRequestEncoder: Encoder[MessageSigningRequest] = { tsr =>
+    Json.obj(
+      "tx" -> tsr.unsignedTx.asJson,
+      "secrets" -> Json.obj(
+        "dlog" -> tsr.dlogs.asJson,
+        "dht" -> tsr.dhts.asJson
+      ),
+      "hints" -> tsr.hints.asJson,
+      "inputsRaw" -> tsr.inputs.asJson,
+      "dataInputsRaw" -> tsr.dataInputs.asJson,
+      "message" -> tsr.message.asJson
+    )
+  }
+
+  implicit val messageSigningRequestDecoder: Decoder[MessageSigningRequest] = { cursor =>
+    for {
+      tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
+      dlogs <- cursor.downField("secrets").downField("dlog").as[Option[Seq[DlogSecretKey]]]
+      dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DhtSecretKey]]]
+      hints <- cursor.downField("hints").as[Option[TransactionHintsBag]]
+      inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
+      dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
+      message <- cursor.downField("tx").downField("message").as[Option[Seq[String]]]
+      secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
+    } yield MessageSigningRequest(tx, hints.getOrElse(TransactionHintsBag.empty), secrets, inputs, dataInputs, message)
+  }
+
+  implicit val messageVerifyRequestEncoder: Encoder[MessageVerifyRequest] = { mvr =>
+    Json.obj(
+      "tx" -> mvr.unsignedTx.asJson,
+      "signedMessage" -> mvr.signedMessage.asJson,
+      "message" -> mvr.message.asJson
+    )
+  }
+
+  implicit val messageVerifyRequestDecoder: Decoder[MessageVerifyRequest] = { cursor =>
+    for {
+      tx <- cursor.downField("tx").as[UnsignedErgoTransaction]
+      dlogs <- cursor.downField("secrets").downField("dlog").as[Option[Seq[DlogSecretKey]]]
+      dhts <- cursor.downField("secrets").downField("dht").as[Option[Seq[DhtSecretKey]]]
+      hints <- cursor.downField("hints").as[Option[TransactionHintsBag]]
+      signedMessage <- cursor.downField("tx").downField("signedMessage").as[Option[String]]
+      message <- cursor.downField("tx").downField("message").as[Option[Seq[String]]]
+      secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
+    } yield MessageVerifyRequest(tx, hints.getOrElse(TransactionHintsBag.empty), secrets, signedMessage, message)
   }
 
   implicit val generateCommitmentsRequestEncoder: Encoder[GenerateCommitmentsRequest] = { gcr =>

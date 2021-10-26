@@ -1,26 +1,25 @@
 package org.ergoplatform.nodeView.wallet
 
-import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform.{ErgoBox, P2PKAddress}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor._
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
-import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
 import org.ergoplatform.nodeView.wallet.requests.{BoxesRequest, ExternalSecret, TransactionGenerationRequest}
+import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
-import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
+import org.ergoplatform.{ErgoBox, P2PKAddress}
 import scorex.core.transaction.wallet.VaultReader
 import scorex.util.ModifierId
 import sigmastate.Values.SigmaBoolean
 
+import java.util.concurrent.TimeUnit
 import scala.concurrent.Future
 import scala.util.Try
 
@@ -112,6 +111,21 @@ trait ErgoWalletReader extends VaultReader {
                       boxesToSpend: Option[Seq[ErgoBox]],
                       dataBoxes: Option[Seq[ErgoBox]]): Future[Try[ErgoTransaction]] =
     (walletActor ? SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes)).mapTo[Try[ErgoTransaction]]
+
+  def signMessage(tx: UnsignedErgoTransaction,
+                  secrets: Seq[ExternalSecret],
+                  hints: TransactionHintsBag,
+                  boxesToSpend: Option[Seq[ErgoBox]],
+                  dataBoxes: Option[Seq[ErgoBox]],
+                  message: Option[Seq[String]]): Future[Try[Array[Byte]]] = // Future[Try[ErgoMessage]] =
+    (walletActor ? SignMessage(tx, secrets, hints, boxesToSpend, dataBoxes, message)).mapTo[Try[Array[Byte]]] // .mapTo[Try[ErgoMessage]]
+
+  def verifyMessage(tx: UnsignedErgoTransaction,
+                    secrets: Seq[ExternalSecret],
+                    hints: TransactionHintsBag,
+                    signedMessage: Option[String],
+                    message: Option[Seq[String]]): Future[Try[Array[Byte]]] =
+    (walletActor ? VerifyMessage(tx, secrets, hints, signedMessage, message)).mapTo[Try[Array[Byte]]]
 
   def extractHints(tx: ErgoTransaction,
                    real: Seq[SigmaBoolean],

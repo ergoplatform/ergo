@@ -1,5 +1,6 @@
 package org.ergoplatform.network
 
+import io.circe.{Encoder, Json}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{NodeConfigurationSettings, PeerFeatureIds}
 import scorex.core.network.PeerFeature
@@ -30,6 +31,8 @@ case class ModeFeature(stateType: StateType,
 
 object ModeFeature {
 
+  import io.circe.syntax._
+
   def apply(nodeSettings: NodeConfigurationSettings): ModeFeature = {
     val popowSuffix = if (nodeSettings.poPoWBootstrap) Some(nodeSettings.minimalSuffix) else None
 
@@ -38,6 +41,14 @@ object ModeFeature {
       nodeSettings.verifyTransactions,
       popowSuffix,
       nodeSettings.blocksToKeep
+    )
+  }
+
+  implicit val jsonEncoder: Encoder[ModeFeature] = { mf: ModeFeature =>
+    Json.obj(
+      "state" -> mf.stateType.toString.asJson,
+      "verifyingTransactions" -> mf.verifyingTransactions.asJson,
+      "fullBlocksSuffix" -> mf.blocksToKeep.asJson
     )
   }
 

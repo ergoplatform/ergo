@@ -464,7 +464,6 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
       history.applicable(extension) shouldBe true
       history.bestHeaderOpt.get shouldBe header
       history.bestFullBlockOpt.get shouldBe startFullBlock
-      history.openSurfaceIds().head shouldEqual startFullBlock.header.id
 
       history = history.append(txs).get._1
 
@@ -492,7 +491,6 @@ class VerifyADHistorySpecification extends HistoryTestHelpers with NoShrink {
       history.applicable(txs) shouldBe false
       history.bestHeaderOpt.value shouldBe header
       history.bestFullBlockOpt.value shouldBe fullBlock
-      history.openSurfaceIds().head shouldEqual fullBlock.header.id
     }
   }
 

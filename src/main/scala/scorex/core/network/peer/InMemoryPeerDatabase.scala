@@ -44,8 +44,7 @@ final class InMemoryPeerDatabase(settings: ScorexSettings, timeProvider: TimePro
   /*
    * Deserialize object using standard Java serializer
    */
-  private def deserialize(bytes: Array[Byte]) : Object =
-  {
+  private def deserialize(bytes: Array[Byte]) : Object = {
     val ois = new ObjectInputStream(new ByteArrayInputStream(bytes))
     ois.readObject()
   }
@@ -57,7 +56,7 @@ final class InMemoryPeerDatabase(settings: ScorexSettings, timeProvider: TimePro
     var peers = Map.empty[InetSocketAddress, PeerInfo]
     for ((addr,peer) <- objectStore.getAll) {
       val address = deserialize(addr).asInstanceOf[InetSocketAddress]
-      val peerInfo = deserialize(peer).asInstanceOf[PeerInfo]
+      val peerInfo = PeerInfoSerializer.parseBytes(peer)
       peers += address -> peerInfo
     }
     peers
@@ -70,7 +69,7 @@ final class InMemoryPeerDatabase(settings: ScorexSettings, timeProvider: TimePro
       peerInfo.peerSpec.address.foreach { address =>
         log.debug(s"Updating peer info for $address")
         peers += address -> peerInfo
-        objectStore.insert(Seq((serialize(address), serialize(peerInfo))))
+        objectStore.insert(Seq((serialize(address), PeerInfoSerializer.toBytes(peerInfo))))
       }
     }
   }

@@ -1,4 +1,4 @@
-package scorex
+package scorex.testkit.generators
 
 import java.net.{InetAddress, InetSocketAddress}
 
@@ -10,7 +10,6 @@ import scorex.core.network.message.{InvData, ModifiersData}
 import scorex.core.network._
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.{ModifierTypeId, NodeViewModifier}
-import scorex.crypto.signatures.Curve25519
 import scorex.util.serialization._
 import scorex.util.{ModifierId, bytesToId}
 

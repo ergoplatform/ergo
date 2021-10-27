@@ -1,18 +1,17 @@
 package org.ergoplatform.bench
 
 import java.io.File
-
 import akka.actor.ActorRef
 import org.ergoplatform.bench.misc.{CrawlerConfig, TempDir}
 import org.ergoplatform.http.api.{BlocksApiRoute, ErgoUtilsApiRoute, InfoApiRoute, TransactionsApiRoute}
 import org.ergoplatform.local.ErgoStatsCollectorRef
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.network.ErgoNodeViewSynchronizer
+import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings}
-import scorex.core.api.http.{ApiRoute, PeersApiRoute}
+import scorex.core.api.http.ApiRoute
 import scorex.core.app.Application
 import scorex.core.network.PeerFeature
 import scorex.core.network.message.MessageSpec
@@ -36,7 +35,7 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   implicit val ec: ExecutionContextExecutor = actorSystem.dispatcher
 
-  lazy val ergoSettings: ErgoSettings = ErgoSettings.read(Args(cfgPath, None))
+  override val ergoSettings: ErgoSettings = ErgoSettings.read(Args(cfgPath, None))
 
   lazy val emission = new EmissionRules(ergoSettings.chainSettings.monetary)
 
@@ -53,19 +52,20 @@ class CrawlerRunner(args: Array[String]) extends Application {
 
   override val apiRoutes: Seq[ApiRoute] = Seq(
     ErgoUtilsApiRoute(ergoSettings),
-    PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, settings.restApi),
     InfoApiRoute(statsCollectorRef, settings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, settings.restApi))
 
   override val swaggerConfig: String = Source.fromResource("api/openapi.yaml").getLines.mkString("\n")
 
+  val syncTracker = ErgoSyncTracker(actorSystem, settings.network, timeProvider)
+
   override val nodeViewSynchronizer: ActorRef =
     ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      ergoSettings, timeProvider)
+      ergoSettings, timeProvider, syncTracker)
 
 }
 
 object CrawlerRunner {
-  def main(args: Array[String]): Unit = new CrawlerRunner(args).run
+  def main(args: Array[String]): Unit = new CrawlerRunner(args).run()
 }

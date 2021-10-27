@@ -19,13 +19,12 @@ import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, ErgoBox, GlobalConstants, P2PKAddress}
 import scorex.core.VersionTag
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
 import scorex.core.utils.ScorexEncoding
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
-import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -38,7 +37,6 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   import ErgoWalletActor._
 
-  private implicit val ec: ExecutionContextExecutor = scala.concurrent.ExecutionContext.global
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
   override val supervisorStrategy: OneForOneStrategy =

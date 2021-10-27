@@ -1,15 +1,11 @@
 package org.ergoplatform.bench
 
-import java.io.File
-
 import akka.actor.{ActorRef, ActorSystem}
 import org.ergoplatform.bench.misc.TempDir
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{ErgoState, StateType}
-import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, NVBenchmark}
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import scorex.core.NodeViewHolder.CurrentView
@@ -30,7 +26,7 @@ object BenchRunner extends ScorexLogging with NVBenchmark {
     val threshold = args.headOption.getOrElse("1000").toInt
     val isUtxo = args.lift(2).isEmpty
     val state = if (isUtxo) StateType.Utxo else StateType.Digest
-    val benchRef = BenchActor(threshold, state)
+    val benchRef = BenchActor(threshold)
     val userDir = TempDir.createTempDir
 
     log.info(s"User dir is $userDir")

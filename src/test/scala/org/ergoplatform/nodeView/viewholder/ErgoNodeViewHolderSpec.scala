@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.{ErgoPropertyTest, FileUtils, NodeViewTestConfig, NodeViewTestOps, TestCase}
 import scorex.core.NodeViewHolder.ReceivableMessages._
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.testkit.utils.NoShrink
 import scorex.util.{ModifierId, bytesToId}
@@ -45,7 +45,6 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getHistoryHeight shouldBe ErgoHistory.GenesisHeight
     getHeightOf(block.header.id) shouldBe Some(ErgoHistory.GenesisHeight)
     getLastHeadersLength(10) shouldBe 1
-    getOpenSurfaces shouldBe Seq(block.header.id)
     getBestHeaderOpt shouldBe Some(block.header)
   }
 

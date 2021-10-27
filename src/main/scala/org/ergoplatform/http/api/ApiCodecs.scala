@@ -51,7 +51,7 @@ trait ApiCodecs extends JsonCodecs {
 
   implicit val sideEncoder: Encoder[Side] = _.toByte.asJson
 
-  implicit def merkleProofEncoder[D <: Digest]: Encoder[MerkleProof[D]] = { proof =>
+  protected implicit def merkleProofEncoder[D <: Digest]: Encoder[MerkleProof[D]] = { proof =>
     Json.obj(
       "leafData" -> proof.leafData.asJson,
       "levels" -> proof.levels.asJson,

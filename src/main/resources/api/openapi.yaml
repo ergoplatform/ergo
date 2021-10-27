@@ -387,6 +387,95 @@ components:
               items:
                 $ref: '#/components/schemas/DhtSecret'
 
+    MessageSigningRequest:
+      description: A request to sign a transaction and message with secrets provided
+      type: object
+      required:
+        - tx
+        - secrets
+        - message
+      properties:
+        tx:
+          description: Unsigned transaction to sign
+          type: object
+          $ref: '#/components/schemas/UnsignedErgoTransaction'
+        inputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
+        dataInputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
+        message:
+          description: message to generate signature for
+          type: array
+          items:
+            type: string
+            description: phrases to sign
+        hints:
+          description: Optional list of hints used for signing
+          $ref: '#/components/schemas/TransactionHintsBag'
+        secrets:
+          description: Secrets used for signing
+          type: object
+          properties:
+            dlog:
+              description: Sequence of secret exponents (DLOG secrets)
+              type: array
+              items:
+                $ref: '#/components/schemas/DlogSecret'
+            dht:
+              description: Sequence of secret Diffie-Hellman tuple exponents (DHT secrets)
+              type: array
+              items:
+                $ref: '#/components/schemas/DhtSecret'
+
+    MessageVerifyRequest:
+      description: A request to sign a transaction with secrets provided
+      type: object
+      required:
+        - tx
+        - secrets
+      properties:
+        tx:
+          description: Unsigned transaction to sign
+          type: object
+          $ref: '#/components/schemas/UnsignedErgoTransaction'
+        inputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
+        dataInputsRaw:
+          description: Optional list of inputs to be used in serialized form
+          type: array
+          items:
+            type: string
+            description: hex-encoded serialized box bytes
+        hints:
+          description: Optional list of hints used for signing
+          $ref: '#/components/schemas/TransactionHintsBag'
+        secrets:
+          description: Secrets used for signing
+          type: object
+          properties:
+            dlog:
+              description: Sequence of secret exponents (DLOG secrets)
+              type: array
+              items:
+                $ref: '#/components/schemas/DlogSecret'
+            dht:
+              description: Sequence of secret Diffie-Hellman tuple exponents (DHT secrets)
+              type: array
+              items:
+                $ref: '#/components/schemas/DhtSecret'
+
     AddressHolder:
       description: Holds encoded ErgoAddress
       type: object
@@ -3797,7 +3886,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-
   /wallet/transaction/sign:
     post:
       security:
@@ -3819,6 +3907,80 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TransactionSigningRequest'
+      responses:
+        '200':
+          description: Generated Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransaction'
+        '400':
+          description: Bad transaction request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/message/sign:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Sign arbitrary unsigned transaction and message with wallet secrets and also secrets provided.
+      operationId: walletMessageSign
+      tags:
+        - wallet
+      requestBody:
+        description:
+          With this API method an arbitrary unsigned transaction and message can be signed with secrets provided or stored in the
+          wallet. Both DLOG and Diffie-Hellman tuple secrets are supported.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageSigningRequest'
+      responses:
+        '200':
+          description: Generated Ergo transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErgoTransaction'
+        '400':
+          description: Bad transaction request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/message/verify:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Verify arbitrary signature message with wallet secrets and also secrets provided.
+      operationId: walletMessageVerify
+      tags:
+        - wallet
+      requestBody:
+        description:
+          With this API method an arbitrary message can be verified with secrets provided or stored in the
+          wallet. Both DLOG and Diffie-Hellman tuple secrets are supported.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageVerifyRequest'
       responses:
         '200':
           description: Generated Ergo transaction
@@ -4111,7 +4273,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-
   /utxo/withPool/byId/{boxId}:
     get:
       summary: Get box contents for a box by a unique identifier, from UTXO set and also the mempool.
@@ -4206,7 +4367,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-
   /script/p2sAddress:
     post:
       security:
@@ -4274,7 +4434,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-
 
   /script/addressToTree/{address}:
     get:
@@ -4579,7 +4738,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-
   /wallet/extractHints:
     post:
       security:
@@ -4613,7 +4771,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-
 
   /scan/addBox:
     post:

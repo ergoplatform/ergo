@@ -25,7 +25,6 @@ import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.Values.SigmaBoolean
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
 
-import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -38,7 +37,6 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   import ErgoWalletActor._
 
-  private implicit val ec: ExecutionContextExecutor = scala.concurrent.ExecutionContext.global
   private implicit val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
   override val supervisorStrategy: OneForOneStrategy =
@@ -344,6 +342,10 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! txTry
 
     case VerifyMessage(tx, secrets, hints, signedMessage, message) =>
+      val x = tx
+      log.warn(x.toString())
+      val y = hints
+      log.warn(y.toString)
       val txTry =
         ergoWalletService.verifyMessage(
           state.walletVars.proverOpt,

@@ -16,11 +16,11 @@ import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.local.ErgoStatsCollectorRef
 import org.ergoplatform.mining.difficulty.RequiredDifficulty
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.ChangedHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.ChangedHistory
 import scorex.core.utils.TimeProvider.Time
 import scorex.core.utils.NetworkTimeProvider
 

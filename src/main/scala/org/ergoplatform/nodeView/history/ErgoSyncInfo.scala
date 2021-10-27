@@ -13,6 +13,10 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
   *
   */
 sealed trait ErgoSyncInfo extends SyncInfo {
+  /*
+   * Whether sync info message corresponds to non-empty blockchain
+   */
+  val nonEmpty: Boolean
 
   override type M = ErgoSyncInfo
 
@@ -22,12 +26,21 @@ sealed trait ErgoSyncInfo extends SyncInfo {
 /**
   * @param lastHeaderIds - last header ids known to a peer
   */
-case class ErgoSyncInfoV1(lastHeaderIds: Seq[ModifierId]) extends ErgoSyncInfo
+case class ErgoSyncInfoV1(lastHeaderIds: Seq[ModifierId]) extends ErgoSyncInfo {
+  override val nonEmpty: Boolean = lastHeaderIds.nonEmpty
+}
 
 /**
-  * @param lastHeaders - some recent headers (inlcuding last one) known to a peer
+  * @param lastHeaders - some recent headers (including last one) known to a peer
   */
-case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo
+case class ErgoSyncInfoV2(lastHeaders: Seq[Header]) extends ErgoSyncInfo {
+  /**
+    * Height of a chain reported by a peer (so most recent header it shows)
+    */
+  val height = lastHeaders.headOption.map(_.height)
+
+  override val nonEmpty: Boolean = lastHeaders.nonEmpty
+}
 
 object ErgoSyncInfo {
   val MaxBlockIds = 1000

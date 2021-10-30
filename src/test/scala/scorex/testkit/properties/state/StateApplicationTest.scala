@@ -65,10 +65,10 @@ trait StateApplicationTest[ST <: MinimalState[ST]] extends StateTests[ST] {
     }
   }
 
-  property(propertyNameGenerator("application after rollback is possible (within maxRollbackDepth)")) {
+  property(propertyNameGenerator("application after rollback is possible (within 10 blocks)")) {
     forAll(stateGen) { s =>
       @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-      val rollbackDepth = Gen.chooseNum(1, s.maxRollbackDepth).sample.get
+      val rollbackDepth = Gen.chooseNum(1, 10).sample.get
       val buf = new ListBuffer[ErgoPersistentModifier]()
       val ver = s.version
 

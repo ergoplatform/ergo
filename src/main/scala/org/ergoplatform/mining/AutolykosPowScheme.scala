@@ -341,7 +341,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     def loop(i: Long): Option[AutolykosSolution] = if (i == endNonce) {
       None
     } else {
-      if (i % 1000000 == 0 && i > 0) log.debug(s"$i nonce tested")
+      if (i % 1000000 == 0 && i > 0) println(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)
       val seed = if(version == 1) {
         Bytes.concat(m, nonce)

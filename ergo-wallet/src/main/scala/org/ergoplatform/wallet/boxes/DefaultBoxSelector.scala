@@ -101,7 +101,7 @@ object DefaultBoxSelector extends BoxSelector {
     //at least a minimum amount of ERG should be assigned per a created box
     if (changeBoxesAssets.size * MinBoxValue > changeBalance) {
       Left(NotEnoughCoinsForChangeBoxesError(
-        s"Not enough ERG $changeBalance to create ${changeBoxesAssets.size} change boxes, \nfor $changeBoxesAssets"
+        s"Not enough nanoERGs ($changeBalance nanoERG) to create ${changeBoxesAssets.size} change boxes, \nfor $changeBoxesAssets"
       ))
     } else {
       val changeBoxes = if (changeBoxesAssets.nonEmpty) {

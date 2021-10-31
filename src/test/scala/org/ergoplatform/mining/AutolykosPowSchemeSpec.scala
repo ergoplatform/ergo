@@ -7,13 +7,14 @@ import org.ergoplatform.utils.ErgoPropertyTest
 import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
 import scorex.testkit.utils.NoShrink
+import scorex.util.encode.Base16
 
 class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
 
   property("generated solution should be valid") {
     val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
     forAll(invalidHeaderGen,
-            Gen.choose(80, 100),
+            Gen.choose(100, 120),
             Gen.choose[Byte](1, 2)) { (inHeader, difficulty, ver) =>
       val nBits = RequiredDifficulty.encodeCompactBits(difficulty)
       val h = inHeader.copy(nBits = nBits, version = ver)
@@ -60,6 +61,57 @@ class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
     pow.calcN(2, 1051200) shouldBe 104107290 // 4 years
     pow.calcN(2, 4198400) shouldBe 2143944600 // max height
     pow.calcN(2, 41984000) shouldBe 2143944600
+  }
+
+  property("test vectors for first increase in N value (height 614,400)") {
+    import io.circe.parser._
+    val pow = new AutolykosPowScheme(32, 26)
+
+    val headerJson =
+      """
+        |{
+        |  "extensionId" : "00cce45975d87414e8bdd8146bc88815be59cd9fe37a125b5021101e05675a18",
+        |  "difficulty" : "16384",
+        |  "votes" : "000000",
+        |  "timestamp" : 4928911477310178288,
+        |  "size" : 223,
+        |  "stateRoot" : "5c8c00b8403d3701557181c8df800001b6d5009e2201c6ff807d71808c00019780",
+        |  "height" : 614400,
+        |  "nBits" : 37748736,
+        |  "version" : 2,
+        |  "id" : "5603a937ec1988220fc44fb5022fb82d5565b961f005ebb55d85bd5a9e6f801f",
+        |  "adProofsRoot" : "5d3f80dcff7f5e7f59007294c180808d0158d1ff6ba10000f901c7f0ef87dcff",
+        |  "transactionsRoot" : "f17fffacb6ff7f7f1180d2ff7f1e24ffffe1ff937f807f0797b9ff6ebdae007e",
+        |  "extensionHash" : "1480887f80007f4b01cf7f013ff1ffff564a0000b9a54f00770e807f41ff88c0",
+        |  "powSolutions" : {
+        |    "pk" : "03bedaee069ff4829500b3c07c4d5fe6b3ea3d3bf76c5c28c1d4dcdb1bed0ade0c",
+        |    "n" : "0000000000003105"
+        |   },
+        |  "adProofsId" : "dec129290a763f4de41f04e87e2b661dd59758af6bdd00dd51f5d97c3a8cb9b5",
+        |  "transactionsId" : "eba1dd82cf51147232e09c1f72b37c554c30f63274d5093bff36849a83472a42",
+        |  "parentId" : "ac2101807f0000ca01ff0119db227f202201007f62000177a080005d440896d0"
+        |}
+      """.stripMargin
+
+    val header = Header.jsonDecoder.decodeJson(parse(headerJson).toOption.get).toOption.get
+
+    header.height shouldBe 614400
+
+    val msg = Base16.encode(pow.msgByHeader(header))
+    msg shouldBe "548c3e602a8f36f8f2738f5f643b02425038044d98543a51cabaa9785e7e864f"
+
+    pow.calcN(header) shouldBe 70464240
+
+    // vector got from a miner dev
+    pow.hitForVersion2(header) shouldBe toBigInt(Base16.decode("0002fcb113fe65e5754959872dfdbffea0489bf830beb4961ddc0e9e66a1412a").get)
+
+    pow.getB(header.nBits) shouldBe BigInt("7067388259113537318333190002971674063283542741642755394446115914399301849")
+
+    Base16.encode(groupElemToBytes(header.powSolution.pk)) shouldBe "03bedaee069ff4829500b3c07c4d5fe6b3ea3d3bf76c5c28c1d4dcdb1bed0ade0c"
+
+    Base16.encode(header.powSolution.n) shouldBe "0000000000003105"
+
+    pow.validate(header) shouldBe 'success
   }
 
   // testing an invalid header got from a mining pool

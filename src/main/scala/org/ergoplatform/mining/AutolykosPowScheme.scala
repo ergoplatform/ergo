@@ -171,7 +171,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
     // sum as byte array is always about 32 bytes
     val array: Array[Byte] = BigIntegers.asUnsignedByteArray(32, f2.underlying())
-    toBigInt(hash(array))
+    val ha = hash(array)
+    toBigInt(ha)
   }
 
   /**

@@ -102,6 +102,9 @@ class AutolykosPowSchemeSpec extends ErgoPropertyTest with NoShrink {
 
     pow.calcN(header) shouldBe 70464240
 
+    // vector got from a miner dev
+    pow.hitForVersion2(header) shouldBe toBigInt(Base16.decode("0002fcb113fe65e5754959872dfdbffea0489bf830beb4961ddc0e9e66a1412a").get)
+
     pow.getB(header.nBits) shouldBe BigInt("7067388259113537318333190002971674063283542741642755394446115914399301849")
 
     Base16.encode(groupElemToBytes(header.powSolution.pk)) shouldBe "03bedaee069ff4829500b3c07c4d5fe6b3ea3d3bf76c5c28c1d4dcdb1bed0ade0c"

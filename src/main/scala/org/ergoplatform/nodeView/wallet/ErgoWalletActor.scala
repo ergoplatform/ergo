@@ -391,11 +391,16 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! ScanRelatedTxsResponse(ergoWalletService.getScanTransactions(scanId, state.registry, state.fullHeight))
 
     case GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum)  =>
-      getFiltered(state, scanIds, minHeight, maxHeight, minConfNum, maxConfNum)
+      readFiltered(state, scanIds, minHeight, maxHeight, minConfNum, maxConfNum)
 
   }
 
-  def getFiltered(state: ErgoWalletState, scanIds: List[ScanId], minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int): Unit = {
+  def readFiltered(state: ErgoWalletState,
+                   scanIds: List[ScanId],
+                   minHeight: Int,
+                   maxHeight: Int,
+                   minConfNum: Int,
+                   maxConfNum: Int): Unit = {
     val heightFrom = if (maxConfNum == Int.MaxValue) {
       minHeight
     } else {
@@ -406,13 +411,13 @@ class ErgoWalletActor(settings: ErgoSettings,
     } else {
       Math.min(maxHeight,  - minConfNum)
     }
-    log.info("Starting to read wallet transactions")
+    log.debug("Starting to read wallet transactions")
     val ts0 = System.currentTimeMillis()
     val txs = scanIds.flatMap(scan => state.registry.walletTxsBetween(scan, heightFrom, heightTo))
       .sortBy(-_.inclusionHeight)
       .map(tx => AugWalletTransaction(tx, state.fullHeight - tx.inclusionHeight))
     val ts = System.currentTimeMillis()
-    log.info(s"Wallet: ${txs.size} read in ${ts-ts0} ms")
+    log.debug(s"Wallet: ${txs.size} read in ${ts-ts0} ms")
     sender() ! txs
   }
 

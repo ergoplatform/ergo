@@ -1,6 +1,7 @@
 package scorex.testkit.properties.state
 
 import org.ergoplatform.modifiers.ErgoPersistentModifier
+import org.ergoplatform.nodeView.state.DigestState
 import org.scalacheck.Gen
 import scorex.core.transaction.state.MinimalState
 
@@ -65,10 +66,17 @@ trait StateApplicationTest[ST <: MinimalState[ST]] extends StateTests[ST] {
     }
   }
 
-  property(propertyNameGenerator("application after rollback is possible (within 10 blocks)")) {
+  property(propertyNameGenerator("application after rollback is possible")) {
     forAll(stateGen) { s =>
+
+      val maxRollbackDepth = s match {
+        case ds: DigestState =>
+          ds.store.rollbackVersions().size
+        case _ =>
+          10
+      }
       @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
-      val rollbackDepth = Gen.chooseNum(1, 10).sample.get
+      val rollbackDepth = Gen.chooseNum(1, maxRollbackDepth).sample.get
       val buf = new ListBuffer[ErgoPersistentModifier]()
       val ver = s.version
 

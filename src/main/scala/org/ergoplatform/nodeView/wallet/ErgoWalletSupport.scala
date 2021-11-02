@@ -112,6 +112,9 @@ trait ErgoWalletSupport extends ScorexLogging {
           }
         } else {
           // If no usePreEip3Derivation flag is set, add first derived key (for m/44'/429'/0'/0/0) to the db
+
+          // We set prover to avoid None.get exception in addSecretToStorage
+          // the prover (with derived key added) will be recreated later in updatePublicKeys()
           val prover = ErgoProvingInterpreter(IndexedSeq(masterKey), state.parameters)
           val sp = state.copy(walletVars = state.walletVars.withProver(prover))
 

@@ -10,6 +10,7 @@ import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest, TransactionGenerationRequest}
 import org.ergoplatform.settings.Parameters
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
@@ -131,6 +132,13 @@ trait ErgoWalletSupport extends ScorexLogging {
           }
         }
       } else {
+        if (pubKeys.size == 1 &&
+              pubKeys.head.path == Constants.eip3DerivationPath.toPublicBranch &&
+              state.storage.readChangeAddress.isEmpty) {
+          val changeAddress = P2PKAddress(pubKeys.head.key)
+          log.info(s"Update change address to $changeAddress")
+          state.storage.updateChangeAddress(changeAddress)
+        }
         log.info("Wallet unlock finished using existing keys in storage")
         Try(updatePublicKeys(state, masterKey, pubKeys))
       }

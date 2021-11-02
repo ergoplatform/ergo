@@ -5,7 +5,6 @@ import java.io.File
 import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoPersistentModifier
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.settings.Algos.HF
@@ -37,7 +36,7 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
   override def applyModifier(mod: ErgoPersistentModifier): Try[WrappedUtxoState] = super.applyModifier(mod) match {
     case Success(us) =>
       mod match {
-        case ct: TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction@unchecked] =>
+        case ct: TransactionsCarryingPersistentNodeViewModifier =>
           // You can not get block with transactions not being of ErgoTransaction type so no type checks here.
 
           val changes = ErgoState.stateChanges(ct.transactions)

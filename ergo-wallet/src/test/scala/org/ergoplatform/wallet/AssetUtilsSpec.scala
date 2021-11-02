@@ -1,7 +1,7 @@
 package org.ergoplatform.wallet
 
 import org.ergoplatform.wallet.utils.WalletTestHelpers
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 class AssetUtilsSpec extends WalletTestHelpers with Matchers with TableDrivenPropertyChecks {

@@ -6,13 +6,10 @@ import org.ergoplatform.mining.CandidateGenerator.GenerateCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.state.DigestState
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{FirstSecretResponse, GetFirstSecret, GetMiningPubKey, MiningPubKeyResponse}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
 import sigmastate.basics.DLogProtocol.{DLogProverInput, ProveDlog}
@@ -61,7 +58,7 @@ class ErgoMiner(
     secretKeyOpt: Option[DLogProverInput],
     publicKey: ProveDlog
   ): Unit = {
-    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier[_]])
+    context.system.eventStream.subscribe(self, classOf[SemanticallySuccessfulModifier])
     val candidateGeneratorRef = CandidateGenerator(
       publicKey,
       readersHolderRef,
@@ -77,13 +74,7 @@ class ErgoMiner(
 
     /** at first keep trying to obtain secret and public key as we cannot mine without it */
     case walletQuery: WalletQuery =>
-      viewHolderRef ! GetDataFromCurrentView[
-        ErgoHistory,
-        DigestState,
-        ErgoWallet,
-        ErgoMemPool,
-        Unit
-      ] { v =>
+      viewHolderRef ! GetDataFromCurrentView[DigestState, Unit] { v =>
         walletQuery match {
           case QueryWalletSecret =>
             v.vault.walletActor ! GetFirstSecret
@@ -145,7 +136,7 @@ class ErgoMiner(
         }
       }
       context.system.eventStream
-        .unsubscribe(self, classOf[SemanticallySuccessfulModifier[_]])
+        .unsubscribe(self, classOf[SemanticallySuccessfulModifier])
       context.become(started(minerState))
 
     case StartMining =>

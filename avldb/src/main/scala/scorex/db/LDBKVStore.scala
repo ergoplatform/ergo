@@ -19,7 +19,7 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
       toInsert.foreach { case (k, v) => batch.put(k, v) }
       toRemove.foreach(batch.delete)
       db.write(batch)
-      Success(Unit)
+      Success(())
     } catch {
       case t: Throwable => Failure(t)
     } finally {

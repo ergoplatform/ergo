@@ -5,7 +5,7 @@ import org.ergoplatform.ErgoBox._
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext, VotingData}
 import org.ergoplatform.settings.Parameters.MaxBlockCostIncrease
-import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txBoxSize}
+import org.ergoplatform.settings.ValidationRules.{bsBlockTransactionsCost, txAssetsInOneBox}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoPropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -163,7 +163,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   }
 
   property("impossible to overflow an asset value") {
-    val gen = validErgoTransactionGenTemplate(1, 1, 8, 16)
+    val gen = validErgoTransactionGenTemplate(minAssets = 1, maxAssets = 1, maxInputs = 16, propositionGen = trueLeafGen)
     forAll(gen) { case (from, tx) =>
       val tokenOpt = tx.outputCandidates.flatMap(_.additionalTokens.toArray).map(t => ByteArrayWrapper.apply(t._1) -> t._2)
         .groupBy(_._1).find(_._2.size >= 2)
@@ -193,7 +193,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
   property("stateful validation should catch false proposition") {
     val propositionGen = Gen.const(Constants.FalseLeaf)
-    val gen = validErgoTransactionGenTemplate(1, 1, 1, 1, propositionGen)
+    val gen = validErgoTransactionGenTemplate(1, 1, 1, propositionGen)
     forAll(gen) { case (from, tx) =>
       tx.statelessValidity().isSuccess shouldBe true
       val validity = tx.statefulValidity(from, emptyDataBoxes, emptyStateContext)
@@ -204,7 +204,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   }
 
   property("assets usage correctly affects transaction total cost") {
-    val txGen = validErgoTransactionGenTemplate(1, 1, 8, 16)
+    val txGen = validErgoTransactionGenTemplate(1, 1,16, propositionGen = trueLeafGen)
     forAll(txGen) { case (from, tx) =>
       val initTxCost = tx.statefulValidity(from, emptyDataBoxes, emptyStateContext).get
 
@@ -255,8 +255,8 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
 
   property("spam simulation (transaction validation cost with too many tokens exceeds block limit)") {
     val bxsQty = 400
-    val (inputs, tx) = validErgoTransactionGenTemplate(1, 1, 8, 16).sample.get // it takes too long to test with `forAll`
-    val tokens = (0 until 255).map(_ => (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextInt(100000000).toLong))
+    val (inputs, tx) = validErgoTransactionGenTemplate(1, 1,16).sample.get // it takes too long to test with `forAll`
+    val tokens = (0 until 255).map(_ => (Digest32 @@ scorex.util.Random.randomBytes(), Random.nextLong))
     val (in, out) = {
       val in0 = inputs.head
       val out0 = tx.outputs.head
@@ -276,8 +276,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
     val txMod = tx.copy(inputs = inputsPointers, outputCandidates = out)
     val validFailure = txMod.statefulValidity(in, emptyDataBoxes, emptyStateContext)
-    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(txBoxSize, "").take(30))
-
+    validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(txAssetsInOneBox, "").take(30))
   }
 
   property("transaction with too many inputs should be rejected") {
@@ -296,7 +295,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       t - t0
     }
 
-    val gen = validErgoTransactionGenTemplate(0, 0, 1500, 2000, trueLeafGen)
+    val gen = validErgoTransactionGenTemplate(0, 0, 2000, trueLeafGen)
     val (from, tx) = gen.sample.get
     tx.statelessValidity().isSuccess shouldBe true
 
@@ -336,7 +335,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
       emptyStateContext.copy(currentParameters = params2)(settings)
     }
 
-    val gen = validErgoTransactionGenTemplate(0, 0, 10, 10, trueLeafGen)
+    val gen = validErgoTransactionGenTemplate(0, 0,10, trueLeafGen)
     val (from, tx) = gen.sample.get
     tx.statelessValidity().isSuccess shouldBe true
 
@@ -371,7 +370,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
   property("cost accumulated correctly across inputs") {
     val accInitCost = 100000
 
-    def inputCost(tx: ErgoTransaction, idx: Short, from: IndexedSeq[ErgoBox]): Long = {
+    def inputCost(tx: ErgoTransaction, from: IndexedSeq[ErgoBox]): Long = {
       val idx = 0
       val input = tx.inputs(idx)
       val proof = input.spendingProof
@@ -393,7 +392,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     forAll(smallPositiveInt) { inputsNum =>
 
       val nonTrivialTrueGen = Gen.const(AND(Seq(TrueLeaf, TrueLeaf)).toSigmaProp.treeWithSegregation)
-      val gen = validErgoTransactionGenTemplate(0, 0, inputsNum, inputsNum, nonTrivialTrueGen)
+      val gen = validErgoTransactionGenTemplate(0, 0, inputsNum, nonTrivialTrueGen)
       val (from, tx) = gen.sample.get
       tx.statelessValidity().isSuccess shouldBe true
 
@@ -416,7 +415,7 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
           CostTable.interpreterInitCost +
           assetsCost
 
-      txCost shouldBe (accInitCost + initialCost + inputCost(tx, 0, from) * inputsNum)
+      txCost shouldBe (accInitCost + initialCost + inputCost(tx, from) * inputsNum)
     }
   }
 

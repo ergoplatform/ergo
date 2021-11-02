@@ -12,9 +12,9 @@ import org.ergoplatform.utils.HistoryTestHelpers
 
 import scala.annotation.tailrec
 
-object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark with App {
+object ModifiersApplicationBench extends HistoryTestHelpers with NVBenchmark {
 
-  override def main(args: Array[String]): Unit = {
+  def main(args: Array[String]): Unit = {
 
     val startTs = System.currentTimeMillis()
 

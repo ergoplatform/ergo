@@ -1,15 +1,11 @@
 package org.ergoplatform.bench
 
-import java.io.File
-
 import akka.actor.{ActorRef, ActorSystem}
 import org.ergoplatform.bench.misc.TempDir
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{FullBlockPruningProcessor, ToDownloadProcessor}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{ErgoState, StateType}
-import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, NVBenchmark}
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import scorex.core.NodeViewHolder.CurrentView
@@ -30,7 +26,7 @@ object BenchRunner extends ScorexLogging with NVBenchmark {
     val threshold = args.headOption.getOrElse("1000").toInt
     val isUtxo = args.lift(2).isEmpty
     val state = if (isUtxo) StateType.Utxo else StateType.Digest
-    val benchRef = BenchActor(threshold, state)
+    val benchRef = BenchActor(threshold)
     val userDir = TempDir.createTempDir
 
     log.info(s"User dir is $userDir")
@@ -54,7 +50,7 @@ object BenchRunner extends ScorexLogging with NVBenchmark {
       * It's a hack to set minimalFullBlockHeightVar to 0 and to avoid "Header Is Not Synced" error, cause
       * in our case we are considering only locally pre-generated modifiers.
       */
-    nodeViewHolderRef ! GetDataFromCurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool, Unit](adjust)
+    nodeViewHolderRef ! GetDataFromCurrentView[ErgoState[_], Unit](adjust)
 
     log.info("Starting to read modifiers.")
     log.info("Finished read modifiers, starting to bench.")
@@ -62,7 +58,7 @@ object BenchRunner extends ScorexLogging with NVBenchmark {
     runBench(benchRef, nodeViewHolderRef, (readHeaders ++ readExtensions ++ readPayloads).toVector)
   }
 
-  private def adjust(v: CurrentView[ErgoHistory, ErgoState[_], ErgoWallet, ErgoMemPool]): Unit = {
+  private def adjust(v: CurrentView[ErgoState[_]]): Unit = {
     import scala.reflect.runtime.{universe => ru}
     val runtimeMirror = ru.runtimeMirror(getClass.getClassLoader)
     val procInstance = runtimeMirror.reflect(v.history.asInstanceOf[ToDownloadProcessor])

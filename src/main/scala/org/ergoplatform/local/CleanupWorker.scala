@@ -41,7 +41,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     case a: Any => log.warn(s"Strange input: $a")
   }
 
-  private def runCleanup(validator: TransactionValidation[ErgoTransaction],
+  private def runCleanup(validator: TransactionValidation,
                          mempool: ErgoMemPoolReader): Unit = {
     val toEliminate = validatePool(validator, mempool)
     if (toEliminate.nonEmpty) {
@@ -55,9 +55,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     *
     * @return - invalidated transaction ids
     */
-  private def validatePool(validator: TransactionValidation[ErgoTransaction],
-                           mempool: ErgoMemPoolReader): Seq[ModifierId] = {
-
+  private def validatePool(validator: TransactionValidation, mempool: ErgoMemPoolReader): Seq[ModifierId] = {
 
     // Check transactions sorted by priority. Parent transaction comes before its children.
     val txsToValidate = mempool.getAllPrioritized.toList
@@ -132,6 +130,6 @@ object CleanupWorker {
     * @param validator - a state implementation which provides transaction validation
     * @param mempool - mempool reader instance
     */
-  case class RunCleanup(validator: TransactionValidation[ErgoTransaction], mempool: ErgoMemPoolReader)
+  case class RunCleanup(validator: TransactionValidation, mempool: ErgoMemPoolReader)
 
 }

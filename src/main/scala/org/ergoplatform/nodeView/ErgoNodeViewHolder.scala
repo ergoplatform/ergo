@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
-
 import java.io.File
+
 import akka.actor.{ActorRef, ActorSystem, OneForOneStrategy, Props}
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.ErgoApp.CriticalSystemException
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
@@ -18,25 +18,18 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.FileUtils
 import scorex.core._
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
-
 import scala.util.{Failure, Success, Try}
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider)
-  extends NodeViewHolder[ErgoTransaction, ErgoPersistentModifier] {
+  extends NodeViewHolder[State] {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
 
   override val scorexSettings: ScorexSettings = settings.scorexSettings
-
-  override type MS = State
-  override type SI = ErgoSyncInfo
-  override type HIS = ErgoHistory
-  override type VL = ErgoWallet
-  override type MP = ErgoMemPool
 
   override protected lazy val modifiersCache =
     new ErgoModifiersCache(settings.scorexSettings.network.maxModifiersCacheSize)
@@ -60,7 +53,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         log.debug(s"Unconfirmed transaction $tx added to the memory pool")
         val newVault = vault().scanOffchain(tx)
         updateNodeView(updatedVault = Some(newVault), updatedMempool = Some(newPool))
-        context.system.eventStream.publish(SuccessfulTransaction[ErgoTransaction](tx))
+        context.system.eventStream.publish(SuccessfulTransaction(tx))
       case (newPool, ProcessingOutcome.Invalidated(e)) =>
         log.debug(s"Transaction $tx invalidated. Cause: ${e.getMessage}")
         updateNodeView(updatedMempool = Some(newPool))
@@ -79,8 +72,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     */
   override protected def updateMemPool(blocksRemoved: Seq[ErgoPersistentModifier],
                                        blocksApplied: Seq[ErgoPersistentModifier],
-                                       memPool: MP,
-                                       state: MS): MP = {
+                                       memPool: ErgoMemPool,
+                                       state: State): ErgoMemPool = {
     val rolledBackTxs = blocksRemoved.flatMap(extractTransactions)
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
 
@@ -90,7 +83,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   /**
     * Hard-coded initial view all the honest nodes in a network are making progress from.
     */
-  override protected def genesisState: (ErgoHistory, MS, ErgoWallet, ErgoMemPool) = {
+  override protected def genesisState: (ErgoHistory, State, ErgoWallet, ErgoMemPool) = {
 
     val state = recreatedState()
 
@@ -110,14 +103,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * (e.g. if it is a first launch of a node) None is to be returned
     */
   @SuppressWarnings(Array("AsInstanceOf"))
-  override def restoreState: Option[NodeView] = if (ErgoHistory.historyDir(settings).listFiles().isEmpty) {
+  override def restoreState(): Option[NodeView] = if (ErgoHistory.historyDir(settings).listFiles().isEmpty) {
     None
   } else {
     val history = ErgoHistory.readOrGenerate(settings, timeProvider)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
     val constants = StateConstants(Some(self), settings)
-    restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[MS], history) match {
+    restoreConsistentState(ErgoState.readOrGenerate(settings, constants).asInstanceOf[State], history) match {
       case Success(state) =>
         log.info("State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
@@ -148,7 +141,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         case Success((historyBeforeStUpdate, progressInfo)) =>
           log.debug(s"Going to apply modifications to the state: $progressInfo")
           context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod))
-          context.system.eventStream.publish(NewOpenSurface(historyBeforeStUpdate.openSurfaceIds()))
 
           if (progressInfo.toApply.nonEmpty) {
             val (newHistory, newStateTry, blocksApplied) =
@@ -291,6 +283,7 @@ private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
   */
 sealed abstract class ErgoNodeViewProps[ST <: StateType, S <: ErgoState[S], N <: ErgoNodeViewHolder[S]]
 (implicit ev: StateType.Evidence[ST, S]) {
+  assert(ev != null) // just to satisfy scalac
   def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider, digestType: ST): Props
 }
 
@@ -313,8 +306,8 @@ object ErgoNodeViewRef {
   def props(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider): Props =
     settings.nodeSettings.stateType match {
-      case digestType@StateType.Digest => DigestNodeViewProps(settings, timeProvider, digestType)
-      case utxoType@StateType.Utxo => UtxoNodeViewProps(settings, timeProvider, utxoType)
+      case StateType.Digest => DigestNodeViewProps(settings, timeProvider, StateType.Digest)
+      case StateType.Utxo => UtxoNodeViewProps(settings, timeProvider, StateType.Utxo)
     }
 
   def apply(settings: ErgoSettings,

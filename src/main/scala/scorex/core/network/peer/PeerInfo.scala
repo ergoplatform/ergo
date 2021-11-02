@@ -2,11 +2,17 @@ package scorex.core.network.peer
 
 import java.net.InetSocketAddress
 
+import org.ergoplatform.network.ModeFeature
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.app.Version
-import scorex.core.network.{ConnectionDirection, PeerSpec}
+import scorex.core.network.{ConnectionDirection, Incoming, Outgoing, PeerFeature, PeerSpec, PeerSpecSerializer}
+import scorex.core.serialization.ScorexSerializer
+import scorex.util.serialization.{Reader, Writer}
 
 /**
   * Information about peer to be stored in PeerDatabase
+  *
+  * In case of updating this class check database backwards compatibility also!
   *
   * @param peerSpec       - general information about the peer
   * @param lastHandshake  - timestamp when last handshake was done
@@ -35,4 +41,26 @@ object PeerInfo {
     PeerInfo(peerSpec, 0L, None)
   }
 
+}
+
+object PeerInfoSerializer extends ScorexSerializer[PeerInfo] {
+  // TODO: This code is cut&pasted from ErgoApp.
+  // It should be better extracted to some other place.
+  private val ergoSettings = ErgoSettings.read()
+  private val features: Seq[PeerFeature] = Seq(ModeFeature(ergoSettings.nodeSettings))
+  private val featureSerializers: PeerFeature.Serializers = features.map(f => f.featureId -> f.serializer).toMap
+  private val peerSpecSerializer =  new PeerSpecSerializer(featureSerializers)
+
+  override def serialize(obj: PeerInfo, w: Writer): Unit = {
+    w.putLong(obj.lastHandshake)
+    w.putOption(obj.connectionType)((w,d) => w.putBoolean(d.isIncoming))
+    peerSpecSerializer.serialize(obj.peerSpec, w)
+  }
+
+   override def parse(r: Reader): PeerInfo = {
+     val lastHandshake = r.getLong()
+     val connectionType = r.getOption(if (r.getUByte() != 0) Incoming else Outgoing)
+     val peerSpec = peerSpecSerializer.parse(r)
+     PeerInfo(peerSpec, lastHandshake, connectionType)
+   }
 }

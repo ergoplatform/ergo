@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
-
 import java.io.File
+
 import akka.actor.{ActorRef, ActorSystem, OneForOneStrategy, Props}
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -18,10 +18,9 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.FileUtils
 import scorex.core._
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
-
 import scala.util.{Failure, Success, Try}
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
@@ -142,7 +141,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         case Success((historyBeforeStUpdate, progressInfo)) =>
           log.debug(s"Going to apply modifications to the state: $progressInfo")
           context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod))
-          context.system.eventStream.publish(NewOpenSurface(historyBeforeStUpdate.openSurfaceIds()))
 
           if (progressInfo.toApply.nonEmpty) {
             val (newHistory, newStateTry, blocksApplied) =
@@ -285,6 +283,7 @@ private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
   */
 sealed abstract class ErgoNodeViewProps[ST <: StateType, S <: ErgoState[S], N <: ErgoNodeViewHolder[S]]
 (implicit ev: StateType.Evidence[ST, S]) {
+  assert(ev != null) // just to satisfy scalac
   def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider, digestType: ST): Props
 }
 
@@ -307,8 +306,8 @@ object ErgoNodeViewRef {
   def props(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider): Props =
     settings.nodeSettings.stateType match {
-      case digestType@StateType.Digest => DigestNodeViewProps(settings, timeProvider, digestType)
-      case utxoType@StateType.Utxo => UtxoNodeViewProps(settings, timeProvider, utxoType)
+      case StateType.Digest => DigestNodeViewProps(settings, timeProvider, StateType.Digest)
+      case StateType.Utxo => UtxoNodeViewProps(settings, timeProvider, StateType.Utxo)
     }
 
   def apply(settings: ErgoSettings,

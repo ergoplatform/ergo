@@ -9,9 +9,8 @@ import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionValidator
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Constants, _}
+import org.ergoplatform.settings._
 import org.ergoplatform.wallet.protocol.context.ErgoLikeStateContext
-import scorex.core.block.Block
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.{ModifierValidator, ValidationState}
@@ -97,7 +96,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   /**
     * @return block version of the protocol
     */
-  def blockVersion: Block.Version = currentParameters.blockVersion
+  def blockVersion: Header.Version = currentParameters.blockVersion
 
   private def votingEpochLength: Int = votingSettings.votingLength
 
@@ -232,7 +231,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     }
   }
 
-  def appendHeader(header: Header, votingSettings: VotingSettings): Try[ErgoStateContext] = {
+  def appendHeader(header: Header): Try[ErgoStateContext] = {
     validateVotes(header)
       .result
       .toTry

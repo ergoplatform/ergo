@@ -10,20 +10,18 @@ import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote}
-import scorex.core.consensus.History.{Equal, Nonsense, Older, Younger}
-import scorex.core.consensus.{History, SyncInfo}
+import scorex.core.consensus.SyncInfo
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
-import scorex.core.network.NodeViewSynchronizer.Events.{BetterNeighbourAppeared, NoBetterNeighbour, NodeViewSynchronizerEvent}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PenaltyType
-import scorex.util.serialization._
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.core.transaction.state.MinimalState
 import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
+import scorex.util.serialization._
 
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -121,10 +119,6 @@ trait NodeViewSynchronizerTests[ST <: MinimalState[ST]] extends AnyPropSpec
       })
 
       val dummySyncInfo: SyncInfo = new SyncInfo {
-        def answer: Boolean = true
-
-        def startingPoints: History.ModifierIds = Seq((mod.modifierTypeId, mod.id))
-
         type M = BytesSerializable
 
         def serializer: ScorexSerializer[M] = throw new Exception
@@ -134,55 +128,6 @@ trait NodeViewSynchronizerTests[ST <: MinimalState[ST]] extends AnyPropSpec
 
       node ! Message(dummySyncInfoMessageSpec, Left(msgBytes), Some(peer))
       //    vhProbe.fishForMessage(3 seconds) { case m => m == OtherNodeSyncingInfo(peer, dummySyncInfo) }
-    }
-  }
-
-  property("NodeViewSynchronizer: OtherNodeSyncingStatus: Nonsense") {
-    withFixture { ctx =>
-      import ctx._
-      node ! OtherNodeSyncingStatus(peer, Nonsense, Seq.empty)
-      // NVS does nothing in this case
-    }
-  }
-
-  property("NodeViewSynchronizer: OtherNodeSyncingStatus: Older") {
-    withFixture { ctx =>
-      import ctx._
-      system.eventStream.subscribe(eventListener.ref, classOf[NodeViewSynchronizerEvent])
-      node ! OtherNodeSyncingStatus(peer, Older, Seq.empty)
-      eventListener.fishForMessage(3 seconds) { case m => m == BetterNeighbourAppeared }
-    }
-  }
-
-  property("NodeViewSynchronizer: OtherNodeSyncingStatus: Older and then Younger") {
-    withFixture { ctx =>
-      import ctx._
-      system.eventStream.subscribe(eventListener.ref, classOf[NodeViewSynchronizerEvent])
-      node ! OtherNodeSyncingStatus(peer, Older, Seq.empty)
-      node ! OtherNodeSyncingStatus(peer, Younger, Seq.empty)
-      eventListener.fishForMessage(3 seconds) { case m => m == NoBetterNeighbour }
-    }
-  }
-
-  property("NodeViewSynchronizer: OtherNodeSyncingStatus: Younger with Non-Empty Extension") {
-    withFixture { ctx =>
-      import ctx._
-      node ! OtherNodeSyncingStatus(peer, Younger, Seq((mod.modifierTypeId, mod.id)))
-      ncProbe.fishForMessage(3 seconds) { case m =>
-        m match {
-          case SendToNetwork(Message(_, Right(InvData(tid, ids)), None), SendToPeer(p))
-            if p == peer && tid == mod.modifierTypeId && ids == Seq(mod.id) => true
-          case _ => false
-        }
-      }
-    }
-  }
-
-  property("NodeViewSynchronizer: OtherNodeSyncingStatus: Equal") {
-    withFixture { ctx =>
-      import ctx._
-      node ! OtherNodeSyncingStatus(peer, Equal, Seq((mod.modifierTypeId, mod.id)))
-      // NVS does nothing significant in this case
     }
   }
 

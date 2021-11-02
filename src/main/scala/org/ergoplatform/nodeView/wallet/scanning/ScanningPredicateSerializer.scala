@@ -6,7 +6,7 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.SType
-import sigmastate.Values.{EvaluatedValue, Value}
+import sigmastate.Values.EvaluatedValue
 import sigmastate.serialization.ValueSerializer
 import scorex.util.Extensions._
 

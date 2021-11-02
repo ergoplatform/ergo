@@ -72,7 +72,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
   private def startNodes(networkType: NetworkType,
                          nodeConfigs: List[Config],
-                         configEnrich: ExtraConfig = noExtraConfig) = {
+                         configEnrich: ExtraConfig) = {
     log.trace(s"Starting ${nodeConfigs.size} containers")
     nodeConfigs.map(cfg => startNode(networkType, cfg, configEnrich))
       .sequence
@@ -111,7 +111,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
 
   private def startNode(networkType: NetworkType,
                         nodeSpecificConfig: Config,
-                        extraConfig: ExtraConfig = noExtraConfig,
+                        extraConfig: ExtraConfig,
                         specialVolumeOpt: Option[(String, String)] = None) = {
     val initialSettings = buildErgoSettings(networkType, nodeSpecificConfig)
     val configuredNodeName = initialSettings.scorexSettings.network.nodeName
@@ -214,7 +214,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
                                        nodeConfig: Config,
                                        settings: ErgoSettings,
                                        ip: String,
-                                       specialVolumeOpt: Option[(String, String)] = None): ContainerConfig = {
+                                       specialVolumeOpt: Option[(String, String)]): ContainerConfig = {
     val restApiPort = settings.scorexSettings.restApi.bindAddress.getPort
     val networkPort = settings.scorexSettings.network.bindAddress.getPort
     val portBindings = new ImmutableMap.Builder[String, JList[PortBinding]]()
@@ -267,7 +267,7 @@ class Docker(suiteConfig: Config = ConfigFactory.empty,
       .build()
   }
 
-  private def createNetwork(maxRetry: Int = 5): Network = try {
+  private def createNetwork(maxRetry: Int): Network = try {
     val params = DockerClient.ListNetworksParam.byNetworkName(networkName)
     val networkOpt = client.listNetworks(params).asScala.headOption
     networkOpt match {

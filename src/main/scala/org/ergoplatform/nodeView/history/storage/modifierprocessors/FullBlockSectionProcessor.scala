@@ -45,7 +45,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
 
   override protected def validate(m: BlockSection): Try[Unit] = {
     typedModifierById[Header](m.headerId).map(header =>
-      new PayloadValidator(initialValidationState).validate(m, header)
+      new PayloadValidator().validate(m, header)
     ).getOrElse(
       // Block section can not be validated without a corresponding header
       initialValidationState
@@ -90,7 +90,7 @@ trait FullBlockSectionProcessor extends BlockSectionProcessor with FullBlockProc
   /**
     * Validator for BlockTransactions, ADProofs and Extension
     */
-  class PayloadValidator(validator: ValidationState[Unit]) extends ScorexEncoding {
+  class PayloadValidator extends ScorexEncoding {
 
     def validate(m: BlockSection, header: Header): ValidationResult[Unit] = {
       initialValidationState

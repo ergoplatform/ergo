@@ -21,7 +21,6 @@ import scala.util.{Failure, Success}
 
 class PeerConnectionHandler(val settings: NetworkSettings,
                             networkControllerRef: ActorRef,
-                            peerManagerRef: ActorRef,
                             scorexContext: ScorexContext,
                             connectionDescription: ConnectionDescription
                            )(implicit ec: ExecutionContext)
@@ -274,26 +273,23 @@ object PeerConnectionHandler {
 object PeerConnectionHandlerRef {
   def props(settings: NetworkSettings,
             networkControllerRef: ActorRef,
-            peerManagerRef: ActorRef,
             scorexContext: ScorexContext,
             connectionDescription: ConnectionDescription
            )(implicit ec: ExecutionContext): Props =
-    Props(new PeerConnectionHandler(settings, networkControllerRef, peerManagerRef, scorexContext, connectionDescription))
+    Props(new PeerConnectionHandler(settings, networkControllerRef, scorexContext, connectionDescription))
 
   def apply(settings: NetworkSettings,
             networkControllerRef: ActorRef,
-            peerManagerRef: ActorRef,
             scorexContext: ScorexContext,
             connectionDescription: ConnectionDescription)
            (implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
-    system.actorOf(props(settings, networkControllerRef, peerManagerRef, scorexContext, connectionDescription))
+    system.actorOf(props(settings, networkControllerRef, scorexContext, connectionDescription))
 
   def apply(name: String,
             settings: NetworkSettings,
             networkControllerRef: ActorRef,
-            peerManagerRef: ActorRef,
             scorexContext: ScorexContext,
             connectionDescription: ConnectionDescription)
            (implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
-    system.actorOf(props(settings, networkControllerRef, peerManagerRef, scorexContext, connectionDescription), name)
+    system.actorOf(props(settings, networkControllerRef, scorexContext, connectionDescription), name)
 }

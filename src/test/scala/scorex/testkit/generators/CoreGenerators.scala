@@ -1,7 +1,6 @@
 package scorex.testkit.generators
 
 import org.scalacheck.Gen
-import scorex.ObjectGenerators
 import scorex.core.{VersionTag, idToVersion}
 
 //Generators of objects from scorex-core

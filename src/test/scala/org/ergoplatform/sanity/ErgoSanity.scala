@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer
+import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
@@ -92,13 +92,15 @@ trait ErgoSanity[ST <: MinimalState[ST]] extends HistoryTests
                         settings: ErgoSettings,
                         timeProvider: NetworkTimeProvider,
                         history: ErgoHistory,
-                        pool: ErgoMemPool)
+                        pool: ErgoMemPool,
+                        syncTracker: ErgoSyncTracker)
                        (implicit ec: ExecutionContext) extends ErgoNodeViewSynchronizer(
     networkControllerRef,
     viewHolderRef,
     syncInfoSpec,
     settings,
-    timeProvider)(ec) {
+    timeProvider,
+    syncTracker)(ec) {
 
     override def preStart(): Unit = {
       this.historyReaderOpt = Some(history)

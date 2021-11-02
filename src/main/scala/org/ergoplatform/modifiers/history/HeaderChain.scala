@@ -2,6 +2,9 @@ package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.modifiers.history.header.Header
 
+/**
+  * Wrapper for sequence of consequent headers, not necessarily presenting full-chain (but sub-chain)
+  */
 case class HeaderChain(headers: IndexedSeq[Header]) {
 
   headers.indices.foreach { i =>

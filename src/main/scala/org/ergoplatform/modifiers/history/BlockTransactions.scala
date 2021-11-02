@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSeria
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core._
-import scorex.core.block.Block.Version
+import org.ergoplatform.modifiers.history.header.Header.Version
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.{Leaf, MerkleProof, MerkleTree}

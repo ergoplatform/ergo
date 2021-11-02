@@ -267,8 +267,10 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case UnlockWallet(encPass) =>
+      log.info("Unlocking wallet")
       ergoWalletService.unlockWallet(state, encPass, settings.walletSettings.usePreEip3Derivation) match {
         case Success(newState) =>
+          log.info("Wallet successfully unlocked")
           context.become(loadedWallet(newState))
           sender() ! Success(())
         case f@Failure(t) =>
@@ -301,7 +303,10 @@ class ErgoWalletActor(settings: ErgoSettings,
     case GetWalletStatus =>
       val isSecretSet = state.secretIsSet(settings.walletSettings.testMnemonic)
       val isUnlocked = state.walletVars.proverOpt.isDefined
-      val status = WalletStatus(isSecretSet, isUnlocked, state.getChangeAddress, state.getWalletHeight, state.error)
+      val changeAddress = state.getChangeAddress
+      val height = state.getWalletHeight
+      val lastError = state.error
+      val status = WalletStatus(isSecretSet, isUnlocked, changeAddress, height, lastError)
       sender() ! status
 
     case GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign) =>

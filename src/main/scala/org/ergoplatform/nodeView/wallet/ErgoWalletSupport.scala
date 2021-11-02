@@ -45,7 +45,9 @@ trait ErgoWalletSupport extends ScorexLogging {
     }
 
   // call nextPath and derive next key from it
-  protected def deriveNextKeyForMasterKey(state: ErgoWalletState, masterKey: ExtendedSecretKey, usePreEip3Derivation: Boolean)
+  protected def deriveNextKeyForMasterKey(state: ErgoWalletState,
+                                          masterKey: ExtendedSecretKey,
+                                          usePreEip3Derivation: Boolean)
                                        (implicit addrEncoder: ErgoAddressEncoder): Try[(DeriveNextKeyResult, ErgoWalletState)] = {
     val secrets = state.walletVars.proverOpt.toIndexedSeq.flatMap(_.hdKeys)
     val derivationResult = DerivationPath.nextPath(secrets, usePreEip3Derivation).map { path =>
@@ -57,7 +59,9 @@ trait ErgoWalletSupport extends ScorexLogging {
       .map( newState => DeriveNextKeyResult(derivationResult) -> newState )
   }
 
-  protected def updatePublicKeys(state: ErgoWalletState, masterKey: ExtendedSecretKey, pks: IndexedSeq[ExtendedPublicKey]): ErgoWalletState = {
+  protected def updatePublicKeys(state: ErgoWalletState,
+                                 masterKey: ExtendedSecretKey,
+                                 pks: IndexedSeq[ExtendedPublicKey]): ErgoWalletState = {
     // Secrets corresponding to public keys
     val sks =
       pks.map { pk =>
@@ -76,7 +80,8 @@ trait ErgoWalletSupport extends ScorexLogging {
   }
 
   private def convertLegacyClientPaths(storage: WalletStorage, masterKey: ExtendedSecretKey): Try[Unit] = Try {
-    // first, we're trying to find in the database paths written by clients prior 3.3.0 and convert them into a new format (pubkeys with paths stored instead of paths)
+    // first, we're trying to find in the database paths written by clients prior 3.3.0 and convert them into
+    // a new format (pubkeys with paths stored instead of paths)
     val oldPaths = storage.readPaths()
     if (oldPaths.nonEmpty) {
       val oldDerivedSecrets = masterKey +: oldPaths.map {
@@ -88,7 +93,10 @@ trait ErgoWalletSupport extends ScorexLogging {
     }
   }
 
-  protected def processUnlock(state: ErgoWalletState, masterKey: ExtendedSecretKey, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] = {
+  protected def processUnlock(state: ErgoWalletState,
+                              masterKey: ExtendedSecretKey,
+                              usePreEip3Derivation: Boolean)
+                             (implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] = {
     log.info("Starting wallet unlock")
     convertLegacyClientPaths(state.storage, masterKey).flatMap { _ =>
       // Now we read previously stored, or just stored during the conversion procedure above, public keys
@@ -104,7 +112,13 @@ trait ErgoWalletSupport extends ScorexLogging {
           }
         } else {
           // If no usePreEip3Derivation flag is set, add first derived key (for m/44'/429'/0'/0/0) to the db
-          deriveNextKeyForMasterKey(state, masterKey, usePreEip3Derivation).flatMap { case (derivationResult, newState) =>
+
+          // We set prover to avoid None.get exception in addSecretToStorage
+          // the prover (with derived key added) will be recreated later in updatePublicKeys()
+          val prover = ErgoProvingInterpreter(IndexedSeq(masterKey), state.parameters)
+          val sp = state.copy(walletVars = state.walletVars.withProver(prover))
+
+          deriveNextKeyForMasterKey(sp, masterKey, usePreEip3Derivation).flatMap { case (derivationResult, newState) =>
             derivationResult.result.flatMap { case (_, _, firstSk) =>
               val firstPk = firstSk.publicKey
               newState.storage.addKey(firstPk).flatMap { _ =>
@@ -131,12 +145,11 @@ trait ErgoWalletSupport extends ScorexLogging {
     * @param requests - an input sequence of requests
     * @return sequence of transaction outputs or failure if inputs are incorrect
     */
-  protected def requestsToBoxCandidates(
-                                         requests: Seq[TransactionGenerationRequest],
-                                         assetId: BoxId,
-                                         fullHeight: Int,
-                                         parameters: Parameters,
-                                         publicKeyAddresses: Seq[P2PKAddress]): Try[Seq[ErgoBoxCandidate]] =
+  protected def requestsToBoxCandidates(requests: Seq[TransactionGenerationRequest],
+                                        assetId: BoxId,
+                                        fullHeight: Int,
+                                        parameters: Parameters,
+                                        publicKeyAddresses: Seq[P2PKAddress]): Try[Seq[ErgoBoxCandidate]] = {
     Traverse[List].sequence {
       requests.toList
         .map {
@@ -177,6 +190,7 @@ trait ErgoWalletSupport extends ScorexLogging {
             Failure(new Exception(s"Unknown TransactionRequest type: $other"))
         }
     }
+  }
 
   protected def prepareUnsignedTransaction(payTo: Seq[ErgoBoxCandidate],
                                            walletHeight: Int,
@@ -211,13 +225,12 @@ trait ErgoWalletSupport extends ScorexLogging {
     *                      (to spend the spendable inputs).
     * @return generated transaction along with its inputs and data-inputs, or an error
     */
-  protected def generateUnsignedTransaction(
-                                           state: ErgoWalletState,
-                                           boxSelector: BoxSelector,
-                                           requests: Seq[TransactionGenerationRequest],
-                                           inputsRaw: Seq[String],
-                                           dataInputsRaw: Seq[String]
-                                         )(implicit addrEncoder: ErgoAddressEncoder): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = Try {
+  protected def generateUnsignedTransaction(state: ErgoWalletState,
+                                            boxSelector: BoxSelector,
+                                            requests: Seq[TransactionGenerationRequest],
+                                            inputsRaw: Seq[String],
+                                            dataInputsRaw: Seq[String])
+                                           (implicit addrEncoder: ErgoAddressEncoder): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = Try {
     require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issuance requests")
 
     val userInputs = ErgoWalletService.stringsToBoxes(inputsRaw)

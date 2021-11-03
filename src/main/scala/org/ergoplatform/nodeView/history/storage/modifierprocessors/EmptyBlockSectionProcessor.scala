@@ -6,8 +6,8 @@ import scorex.core.consensus.History.ProgressInfo
 import scala.util.{Failure, Success, Try}
 
 /**
-  * Trait that implements BlockSectionProcessor interfaces for a regime where the node only
-  * downloads block headers
+  * Trait that implements BlockSectionProcessor interfaces for a regime where the node is only
+  * downloading block headers
   */
 trait EmptyBlockSectionProcessor extends BlockSectionProcessor {
 

@@ -44,7 +44,7 @@ trait HistoryTestHelpers extends ErgoPropertyTest {
     val minimalSuffix = 2
     val complexityLimit = initSettings.nodeSettings.maxTransactionComplexity
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      PoPoWBootstrap, minimalSuffix, mining = false, complexityLimit, useExternalMiner = false,
+      utxoBootstrap = false, poPoWBootstrap = PoPoWBootstrap, minimalSuffix, mining = false, complexityLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None,
       offlineGeneration = false, 200, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
     val scorexSettings: ScorexSettings = null

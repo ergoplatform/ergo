@@ -22,7 +22,7 @@ object UtxoSnapshotExample extends App {
   implicit val hf: HF = Algos.hash
   val serializer = new BatchAVLProverSerializer[Digest32, HF]
 
-  /*
+
   /**
     * Count number of leaves and their cumulative size (so total weight of boxes)
     *
@@ -30,7 +30,7 @@ object UtxoSnapshotExample extends App {
     * @return
     */
 
-  private def leafDataStats(prover: BatchAVLProver[hash.Digest32, HF]): (Long, Long) = {
+  private def leafDataStats(prover: BatchAVLProver[scorex.crypto.hash.Digest32, HF]): (Long, Long) = {
 
 
     def step(node: ProverNodes[Digest32], acc: (Long, Long)): (Long, Long) = {
@@ -48,10 +48,12 @@ object UtxoSnapshotExample extends App {
   }
 
 
+  val ss0 = System.currentTimeMillis()
   val (elems, valSize) = leafDataStats(state.persistentProver.prover())
+  val ss = System.currentTimeMillis()
+  println("time to traverse the tree: " + (ss - ss0) + " ms.")
   println("elems: " + elems)
   println("boxes total bytes count: " + valSize)
-   */
 
   println("height: " + state.persistentProver.height)
 

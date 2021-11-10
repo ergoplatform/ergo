@@ -5,8 +5,9 @@ import akka.pattern.StatusReply
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateBlock, CandidateGenerator, ErgoMiner, WorkMessage}
+import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -27,11 +28,6 @@ import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
-import org.ergoplatform.P2PKAddress
-import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.wallet.ErgoWalletService.DeriveNextKeyResult
-import org.ergoplatform.nodeView.wallet.scanning.Scan
-import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.scalacheck.Gen
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
@@ -183,13 +179,13 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! boxes.sortBy(_.trackedBox.inclusionHeightOpt)
 
-      case GetTransactions(_) =>
+      case GetTransactions =>
         sender() ! walletTxs
 
       case DeriveKey(_) => sender() ! Success(WalletActorStub.address)
 
       case DeriveNextKey => sender() !
-        DeriveNextKeyResult(Success(WalletActorStub.path, WalletActorStub.address, WalletActorStub.secretKey))
+        DeriveNextKeyResult(Success((WalletActorStub.path, WalletActorStub.address, WalletActorStub.secretKey)))
 
       case ReadPublicKeys(from, until) =>
         sender() ! trackedAddresses.slice(from, until)
@@ -220,7 +216,7 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
         }
         sender() ! res
 
-      case StopTracking(scanId, boxId) =>
+      case StopTracking(_, _) =>
         sender() ! StopTrackingResponse(Success(()))
 
       case ReadScans =>
@@ -346,14 +342,14 @@ trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       PoPoWBootstrap, minimalSuffix, mining = false, complexityLimit, useExternalMiner = false,
       internalMinersCount = 1, internalMinerPollingInterval = 1.second,miningPubKeyHex = None,
-      offlineGeneration = false, 200, 100000, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
+      offlineGeneration = false, 200, 100000, 1.minute, rebroadcastCount = 200, 1000000, 100)
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null
     val chainSettings = settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs)
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
-      nodeSettings, scorexSettings, walletSettings, CacheSettings.default)
+      nodeSettings, scorexSettings, walletSettings, settings.cacheSettings)
 
     ErgoHistory.readOrGenerate(fullHistorySettings, timeProvider)
   }

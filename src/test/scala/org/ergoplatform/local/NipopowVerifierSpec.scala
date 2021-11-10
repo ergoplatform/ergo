@@ -25,7 +25,7 @@ class NipopowVerifierSpec extends AnyPropSpec with Matchers with ChainGenerator 
       val longProof = popowAlgos.prove(longChain)(poPowParams).get
       val longestProof = popowAlgos.prove(longestChain)(poPowParams).get
 
-      val verifier = new NipopowVerifier(poPowParams, baseChain.head.id)
+      val verifier = new NipopowVerifier(baseChain.head.id)
       verifier.bestChain.length shouldBe 0
 
       verifier.process(shortProof)

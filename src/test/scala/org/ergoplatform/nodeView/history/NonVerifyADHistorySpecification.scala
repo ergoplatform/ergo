@@ -141,7 +141,7 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
     history2.bestHeaderOpt.get shouldBe fork2.take(BlocksInChain / 2).last
     history1.bestHeaderOpt.get shouldBe fork1.last
 
-    val si = history2.syncInfo
+    val si = history2.syncInfoV1
     val continuation = history1.continuationIds(si, BlocksInChain * 100)
     fork1.headers.foreach(h => continuation.exists(_._2 == h.id) shouldBe true)
 
@@ -251,10 +251,10 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
 
         val fork1 = genHeaderChain(forkLength, history, diffBitsOpt = None, useRealTs = false).tail
         val common = fork1.headers(forkDepth)
-        val commonInterlinks = history.typedModifierById[Extension](common.extensionId)
+        history.typedModifierById[Extension](common.extensionId)
           .map(ext => NipopowAlgos.unpackInterlinks(ext.fields).get)
           .getOrElse(Seq.empty)
-        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common), commonInterlinks,
+        val fork2 = fork1.take(forkDepth) ++ genHeaderChain(forkLength + 1, Option(common),
           defaultDifficultyControl, extensionHash, diffBitsOpt = None, useRealTs = false)
         val fork1SuffixIds = fork1.headers.drop(forkDepth + 1).map(_.encodedId)
         val fork2SuffixIds = fork2.headers.drop(forkDepth + 1).map(_.encodedId)
@@ -288,7 +288,6 @@ class NonVerifyADHistorySpecification extends HistoryTestHelpers {
       history.contains(header) shouldBe true
       history.applicable(header) shouldBe false
       history.bestHeaderOpt.get shouldBe header
-      history.openSurfaceIds() shouldEqual Seq(header.id)
       history.heightOf(header.id).get shouldBe (inHeight + 1)
     }
   }

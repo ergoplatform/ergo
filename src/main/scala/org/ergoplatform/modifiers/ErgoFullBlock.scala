@@ -16,7 +16,7 @@ case class ErgoFullBlock(header: Header,
                          extension: Extension,
                          adProofs: Option[ADProofs])
   extends ErgoPersistentModifier
-    with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
+    with TransactionsCarryingPersistentNodeViewModifier {
 
   override type M = ErgoFullBlock
 
@@ -40,7 +40,7 @@ case class ErgoFullBlock(header: Header,
 
   override lazy val size: Int = header.size + blockTransactions.size + adProofs.map(_.size).getOrElse(0)
 
-  override lazy val serializer: ScorexSerializer[ErgoFullBlock] =
+  override def serializer: ScorexSerializer[ErgoFullBlock] =
     throw new Error("Serialization for ErgoFullBlock is not (and will be not) implemented")
 
   def height: Int = header.height

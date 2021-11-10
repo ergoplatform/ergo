@@ -14,6 +14,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.ScorexEncoding
+import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -91,17 +92,12 @@ trait ErgoHistoryReader
   override def contains(id: ModifierId): Boolean = historyStorage.contains(id)
 
   /**
-    * Id of the best full block known
-    */
-  override def openSurfaceIds(): Seq[ModifierId] = bestFullBlockIdOpt.orElse(bestHeaderIdOpt).toSeq
-
-  /**
     * Check, that it's possible to apply modifier to history
     */
   def applicable(modifier: ErgoPersistentModifier): Boolean = applicableTry(modifier).isSuccess
 
   /**
-    * For given headers (sorted in inverse chronological order), find first one (most recent one) which is known
+    * For given headers (sorted in reverse chronological order), find first one (most recent one) which is known
     * to our history
     */
   private def commonPoint(headers: Seq[Header]): Option[Header] = {
@@ -127,10 +123,13 @@ trait ErgoHistoryReader
   }
 
   /**
-    * Whether another's node syncinfo indicates that another node is ahead or behind ours
+    * Whether another's node syncinfo indicates that another node is ahead or behind ours, or on fork
     *
     * @param info other's node sync info
-    * @return Equal if nodes have the same history, Younger if another node is behind, Older if the neighbour is ahead
+    * @return Equal if nodes have the same history,
+    *         Younger if another node is behind,
+    *         Older if the neighbour is ahead,
+    *         Fork if the neighbour is on a fork
     */
   def compareV2(info: ErgoSyncInfoV2): HistoryComparisonResult = {
     bestHeaderOpt.map { myLastHeader =>
@@ -174,7 +173,10 @@ trait ErgoHistoryReader
     * Whether another's node syncinfo indicates that another node is ahead or behind ours
     *
     * @param info other's node sync info
-    * @return Equal if nodes have the same history, Younger if another node is behind, Older if the neighbour is ahead
+    * @return Equal if nodes have the same history,
+    *         Younger if another node is behind,
+    *         Older if the neighbour is ahead,
+    *         Fork if the neighbour is on a fork
     */
   def compareV1(info: ErgoSyncInfoV1): HistoryComparisonResult = {
     bestHeaderIdOpt match {
@@ -188,9 +190,8 @@ trait ErgoHistoryReader
         //Other history is empty, our contain some headers
         Younger
       case Some(_) =>
-        //We are on different forks now.
         if (info.lastHeaderIds.view.reverse.exists(m => contains(m) || m == PreGenesisHeader.id)) {
-          //Return Younger, because we can send blocks from our fork that other node can download.
+          //We are on different forks now.
           Fork
         } else {
           //We don't have any of id's from other's node sync info in history.
@@ -210,12 +211,12 @@ trait ErgoHistoryReader
   /**
     *
     * Calculating continuation from common header which will be sent to another node
-    * if comparison status is YOUNGER of FORK, for sync message V1.
+    * if comparison status is YOUNGER or FORK, for sync message V1.
     */
   def continuationIdsV1(syncInfo: ErgoSyncInfoV1, size: Int): ModifierIds =
     if (isEmpty) {
       // if no any header applied yet, return identifiers from other node's sync info
-      syncInfo.startingPoints
+      syncInfo.lastHeaderIds.map(b => Header.modifierTypeId -> b)
     } else if (syncInfo.lastHeaderIds.isEmpty) {
       // if other node has no headers yet, send up to `size` headers from genesis
       val heightTo = Math.min(headersHeight, size + ErgoHistory.EmptyHistoryHeight)
@@ -264,7 +265,7 @@ trait ErgoHistoryReader
 
   /**
     * Calculating continuation from common header which will be sent to another node
-    * if comparison status is YOUNGER of FORK.
+    * if comparison status is YOUNGER or FORK.
     *
     * @param syncInfo other's node sync info
     * @param size max return size
@@ -305,9 +306,14 @@ trait ErgoHistoryReader
   }
 
   /**
-    * @return sync info for neigbour peers, V1 message
+    * Information about our node synchronization status. Other node should be able to compare it's view with ours by
+    * this syncInfo message and calculate modifiers missed by our node.
+    *
+    * V1 version (last header ids to be sent)
+    *
+    * @return
     */
-  override def syncInfo: ErgoSyncInfo = {
+  def syncInfoV1: ErgoSyncInfo = {
     if (isEmpty) {
       ErgoSyncInfoV1(Seq.empty)
     } else {
@@ -323,6 +329,8 @@ trait ErgoHistoryReader
 
   /**
     * @return sync info for neigbour peers, V2 message
+    * @param full - if false, only last header to be sent, otherwise, multiple headers
+    *               full info is needed when
     */
   def syncInfoV2(full: Boolean): ErgoSyncInfoV2 = {
     if (isEmpty) {
@@ -366,7 +374,7 @@ trait ErgoHistoryReader
       case chunk: UTXOSnapshotChunk =>
         validate(chunk)
       case m: Any =>
-        Failure(new Error(s"Modifier $m has incorrect type"))
+        Failure(new MalformedModifierError(s"Modifier $m has incorrect type"))
     }
   }
 
@@ -537,7 +545,10 @@ trait ErgoHistoryReader
 }
 
 object ErgoHistoryReader {
+  // When we need to help other peer to find a common block when its status is unknown,
+  // we send headers with offsets (from the blockchain tip) from below
   val FullV2SyncOffsets = Array(0, 16, 128, 512)
 
+  // When only last header to be sent in sync v2 message
   val ReducedV2SyncOffsets = Array(0)
 }

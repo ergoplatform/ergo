@@ -154,7 +154,7 @@ object ValidationRules {
     bsHeaderValid -> RuleStatus(s => fatal(s"A header for the block section should not be marked as invalid. $s"),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
-    bsHeadersChainSynced -> RuleStatus(s => recoverable(s"Headers-chain is not synchronized yet"),
+    bsHeadersChainSynced -> RuleStatus(_ => recoverable(s"Headers-chain is not synchronized yet"),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
     bsTooOld -> RuleStatus(s => fatal(s"Block section should correspond to a block header that is not pruned yet. $s"),

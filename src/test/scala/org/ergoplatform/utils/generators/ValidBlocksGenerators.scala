@@ -142,7 +142,7 @@ trait ValidBlocksGenerators
     val (_, bhWithoutGenesis) = boxHolderWithoutEmission.take(b => genesisBoxes.contains(b))
     val (regularBoxes, drainedBh) = bhWithoutGenesis.take(rnd.nextInt(txSizeLimit / 100) + 1)
     val boxes = emissionBox ++ regularBoxes
-    val dataBoxes: Seq[ErgoBox] = Random.shuffle(boxHolder.boxes).take(rnd.nextInt(txSizeLimit / 100)).map(_._2).toSeq
+    val dataBoxes: Seq[ErgoBox] = Random.shuffle(boxHolder.boxes.values).take(rnd.nextInt(txSizeLimit / 100)).toSeq
 
     assert(boxes.nonEmpty, s"Was unable to take at least 1 box from box holder $boxHolder")
     val (txs, createdBoxes) = validTransactionsFromBoxes(txSizeLimit, boxes, dataBoxes, rnd)

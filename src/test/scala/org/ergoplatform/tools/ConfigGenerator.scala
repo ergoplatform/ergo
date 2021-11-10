@@ -23,8 +23,6 @@ object ConfigGenerator extends App with ErgoTestHelpers {
     dumpToFile(saveDirPath, cfgName, template(digestMode, mining, mnemonic, apiKeyHash, nodeName))
   }
 
-  sys.exit(0)
-
   private def dumpToFile(dir: String, cfgName: String, content: String): Unit = {
     new File(dir).mkdirs()
     val outWriter = new PrintWriter(new File(s"$dir/$cfgName"))

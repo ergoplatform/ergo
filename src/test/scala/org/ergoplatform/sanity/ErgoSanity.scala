@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
-import org.ergoplatform.network.ErgoNodeViewSynchronizer
+import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
@@ -29,13 +29,11 @@ import scorex.utils.Random
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
-trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT]
-  with StateApplicationTest[PM, ST]
-  //with WalletSecretsTest[P, TX, PM]
-  with MempoolTransactionsTest[TX, MPool]
-  with MempoolRemovalTest[TX, MPool, PM, CTM, HT, SI]
-  //with BoxStateChangesGenerationTest[P, TX, PM, B, ST]
-  with NodeViewSynchronizerTests[TX, PM, ST, SI, HT, MPool]
+trait ErgoSanity[ST <: MinimalState[ST]] extends HistoryTests
+  with StateApplicationTest[ST]
+  with MempoolTransactionsTest
+  with MempoolRemovalTest
+  with NodeViewSynchronizerTests[ST]
   with ErgoTestHelpers
   with HistoryTestHelpers {
 
@@ -94,13 +92,15 @@ trait ErgoSanity[ST <: MinimalState[PM, ST]] extends HistoryTests[TX, PM, SI, HT
                         settings: ErgoSettings,
                         timeProvider: NetworkTimeProvider,
                         history: ErgoHistory,
-                        pool: ErgoMemPool)
+                        pool: ErgoMemPool,
+                        syncTracker: ErgoSyncTracker)
                        (implicit ec: ExecutionContext) extends ErgoNodeViewSynchronizer(
     networkControllerRef,
     viewHolderRef,
     syncInfoSpec,
     settings,
-    timeProvider)(ec) {
+    timeProvider,
+    syncTracker)(ec) {
 
     override def preStart(): Unit = {
       this.historyReaderOpt = Some(history)

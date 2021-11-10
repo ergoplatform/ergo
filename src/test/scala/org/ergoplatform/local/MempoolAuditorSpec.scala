@@ -14,7 +14,7 @@ import org.ergoplatform.utils.{NodeViewTestOps, ErgoTestHelpers}
 import org.scalatest.flatspec.AnyFlatSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction, ChangedState, ChangedMempool}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction, ChangedState, ChangedMempool}
 import scorex.util.ModifierId
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{RuntimeIRContext, IRContext}
@@ -35,7 +35,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
       rebroadcastCount = 1
     ))
   val fixture = new NodeViewFixture(settingsToTest)
-  val newTx: Class[SuccessfulTransaction[_]] = classOf[SuccessfulTransaction[_]]
+  val newTx: Class[SuccessfulTransaction] = classOf[SuccessfulTransaction]
 
   it should "remove transactions which become invalid" in {
     import fixture._
@@ -65,9 +65,9 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val temporarilyValidTx = validTransactionFromBoxes(validTx.outputs, outputsProposition = proveDlogGen.sample.get)
 
     subscribeEvents(classOf[FailedTransaction])
-    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](validTx)
+    nodeViewHolderRef ! LocallyGeneratedTransaction(validTx)
     testProbe.expectMsgClass(cleanupDuration, newTx)
-    nodeViewHolderRef ! LocallyGeneratedTransaction[ErgoTransaction](temporarilyValidTx)
+    nodeViewHolderRef ! LocallyGeneratedTransaction(temporarilyValidTx)
     testProbe.expectMsgClass(cleanupDuration, newTx)
     getPoolSize shouldBe 2
 

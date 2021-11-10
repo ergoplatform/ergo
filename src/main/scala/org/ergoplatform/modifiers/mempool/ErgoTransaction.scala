@@ -218,11 +218,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           initCost = 0)
 
         val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
-        costTry.recover { case t =>
-          log.debug(s"Tx verification failed: ${t.getMessage}")
-        }
-
-        val (isCostValid, scriptCost) = costTry.getOrElse((false, maxCost + 1))
+        val (isCostValid, scriptCost) =
+          costTry match {
+            case Failure(t) =>
+              log.debug(s"Tx verification failed: ${t.getMessage}")
+              (false, maxCost + 1)
+            case Success(result) =>
+              result
+          }
 
         val currCost = addExact(currentTxCost, scriptCost)
 

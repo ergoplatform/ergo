@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
-import org.ergoplatform.settings.{Algos, VotingSettings}
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.LoggingUtil
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
@@ -37,7 +37,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                 override val store: LDBVersionedStore,
                 override val constants: StateConstants)
   extends ErgoState[UtxoState]
-    with TransactionValidation[ErgoTransaction]
+    with TransactionValidation
     with UtxoStateReader
     with ScorexEncoding {
 
@@ -51,8 +51,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   }
 
   import UtxoState.metadata
-
-  override val maxRollbackDepth = 10
 
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
@@ -97,7 +95,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  //todo: utxo snapshot could go here
   override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
       persistentProver.synchronized {
@@ -204,8 +201,6 @@ object UtxoState {
     }
 
     val store = new LDBVersionedStore(dir, keepVersions = constants.keepVersions)
-
-    implicit val votingSettings: VotingSettings = constants.votingSettings
 
     val defaultStateContext = ErgoStateContext.empty(constants)
     val np = NodeParameters(keySize = 32, valueSize = None, labelSize = 32)

@@ -31,6 +31,9 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
     .maximumSize(config.indexesCacheSize)
     .build[ByteArrayWrapper, Array[Byte]]
 
+  def modifierBytesById(id: ModifierId): Option[Array[Byte]] =
+    objectsStore.get(idToBytes(id))
+
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
     Option(modifiersCache.getIfPresent(id)) orElse
       objectsStore.get(idToBytes(id)).flatMap { bytes =>

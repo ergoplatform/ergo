@@ -25,6 +25,7 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -320,6 +321,42 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val msg = Message(requestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
           networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
         }
+      }
+
+  private def readersOpt: Option[(ErgoHistory, ErgoMemPool)] = historyReaderOpt.flatMap(h => mempoolReaderOpt.map(mp => (h, mp)))
+
+  case class RawResponseFromLocal(source: ConnectedPeer, modifierTypeId: ModifierTypeId, localObjects: Seq[(ModifierId, Array[Byte])])
+
+  //other node asking for objects by their ids
+  override protected def modifiersReq(invData: InvData, remote: ConnectedPeer): Unit = {
+      readersOpt.foreach { readers =>
+        val objs: Seq[(ModifierId,Array[Byte])] =
+            invData.ids.flatMap(id => readers._1.modifierBytesById(id).map(bytes => (id, bytes)))
+
+         self ! RawResponseFromLocal(remote, invData.typeId, objs)
+      }
+  }
+
+  /**
+    * Local node sending out objects requested to remote
+    */
+  override protected def responseFromLocal: Receive = {
+    case RawResponseFromLocal(peer, modType, modifiers: Seq[(ModifierId,Array[Byte])]) =>
+
+        @tailrec
+        def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
+          var size = 5 //message type id + message size
+          val batch = mods.takeWhile { case (_, modBytes) =>
+            size += NodeViewModifier.ModifierIdSize + 4 + modBytes.length
+            size < networkSettings.maxPacketSize
+          }
+          peer.handlerRef ! Message(modifiersSpec, Right(ModifiersData(modType, batch.toMap)), None)
+          val remaining = mods.drop(batch.length)
+          if (remaining.nonEmpty) {
+            sendByParts(remaining)
+          }
+        }
+        sendByParts(modifiers)
       }
 
   /**

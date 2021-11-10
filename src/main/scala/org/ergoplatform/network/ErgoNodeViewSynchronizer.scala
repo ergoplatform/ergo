@@ -368,25 +368,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       }
 
-  private def readersOpt: Option[(ErgoHistory, ErgoMemPool)] = historyReaderOpt.flatMap(h => mempoolReaderOpt.map(mp => (h, mp)))
-
-  case class RawResponseFromLocal(source: ConnectedPeer, modifierTypeId: ModifierTypeId, localObjects: Seq[(ModifierId, Array[Byte])])
-
-  //other node asking for objects by their ids
-  override protected def modifiersReq(invData: InvData, remote: ConnectedPeer): Unit = {
-      readersOpt.foreach { readers =>
-        val objs: Seq[(ModifierId,Array[Byte])] =
-            invData.ids.flatMap(id => readers._1.modifierBytesById(id).map(bytes => (id, bytes)))
-
-         self ! RawResponseFromLocal(remote, invData.typeId, objs)
-      }
-  }
-
   /**
     * Local node sending out objects requested to remote
     */
-  override protected def responseFromLocal: Receive = {
-    case RawResponseFromLocal(peer, modType, modifiers: Seq[(ModifierId,Array[Byte])]) =>
+  protected def responseFromLocal: Receive = {
+    case ResponseFromLocal(peer, modType, modifiers: Seq[(ModifierId,Array[Byte])]) =>
 
         @tailrec
         def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
@@ -555,19 +541,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   //other node asking for objects by their ids
   protected def modifiersReq(invData: InvData, remote: ConnectedPeer): Unit = {
-      val objs: Seq[NodeViewModifier] = invData.typeId match {
+      val objs: Seq[(ModifierId, Array[Byte])] = invData.typeId match {
         case typeId: ModifierTypeId if typeId == Transaction.ModifierTypeId =>
           mempoolReaderOpt.toSeq.flatMap {mp =>
             mp.getAll(invData.ids)
-          }
+          }.map(tx => tx.id -> tx.bytes)
         case _: ModifierTypeId =>
           historyReaderOpt.toSeq.flatMap { h =>
-            invData.ids.flatMap(id => h.modifierById(id))
+            invData.ids.flatMap(id => h.modifierBytesById(id).map(bytes => (id, bytes)))
           }
       }
 
-      log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
-        s"sending ${objs.length} modifiers ${idsToString(invData.typeId, objs.map(_.id))} ")
+      log.whenDebugEnabled {
+        log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
+          s"sending ${objs.length} modifiers ${idsToString(invData.typeId, objs.map(_._1))} ")
+      }
       self ! ResponseFromLocal(remote, invData.typeId, objs)
   }
 
@@ -626,37 +614,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
-
-  /**
-    * Local node sending out objects requested to remote
-    */
-  protected def responseFromLocal: Receive = {
-    case ResponseFromLocal(peer, _, modifiers: Seq[NodeViewModifier]) =>
-      modifiers.headOption.foreach { head =>
-        val modType = head.modifierTypeId
-
-        @tailrec
-        def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
-          var size = 5 //message type id + message size
-          val batch = mods.takeWhile { case (_, modBytes) =>
-            size += NodeViewModifier.ModifierIdSize + 4 + modBytes.length
-            size < networkSettings.maxPacketSize
-          }
-          peer.handlerRef ! Message(modifiersSpec, Right(ModifiersData(modType, batch.toMap)), None)
-          val remaining = mods.drop(batch.length)
-          if (remaining.nonEmpty) {
-            sendByParts(remaining)
-          }
-        }
-
-        Constants.modifierSerializers.get(modType) match {
-          case Some(serializer: ScorexSerializer[NodeViewModifier]) =>
-            sendByParts(modifiers.map(m => m.id -> serializer.toBytes(m)))
-          case _ =>
-            log.error(s"Undefined serializer for modifier of type $modType")
-        }
-      }
-  }
 
   /**
     * Our node needs modifiers of type `modifierTypeId` with ids `modifierIds`
@@ -821,7 +778,7 @@ object ErgoNodeViewSynchronizer {
     // getLocalSyncInfo messages
     case object SendLocalSyncInfo
 
-    case class ResponseFromLocal[M <: NodeViewModifier](source: ConnectedPeer, modifierTypeId: ModifierTypeId, localObjects: Seq[M])
+    case class ResponseFromLocal(source: ConnectedPeer, modifierTypeId: ModifierTypeId, localObjects: Seq[(ModifierId, Array[Byte])])
 
     /**
       * Check delivery of modifier with type `modifierTypeId` and id `modifierId`.

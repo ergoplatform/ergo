@@ -69,7 +69,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     log.info("Initializing wallet actor")
     ErgoWalletState.initial(settings) match {
       case Success(state) =>
-        context.system.eventStream.subscribe(self, classOf[ChangedState[_]])
+        context.system.eventStream.subscribe(self, classOf[ChangedState])
         context.system.eventStream.subscribe(self, classOf[ChangedMempool[_]])
         self ! ReadWallet(state)
       case Failure(ex) =>

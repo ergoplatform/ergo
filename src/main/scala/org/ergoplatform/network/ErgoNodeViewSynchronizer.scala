@@ -21,6 +21,7 @@ import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.state.ErgoStateReader
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
@@ -34,7 +35,6 @@ import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
-import scorex.core.transaction.state.StateReader
 import scorex.core.transaction.wallet.VaultReader
 
 import scala.annotation.tailrec
@@ -813,7 +813,7 @@ object ErgoNodeViewSynchronizer {
 
     case class ChangedVault[VR <: VaultReader](reader: VR) extends NodeViewChange
 
-    case class ChangedState[SR <: StateReader](reader: SR) extends NodeViewChange
+    case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
 
     //todo: consider sending info on the rollback
 

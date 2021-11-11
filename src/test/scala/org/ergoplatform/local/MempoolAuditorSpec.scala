@@ -100,7 +100,6 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     // mempool reader stub specifically for this test
     // only take is defined as only this method is used in rebroadcasting
     object fakeMempool extends ErgoMemPoolReader {
-      override type NVCT = this.type
 
       override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = ???
 

@@ -19,6 +19,7 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
+import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
@@ -96,6 +97,21 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
+  private def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
+    val SnapshotEvery = 20 // test value, switch to 51840 after testing
+
+    if (estimatedTip.nonEmpty && (height % SnapshotEvery == 0) && height - estimatedTip.get <= SnapshotEvery) {
+
+      val serializer = new BatchAVLProverSerializer[Digest32, HF]
+      val (manifest, subtrees) = serializer.slice(persistentProver.avlProver, subtreeDepth = 12)
+
+      val manifestBytes = serializer.manifestToBytes(manifest)
+      println("manifest size: " + manifestBytes.length)
+      println("subtrees count: " + subtrees.size)
+      // todo: save manifest and subtrees into a database
+    }
+  }
+
   override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height]): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
       persistentProver.synchronized {
@@ -120,8 +136,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             } else if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
               throw new Error("Calculated stateRoot is not equal to the declared one")
             }
+
             log.info(s"Valid modifier with header ${fb.header.encodedId} and emission box " +
               s"${emissionBox.map(e => Algos.encode(e.id))} applied to UtxoState at height ${fb.header.height}")
+            saveSnapshotIfNeeded(fb.height, estimatedTip)
             new UtxoState(persistentProver, idToVersion(fb.id), store, constants)
           }
         }
@@ -132,11 +150,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             .ensuring(java.util.Arrays.equals(persistentProver.digest, inRoot))
           Failure(e)
         }
-
-        if (estimatedTip.nonEmpty && (fb.height % 51480 == 0) && fb.height - estimatedTip.get <= 51480) {
-          // todo: save snapshot
-        }
-
       }
 
     case h: Header =>

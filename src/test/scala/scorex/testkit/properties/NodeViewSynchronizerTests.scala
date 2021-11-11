@@ -13,11 +13,11 @@ import scorex.core.NodeViewHolder.ReceivableMessages.{GetNodeViewChanges, Modifi
 import scorex.core.consensus.SyncInfo
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.state.ErgoState
 import scorex.core.network._
 import scorex.core.network.message._
 import scorex.core.network.peer.PenaltyType
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
-import scorex.core.transaction.state.MinimalState
 import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
@@ -29,7 +29,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 @SuppressWarnings(Array("org.wartremover.warts.IsInstanceOf"))
-trait NodeViewSynchronizerTests[ST <: MinimalState[ST]] extends AnyPropSpec
+trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   with Matchers
   with ScorexLogging
   with SyntacticallyTargetedModifierProducer

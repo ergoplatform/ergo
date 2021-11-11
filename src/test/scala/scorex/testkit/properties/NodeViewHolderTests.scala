@@ -9,7 +9,7 @@ import org.scalatest.propspec.AnyPropSpec
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, ModifiersFromRemote}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import scorex.core.transaction.state.MinimalState
+import org.ergoplatform.nodeView.state.ErgoState
 import scorex.testkit.generators._
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
@@ -18,7 +18,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 
 @SuppressWarnings(Array("org.wartremover.warts.TraversableOps"))
-trait NodeViewHolderTests[ST <: MinimalState[ST]]
+trait NodeViewHolderTests[ST <: ErgoState[ST]]
   extends AnyPropSpec
     with Matchers
     with ScorexLogging

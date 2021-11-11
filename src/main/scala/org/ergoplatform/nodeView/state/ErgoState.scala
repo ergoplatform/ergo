@@ -14,7 +14,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.transaction.state.MinimalState
 import scorex.core.validation.ValidationResult.Valid
 import scorex.core.validation.{ModifierValidator, ValidationResult}
 import scorex.core.{VersionTag, idToVersion}
@@ -38,13 +37,13 @@ import scala.util.Try
   * transformations of UTXO set presented in form of authenticated dynamic dictionary are needed to check validity of
   * a transaction set (see https://eprint.iacr.org/2016/994 for details).
   */
-trait ErgoState[IState <: MinimalState[IState]] extends MinimalState[IState] with ErgoStateReader {
+trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
   self: IState =>
 
-  override def applyModifier(mod: ErgoPersistentModifier): Try[IState]
+  def applyModifier(mod: ErgoPersistentModifier): Try[IState]
 
-  override def rollbackTo(version: VersionTag): Try[IState]
+  def rollbackTo(version: VersionTag): Try[IState]
 
   def rollbackVersions: Iterable[VersionTag]
 

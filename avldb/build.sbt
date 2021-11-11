@@ -1,11 +1,9 @@
-import sbt.Keys.testFrameworks
-
 name := "avldb"
 
 libraryDependencies ++= Seq(
   "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "org.scorexfoundation" %% "scrypto" % "2.1.10"
+  "org.scorexfoundation" %% "scrypto" % "2.1.10-34-40ab5fdd-SNAPSHOT"
 )
 
 libraryDependencies ++= Seq(
@@ -20,7 +18,7 @@ libraryDependencies ++= Seq(
 )
 
 testOptions in Test := Seq(Tests.Filter(t => !t.matches(".*Benchmark$")))
-javaOptions in run += "-Xmx12G"
+javaOptions in run += "-Xmx6G"
 
 //scalacOptions ++= Seq("-Xdisable-assertions")
 

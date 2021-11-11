@@ -285,7 +285,7 @@ trait ErgoTransactionGenerators extends ErgoGenerators with Generators {
   // todo: fix generator
   lazy val randomUTXOSnapshotChunkGen: Gen[UTXOSnapshotChunk] = for {
     index: Int <- Arbitrary.arbitrary[Int]
-  } yield UTXOSnapshotChunk(null, index)
+  } yield UTXOSnapshotChunk(null)
 
   lazy val invalidErgoFullBlockGen: Gen[ErgoFullBlock] = for {
     header <- defaultHeaderGen

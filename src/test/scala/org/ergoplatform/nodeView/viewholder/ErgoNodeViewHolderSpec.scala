@@ -72,7 +72,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
     applyBlock(genesis) shouldBe 'success
 
     val block = validFullBlock(Some(genesis), wusAfterGenesis)
@@ -108,13 +108,13 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
     // TODO looks like another bug is still present here, see https://github.com/ergoplatform/ergo/issues/309
     if (verifyTransactions) {
       applyBlock(genesis) shouldBe 'success
 
       val block = validFullBlock(Some(genesis), wusAfterGenesis)
-      val wusAfterBlock = wusAfterGenesis.applyModifier(block).get
+      val wusAfterBlock = wusAfterGenesis.applyModifier(block, None).get
 
       applyBlock(block) shouldBe 'success
       getBestHeaderOpt shouldBe Some(block.header)
@@ -160,7 +160,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
 
     applyBlock(genesis) shouldBe 'success
     getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
@@ -176,7 +176,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getBestFullBlockOpt shouldBe expectedBestFullBlockOpt
     getBestHeaderOpt shouldBe Some(chain1block1.header)
 
-    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
+    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1, None).get
     val chain2block2 = validFullBlock(Some(chain2block1), wusChain2Block1)
     chain2block1.header.stateRoot shouldEqual wusChain2Block1.rootHash
 
@@ -208,7 +208,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
     applyBlock(genesis) shouldBe 'success
 
     val block1 = validFullBlock(Some(genesis), wusAfterGenesis)
@@ -228,13 +228,13 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     import fixture._
     val (us, bh) = createUtxoState(Some(nodeViewHolderRef))
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
 
     applyBlock(genesis) shouldBe 'success
     getRootHash shouldBe Algos.encode(wusAfterGenesis.rootHash)
 
     val chain2block1 = validFullBlock(Some(genesis), wusAfterGenesis)
-    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1).get
+    val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1, None).get
     val chain2block2 = validFullBlock(Some(chain2block1), wusChain2Block1)
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier])
@@ -387,7 +387,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getBestFullBlockOpt shouldBe expectedBestFullBlockOpt
     getBestHeaderOpt shouldBe Some(chain1block1.header)
 
-    val wusChain2Block1 = wusGenesis.applyModifier(chain2block1).get
+    val wusChain2Block1 = wusGenesis.applyModifier(chain2block1, None).get
     val chain2block2 = validFullBlock(Some(chain2block1), wusChain2Block1)
     chain2block1.header.stateRoot shouldEqual wusChain2Block1.rootHash
 

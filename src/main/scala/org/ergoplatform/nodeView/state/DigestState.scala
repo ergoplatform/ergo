@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import java.io.File
 
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -79,7 +80,7 @@ class DigestState protected(override val version: VersionTag,
       Failure(new Exception(s"Modifier not validated: $a"))
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier): Try[DigestState] =
+  override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height]): Try[DigestState] =
     (processFullBlock orElse processHeader orElse processOther) (mod)
 
   @SuppressWarnings(Array("OptionGet"))

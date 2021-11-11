@@ -8,6 +8,7 @@ import org.ergoplatform.ErgoApp
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.ErgoApp.CriticalSystemException
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -207,6 +208,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
+  private def estimatedTip(): Option[Height] = {
+    if(history.isHeadersChainSynced) {
+      Some(history.headersHeight)
+    } else {
+      None
+    }
+  }
+
   private def applyState(history: ErgoHistory,
                          stateToApply: State,
                          suffixTrimmed: IndexedSeq[ErgoPersistentModifier],
@@ -218,7 +227,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         f
       case (success@Success(updateInfo), modToApply) =>
         if (updateInfo.failedMod.isEmpty) {
-          updateInfo.state.applyModifier(modToApply) match {
+          updateInfo.state.applyModifier(modToApply, estimatedTip()) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
                 context.system.eventStream.publish(SemanticallySuccessfulModifier(modToApply))
@@ -407,7 +416,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           history.getFullBlock(h)
             .fold(throw new Error(s"Failed to get full block for header $h"))(fb => fb)
         }
-        toApply.foldLeft[Try[State]](Success(initState))((acc, m) => acc.flatMap(_.applyModifier(m)))
+        toApply.foldLeft[Try[State]](Success(initState)){
+          (acc, block) =>
+            log.info(s"Applying block ${block.height} during consistent state restoration")
+            acc.flatMap(_.applyModifier(block, estimatedTip()))
+        }
     }
   }
 
@@ -437,12 +450,16 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     recoveredStateTry match {
       case Success(state) =>
         log.info("Recovering state using current epoch")
-        chainToApply.foldLeft[Try[DigestState]](Success(state))((acc, m) => acc.flatMap(_.applyModifier(m)))
+        chainToApply.foldLeft[Try[DigestState]](Success(state)) { (acc, m) =>
+          acc.flatMap(_.applyModifier(m, estimatedTip()))
+        }
       case Failure(exception) => // recover using whole headers chain
         log.warn(s"Failed to recover state from current epoch, using whole chain: ${exception.getMessage}")
         val wholeChain = history.headerChainBack(Int.MaxValue, bestFullBlock.header, _.isGenesis).headers
         val genesisState = DigestState.create(None, None, stateDir(settings), constants)
-        wholeChain.foldLeft[Try[DigestState]](Success(genesisState))((acc, m) => acc.flatMap(_.applyModifier(m)))
+        wholeChain.foldLeft[Try[DigestState]](Success(genesisState)){(acc, m) =>
+          acc.flatMap(_.applyModifier(m, estimatedTip()))
+        }
     }
   }
 

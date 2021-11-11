@@ -21,7 +21,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   it should "accept valid transaction" in {
     val (us, bh) = createUtxoState()
     val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
     val txs = validTransactionsFromUtxoState(wus, Random)
     val pool0 = ErgoMemPool.empty(settings)
     val poolAfter = txs.foldLeft(pool0) { case (pool, tx) =>
@@ -43,7 +43,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   it should "decline already contained transaction" in {
     val (us, bh) = createUtxoState()
     val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
     val txs = validTransactionsFromUtxoState(wus, Random)
     var pool = ErgoMemPool.empty(settings)
     txs.foreach { tx =>
@@ -59,7 +59,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       whenever(n1 != n2) {
         val (us, bh) = createUtxoState()
         val genesis = validFullBlock(None, us, bh, Random)
-        val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+        val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
 
         val feeProp = settings.chainSettings.monetary.feeProposition
         val inputBox = wus.takeBoxes(1).head
@@ -115,7 +115,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   it should "decline transactions not meeting min fee" in {
     val (us, bh) = createUtxoState()
     val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
     val txs = validTransactionsFromUtxoState(wus, Random)
 
     val maxSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = Long.MaxValue))
@@ -173,7 +173,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   it should "Accept output of pooled transactions" in {
     val (us, bh) = createUtxoState()
     val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
     val txs = validTransactionsFromUtxoState(wus, Random)
     var pool = ErgoMemPool.empty(settings)
     txs.foreach { tx =>
@@ -191,7 +191,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   it should "consider families for replacement policy" in {
     val (us, bh) = createUtxoState()
     val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
     var txs = validTransactionsFromUtxoState(wus, Random)
     val family_depth = 10
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
@@ -221,7 +221,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   it should "correctly remove transaction from pool and rebuild families" in {
     val (us, bh) = createUtxoState()
     val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
     var txs = validTransactionsFromUtxoState(wus, Random)
     var allTxs = txs
     val family_depth = 10
@@ -254,7 +254,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
 
     val (us, bh) = createUtxoState()
     val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
     var txs = validTransactionsFromUtxoState(wus, Random)
     val family_depth = 10
     val limitedPoolSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
@@ -295,7 +295,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   it should "add removed transaction to mempool statistics" in {
     val (us, bh) = createUtxoState()
     val genesis = validFullBlock(None, us, bh, Random)
-    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis).get
+    val wus = WrappedUtxoState(us, bh, stateConstants).applyModifier(genesis, None).get
     var txs = validTransactionsFromUtxoState(wus, Random)
     var allTxs = txs
     val family_depth = 10

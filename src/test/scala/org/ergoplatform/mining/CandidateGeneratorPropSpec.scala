@@ -68,8 +68,8 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
       defaultMinerPk
     )
 
-    us.applyModifier(validFullBlock(None, us, incorrectTxs)) shouldBe 'failure
-    us.applyModifier(validFullBlock(None, us, txs)) shouldBe 'success
+    us.applyModifier(validFullBlock(None, us, incorrectTxs), None) shouldBe 'failure
+    us.applyModifier(validFullBlock(None, us, txs), None) shouldBe 'success
   }
 
   property("collect reward from transaction fees only") {
@@ -94,8 +94,8 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
       defaultMinerPk
     )
 
-    us.applyModifier(validFullBlock(None, us, blockTx +: incorrect)) shouldBe 'failure
-    us.applyModifier(validFullBlock(None, us, blockTx +: txs)) shouldBe 'success
+    us.applyModifier(validFullBlock(None, us, blockTx +: incorrect), None) shouldBe 'failure
+    us.applyModifier(validFullBlock(None, us, blockTx +: txs), None) shouldBe 'success
   }
 
   property("filter out double spend txs") {
@@ -218,7 +218,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
       .toSeq
     val block = validFullBlock(None, us, blockTx +: txs)
 
-    us = us.applyModifier(block).get
+    us = us.applyModifier(block, None).get
 
     val blockTx2 =
       validTransactionFromBoxes(txBoxes(1), outputsProposition = feeProposition)
@@ -230,9 +230,9 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
     val invalidBlock2 =
       validFullBlock(Some(block), us, IndexedSeq(earlySpendingTx, blockTx2))
 
-    us.applyModifier(invalidBlock2) shouldBe 'failure
+    us.applyModifier(invalidBlock2, None) shouldBe 'failure
 
-    us = us.applyModifier(block2).get
+    us = us.applyModifier(block2, None).get
 
     val earlySpendingTx2 =
       validTransactionFromBoxes(txs.head.outputs, stateCtxOpt = Some(us.stateContext))
@@ -241,7 +241,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
       validTransactionFromBoxes(txBoxes(2), outputsProposition = feeProposition)
     val block3 = validFullBlock(Some(block2), us, IndexedSeq(earlySpendingTx2, blockTx3))
 
-    us.applyModifier(block3) shouldBe 'success
+    us.applyModifier(block3, None) shouldBe 'success
   }
 
   property("collect reward from both emission box and fees") {

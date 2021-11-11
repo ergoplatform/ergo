@@ -80,6 +80,6 @@ class ScriptsSpec extends ErgoPropertyTest {
       assert(us.boxById(boxId).isDefined, s"Box ${Algos.encode(boxId)} missed")
     }
     val block = validFullBlock(None, us, tx, Some(1234L))
-    us.applyModifier(block)
+    us.applyModifier(block, None)
   }
 }

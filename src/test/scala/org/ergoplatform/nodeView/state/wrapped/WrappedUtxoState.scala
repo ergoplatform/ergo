@@ -4,6 +4,7 @@ import java.io.File
 
 import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.ErgoSettings
@@ -33,23 +34,25 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
     case Failure(e) => Failure(e)
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier): Try[WrappedUtxoState] = super.applyModifier(mod) match {
-    case Success(us) =>
-      mod match {
-        case ct: TransactionsCarryingPersistentNodeViewModifier =>
-          // You can not get block with transactions not being of ErgoTransaction type so no type checks here.
+  override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height]): Try[WrappedUtxoState] = {
+    super.applyModifier(mod, estimatedTip) match {
+      case Success(us) =>
+        mod match {
+          case ct: TransactionsCarryingPersistentNodeViewModifier =>
+            // You can not get block with transactions not being of ErgoTransaction type so no type checks here.
 
-          val changes = ErgoState.stateChanges(ct.transactions)
-          val updHolder = versionedBoxHolder.applyChanges(
-            us.version,
-            changes.toRemove.map(_.boxId).map(ByteArrayWrapper.apply),
-            changes.toAppend.map(_.box))
-          Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants))
-        case _ =>
-          val updHolder = versionedBoxHolder.applyChanges(us.version, Seq(), Seq())
-          Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants))
-      }
-    case Failure(e) => Failure(e)
+            val changes = ErgoState.stateChanges(ct.transactions)
+            val updHolder = versionedBoxHolder.applyChanges(
+              us.version,
+              changes.toRemove.map(_.boxId).map(ByteArrayWrapper.apply),
+              changes.toAppend.map(_.box))
+            Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants))
+          case _ =>
+            val updHolder = versionedBoxHolder.applyChanges(us.version, Seq(), Seq())
+            Success(new WrappedUtxoState(us.persistentProver, idToVersion(mod.id), us.store, updHolder, constants))
+        }
+      case Failure(e) => Failure(e)
+    }
   }
 }
 

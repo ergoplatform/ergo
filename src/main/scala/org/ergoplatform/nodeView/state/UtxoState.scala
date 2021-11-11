@@ -4,6 +4,7 @@ import java.io.File
 
 import cats.Traverse
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -95,7 +96,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  override def applyModifier(mod: ErgoPersistentModifier): Try[UtxoState] = mod match {
+  override def applyModifier(mod: ErgoPersistentModifier, estimatedTip: Option[Height]): Try[UtxoState] = mod match {
     case fb: ErgoFullBlock =>
       persistentProver.synchronized {
         val height = fb.header.height

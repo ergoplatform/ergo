@@ -12,7 +12,7 @@ import org.ergoplatform.settings.{Constants, Algos, ErgoSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{NodeViewTestOps, ErgoTestHelpers}
 import org.scalatest.flatspec.AnyFlatSpec
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction, ChangedState, ChangedMempool}
 import scorex.util.ModifierId

@@ -298,6 +298,7 @@ trait NodeViewHolder[State <: ErgoState[State]] extends Actor with ScorexLogging
     */
   protected def processRemoteModifiers: Receive = {
     case ModifiersFromRemote(mods: Seq[ErgoPersistentModifier]) =>
+      log.info(s"Going to apply ${mods.length} modifiers from remote")
       mods.foreach(m => modifiersCache.put(m.id, m))
 
       log.debug(s"Cache size before: ${modifiersCache.size}")

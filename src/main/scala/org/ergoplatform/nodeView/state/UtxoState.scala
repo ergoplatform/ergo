@@ -12,7 +12,7 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.settings.ValidationRules.{fbDigestIncorrect, fbOperationFailed}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.LoggingUtil
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.core._
 import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding

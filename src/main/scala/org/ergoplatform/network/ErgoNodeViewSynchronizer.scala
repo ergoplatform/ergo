@@ -12,8 +12,8 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownlo
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
-import scorex.core.NodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
-import scorex.core.NodeViewHolder._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetNodeViewChanges, ModifiersFromRemote, TransactionsFromRemote}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder._
 import scorex.core.app.Version
 import scorex.core.consensus.History.{Equal, Fork, Nonsense, Older, Unknown, Younger}
 import scorex.core.consensus.{HistoryReader, SyncInfo}
@@ -21,6 +21,7 @@ import scorex.core.network.ModifiersStatus.Requested
 import scorex.core.{ModifierTypeId, NodeViewModifier, PersistentNodeViewModifier, idsToString}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, RegisterMessageSpecs}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.state.ErgoStateReader
 import scorex.core.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
@@ -34,7 +35,6 @@ import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
-import scorex.core.transaction.state.StateReader
 import scorex.core.transaction.wallet.VaultReader
 
 import scala.annotation.tailrec
@@ -813,7 +813,7 @@ object ErgoNodeViewSynchronizer {
 
     case class ChangedVault[VR <: VaultReader](reader: VR) extends NodeViewChange
 
-    case class ChangedState[SR <: StateReader](reader: SR) extends NodeViewChange
+    case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
 
     //todo: consider sending info on the rollback
 

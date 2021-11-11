@@ -133,6 +133,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
           Failure(e)
         }
 
+        if (estimatedTip.nonEmpty && (fb.height % 51480 == 0) && fb.height - estimatedTip.get <= 51480) {
+          // todo: save snapshot
+        }
+
       }
 
     case h: Header =>

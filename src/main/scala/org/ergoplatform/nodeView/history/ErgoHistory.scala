@@ -185,17 +185,29 @@ trait ErgoHistory
     case _ => None
   }
 
-  def forgetHeader(headerId: ModifierId): Try[Unit] = {
-    historyStorage.remove(
-      Seq(
-        validityKey(headerId),
-        headerHeightKey(headerId),
-        headerScoreKey(headerId)
-      ),
-      Seq(
-        headerId
-      )
-    )
+  def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
+    typedModifierById[Header](headerId).foreach { h =>
+      historyStorage.remove(
+        Seq(
+          validityKey(headerId),
+          headerHeightKey(headerId),
+          headerScoreKey(headerId)
+        ),
+        Seq(
+          headerId
+        )
+      ).get
+      requiredModifiersForHeader(h).foreach { case (_, mId) =>
+        historyStorage.remove(
+          Seq(
+            validityKey(mId)
+          ),
+          Seq(
+            mId
+          )
+        ).get
+      }
+    }
   }
 }
 

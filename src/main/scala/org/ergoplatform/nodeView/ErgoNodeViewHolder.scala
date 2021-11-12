@@ -552,12 +552,6 @@ object ErgoNodeViewHolder {
 
   }
 
-  // fixme: No actor is expecting this ModificationApplicationStarted and DownloadRequest messages
-  // fixme: Even more, ModificationApplicationStarted seems not to be sent at all
-  // fixme: should we delete these messages?
-  case class ModificationApplicationStarted(modifier: ErgoPersistentModifier)
-    extends NodeViewHolderEvent
-
   case class DownloadRequest(modifierTypeId: ModifierTypeId,
                              modifierId: scorex.util.ModifierId) extends NodeViewHolderEvent
 
@@ -573,36 +567,22 @@ private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings,
   extends ErgoNodeViewHolder[UtxoState](settings, timeProvider)
 
 
-/** This class guarantees to its inheritors the creation of correct instance of `ErgoNodeViewHolder`
-  * for the given instance of `StateType`
-  */
-sealed abstract class ErgoNodeViewProps[ST <: StateType, S <: ErgoState[S], N <: ErgoNodeViewHolder[S]]
-(implicit ev: StateType.Evidence[ST, S]) {
-  assert(ev != null) // just to satisfy scalac
-  def apply(settings: ErgoSettings, timeProvider: NetworkTimeProvider, digestType: ST): Props
-}
-
-object DigestNodeViewProps extends ErgoNodeViewProps[StateType.DigestType, DigestState, DigestNodeViewHolder] {
-  def apply(settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
-            digestType: StateType.DigestType): Props =
-    Props.create(classOf[DigestNodeViewHolder], settings, timeProvider)
-}
-
-object UtxoNodeViewProps extends ErgoNodeViewProps[StateType.UtxoType, UtxoState, UtxoNodeViewHolder] {
-  def apply(settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
-            digestType: StateType.UtxoType): Props =
-    Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider)
-}
 
 object ErgoNodeViewRef {
+
+  private def digestProps(settings: ErgoSettings,
+                  timeProvider: NetworkTimeProvider): Props =
+    Props.create(classOf[DigestNodeViewHolder], settings, timeProvider)
+
+  private def utxoProps(settings: ErgoSettings,
+                timeProvider: NetworkTimeProvider): Props =
+    Props.create(classOf[UtxoNodeViewHolder], settings, timeProvider)
 
   def props(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider): Props =
     settings.nodeSettings.stateType match {
-      case StateType.Digest => DigestNodeViewProps(settings, timeProvider, StateType.Digest)
-      case StateType.Utxo => UtxoNodeViewProps(settings, timeProvider, StateType.Utxo)
+      case StateType.Digest => digestProps(settings, timeProvider)
+      case StateType.Utxo => utxoProps(settings, timeProvider)
     }
 
   def apply(settings: ErgoSettings,

@@ -26,7 +26,6 @@ import scorex.core.utils.NetworkTimeProvider
 import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId
 import scorex.core.network.DeliveryTracker
-import scala.collection.immutable.TreeMap
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -47,8 +46,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   override protected val deliveryTracker: DeliveryTracker =
     DeliveryTracker.empty(context.system, deliveryTimeout, maxDeliveryChecks, self, settings)
 
-  // cache of transaction ids that were already applied to history
-  private var blockAppliedTxsCache: TreeMap[ModifierId, Long] = TreeMap.empty[ModifierId, Long]
+  // bloom filters with transaction ids that were already applied to history
+  private var blockAppliedTxsCache: FixedSizeBloomFilterQueue =
+    FixedSizeBloomFilterQueue.empty(bloomFilterQueueSize = 5)
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -395,7 +395,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (spam.nonEmpty) {
       if (typeId == Transaction.ModifierTypeId) {
-        val spammyTxs = modifiers.filterKeys(id => !blockAppliedTxsCache.contains(id))
+        val spammyTxs = modifiers.filterKeys(id => !blockAppliedTxsCache.mightContain(id))
         if (spammyTxs.nonEmpty) {
           log.info(s"Got spammy transactions: $spammyTxs")
           penalizeSpammingPeer(remote)
@@ -455,7 +455,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
               val unknownMods =
                 invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
               // filter out transactions that were already applied to history
-              unknownMods.filterNot(blockAppliedTxsCache.contains)
+              unknownMods.filterNot(blockAppliedTxsCache.mightContain)
             } else {
               Seq.empty
             }
@@ -504,16 +504,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private val onBlockAppliedTransactions: Receive = {
     case BlockAppliedTransactions(transactionIds: Seq[ModifierId]) =>
-      val ts = System.currentTimeMillis()
-      val blockTxsCount = transactionIds.size
-      val cacheSizeLimit = blockTxsCount * 5 // let's cache txs from approximately last 5 blocks
-      val inv =
-        if (blockAppliedTxsCache.size >= cacheSizeLimit)
-          blockAppliedTxsCache.drop(blockTxsCount)
-        else
-          blockAppliedTxsCache
-
-      blockAppliedTxsCache = inv ++ transactionIds.map(_ -> ts)
+      logger.info("Caching applied transactions")
+      blockAppliedTxsCache = blockAppliedTxsCache.putAll(transactionIds)
   }
 
   protected def broadcastInvForNewModifier(mod: PersistentNodeViewModifier): Unit = {

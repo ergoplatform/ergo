@@ -173,9 +173,9 @@ class NetworkController(settings: NetworkSettings,
 
       // If a message received from p2p within connection timeout,
       // connectivity is not lost thus we're removing the peer
-      // we add multiplier 3 to remove more dead peers (and still not dropping a lot when connectivity lost)
+      // we add multiplier 6 to remove more dead peers (and still not dropping a lot when connectivity lost)
       val noNetworkMessagesFor = networkTime() - lastIncomingMessageTime
-      if (noNetworkMessagesFor < settings.connectionTimeout.toMillis * 3) {
+      if (noNetworkMessagesFor < settings.connectionTimeout.toMillis * 6) {
         peerManagerRef ! RemovePeer(c.remoteAddress)
       }
 

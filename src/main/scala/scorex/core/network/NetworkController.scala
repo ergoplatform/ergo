@@ -160,6 +160,8 @@ class NetworkController(settings: NetworkSettings,
       handlerRef ! Close
 
     case Handshaked(connectedPeer) =>
+      val now = networkTime()
+      lastIncomingMessageTime = now
       handleHandshake(connectedPeer, sender())
 
     case f@CommandFailed(c: Connect) =>
@@ -171,7 +173,9 @@ class NetworkController(settings: NetworkSettings,
 
       // If a message received from p2p within connection timeout,
       // connectivity is not lost thus we're removing the peer
-      if (networkTime() - lastIncomingMessageTime < settings.connectionTimeout.toMillis) {
+      // we add multiplier 3 to remove more dead peers (and still not dropping a lot when connectivity lost)
+      val noNetworkMessagesFor = networkTime() - lastIncomingMessageTime
+      if (noNetworkMessagesFor < settings.connectionTimeout.toMillis * 3) {
         peerManagerRef ! RemovePeer(c.remoteAddress)
       }
 

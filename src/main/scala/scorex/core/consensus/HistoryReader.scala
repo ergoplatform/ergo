@@ -32,9 +32,6 @@ trait HistoryReader[PM <: PersistentNodeViewModifier, SI <: SyncInfo] extends No
     */
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
-  //todo: output should be ID | Seq[ID]
-  def openSurfaceIds(): Seq[ModifierId]
-
   /**
     * Ids of modifiers, that node with info should download and apply to synchronize
     */

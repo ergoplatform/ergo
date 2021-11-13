@@ -228,7 +228,10 @@ trait ErgoWalletService {
 
 class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
 
-  def readWallet(state: ErgoWalletState, testMnemonic: Option[String], testKeysQty: Option[Int], secretStorageSettings: SecretStorageSettings): ErgoWalletState = {
+  def readWallet(state: ErgoWalletState,
+                 testMnemonic: Option[String],
+                 testKeysQty: Option[Int],
+                 secretStorageSettings: SecretStorageSettings): ErgoWalletState = {
     testMnemonic match {
       case Some(mnemonic) =>
         log.warn("Avoiding wallet reading in test mode by building prover from mnemonic. Switch to secure mode for production usage.")
@@ -257,7 +260,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
     val walletSettings = settings.walletSettings
     //Read high-quality random bits from Java's SecureRandom
     val entropy = scorex.utils.Random.randomBytes(walletSettings.seedStrengthBits / 8)
-    log.warn("Initializing wallet")
+    log.info("Initializing wallet")
 
     def initStorage(mnemonic: String): Try[JsonSecretStorage] =
       Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), walletPass)(walletSettings.secretStorage))
@@ -327,14 +330,16 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
     state.copy(walletVars = state.walletVars.resetProver())
   }
 
-  def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] =
+  def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] = {
+    val registryFolder = WalletRegistry.registryFolder(settings)
+    log.info(s"Removing the registry folder $registryFolder")
+    state.registry.close()
+    FileUtils.deleteRecursive(registryFolder)
+
     WalletRegistry.apply(settings).map { reg =>
-      val registryFolder = WalletRegistry.registryFolder(settings)
-      log.info(s"Removing the registry folder $registryFolder")
-      state.registry.close()
-      FileUtils.deleteRecursive(registryFolder)
       state.copy(registry = reg)
     }
+  }
 
   def recreateStorage(state: ErgoWalletState, settings: ErgoSettings)(implicit addrEncoder: ErgoAddressEncoder): Try[ErgoWalletState] =
     Try {

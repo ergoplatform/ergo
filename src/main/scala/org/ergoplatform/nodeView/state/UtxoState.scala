@@ -19,7 +19,7 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
-import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer}
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
@@ -101,7 +101,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   private def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
     val SnapshotEvery = 20 // test value, switch to 51840 after testing
 
-    var prevManifest: BatchAVLProverManifest[Digest32] = null
+    var prevManifest: UtxoState.Manifest = null
 
     if (estimatedTip.nonEmpty &&
         (height % SnapshotEvery == 0) &&
@@ -190,6 +190,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 }
 
 object UtxoState {
+
+  type Manifest = BatchAVLProverManifest[Digest32]
+  type Subtree = BatchAVLProverSubtree[Digest32]
+
+  type ManifestId = Digest32
 
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")

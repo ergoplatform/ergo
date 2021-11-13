@@ -19,10 +19,11 @@ import scorex.core.transaction.state.TransactionValidation
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ModifierValidator
 import scorex.crypto.authds.avltree.batch._
-import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSerializer
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
+import scorex.util.encode.Base16
 
 import scala.util.{Failure, Success, Try}
 
@@ -100,7 +101,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   private def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
     val SnapshotEvery = 20 // test value, switch to 51840 after testing
 
-    if (estimatedTip.nonEmpty && (height % SnapshotEvery == 0) && height - estimatedTip.get <= SnapshotEvery) {
+    var prevManifest: BatchAVLProverManifest[Digest32] = null
+
+    if (estimatedTip.nonEmpty &&
+        (height % SnapshotEvery == 0) &&
+        height - estimatedTip.get <= SnapshotEvery) {
 
       val serializer = new BatchAVLProverSerializer[Digest32, HF]
       val (manifest, subtrees) = serializer.slice(persistentProver.avlProver, subtreeDepth = 12)
@@ -109,6 +114,17 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       println("manifest size: " + manifestBytes.length)
       println("subtrees count: " + subtrees.size)
       // todo: save manifest and subtrees into a database
+
+      if (prevManifest != null) {
+        val prevSubtrees = prevManifest.subtreesIds.map(Base16.encode).toSet
+        val subtrees = manifest.subtreesIds.map(Base16.encode).toSet
+
+        val common = subtrees.map { id =>
+          if (prevSubtrees.contains(id)) 1 else 0
+        }.sum
+        println("Subtrees not changed: " + common)
+      }
+      prevManifest = manifest
     }
   }
 

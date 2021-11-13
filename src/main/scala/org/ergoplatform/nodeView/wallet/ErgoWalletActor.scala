@@ -19,7 +19,7 @@ import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.{ErgoAddressEncoder, ErgoApp, ErgoBox, GlobalConstants, P2PKAddress}
 import scorex.core.VersionTag
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{ChangedMempool, ChangedState}
 import scorex.core.utils.ScorexEncoding
 import scorex.util.{ModifierId, ScorexLogging}
 import sigmastate.Values.SigmaBoolean
@@ -267,8 +267,10 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case UnlockWallet(encPass) =>
+      log.info("Unlocking wallet")
       ergoWalletService.unlockWallet(state, encPass, settings.walletSettings.usePreEip3Derivation) match {
         case Success(newState) =>
+          log.info("Wallet successfully unlocked")
           context.become(loadedWallet(newState))
           sender() ! Success(())
         case f@Failure(t) =>
@@ -301,7 +303,10 @@ class ErgoWalletActor(settings: ErgoSettings,
     case GetWalletStatus =>
       val isSecretSet = state.secretIsSet(settings.walletSettings.testMnemonic)
       val isUnlocked = state.walletVars.proverOpt.isDefined
-      val status = WalletStatus(isSecretSet, isUnlocked, state.getChangeAddress, state.getWalletHeight, state.error)
+      val changeAddress = state.getChangeAddress
+      val height = state.getWalletHeight
+      val lastError = state.error
+      val status = WalletStatus(isSecretSet, isUnlocked, changeAddress, height, lastError)
       sender() ! status
 
     case GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign) =>
@@ -391,11 +396,16 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! ScanRelatedTxsResponse(ergoWalletService.getScanTransactions(scanId, state.registry, state.fullHeight))
 
     case GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum)  =>
-      getFiltered(state, scanIds, minHeight, maxHeight, minConfNum, maxConfNum)
+      readFiltered(state, scanIds, minHeight, maxHeight, minConfNum, maxConfNum)
 
   }
 
-  def getFiltered(state: ErgoWalletState, scanIds: List[ScanId], minHeight: Int, maxHeight: Int, minConfNum: Int, maxConfNum: Int): Unit = {
+  def readFiltered(state: ErgoWalletState,
+                   scanIds: List[ScanId],
+                   minHeight: Int,
+                   maxHeight: Int,
+                   minConfNum: Int,
+                   maxConfNum: Int): Unit = {
     val heightFrom = if (maxConfNum == Int.MaxValue) {
       minHeight
     } else {
@@ -406,13 +416,13 @@ class ErgoWalletActor(settings: ErgoSettings,
     } else {
       Math.min(maxHeight,  - minConfNum)
     }
-    log.info("Starting to read wallet transactions")
+    log.debug("Starting to read wallet transactions")
     val ts0 = System.currentTimeMillis()
     val txs = scanIds.flatMap(scan => state.registry.walletTxsBetween(scan, heightFrom, heightTo))
       .sortBy(-_.inclusionHeight)
       .map(tx => AugWalletTransaction(tx, state.fullHeight - tx.inclusionHeight))
     val ts = System.currentTimeMillis()
-    log.info(s"Wallet: ${txs.size} read in ${ts-ts0} ms")
+    log.debug(s"Wallet: ${txs.size} read in ${ts-ts0} ms")
     sender() ! txs
   }
 

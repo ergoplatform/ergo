@@ -14,6 +14,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.core.consensus.History._
 import scorex.core.consensus.{HistoryReader, ModifierSemanticValidity}
 import scorex.core.utils.ScorexEncoding
+import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -78,11 +79,6 @@ trait ErgoHistoryReader
   }
 
   override def contains(id: ModifierId): Boolean = historyStorage.contains(id)
-
-  /**
-    * Id of the best full block known
-    */
-  override def openSurfaceIds(): Seq[ModifierId] = bestFullBlockIdOpt.orElse(bestHeaderIdOpt).toSeq
 
   /**
     * Check, that it's possible to apply modifier to history
@@ -183,9 +179,8 @@ trait ErgoHistoryReader
         //Other history is empty, our contain some headers
         Younger
       case Some(_) =>
-        //We are on different forks now.
         if (info.lastHeaderIds.view.reverse.exists(m => contains(m) || m == PreGenesisHeader.id)) {
-          //Return Younger, because we can send blocks from our fork that other node can download.
+          //We are on different forks now.
           Fork
         } else {
           //We don't have any of id's from other's node sync info in history.
@@ -368,7 +363,7 @@ trait ErgoHistoryReader
       case chunk: UTXOSnapshotChunk =>
         validate(chunk)
       case m: Any =>
-        Failure(new Error(s"Modifier $m has incorrect type"))
+        Failure(new MalformedModifierError(s"Modifier $m has incorrect type"))
     }
   }
 

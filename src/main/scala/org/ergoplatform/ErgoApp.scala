@@ -9,7 +9,7 @@ import org.ergoplatform.http.api._
 import org.ergoplatform.local._
 import org.ergoplatform.mining.ErgoMiner
 import org.ergoplatform.mining.ErgoMiner.StartMining
-import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ModeFeature}
+import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, ModeFeature}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{Args, ErgoSettings, NetworkType}
@@ -22,8 +22,8 @@ import scorex.core.network.peer.PeerManagerRef
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging
-
 import java.net.InetSocketAddress
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.Source
 
@@ -101,8 +101,17 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val statsCollectorRef: ActorRef =
     ErgoStatsCollectorRef(readersHolderRef, networkControllerRef, ergoSettings, timeProvider)
 
-    ErgoNodeViewSynchronizer(networkControllerRef, nodeViewHolderRef, ErgoSyncInfoMessageSpec,
-      ergoSettings, timeProvider)
+  private val syncTracker = ErgoSyncTracker(actorSystem, scorexSettings.network, timeProvider)
+
+  // touch it to run preStart method of the actor which is in turn running schedulers
+  ErgoNodeViewSynchronizer(
+    networkControllerRef,
+    nodeViewHolderRef,
+    ErgoSyncInfoMessageSpec,
+    ergoSettings,
+    timeProvider,
+    syncTracker
+  )
 
   // Launching PeerSynchronizer actor which is then registering itself at network controller
   PeerSynchronizerRef("PeerSynchronizer", networkControllerRef, peerManagerRef, scorexSettings.network, featureSerializers)
@@ -110,7 +119,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val apiRoutes: Seq[ApiRoute] = Seq(
     EmissionApiRoute(ergoSettings),
     ErgoUtilsApiRoute(ergoSettings),
-    PeersApiRoute(peerManagerRef, networkControllerRef, timeProvider, scorexSettings.restApi),
+    ErgoPeersApiRoute(peerManagerRef, networkControllerRef, syncTracker, timeProvider, scorexSettings.restApi),
     InfoApiRoute(statsCollectorRef, scorexSettings.restApi, timeProvider),
     BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),

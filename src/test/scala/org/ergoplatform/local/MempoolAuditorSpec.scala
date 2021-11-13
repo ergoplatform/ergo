@@ -14,7 +14,7 @@ import org.ergoplatform.utils.{NodeViewTestOps, ErgoTestHelpers}
 import org.scalatest.flatspec.AnyFlatSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction, ChangedState, ChangedMempool}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{SuccessfulTransaction, FailedTransaction, ChangedState, ChangedMempool}
 import scorex.util.ModifierId
 import sigmastate.Values.ErgoTree
 import sigmastate.eval.{RuntimeIRContext, IRContext}

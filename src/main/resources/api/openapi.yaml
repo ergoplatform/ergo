@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "4.0.16"
+  version: "4.0.17"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -1538,6 +1538,49 @@ components:
           allOf:
             - $ref: '#/components/schemas/Timestamp'
 
+    PeerMode:
+      type: object
+      required:
+        - state
+        - verifyingTransactions
+        - fullBlocksSuffix
+      properties:
+        state:
+          type: string
+          example: 'utxo'
+        verifyingTransactions:
+          type: boolean
+          example: true
+        fullBlocksSuffix:
+          type: integer
+          example: 2880
+
+    PeerInfo:
+      type: object
+      required:
+        - address
+        - mode
+        - version
+        - status
+        - height
+      properties:
+        address:
+          type: string
+          example: '127.0.0.1:5673'
+        mode:
+          type: object
+          description: Peer operating mode parameters
+          $ref: '#/components/schemas/PeerMode'
+        version:
+          type: string
+          example: '4.0.16'
+        status:
+          type: string
+          example: 'Older'
+        height:
+          type: integer
+          example: 65780
+
     BlacklistedPeers:
       type: object
       required:
@@ -2766,7 +2809,31 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PeersStatus'
+                type: array
+                items:
+                  $ref: '#/components/schemas/PeersInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /peers/syncInfo:
+    get:
+      summary: Get sync info reported by peers, including versions, current status and height (if available)
+      operationId: getPeersFullInfo
+      tags:
+        - peers
+      responses:
+        '200':
+          description: Network status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PeersInfo'
         default:
           description: Error
           content:

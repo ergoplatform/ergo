@@ -19,7 +19,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
 
@@ -33,7 +33,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
   private val newBlockDelay: FiniteDuration        = 3.seconds
   private val newBlockSignal: Class[SemanticallySuccessfulModifier] =
     classOf[SemanticallySuccessfulModifier]
- 
+
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
 
@@ -50,20 +50,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
 
-  // when solution is submitted, then ack reply and applied modifier event are racing
-  private def expectEitherAckOrModifier(testProbe: TestProbe): Any = {
-    // we fish either for ack or SSM as the order is non-deterministic
-    testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(())           => true
-      case SemanticallySuccessfulModifier(_) => false
-    }
-    testProbe.fishForMessage(newBlockDelay) {
-      case StatusReply.Success(())           => false
-      case SemanticallySuccessfulModifier(_) => true
-    }
-  }
-
-  it should "provide candidate to internal miner and verify and apply his solution" in new TestKit(
+  it should "provider candidate to internal miner and verify and apply his solution" in new TestKit(
     ActorSystem()
   ) {
     val testProbe = new TestProbe(system)
@@ -220,8 +207,19 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
+        // we fish either for ack or SSM as the order is non-deterministic
+        testProbe.fishForMessage(blockValidationDelay) {
+          case StatusReply.Success(()) =>
+            testProbe.expectMsgPF(candidateGenDelay) {
+              case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            }
+            true
+          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            testProbe.expectMsg(StatusReply.Success(()))
+            true
+        }
     }
-    expectEitherAckOrModifier(testProbe)
+
     // build new transaction that uses miner's reward as input
     val prop: DLogProtocol.ProveDlog =
       DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage

@@ -4,6 +4,7 @@ import java.io.{File, PrintWriter}
 
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.interface4j.SecretString
 
 object ConfigGenerator extends App with ErgoTestHelpers {
 
@@ -33,7 +34,7 @@ object ConfigGenerator extends App with ErgoTestHelpers {
   }
 
   private def template(digestMode: Boolean, mining: Boolean,
-                       mnemonic: String, apiKeyHash: String, nodeName: String): String =
+                       mnemonic: SecretString, apiKeyHash: String, nodeName: String): String =
     s"""
        |ergo.node.stateType = "${if (digestMode) "digest" else "utxo"}"
        |ergo.node.mining = ${if (mining) "true" else "false"}

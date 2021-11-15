@@ -483,7 +483,9 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
     prover.bagForTransaction(tx, inputBoxes, dataBoxes, state.stateContext, real, simulated)
   }
 
-  def deriveKeyFromPath(state: ErgoWalletState, encodedPath: String)(implicit addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)] =
+  def deriveKeyFromPath(state: ErgoWalletState,
+                        encodedPath: String)
+                       (implicit addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)] = {
     state.secretStorageOpt match {
       case Some(secretStorage) if !secretStorage.isLocked =>
         val rootSecret = secretStorage.secret.get // unlocked means Some(secret)
@@ -506,8 +508,11 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
       case None =>
         Failure(new Exception("Unable to derive key from path, wallet is not initialized"))
     }
+  }
 
-  def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean)(implicit addrEncoder: ErgoAddressEncoder): Try[(DeriveNextKeyResult, ErgoWalletState)] =
+  def deriveNextKey(state: ErgoWalletState,
+                    usePreEip3Derivation: Boolean)
+                   (implicit addrEncoder: ErgoAddressEncoder): Try[(DeriveNextKeyResult, ErgoWalletState)] = {
     state.secretStorageOpt match {
       case Some(secretStorage) if !secretStorage.isLocked =>
         val masterKey = secretStorage.secret.get // unlocked means Some(secret)
@@ -517,10 +522,17 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
       case None =>
         Failure(new Exception("Unable to derive key, wallet is not initialized"))
     }
+  }
 
-  def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock): Try[ErgoWalletState] =
-      WalletScanLogic.scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter)
-        .map { case (reg, offReg, updatedOutputsFilter) => state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter)) }
+  def scanBlockUpdate(state: ErgoWalletState,
+                      block: ErgoFullBlock): Try[ErgoWalletState] = {
+    import WalletScanLogic.scanBlockTransactions
+
+    scanBlockTransactions(state.registry, state.offChainRegistry, state.walletVars, block, state.outputsFilter)
+      .map { case (reg, offReg, updatedOutputsFilter) =>
+        state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
+      }
+  }
 
   def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {

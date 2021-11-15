@@ -71,12 +71,12 @@ trait ErgoWalletSupport extends ScorexLogging {
       }
     // If no master key in the secrets corresponding to public keys,
     // add master key so then it is not available to the user but presents in the prover
-    val secrets = if (sks.headOption.contains(masterKey)) {
-      sks
+    val (secrets, pubKeys) = if (sks.headOption.contains(masterKey)) {
+      sks -> pks
     } else {
-      masterKey +: sks
+      (masterKey +: sks, masterKey.publicKey +: pks)
     }
-    val prover = ErgoProvingInterpreter(secrets, state.parameters)
+    val prover = new ErgoProvingInterpreter(secrets, state.parameters, Some(pubKeys))(new RuntimeIRContext)
     state.copy(walletVars = state.walletVars.withProver(prover))
   }
 

@@ -71,6 +71,8 @@ object WalletScanLogic extends ScorexLogging {
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]]
                            ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
 
+    log.info(s"Scan block transactions in block # $height, wallet has ${walletVars.trackedBytes.length} keys")
+
     // Take unspent wallet outputs Bloom Filter from cache
     // or recreate it from unspent outputs stored in the database
     val outputsFilter = cachedOutputsFilter.getOrElse {

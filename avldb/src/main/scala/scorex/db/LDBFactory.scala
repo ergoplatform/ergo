@@ -74,7 +74,7 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
     }
   }
 
-  private def remove(path: File): Unit = {
+  private def remove(path: File): Option[RegisteredDB] = {
     lock.writeLock().lock()
     try {
       map.remove(path)
@@ -112,7 +112,7 @@ object LDBFactory extends ScorexLogging {
   private val javaFactory = "org.iq80.leveldb.impl.Iq80DBFactory"
   private val memoryPoolSize = 512 * 1024
 
-  def setLevelDBParams(factory: DBFactory): Unit = {
+  def setLevelDBParams(factory: DBFactory): AnyRef = {
     val pushMemoryPool = factory.getClass.getDeclaredMethod("pushMemoryPool", classOf[Int])
     pushMemoryPool.invoke(null, Integer.valueOf(memoryPoolSize))
   }

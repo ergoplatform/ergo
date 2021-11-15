@@ -6,9 +6,6 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions.LongOps
 
-import scala.language.implicitConversions
-
-
 /**
   * A structure representing NiPoPow proof as a persistent modifier.
   *

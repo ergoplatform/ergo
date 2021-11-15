@@ -64,8 +64,12 @@ class SerializationTests extends ErgoPropertyTest with WalletGenerators with sco
     checkSerializationRoundtripAndSize(invalidErgoTransactionGen, ErgoTransactionSerializer)
   }
 
-  property("ErgoSyncInfo serialization") {
-    checkSerializationRoundtrip(ergoSyncInfoGen, ErgoSyncInfoSerializer)
+  property("ErgoSyncInfo v1 serialization") {
+    checkSerializationRoundtrip(ergoSyncInfoV1Gen, ErgoSyncInfoSerializer)
+  }
+
+  property("ErgoSyncInfo v2 serialization") {
+    checkSerializationRoundtrip(ergoSyncInfoV2Gen, ErgoSyncInfoSerializer)
   }
 
   property("ErgoHeader serialization") {

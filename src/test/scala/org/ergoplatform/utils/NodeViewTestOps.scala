@@ -3,18 +3,16 @@ package org.ergoplatform.utils
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
-import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
-import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.Algos
 import scorex.core.NodeViewHolder.CurrentView
 import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId
 
@@ -96,8 +94,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
   /** Creates next block in chain from transactions, works only for UTXO configurations
     */
   def makeNextBlock(utxoState: UtxoState,
-                    txs: Seq[ErgoTransaction],
-                    ext: ExtensionCandidate = ExtensionCandidate(Seq()))
+                    txs: Seq[ErgoTransaction])
                    (implicit ctx: Ctx): ErgoFullBlock = {
     val time = timeProvider.time()
     val parent = getHistory.bestFullBlockOpt
@@ -143,7 +140,6 @@ trait NodeViewTestOps extends NodeViewBaseOps {
 
   def getBestHeaderEncodedId(implicit ctx: Ctx): Option[String] = getBestHeaderOpt.map(_.encodedId)
 
-  def getOpenSurfaces(implicit ctx: Ctx): Seq[ModifierId] = getHistory.openSurfaceIds()
 
   def getHistoryHeight(implicit ctx: Ctx): Int = getHistory.headersHeight
 

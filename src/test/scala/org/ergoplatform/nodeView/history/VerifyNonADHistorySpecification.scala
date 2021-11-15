@@ -196,8 +196,6 @@ class VerifyNonADHistorySpecification extends HistoryTestHelpers {
 
       history.bestFullBlockOpt.value shouldBe startFullBlock
 
-      history.openSurfaceIds().head shouldBe startFullBlock.header.id
-
       history = history.append(txs).get._1
       history = history.append(extension).get._1
 

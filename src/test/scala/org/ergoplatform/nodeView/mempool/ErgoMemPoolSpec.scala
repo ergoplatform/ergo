@@ -199,7 +199,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     txs.foreach { tx =>
       pool = pool.putWithoutCheck(Seq(tx))
     }
-    for (i <- 1 to family_depth) {
+    for (_ <- 1 to family_depth) {
       txs = txs.map(tx => {
         val spendingBox = tx.outputs.head
         val newTx = tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
@@ -230,7 +230,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     txs.foreach { tx =>
       pool = pool.putWithoutCheck(Seq(tx))
     }
-    for (i <- 1 to family_depth) {
+    for (_ <- 1 to family_depth) {
       txs = txs.map(tx => {
         val spendingBox = tx.outputs.head
         val newTx = tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
@@ -262,7 +262,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     txs.foreach { tx =>
       pool = pool.putWithoutCheck(Seq(tx))
     }
-    for (i <- 1 to family_depth) {
+    for (_ <- 1 to family_depth) {
       txs = txs.map(tx => {
         val spendingBox = tx.outputs.head
 
@@ -304,7 +304,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     txs.foreach { tx =>
       pool = pool.putWithoutCheck(Seq(tx))
     }
-    for (i <- 1 to family_depth) {
+    for (_ <- 1 to family_depth) {
       txs = txs.map(tx => {
         val spendingBox = tx.outputs.head
         val newTx = tx.copy(inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),

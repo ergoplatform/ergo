@@ -24,18 +24,34 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       10,
       mining = true,
       complexityLimit,
-      useExternalMiner             = false,
-      internalMinersCount          = 1,
-      internalMinerPollingInterval = 1.second,
-      miningPubKeyHex              = None,
-      offlineGeneration            = false,
-      keepVersions                 = 200,
-      mempoolCapacity              = 100000,
-      blacklistCapacity            = 100000,
-      mempoolCleanupDuration       = 10.seconds,
-      rebroadcastCount             = 3,
-      minimalFeeAmount             = 0,
-      headerChainDiff              = 100
+      useExternalMiner                          = false,
+      internalMinersCount                       = 1,
+      internalMinerPollingInterval              = 1.second,
+      miningPubKeyHex                           = None,
+      offlineGeneration                         = false,
+      keepVersions                              = 200,
+      mempoolCapacity                           = 100000,
+      mempoolCleanupDuration                    = 10.seconds,
+      rebroadcastCount                          = 3,
+      minimalFeeAmount                          = 0,
+      headerChainDiff                           = 100
+    )
+    settings.cacheSettings shouldBe CacheSettings(
+      HistoryCacheSettings(
+        100, 1000
+      ),
+      NetworkCacheSettings(
+        invalidModifiersBloomFilterCapacity       = 10000000,
+        invalidModifiersBloomFilterExpirationRate = 0.1,
+        invalidModifiersCacheSize                 = 10000,
+        invalidModifiersCacheExpiration           = 6.hours,
+      ),
+      MempoolCacheSettings(
+        invalidModifiersBloomFilterCapacity       = 10000000,
+        invalidModifiersBloomFilterExpirationRate = 0.1,
+        invalidModifiersCacheSize                 = 10000,
+        invalidModifiersCacheExpiration           = 6.hours,
+      )
     )
   }
 
@@ -49,18 +65,34 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       10,
       mining = true,
       complexityLimit,
-      useExternalMiner             = false,
-      internalMinersCount          = 1,
-      internalMinerPollingInterval = 1.second,
-      miningPubKeyHex              = None,
-      offlineGeneration            = false,
-      keepVersions                 = 200,
-      mempoolCapacity              = 100000,
-      blacklistCapacity            = 100000,
-      mempoolCleanupDuration       = 10.seconds,
-      rebroadcastCount             = 3,
-      minimalFeeAmount             = 0,
-      headerChainDiff              = 100
+      useExternalMiner                          = false,
+      internalMinersCount                       = 1,
+      internalMinerPollingInterval              = 1.second,
+      miningPubKeyHex                           = None,
+      offlineGeneration                         = false,
+      keepVersions                              = 200,
+      mempoolCapacity                           = 100000,
+      mempoolCleanupDuration                    = 10.seconds,
+      rebroadcastCount                          = 3,
+      minimalFeeAmount                          = 0,
+      headerChainDiff                           = 100
+    )
+    settings.cacheSettings shouldBe CacheSettings(
+      HistoryCacheSettings(
+        100, 1000
+      ),
+      NetworkCacheSettings(
+        invalidModifiersBloomFilterCapacity       = 10000000,
+        invalidModifiersBloomFilterExpirationRate = 0.1,
+        invalidModifiersCacheSize                 = 10000,
+        invalidModifiersCacheExpiration           = 6.hours,
+      ),
+      MempoolCacheSettings(
+        invalidModifiersBloomFilterCapacity       = 10000000,
+        invalidModifiersBloomFilterExpirationRate = 0.1,
+        invalidModifiersCacheSize                 = 10000,
+        invalidModifiersCacheExpiration           = 6.hours,
+      )
     )
   }
 
@@ -74,18 +106,34 @@ class ErgoSettingsSpecification extends ErgoPropertyTest {
       10,
       mining = true,
       complexityLimit,
-      useExternalMiner             = false,
-      internalMinersCount          = 1,
-      internalMinerPollingInterval = 1.second,
-      miningPubKeyHex              = None,
-      offlineGeneration            = false,
-      keepVersions                 = 200,
-      mempoolCapacity              = 100000,
-      blacklistCapacity            = 100000,
-      mempoolCleanupDuration       = 10.seconds,
-      rebroadcastCount             = 3,
-      minimalFeeAmount             = 0,
-      headerChainDiff              = 100
+      useExternalMiner                          = false,
+      internalMinersCount                       = 1,
+      internalMinerPollingInterval              = 1.second,
+      miningPubKeyHex                           = None,
+      offlineGeneration                         = false,
+      keepVersions                              = 200,
+      mempoolCapacity                           = 100000,
+      mempoolCleanupDuration                    = 10.seconds,
+      rebroadcastCount                          = 3,
+      minimalFeeAmount                          = 0,
+      headerChainDiff                           = 100
+    )
+    settings.cacheSettings shouldBe CacheSettings(
+      HistoryCacheSettings(
+        100, 1000
+      ),
+      NetworkCacheSettings(
+        invalidModifiersBloomFilterCapacity       = 10000000,
+        invalidModifiersBloomFilterExpirationRate = 0.1,
+        invalidModifiersCacheSize                 = 10000,
+        invalidModifiersCacheExpiration           = 6.hours,
+      ),
+      MempoolCacheSettings(
+        invalidModifiersBloomFilterCapacity       = 10000000,
+        invalidModifiersBloomFilterExpirationRate = 0.1,
+        invalidModifiersCacheSize                 = 10000,
+        invalidModifiersCacheExpiration           = 6.hours,
+      )
     )
   }
 

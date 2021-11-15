@@ -7,11 +7,11 @@ import org.ergoplatform.nodeView.NVBenchmark
 import org.ergoplatform.settings.{Args, ErgoSettings}
 import org.ergoplatform.utils.HistoryTestHelpers
 
-object UtxoStateBenchmark extends HistoryTestHelpers with NVBenchmark with App {
+object UtxoStateBenchmark extends HistoryTestHelpers with NVBenchmark {
 
   val WarmupRuns = 2
 
-  override def main(args: Array[String]): Unit = {
+  def main(args: Array[String]): Unit = {
 
     val startTs = System.currentTimeMillis()
 

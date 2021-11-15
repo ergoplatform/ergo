@@ -24,8 +24,8 @@ case class TransactionHintsBag(secretHints: Map[Int, HintsBag], publicHints: Map
     */
   def addHintsForInput(index: Int, hintsBag: HintsBag): TransactionHintsBag = {
     val (secret, public) = hintsBag.hints.partition(_.isInstanceOf[OwnCommitment])
-    val oldSecret = this.secretHints.getOrElse(0, HintsBag.empty)
-    val oldPublic = this.publicHints.getOrElse(0, HintsBag.empty)
+    val oldSecret = this.secretHints.getOrElse(index, HintsBag.empty)
+    val oldPublic = this.publicHints.getOrElse(index, HintsBag.empty)
 
     val newSecret = secretHints.updated(index, HintsBag(secret) ++ oldSecret)
     val newPublic = publicHints.updated(index, HintsBag(public) ++ oldPublic)

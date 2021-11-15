@@ -11,6 +11,9 @@ class WalletVarsSpec extends ErgoPropertyTest {
     val wp = walletVars.withProver(prover)
 
     wp.trackedPubKeys.length shouldBe 1
+    wp.trackedBytes.length shouldBe 1
+
+    defaultRootSecret.publicKey shouldBe wp.trackedPubKeys.head
   }
 
 }

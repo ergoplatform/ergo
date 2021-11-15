@@ -77,6 +77,7 @@ trait ErgoWalletSupport extends ScorexLogging {
       (masterKey +: sks, masterKey.publicKey +: pks)
     }
     val prover = new ErgoProvingInterpreter(secrets, state.parameters, Some(pubKeys))(new RuntimeIRContext)
+    log.info(s"Wallet unlock: ${prover.hdPubKeys.length} keys read" )
     state.copy(walletVars = state.walletVars.withProver(prover))
   }
 

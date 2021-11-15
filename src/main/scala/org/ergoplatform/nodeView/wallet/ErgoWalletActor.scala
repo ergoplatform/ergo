@@ -197,26 +197,28 @@ class ErgoWalletActor(settings: ErgoSettings,
       context.become(loadedWallet(newState))
 
     case ScanInThePast(blockHeight) =>
-      val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)
-      if (nextBlockHeight == blockHeight) {
-        val newState =
-          historyReader.bestFullBlockAt(blockHeight) match {
-            case Some(block) =>
-              log.info(s"Wallet is going to scan a block ${block.id} in the past at height ${block.height}")
-              ergoWalletService.scanBlockUpdate(state, block) match {
-                case Failure(ex) =>
-                  val errorMsg = s"Scanning block ${block.id} at height $blockHeight failed : ${ex.getMessage}"
-                  log.error(errorMsg, ex)
-                  state.copy(error = Some(errorMsg))
-                case Success(updatedState) =>
-                  updatedState
-              }
-            case None =>
-              state // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
-        }
-        context.become(loadedWallet(newState))
-        if (blockHeight < newState.fullHeight) {
-          self ! ScanInThePast(blockHeight + 1)
+      if(state.fullHeight >= historyReader.headersHeight - 10) { //todo: move this to a separate PR, test
+        val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)
+        if (nextBlockHeight == blockHeight) {
+          val newState =
+            historyReader.bestFullBlockAt(blockHeight) match {
+              case Some(block) =>
+                log.info(s"Wallet is going to scan a block ${block.id} in the past at height ${block.height}")
+                ergoWalletService.scanBlockUpdate(state, block) match {
+                  case Failure(ex) =>
+                    val errorMsg = s"Scanning block ${block.id} at height $blockHeight failed : ${ex.getMessage}"
+                    log.error(errorMsg, ex)
+                    state.copy(error = Some(errorMsg))
+                  case Success(updatedState) =>
+                    updatedState
+                }
+              case None =>
+                state // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
+            }
+          context.become(loadedWallet(newState))
+          if (blockHeight < newState.fullHeight) {
+            self ! ScanInThePast(blockHeight + 1)
+          }
         }
       }
 

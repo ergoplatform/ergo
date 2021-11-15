@@ -99,13 +99,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   }
 
   private def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
-    val SnapshotEvery = 20 // test value, switch to 51840 after testing
-
-    var prevManifest: UtxoState.Manifest = null
+    val SnapshotEvery = 10 // test value, switch to 51840 after testing
 
     if (estimatedTip.nonEmpty &&
         (height % SnapshotEvery == 0) &&
-        height - estimatedTip.get <= SnapshotEvery) {
+          estimatedTip.get - height <= SnapshotEvery) {
 
       val serializer = new BatchAVLProverSerializer[Digest32, HF]
       val (manifest, subtrees) = serializer.slice(persistentProver.avlProver, subtreeDepth = 12)
@@ -115,16 +113,14 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       println("subtrees count: " + subtrees.size)
       // todo: save manifest and subtrees into a database
 
-      if (prevManifest != null) {
-        val prevSubtrees = prevManifest.subtreesIds.map(Base16.encode).toSet
+      if (UtxoState.prevManifest != null) {
+        val prevSubtrees = UtxoState.prevManifest.subtreesIds.map(Base16.encode).toSet
         val subtrees = manifest.subtreesIds.map(Base16.encode).toSet
 
-        val common = subtrees.map { id =>
-          if (prevSubtrees.contains(id)) 1 else 0
-        }.sum
+        val common = subtrees.count(prevSubtrees.contains)
         println("Subtrees not changed: " + common)
       }
-      prevManifest = manifest
+      UtxoState.prevManifest = manifest
     }
   }
 
@@ -190,6 +186,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 }
 
 object UtxoState {
+
+  //todo: remove after experiment
+  var prevManifest: UtxoState.Manifest = null
 
   type Manifest = BatchAVLProverManifest[Digest32]
   type Subtree = BatchAVLProverSubtree[Digest32]

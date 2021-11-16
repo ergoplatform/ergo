@@ -139,6 +139,7 @@ trait ErgoWalletSupport extends ScorexLogging {
           log.info(s"Update change address to $changeAddress")
           state.storage.updateChangeAddress(changeAddress)
         }
+        // Add master key's public key to the storage to track payments to it when the wallet is locked
         if (!state.storage.containsPublicKey(masterKey.path.toPublicBranch)) {
           state.storage.addPublicKeys(masterKey.publicKey)
         }

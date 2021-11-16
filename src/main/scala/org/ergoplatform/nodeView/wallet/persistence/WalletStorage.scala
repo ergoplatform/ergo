@@ -64,6 +64,9 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
     }
   }
 
+  /**
+    * Read public key corresponding to a provided derivation path
+    */
   def getPublicKey(path: DerivationPath): Option[ExtendedPublicKey] = {
     store
       .get(pubKeyPrefixKey(path))

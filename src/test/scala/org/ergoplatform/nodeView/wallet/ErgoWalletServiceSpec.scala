@@ -26,13 +26,7 @@ import sigmastate.{SType, Values}
 
 import scala.util.Random
 
-class ErgoWalletServiceSpec
-  extends ErgoPropertyTest
-    with WalletTestOps
-    with ErgoWalletSupport
-    with ErgoTransactionGenerators
-    with DBSpec
-    with BeforeAndAfterAll {
+class ErgoWalletServiceSpec extends ErgoPropertyTest with WalletTestOps with ErgoWalletSupport with ErgoTransactionGenerators with DBSpec with BeforeAndAfterAll {
 
   private implicit val x: WalletFixture = new WalletFixture(settings, getCurrentView(_).vault)
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration = PropertyCheckConfiguration(minSuccessful = 4, sizeRange = 4)

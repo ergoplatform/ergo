@@ -38,7 +38,7 @@ trait ErgoWalletSupport extends ScorexLogging {
 
   protected def addSecretToStorage(state: ErgoWalletState, secret: ExtendedSecretKey): Try[ErgoWalletState] =
     state.walletVars.withExtendedKey(secret).flatMap { newWalletVars =>
-      state.storage.addKey(secret.publicKey).flatMap { _ =>
+      state.storage.addPublicKeys(secret.publicKey).flatMap { _ =>
         newWalletVars.stateCacheOpt.get.withNewPubkey(secret.publicKey).map { updCache =>
           state.copy(walletVars = newWalletVars.copy(stateCacheProvided = Some(updCache))(newWalletVars.settings))
         }
@@ -64,11 +64,10 @@ trait ErgoWalletSupport extends ScorexLogging {
                                  masterKey: ExtendedSecretKey,
                                  pks: IndexedSeq[ExtendedPublicKey]): ErgoWalletState = {
     // Secrets corresponding to public keys
-    val sks =
-      pks.map { pk =>
-        val path = pk.path.toPrivateBranch
-        masterKey.derive(path)
-      }
+    val sks = pks.map { pk =>
+      val path = pk.path.toPrivateBranch
+      masterKey.derive(path)
+    }
     // If no master key in the secrets corresponding to public keys,
     // add master key so then it is not available to the user but presents in the prover
     val (secrets, pubKeys) = if (sks.headOption.contains(masterKey)) {
@@ -90,7 +89,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         path => masterKey.derive(path)
       }
       val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
-      oldPubKeys.foreach(storage.addKey(_).get)
+      oldPubKeys.foreach(storage.addPublicKeys(_).get)
       storage.removePaths().get
     }
   }
@@ -108,7 +107,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         if (usePreEip3Derivation) {
           // If usePreEip3Derivation flag is set in the wallet settings, the first key is the master key
           val masterPubKey = masterKey.publicKey
-          state.storage.addKey(masterPubKey).map { _ =>
+          state.storage.addPublicKeys(masterPubKey).map { _ =>
             log.info("Wallet unlock finished using usePreEip3Derivation")
             updatePublicKeys(state, masterKey, Vector(masterPubKey))
           }
@@ -123,7 +122,7 @@ trait ErgoWalletSupport extends ScorexLogging {
           deriveNextKeyForMasterKey(sp, masterKey, usePreEip3Derivation).flatMap { case (derivationResult, newState) =>
             derivationResult.result.flatMap { case (_, _, firstSk) =>
               val firstPk = firstSk.publicKey
-              newState.storage.addKey(firstPk).flatMap { _ =>
+              newState.storage.addPublicKeys(firstPk).flatMap { _ =>
                 newState.storage.updateChangeAddress(P2PKAddress(firstPk.key)).map { _ =>
                   log.info("Wallet unlock finished")
                   updatePublicKeys(newState, masterKey, Vector(firstPk))
@@ -139,6 +138,9 @@ trait ErgoWalletSupport extends ScorexLogging {
           val changeAddress = P2PKAddress(pubKeys.head.key)
           log.info(s"Update change address to $changeAddress")
           state.storage.updateChangeAddress(changeAddress)
+        }
+        if (!state.storage.containsPublicKey(masterKey.path.toPublicBranch)) {
+          state.storage.addPublicKeys(masterKey.publicKey)
         }
         log.info("Wallet unlock finished using existing keys in storage")
         Try(updatePublicKeys(state, masterKey, pubKeys))

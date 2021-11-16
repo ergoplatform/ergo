@@ -2,8 +2,8 @@ package org.ergoplatform.db
 
 import akka.util.ByteString
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.wallet.utils.FileUtils
 import org.iq80.leveldb.{DB, Options}
-import scorex.testkit.utils.FileUtils
 import scorex.db.LDBFactory.factory
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 

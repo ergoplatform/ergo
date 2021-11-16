@@ -1,8 +1,9 @@
-package scorex.testkit.utils
+package org.ergoplatform.wallet.utils
 
-import java.nio.file.Path
-
-import org.scalacheck.Gen
+import java.io.File
+import java.nio.file.{Files, Path}
+import scala.collection.JavaConverters._
+import scala.util.Try
 
 trait FileUtils {
 
@@ -11,7 +12,16 @@ trait FileUtils {
   val basePath: Path = java.nio.file.Files.createTempDirectory(s"scorex-${System.nanoTime()}")
 
   sys.addShutdownHook {
-    remove(basePath)
+    deleteRecursive(basePath.toFile)
+  }
+
+  /**
+    * Perform recursive deletion of directory content.
+    */
+  def deleteRecursive(root: File): Unit = {
+    if (root.exists()) {
+      Files.walk(root.toPath).iterator().asScala.toSeq.reverse.foreach(path => Try(Files.delete(path)))
+    }
   }
 
   def createTempFile: java.io.File = {
@@ -28,31 +38,8 @@ trait FileUtils {
     createTempDirForPrefix(rndString)
   }
 
-  def tempDirGen: Gen[java.io.File] = Gen.listOfN(randomPrefixLength, Gen.alphaNumChar).map { p =>
-    val prefix = p.mkString("")
-    createTempDirForPrefix(prefix)
-  }
-
-  /**
-    * Recursively remove all the files and directories in `root`
-    */
-  def remove(root: Path): Unit = {
-
-    @SuppressWarnings(Array("org.wartremover.warts.Recursion"))
-    def deleteRecursive(dir: java.io.File): Unit = {
-      for (file <- dir.listFiles) {
-        if (file.isDirectory){
-          deleteRecursive(file)
-        }
-        file.delete()
-      }
-    }
-
-    deleteRecursive(root.toFile)
-  }
-
   private def createTempDirForPrefix(prefix: String): java.io.File = {
-    val file = java.nio.file.Files.createTempDirectory(basePath, prefix).toFile
+    val file = java.nio.file.Files.createTempDirectory(prefix).toFile
     file.deleteOnExit()
     file
   }

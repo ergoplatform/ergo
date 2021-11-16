@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
-import java.io.File
 
+import java.io.File
 import akka.actor.{ActorRef, ActorSystem, OneForOneStrategy, Props}
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -16,16 +16,17 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform.utils.FileUtils
 import scorex.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.wallet.utils.FileUtils
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkTimeProvider
+
 import scala.util.{Failure, Success, Try}
 
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,
                                                              timeProvider: NetworkTimeProvider)
-  extends NodeViewHolder[State] {
+  extends NodeViewHolder[State] with FileUtils {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
 
@@ -183,7 +184,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   @SuppressWarnings(Array("AsInstanceOf"))
   private def recreatedState(): State = {
     val dir = stateDir(settings)
-    FileUtils.deleteRecursive(dir)
+    deleteRecursive(dir)
 
     val constants = StateConstants(Some(self), settings)
     ErgoState.readOrGenerate(settings, constants)

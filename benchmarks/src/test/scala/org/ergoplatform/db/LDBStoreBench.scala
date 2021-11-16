@@ -4,12 +4,12 @@ import com.google.common.primitives.Longs
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
+import org.ergoplatform.wallet.utils.FileUtils
 import org.iq80.leveldb.Options
 import org.scalameter.KeyValue
 import org.scalameter.api.{Bench, Gen, _}
 import org.scalameter.picklers.Implicits._
 import scorex.crypto.hash.Digest32
-import scorex.testkit.utils.FileUtils
 import scorex.util.idToBytes
 import scorex.db.LDBFactory.factory
 import scorex.db.{LDBKVStore, LDBVersionedStore}

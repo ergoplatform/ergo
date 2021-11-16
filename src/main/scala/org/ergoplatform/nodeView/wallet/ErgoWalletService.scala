@@ -12,13 +12,13 @@ import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStora
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
-import org.ergoplatform.utils.FileUtils
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, ErgoBoxSerializer}
 import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey, JsonSecretStorage}
 import org.ergoplatform.wallet.settings.SecretStorageSettings
+import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.Values.SigmaBoolean
@@ -226,7 +226,7 @@ trait ErgoWalletService {
 
 }
 
-class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
+class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport with FileUtils {
 
   def readWallet(state: ErgoWalletState,
                  testMnemonic: Option[String],
@@ -334,7 +334,8 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
     val registryFolder = WalletRegistry.registryFolder(settings)
     log.info(s"Removing the registry folder $registryFolder")
     state.registry.close()
-    FileUtils.deleteRecursive(registryFolder)
+
+    deleteRecursive(registryFolder)
 
     WalletRegistry.apply(settings).map { reg =>
       state.copy(registry = reg)
@@ -346,7 +347,7 @@ class ErgoWalletServiceImpl extends ErgoWalletService with ErgoWalletSupport {
       val storageFolder = WalletStorage.storageFolder(settings)
       log.info(s"Removing the wallet storage folder $storageFolder")
       state.storage.close()
-      FileUtils.deleteRecursive(storageFolder)
+      deleteRecursive(storageFolder)
       state.copy(storage = WalletStorage.readOrCreate(settings))
     }
 

@@ -28,6 +28,7 @@ import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.{DerivationPath, ExtendedSecretKey}
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import scorex.core.app.Version
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
@@ -44,7 +45,7 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with scorex.testkit.utils.FileUtils {
+trait Stubs extends ErgoGenerators with ErgoTestHelpers with ChainGenerator with FileUtils {
 
   implicit val system: ActorSystem
 

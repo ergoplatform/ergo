@@ -12,12 +12,12 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalatest.matchers.should.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.db.ByteArrayWrapper
 import scorex.testkit.TestkitHelpers
-import scorex.testkit.utils.FileUtils
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Random, Success, Try}

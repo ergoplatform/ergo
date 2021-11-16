@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import com.google.common.hash.BloomFilter
+import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
@@ -70,9 +71,11 @@ object WalletScanLogic extends ScorexLogging {
                             transactions: Seq[ErgoTransaction],
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]]
                            ): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
+    implicit val encoder = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
 
-    log.info(s"Scan block transactions in block # $height, wallet has ${walletVars.trackedBytes.length} keys")
-
+    log.info(s"Scan block transactions in block # $height, wallet has ${walletVars.trackedBytes.length} keys : " +
+      s" ${walletVars.trackedPubKeys.map(_.key).map(P2PKAddress.apply)}")
+    
     // Take unspent wallet outputs Bloom Filter from cache
     // or recreate it from unspent outputs stored in the database
     val outputsFilter = cachedOutputsFilter.getOrElse {

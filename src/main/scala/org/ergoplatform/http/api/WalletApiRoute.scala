@@ -333,7 +333,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def initWalletR: Route = (path("init") & post & initRequest) {
     case (pass, mnemonicPassOpt) =>
-      withWalletOp(_.initWallet(SecretString.create(pass), mnemonicPassOpt.fold[Option[SecretString]](None)(x => Option(SecretString.create(x))))) {
+      withWalletOp(_.initWallet(SecretString.create(pass), mnemonicPassOpt.map(SecretString.create(_)))) {
         _.fold(
           e => BadRequest(e.getMessage),
           mnemonic => ApiResponse(Json.obj("mnemonic" -> mnemonic.asJson))
@@ -343,7 +343,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def restoreWalletR: Route = (path("restore") & post & restoreRequest) {
     case (pass, mnemo, mnemoPassOpt) =>
-      withWalletOp(_.restoreWallet(SecretString.create(pass), SecretString.create(mnemo), mnemoPassOpt.fold[Option[SecretString]](None)(x => Option(SecretString.create(x))))) {
+      withWalletOp(_.restoreWallet(SecretString.create(pass), SecretString.create(mnemo), mnemoPassOpt.map(SecretString.create(_)))) {
         _.fold(
           e => BadRequest(e.getMessage),
           _ => ApiResponse.toRoute(ApiResponse.OK)
@@ -362,7 +362,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def checkSeedR: Route = (path("check") & post & checkRequest) {
     case (mnemo, mnemoPassOpt) =>
-      withWalletOp(_.checkSeed(SecretString.create(mnemo), mnemoPassOpt.fold[Option[SecretString]](None)(x => Option(SecretString.create(x))))) { matched =>
+      withWalletOp(_.checkSeed(SecretString.create(mnemo), mnemoPassOpt.map(SecretString.create(_)))) { matched =>
         ApiResponse(
           Json.obj(
             "matched" -> matched.asJson

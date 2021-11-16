@@ -85,7 +85,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ReadWallet(state) =>
       val ws = settings.walletSettings
       // Try to read wallet from json file or test mnemonic provided in a config file
-      val newState = ergoWalletService.readWallet(state, ws.testMnemonic.fold[Option[SecretString]](None)(x => Option(SecretString.create(x))), ws.testKeysQty, ws.secretStorage)
+      val newState = ergoWalletService.readWallet(state, ws.testMnemonic.map(SecretString.create(_)), ws.testKeysQty, ws.secretStorage)
       context.become(loadedWallet(newState))
       unstashAll()
     case _ => // stashing all messages until wallet is setup

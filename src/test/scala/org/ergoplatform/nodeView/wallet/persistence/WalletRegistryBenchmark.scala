@@ -40,7 +40,7 @@ object WalletRegistryBenchmark extends App with ErgoTestConstants {
 
   val derivedSecrets = (1 to 15000).map { i =>
     val k = rootSecret.derive(DerivationPath.fromEncoded(s"m/44'/429'/0'/0/$i").get)
-    storage.addKey(k.publicKey).get
+    storage.addPublicKeys(k.publicKey).get
     k
   }
 

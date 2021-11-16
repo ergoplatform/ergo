@@ -9,8 +9,6 @@ import io.circe.Printer
 import scorex.core.utils.ActorHelper
 import scorex.util.ScorexLogging
 
-import scala.language.implicitConversions
-
 trait ApiRoute
   extends ApiDirectives
     with ActorHelper

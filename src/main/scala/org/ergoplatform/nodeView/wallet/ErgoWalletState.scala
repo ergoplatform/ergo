@@ -22,7 +22,7 @@ case class ErgoWalletState(
     offChainRegistry: OffChainRegistry,
     outputsFilter: Option[BloomFilter[Array[Byte]]], // Bloom filter for boxes not being spent to the moment
     walletVars: WalletVars,
-    stateReaderOpt: Option[ErgoStateReader], //todo: temporary 3.2.x collection and readers
+    stateReaderOpt: Option[ErgoStateReader],
     mempoolReaderOpt: Option[ErgoMemPoolReader],
     utxoStateReaderOpt: Option[UtxoStateReader],
     parameters: Parameters,
@@ -79,12 +79,13 @@ case class ErgoWalletState(
     */
   def fullHeight: Int = stateContext.currentHeight
 
-  def getChangeAddress(implicit addrEncoder: ErgoAddressEncoder): Option[P2PKAddress] = walletVars.proverOpt.map { prover =>
-    storage.readChangeAddress
-      .getOrElse {
+  def getChangeAddress(implicit addrEncoder: ErgoAddressEncoder): Option[P2PKAddress] = {
+    walletVars.proverOpt.map { prover =>
+      storage.readChangeAddress.getOrElse {
         log.debug("Change address not specified. Using root address from wallet.")
         P2PKAddress(prover.hdPubKeys.head.key)
       }
+    }
   }
 
   // Read a box from UTXO set if the node has it, otherwise, from the wallet

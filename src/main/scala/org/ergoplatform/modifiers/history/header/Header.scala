@@ -12,7 +12,6 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistory.Difficulty
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import scorex.core.block.Block._
 import scorex.core.serialization.ScorexSerializer
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.ModifierTypeId
@@ -43,12 +42,12 @@ import scala.concurrent.duration.FiniteDuration
   * @param votes - votes for changing system parameters
   * @param sizeOpt - optionally, size of the header (to avoid serialization on calling .length)
   */
-case class Header(override val version: Version,
+case class Header(override val version: Header.Version,
                   override val parentId: ModifierId,
                   override val ADProofsRoot: Digest32,
                   override val stateRoot: ADDigest, //33 bytes! extra byte with tree height here!
                   override val transactionsRoot: Digest32,
-                  override val timestamp: Timestamp,
+                  override val timestamp: Header.Timestamp,
                   override val nBits: Long, //actually it is unsigned int
                   override val height: Int,
                   override val extensionRoot: Digest32,
@@ -57,7 +56,7 @@ case class Header(override val version: Version,
                   override val sizeOpt: Option[Int] = None) extends HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
   nBits, height, extensionRoot, votes) with PreHeader with ErgoPersistentModifier {
 
-  override def serializedId: Array[Version] = Algos.hash(bytes)
+  override def serializedId: Array[Header.Version] = Algos.hash(bytes)
 
   override type M = Header
 
@@ -109,6 +108,9 @@ case class Header(override val version: Version,
 
 
 object Header extends ApiCodecs {
+
+  type Timestamp = Long
+  type Version = Byte
 
   def toSigma(header: Header): special.sigma.Header =
     CHeader(

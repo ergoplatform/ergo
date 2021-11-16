@@ -41,9 +41,13 @@ trait ModifiersCache[PMOD <: PersistentNodeViewModifier, H <: HistoryReader[PMOD
     */
   def findCandidateKey(history: H): Option[K]
 
-  protected def onPut(key: K): Unit = {}
+  protected def onPut(key: K): Unit = {
+    assert(key != null)
+  }
 
-  protected def onRemove(key: K): Unit = {}
+  protected def onRemove(key: K): Unit = {
+    assert(key != null)
+  }
 
   /**
     * Remove elements from cache when it is overfull

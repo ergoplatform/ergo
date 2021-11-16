@@ -32,21 +32,10 @@ trait HistoryReader[PM <: PersistentNodeViewModifier, SI <: SyncInfo] extends No
     */
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
-  //todo: output should be ID | Seq[ID]
-  def openSurfaceIds(): Seq[ModifierId]
-
   /**
     * Ids of modifiers, that node with info should download and apply to synchronize
     */
   def continuationIds(info: SI, size: Int): ModifierIds
-
-  /**
-    * Information about our node synchronization status. Other node should be able to compare it's view with ours by
-    * this syncInfo message and calculate modifiers missed by our node.
-    *
-    * @return
-    */
-  def syncInfo: SI
 
   /**
     * Whether another's node syncinfo shows that another node is ahead or behind ours

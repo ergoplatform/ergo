@@ -3,9 +3,9 @@ package scorex.core.network.peer
 import java.net.{InetAddress, InetSocketAddress}
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import org.ergoplatform.settings.ErgoSettings
 import scorex.core.app.ScorexContext
 import scorex.core.network._
-import scorex.core.settings.ScorexSettings
 import scorex.core.utils.NetworkUtils
 import scorex.util.ScorexLogging
 
@@ -15,19 +15,22 @@ import scala.util.Random
   * Peer manager takes care of peers connected and in process, and also chooses a random peer to connect
   * Must be singleton
   */
-class PeerManager(settings: ScorexSettings, scorexContext: ScorexContext) extends Actor with ScorexLogging {
+class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends Actor with ScorexLogging {
 
   import PeerManager.ReceivableMessages._
 
-  private val peerDatabase = new InMemoryPeerDatabase(settings.network, scorexContext.timeProvider)
+  private val peerDatabase = new PeerDatabase(settings, scorexContext.timeProvider)
 
   if (peerDatabase.isEmpty) {
     // fill database with peers from config file if empty
-    settings.network.knownPeers.foreach { address =>
+    log.info("No peers in database, seeding peers database with nodes from config")
+    settings.scorexSettings.network.knownPeers.foreach { address =>
       if (!isSelf(address)) {
         peerDatabase.addOrUpdateKnownPeer(PeerInfo.fromAddress(address))
       }
     }
+  } else {
+    log.info(s"${peerDatabase.knownPeers.size} peers read from the database")
   }
 
   override def receive: Receive = peersManagement orElse apiInterface orElse {
@@ -39,8 +42,11 @@ class PeerManager(settings: ScorexSettings, scorexContext: ScorexContext) extend
 
     case ConfirmConnection(connectionId, handlerRef) =>
       log.info(s"Connection confirmation request: $connectionId")
-      if (peerDatabase.isBlacklisted(connectionId.remoteAddress)) sender() ! ConnectionDenied(connectionId, handlerRef)
-      else sender() ! ConnectionConfirmed(connectionId, handlerRef)
+      if (peerDatabase.isBlacklisted(connectionId.remoteAddress)) {
+        sender() ! ConnectionDenied(connectionId, handlerRef)
+      } else {
+        sender() ! ConnectionConfirmed(connectionId, handlerRef)
+      }
 
     case AddOrUpdatePeer(peerInfo) =>
       // We have connected to a peer and got his peerInfo from him
@@ -84,7 +90,7 @@ class PeerManager(settings: ScorexSettings, scorexContext: ScorexContext) extend
     * Given a peer's address, returns `true` if the peer is the same is this node.
     */
   private def isSelf(peerAddress: InetSocketAddress): Boolean = {
-    NetworkUtils.isSelf(peerAddress, settings.network.bindAddress, scorexContext.externalNodeAddress)
+    NetworkUtils.isSelf(peerAddress, settings.scorexSettings.network.bindAddress, scorexContext.externalNodeAddress)
   }
 
   private def isSelf(peerSpec: PeerSpec): Boolean = {
@@ -158,8 +164,11 @@ object PeerManager {
           excludedPeers.exists(_.peerSpec.address == p.peerSpec.address) &&
             blacklistedPeers.exists(addr => p.peerSpec.address.map(_.getAddress).contains(addr))
         }.toSeq
-        if (candidates.nonEmpty) Some(candidates(Random.nextInt(candidates.size)))
-        else None
+        if (candidates.nonEmpty) {
+          Some(candidates(Random.nextInt(candidates.size)))
+        } else {
+          None
+        }
       }
     }
 
@@ -176,18 +185,12 @@ object PeerManager {
 
 object PeerManagerRef {
 
-  def props(settings: ScorexSettings, scorexContext: ScorexContext): Props = {
+  def props(settings: ErgoSettings, scorexContext: ScorexContext): Props = {
     Props(new PeerManager(settings, scorexContext))
   }
 
-  def apply(settings: ScorexSettings, scorexContext: ScorexContext)
+  def apply(settings: ErgoSettings, scorexContext: ScorexContext)
            (implicit system: ActorSystem): ActorRef = {
     system.actorOf(props(settings, scorexContext))
   }
-
-  def apply(name: String, settings: ScorexSettings, scorexContext: ScorexContext)
-           (implicit system: ActorSystem): ActorRef = {
-    system.actorOf(props(settings, scorexContext), name)
-  }
-
 }

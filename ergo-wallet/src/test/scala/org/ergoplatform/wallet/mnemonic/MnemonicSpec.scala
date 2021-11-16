@@ -3,8 +3,8 @@ package org.ergoplatform.wallet.mnemonic
 import java.text.Normalizer.Form.NFKD
 import java.text.Normalizer.normalize
 import org.ergoplatform.wallet.interface4j.SecretString
-
 import org.ergoplatform.wallet.utils.Generators
+import org.scalatest.Assertion
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
@@ -178,7 +178,6 @@ class MnemonicSpec
 
   it should "pass https://github.com/bip32JP/bip32JP.github.io/blob/master/test_JP_BIP39.json" in {
     val lang = "japanese"
-    val passphrase = "TREZOR"
 
     val cases = Table(
       ("Entropy", "Sentence", "Passphase", "Seed", "bip32_xprv"),
@@ -400,7 +399,7 @@ class MnemonicSpec
                 sentence: String,
                 pass: String,
                 seed: String,
-                langId: String): Unit = {
+                langId: String): Assertion = {
     val sentenceSize = if (langId == "japanese") sentence.split("\u3000").length else sentence.split(" ").length
     val strength = Mnemonic.AllowedStrengths.zip(Mnemonic.MnemonicSentenceSizes).find(_._2 == sentenceSize).map(_._1).get
     val mnemonic = new Mnemonic(langId, strength)

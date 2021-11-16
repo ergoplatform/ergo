@@ -2,7 +2,6 @@ package org.ergoplatform.it
 
 import com.typesafe.config.Config
 import io.circe.Json
-import io.circe.Json.JArray
 import io.circe.parser._
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.TokenId

@@ -8,7 +8,7 @@ import akka.io.{IO, Tcp}
 import akka.pattern.ask
 import akka.util.Timeout
 import scorex.core.app.{ScorexContext, Version}
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.{DisconnectedPeer, HandshakedPeer}
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.{DisconnectedPeer, HandshakedPeer}
 import scorex.core.network.message.Message.MessageCode
 import scorex.core.network.message.{Message, MessageSpec}
 import scorex.core.network.peer.PeerManager.ReceivableMessages._
@@ -20,7 +20,6 @@ import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import scala.language.{existentials, postfixOps}
 import scala.util.Try
 
 /**
@@ -50,9 +49,7 @@ class NetworkController(settings: NetworkSettings,
       Restart
   }
 
-  private implicit val system: ActorSystem = context.system
-
-  private implicit val timeout: Timeout = Timeout(settings.controllerTimeout.getOrElse(5 seconds))
+  private implicit val timeout: Timeout = Timeout(settings.controllerTimeout.getOrElse(5.seconds))
 
   private var messageHandlers = Map.empty[MessageCode, ActorRef]
 
@@ -163,6 +160,8 @@ class NetworkController(settings: NetworkSettings,
       handlerRef ! Close
 
     case Handshaked(connectedPeer) =>
+      val now = networkTime()
+      lastIncomingMessageTime = now
       handleHandshake(connectedPeer, sender())
 
     case f@CommandFailed(c: Connect) =>
@@ -174,7 +173,9 @@ class NetworkController(settings: NetworkSettings,
 
       // If a message received from p2p within connection timeout,
       // connectivity is not lost thus we're removing the peer
-      if (networkTime() - lastIncomingMessageTime < settings.connectionTimeout.toMillis) {
+      // we add multiplier 6 to remove more dead peers (and still not dropping a lot when connectivity lost)
+      val noNetworkMessagesFor = networkTime() - lastIncomingMessageTime
+      if (noNetworkMessagesFor < settings.connectionTimeout.toMillis * 6) {
         peerManagerRef ! RemovePeer(c.remoteAddress)
       }
 
@@ -314,8 +315,7 @@ class NetworkController(settings: NetworkSettings,
 
     val connectionDescription = ConnectionDescription(connection, connectionId, selfAddressOpt, peerFeatures)
 
-    val handlerProps: Props = PeerConnectionHandlerRef.props(settings, self, peerManagerRef,
-      scorexContext, connectionDescription)
+    val handlerProps: Props = PeerConnectionHandlerRef.props(settings, self, scorexContext, connectionDescription)
 
     val handler = context.actorOf(handlerProps) // launch connection handler
     context.watch(handler)

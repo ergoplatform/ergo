@@ -24,12 +24,15 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
     with ScorexEncoding {
 
   private val modifiersCache = CacheBuilder.newBuilder()
-    .maximumSize(config.modifiersCacheSize)
+    .maximumSize(config.history.modifiersCacheSize)
     .build[String, ErgoPersistentModifier]
 
   private val indexCache = CacheBuilder.newBuilder()
-    .maximumSize(config.indexesCacheSize)
+    .maximumSize(config.history.indexesCacheSize)
     .build[ByteArrayWrapper, Array[Byte]]
+
+  def modifierBytesById(id: ModifierId): Option[Array[Byte]] =
+    objectsStore.get(idToBytes(id))
 
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
     Option(modifiersCache.getIfPresent(id)) orElse

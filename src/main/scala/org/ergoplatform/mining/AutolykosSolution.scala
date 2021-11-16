@@ -5,7 +5,7 @@ import io.circe.{Decoder, Encoder, HCursor}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.settings.Algos
-import scorex.core.block.Block.Version
+import org.ergoplatform.modifiers.history.header.Header.Version
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.interpreter.CryptoConstants

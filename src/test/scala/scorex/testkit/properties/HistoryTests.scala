@@ -6,10 +6,7 @@ import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scorex.core.PersistentNodeViewModifier
-import scorex.core.consensus.{History, SyncInfo}
 import scorex.core.consensus.ModifierSemanticValidity.Valid
-import scorex.core.transaction.Transaction
 import scorex.testkit.TestkitHelpers
 import scorex.testkit.generators.SyntacticallyTargetedModifierProducer
 import scorex.util.ScorexLogging

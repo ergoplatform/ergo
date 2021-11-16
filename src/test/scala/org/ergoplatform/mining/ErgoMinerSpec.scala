@@ -22,7 +22,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import sigmastate.SigmaAnd
 import sigmastate.Values.{ErgoTree, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol

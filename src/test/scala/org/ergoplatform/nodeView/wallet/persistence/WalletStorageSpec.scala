@@ -47,7 +47,7 @@ class WalletStorageSpec
     forAll(extendedPubKeyListGen) { pubKeys =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
-        pubKeys.foreach(storage.addKey(_).get)
+        pubKeys.foreach(storage.addPublicKeys(_).get)
         val keysRead = storage.readAllKeys()
         keysRead.length shouldBe pubKeys.length
         keysRead should contain theSameElementsAs pubKeys.toSet

@@ -2,13 +2,13 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.settings.{Algos, VotingSettings}
-import scorex.core.transaction.state.StateReader
+import scorex.core.{NodeViewComponent, VersionTag}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.db.LDBVersionedStore
 import scorex.util.ScorexLogging
 
-trait ErgoStateReader extends StateReader with ScorexLogging {
+trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
 
   def rootHash: ADDigest
   val store: LDBVersionedStore
@@ -21,6 +21,15 @@ trait ErgoStateReader extends StateReader with ScorexLogging {
   def stateContext: ErgoStateContext = ErgoStateReader.storageStateContext(store, constants)
 
   def genesisBoxes: Seq[ErgoBox] = ErgoState.genesisBoxes(chainSettings)
+
+  //must be ID of last applied modifier
+  def version: VersionTag
+
+  def closeStorage(): Unit = {
+    log.warn("Closing state's store.")
+    store.close()
+  }
+
 }
 
 object ErgoStateReader {

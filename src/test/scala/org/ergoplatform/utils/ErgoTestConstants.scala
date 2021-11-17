@@ -10,6 +10,7 @@ import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateConsta
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, ErgoProvingInterpreter}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey
@@ -53,7 +54,7 @@ trait ErgoTestConstants extends ScorexLogging {
   val feeProp: ErgoTree = ErgoScriptPredef.feeProposition(emission.settings.minerRewardDelay)
 
   val emptyProverResult: ProverResult = ProverResult(Array.emptyByteArray, ContextExtension.empty)
-  lazy val defaultSeed: Array[Byte] = Mnemonic.toSeed(settings.walletSettings.testMnemonic.get)
+  lazy val defaultSeed: Array[Byte] = Mnemonic.toSeed(settings.walletSettings.testMnemonic.fold[SecretString](SecretString.empty())(SecretString.create(_)))
   val defaultRootSecret: ExtendedSecretKey = ExtendedSecretKey.deriveMasterKey(defaultSeed)
   val defaultChildSecrets: IndexedSeq[ExtendedSecretKey] = settings.walletSettings.testKeysQty
     .toIndexedSeq

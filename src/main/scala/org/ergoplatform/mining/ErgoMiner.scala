@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.state.DigestState
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.wallet.ErgoWalletActor.{FirstSecretResponse, GetFirstSecret, GetMiningPubKey, MiningPubKeyResponse}
 import org.ergoplatform.settings.ErgoSettings
-import scorex.core.NodeViewHolder.ReceivableMessages.GetDataFromCurrentView
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import scorex.core.utils.NetworkTimeProvider
 import scorex.util.ScorexLogging

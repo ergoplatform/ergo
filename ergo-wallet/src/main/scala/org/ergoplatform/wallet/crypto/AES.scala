@@ -21,7 +21,7 @@ object AES {
     * @param iv   - cipher initialization vector
     * @return     - tuple of resulted ciphertext and message auth tag
     */
-  def encrypt(data: Array[Byte], pass: String, salt: Array[Byte], iv: Array[Byte])
+  def encrypt(data: Array[Byte], pass: Array[Char], salt: Array[Byte], iv: Array[Byte])
              (settings: EncryptionSettings): (Array[Byte], Array[Byte]) = {
     require(data.nonEmpty, "Empty data encryption attempt")
     val keySpec = deriveEncryptionKeySpec(pass, salt)(settings)
@@ -42,7 +42,7 @@ object AES {
     * @param iv         - cipher initialization vector
     * @param authTag    - message authentication tag
     */
-  def decrypt(ciphertext: Array[Byte], pass: String, salt: Array[Byte], iv: Array[Byte], authTag: Array[Byte])
+  def decrypt(ciphertext: Array[Byte], pass: Array[Char], salt: Array[Byte], iv: Array[Byte], authTag: Array[Byte])
              (settings: EncryptionSettings): Try[Array[Byte]] = {
     require(ciphertext.nonEmpty, "Empty ciphertext decryption attempt")
     val keySpec = deriveEncryptionKeySpec(pass, salt)(settings)
@@ -54,9 +54,9 @@ object AES {
     Try(cipher.doFinal(authTag ++ ciphertext))
   }
 
-  private def deriveEncryptionKeySpec(pass: String, salt: Array[Byte])
+  private def deriveEncryptionKeySpec(pass: Array[Char], salt: Array[Byte])
                                      (settings: EncryptionSettings): SecretKeySpec = {
-    val pbeSpec = new PBEKeySpec(pass.toCharArray, salt, settings.c, settings.dkLen)
+    val pbeSpec = new PBEKeySpec(pass, salt, settings.c, settings.dkLen)
     val skf = SecretKeyFactory.getInstance(s"PBKDF2With${settings.prf}")
     val encryptionKey = skf.generateSecret(pbeSpec).getEncoded
     new SecretKeySpec(encryptionKey, CipherAlgo)

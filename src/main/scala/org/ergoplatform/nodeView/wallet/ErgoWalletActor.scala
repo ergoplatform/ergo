@@ -14,6 +14,7 @@ import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.settings._
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, ChainStatus}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
@@ -82,7 +83,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ReadWallet(state) =>
       val ws = settings.walletSettings
       // Try to read wallet from json file or test mnemonic provided in a config file
-      val newState = ergoWalletService.readWallet(state, ws.testMnemonic, ws.testKeysQty, ws.secretStorage)
+      val newState = ergoWalletService.readWallet(state, ws.testMnemonic.map(SecretString.create(_)), ws.testKeysQty, ws.secretStorage)
       context.become(loadedWallet(newState))
       unstashAll()
     case _ => // stashing all messages until wallet is setup
@@ -562,7 +563,7 @@ object ErgoWalletActor extends ScorexLogging {
     * @param walletPass
     * @param mnemonicPassOpt
     */
-  final case class InitWallet(walletPass: String, mnemonicPassOpt: Option[String])
+  final case class InitWallet(walletPass: SecretString, mnemonicPassOpt: Option[SecretString])
 
   /**
     * Restore wallet with mnemonic, optional mnemonic password and (mandatory) wallet encryption password
@@ -571,14 +572,14 @@ object ErgoWalletActor extends ScorexLogging {
     * @param mnemonicPassOpt
     * @param walletPass
     */
-  final case class RestoreWallet(mnemonic: String, mnemonicPassOpt: Option[String], walletPass: String)
+  final case class RestoreWallet(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString], walletPass: SecretString)
 
   /**
     * Unlock wallet with wallet password
     *
     * @param walletPass
     */
-  final case class UnlockWallet(walletPass: String)
+  final case class UnlockWallet(walletPass: SecretString)
 
   /**
     * Derive key with given path according to BIP-32
@@ -677,7 +678,7 @@ object ErgoWalletActor extends ScorexLogging {
     */
   final case class GetTransaction(id: ModifierId)
 
-  final case class CheckSeed(mnemonic: String, passOpt: Option[String])
+  final case class CheckSeed(mnemonic: SecretString, passOpt: Option[SecretString])
 
   /**
     * Get wallet-related transaction

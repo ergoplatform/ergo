@@ -40,8 +40,6 @@ class DigestState protected(override val version: VersionTag,
 
   private lazy val nodeSettings = ergoSettings.nodeSettings
 
-  override lazy val maxRollbackDepth: Int = store.rollbackVersions().size
-
   private[state] def validateTransactions(transactions: Seq[ErgoTransaction],
                                           expectedHash: ADDigest,
                                           proofs: ADProofs,

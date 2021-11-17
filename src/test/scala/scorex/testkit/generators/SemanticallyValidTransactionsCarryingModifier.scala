@@ -2,9 +2,9 @@ package scorex.testkit.generators
 
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import scorex.core.transaction.state.MinimalState
+import org.ergoplatform.nodeView.state.ErgoState
 
-trait SemanticallyValidTransactionsCarryingModifier[ST <: MinimalState[ST]] {
+trait SemanticallyValidTransactionsCarryingModifier[ST <: ErgoState[ST]] {
 
   def semanticallyValidModifier(state: ST): BlockTransactions
   def genValidTransactionPair(state: ST): Seq[ErgoTransaction]

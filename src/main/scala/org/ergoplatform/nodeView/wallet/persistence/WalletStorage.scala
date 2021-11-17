@@ -10,7 +10,10 @@ import scorex.crypto.hash.Blake2b256
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.db.{LDBFactory, LDBKVStore}
 import java.io.File
-import scala.util.{Success, Try}
+
+import scorex.util.ScorexLogging
+
+import scala.util.{Failure, Success, Try}
 
 /**
   * Persists version-agnostic wallet actor's mutable state (which is not a subject to rollbacks in case of forks)
@@ -23,7 +26,7 @@ import scala.util.{Success, Try}
   * * external scans
   */
 final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
-                         (implicit val addressEncoder: ErgoAddressEncoder) {
+                         (implicit val addressEncoder: ErgoAddressEncoder) extends ScorexLogging {
 
   import WalletStorage._
 
@@ -50,18 +53,46 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings)
 
   /**
     * Store wallet-related public key in the database
-    * @param publicKey - public key to store
+    *
+    * @param publicKeys - public key to store
     */
-  def addKey(publicKey: ExtendedPublicKey): Try[Unit] = {
-    store.insert(Seq(pubKeyPrefixKey(publicKey) -> ExtendedPublicKeySerializer.toBytes(publicKey)))
+  def addPublicKeys(publicKeys: ExtendedPublicKey*): Try[Unit] = {
+    store.insert {
+      publicKeys.map { publicKey =>
+        pubKeyPrefixKey(publicKey) -> ExtendedPublicKeySerializer.toBytes(publicKey)
+      }
+    }
+  }
+
+  /**
+    * Read public key corresponding to a provided derivation path
+    */
+  def getPublicKey(path: DerivationPath): Option[ExtendedPublicKey] = {
+    store
+      .get(pubKeyPrefixKey(path))
+      .flatMap{bytes =>
+        ExtendedPublicKeySerializer.parseBytesTry(bytes) match {
+          case Success(key) =>
+            Some(key)
+          case Failure(t) =>
+            log.error(s"Corrupted data when reading public key data for $path : ", t)
+            None
+        }
+      }
+  }
+
+  def containsPublicKey(path: DerivationPath): Boolean = {
+    getPublicKey(path).isDefined
   }
 
   /**
     * Read wallet-related public keys from the database
     * @return wallet public keys
     */
-  def readAllKeys(): Seq[ExtendedPublicKey] = store.getRange(FirstPublicKeyId, LastPublicKeyId).map { case (_, v) =>
-    ExtendedPublicKeySerializer.parseBytes(v)
+  def readAllKeys(): Seq[ExtendedPublicKey] = {
+    store.getRange(FirstPublicKeyId, LastPublicKeyId).map { case (_, v) =>
+      ExtendedPublicKeySerializer.parseBytes(v)
+    }
   }
 
   /**
@@ -190,7 +221,8 @@ object WalletStorage {
   val BiggestPossibleScanId: Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
 
   def scanPrefixKey(scanId: Short): Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(scanId)
-  def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = PublicKeyPrefixArray ++ pk.path.bytes
+  def pubKeyPrefixKey(path: DerivationPath): Array[Byte] = PublicKeyPrefixArray ++ path.bytes
+  def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = pubKeyPrefixKey(pk.path)
 
 
   // public keys space to iterate over all of them

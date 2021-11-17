@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.viewholder
 
 import java.io.File
-
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -9,8 +8,8 @@ import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
-import org.ergoplatform.utils.{ErgoPropertyTest, FileUtils, NodeViewTestConfig, NodeViewTestOps, TestCase}
-import scorex.core.NodeViewHolder.ReceivableMessages._
+import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestConfig, NodeViewTestOps, TestCase}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.testkit.utils.NoShrink
@@ -45,7 +44,6 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
     getHistoryHeight shouldBe ErgoHistory.GenesisHeight
     getHeightOf(block.header.id) shouldBe Some(ErgoHistory.GenesisHeight)
     getLastHeadersLength(10) shouldBe 1
-    getOpenSurfaces shouldBe Seq(block.header.id)
     getBestHeaderOpt shouldBe Some(block.header)
   }
 
@@ -219,7 +217,7 @@ class ErgoNodeViewHolderSpec extends ErgoPropertyTest with NodeViewTestOps with 
 
     stopNodeViewHolder()
     val stateDir = new File(s"${nodeViewDir.getAbsolutePath}/state")
-    FileUtils.deleteRecursive(stateDir)
+    this.deleteRecursive(stateDir)
     startNodeViewHolder()
 
     getRootHash shouldBe Algos.encode(block1.header.stateRoot)

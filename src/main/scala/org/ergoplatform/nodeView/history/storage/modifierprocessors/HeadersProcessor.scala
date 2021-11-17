@@ -43,8 +43,6 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
 
   lazy val difficultyCalculator = new LinearDifficultyControl(chainSettings)
 
-  def realDifficulty(h: Header): Difficulty = powScheme.realDifficulty(h)
-
   def isSemanticallyValid(modifierId: ModifierId): ModifierSemanticValidity
 
   // todo for performance reasons we may just use key like s"score$id" but this will require to redownload blockchain
@@ -57,7 +55,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
   protected[history] def validityKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("validity".getBytes(ErgoHistory.CharsetName) ++ idToBytes(id)))
 
-  protected def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(bytesToId)
+  def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(bytesToId)
 
   /**
     * Id of best header with transactions and proofs. None in regime that do not process transactions

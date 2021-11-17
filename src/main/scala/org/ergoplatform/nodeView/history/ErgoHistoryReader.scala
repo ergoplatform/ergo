@@ -58,6 +58,17 @@ trait ErgoHistoryReader
 
   /**
     * @param id - modifier id
+    * @return raw bytes of semantically valid ErgoPersistentModifier with the given id it is in history
+    */
+  def modifierBytesById(id: ModifierId): Option[Array[Byte]] =
+    if (isSemanticallyValid(id) != ModifierSemanticValidity.Invalid) {
+      historyStorage.modifierBytesById(id)
+    } else {
+      None
+    }
+
+  /**
+    * @param id - modifier id
     * @return semantically valid ErgoPersistentModifier with the given id it is in history
     */
   override def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
@@ -79,11 +90,6 @@ trait ErgoHistoryReader
   }
 
   override def contains(id: ModifierId): Boolean = historyStorage.contains(id)
-
-  /**
-    * Id of the best full block known
-    */
-  override def openSurfaceIds(): Seq[ModifierId] = bestFullBlockIdOpt.orElse(bestHeaderIdOpt).toSeq
 
   /**
     * Check, that it's possible to apply modifier to history

@@ -6,6 +6,7 @@ import java.text.Normalizer.normalize
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.interface4j.SecretString
 import scodec.bits.BitVector
 
 import scala.util.{Failure, Try}
@@ -22,7 +23,7 @@ final class Mnemonic(languageId: String, strength: Int) {
   /**
     * Generates new mnemonic phrase from system randomness.
     */
-  def generate: Try[String] = {
+  def generate: Try[SecretString] = {
     if (!AllowedStrengths.contains(strength))
       Failure(new Error(s"Strength should be one of $AllowedStrengths, but it is $strength."))
     else toMnemonic(scorex.utils.Random.randomBytes(strength / 8))
@@ -31,7 +32,7 @@ final class Mnemonic(languageId: String, strength: Int) {
   /**
     * Generates new mnemonic phrase from a given entropy.
     */
-  def toMnemonic(entropy: Array[Byte]): Try[String] = {
+  def toMnemonic(entropy: Array[Byte]): Try[SecretString] = {
     if (!AllowedEntropyLengths.contains(entropy.length))
       Failure(new Error(s"Entropy length should be one of $AllowedEntropyLengths, but it is ${entropy.length}."))
     else {
@@ -39,12 +40,12 @@ final class Mnemonic(languageId: String, strength: Int) {
       val entropyWithChecksum = BitVector(entropy) ++ checksum.take(entropy.length / 4)
 
       WordList.load(languageId).map { wordList =>
-        entropyWithChecksum
+        SecretString.create(entropyWithChecksum
           .grouped(BitsGroupSize)
           .map { wordIndex =>
             wordList.words(wordIndex.toInt(signed = false))
           }
-          .mkString(wordList.delimiter)
+          .mkString(wordList.delimiter))
       }
     }
   }
@@ -64,10 +65,13 @@ object Mnemonic {
   /**
     * Converts mnemonic phrase to seed it was derived from.
     */
-  def toSeed(mnemonic: String, passOpt: Option[String] = None): Array[Byte] = {
-    val normalizedMnemonic = normalize(mnemonic.toCharArray, NFKD).toCharArray
-    val normalizedPass = normalize(s"mnemonic${passOpt.getOrElse("")}", NFKD)
-
+  def toSeed(mnemonic: SecretString, passOpt: Option[SecretString] = None): Array[Byte] = {
+    val normalizedMnemonic = normalize(mnemonic.getData(), NFKD).toCharArray
+    val normalizedPass = normalize(("mnemonic".toCharArray ++ passOpt.fold("".toCharArray())(_.getData())), NFKD)
+    
+    mnemonic.erase()
+    passOpt.fold(())(_.erase())
+    
     val spec = new PBEKeySpec(
       normalizedMnemonic,
       normalizedPass.getBytes(Constants.Encoding),

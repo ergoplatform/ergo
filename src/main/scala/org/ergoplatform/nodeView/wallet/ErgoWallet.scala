@@ -28,8 +28,6 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings)
   private val optimalInputs = walletSettings.optimalInputs
   private val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs)
 
-  override type NVCT = this.type
-
   override val walletActor: ActorRef =
     ErgoWalletActor(settings, new ErgoWalletServiceImpl, boxSelector, historyReader)
 

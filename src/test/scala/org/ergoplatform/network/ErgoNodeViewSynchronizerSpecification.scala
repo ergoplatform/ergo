@@ -13,8 +13,8 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.HistoryTestHelpers
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
-import scorex.core.NodeViewHolder.DownloadRequest
-import scorex.core.NodeViewHolder.ReceivableMessages.GetNodeViewChanges
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.DownloadRequest
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import scorex.core.PersistentNodeViewModifier
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{RegisterMessageSpecs, SendToNetwork}

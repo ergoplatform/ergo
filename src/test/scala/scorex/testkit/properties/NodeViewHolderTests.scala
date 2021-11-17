@@ -6,10 +6,10 @@ import org.ergoplatform.modifiers.ErgoPersistentModifier
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
-import scorex.core.NodeViewHolder.CurrentView
-import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, ModifiersFromRemote}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier, ModifiersFromRemote}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
-import scorex.core.transaction.state.MinimalState
+import org.ergoplatform.nodeView.state.ErgoState
 import scorex.testkit.generators._
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ScorexLogging
@@ -18,7 +18,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 
 @SuppressWarnings(Array("org.wartremover.warts.TraversableOps"))
-trait NodeViewHolderTests[ST <: MinimalState[ST]]
+trait NodeViewHolderTests[ST <: ErgoState[ST]]
   extends AnyPropSpec
     with Matchers
     with ScorexLogging
@@ -272,7 +272,7 @@ trait NodeViewHolderTests[ST <: MinimalState[ST]]
 
       p.send(node, GetDataFromCurrentView[ST, Seq[ErgoPersistentModifier]] { v =>
         val mods = totallyValidModifiers(v.history, v.state, fork1OpCount)
-        assert(mods.head.parentId == v.history.openSurfaceIds().head)
+        assert(mods.head.parentId == v.history.bestFullBlockIdOpt.orElse(v.history.bestHeaderIdOpt).get)
         mods
       })
       val fork1Mods = p.expectMsgClass(waitDuration, classOf[Seq[ErgoPersistentModifier]])
@@ -286,7 +286,7 @@ trait NodeViewHolderTests[ST <: MinimalState[ST]]
       fork2Mods.foreach { mod => p.send(node, LocallyGeneratedModifier(mod)) }
 
       p.send(node, GetDataFromCurrentView[ST, Boolean] { v =>
-        v.history.openSurfaceIds().contains(fork2Mods.last.id)
+        v.history.bestFullBlockIdOpt.orElse(v.history.bestHeaderIdOpt).contains(fork2Mods.last.id)
       })
       p.expectMsg(true)
     }
@@ -308,7 +308,7 @@ trait NodeViewHolderTests[ST <: MinimalState[ST]]
       // generate the first fork with valid blocks
       val fork1Mods = withView(node) { v =>
         val mods = totallyValidModifiers(v.history, v.state, fork1OpCount)
-        assert(mods.head.parentId == v.history.openSurfaceIds().head)
+        assert(mods.head.parentId == v.history.bestFullBlockIdOpt.orElse(v.history.bestHeaderIdOpt).get)
         mods
       }
       // generate the second fork with the invalid block
@@ -325,7 +325,7 @@ trait NodeViewHolderTests[ST <: MinimalState[ST]]
       // verify that open surface consist of last block of the first chain,
       // or first block of the second chain, or both, but no any other option
       withView(node) { v =>
-        v.history.openSurfaceIds should (
+        v.history.bestFullBlockIdOpt.orElse(v.history.bestHeaderIdOpt).toSeq should (
           contain only fork1Mods.last.id
             or contain only fork2Mods.head.id
             or contain only(fork1Mods.last.id, fork2Mods.head.id)

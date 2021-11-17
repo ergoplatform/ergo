@@ -9,13 +9,12 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{DigestState, UtxoState}
+import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers}
 import org.scalacheck.Gen
-import scorex.core.transaction.state.MinimalState
 import scorex.core.utils.NetworkTimeProvider
 import scorex.core.{PersistentNodeViewModifier, bytesToId}
 import scorex.crypto.authds.ADDigest
@@ -29,7 +28,7 @@ import scorex.utils.Random
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
-trait ErgoSanity[ST <: MinimalState[ST]] extends HistoryTests
+trait ErgoSanity[ST <: ErgoState[ST]] extends HistoryTests
   with StateApplicationTest[ST]
   with MempoolTransactionsTest
   with MempoolRemovalTest

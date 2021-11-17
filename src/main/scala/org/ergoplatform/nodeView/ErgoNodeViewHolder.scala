@@ -36,7 +36,7 @@ import scala.util.{Failure, Success, Try}
   *
   * Contains instances for History, ErgoState, Vault, MemoryPool.
   * The instances are read-only for external world.
-  * Updates of the composite view(the instances are to be performed atomically.
+  * Updates of the composite view instances are to be performed atomically.
   *
   */
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings,

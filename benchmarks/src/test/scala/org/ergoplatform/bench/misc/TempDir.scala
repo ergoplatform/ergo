@@ -1,5 +1,5 @@
 package org.ergoplatform.bench.misc
 
-import org.ergoplatform.wallet.utils.FileUtils
+import org.ergoplatform.wallet.utils.TestFileUtils
 
-object TempDir extends FileUtils
+object TempDir extends TestFileUtils

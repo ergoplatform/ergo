@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
-import org.ergoplatform.wallet.utils.FileUtils
+import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalatest.matchers.should.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
@@ -23,7 +23,7 @@ import scala.annotation.tailrec
 import scala.util.{Failure, Random, Success, Try}
 
 trait ValidBlocksGenerators
-  extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
+  extends TestkitHelpers with TestFileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
 
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
     val constants = StateConstants(nodeViewHolderRef, settings)

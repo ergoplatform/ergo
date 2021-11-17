@@ -9,12 +9,6 @@ trait FileUtils {
 
   protected val randomPrefixLength = 10
 
-  val basePath: Path = java.nio.file.Files.createTempDirectory(s"scorex-${System.nanoTime()}")
-
-  sys.addShutdownHook {
-    deleteRecursive(basePath.toFile)
-  }
-
   /**
     * Perform recursive deletion of directory content.
     */
@@ -43,5 +37,4 @@ trait FileUtils {
     file.deleteOnExit()
     file
   }
-
 }

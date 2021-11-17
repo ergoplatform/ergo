@@ -4,7 +4,7 @@ import com.google.common.primitives.Longs
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.generators.ErgoTransactionGenerators
-import org.ergoplatform.wallet.utils.FileUtils
+import org.ergoplatform.wallet.utils.TestFileUtils
 import org.iq80.leveldb.Options
 import org.scalameter.KeyValue
 import org.scalameter.api.{Bench, Gen, _}
@@ -19,7 +19,7 @@ import scala.util.Random
 object LDBStoreBench
   extends Bench.ForkedTime
     with ErgoTransactionGenerators
-    with FileUtils {
+    with TestFileUtils {
 
   private val options = new Options()
   options.createIfMissing(true)

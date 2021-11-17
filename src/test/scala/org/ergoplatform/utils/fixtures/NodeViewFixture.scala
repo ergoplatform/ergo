@@ -6,7 +6,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{ErgoTestHelpers, NodeViewTestContext}
-import org.ergoplatform.wallet.utils.FileUtils
+import org.ergoplatform.wallet.utils.TestFileUtils
 import scorex.core.utils.NetworkTimeProvider
 
 import scala.concurrent.ExecutionContext
@@ -14,7 +14,7 @@ import scala.concurrent.ExecutionContext
 /** This uses TestProbe to receive messages from actor.
   * To make TestProbe work `defaultSender` implicit should be imported
   */
-class NodeViewFixture(protoSettings: ErgoSettings) extends NodeViewTestContext with FileUtils { self =>
+class NodeViewFixture(protoSettings: ErgoSettings) extends NodeViewTestContext with TestFileUtils { self =>
 
   implicit val actorSystem: ActorSystem = ActorSystem()
   implicit val executionContext: ExecutionContext = actorSystem.dispatchers.lookup("scorex.executionContext")

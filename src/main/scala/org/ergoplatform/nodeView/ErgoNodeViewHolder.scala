@@ -528,6 +528,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 
 object ErgoNodeViewHolder {
+
+  case class BlockAppliedTransactions(txs: Seq[scorex.util.ModifierId])
+
   object ReceivableMessages {
 
     // Explicit request of NodeViewChange events of certain types.
@@ -590,8 +593,5 @@ object ErgoNodeViewRef {
   def apply(settings: ErgoSettings,
             timeProvider: NetworkTimeProvider)(implicit system: ActorSystem): ActorRef =
     system.actorOf(props(settings, timeProvider))
-}
-
-object ErgoNodeViewHolder {
-  case class BlockAppliedTransactions(txs: Seq[scorex.util.ModifierId])
+  
 }

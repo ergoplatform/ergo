@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.history._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.{CheckModifiersToDownload, PeerSyncState}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings}
@@ -55,6 +56,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                syncTracker: ErgoSyncTracker
                               )(implicit ex: ExecutionContext)
   extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
+
+  // bloom filters with transaction ids that were already applied to history
+  private var blockAppliedTxsCache: FixedSizeBloomFilterQueue =
+    FixedSizeBloomFilterQueue.empty(bloomFilterQueueSize = 5)
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -109,6 +114,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ChangedMempool[ErgoMemPoolReader]])
     context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
+    context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
     context.system.eventStream.subscribe(self, classOf[ModifiersProcessingResult])
 
     // subscribe for history and mempool changes
@@ -474,8 +480,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (spam.nonEmpty) {
       if (typeId == Transaction.ModifierTypeId) {
-        log.info(s"Got spammy transactions: $modifiers")
-        // todo: consider rules for penalizing peers for spammy transactions
+        val spammyTxs = modifiers.filterKeys(id => !blockAppliedTxsCache.mightContain(id))
+        if (spammyTxs.nonEmpty) {
+          log.info(s"Got spammy transactions: $spammyTxs")
+          penalizeSpammingPeer(remote)
+        }
       } else {
         log.info(s"Spam attempt: peer $remote has sent a non-requested modifiers of type $typeId with ids" +
           s": ${spam.keys.map(encoder.encodeId)}")
@@ -503,7 +512,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             if (!settings.nodeSettings.stateType.requireProofs &&
               history.isHeadersChainSynced &&
               history.fullBlockHeight == history.headersHeight) {
-              invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
+              val unknownMods =
+                invData.ids.filter(mid => deliveryTracker.status(mid, mempool) == ModifiersStatus.Unknown)
+              // filter out transactions that were already applied to history
+              unknownMods.filterNot(blockAppliedTxsCache.mightContain)
             } else {
               Seq.empty
             }
@@ -733,8 +745,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // applied modifiers state was already changed at `SyntacticallySuccessfulModifier`
       cleared.foreach(m => deliveryTracker.setUnknown(m.id))
       requestMoreModifiers(applied)
-  }
 
+    case BlockAppliedTransactions(transactionIds: Seq[ModifierId]) =>
+      // We collect applied TXs in order to avoid banning peers that sent these afterwards
+      logger.info("Caching applied transactions")
+      blockAppliedTxsCache = blockAppliedTxsCache.putAll(transactionIds)
+  }
 
   override def receive: Receive =
     processDataFromPeer orElse

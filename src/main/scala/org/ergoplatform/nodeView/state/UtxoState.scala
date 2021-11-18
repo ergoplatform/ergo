@@ -194,6 +194,7 @@ object UtxoState {
   type Subtree = BatchAVLProverSubtree[Digest32]
 
   type ManifestId = Digest32
+  type SubtreeId = Digest32
 
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")

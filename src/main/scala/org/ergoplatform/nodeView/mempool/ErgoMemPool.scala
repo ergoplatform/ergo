@@ -31,8 +31,6 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
 
   private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
 
-  override type NVCT = ErgoMemPool
-
   override def size: Int = pool.size
 
   override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = pool.get(modifierId)
@@ -120,7 +118,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
               ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
               _ => acceptIfNoDoubleSpend(tx)
             )
-          case validator: TransactionValidation[ErgoTransaction@unchecked] =>
+          case validator: TransactionValidation =>
             // transaction validation currently works only for UtxoState, so this branch currently
             // will not be triggered probably
             validator.validate(tx).fold(

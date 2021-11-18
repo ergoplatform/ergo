@@ -4,6 +4,7 @@ import java.io.{File, PrintWriter}
 
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.interface4j.SecretString
 
 object ConfigGenerator extends App with ErgoTestHelpers {
 
@@ -23,8 +24,6 @@ object ConfigGenerator extends App with ErgoTestHelpers {
     dumpToFile(saveDirPath, cfgName, template(digestMode, mining, mnemonic, apiKeyHash, nodeName))
   }
 
-  sys.exit(0)
-
   private def dumpToFile(dir: String, cfgName: String, content: String): Unit = {
     new File(dir).mkdirs()
     val outWriter = new PrintWriter(new File(s"$dir/$cfgName"))
@@ -33,7 +32,7 @@ object ConfigGenerator extends App with ErgoTestHelpers {
   }
 
   private def template(digestMode: Boolean, mining: Boolean,
-                       mnemonic: String, apiKeyHash: String, nodeName: String): String =
+                       mnemonic: SecretString, apiKeyHash: String, nodeName: String): String =
     s"""
        |ergo.node.stateType = "${if (digestMode) "digest" else "utxo"}"
        |ergo.node.mining = ${if (mining) "true" else "false"}

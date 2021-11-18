@@ -1,12 +1,30 @@
 package org.ergoplatform.settings
 
+import scala.concurrent.duration.FiniteDuration
+
 /**
   * Configuration file for different caches
   *
   * @see src/main/resources/application.conf for parameters description
   */
-case class CacheSettings(modifiersCacheSize: Int, indexesCacheSize: Int)
+case class CacheSettings(
+  history: HistoryCacheSettings,
+  network: NetworkCacheSettings,
+  mempool: MempoolCacheSettings
+)
 
-object CacheSettings {
-  val default: CacheSettings = CacheSettings(100, 1000)
-}
+case class HistoryCacheSettings(modifiersCacheSize: Int, indexesCacheSize: Int)
+
+case class NetworkCacheSettings(
+  invalidModifiersBloomFilterCapacity: Int,
+  invalidModifiersBloomFilterExpirationRate: Double,
+  invalidModifiersCacheSize: Int,
+  invalidModifiersCacheExpiration: FiniteDuration
+)
+
+case class MempoolCacheSettings(
+  invalidModifiersBloomFilterCapacity: Int,
+  invalidModifiersBloomFilterExpirationRate: Double,
+  invalidModifiersCacheSize: Int,
+  invalidModifiersCacheExpiration: FiniteDuration
+)

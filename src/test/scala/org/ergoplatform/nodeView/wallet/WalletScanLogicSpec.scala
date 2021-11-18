@@ -1,8 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
-import org.ergoplatform.settings.LaunchParameters
 import org.ergoplatform.utils.{ErgoPropertyTest, WalletTestOps}
-import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
@@ -30,7 +28,6 @@ class WalletScanLogicSpec extends ErgoPropertyTest with DBSpec with WalletTestOp
     def valuesSum: Long = (paymentValues ++ appPaymentValues ++ miningRewardValues).sum
   }
 
-  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(LaunchParameters)
   private val prover = defaultProver
   private val monetarySettings = initSettings.chainSettings.monetary.copy(minerRewardDelay = 720)
   private val s = initSettings.copy(chainSettings = initSettings.chainSettings.copy(monetary = monetarySettings))

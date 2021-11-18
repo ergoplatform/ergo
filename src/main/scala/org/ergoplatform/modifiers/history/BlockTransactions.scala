@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSeria
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import org.ergoplatform.settings.{Algos, Constants}
 import scorex.core._
-import scorex.core.block.Block.Version
+import org.ergoplatform.modifiers.history.header.Header.Version
 import scorex.core.serialization.ScorexSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.{Leaf, MerkleProof, MerkleTree}
@@ -31,7 +31,7 @@ case class BlockTransactions(headerId: ModifierId,
                              blockVersion: Version,
                              txs: Seq[ErgoTransaction],
                              override val sizeOpt: Option[Int] = None)
-  extends BlockSection with TransactionsCarryingPersistentNodeViewModifier[ErgoTransaction] {
+  extends BlockSection with TransactionsCarryingPersistentNodeViewModifier {
 
   assert(txs.nonEmpty, "Block should always contain at least 1 coinbase-like transaction")
 

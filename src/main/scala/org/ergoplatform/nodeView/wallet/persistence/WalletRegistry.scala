@@ -159,9 +159,9 @@ class WalletRegistry(store: LDBVersionedStore)(ws: WalletSettings) extends Score
     * @param heightTo - height to finish at (inclusive)
     * @return - wallet transactions for the heights range provided
     */
-  def walletTxsBetween(heightFrom: Height, heightTo: Height): Seq[WalletTransaction] = {
-    val firstKey = firstIncludedScanTransactionSpaceKey(Constants.PaymentsScanId, heightFrom)
-    val lastKey = lastIncludedScanTransactionSpaceKey(Constants.PaymentsScanId, heightTo)
+  def walletTxsBetween(scanId: ScanId, heightFrom: Height, heightTo: Height): Seq[WalletTransaction] = {
+    val firstKey = firstIncludedScanTransactionSpaceKey(scanId, heightFrom)
+    val lastKey = lastIncludedScanTransactionSpaceKey(scanId, heightTo)
 
     // Get wallet transactions from heightFrom (inclusive) to heightTo (inclusive)
     val range = store.getRange(firstKey, lastKey)
@@ -489,11 +489,13 @@ object WalletRegistry {
   private def lastSpentScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(SpentIndexPrefix, scanId, -1)
 
+/*
   private def firstIncludedScanBoxSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
     composeKey(UnspentIndexPrefix, scanId, height, 0)
 
   private def lastIncludedScanBoxSpaceKey(scanId: ScanId): Array[Byte] =
     composeKey(UnspentIndexPrefix, scanId, Int.MaxValue, -1)
+*/
 
   private def firstIncludedScanTransactionSpaceKey(scanId: ScanId, height: Int): Array[Byte] =
     composeKey(InclusionHeightScanTxPrefix, scanId, height)
@@ -593,7 +595,7 @@ object WalletRegistry {
 
   private[persistence] def putDigest(bag: KeyValuePairsBag, digest: WalletDigest): KeyValuePairsBag = {
     val registryBytes = WalletDigestSerializer.toBytes(digest)
-    bag.copy(toInsert = bag.toInsert :+ (RegistrySummaryKey, registryBytes))
+    bag.copy(toInsert = bag.toInsert :+ RegistrySummaryKey -> registryBytes)
   }
 }
 

@@ -18,7 +18,7 @@ import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoScriptPredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
-import scorex.core.network.NodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
 
@@ -28,8 +28,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
 
   implicit private val timeout: Timeout = defaultTimeout
 
-  private val newBlockSignal: Class[SemanticallySuccessfulModifier[_]] =
-    classOf[SemanticallySuccessfulModifier[_]]
+  private val newBlockSignal: Class[SemanticallySuccessfulModifier] =
+    classOf[SemanticallySuccessfulModifier]
   private val newBlockDelay: FiniteDuration        = 30.seconds
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
@@ -184,10 +184,22 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
+        // let's pretend we are mining at least a bit so it is realistic
+        expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
+
+        // we fish either for ack or SSM as the order is non-deterministic
+        testProbe.fishForMessage(blockValidationDelay) {
+          case StatusReply.Success(()) =>
+            testProbe.expectMsgPF(candidateGenDelay) {
+              case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            }
+            true
+          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            testProbe.expectMsg(StatusReply.Success(()))
+            true
+        }
     }
-    testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal) // new block applied
 
     // build new transaction that uses miner's reward as input
     val prop: DLogProtocol.ProveDlog =
@@ -210,6 +222,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         .get
     )
 
+    testProbe.expectNoMessage(200.millis)
     // mine a block with that transaction
     candidateGenerator.tell(GenerateCandidate(Seq(tx), reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
@@ -217,18 +230,20 @@ class CandidateGeneratorSpec extends AnyFlatSpec with ErgoTestHelpers with Event
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
-        // let's pretend we are mining at least a bit so it is realistic
-        expectNoMessage(200.millis)
+        testProbe.expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
-    }
-    // we fish either for ack or SSM as the order is non-deterministic
-    testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(())           => true
-      case SemanticallySuccessfulModifier(_) => false
-    }
-    testProbe.fishForMessage(newBlockDelay) {
-      case StatusReply.Success(())           => false
-      case SemanticallySuccessfulModifier(_) => true
+
+        // we fish either for ack or SSM as the order is non-deterministic
+        testProbe.fishForMessage(blockValidationDelay) {
+          case StatusReply.Success(()) =>
+            testProbe.expectMsgPF(candidateGenDelay) {
+              case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            }
+            true
+          case SemanticallySuccessfulModifier(mod: ErgoFullBlock) if mod.id != block.header.parentId =>
+            testProbe.expectMsg(StatusReply.Success(()))
+            true
+        }
     }
 
     // new transaction should be cleared from pool after applying new block

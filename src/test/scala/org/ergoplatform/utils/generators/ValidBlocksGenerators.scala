@@ -12,18 +12,18 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, LaunchParameters}
 import org.ergoplatform.utils.LoggingUtil
+import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalatest.matchers.should.Matchers
 import scorex.core.VersionTag
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.db.ByteArrayWrapper
 import scorex.testkit.TestkitHelpers
-import scorex.testkit.utils.FileUtils
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Random, Success, Try}
 
 trait ValidBlocksGenerators
-  extends TestkitHelpers with FileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
+  extends TestkitHelpers with TestFileUtils with Matchers with ChainGenerator with ErgoTransactionGenerators {
 
   def createUtxoState(nodeViewHolderRef: Option[ActorRef] = None): (UtxoState, BoxHolder) = {
     val constants = StateConstants(nodeViewHolderRef, settings)
@@ -142,7 +142,7 @@ trait ValidBlocksGenerators
     val (_, bhWithoutGenesis) = boxHolderWithoutEmission.take(b => genesisBoxes.contains(b))
     val (regularBoxes, drainedBh) = bhWithoutGenesis.take(rnd.nextInt(txSizeLimit / 100) + 1)
     val boxes = emissionBox ++ regularBoxes
-    val dataBoxes: Seq[ErgoBox] = Random.shuffle(boxHolder.boxes).take(rnd.nextInt(txSizeLimit / 100)).map(_._2).toSeq
+    val dataBoxes: Seq[ErgoBox] = Random.shuffle(boxHolder.boxes.values).take(rnd.nextInt(txSizeLimit / 100)).toSeq
 
     assert(boxes.nonEmpty, s"Was unable to take at least 1 box from box holder $boxHolder")
     val (txs, createdBoxes) = validTransactionsFromBoxes(txSizeLimit, boxes, dataBoxes, rnd)

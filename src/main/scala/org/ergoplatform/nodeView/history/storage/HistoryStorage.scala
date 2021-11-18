@@ -25,13 +25,16 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, config: C
 
   // in-memory cache for modifiers
   private val modifiersCache = CacheBuilder.newBuilder()
-    .maximumSize(config.modifiersCacheSize)
+    .maximumSize(config.history.modifiersCacheSize)
     .build[ModifierId, ErgoPersistentModifier]
 
   // in-memory cache for indexes
   private val indexCache = CacheBuilder.newBuilder()
-    .maximumSize(config.indexesCacheSize)
+    .maximumSize(config.history.indexesCacheSize)
     .build[ByteArrayWrapper, Array[Byte]]
+
+  def modifierBytesById(id: ModifierId): Option[Array[Byte]] =
+    objectsStore.get(idToBytes(id))
 
   def modifierById(id: ModifierId): Option[ErgoPersistentModifier] =
     Option(modifiersCache.getIfPresent(id)) orElse

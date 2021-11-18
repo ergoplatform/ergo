@@ -43,7 +43,6 @@ trait ErgoHistory
   extends History[ErgoPersistentModifier, ErgoSyncInfo, ErgoHistory]
     with ErgoHistoryReader {
 
-  override type NVCT = ErgoHistory
   override protected lazy val requireProofs: Boolean = nodeSettings.stateType.requireProofs
 
   def closeStorage(): Unit = historyStorage.close()
@@ -166,7 +165,8 @@ trait ErgoHistory
             }
         }
       case None =>
-        //No headers become invalid. Just valid this modifier as invalid
+        //No headers become invalid. Just mark this modifier as invalid
+        log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is missing corresponding header")
         historyStorage.insert(
           Seq(validityKey(modifier.id) -> Array(0.toByte)),
           Seq.empty).map { _ =>

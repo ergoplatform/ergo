@@ -438,7 +438,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
       val genesisBlock = makeGenesisBlock(address.pubkey, randomNewAsset)
       applyBlock(genesisBlock) shouldBe 'success
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 300.millis)
-      val (spendingTx, confirmedBalance, balanceToSpend, balanceToReturn, assets, spendingBlock) =
+      val (confirmedBalance, balanceToSpend, balanceToReturn, assets, spendingBlock) =
         eventually {
           val confirmedBalance = getConfirmedBalances.walletBalance
           val boxesToSpend = boxesAvailable(genesisBlock, address.pubkey)
@@ -455,7 +455,7 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
           assets should not be empty
           val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
           applyBlock(spendingBlock) shouldBe 'success
-          (spendingTx, confirmedBalance, balanceToSpend, balanceToReturn, assets, spendingBlock)
+          (confirmedBalance, balanceToSpend, balanceToReturn, assets, spendingBlock)
         }
       wallet.scanPersistent(spendingBlock)
       eventually {
@@ -902,7 +902,6 @@ class ErgoWalletSpec extends ErgoPropertyTest with WalletTestOps with Eventually
       val es2 = ExternalSecret(PrimitiveSecretKey(secret2))
 
       val secret3 = DLogProverInput.random()
-      val es3 = ExternalSecret(PrimitiveSecretKey(secret3))
 
       val pubKey = getPublicKeys.head.pubkey
       val genesisBlock = makeGenesisBlock(pubKey, randomNewAsset)

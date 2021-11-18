@@ -28,7 +28,7 @@ case class NipopowProofModifier(proof: NipopowProof, override val sizeOpt: Optio
 
   override type M = NipopowProofModifier
 
-  override lazy val serializer: ScorexSerializer[NipopowProofModifier] = throw new Error("PoPow proofs serialization not supported")
+  override def serializer: ScorexSerializer[NipopowProofModifier] = throw new Error("PoPow proofs serialization not supported")
 
   override def compare(that: NipopowProofModifier): Int = ???
 

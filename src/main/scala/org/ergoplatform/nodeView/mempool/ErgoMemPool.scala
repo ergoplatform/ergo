@@ -31,8 +31,6 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
 
   private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
 
-  override type NVCT = ErgoMemPool
-
   override def size: Int = pool.size
 
   override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = pool.get(modifierId)

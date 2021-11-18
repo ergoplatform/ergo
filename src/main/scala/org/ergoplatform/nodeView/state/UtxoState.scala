@@ -99,6 +99,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   }
 
   private def saveSnapshotIfNeeded(height: Height, estimatedTip: Option[Height]): Unit = {
+
+    val snapshotsDb = SnapshotsDb.create(constants.settings) //todo: move out (to constants?)
+
     val SnapshotEvery = 10 // test value, switch to 51840 after testing
 
     if (estimatedTip.nonEmpty &&
@@ -112,6 +115,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       println("manifest size: " + manifestBytes.length)
       println("subtrees count: " + subtrees.size)
       // todo: save manifest and subtrees into a database
+
+      val ms0 = System.currentTimeMillis()
+      snapshotsDb.writeSnapshot(height, manifest, subtrees)
+      val ms = System.currentTimeMillis()
+      println("Time to dump utxo set snapshot: " + (ms - ms0))
 
       if (UtxoState.prevManifest != null) {
         val prevSubtrees = UtxoState.prevManifest.subtreesIds.map(Base16.encode).toSet

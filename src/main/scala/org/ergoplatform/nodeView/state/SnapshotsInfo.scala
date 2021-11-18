@@ -76,7 +76,7 @@ class SnapshotsDb(store: LDBKVStore) {
 
 object SnapshotsDb {
 
-  def create(ergoSettings: ErgoSettings): Unit = {
+  def create(ergoSettings: ErgoSettings): SnapshotsDb = {
     val dir = s"${ergoSettings.directory}/snapshots"
     create(dir)
   }

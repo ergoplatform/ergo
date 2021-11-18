@@ -170,7 +170,7 @@ class CandidateGeneratorPropSpec extends ErgoPropertyTest {
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
       val costs: Seq[Long] = fromBigMempool.map { tx =>
-        us.validateWithCost(tx, Some(upcomingContext), Int.MaxValue).getOrElse {
+        us.validateWithCost(tx, Some(upcomingContext), Int.MaxValue, Int.MaxValue).getOrElse {
           val boxesToSpend =
             tx.inputs.map(i => newBoxes.find(b => b.id sameElements i.boxId).get)
           tx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext).get

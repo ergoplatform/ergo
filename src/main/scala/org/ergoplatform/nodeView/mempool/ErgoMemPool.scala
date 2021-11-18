@@ -5,7 +5,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
-import org.ergoplatform.settings.{ErgoSettings, MonetarySettings}
+import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import scorex.core.transaction.MemoryPool
 import scorex.core.transaction.state.TransactionValidation
 import scorex.util.{ModifierId, bytesToId}
@@ -29,6 +29,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
   import ErgoMemPool._
   import EmissionRules.CoinsInOneErgo
 
+  private val nodeSettings: NodeConfigurationSettings = settings.nodeSettings
   private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
 
   override def size: Int = pool.size
@@ -114,7 +115,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
         state match {
           case utxo: UtxoState =>
             // Allow proceeded transaction to spend outputs of pooled transactions.
-            utxo.withTransactions(getAll).validate(tx).fold(
+            utxo.withTransactions(getAll).validateWithCost(tx, None, nodeSettings.maxTransactionComplexity, nodeSettings.maxTransactionCost).fold(
               ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
               _ => acceptIfNoDoubleSpend(tx)
             )

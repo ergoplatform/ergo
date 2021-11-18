@@ -35,6 +35,7 @@ import scorex.core.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.peer.PenaltyType
+import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.core.transaction.wallet.VaultReader
 
 import scala.annotation.tailrec
@@ -699,10 +700,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.setHeld(tx.id)
       broadcastModifierInv(tx)
 
-    case FailedTransaction(id, _, immediateFailure) =>
-      val senderOpt = deliveryTracker.setInvalid(id)
-      // penalize sender only in case transaction was invalidated at first validation.
-      if (immediateFailure) senderOpt.foreach(penalizeMisbehavingPeer)
+    case FailedTransaction(id, error, immediateFailure) =>
+      if (immediateFailure) {
+        // penalize sender only in case transaction was invalidated at first validation.
+        deliveryTracker.setInvalid(id).foreach { peer =>
+          error match {
+            case TooHighCostError(_) =>
+              penalizeSpammingPeer(peer)
+            case _ =>
+              penalizeMisbehavingPeer(peer)
+          }
+        }
+      }
 
     case SyntacticallySuccessfulModifier(mod) =>
       deliveryTracker.setHeld(mod.id)

@@ -15,6 +15,11 @@ trait TransactionValidation extends StateFeature {
   def validate(tx: ErgoTransaction): Try[Unit]
 }
 
+object TransactionValidation {
+  case class TooHighComplexityError(message: String) extends Exception(message)
+  case class TooHighCostError(message: String) extends Exception(message)
+}
+
 trait ModifierValidation[M <: PersistentNodeViewModifier] extends StateFeature {
   def validate(mod: M): Try[Unit]
 }

@@ -695,6 +695,7 @@ object CandidateGenerator extends ScorexLogging {
       def current: Seq[ErgoTransaction] = (acc ++ lastFeeTx).map(_._1)
 
       val stateWithTxs = us.withTransactions(current)
+      val maxTransactionCost = us.stateContext.ergoSettings.nodeSettings.maxTransactionCost
 
       mempoolTxs.headOption match {
         case Some(tx) =>
@@ -710,7 +711,8 @@ object CandidateGenerator extends ScorexLogging {
             stateWithTxs.validateWithCost(
               tx,
               Some(upcomingContext),
-              maxTransactionComplexity
+              maxTransactionComplexity,
+              maxTransactionCost
             ) match {
               case Success(costConsumed) =>
                 val newTxs   = acc :+ (tx -> costConsumed)

@@ -10,6 +10,7 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
+import scorex.core.transaction.state.TransactionValidation.{TooHighComplexityError, TooHighCostError}
 import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -33,19 +34,26 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     */
   def validateWithCost(tx: ErgoTransaction,
                        stateContextOpt: Option[ErgoStateContext],
-                       complexityLimit: Int): Try[Long] = {
+                       complexityLimit: Int,
+                       costLimit: Int): Try[Long] = {
     val verifier = ErgoInterpreter(stateContext.currentParameters)
     val context = stateContextOpt.getOrElse(stateContext)
     tx.statelessValidity().flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
       val txComplexity = boxesToSpend.map(_.ergoTree.complexity).sum
       if (txComplexity > complexityLimit) {
-        throw new Exception(s"Transaction $tx has too high complexity $txComplexity")
+        Failure(TooHighComplexityError(s"Transaction $tx has too high complexity $txComplexity"))
+      } else {
+        tx.statefulValidity(
+          boxesToSpend,
+          tx.dataInputs.flatMap(i => boxById(i.boxId)),
+          context)(verifier).flatMap {
+            case txCost if txCost > costLimit =>
+              Failure(TooHighCostError(s"Transaction $tx has too high cost $txCost"))
+            case txCost =>
+              Success(txCost)
+        }
       }
-      tx.statefulValidity(
-        boxesToSpend,
-        tx.dataInputs.flatMap(i => boxById(i.boxId)),
-        context)(verifier)
     }
   }
 
@@ -55,7 +63,8 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     * as soon as state (both UTXO set and state context) will change.
     *
     */
-  override def validate(tx: ErgoTransaction): Try[Unit] = validateWithCost(tx, None, Int.MaxValue).map(_ => Unit)
+  override def validate(tx: ErgoTransaction): Try[Unit] =
+    validateWithCost(tx, None, Int.MaxValue, Int.MaxValue).map(_ => Unit)
 
   /**
     *

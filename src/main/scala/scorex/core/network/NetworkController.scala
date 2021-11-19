@@ -241,7 +241,7 @@ class NetworkController(settings: NetworkSettings,
     * It is needed to prevent eclipsing (https://www.usenix.org/system/files/conference/usenixsecurity15/sec15-paper-heilman.pdf)
     */
   private def scheduleEvictRandomConnections(): Unit = {
-   context.system.scheduler.scheduleWithFixedDelay(settings.peerEvictInterval, settings.peerEvictInterval) {
+   context.system.scheduler.scheduleWithFixedDelay(settings.peerEvictionInterval, settings.peerEvictionInterval) {
      () =>
        val connectedPeers = connections.values.filter(_.peerInfo.nonEmpty).toSeq
        if (!connectedPeers.isEmpty) {

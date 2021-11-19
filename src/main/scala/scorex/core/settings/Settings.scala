@@ -51,7 +51,7 @@ case class NetworkSettings(nodeName: String,
                            temporalBanDuration: FiniteDuration,
                            penaltySafeInterval: FiniteDuration,
                            penaltyScoreThreshold: Int,
-                           peerEvictInterval: FiniteDuration)
+                           peerEvictionInterval: FiniteDuration)
 
 case class ScorexSettings(dataDir: File,
                           logDir: File,

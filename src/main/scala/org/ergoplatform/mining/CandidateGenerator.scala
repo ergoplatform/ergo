@@ -168,12 +168,12 @@ class CandidateGenerator(
           txsToInclude,
           ergoSettings
         ) match {
-          case Some(Failure(ex)) =>
+          case Failure(ex) =>
             log.error(s"Candidate generation failed", ex)
             senderOpt.foreach(
               _ ! StatusReply.error(s"Candidate generation failed : ${ex.getMessage}")
             )
-          case Some(Success((candidate, eliminatedTxs))) =>
+          case Success(Some((candidate, eliminatedTxs))) =>
             if (eliminatedTxs.ids.nonEmpty) viewHolderRef ! eliminatedTxs
             val generationTook = System.currentTimeMillis() - start
             log.info(s"Generated new candidate in $generationTook ms")
@@ -186,9 +186,9 @@ class CandidateGenerator(
               )
             )
             senderOpt.foreach(_ ! StatusReply.success(candidate))
-          case None =>
-            log.warn(
-              "Can not generate block candidate: either mempool is empty or chain is not synced (maybe last block not fully applied yet"
+          case Success(None) =>
+            log.info(
+              "Postponing candidate generation: either mempool is empty or chain is not synced (maybe last block not fully applied yet)"
             )
             senderOpt.foreach { s =>
               context.system.scheduler.scheduleOnce(state.avgGenTime, self, gen)(
@@ -373,7 +373,7 @@ object CandidateGenerator extends ScorexLogging {
     pk: ProveDlog,
     txsToInclude: Seq[ErgoTransaction],
     ergoSettings: ErgoSettings
-  ): Option[Try[(Candidate, EliminateTransactions)]] = {
+  ): Try[Option[(Candidate, EliminateTransactions)]] = {
     //mandatory transactions to include into next block taken from the previous candidate
     lazy val unspentTxsToInclude = txsToInclude.filter { tx =>
       inputsNotSpent(tx, s)
@@ -393,26 +393,24 @@ object CandidateGenerator extends ScorexLogging {
 
     if (!hasAnyMemPoolOrMinerTx) {
       log.info(s"Avoiding generation of a block without any transactions")
-      None
+      Success(None)
     } else if (!chainSynced) {
       log.info(
         "Chain not synced probably due to racing condition when last block is not fully applied yet"
       )
-      None
+      Success(None)
     } else {
       val desiredUpdate = ergoSettings.votingTargets.desiredUpdate
-      Some(
-        createCandidate(
-          pk,
-          h,
-          desiredUpdate,
-          s,
-          timeProvider,
-          poolTransactions,
-          emissionTxOpt,
-          unspentTxsToInclude,
-          ergoSettings
-        )
+      createCandidate(
+        pk,
+        h,
+        desiredUpdate,
+        s,
+        timeProvider,
+        poolTransactions,
+        emissionTxOpt,
+        unspentTxsToInclude,
+        ergoSettings
       )
     }
   }
@@ -441,7 +439,7 @@ object CandidateGenerator extends ScorexLogging {
     emissionTxOpt: Option[ErgoTransaction],
     prioritizedTransactions: Seq[ErgoTransaction],
     ergoSettings: ErgoSettings
-  ): Try[(Candidate, EliminateTransactions)] =
+  ): Try[Option[(Candidate, EliminateTransactions)]] =
     Try {
       val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings.powScheme)
       // Extract best header and extension of a best block user their data for assembling a new block
@@ -531,77 +529,77 @@ object CandidateGenerator extends ScorexLogging {
       val eliminateTransactions = EliminateTransactions(toEliminate)
 
       if (txs.isEmpty) {
-        throw new IllegalArgumentException(
-          s"Proofs for 0 txs cannot be generated : emissionTxs: ${emissionTxs.size}, priorityTxs: ${prioritizedTransactions.size}, poolTxs: ${poolTxs.size}"
-        )
-      }
+        Success(Option.empty)
+      } else {
+        def deriveWorkMessage(block: CandidateBlock) =
+          ergoSettings.chainSettings.powScheme.deriveExternalCandidate(
+            block,
+            minerPk,
+            prioritizedTransactions.map(_.id)
+          )
 
-      def deriveWorkMessage(block: CandidateBlock) =
-        ergoSettings.chainSettings.powScheme.deriveExternalCandidate(
-          block,
-          minerPk,
-          prioritizedTransactions.map(_.id)
-        )
-
-      state.proofsForTransactions(txs) match {
-        case Success((adProof, adDigest)) =>
-          val candidate = CandidateBlock(
-            bestHeaderOpt,
-            version,
-            nBits,
-            adDigest,
-            adProof,
-            txs,
-            timestamp,
-            extensionCandidate,
-            votes
-          )
-          val ext = deriveWorkMessage(candidate)
-          log.info(s"New candidate with msg ${Base16.encode(ext.msg)} generated")
-          log.debug(
-            s"Got candidate block at height ${ErgoHistory.heightOf(candidate.parentOpt) + 1}" +
-            s" with ${candidate.transactions.size} transactions"
-          )
-          Success(
-            Candidate(candidate, ext, prioritizedTransactions) -> eliminateTransactions
-          )
-        case Failure(t: Throwable) =>
-          // We can not produce a block for some reason, so print out an error
-          // and collect only emission transaction if it exists.
-          // We consider that emission transaction is always valid.
-          emissionTxOpt match {
-            case Some(emissionTx) =>
-              log.error(
-                "Failed to produce proofs for transactions, but emission box is found: ",
-                t
-              )
-              val fallbackTxs = Seq(emissionTx)
-              state.proofsForTransactions(fallbackTxs).map {
-                case (adProof, adDigest) =>
-                  val candidate = CandidateBlock(
-                    bestHeaderOpt,
-                    version,
-                    nBits,
-                    adDigest,
-                    adProof,
-                    fallbackTxs,
-                    timestamp,
-                    extensionCandidate,
-                    votes
-                  )
-                  Candidate(
-                    candidate,
-                    deriveWorkMessage(candidate),
-                    prioritizedTransactions
-                  ) -> eliminateTransactions
-              }
-            case None =>
-              log.error(
-                "Failed to produce proofs for transactions and no emission box available: ",
-                t
-              )
-              Failure(t)
-          }
+        state.proofsForTransactions(txs) match {
+          case Success((adProof, adDigest)) =>
+            val candidate = CandidateBlock(
+              bestHeaderOpt,
+              version,
+              nBits,
+              adDigest,
+              adProof,
+              txs,
+              timestamp,
+              extensionCandidate,
+              votes
+            )
+            val ext = deriveWorkMessage(candidate)
+            log.info(s"New candidate with msg ${Base16.encode(ext.msg)} generated")
+            log.debug(
+              s"Got candidate block at height ${ErgoHistory.heightOf(candidate.parentOpt) + 1}" +
+              s" with ${candidate.transactions.size} transactions"
+            )
+            Success(
+              Option(Candidate(candidate, ext, prioritizedTransactions) -> eliminateTransactions)
+            )
+          case Failure(t: Throwable) =>
+            // We can not produce a block for some reason, so print out an error
+            // and collect only emission transaction if it exists.
+            // We consider that emission transaction is always valid.
+            emissionTxOpt match {
+              case Some(emissionTx) =>
+                log.error(
+                  "Failed to produce proofs for transactions, but emission box is found: ",
+                  t
+                )
+                val fallbackTxs = Seq(emissionTx)
+                state.proofsForTransactions(fallbackTxs).map {
+                  case (adProof, adDigest) =>
+                    val candidate = CandidateBlock(
+                      bestHeaderOpt,
+                      version,
+                      nBits,
+                      adDigest,
+                      adProof,
+                      fallbackTxs,
+                      timestamp,
+                      extensionCandidate,
+                      votes
+                    )
+                    Option(
+                      Candidate(
+                        candidate,
+                        deriveWorkMessage(candidate),
+                        prioritizedTransactions
+                      ) -> eliminateTransactions
+                    )
+                }
+              case None =>
+                log.error(
+                  "Failed to produce proofs for transactions and no emission box available: ",
+                  t
+                )
+                Failure(t)
+            }
+        }
       }
     }.flatten
 

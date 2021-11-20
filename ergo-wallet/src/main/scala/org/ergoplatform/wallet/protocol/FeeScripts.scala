@@ -39,7 +39,5 @@ object FeeScripts extends App {
   val trueFeeScriptV1Bytes = trueFeeScriptV1.bytes
   val compilerV0Bytes = compilerV0.bytes
 
-  def isFeeBox(b: ErgoBox) = {
-
-  }
+  def isFeeBox(b: ErgoBox) = ???
 }

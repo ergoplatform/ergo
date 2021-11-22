@@ -12,15 +12,13 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.db.LDBKVStore
-import scorex.testkit.utils.FileUtils
 
 class WalletStorageSpec
   extends AnyFlatSpec
     with Matchers
     with WalletGenerators
     with ScalaCheckPropertyChecks
-    with DBSpec
-    with FileUtils {
+    with DBSpec {
 
   private implicit val addressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)
@@ -49,7 +47,7 @@ class WalletStorageSpec
     forAll(extendedPubKeyListGen) { pubKeys =>
       withStore { store =>
         val storage = new WalletStorage(store, settings)
-        pubKeys.foreach(storage.addKey(_).get)
+        pubKeys.foreach(storage.addPublicKeys(_).get)
         val keysRead = storage.readAllKeys()
         keysRead.length shouldBe pubKeys.length
         keysRead should contain theSameElementsAs pubKeys.toSet

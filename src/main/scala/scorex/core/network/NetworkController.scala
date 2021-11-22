@@ -1,7 +1,6 @@
 package scorex.core.network
 
 import java.net._
-
 import akka.actor._
 import akka.io.Tcp._
 import akka.io.{IO, Tcp}
@@ -20,7 +19,7 @@ import scorex.util.ScorexLogging
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import scala.util.Try
+import scala.util.{Random, Try}
 
 /**
   * Control all network interaction
@@ -86,6 +85,7 @@ class NetworkController(settings: NetworkSettings,
       log.info("Successfully bound to the port " + settings.bindAddress.getPort)
       scheduleConnectionToPeer()
       scheduleDroppingDeadConnections()
+      scheduleEvictRandomConnections()
 
     case CommandFailed(_: Bind) =>
       log.error("Network port " + settings.bindAddress.getPort + " already in use!")
@@ -160,6 +160,8 @@ class NetworkController(settings: NetworkSettings,
       handlerRef ! Close
 
     case Handshaked(connectedPeer) =>
+      val now = networkTime()
+      lastIncomingMessageTime = now
       handleHandshake(connectedPeer, sender())
 
     case f@CommandFailed(c: Connect) =>
@@ -171,7 +173,9 @@ class NetworkController(settings: NetworkSettings,
 
       // If a message received from p2p within connection timeout,
       // connectivity is not lost thus we're removing the peer
-      if (networkTime() - lastIncomingMessageTime < settings.connectionTimeout.toMillis) {
+      // we add multiplier 6 to remove more dead peers (and still not dropping a lot when connectivity lost)
+      val noNetworkMessagesFor = networkTime() - lastIncomingMessageTime
+      if (noNetworkMessagesFor < settings.connectionTimeout.toMillis * 6) {
         peerManagerRef ! RemovePeer(c.remoteAddress)
       }
 
@@ -233,6 +237,23 @@ class NetworkController(settings: NetworkSettings,
   }
 
   /**
+    * Schedule a periodic eviction of random connection.
+    * It is needed to prevent eclipsing (https://www.usenix.org/system/files/conference/usenixsecurity15/sec15-paper-heilman.pdf)
+    */
+  private def scheduleEvictRandomConnections(): Unit = {
+   context.system.scheduler.scheduleWithFixedDelay(settings.peerEvictionInterval, settings.peerEvictionInterval) {
+     () =>
+       val connectedPeers = connections.values.filter(_.peerInfo.nonEmpty).toSeq
+       if (!connectedPeers.isEmpty) {
+         val victim = Random.nextInt(connectedPeers.size)
+         val cp = connectedPeers(victim)
+         log.info(s"Evict connection to ${cp.peerInfo}")
+         cp.handlerRef ! CloseConnection
+       }
+    }
+  }
+
+    /**
     * Schedule a periodic dropping of connections which seem to be inactive
     */
   private def scheduleDroppingDeadConnections(): Unit = {

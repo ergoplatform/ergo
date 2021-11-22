@@ -156,9 +156,15 @@ class ErgoTransactionSpec extends ErgoPropertyTest {
     }
   }
 
-  property("impossible to create an asset of non-positive amount") {
+  property("impossible to create an asset of negative amount") {
     forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
       checkTx(from, updateAnAsset(tx, from, _ => -1)) shouldBe 'failure
+    }
+  }
+
+  property("impossible to create an asset of zero amount") {
+    forAll(validErgoTransactionWithAssetsGen) { case (from, tx) =>
+      checkTx(from, updateAnAsset(tx, from, _ => 0)) shouldBe 'failure
     }
   }
 

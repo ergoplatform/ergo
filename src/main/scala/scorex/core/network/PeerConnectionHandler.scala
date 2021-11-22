@@ -237,7 +237,7 @@ class PeerConnectionHandler(val settings: NetworkSettings,
     }
   }
 
-  private def createHandshakeMessage() = {
+  private def createHandshakeMessage(): Handshake = {
     Handshake(
       PeerSpec(
         settings.agentName,
@@ -256,10 +256,6 @@ object PeerConnectionHandler {
 
   object ReceivableMessages {
 
-    private[PeerConnectionHandler] object HandshakeDone
-
-    case object StartInteraction
-
     case object HandshakeTimeout
 
     case object CloseConnection
@@ -271,25 +267,22 @@ object PeerConnectionHandler {
 }
 
 object PeerConnectionHandlerRef {
+
   def props(settings: NetworkSettings,
             networkControllerRef: ActorRef,
             scorexContext: ScorexContext,
             connectionDescription: ConnectionDescription
-           )(implicit ec: ExecutionContext): Props =
+           )(implicit ec: ExecutionContext): Props = {
     Props(new PeerConnectionHandler(settings, networkControllerRef, scorexContext, connectionDescription))
-
-  def apply(settings: NetworkSettings,
-            networkControllerRef: ActorRef,
-            scorexContext: ScorexContext,
-            connectionDescription: ConnectionDescription)
-           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
-    system.actorOf(props(settings, networkControllerRef, scorexContext, connectionDescription))
+  }
 
   def apply(name: String,
             settings: NetworkSettings,
             networkControllerRef: ActorRef,
             scorexContext: ScorexContext,
             connectionDescription: ConnectionDescription)
-           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
+           (implicit system: ActorSystem, ec: ExecutionContext): ActorRef = {
     system.actorOf(props(settings, networkControllerRef, scorexContext, connectionDescription), name)
+  }
+
 }

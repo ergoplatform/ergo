@@ -14,8 +14,11 @@ trait ApiDirectives extends CorsHandler with ScorexEncoding {
     case None => reject(AuthorizationFailedRejection)
     case Some(key) =>
       val keyHashStr: String = encoder.encode(Blake2b256(key))
-      if (settings.apiKeyHash.contains(keyHashStr)) pass
-      else reject(AuthorizationFailedRejection)
+      if (settings.apiKeyHash.contains(keyHashStr)){
+        pass
+      } else{
+        reject(AuthorizationFailedRejection)
+      }
   }
 
 }

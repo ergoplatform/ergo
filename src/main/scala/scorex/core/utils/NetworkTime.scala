@@ -56,4 +56,5 @@ class NetworkTimeProvider(ntpSettings: NetworkTimeProviderSettings)(implicit ec:
       lastUpdate.compareAndSet(time, lu)
     }
   }
+
 }

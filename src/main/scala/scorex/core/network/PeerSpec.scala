@@ -30,8 +30,6 @@ case class PeerSpec(agentName: String,
     features.collectFirst { case LocalAddressPeerFeature(addr) => addr }
   }
 
-  def reachablePeer: Boolean = address.isDefined
-
   def address: Option[InetSocketAddress] = declaredAddress orElse localAddressOpt
 
 }

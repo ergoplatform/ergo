@@ -163,6 +163,47 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
   }
 
+  private def verifyAssets(validationBefore: ValidationState[Long],
+                           outAssets: Map[ByteArrayWrapper, Long],
+                           outAssetsNum: Int,
+                           boxesToSpend: IndexedSeq[ErgoBox],
+                           stateContext: ErgoStateContext): ValidationResult[Long] = {
+    // Cost limit per block
+    val maxCost = stateContext.currentParameters.maxBlockCost
+
+    ErgoTransaction.extractAssets(boxesToSpend) match {
+      case Success((inAssets, inAssetsNum)) =>
+        lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
+        val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
+        val currentTxCost = validationBefore.result.payload.get
+
+        // Cost of assets preservation rules checks.
+        // We iterate through all assets to create a map (cost: `(outAssetsNum + inAssetsNum) * tokenAccessCost)`)
+        // and after that we iterate through unique asset ids to check preservation rules (cost: `(inAssets.size + outAssets.size) * tokenAccessCost`)
+        val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
+          (inAssets.size + outAssets.size) * tokenAccessCost
+        val newCost = addExact(currentTxCost, totalAssetsAccessCost)
+
+        validationBefore
+          // Check that transaction is not too costly considering all the assets
+          .validate(bsBlockTransactionsCost, maxCost >= newCost, s"$id: assets cost")
+          .validateSeq(outAssets) {
+            case (validationState, (outAssetId, outAmount)) =>
+              val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
+
+              // Check that for each asset output amount is no more than input amount,
+              // with a possible exception for a new asset created by the transaction
+              validationState.validate(txAssetsPreservation,
+                inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0),
+                s"$id: Amount in = $inAmount, out = $outAmount. Allowed new asset = $newAssetId, out = $outAssetId")
+          }
+          .payload(newCost)
+      case Failure(e) =>
+        // should never be here as far as we've already checked this when we've created the box
+        ModifierValidator.fatal(e.getMessage)
+    }
+  }
+
   /**
     * Checks whether transaction is valid against input boxes to spend, and
     * non-spendable data inputs.
@@ -224,37 +265,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       // Check that transaction is not creating money out of thin air.
       .validate(txErgPreservation, inputSumTry == outputsSumTry, s"$id: $inputSumTry == $outputsSumTry")
       .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", e)) { case (validation, (outAssets, outAssetsNum)) =>
-        ErgoTransaction.extractAssets(boxesToSpend) match {
-          case Success((inAssets, inAssetsNum)) =>
-            lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
-            val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
-            val currentTxCost = validation.result.payload.get
-
-            // Cost of assets preservation rules checks.
-            // We iterate through all assets to create a map (cost: `(outAssetsNum + inAssetsNum) * tokenAccessCost)`)
-            // and after that we iterate through unique asset ids to check preservation rules (cost: `(inAssets.size + outAssets.size) * tokenAccessCost`)
-            val totalAssetsAccessCost = (outAssetsNum + inAssetsNum) * tokenAccessCost +
-              (inAssets.size + outAssets.size) * tokenAccessCost
-            val newCost = addExact(currentTxCost, totalAssetsAccessCost)
-
-            validation
-              // Check that transaction is not too costly considering all the assets
-              .validate(bsBlockTransactionsCost, maxCost >= newCost, s"$id: assets cost")
-              .validateSeq(outAssets) {
-                case (validationState, (outAssetId, outAmount)) =>
-                  val inAmount: Long = inAssets.getOrElse(outAssetId, -1L)
-
-                  // Check that for each asset output amount is no more than input amount,
-                  // with a possible exception for a new asset created by the transaction
-                  validationState.validate(txAssetsPreservation,
-                    inAmount >= outAmount || (outAssetId == newAssetId && outAmount > 0),
-                    s"$id: Amount in = $inAmount, out = $outAmount. Allowed new asset = $newAssetId, out = $outAssetId")
-              }
-              .payload(newCost)
-          case Failure(e) =>
-            // should never be here as far as we've already checked this when we've created the box
-            ModifierValidator.fatal(e.getMessage)
-        }
+        verifyAssets(validation, outAssets, outAssetsNum, boxesToSpend, stateContext)
       }
       // Check inputs, the most expensive check usually, so done last.
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>

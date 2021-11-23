@@ -229,7 +229,7 @@ trait HeadersProcessor extends ToDownloadProcessor with ScorexLogging with Score
       }
     }
 
-    if (bestHeaderIdOpt.isEmpty || (limit == 0)) {
+    if (bestHeaderIdOpt.isEmpty || (limit == 0) || (limit > startHeader.height)) {
       HeaderChain(ArrayBuffer.empty)
     } else {
       HeaderChain(loop(startHeader, ArrayBuffer.empty += startHeader).reverse)

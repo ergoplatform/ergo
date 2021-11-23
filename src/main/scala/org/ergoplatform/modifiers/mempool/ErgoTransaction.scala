@@ -4,9 +4,11 @@ import io.circe.syntax._
 import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiCodecs
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.nodeView.ErgoContext
 import org.ergoplatform.nodeView.state.ErgoStateContext
+import org.ergoplatform.reemission.Reemission
 import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
@@ -140,6 +142,30 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
 
     val currCost = addExact(currentTxCost, scriptCost)
+
+    import Reemission._
+
+    if (checkReemissionRules) {
+      if (box.value > 100000 * EmissionRules.CoinsInOneErgo) {
+        if(box.tokens.contains(EmissionNftId)) {
+          val reemissionTokensIn = box.tokens.getOrElse(ReemissionTokenId, 0L)
+          require(reemissionTokensIn > 0)
+
+          // positions guaranteed by emission contract
+          val emissionOut = outputCandidates(0)
+          val rewardsOut = outputCandidates(1)
+
+          val emissionTokensOut = emissionOut.tokens.getOrElse(ReemissionTokenId, 0L)
+          val rewardsTokensOut = rewardsOut.tokens.getOrElse(ReemissionTokenId, 0L)
+
+          require(emissionOut.tokens.contains(EmissionNftId))
+          require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut)
+
+          //val height = stateContext.currentHeight
+
+        }
+      }
+    }
 
     validationBefore
       // Check whether input box script interpreter raised exception

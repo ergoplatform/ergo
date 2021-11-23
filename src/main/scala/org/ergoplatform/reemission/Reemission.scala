@@ -1,6 +1,8 @@
 package org.ergoplatform.reemission
 
+import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.ErgoScriptPredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
+import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.{ErgoAddressEncoder, Height, MinerPubkey, Outputs, Self}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings}
 import scorex.util.ModifierId
@@ -8,19 +10,24 @@ import sigmastate.{AND, EQ, GE, GT, Minus, OR}
 import sigmastate.Values.{ErgoTree, IntConstant}
 import sigmastate.utxo.{ByIndex, ExtractAmount, ExtractScriptBytes}
 
-object Reemission {
 
-  val checkReemissionRules = true
+class Reemission(ms: MonetarySettings) {
+  import Reemission._
 
-  val EmissionNftId = ModifierId @@ ""
+  val emissionRules = new EmissionRules(ms)
 
-  val ReemissionTokenId = ModifierId @@ ""
+  def reemissionForHeight(height: Height): Long = {
+    val emission = emissionRules.emissionAtHeight(height)
+    if (height >= ActivationHeight && emission >= 15 * EmissionRules.CoinsInOneErgo) {
+      12 * EmissionRules.CoinsInOneErgo
+    } else if (emission > 3 * EmissionRules.CoinsInOneErgo) {
+      emission - 3 * EmissionRules.CoinsInOneErgo
+    } else {
+      0L
+    }
+  }
 
-  val ActivationHeight = 0
-
-  val emissionPeriod = 2080800
-
-  def reemissionBoxProp(s: MonetarySettings): ErgoTree = {
+  val reemissionBoxProp: ErgoTree = {
     // output of the reemission contract
     val reemissionOut = ByIndex(Outputs, IntConstant(0))
 
@@ -30,7 +37,7 @@ object Reemission {
     // miner's output must have script which is time-locking reward for miner's pubkey
     // box height must be the same as block height
     val correctMinerOutput = AND(
-      EQ(ExtractScriptBytes(minerOut), expectedMinerOutScriptBytesVal(s.minerRewardDelay, MinerPubkey)),
+      EQ(ExtractScriptBytes(minerOut), expectedMinerOutScriptBytesVal(ms.minerRewardDelay, MinerPubkey)),
       EQ(Height, boxCreationHeight(minerOut))
     )
 
@@ -47,7 +54,7 @@ object Reemission {
     val sameScriptRule = EQ(ExtractScriptBytes(Self), ExtractScriptBytes(reemissionOut))
 
     // miner's reward
-    val coinsToIssue = s.oneEpochReduction // 3 ERG
+    val coinsToIssue = ms.oneEpochReduction // 3 ERG
     val correctCoinsIssued = EQ(coinsToIssue, Minus(ExtractAmount(Self), ExtractAmount(reemissionOut)))
 
     val sponsored = GT(ExtractAmount(reemissionOut), ExtractAmount(Self))
@@ -67,13 +74,42 @@ object Reemission {
     ).toSigmaProp.treeWithSegregation
   }
 
+}
+
+
+object Reemission {
+
+  val checkReemissionRules = true
+
+  val EmissionNftId = ModifierId @@ ""
+
+  val ReemissionTokenId = ModifierId @@ ""
+
+  val ActivationHeight = 700000
+
+  val emissionPeriod = 2080800
+
   def main(args: Array[String]): Unit = {
     val settings = ErgoSettings.read()
     val ms = settings.chainSettings.monetary
     println("Monetary settings: " + ms)
-    val et = reemissionBoxProp(ms)
+    val reemission = new Reemission(ms)
+    val et = reemission.reemissionBoxProp
     val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
     println("p2s address: " + enc.fromProposition(et))
 
+    val total = (ActivationHeight to emissionPeriod).map{h =>
+      val e = reemission.emissionRules.emissionAtHeight(h)
+      val r = reemission.reemissionForHeight(h)
+      if(h % 65536 == 0) {
+        println(s"Emission at height $h : " + e / EmissionRules.CoinsInOneErgo)
+        println(s"Reemission at height $h : " + r / EmissionRules.CoinsInOneErgo)
+      }
+      r
+    }.sum / EmissionRules.CoinsInOneErgo
+
+    val totalBlocks = total / 2 // 2 erg per block
+    println("Total reemission: " + total + " ERG")
+    println("Total reemission is enough for: " + totalBlocks + " blocks (" + totalBlocks / 720.0 / 365.0 + " years")
   }
 }

@@ -100,13 +100,17 @@ object Reemission {
     val enc = new ErgoAddressEncoder(ErgoAddressEncoder.MainnetNetworkPrefix)
     println("p2s address: " + enc.fromProposition(et))
 
-    val total = (ActivationHeight to emissionPeriod).map{h =>
+    var lowSet = false
+
+    val total = (ActivationHeight to emissionPeriod).map { h =>
       val e = reemission.emissionRules.emissionAtHeight(h) / EmissionRules.CoinsInOneErgo
       val r = reemission.reemissionForHeight(h) / EmissionRules.CoinsInOneErgo
-      if(e - r == 3) {
+
+      if ((e - r) == 3 && !lowSet) {
         println("Start of low emission period: " + h)
+        lowSet = true
       }
-      if(h % 65536 == 0) {
+      if ((h % 65536 == 0) || h == ActivationHeight) {
         println(s"Emission at height $h : " + e)
         println(s"Reemission at height $h : " + r)
       }

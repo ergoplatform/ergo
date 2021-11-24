@@ -23,8 +23,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages.SemanticallySuccessfulModifier
-import sigmastate.SigmaAnd
-import sigmastate.Values.{ErgoTree, SigmaPropConstant}
+// import sigmastate.Values.{ErgoTree, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol
 import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.utxo.CostTable
@@ -56,75 +55,6 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with ValidBlocksGen
       verifyTransactions = true)
     val chainSettings = empty.chainSettings.copy(blockInterval = 2.seconds)
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
-  }
-
-  it should "not include too complex transactions" in new TestKit(ActorSystem()) {
-    val testProbe = new TestProbe(system)
-    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
-    val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
-    val complexScript: ErgoTree = (0 until 100).foldLeft(SigmaAnd(SigmaPropConstant(defaultMinerPk), SigmaPropConstant(defaultMinerPk))) { (l, _) =>
-      SigmaAnd(SigmaPropConstant(defaultMinerPk), l)
-    }
-    complexScript.complexity shouldBe 28077
-
-    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, timeProvider)
-    val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
-
-    val minerRef: ActorRef = ErgoMiner(
-      ergoSettings,
-      nodeViewHolderRef,
-      readersHolderRef,
-      timeProvider,
-      Some(defaultMinerSecret)
-    )
-    expectNoMessage(1 second)
-    val r: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
-
-    minerRef ! StartMining
-
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-
-    val boxToSpend: ErgoBox = r.h.bestFullBlockOpt.get.transactions.last.outputs.last
-    boxToSpend.propositionBytes shouldBe ErgoScriptPredef.rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk).bytes
-
-    val input = Input(boxToSpend.id, emptyProverResult)
-
-    // create transaction with output with complex proposition
-    val output = new ErgoBoxCandidate(boxToSpend.value / 10, complexScript, r.s.stateContext.currentHeight)
-    val outputs = (0 until 10).map(_ => output)
-    val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
-    val tx = defaultProver.sign(unsignedTx, IndexedSeq(boxToSpend), IndexedSeq(), r.s.stateContext).get
-    nodeViewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(tx))
-    expectNoMessage(1 seconds)
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
-
-    //check that tx is included into UTXO set
-    val state = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
-    tx.outputs.foreach(o => state.boxById(o.id).get shouldBe o)
-
-    // try to spend all the boxes with complex scripts
-    val complexInputs = tx.outputs.map(o => Input(o.id, emptyProverResult))
-    val complexOut = new ErgoBoxCandidate(tx.outputs.map(_.value).sum, complexScript, r.s.stateContext.currentHeight)
-    val unsignedComplexTx = new UnsignedErgoTransaction(complexInputs, IndexedSeq(), IndexedSeq(complexOut))
-    val complexTx = defaultProver.sign(unsignedComplexTx, tx.outputs, IndexedSeq(), r.s.stateContext).get
-    tx.outputs.map(_.ergoTree.complexity).sum should be > ergoSettings.nodeSettings.maxTransactionComplexity
-    // send complex transaction to the mempool
-    nodeViewHolderRef ! LocallyGeneratedTransaction(ErgoTransaction(complexTx))
-
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-
-    // complex tx was removed from mempool
-    expectNoMessage(1 second)
-    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
-    // complex tx was not included
-    val state2 = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
-    tx.outputs.foreach(o => state2.boxById(o.id) should not be None)
-    complexTx.outputs.foreach(o => state2.boxById(o.id) shouldBe None)
   }
 
   it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {

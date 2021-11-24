@@ -275,9 +275,8 @@ lazy val ergoWallet = (project in file("ergo-wallet"))
         Seq.empty
       else
         Seq("-release", "8") 
-      ) 
-  
-  )
+      )
+  ).dependsOn(avldb)
 
 lazy val It2Test = config("it2") extend (IntegrationTest, Test)
 configs(It2Test)

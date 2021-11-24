@@ -16,10 +16,12 @@ class Reemission(ms: MonetarySettings) {
 
   val emissionRules = new EmissionRules(ms)
 
+  val basicChargeAmount = 21 // in ERG
+
   def reemissionForHeight(height: Height): Long = {
     val emission = emissionRules.emissionAtHeight(height)
-    if (height >= ActivationHeight && emission >= 15 * EmissionRules.CoinsInOneErgo) {
-      12 * EmissionRules.CoinsInOneErgo
+    if (height >= ActivationHeight && emission >= (basicChargeAmount + 3) * EmissionRules.CoinsInOneErgo) {
+      basicChargeAmount * EmissionRules.CoinsInOneErgo
     } else if (emission > 3 * EmissionRules.CoinsInOneErgo) {
       emission - 3 * EmissionRules.CoinsInOneErgo
     } else {
@@ -108,7 +110,7 @@ object Reemission {
       r
     }.sum / EmissionRules.CoinsInOneErgo
 
-    val totalBlocks = total / 2 // 2 erg per block
+    val totalBlocks = total / 3 // 3 erg per block
     println("Total reemission: " + total + " ERG")
     println("Total reemission is enough for: " + totalBlocks + " blocks (" + totalBlocks / 720.0 / 365.0 + " years")
   }

@@ -101,14 +101,17 @@ object Reemission {
     println("p2s address: " + enc.fromProposition(et))
 
     val total = (ActivationHeight to emissionPeriod).map{h =>
-      val e = reemission.emissionRules.emissionAtHeight(h)
-      val r = reemission.reemissionForHeight(h)
+      val e = reemission.emissionRules.emissionAtHeight(h) / EmissionRules.CoinsInOneErgo
+      val r = reemission.reemissionForHeight(h) / EmissionRules.CoinsInOneErgo
+      if(e - r == 3) {
+        println("Start of low emission period: " + h)
+      }
       if(h % 65536 == 0) {
-        println(s"Emission at height $h : " + e / EmissionRules.CoinsInOneErgo)
-        println(s"Reemission at height $h : " + r / EmissionRules.CoinsInOneErgo)
+        println(s"Emission at height $h : " + e)
+        println(s"Reemission at height $h : " + r)
       }
       r
-    }.sum / EmissionRules.CoinsInOneErgo
+    }.sum
 
     val totalBlocks = total / 3 // 3 erg per block
     println("Total reemission: " + total + " ERG")

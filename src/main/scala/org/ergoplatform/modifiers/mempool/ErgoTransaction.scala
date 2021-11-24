@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.reemission.Reemission
 import org.ergoplatform.utils.ArithUtils._
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
+import org.ergoplatform.settings.{Algos, ErgoValidationSettings, MonetarySettings}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.EphemerealNodeViewModifier
@@ -143,6 +143,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     val currCost = addExact(currentTxCost, scriptCost)
 
+    // reemission logic below
     import Reemission._
 
     if (checkReemissionRules) {
@@ -161,9 +162,13 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           require(emissionOut.tokens.contains(EmissionNftId))
           require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut)
 
-          //val height = stateContext.currentHeight
-
+          val height = stateContext.currentHeight
+          val ms = stateContext.ergoSettings.chainSettings.monetary
+          val reemission = new Reemission(ms)
+          val properReemissionRewardPart = reemission.reemissionForHeight(height)
+          require(rewardsTokensOut == properReemissionRewardPart)
         }
+      } else if(box.tokens.contains(ReemissionTokenId)) {
       }
     }
 

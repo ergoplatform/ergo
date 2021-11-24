@@ -20,13 +20,14 @@ import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
 import scorex.core.validation.{ModifierValidator, ValidationState}
-import scorex.db.{ByteArrayUtils, ByteArrayWrapper}
+import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigmastate.serialization.ConstantStore
 import sigmastate.utils.{SigmaByteReader, SigmaByteWriter}
 import sigmastate.utxo.CostTable
 
+import java.nio.ByteBuffer
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -70,7 +71,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof))).tail
 
 
-  lazy val outAssetsTry: Try[(Map[ByteArrayWrapper, Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
+  lazy val outAssetsTry: Try[(Map[ByteBuffer, Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
 
   lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
@@ -172,7 +173,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", e)) { case (validation, (outAssets, outAssetsNum)) =>
         ErgoBoxAssetExtractor.extractAssets(boxesToSpend) match {
           case Success((inAssets, inAssetsNum)) =>
-            lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
+            lazy val newAssetId = ByteBuffer.wrap(inputs.head.boxId)
             val tokenAccessCost = stateContext.currentParameters.tokenAccessCost
             val currentTxCost = validation.result.payload.get
 

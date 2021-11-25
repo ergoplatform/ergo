@@ -9,8 +9,10 @@ import org.ergoplatform.wallet.Constants
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSerializer, BatchAVLProverSubtree}
 import scorex.crypto.hash.Digest32
 import scorex.db.{LDBFactory, LDBKVStore}
+import scorex.util.ScorexLogging
+import scorex.util.encode.Base16
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 case class SnapshotsInfo(availableManifests: Map[Height, ManifestId]) {
   def withNewManifest(height: Height, manifestId: ManifestId): SnapshotsInfo = {
@@ -22,7 +24,7 @@ object SnapshotsInfo {
   val empty = SnapshotsInfo(Map.empty)
 }
 
-class SnapshotsDb(store: LDBKVStore) {
+class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
   private val serializer = new BatchAVLProverSerializer[Digest32, HF]()(ErgoAlgos.hash)
 
@@ -51,6 +53,30 @@ class SnapshotsDb(store: LDBKVStore) {
 
   def readSnapshotsInfo: Option[SnapshotsInfo] = {
     store.get(snapshotInfoKey).map(snapshotsInfoFromBytes)
+  }
+
+  def pruneSnapshots(before: Height): Unit = {
+    log.info("Starting snapshots pruning")
+    readSnapshotsInfo.foreach { si =>
+      si.availableManifests.filterKeys(_ < before).foreach { case (h, manifestId) =>
+        log.info(s"Pruning snapshot at height $h")
+        val keysToRemove = store.get(manifestId) match {
+          case Some(manifestBytes) =>
+            serializer.manifestFromBytes(manifestBytes, Constants.ModifierIdLength) match {
+              case Success(m) =>
+                m.subtreesIds += manifestId
+              case Failure(e) =>
+                log.error(s"Can't parse manifest ${Base16.encode(manifestId)} :", e)
+                Seq.empty
+            }
+          case None =>
+            log.error(s"Manifest ${Base16.encode(manifestId)} not found:")
+            Seq.empty
+        }
+        store.remove(keysToRemove)
+      }
+    }
+    log.info("Snapshots pruning finished")
   }
 
   def writeSnapshot(height: Height,

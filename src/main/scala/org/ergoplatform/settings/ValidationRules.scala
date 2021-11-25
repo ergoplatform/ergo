@@ -246,6 +246,7 @@ object ValidationRules {
   val txBoxSize: Short = 120
   val txBoxPropositionSize: Short = 121
   val txNegHeight: Short = 122
+  val txReemission: Short = 123
 
   // header validation
   val hdrGenesisParent: Short = 200

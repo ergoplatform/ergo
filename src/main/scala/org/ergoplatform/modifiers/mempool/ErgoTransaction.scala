@@ -143,35 +143,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     val currCost = addExact(currentTxCost, scriptCost)
 
-    // reemission logic below
-    import Reemission._
-
-    if (checkReemissionRules) {
-      if (box.value > 100000 * EmissionRules.CoinsInOneErgo) {
-        if(box.tokens.contains(EmissionNftId)) {
-          val reemissionTokensIn = box.tokens.getOrElse(ReemissionTokenId, 0L)
-          require(reemissionTokensIn > 0)
-
-          // positions guaranteed by emission contract
-          val emissionOut = outputCandidates(0)
-          val rewardsOut = outputCandidates(1)
-
-          val emissionTokensOut = emissionOut.tokens.getOrElse(ReemissionTokenId, 0L)
-          val rewardsTokensOut = rewardsOut.tokens.getOrElse(ReemissionTokenId, 0L)
-
-          require(emissionOut.tokens.contains(EmissionNftId))
-          require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut)
-
-          val height = stateContext.currentHeight
-          val ms = stateContext.ergoSettings.chainSettings.monetary
-          val reemission = new Reemission(ms)
-          val properReemissionRewardPart = reemission.reemissionForHeight(height)
-          require(rewardsTokensOut == properReemissionRewardPart)
-        }
-      } else if(box.tokens.contains(ReemissionTokenId)) {
-      }
-    }
-
     validationBefore
       // Check whether input box script interpreter raised exception
       .validate(txScriptValidation, costTry.isSuccess && isCostValid, s"$id: #$inputIndex => $costTry")
@@ -233,6 +204,56 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         // should never be here as far as we've already checked this when we've created the box
         ModifierValidator.fatal(e.getMessage)
     }
+  }
+
+  def verifyReemission(boxesToSpend: IndexedSeq[ErgoBox],
+                       outputCandidates: Seq[ErgoBoxCandidate],
+                       stateContext: ErgoStateContext): Try[Unit] = Try {
+    // reemission logic below
+    import Reemission._
+
+    var reemissionSpending = false
+    boxesToSpend.foreach { box =>
+      if (box.value > 100000 * EmissionRules.CoinsInOneErgo) {
+        if (box.tokens.contains(EmissionNftId)) {
+          val reemissionTokensIn = box.tokens.getOrElse(ReemissionTokenId, 0L)
+          require(reemissionTokensIn > 0)
+
+          // positions guaranteed by emission contract
+          val emissionOut = outputCandidates(0)
+          val rewardsOut = outputCandidates(1)
+
+          val emissionTokensOut = emissionOut.tokens.getOrElse(ReemissionTokenId, 0L)
+          val rewardsTokensOut = rewardsOut.tokens.getOrElse(ReemissionTokenId, 0L)
+
+          require(emissionOut.tokens.contains(EmissionNftId))
+          require(reemissionTokensIn == emissionTokensOut + rewardsTokensOut)
+
+          val height = stateContext.currentHeight
+          val ms = stateContext.ergoSettings.chainSettings.monetary
+          val reemission = new Reemission(ms)
+          val properReemissionRewardPart = reemission.reemissionForHeight(height)
+          require(rewardsTokensOut == properReemissionRewardPart)
+        }
+      } else if (box.tokens.contains(ReemissionTokenId)) {
+        reemissionSpending = true
+      }
+    }
+
+    if (reemissionSpending) {
+      val ms = stateContext.ergoSettings.chainSettings.monetary
+      val reemission = new Reemission(ms)
+
+      val toBurn = boxesToSpend.map { box =>
+        box.tokens.getOrElse(ReemissionTokenId, 0L)
+      }.sum
+      val reemissionOutputs = outputCandidates.filter { out =>
+        require(!out.tokens.contains(ReemissionTokenId), "outputs contain reemission token")
+        out.ergoTree == reemission.reemissionBoxProp
+      }
+      require(reemissionOutputs.map(_.value).sum == toBurn)
+    }
+
   }
 
   /**
@@ -303,6 +324,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val currentTxCost = validation.result.payload.get
         verifyInput(validation, boxesToSpend, dataBoxes, box, idx.toShort, stateContext, currentTxCost)
        }
+      .validate(txReemission, Reemission.checkReemissionRules &&
+                                verifyReemission(boxesToSpend, outputCandidates, stateContext).isSuccess)
   }
 
   /**

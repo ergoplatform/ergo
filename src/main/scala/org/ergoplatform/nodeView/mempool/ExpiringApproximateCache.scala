@@ -10,7 +10,7 @@ import scala.concurrent.duration.FiniteDuration
   * @tparam T type of cache's element
   */
 sealed trait ApproximateCacheLike[T] {
-  def put(elem: T): ExpiringApproximateCache
+  def put(elem: T): ApproximateCacheLike[T]
   def mightContain(elem: T): Boolean
   def approximateElementCount: Long
 }

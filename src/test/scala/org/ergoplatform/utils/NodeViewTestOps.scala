@@ -10,8 +10,8 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, ErgoPersistentModifier}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.settings.Algos
-import scorex.core.NodeViewHolder.CurrentView
-import scorex.core.NodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedModifier}
 import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
 import scorex.core.validation.MalformedModifierError
 import scorex.util.ModifierId

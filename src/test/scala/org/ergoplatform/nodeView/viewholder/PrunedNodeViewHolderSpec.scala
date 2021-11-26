@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.state.{DigestState, StateType}
 import org.ergoplatform.settings.{ErgoSettings, VotingSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoPropertyTest, NodeViewTestOps}
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifier
 import scorex.testkit.utils.NoShrink
 
 import scala.concurrent.duration._

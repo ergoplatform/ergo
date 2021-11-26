@@ -12,10 +12,11 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import scorex.core.NodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import scorex.core.api.http.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.core.settings.RESTApiSettings
@@ -332,7 +333,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def initWalletR: Route = (path("init") & post & initRequest) {
     case (pass, mnemonicPassOpt) =>
-      withWalletOp(_.initWallet(pass, mnemonicPassOpt)) {
+      withWalletOp(_.initWallet(SecretString.create(pass), mnemonicPassOpt.map(SecretString.create(_)))) {
         _.fold(
           e => BadRequest(e.getMessage),
           mnemonic => ApiResponse(Json.obj("mnemonic" -> mnemonic.asJson))
@@ -342,7 +343,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def restoreWalletR: Route = (path("restore") & post & restoreRequest) {
     case (pass, mnemo, mnemoPassOpt) =>
-      withWalletOp(_.restoreWallet(pass, mnemo, mnemoPassOpt)) {
+      withWalletOp(_.restoreWallet(SecretString.create(pass), SecretString.create(mnemo), mnemoPassOpt.map(SecretString.create(_)))) {
         _.fold(
           e => BadRequest(e.getMessage),
           _ => ApiResponse.toRoute(ApiResponse.OK)
@@ -351,7 +352,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
   }
 
   def unlockWalletR: Route = (path("unlock") & post & password) { pass =>
-    withWalletOp(_.unlockWallet(pass)) {
+    withWalletOp(_.unlockWallet(SecretString.create(pass))) {
       _.fold(
         e => BadRequest(e.getMessage),
         _ => ApiResponse.toRoute(ApiResponse.OK)
@@ -361,7 +362,7 @@ case class WalletApiRoute(readersHolder: ActorRef, nodeViewActorRef: ActorRef, e
 
   def checkSeedR: Route = (path("check") & post & checkRequest) {
     case (mnemo, mnemoPassOpt) =>
-      withWalletOp(_.checkSeed(mnemo, mnemoPassOpt)) { matched =>
+      withWalletOp(_.checkSeed(SecretString.create(mnemo), mnemoPassOpt.map(SecretString.create(_)))) { matched =>
         ApiResponse(
           Json.obj(
             "matched" -> matched.asJson

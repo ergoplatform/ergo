@@ -12,15 +12,13 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.db.LDBKVStore
-import scorex.testkit.utils.FileUtils
 
 class WalletStorageSpec
   extends AnyFlatSpec
     with Matchers
     with WalletGenerators
     with ScalaCheckPropertyChecks
-    with DBSpec
-    with FileUtils {
+    with DBSpec {
 
   private implicit val addressEncoder: ErgoAddressEncoder =
     ErgoAddressEncoder(settings.chainSettings.addressPrefix)

@@ -2,12 +2,12 @@ package org.ergoplatform.db
 
 import akka.util.ByteString
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.wallet.utils.TestFileUtils
 import org.iq80.leveldb.{DB, Options}
-import scorex.testkit.utils.FileUtils
 import scorex.db.LDBFactory.factory
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 
-trait DBSpec extends FileUtils {
+trait DBSpec extends TestFileUtils {
 
   implicit class ValueOps(x: Option[Array[Byte]]) {
     def toBs: Option[ByteString] = x.map(ByteString.apply)

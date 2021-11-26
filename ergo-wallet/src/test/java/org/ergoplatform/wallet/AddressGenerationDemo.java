@@ -3,6 +3,7 @@ package org.ergoplatform.wallet;
 import org.ergoplatform.ErgoAddressEncoder;
 import org.ergoplatform.P2PKAddress;
 import org.ergoplatform.wallet.mnemonic.Mnemonic;
+import org.ergoplatform.wallet.interface4j.SecretString;
 import org.ergoplatform.wallet.secrets.DerivationPath;
 import org.ergoplatform.wallet.secrets.ExtendedPublicKey;
 import org.ergoplatform.wallet.secrets.ExtendedSecretKey;
@@ -13,7 +14,7 @@ import scala.Option;
  */
 public class AddressGenerationDemo {
     public static byte[] secretSeedFromMnemonic(String mnemonic) {
-        byte[] secret =  Mnemonic.toSeed(mnemonic, Option.empty());
+        byte[] secret =  Mnemonic.toSeed(SecretString.create(mnemonic), Option.empty());
         return secret;
     }
 

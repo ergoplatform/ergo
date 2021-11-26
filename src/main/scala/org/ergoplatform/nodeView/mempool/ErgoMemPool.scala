@@ -115,7 +115,7 @@ class ErgoMemPool private[mempool](pool: OrderedTxPool, private[mempool] val sta
         state match {
           case utxo: UtxoState =>
             // Allow proceeded transaction to spend outputs of pooled transactions.
-            utxo.withTransactions(getAll).validateWithCost(tx, None, nodeSettings.maxTransactionComplexity, nodeSettings.maxTransactionCost).fold(
+            utxo.withTransactions(getAll).validateWithCost(tx, None, nodeSettings.maxTransactionCost).fold(
               ex => new ErgoMemPool(pool.invalidate(tx), stats) -> ProcessingOutcome.Invalidated(ex),
               _ => acceptIfNoDoubleSpend(tx)
             )

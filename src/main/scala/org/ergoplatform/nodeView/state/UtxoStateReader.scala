@@ -10,7 +10,7 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import scorex.core.transaction.state.TransactionValidation
-import scorex.core.transaction.state.TransactionValidation.{TooHighComplexityError, TooHighCostError}
+import scorex.core.transaction.state.TransactionValidation.TooHighCostError
 import scorex.crypto.authds.avltree.batch.{NodeParameters, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -34,17 +34,12 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     */
   def validateWithCost(tx: ErgoTransaction,
                        stateContextOpt: Option[ErgoStateContext],
-                       complexityLimit: Int,
                        costLimit: Int): Try[Long] = {
     val verifier = ErgoInterpreter(stateContext.currentParameters)
     val context = stateContextOpt.getOrElse(stateContext)
     tx.statelessValidity().flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))
-      val txComplexity = boxesToSpend.map(_.ergoTree.complexity).sum
-      if (txComplexity > complexityLimit) {
-        Failure(TooHighComplexityError(s"Transaction $tx has too high complexity $txComplexity"))
-      } else {
-        tx.statefulValidity(
+      tx.statefulValidity(
           boxesToSpend,
           tx.dataInputs.flatMap(i => boxById(i.boxId)),
           context)(verifier).flatMap {
@@ -53,7 +48,6 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
             case txCost =>
               Success(txCost)
         }
-      }
     }
   }
 
@@ -64,7 +58,7 @@ trait UtxoStateReader extends ErgoStateReader with TransactionValidation {
     *
     */
   override def validate(tx: ErgoTransaction): Try[Unit] =
-    validateWithCost(tx, None, Int.MaxValue, Int.MaxValue).map(_ => Unit)
+    validateWithCost(tx, None, Int.MaxValue).map(_ => Unit)
 
   /**
     *

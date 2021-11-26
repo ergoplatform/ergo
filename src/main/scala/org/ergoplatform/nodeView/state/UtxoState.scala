@@ -117,6 +117,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       // todo: save manifest and subtrees into a database
 
       val ms0 = System.currentTimeMillis()
+      snapshotsDb.pruneSnapshots(height - SnapshotEvery * 2)
       snapshotsDb.writeSnapshot(height, manifest, subtrees)
       val ms = System.currentTimeMillis()
       println("Time to dump utxo set snapshot: " + (ms - ms0))

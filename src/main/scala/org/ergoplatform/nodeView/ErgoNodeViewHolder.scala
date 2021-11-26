@@ -1,6 +1,8 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
+import java.io.File
+
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
 import org.ergoplatform.ErgoApp
 import org.ergoplatform.ErgoApp.CriticalSystemException
@@ -20,13 +22,18 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.core._
+import org.ergoplatform.network.ErgoNodeViewSynchronizer.ReceivableMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.{CurrentView, DownloadRequest}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.settings.ScorexSettings
 import scorex.core.utils.{NetworkTimeProvider, ScorexEncoding}
 import scorex.util.ScorexLogging
+import spire.syntax.all.cfor
 
 import java.io.File
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -252,6 +259,74 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   /**
+    * Process new modifiers from remote.
+    * Put all candidates to modifiersCache and then try to apply as much modifiers from cache as possible.
+    * Clear cache if it's size exceeds size limit.
+    * Publish `ModifiersProcessingResult` message with all just applied and removed from cache modifiers.
+    */
+  protected def processRemoteModifiers: Receive = {
+    case ModifiersFromRemote(mods: Seq[ErgoPersistentModifier]@unchecked) =>
+      @tailrec
+      def applyFromCacheLoop(applied: Seq[ErgoPersistentModifier]): Seq[ErgoPersistentModifier] = {
+        modifiersCache.popCandidate(history()) match {
+          case Some(mod) =>
+            pmodModify(mod)
+            applyFromCacheLoop(mod +: applied)
+          case None =>
+            applied
+        }
+      }
+
+      mods.headOption match {
+        case Some(h) if h.isInstanceOf[Header] => // modifiers are always of the same type
+          val sorted = mods.sortBy(_.asInstanceOf[Header].height)
+
+          val applied0 = if (sorted.head.asInstanceOf[Header].height == history().headersHeight + 1) {
+
+            // we apply sorted headers while headers sequence is not broken
+            val appliedBuffer = mutable.Buffer[Header]()
+            var expectedHeight = history().headersHeight + 1
+            var linkBroken = false
+
+            cfor(0)(_ < sorted.length, _ + 1) { idx =>
+              val header = sorted(idx).asInstanceOf[Header]
+              if (!linkBroken && header.height == expectedHeight) {
+                pmodModify(header)
+                header +=: appliedBuffer // prepend header, to be consistent with applyFromCacheLoop
+                expectedHeight += 1
+              } else {
+                if (!linkBroken) {
+                  linkBroken = true
+                }
+                // put into cache headers not applied
+                modifiersCache.put(header.id, header)
+              }
+            }
+            appliedBuffer
+          } else {
+            mods.foreach(h => modifiersCache.put(h.id, h))
+            Seq.empty
+          }
+
+          val applied = applyFromCacheLoop(applied0)
+
+          val cleared = modifiersCache.cleanOverfull()
+          context.system.eventStream.publish(ModifiersProcessingResult(applied, cleared))
+          log.debug(s"Cache size after: ${modifiersCache.size}")
+        case _ =>
+          mods.foreach(m => modifiersCache.put(m.id, m))
+
+          log.debug(s"Cache size before: ${modifiersCache.size}")
+
+          val applied = applyFromCacheLoop(Seq())
+          val cleared = modifiersCache.cleanOverfull()
+
+          context.system.eventStream.publish(ModifiersProcessingResult(applied, cleared))
+          log.debug(s"Cache size after: ${modifiersCache.size}")
+      }
+  }
+
+  /**
     * Performs mempool update after a block application, transactions
     * from rolled back block are to be returned to the pool, and transactions
     * included in applied block are to be removed.
@@ -449,36 +524,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val dir = ErgoState.stateDir(settings)
     dir.mkdirs()
     dir
-  }
-
-  /**
-    * Process new modifiers from remote.
-    * Put all candidates to modifiersCache and then try to apply as much modifiers from cache as possible.
-    * Clear cache if it's size exceeds size limit.
-    * Publish `ModifiersProcessingResult` message with all just applied and removed from cache modifiers.
-    */
-  protected def processRemoteModifiers: Receive = {
-    case ModifiersFromRemote(mods: Seq[ErgoPersistentModifier]) =>
-      mods.foreach(m => modifiersCache.put(m.id, m))
-
-      log.debug(s"Cache size before: ${modifiersCache.size}")
-
-      @tailrec
-      def applyLoop(applied: Seq[ErgoPersistentModifier]): Seq[ErgoPersistentModifier] = {
-        modifiersCache.popCandidate(history()) match {
-          case Some(mod) =>
-            pmodModify(mod)
-            applyLoop(mod +: applied)
-          case None =>
-            applied
-        }
-      }
-
-      val applied = applyLoop(Seq())
-      val cleared = modifiersCache.cleanOverfull()
-
-      context.system.eventStream.publish(ModifiersProcessingResult(applied, cleared))
-      log.debug(s"Cache size after: ${modifiersCache.size}")
   }
 
   protected def transactionsProcessing: Receive = {

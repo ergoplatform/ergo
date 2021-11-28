@@ -19,8 +19,6 @@ import scorex.core.serialization.ScorexSerializer
 import scorex.core.transaction.Transaction
 import scorex.core.utils.ScorexEncoding
 import scorex.core.validation.ValidationResult.fromValidationState
-import scorex.core.validation.{ModifierValidator, ValidationState}
-import scorex.db.ByteArrayUtils
 import scorex.core.validation.{ModifierValidator, ValidationResult, ValidationState}
 import scorex.db.{ByteArrayUtils, ByteArrayWrapper}
 import scorex.util.serialization.{Reader, Writer}
@@ -166,14 +164,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   }
 
   private def verifyAssets(validationBefore: ValidationState[Long],
-                           outAssets: Map[ByteArrayWrapper, Long],
+                           outAssets: Map[ByteBuffer, Long],
                            outAssetsNum: Int,
                            boxesToSpend: IndexedSeq[ErgoBox],
                            stateContext: ErgoStateContext): ValidationResult[Long] = {
     // Cost limit per block
     val maxCost = stateContext.currentParameters.maxBlockCost
 
-    ErgoTransaction.extractAssets(boxesToSpend) match {
+    ErgoBoxAssetExtractor.extractAssets(boxesToSpend) match {
       case Success((inAssets, inAssetsNum)) =>
         lazy val newAssetId = ByteArrayWrapper(inputs.head.boxId)
         val tokenAccessCost = stateContext.currentParameters.tokenAccessCost

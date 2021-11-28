@@ -101,10 +101,24 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   }
 
 
+  /**
+    * Helper method to decide whether an input can be spent
+    *
+    *
+    * @param validationBefore - transaction validation before checking the input
+    * @param boxesToSpend - input boxes
+    * @param dataBoxes - data input boxes
+    * @param box - the input to check
+    * @param inputIndex - index of the input to check
+    * @param stateContext - context used during validation
+    * @param currentTxCost - accumulated validation cost before checking the input
+    * @param verifier - verifier used to check spending validity
+    * @return
+    */
   private def verifyInput(validationBefore: ValidationState[Long],
                           boxesToSpend: IndexedSeq[ErgoBox],
                           dataBoxes: IndexedSeq[ErgoBox],
-                          box: ErgoBox,
+                          box: ErgoBox, //todo: replace with boxesToSpend(inputIndex) during next refactoring
                           inputIndex: Short,
                           stateContext: ErgoStateContext,
                           currentTxCost: Long)
@@ -149,6 +163,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .map(c => addExact(c, scriptCost))
   }
 
+  /**
+    * Helper method to verify an output of the transaction
+    *
+    * @param validationBefore - validation state before checking the output
+    * @param out - the output to check
+    * @param stateContext - context used in validation
+    * @return
+    */
   private def verifyOutput(validationBefore: ValidationState[Long],
                            out: ErgoBox,
                            stateContext: ErgoStateContext): ValidationResult[Long] = {
@@ -163,6 +185,16 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txBoxPropositionSize, out.propositionBytes.length <= MaxPropositionBytes.value, s"$id: output $out")
   }
 
+  /**
+    * Check validity of transaction assets (access cost and preservation rules)
+    *
+    * @param validationBefore - validation state before checking the output
+    * @param outAssets - dictionary of assets in outputs
+    * @param outAssetsNum - number of assets in outputs
+    * @param boxesToSpend - input boxes
+    * @param stateContext - context used in validation
+    * @return
+    */
   private def verifyAssets(validationBefore: ValidationState[Long],
                            outAssets: Map[ByteBuffer, Long],
                            outAssetsNum: Int,

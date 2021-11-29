@@ -23,7 +23,6 @@ import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest,
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
-import scorex.util.encode.Base16
 
 import scala.util.{Failure, Success, Try}
 
@@ -111,25 +110,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       val serializer = new BatchAVLProverSerializer[Digest32, HF]
       val (manifest, subtrees) = serializer.slice(persistentProver.avlProver, subtreeDepth = 12)
 
-      val manifestBytes = serializer.manifestToBytes(manifest)
-      println("manifest size: " + manifestBytes.length)
-      println("subtrees count: " + subtrees.size)
-      // todo: save manifest and subtrees into a database
-
       val ms0 = System.currentTimeMillis()
       snapshotsDb.pruneSnapshots(height - SnapshotEvery * 2)
       snapshotsDb.writeSnapshot(height, manifest, subtrees)
       val ms = System.currentTimeMillis()
       println("Time to dump utxo set snapshot: " + (ms - ms0))
-
-      if (UtxoState.prevManifest != null) {
-        val prevSubtrees = UtxoState.prevManifest.subtreesIds.map(Base16.encode).toSet
-        val subtrees = manifest.subtreesIds.map(Base16.encode).toSet
-
-        val common = subtrees.count(prevSubtrees.contains)
-        println("Subtrees not changed: " + common)
-      }
-      UtxoState.prevManifest = manifest
     }
   }
 
@@ -195,9 +180,6 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 }
 
 object UtxoState {
-
-  //todo: remove after experiment
-  var prevManifest: UtxoState.Manifest = null
 
   type Manifest = BatchAVLProverManifest[Digest32]
   type Subtree = BatchAVLProverSubtree[Digest32]

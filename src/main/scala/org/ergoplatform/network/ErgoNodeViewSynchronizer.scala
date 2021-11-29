@@ -761,25 +761,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
 object ErgoNodeViewSynchronizer {
 
-  def props(networkControllerRef: ActorRef,
-            viewHolderRef: ActorRef,
-            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-            settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
-            syncTracker: ErgoSyncTracker)
-           (implicit ex: ExecutionContext): Props =
-    Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
-      timeProvider, syncTracker))
-
-  def apply(networkControllerRef: ActorRef,
-            viewHolderRef: ActorRef,
-            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
-            settings: ErgoSettings,
-            timeProvider: NetworkTimeProvider,
-            syncTracker: ErgoSyncTracker)
-           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef =
-    context.actorOf(props(networkControllerRef, viewHolderRef, syncInfoSpec, settings, timeProvider, syncTracker))
-
   case object CheckModifiersToDownload
 
   object Events {
@@ -872,6 +853,18 @@ object ErgoNodeViewSynchronizer {
     case object OlderCalling extends PeerSyncState
     /** Better Unknown or Fork than no peers */
     case object UnknownOrFork extends PeerSyncState
+  }
+
+  def apply(networkControllerRef: ActorRef,
+            viewHolderRef: ActorRef,
+            syncInfoSpec: ErgoSyncInfoMessageSpec.type,
+            settings: ErgoSettings,
+            timeProvider: NetworkTimeProvider,
+            syncTracker: ErgoSyncTracker)
+           (implicit context: ActorRefFactory, ex: ExecutionContext): ActorRef = {
+    val props = Props(new ErgoNodeViewSynchronizer(networkControllerRef, viewHolderRef, syncInfoSpec, settings,
+      timeProvider, syncTracker))
+    context.actorOf(props)
   }
 
 }
